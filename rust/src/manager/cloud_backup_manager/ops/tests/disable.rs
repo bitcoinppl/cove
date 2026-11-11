@@ -1,7 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::{CloudBackupDisablePreparation, DisableAttempt};
-use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
 /// A Turn Off stopped before its commit point leaves the backup configured, with nothing to
@@ -13,7 +12,7 @@ fn assert_blocked_disable_left_backup_configured(manager: &RustCloudBackupManage
     );
     assert!(current_disable_generation().is_none());
 
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
     let CloudBackupDestructiveOperationState::DisableFailed { message, can_keep_enabled } =
@@ -202,176 +201,6 @@ async fn blocked_disable_can_be_retried_once_the_blocker_is_gone() {
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn keep_cloud_backup_enabled_clears_a_blocked_disable_failure() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    globals
-        .cloud
-        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
-
-    run_disable_cloud_backup(&manager).await;
-    assert_blocked_disable_left_backup_configured(&manager);
-
-    call!(manager.supervisor.keep_cloud_backup_enabled()).await.expect("keep cloud backup enabled");
-    wait_for_test_condition(Duration::from_secs(2), "the stale disable failure clears", || {
-        matches!(
-            manager.state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
-                if configured.destructive_operation == CloudBackupDestructiveOperationState::Idle
-        )
-    })
-    .await;
-
-    assert!(globals.cloud.has_namespace(&namespace));
-    assert!(current_disable_generation().is_none());
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fence() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let metadata = xpub_only_wallet_metadata();
-    persist_xpub_wallets(vec![metadata.clone()]);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let record_id = wallet_record_id(metadata.id.as_ref());
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    let PersistedCloudBackupState::Configured(previous_configured) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected configured cloud backup state");
-    };
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
-            previous_configured,
-            namespace_id: namespace.clone(),
-            disable_generation: 42,
-            started_at: 100,
-            delete_started_at: Some(100),
-            last_error: None,
-            retry_after: None,
-        }))
-        .unwrap();
-
-    manager.handle_wallet_backup_change(metadata.id.clone());
-
-    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 0);
-    assert!(matches!(
-        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
-    ));
-
-    run_keep_cloud_backup_enabled(&manager).await;
-
-    wait_for_test_condition(
-        Duration::from_secs(5),
-        "dirty wallet marked during disable fence uploads after Keep Enabled",
-        || {
-            let upload_attempted = globals.cloud.wallet_backup_upload_attempt_count() > 0;
-            let uploaded_or_confirmed = matches!(
-                Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-                Some(PersistedCloudBlobSyncState {
-                    state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                        | PersistedCloudBlobState::Confirmed(_),
-                    ..
-                })
-            );
-
-            upload_attempted && uploaded_or_confirmed
-        },
-    )
-    .await;
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Configured(_)
-    ));
-
-    clear_wallet_upload_runtime_for_test_async(&manager).await;
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn keep_cloud_backup_enabled_preserves_configured_runtime_status() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 3);
-
-    Database::global()
-        .cloud_backup_state
-        .set(&persisted_passkey_missing_cloud_backup_state(Some(3)))
-        .unwrap();
-    manager.reconcile_runtime_status(CloudBackupStatus::Enabled);
-    manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-        message: "disable failed".into(),
-        can_keep_enabled: true,
-    });
-
-    manager.finish_keep_cloud_backup_enabled();
-
-    assert_eq!(manager.current_status(), CloudBackupStatus::PasskeyMissing);
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
-        panic!("expected configured cloud backup lifecycle");
-    };
-    assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let PersistedCloudBackupState::Configured(previous_configured) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected configured state");
-    };
-
-    let stale = PersistedDisablingCloudBackup {
-        previous_configured,
-        namespace_id,
-        disable_generation: 10,
-        started_at: 100,
-        delete_started_at: None,
-        last_error: None,
-        retry_after: None,
-    };
-    let current = PersistedDisablingCloudBackup { disable_generation: 11, ..stale.clone() };
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(current))
-        .unwrap();
-
-    let stale = CommittedDisable {
-        namespace_id: stale.namespace_id.clone(),
-        attempt_id: stale.disable_generation,
-        committed_at: 100,
-        last_error: None,
-        retry_after: None,
-    };
-    let restored = manager
-        .restore_configured_cloud_backup_after_disable(
-            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
-            &stale,
-        )
-        .unwrap();
-
-    assert!(!restored);
-    let disabling = persisted_disabling();
-    assert_eq!(disabling.disable_generation, 11);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -641,34 +470,6 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
     );
     assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
     assert_eq!(restarted_manager.model_snapshot().status, CloudBackupStatus::Disabled);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namespace() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    globals.cloud.fail_delete_namespace("delete failed");
-
-    run_disable_cloud_backup(&manager).await;
-    let error = disable_failure_message(&manager);
-    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
-
-    run_keep_cloud_backup_enabled(&manager).await;
-
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
-    );
-    assert_eq!(
-        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
-        Some(namespace.as_str())
-    );
-    assert!(current_disable_generation().is_none());
 }
 
 /// Turn Off's drain and namespace delete are lane commands: while an upload is the write in

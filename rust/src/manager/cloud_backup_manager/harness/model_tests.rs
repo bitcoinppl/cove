@@ -81,7 +81,6 @@ enum World {
 enum Tap {
     Enable,
     TurnOff,
-    KeepEnabled,
     Verify,
     SyncUnsynced,
     Restore,
@@ -96,10 +95,9 @@ enum Tap {
 }
 
 impl Tap {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 13] = [
         Self::Enable,
         Self::TurnOff,
-        Self::KeepEnabled,
         Self::Verify,
         Self::SyncUnsynced,
         Self::Restore,
@@ -119,7 +117,6 @@ impl Tap {
         match self {
             Self::Enable => A::EnableCloudBackup(CloudBackupEnableContext::settings_manual()),
             Self::TurnOff => A::DisableCloudBackup,
-            Self::KeepEnabled => A::KeepCloudBackupEnabled,
             Self::Verify => A::StartVerification(CloudBackupVerificationSource::CloudBackupDetail),
             Self::SyncUnsynced => A::SyncUnsynced,
             Self::Restore => A::RestoreFromCloudBackup,
@@ -201,9 +198,7 @@ fn forbidden_by_record(record: &PersistedCloudBackupState) -> &'static [N] {
     let recovering = RustCloudBackupManager::pending_enable_evidence_remains();
 
     match record {
-        PersistedCloudBackupState::Disabled => {
-            &[N::TurnOff, N::KeepEnabled, N::Verify, N::SyncUnsynced]
-        }
+        PersistedCloudBackupState::Disabled => &[N::TurnOff, N::Verify, N::SyncUnsynced],
         PersistedCloudBackupState::Configured(_) if !recovering => {
             &[N::Enable, N::RestoreFromCloudBackup]
         }
@@ -213,7 +208,7 @@ fn forbidden_by_record(record: &PersistedCloudBackupState) -> &'static [N] {
                 .disabling()
                 .is_some_and(|disabling| disabling.delete_started_at.is_some()) =>
         {
-            &[N::Enable, N::KeepEnabled, N::Verify, N::SyncUnsynced, N::RestoreFromCloudBackup]
+            &[N::Enable, N::Verify, N::SyncUnsynced, N::RestoreFromCloudBackup]
         }
         _ => &[],
     }

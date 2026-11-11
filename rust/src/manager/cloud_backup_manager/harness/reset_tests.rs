@@ -743,7 +743,7 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
             .expect("stage a master key");
         app.relaunch().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
 
-        let recovery = match app.manager().state().lifecycle {
+        let recovery = match app.manager().model_state().lifecycle {
             CloudBackupLifecycle::PendingEnableRecovery(recovery) => recovery,
             lifecycle => panic!("not in recovery after restart: {lifecycle:?}"),
         };
@@ -757,7 +757,7 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         // the reset owns the runtime, and the recovery still shows
         app.current().then_cannot(&[N::Enable, N::TurnOff]);
         assert_eq!(
-            app.manager().state().lifecycle,
+            app.manager().model_state().lifecycle,
             CloudBackupLifecycle::PendingEnableRecovery(recovery.clone())
         );
 
@@ -769,7 +769,7 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         .then_cannot(&[N::TurnOff]);
 
         assert_eq!(
-            app.manager().state().lifecycle,
+            app.manager().model_state().lifecycle,
             CloudBackupLifecycle::PendingEnableRecovery(recovery.clone()),
             "{}",
             app.describe()
@@ -787,6 +787,6 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
             cspp.master_key_promotion_status().expect("read"),
             MasterKeyPromotionStatus::None
         );
-        assert_eq!(app.manager().state().lifecycle, CloudBackupLifecycle::Disabled);
+        assert_eq!(app.manager().model_state().lifecycle, CloudBackupLifecycle::Disabled);
     });
 }

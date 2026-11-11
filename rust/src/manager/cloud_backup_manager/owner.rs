@@ -6,3 +6,5 @@
 
 pub(crate) mod lifecycle;
 pub(crate) mod operation;
+#[cfg(any(test, debug_assertions))]
+pub(crate) mod ui_test_legacy_record;

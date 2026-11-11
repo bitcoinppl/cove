@@ -402,8 +402,8 @@ private fun logPasskeyFailure(
     error: Exception,
     mapped: PasskeyException,
 ) {
-    if (mapped is PasskeyException.UserCancelled) {
-        Log.i(PASSKEY_LOG_TAG, "passkey $stage cancelled by user")
+    if (mapped is PasskeyException.NotCompleted) {
+        Log.i(PASSKEY_LOG_TAG, "passkey $stage not completed")
         return
     }
 

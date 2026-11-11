@@ -6,7 +6,8 @@ use crate::database::cloud_backup::DriveAccountSwitchId;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
+    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupDriveAccountSwitchRecovery,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupHealNotice,
     CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation, CloudOnlyOperation,
@@ -177,6 +178,9 @@ pub(crate) enum CloudBackupStateReducerEvent {
     SyncStateResolved(SyncState),
     RecoveryStateResolved(RecoveryState),
     DisableStateResolved(CloudBackupDisableOutcome),
+    HealNoticeReconciled(Option<CloudBackupHealNotice>),
+    /// Rust and the platform disagree about a Google Drive account switch; `None` clears it
+    DriveAccountSwitchRecoveryReported(Option<CloudBackupDriveAccountSwitchRecovery>),
     UndecryptableWalletDeletionStateResolved(CloudBackupUndecryptableWalletDeletionState),
     DetailRefreshStarted,
     DetailRefreshProvisional(CloudBackupDetail),

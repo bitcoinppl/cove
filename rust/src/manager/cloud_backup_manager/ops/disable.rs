@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use backon::{BackoffBuilder as _, FibonacciBuilder};
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 
 use super::blocking_cloud_error;
 use crate::database::Database;
@@ -15,9 +15,9 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommitDisable, CommittedDisable, DisableCommitReview, DisablingRecord, LifecycleWriter,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDisableOutcome,
-    CloudBackupError, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStatus,
-    CloudOnlyOperation, OtherBackupsOperation, RustCloudBackupManager,
+    BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupError, CloudBackupKeychain,
+    CloudBackupOtherBackupsState, CloudBackupStatus, CloudOnlyOperation, OtherBackupsOperation,
+    RustCloudBackupManager,
 };
 
 const DISABLE_BLOCKING_MESSAGE: &str =
@@ -50,13 +50,6 @@ pub(crate) enum DisableAttempt {
     Uncommitted { review: DisableCommitReview, attempt_id: u64 },
     /// The attempt committed, so it only goes forward
     Committed(CommittedDisable),
-}
-
-#[derive(Debug)]
-pub(crate) enum CloudBackupKeepEnabledPreparation {
-    AlreadyConfigured,
-    AlreadyDisabled,
-    Ready(Box<CommittedDisable>),
 }
 
 impl RustCloudBackupManager {
@@ -298,83 +291,6 @@ impl RustCloudBackupManager {
             crate::manager::cloud_backup_manager::CloudBackupOtherBackupsOutcome::Idle,
         );
         self.apply_recovery_state(crate::manager::cloud_backup_manager::RecoveryState::Idle);
-    }
-
-    pub(crate) async fn prepare_keep_cloud_backup_enabled(
-        &self,
-    ) -> Result<CloudBackupKeepEnabledPreparation, CloudBackupError> {
-        let committed = match Self::load_persisted_state() {
-            PersistedCloudBackupState::ExclusiveTransition(
-                PersistedCloudBackupTransition::Disabling(disabling),
-            ) => match CommittedDisable::from_record(&disabling) {
-                DisablingRecord::Committed(committed) => committed,
-                DisablingRecord::Unnormalized => {
-                    return Err(CloudBackupError::Internal(
-                        CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into(),
-                    ));
-                }
-            },
-            PersistedCloudBackupState::ExclusiveTransition(
-                PersistedCloudBackupTransition::DriveAccountSwitch(_),
-            ) => {
-                return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-            }
-            PersistedCloudBackupState::Configured(_) => {
-                return Ok(CloudBackupKeepEnabledPreparation::AlreadyConfigured);
-            }
-            PersistedCloudBackupState::Disabled => {
-                return Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled);
-            }
-            PersistedCloudBackupState::Corrupted { .. } => {
-                return Err(CloudBackupError::Internal(
-                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
-                ));
-            }
-        };
-
-        let cloud = CloudStorage::global_explicit_client();
-        let namespaces = cloud.list_namespaces().await.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::Disable,
-                CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
-            )
-        })?;
-        if !namespaces.iter().any(|namespace| namespace == &committed.namespace_id) {
-            return Err(CloudBackupError::RecoveryRequired(
-                "cloud backup deletion may already have completed; retry disable".into(),
-            ));
-        }
-
-        Ok(CloudBackupKeepEnabledPreparation::Ready(Box::new(committed)))
-    }
-
-    pub(crate) fn restore_configured_cloud_backup_after_disable(
-        &self,
-        lifecycle: &LifecycleWriter,
-        committed: &CommittedDisable,
-    ) -> Result<bool, CloudBackupError> {
-        lifecycle.keep_enabled_after_disable(committed.attempt_id).map_err(|source| {
-            CloudBackupError::internal_context("restore configured cloud backup state", source)
-        })
-    }
-
-    pub(crate) fn finish_keep_cloud_backup_enabled(&self) {
-        let runtime_status = match Self::load_persisted_state() {
-            state @ (PersistedCloudBackupState::Configured(_)
-            | PersistedCloudBackupState::Corrupted { .. }) => {
-                Self::runtime_status_for(&state).unwrap_or(CloudBackupStatus::Enabled)
-            }
-            _ => CloudBackupStatus::Enabled,
-        };
-
-        self.reconcile_runtime_status(runtime_status);
-        self.apply_disable_outcome(CloudBackupDisableOutcome::ReturnedToIdle);
-    }
-
-    pub(crate) fn clear_stale_disable_failure_if_configured(&self) {
-        if matches!(Self::load_persisted_state(), PersistedCloudBackupState::Configured(_)) {
-            self.apply_disable_outcome(CloudBackupDisableOutcome::ReturnedToIdle);
-        }
     }
 }
 

@@ -40,7 +40,6 @@ pub(crate) enum NextAction {
     Enable,
     RestoreFromCloudBackup,
     TurnOff,
-    KeepEnabled,
     Verify,
     SyncUnsynced,
 }
@@ -53,7 +52,6 @@ impl NextAction {
             Self::Enable => UserIntent::Enable(EnableIntent::Standard, context),
             Self::RestoreFromCloudBackup => UserIntent::RestoreFromCloudBackup,
             Self::TurnOff => UserIntent::TurnOff,
-            Self::KeepEnabled => UserIntent::KeepEnabled,
             Self::Verify => UserIntent::StartVerification {
                 source: CloudBackupVerificationSource::CloudBackupDetail,
                 discoverable: false,
@@ -454,7 +452,7 @@ impl TestApp {
             "active operation: {active:?}\npersisted: {:?}\ncloud calls: {:?}\nlifecycle: {:#?}",
             Database::global().cloud_backup_state.get(),
             self.cloud.calls(),
-            self.manager.state().lifecycle,
+            self.manager.model_state().lifecycle,
         )
     }
 }

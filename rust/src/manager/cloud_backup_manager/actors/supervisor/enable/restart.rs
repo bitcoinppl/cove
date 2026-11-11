@@ -278,8 +278,7 @@ impl CloudBackupSupervisor {
         };
 
         // the journal does not record which work wrote it; the body restart loaded does
-        let owner =
-            ContinuationOwner::of_body(self.runtime.admission_body(ConfiguredAdmission::Ready));
+        let owner = ContinuationOwner::of_body(self.runtime.admission_body());
         self.enable_continuation = Some(EnableContinuation::new(
             owner,
             PendingEnableSession::awaiting_saved_passkey_confirmation(

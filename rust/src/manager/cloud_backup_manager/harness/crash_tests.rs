@@ -26,7 +26,7 @@ fn committed_at() -> Option<u64> {
 /// exactly once in this process and without a passkey prompt
 fn next_launch_finishes_the_committed_disable(namespace: &str, deletes_this_launch: usize) {
     let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-    app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::KeepEnabled, N::Verify]);
+    app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::Verify]);
 
     assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
     assert_eq!(keychain_namespace(), None);
@@ -128,11 +128,8 @@ fn delete_that_succeeded_with_its_response_lost_finishes_after_a_kill() {
             app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::SucceedThenFail(lost));
             load_detail(&mut app);
 
-            app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[
-                N::Enable,
-                N::KeepEnabled,
-                N::Verify,
-            ]);
+            app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+                .then_cannot(&[N::Enable, N::Verify]);
             assert!(committed_at().is_some(), "the failed response undid the commit");
             assert!(!app.cloud.inner.has_namespace(&namespace), "the delete did not land");
 

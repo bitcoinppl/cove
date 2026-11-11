@@ -1,8 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommitDisable, CommittedDisable, LifecycleWriter,
-};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{CommitDisable, CommittedDisable};
 
 /// Shown when the namespace changed between the blocker check and the commit
 const CLOUD_BACKUP_DISABLE_STALE_REVIEW_MESSAGE: &str =
@@ -338,11 +336,9 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         message: String,
     ) {
-        // callers log the cause before building the reader message, so logging it here again
-        // would add a second line with less detail
-        //
-        // nothing uncommitted is persisted and a committed disable only goes forward, so a
-        // failure never offers Keep Enabled
+        error!("disable_cloud_backup failed: {message}");
+
+        // nothing uncommitted is persisted and a committed disable only goes forward
         manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
             message,
             can_keep_enabled: false,
@@ -357,80 +353,5 @@ impl CloudBackupSupervisor {
     ) {
         self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
-    }
-
-    pub async fn keep_cloud_backup_enabled(&mut self) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_keep_cloud_backup_enabled().await;
-            send!(addr.complete_keep_cloud_backup_enabled(result));
-        });
-        Produces::ok(())
-    }
-
-    pub async fn complete_keep_cloud_backup_enabled(
-        &mut self,
-        result: Result<CloudBackupKeepEnabledPreparation, CloudBackupError>,
-    ) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
-
-        match result {
-            Ok(CloudBackupKeepEnabledPreparation::AlreadyConfigured) => {
-                manager.clear_stale_disable_failure_if_configured();
-            }
-            Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled) => {}
-            Ok(CloudBackupKeepEnabledPreparation::Ready(disabling)) => {
-                let Some(restored) = self.runtime.commit(|lifecycle| {
-                    Self::restore_configured_cloud_backup_after_disable(
-                        &manager, lifecycle, &disabling,
-                    )
-                }) else {
-                    return Produces::ok(());
-                };
-
-                if !restored {
-                    return Produces::ok(());
-                }
-
-                manager.finish_keep_cloud_backup_enabled();
-                manager.refresh_sync_health();
-
-                // the record is configured again, and its commit already rebased an idle body and
-                // published a policy that runs background writes; ending a running Turn Off does
-                // the same, and the write lane wakes uploads from it
-                if let Some(claim) = self.runtime.claim()
-                    && claim.operation() == CloudBackupExclusiveOperation::Disable
-                {
-                    self.finish_disable_operation(&manager, claim);
-                }
-            }
-            Err(error) => {
-                manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.logged_reader_message("Failed to keep cloud backup enabled"),
-                    can_keep_enabled: false,
-                });
-            }
-        }
-
-        Produces::ok(())
-    }
-
-    fn restore_configured_cloud_backup_after_disable(
-        manager: &RustCloudBackupManager,
-        lifecycle: &LifecycleWriter,
-        disabling: &CommittedDisable,
-    ) -> Option<bool> {
-        match manager.restore_configured_cloud_backup_after_disable(lifecycle, disabling) {
-            Ok(restored) => Some(restored),
-            Err(error) => {
-                manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.logged_reader_message(
-                        "Failed to restore configured cloud backup after disable",
-                    ),
-                    can_keep_enabled: false,
-                });
-                None
-            }
-        }
     }
 }

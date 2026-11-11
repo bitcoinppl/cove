@@ -30,12 +30,19 @@ pub enum CloudBackupPasskeyRepairState {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupVerificationState {
     NotVerified,
-    Verified { report: Option<DeepVerificationReport>, last_verified_at: Option<u64> },
-    NeedsAttention { report: DeepVerificationReport, checked_at: Option<u64> },
+    Verified {
+        report: Option<DeepVerificationReport>,
+        last_verified_at: Option<u64>,
+    },
+    NeedsAttention {
+        report: DeepVerificationReport,
+        checked_at: Option<u64>,
+    },
     Required,
     Running,
     AwaitingUploadConfirmation,
-    Cancelled,
+    /// The passkey request did not complete; the card shows it, and nothing prompts again
+    NotCompleted,
     Failed(DeepVerificationFailure),
 }
 
@@ -49,7 +56,7 @@ pub enum CloudBackupSyncState {
 }
 
 /// Public status for destructive operations that can affect remote backup data
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudBackupDestructiveOperationState {
     Idle,
     RecreatingManifest,
@@ -59,7 +66,7 @@ pub enum CloudBackupDestructiveOperationState {
 }
 
 /// Status of a request to remove cloud-only backups that the active key cannot decrypt
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudBackupUndecryptableWalletDeletionState {
     Idle,
     Deleting,
@@ -67,7 +74,7 @@ pub enum CloudBackupUndecryptableWalletDeletionState {
 }
 
 /// Detail payload shown after remote backup detail has loaded
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadedCloudBackupDetail {
     pub detail: CloudBackupDetail,
     /// Evidence used to accept the active namespace inventory
@@ -78,7 +85,7 @@ pub struct LoadedCloudBackupDetail {
 }
 
 /// Evidence used to accept wallet inventory for the active backup namespace
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum CloudBackupInventoryAuthority {
     /// The provider returned an authoritative inventory
     ProviderConfirmed,
@@ -113,7 +120,7 @@ impl From<CloudStorageIssue> for CloudBackupInventoryIncompleteReason {
 }
 
 /// Public loading state for the cloud backup detail screen
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudBackupDetailState {
     NotLoaded,
     Checking {
@@ -154,7 +161,7 @@ pub enum CloudBackupRestoreAllState {
 }
 
 /// Public configured-backup state projected from the private reducer
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CloudBackupConfiguredState {
     pub passkey: CloudBackupPasskeyState,
     pub verification: CloudBackupVerificationState,
@@ -192,7 +199,7 @@ pub enum CloudBackupRestoreFlow {
 }
 
 /// Public terminal cloud backup failure
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CloudBackupFailure {
     pub message: String,
 }
@@ -214,7 +221,7 @@ pub struct CloudBackupPendingEnableRecovery {
 
 /// Public top-level cloud backup lifecycle
 #[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudBackupLifecycle {
     Disabled,
     Enabling(CloudBackupEnableFlow),

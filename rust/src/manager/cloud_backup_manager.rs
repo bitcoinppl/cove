@@ -20,6 +20,7 @@ mod pending_verification;
 mod reconcile;
 mod recovery_coverage;
 mod remote_inventory;
+mod screen;
 mod store;
 mod sync_health;
 mod timing;
@@ -99,10 +100,12 @@ pub(crate) use self::model::{
     CloudBackupStatus, CloudOnlyFetch, CloudOnlyListingUpdate,
 };
 pub use self::model::{
-    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
-    CloudBackupRestoreAllState, CloudBackupRestoreFlow,
-    CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
+    CloudBackupEnableFlow, CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
+    CloudBackupLifecycle, CloudBackupPasskeyState, CloudBackupPendingEnableCleanupState,
+    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
+    CloudBackupSyncState, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupVerificationState, LoadedCloudBackupDetail,
 };
 #[cfg(test)]
 pub(crate) use self::ops::test_support::rebase_owners_after_test_write;
@@ -110,10 +113,9 @@ pub(crate) use self::ops::{
     CloudBackupDisablePreparation, CloudBackupEnablePasskeyPreparation,
     CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
     CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
-    CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
-    CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
-    CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
+    CloudBackupNoDiscoveryEnablePreparation, CloudBackupPreparedCloudWalletDelete,
+    CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
+    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
@@ -131,6 +133,11 @@ use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
 pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
+use self::screen::PublishedScreen;
+pub use self::screen::{
+    CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
+    CloudBackupScreen, CloudBackupScreenDelta,
+};
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
 pub(crate) use self::wallet_changes::{LIVE_UPLOAD_DEBOUNCE, live_upload_retry_delay_for_attempt};
@@ -245,9 +252,27 @@ pub enum CloudBackupManagerAction {
     RecoverOtherBackups,
     DeleteOtherBackups,
     DisableCloudBackup,
-    KeepCloudBackupEnabled,
+    /// Confirms the review the user saw; a stale id is rejected
+    ConfirmDisable {
+        review_id: u64,
+    },
+    /// Every way out of the Turn Off review or drain: Cancel, backdrop, back, screen pop
+    CancelDisable,
+    /// Try Again on a committed Turn Off
+    ResumeDisable,
+    /// Finishes a committed Turn Off locally and leaves the remote data
+    StopUsingOnThisDevice,
+    DismissNotice(CloudBackupNoticeKind),
+    /// Google Drive authorization, separate from verification
+    ReconnectDrive,
     RefreshDetail,
     EnterDetail,
+    /// The detail screen went away; a Turn Off review still open is cancelled
+    LeaveDetail,
+    /// Runs the failed load again
+    RetryLoad,
+    /// Resets a corrupted Cloud Backup on this device
+    ResetOnThisDevice,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
@@ -267,13 +292,6 @@ pub enum DeepVerificationFailure {
     ReinitializeBackup { message: String, warning: String, detail: Option<CloudBackupDetail> },
     /// Backup uses a newer format — do not overwrite
     UnsupportedVersion { message: String, detail: Option<CloudBackupDetail> },
-}
-
-/// Top-level state snapshot exposed to platform managers
-#[uniffi::remote(Record)]
-pub struct CloudBackupState {
-    pub lifecycle: CloudBackupLifecycle,
-    pub settings_row_status: CloudBackupSettingsRowStatus,
 }
 
 #[uniffi::export]
@@ -300,6 +318,7 @@ impl DeepVerificationFailure {
 pub struct RustCloudBackupManager {
     pub(crate) state: Arc<RwLock<CloudBackupStateReducer>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
+    published_screen: Arc<PublishedScreen>,
     pub(crate) pending_enable: PendingEnableCoordinator,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
@@ -389,6 +408,11 @@ impl Drop for CloudBackupResetPermit {
 }
 
 impl RustCloudBackupManager {
+    /// The reducer's presentation state, which the screen is projected from
+    pub(crate) fn model_state(&self) -> CloudBackupState {
+        self.state.read().public_state()
+    }
+
     async fn recover_failed_local_reset_preparation(&self, previous_status: CloudBackupStatus) {
         self.abandon_local_reset(previous_status).await;
     }
@@ -638,6 +662,7 @@ impl RustCloudBackupManager {
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
                 reconciler: ReconcileChannel::new(1000),
+                published_screen: Arc::new(PublishedScreen::default()),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
                 // the bootstrap phase hands its writer to the supervisor, the lifecycle owner
@@ -1057,8 +1082,9 @@ impl RustCloudBackupManager {
         CLOUD_BACKUP_MANAGER.clone()
     }
 
-    pub fn state(&self) -> CloudBackupState {
-        self.state.read().public_state()
+    /// The screen the platform starts from; every later change arrives as a `Screen` delta
+    pub fn state(&self) -> CloudBackupScreen {
+        self.published_screen()
     }
 
     /// Number of wallets in the cloud backup
@@ -1191,7 +1217,7 @@ impl RustCloudBackupManager {
             return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery;
         }
 
-        match self.state().lifecycle {
+        match self.model_state().lifecycle {
             CloudBackupLifecycle::Configured(configured)
                 if configured.passkey == model::CloudBackupPasskeyState::Available =>
             {
@@ -1767,7 +1793,7 @@ mod tests {
             operation_id(1),
         ));
 
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Enabling(_)));
         assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabling);
     }
 
@@ -1785,7 +1811,7 @@ mod tests {
             operation_id(1),
         ));
 
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Restoring(_)));
         assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Restoring);
     }
 
@@ -1804,7 +1830,7 @@ mod tests {
         ));
         manager.sync_persisted_state();
 
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Enabling(_)));
         assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
     }
 
@@ -1840,7 +1866,7 @@ mod tests {
             }],
         ));
 
-        let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
             panic!("expected configured state");
         };
 

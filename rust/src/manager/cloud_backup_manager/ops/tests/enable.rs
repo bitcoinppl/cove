@@ -416,7 +416,7 @@ async fn detail_entry_starts_discoverable_verification_without_runtime_authoriza
 
     configure_enabled_cloud_backup(&manager, globals, 0);
     seed_verifiable_cloud_master_key(globals);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let discover_count = globals.passkey.discover_count();
 
@@ -451,7 +451,7 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
         manager.clear_pending_verification_completion();
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.apply_verification_state(verification);
-        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+        globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
         let discover_count = globals.passkey.discover_count();
         let authenticate_count = globals.passkey.authenticate_count();
@@ -906,7 +906,7 @@ async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorizati
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
 
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
     let create_count = globals.passkey.create_count();
     let authenticate_count = globals.passkey.authenticate_count();
     let discover_count = globals.passkey.discover_count();
@@ -1003,7 +1003,7 @@ async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recove
     );
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
-    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+    assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
     assert_eq!(
         manager.onboarding_enable_completion_readiness(),
         CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery
@@ -1031,7 +1031,7 @@ async fn fresh_start_new_passkey_cancellation_preserves_prior_active_exactly() {
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     let (prior_master_key, prior_metadata) = seed_retained_active_master();
-    globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_create_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_force_new(&manager).await.unwrap();
 
@@ -1091,7 +1091,7 @@ async fn fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exact
     let prior_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(prior_namespace.clone(), vec![1, 2, 3]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_force_new(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
@@ -1157,7 +1157,7 @@ async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
         serde_json::to_vec(&encrypted_existing_master).unwrap(),
     );
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
@@ -1316,7 +1316,7 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
     restarted_manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
     restarted_manager.apply_verification_state(VerificationState::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let discover_count = globals.passkey.discover_count();
 
@@ -1368,7 +1368,7 @@ async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
 
@@ -1388,7 +1388,7 @@ async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_create_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
@@ -1431,7 +1431,7 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
         serde_json::to_vec(&encrypted_master).unwrap(),
     );
     globals.cloud.set_wallet_files(remote_namespace_id, vec!["wallet-remote.json".into()]);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let operation = new_restore_operation_for_test(&manager).await;
     let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();

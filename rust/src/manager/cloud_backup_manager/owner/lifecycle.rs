@@ -145,7 +145,13 @@ impl LifecycleWriter {
     ) -> (Self, LifecycleLoad) {
         debug_assert!(ownership.manager_initialized && !ownership.recovery_cleanup_active);
 
-        let writer = Self::with_capability(LifecycleCapability(()));
+        let writer = Self(LifecycleCapability(()));
+
+        // a UI test's legacy record is written as an older build would have left it, before the
+        // load that heals it
+        #[cfg(any(test, debug_assertions))]
+        super::ui_test_legacy_record::seed_requested_legacy_stuck_record(&writer.0);
+
         let load = writer.normalize_on_load(heal);
         (writer, load)
     }
@@ -285,6 +291,16 @@ impl LifecycleWriter {
 
             *state = new_state;
             true
+        })
+    }
+
+    /// The user dismissed the heal notice
+    pub(crate) fn dismiss_heal_notice(&self) -> Result<Committed<bool>, DatabaseError> {
+        self.mutate(|state| match state {
+            PersistedCloudBackupState::Configured(configured) => {
+                configured.heal_notice.take().is_some()
+            }
+            _ => false,
         })
     }
 
@@ -618,17 +634,6 @@ impl LifecycleWriter {
     ) -> Result<Committed<()>, DatabaseError> {
         info!("Cloud Backup finished disable attempt {}", committed.attempt_id);
         self.mutate(|state| *state = PersistedCloudBackupState::Disabled)
-    }
-
-    /// Keep Enabled after a committed disable whose namespace still exists
-    ///
-    /// Routed through the owner like every other record write
-    pub(crate) fn keep_enabled_after_disable(
-        &self,
-        attempt_id: u64,
-    ) -> Result<bool, DatabaseError> {
-        self.mutate(|state| state.restore_configured_after_disable(attempt_id))
-            .map(|mutation| mutation.outcome)
     }
 }
 

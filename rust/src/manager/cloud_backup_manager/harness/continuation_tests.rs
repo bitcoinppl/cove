@@ -18,9 +18,12 @@ use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBac
 use crate::manager::cloud_backup_manager::actors::write::Decision;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupActionAvailability, CloudBackupScreenAction as A,
+};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupKeychain,
-    CloudBackupManagerAction, CloudBackupRootPrompt, CloudBackupStatus,
+    CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupEnableState,
+    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupRootPrompt, CloudBackupStatus,
     SavedPasskeyConfirmationMode, VerificationState,
 };
 
@@ -173,7 +176,7 @@ fn assert_late_discard_changes_nothing(app: &mut TestApp) {
 
     // displayed
     assert_eq!(app.manager().current_status(), CloudBackupStatus::Enabled);
-    assert!(matches!(app.manager().state().lifecycle, CloudBackupLifecycle::Configured(_)));
+    assert!(matches!(app.manager().model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
 
     // durable
     assert!(matches!(record, PersistedCloudBackupState::Configured(_)), "{record:?}");
@@ -186,6 +189,55 @@ fn assert_late_discard_changes_nothing(app: &mut TestApp) {
         .block_on("the lane's ticket", async move { call!(writes.ticket()).await })
         .expect("ticket");
     assert_eq!(ticket.ordinary, Decision::Run);
+}
+
+/// The existing-backup prompt's choices are controls like any other: each has its own entry with
+/// admission's decision, which the platform's prompt binds its button to, and answering the
+/// prompt takes both away with the prompt
+#[test]
+fn the_existing_backup_prompt_offers_each_choice_as_its_own_entry() {
+    let test =
+        concat!(module_path!(), "::the_existing_backup_prompt_offers_each_choice_as_its_own_entry");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let existing = MasterKey::generate();
+        let namespace = existing.namespace_id();
+        let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
+        app.cloud.inner.set_wallet_files(namespace.clone(), vec!["wallet-1.json".into()]);
+        app.cloud.inner.set_master_key_backup(
+            namespace,
+            serde_json::to_vec(&encrypted).expect("encode master key"),
+        );
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackupNoDiscovery(
+            CloudBackupEnableContext::settings_manual(),
+        ))
+        .then_cannot(&[N::TurnOff]);
+
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::ExistingBackupFound(..)),
+            "{}",
+            app.describe()
+        );
+        for choice in [A::AcceptEnablePromptUseExisting, A::AcceptEnablePromptCreateNew] {
+            assert_eq!(
+                screen.actions.availability(choice),
+                Some(CloudBackupActionAvailability::Available),
+                "{choice:?}"
+            );
+        }
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::CreateNew,
+        ))
+        .then_cannot(&[N::TurnOff]);
+
+        let screen = app.manager().published_screen();
+        assert_eq!(screen.root_prompt, CloudBackupRootPrompt::None, "{}", app.describe());
+        assert_eq!(screen.actions.availability(A::AcceptEnablePromptUseExisting), None);
+        assert_eq!(screen.actions.availability(A::AcceptEnablePromptCreateNew), None);
+    });
 }
 
 /// Dismissing the existing-backup prompt is a Discard of an Enable that holds no material: it

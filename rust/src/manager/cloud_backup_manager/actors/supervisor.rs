@@ -29,8 +29,7 @@ use crate::database::cloud_backup::{
 };
 use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, ConfiguredAdmission, ContinuationOwner, ContinuationStage, PauseReason, Rejection,
-    UserIntent,
+    Admission, ContinuationOwner, ContinuationStage, PauseReason, Rejection, UserIntent,
 };
 use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
 use crate::manager::cloud_backup_manager::model::{
@@ -60,8 +59,8 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
     CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
     CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
-    CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
+    CloudBackupNoDiscoveryEnablePreparation, CloudBackupOtherBackupsOutcome,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
     CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
@@ -106,7 +105,8 @@ mod workers;
 
 use enable::EnableContinuation;
 
-pub(crate) use dispatch::DispatchOutcome;
+pub(crate) use dispatch::{DispatchOutcome, enable_prompt_answers};
+pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};

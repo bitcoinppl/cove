@@ -3963,10 +3963,25 @@ sealed class PasskeyException: kotlin.Exception() {
             get() = ""
     }
 
-    class UserCancelled(
+    /**
+     * The user-started request did not complete, such as a dismissed sheet; never a missing
+     * credential
+     */
+    class NotCompleted(
         ) : PasskeyException() {
         override val message
             get() = ""
+    }
+
+    /**
+     * No foreground window or activity can present the request yet
+     */
+    class NotReady(
+
+        val `operation`: PasskeyOperation
+        ) : PasskeyException() {
+        override val message
+            get() = "operation=${ `operation` }"
     }
 
     class RequestFailed(
@@ -4017,12 +4032,15 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 FfiConverterTypePasskeyFailureReason.read(buf),
                 )
             2 -> PasskeyException.PrfUnsupportedProvider()
-            3 -> PasskeyException.UserCancelled()
-            4 -> PasskeyException.RequestFailed(
+            3 -> PasskeyException.NotCompleted()
+            4 -> PasskeyException.NotReady(
+                FfiConverterTypePasskeyOperation.read(buf),
+                )
+            5 -> PasskeyException.RequestFailed(
                 FfiConverterTypePasskeyOperation.read(buf),
                 FfiConverterTypePasskeyFailureReason.read(buf),
                 )
-            5 -> PasskeyException.NoCredentialFound()
+            6 -> PasskeyException.NoCredentialFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -4038,9 +4056,14 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is PasskeyException.UserCancelled -> (
+            is PasskeyException.NotCompleted -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+            )
+            is PasskeyException.NotReady -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypePasskeyOperation.allocationSize(value.`operation`)
             )
             is PasskeyException.RequestFailed -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -4066,18 +4089,23 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 buf.putInt(2)
                 Unit
             }
-            is PasskeyException.UserCancelled -> {
+            is PasskeyException.NotCompleted -> {
                 buf.putInt(3)
                 Unit
             }
-            is PasskeyException.RequestFailed -> {
+            is PasskeyException.NotReady -> {
                 buf.putInt(4)
+                FfiConverterTypePasskeyOperation.write(value.`operation`, buf)
+                Unit
+            }
+            is PasskeyException.RequestFailed -> {
+                buf.putInt(5)
                 FfiConverterTypePasskeyOperation.write(value.`operation`, buf)
                 FfiConverterTypePasskeyFailureReason.write(value.`reason`, buf)
                 Unit
             }
             is PasskeyException.NoCredentialFound -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

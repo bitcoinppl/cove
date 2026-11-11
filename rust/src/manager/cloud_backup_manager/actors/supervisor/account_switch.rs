@@ -1,4 +1,6 @@
 use super::*;
+use crate::manager::cloud_backup_manager::CloudBackupDriveAccountSwitchRecovery;
+use crate::manager::cloud_backup_manager::model::CloudBackupStateReducerEvent;
 use crate::manager::cloud_backup_manager::owner::lifecycle::DriveAccountSwitchStart;
 use cove_util::ResultExt as _;
 
@@ -282,6 +284,11 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(error));
         }
 
+        // a retry answers the recovery card; a retry that fails again reports a new one
+        manager.apply_model_event(
+            CloudBackupStateReducerEvent::DriveAccountSwitchRecoveryReported(None),
+        );
+
         let Some(transition) = Self::drive_account_switch() else {
             let action = match platform_state {
                 DriveAccountSwitchPlatformState::NoTransition => {
@@ -560,9 +567,13 @@ impl CloudBackupSupervisor {
             action: RecoveryAction::ReinitializeBackup,
             error: message.into(),
         });
-        manager.send(crate::manager::cloud_backup_manager::CloudBackupReconcileMessage::DriveAccountSwitchRecoveryRequired {
-            transition_id: transition_id.value(),
-            message: message.into(),
-        });
+        manager.apply_model_event(
+            CloudBackupStateReducerEvent::DriveAccountSwitchRecoveryReported(Some(
+                CloudBackupDriveAccountSwitchRecovery {
+                    transition_id: transition_id.value(),
+                    message: message.into(),
+                },
+            )),
+        );
     }
 }

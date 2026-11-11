@@ -47,17 +47,17 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome,
     CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
-    CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupInventoryAuthority,
-    CloudBackupInventoryIncompleteReason, CloudBackupKeychain, CloudBackupLifecycle,
-    CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRestoreAllState, CloudBackupRestoreEvent, CloudBackupRootPrompt,
-    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
-    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
+    CloudBackupDetailSnapshotCompletion, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
+    CloudBackupEnableState, CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
+    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreAllState,
+    CloudBackupRestoreEvent, CloudBackupRootPrompt, CloudBackupVerificationPresentation,
+    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingEnableNamespaceOwnership,
+    PendingEnablePasskeyMetadata, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction,
+    SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
@@ -141,7 +141,7 @@ async fn deep_verify_for_test(
         }
         VerificationState::Failed(failure) => DeepVerificationResult::Failed(failure),
         VerificationState::Cancelled => {
-            DeepVerificationResult::UserCancelled(manager.model_snapshot().detail)
+            DeepVerificationResult::NotCompleted(manager.model_snapshot().detail)
         }
         VerificationState::Idle | VerificationState::Verifying => {
             panic!("expected supervisor-owned deep verification result")
@@ -300,14 +300,6 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
     .await;
 }
 
-async fn run_keep_cloud_backup_enabled(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.keep_cloud_backup_enabled()).await.expect("keep cloud backup enabled");
-    wait_for_test_condition(Duration::from_secs(2), "keep-enabled recovery finishes", || {
-        current_disable_generation().is_none()
-    })
-    .await;
-}
-
 async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.start_recovery_operation(RecoveryAction::RecreateManifest))
         .await
@@ -359,7 +351,7 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
 }
 
 fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
     let CloudBackupDestructiveOperationState::DisableFailed { message, .. } =

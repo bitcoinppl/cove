@@ -440,21 +440,6 @@ impl PersistedCloudBackupState {
     pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
         Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
     }
-
-    pub(crate) fn restore_configured_after_disable(&mut self, disable_generation: u64) -> bool {
-        match std::mem::take(self) {
-            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
-                if disabling.disable_generation == disable_generation =>
-            {
-                *self = Self::Configured(disabling.previous_configured);
-                true
-            }
-            other => {
-                *self = other;
-                false
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

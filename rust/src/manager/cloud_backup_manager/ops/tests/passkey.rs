@@ -219,7 +219,7 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
     globals
         .cloud
         .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
@@ -630,7 +630,7 @@ async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
     }));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
 
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),

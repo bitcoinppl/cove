@@ -188,7 +188,7 @@ impl PasskeyMaterialAcquirer {
                     provider_hint: None,
                 }))
             }
-            Err(PasskeyError::UserCancelled) => {
+            Err(PasskeyError::NotCompleted) => {
                 info!("{}", purpose.cancelled_message());
                 Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
@@ -341,7 +341,7 @@ fn passkey_provider_hint(
 pub(crate) fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
     match error {
         PasskeyError::PrfUnsupportedProvider => CloudBackupError::UnsupportedPasskeyProvider,
-        PasskeyError::UserCancelled => {
+        PasskeyError::NotCompleted => {
             info!("User cancelled new passkey flow for wrapper repair");
             CloudBackupError::PasskeyDiscoveryCancelled
         }
@@ -352,7 +352,7 @@ pub(crate) fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBack
 fn map_enable_passkey_error(error: PasskeyError) -> CloudBackupError {
     match error {
         PasskeyError::PrfUnsupportedProvider => CloudBackupError::UnsupportedPasskeyProvider,
-        PasskeyError::UserCancelled => {
+        PasskeyError::NotCompleted => {
             info!("User cancelled new passkey flow for cloud backup enable");
             CloudBackupError::PasskeyDiscoveryCancelled
         }

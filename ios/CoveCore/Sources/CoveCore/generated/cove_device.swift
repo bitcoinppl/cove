@@ -2176,7 +2176,16 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case NotSupported(reason: PasskeyFailureReason
     )
     case PrfUnsupportedProvider
-    case UserCancelled
+    /**
+     * The user-started request did not complete, such as a dismissed sheet; never a missing
+     * credential
+     */
+    case NotCompleted
+    /**
+     * No foreground window or activity can present the request yet
+     */
+    case NotReady(operation: PasskeyOperation
+    )
     case RequestFailed(operation: PasskeyOperation, reason: PasskeyFailureReason
     )
     case NoCredentialFound
@@ -2224,12 +2233,15 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
         case 2: return .PrfUnsupportedProvider
-        case 3: return .UserCancelled
-        case 4: return .RequestFailed(
+        case 3: return .NotCompleted
+        case 4: return .NotReady(
+            operation: try FfiConverterTypePasskeyOperation.read(from: &buf)
+            )
+        case 5: return .RequestFailed(
             operation: try FfiConverterTypePasskeyOperation.read(from: &buf),
             reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
-        case 5: return .NoCredentialFound
+        case 6: return .NoCredentialFound
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2251,18 +2263,23 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case .UserCancelled:
+        case .NotCompleted:
             writeInt(&buf, Int32(3))
 
 
-        case let .RequestFailed(operation,reason):
+        case let .NotReady(operation):
             writeInt(&buf, Int32(4))
+            FfiConverterTypePasskeyOperation.write(operation, into: &buf)
+
+
+        case let .RequestFailed(operation,reason):
+            writeInt(&buf, Int32(5))
             FfiConverterTypePasskeyOperation.write(operation, into: &buf)
             FfiConverterTypePasskeyFailureReason.write(reason, into: &buf)
 
 
         case .NoCredentialFound:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
 
         }
     }

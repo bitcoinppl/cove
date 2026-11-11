@@ -136,12 +136,13 @@ fn verification_proof_is_usable(
     matches!(
         (live, persisted),
         (
-            CloudBackupVerificationState::Verified { .. } | CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::Verified { .. }
+                | CloudBackupVerificationState::NotCompleted,
             PersistedBackupVerificationState::Verified { .. },
         ) | (
             CloudBackupVerificationState::Verified { .. }
                 | CloudBackupVerificationState::Required
-                | CloudBackupVerificationState::Cancelled,
+                | CloudBackupVerificationState::NotCompleted,
             PersistedBackupVerificationState::Required {
                 reason: PersistedVerificationRequirement::WalletSetChanged,
                 last_verified_at: Some(_),
@@ -233,7 +234,6 @@ mod tests {
                         record_id: record_id.into(),
                     }],
                     needs_sync: Vec::new(),
-                    cloud_only_count: 0,
                 },
                 inventory_authority: authority,
                 cloud_only: super::super::CloudOnlyState::NotFetched,
@@ -508,7 +508,7 @@ mod tests {
                 CloudBackupWalletStatus::Confirmed,
                 &record_id,
             ),
-            CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::NotCompleted,
             CloudSyncHealth::AllUploaded,
         );
         let mut wallet_set_changed = persisted_verified_state();
@@ -516,7 +516,7 @@ mod tests {
 
         for persisted in [persisted_verified_state(), wallet_set_changed] {
             let cancelled =
-                apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+                apply_verification_result(&persisted, &DeepVerificationResult::NotCompleted(None));
 
             assert_eq!(cancelled, persisted);
             assert!(
@@ -533,14 +533,14 @@ mod tests {
         let persisted =
             persisted_required_state(PersistedVerificationRequirement::IntegrityIssue, Some(10));
         let cancelled =
-            apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+            apply_verification_result(&persisted, &DeepVerificationResult::NotCompleted(None));
         let live = cloud_state_with_verification(
             loaded_detail(
                 CloudBackupInventoryAuthority::ProviderConfirmed,
                 CloudBackupWalletStatus::Confirmed,
                 &record_id,
             ),
-            CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::NotCompleted,
             CloudSyncHealth::AllUploaded,
         );
 

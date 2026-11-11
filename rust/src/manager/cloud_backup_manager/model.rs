@@ -5,7 +5,8 @@
 //! claims are tracked here so stale async completions cannot clear newer work
 
 use super::{
-    CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupError,
+    CloudBackupDetail, CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext,
+    CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupHealNotice,
     CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
     CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationReason, CloudBackupWalletStatus,
@@ -73,13 +74,12 @@ pub(crate) enum CloudBackupEnableState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupDisableOutcome {
     Started,
-    ReturnedToIdle,
     Failed { message: String, can_keep_enabled: bool },
 }
 
 /// Detail built from a provider listing, paired with the listing's cloud-only identity
 ///
-/// The exported detail carries only a cloud-only count, which cannot tell loaded rows `{A, B}`
+/// The exported detail carries no cloud-only identity, so it cannot tell loaded rows `{A, B}`
 /// from a listing that now has `{B, C}`, so every listing-backed detail travels with the IDs
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CloudBackupListedDetail {
@@ -102,8 +102,8 @@ impl CloudBackupDetail {
     /// confirmed rows it dropped
     ///
     /// A deleted wallet keeps its backup, so a confirmed row's backup is a cloud-only record from
-    /// now on and the count grows by those rows. A row that still needed a sync may never have
-    /// reached the cloud, so the next refresh settles it
+    /// now on. A row that still needed a sync may never have reached the cloud, so the next
+    /// refresh settles it
     pub(crate) fn retain_local_wallets(
         &mut self,
         local_record_ids: &HashSet<String>,
@@ -114,7 +114,6 @@ impl CloudBackupDetail {
 
         self.up_to_date = kept;
         self.needs_sync.retain(|wallet| local_record_ids.contains(&wallet.record_id));
-        self.cloud_only_count += removed.len() as u32;
 
         removed.into_iter().map(|wallet| wallet.record_id).collect()
     }
@@ -190,6 +189,10 @@ struct CloudBackupReducerState {
     should_prompt_verification: bool,
     verification_metadata: CloudBackupVerificationMetadata,
     verification_presentation: CloudBackupVerificationPresentation,
+    /// The persisted heal notice, mirrored for the screen until the owner projects it
+    heal_notice: Option<CloudBackupHealNotice>,
+    /// A Google Drive account switch Rust and the platform disagree on, until it is retried
+    drive_account_switch_recovery: Option<CloudBackupDriveAccountSwitchRecovery>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -244,6 +247,8 @@ impl Default for CloudBackupReducerState {
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
+            heal_notice: None,
+            drive_account_switch_recovery: None,
         }
     }
 }
@@ -637,7 +642,7 @@ impl CloudBackupReducerState {
 
         if matches!(
             self.configured.verification,
-            CloudBackupVerificationState::Required | CloudBackupVerificationState::Cancelled
+            CloudBackupVerificationState::Required | CloudBackupVerificationState::NotCompleted
         ) {
             return CloudBackupSettingsRowStatus::Unverified;
         }
@@ -713,7 +718,7 @@ impl CloudBackupReducerState {
                 VerificationState::NeedsAttention(report.clone())
             }
             CloudBackupVerificationState::Running => VerificationState::Verifying,
-            CloudBackupVerificationState::Cancelled => VerificationState::Cancelled,
+            CloudBackupVerificationState::NotCompleted => VerificationState::Cancelled,
             CloudBackupVerificationState::Failed(failure) => {
                 VerificationState::Failed(failure.clone())
             }
@@ -1152,7 +1157,7 @@ impl CloudBackupReducerState {
     fn resolve_verification(&mut self, verification: VerificationState) {
         self.configured.verification = match verification {
             VerificationState::Idle => self.idle_verification_state(),
-            VerificationState::Cancelled => CloudBackupVerificationState::Cancelled,
+            VerificationState::Cancelled => CloudBackupVerificationState::NotCompleted,
             VerificationState::Verifying => CloudBackupVerificationState::Running,
             VerificationState::Verified(report) => CloudBackupVerificationState::Verified {
                 report: Some(report),
@@ -1243,10 +1248,6 @@ impl CloudBackupReducerState {
                         message,
                         can_keep_enabled,
                     };
-                self.phase = CloudBackupLifecyclePhase::Configured;
-            }
-            CloudBackupDisableOutcome::ReturnedToIdle => {
-                self.configured.destructive_operation = CloudBackupDestructiveOperationState::Idle;
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
         }
@@ -1631,6 +1632,16 @@ impl CloudBackupStateReducer {
         self.state.other_backups_operation()
     }
 
+    pub(crate) fn heal_notice(&self) -> Option<CloudBackupHealNotice> {
+        self.state.heal_notice
+    }
+
+    pub(crate) fn drive_account_switch_recovery(
+        &self,
+    ) -> Option<CloudBackupDriveAccountSwitchRecovery> {
+        self.state.drive_account_switch_recovery.clone()
+    }
+
     pub(crate) fn active_operation(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         self.state.active_operation()
     }
@@ -1835,6 +1846,12 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::DisableStateResolved(outcome) => {
                 self.state.resolve_disable(outcome);
+            }
+            CloudBackupStateReducerEvent::HealNoticeReconciled(notice) => {
+                self.state.heal_notice = notice;
+            }
+            CloudBackupStateReducerEvent::DriveAccountSwitchRecoveryReported(recovery) => {
+                self.state.drive_account_switch_recovery = recovery;
             }
             CloudBackupStateReducerEvent::UndecryptableWalletDeletionStateResolved(state) => {
                 self.state.configured.undecryptable_wallet_deletion = state;
@@ -2113,13 +2130,8 @@ mod tests {
         }
     }
 
-    fn test_detail(cloud_only_count: u32) -> CloudBackupDetail {
-        CloudBackupDetail {
-            last_sync: None,
-            up_to_date: Vec::new(),
-            needs_sync: Vec::new(),
-            cloud_only_count,
-        }
+    fn test_detail() -> CloudBackupDetail {
+        CloudBackupDetail { last_sync: None, up_to_date: Vec::new(), needs_sync: Vec::new() }
     }
 
     fn cloud_only_wallet(
@@ -2150,10 +2162,7 @@ mod tests {
             ),
         };
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: (
-                test_detail(wallets.len() as u32),
-                CloudBackupInventoryAuthority::ProviderConfirmed,
-            ),
+            detail: (test_detail(), CloudBackupInventoryAuthority::ProviderConfirmed),
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
@@ -2228,7 +2237,6 @@ mod tests {
             last_sync: None,
             up_to_date: vec![deleted.clone()],
             needs_sync: vec![kept.clone()],
-            cloud_only_count: 0,
         };
         let mut model = configured_model_with_cloud_only(Vec::new());
         load_listed_cloud_only(&mut model, &detail, &[]);
@@ -2244,7 +2252,6 @@ mod tests {
             visible_rows(&model),
             vec![(kept.record_id.clone(), CloudBackupWalletStatus::Dirty)]
         );
-        assert_eq!(model.state.loaded_detail().unwrap().detail.cloud_only_count, 1);
 
         // the throttled detail refresh fails, which keeps the retained detail as it now is
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
@@ -2280,7 +2287,6 @@ mod tests {
             last_sync: None,
             up_to_date: vec![wallet.clone()],
             needs_sync: Vec::new(),
-            cloud_only_count: 0,
         };
         let mut model = configured_model_with_cloud_only(Vec::new());
         load_listed_cloud_only(&mut model, &detail, &[]);
@@ -2293,13 +2299,12 @@ mod tests {
             visible_rows(&model),
             vec![(wallet.record_id, CloudBackupWalletStatus::Confirmed)]
         );
-        assert_eq!(model.state.loaded_detail().unwrap().detail.cloud_only_count, 0);
     }
 
     #[test]
     fn already_on_device_result_read_before_a_local_wallet_change_is_discarded() {
         let wallet = cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice);
-        let detail = test_detail(1);
+        let detail = test_detail();
         let mut model = configured_model_with_cloud_only(Vec::new());
         load_listed_cloud_only(&mut model, &detail, std::slice::from_ref(&wallet));
         let restore_generation = model.cloud_only_listing_generation();
@@ -2570,7 +2575,7 @@ mod tests {
 
     #[test]
     fn restore_all_retry_allows_one_remaining_wallet_only_when_complete() {
-        let detail = test_detail(1);
+        let detail = test_detail();
         let wallets =
             vec![cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice)];
         let mut model = configured_model_with_cloud_only(wallets.clone());
@@ -2663,7 +2668,7 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let detail = test_detail(2);
+        let detail = test_detail();
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
             detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
@@ -2697,7 +2702,7 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let detail = test_detail(2);
+        let detail = test_detail();
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
             detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
@@ -2728,7 +2733,7 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let provisional = test_detail(1);
+        let provisional = test_detail();
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(
             provisional.clone(),
@@ -2755,7 +2760,7 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let detail = test_detail(2);
+        let detail = test_detail();
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
             detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
@@ -2790,7 +2795,7 @@ mod tests {
         };
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: (test_detail(1), CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount),
+            detail: (test_detail(), CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount),
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
 
@@ -2806,7 +2811,7 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let detail = test_detail(2);
+        let detail = test_detail();
         let wallets = vec![
             cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
@@ -2854,13 +2859,13 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        let retained = test_detail(3);
+        let retained = test_detail();
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
             detail: (retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
-        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail(0)));
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail()));
 
         assert_eq!(model.state.detail(), Some(retained));
         assert!(!model.detail_inventory_is_complete());
@@ -3293,24 +3298,6 @@ mod tests {
                 can_keep_enabled: true,
             }
         );
-    }
-
-    #[test]
-    fn returned_to_idle_clears_disable_failed_signal() {
-        let mut model = CloudBackupStateReducer::default();
-        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
-        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-            CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
-        ));
-
-        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-            CloudBackupDisableOutcome::ReturnedToIdle,
-        ));
-
-        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
-            panic!("enabled backup should project configured lifecycle");
-        };
-        assert_eq!(state.destructive_operation, CloudBackupDestructiveOperationState::Idle);
     }
 
     #[test]

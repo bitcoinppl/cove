@@ -9,11 +9,12 @@ use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::app::{NextAction, TestApp};
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
+use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
     wallet_entry_with_labels, xpub_only_wallet_metadata,
 };
+use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, CloudBackupManagerAction, CloudBackupStore,
 };
@@ -159,9 +160,6 @@ pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
 }
 
 /// Persist the reporter's stuck record: a disable that never deleted anything
-///
-/// Only builds before the fix wrote this shape (`begin_disabling` with no commit time); the
-/// exact `last_error` on the reporter's device is not known
 pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     let table = &Database::global().cloud_backup_state;
     let PersistedCloudBackupState::Configured(previous_configured) =
@@ -171,15 +169,7 @@ pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     };
 
     table
-        .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
-            previous_configured,
-            namespace_id: namespace.to_string(),
-            disable_generation: 1,
-            started_at,
-            delete_started_at: None,
-            last_error: None,
-            retry_after: None,
-        }))
+        .set(&legacy_stuck_record(previous_configured, namespace.to_string(), started_at))
         .expect("persist legacy disabling record");
 }
 

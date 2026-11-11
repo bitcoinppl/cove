@@ -142,7 +142,6 @@ pub(crate) fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListed
             last_sync: None,
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
-            cloud_only_count: cloud_only_record_ids.len() as u32,
         },
         cloud_only_record_ids: cloud_only_record_ids
             .iter()

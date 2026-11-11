@@ -117,7 +117,7 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
     )
     .await;
 
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
 

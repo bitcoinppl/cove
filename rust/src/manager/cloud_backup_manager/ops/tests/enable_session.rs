@@ -338,7 +338,7 @@ async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
-    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
     confirm_saved_passkey_session(&manager).await;
 
     assert_eq!(
@@ -620,7 +620,7 @@ async fn enable_during_a_pending_enable_discard_is_rejected_and_the_discard_fini
             CloudBackupExclusiveOperation::DiscardPendingEnable
         ))
     );
-    assert_eq!(manager.state().lifecycle, CloudBackupLifecycle::Disabled);
+    assert_eq!(manager.model_state().lifecycle, CloudBackupLifecycle::Disabled);
 
     delete.release();
     wait_for_test_condition(
@@ -687,11 +687,11 @@ async fn discard_pending_enable_remote_cleanup_failure_retains_session_and_journ
     wait_for_test_condition(
         Duration::from_secs(1),
         "discard pending enable cleanup failure should surface",
-        || matches!(manager.state().lifecycle, CloudBackupLifecycle::Failed(_)),
+        || matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Failed(_)),
     )
     .await;
 
-    let CloudBackupLifecycle::Failed(failure) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Failed(failure) = manager.model_state().lifecycle else {
         panic!("expected failed lifecycle");
     };
     assert_eq!(failure.message, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
@@ -915,11 +915,11 @@ async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journa
     wait_for_test_condition(
         Duration::from_secs(1),
         "discard pending enable local cleanup failure should surface",
-        || matches!(manager.state().lifecycle, CloudBackupLifecycle::Failed(_)),
+        || matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Failed(_)),
     )
     .await;
 
-    let CloudBackupLifecycle::Failed(failure) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Failed(failure) = manager.model_state().lifecycle else {
         panic!("expected failed lifecycle");
     };
     assert_eq!(failure.message, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);

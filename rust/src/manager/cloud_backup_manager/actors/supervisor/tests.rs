@@ -35,6 +35,7 @@ use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerifi
 use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey,
 };
+use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle, CloudBackupListedDetail,
     CloudBackupOtherBackupsSummary,
@@ -169,12 +170,11 @@ fn test_cloud_only_wallet(record_id: &str) -> CloudBackupWalletItem {
     }
 }
 
-fn test_cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
+fn test_cloud_backup_detail() -> CloudBackupDetail {
     CloudBackupDetail {
         last_sync: None,
         up_to_date: Vec::new(),
         needs_sync: Vec::new(),
-        cloud_only_count,
     }
 }
 
@@ -224,7 +224,7 @@ fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBa
 
 /// The detail the frontends read, including one retained while a refresh runs or after it failed
 fn public_detail(manager: &RustCloudBackupManager) -> Option<CloudBackupDetail> {
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
 
@@ -238,7 +238,7 @@ fn public_detail(manager: &RustCloudBackupManager) -> Option<CloudBackupDetail> 
 
 /// The cloud-only state the frontends read, which only exists once the detail has loaded
 fn public_cloud_only(manager: &RustCloudBackupManager) -> Option<CloudOnlyState> {
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         return None;
     };
 
@@ -1163,22 +1163,10 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
         supervisor.runtime.claim().and_then(CloudBackupExclusiveOperationClaim::drive_account_switch_id),
         None
     );
-    assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
-        SingleOrMany::Single(message) => matches!(
-            message,
-            CloudBackupReconcileMessage::DriveAccountSwitchRecoveryRequired {
-                transition_id: 7,
-                ..
-            }
-        ),
-        SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
-            message,
-            CloudBackupReconcileMessage::DriveAccountSwitchRecoveryRequired {
-                transition_id: 7,
-                ..
-            }
-        )),
-    }));
+    let CloudBackupScreenBody::DriveAccountSwitch(screen) = manager.published_screen().body else {
+        panic!("the recovery card is not on screen: {:?}", manager.published_screen().body);
+    };
+    assert_eq!(screen.recovery.map(|recovery| recovery.transition_id), Some(7));
 }
 
 fn begin_exclusive(
@@ -1812,7 +1800,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
         CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
     );
 
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup");
     };
     let CloudBackupDetailState::Complete { state } = configured.detail else {
@@ -1849,7 +1837,7 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::Configured(ref configured)
             if matches!(
                 configured.detail,
@@ -1900,7 +1888,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::Configured(ref configured)
             if matches!(
                 configured.detail,
@@ -2619,7 +2607,7 @@ async fn pending_enable_restart_finishes_after_commit_cleared_staging_slot() {
         .load_pending_enable_journal()
         .unwrap()
         .is_none());
-    assert!(!matches!(manager.state().lifecycle, CloudBackupLifecycle::PendingEnableRecovery(_)));
+    assert!(!matches!(manager.model_state().lifecycle, CloudBackupLifecycle::PendingEnableRecovery(_)));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2704,7 +2692,7 @@ async fn pending_enable_restart_fails_closed_on_conflicting_completion() {
     supervisor.resume_pending_enable_after_restart().await.unwrap();
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
@@ -2746,13 +2734,13 @@ async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
     supervisor.resume_pending_enable_after_restart().await.unwrap();
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::Available,
         }) if support_code == "CB-PE-001"
     ));
-    assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+    assert_eq!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2771,18 +2759,18 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     crate::manager::cloud_backup_manager::ops::test_support::supervisor_checkpoint(&manager).await;
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::Available,
         }) if support_code == "CB-PE-001"
     ));
-    assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+    assert_eq!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
 
     call!(manager.supervisor.confirm_pending_enable_cleanup()).await.unwrap();
 
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
-    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Disabled));
+    assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Disabled));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2803,7 +2791,7 @@ async fn pending_enable_recovery_survives_persisted_state_reconcile() {
     manager.reconcile_persisted_state(&persisted_enabled_cloud_backup_state(Some(0)));
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(_)
     ));
 }
@@ -2835,7 +2823,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
 
     supervisor.resume_pending_enable_after_restart().await.unwrap();
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::Available,
@@ -2852,7 +2840,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
-    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+    assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2868,7 +2856,7 @@ async fn no_journal_staged_cleanup_revalidates_before_discarding() {
     );
     supervisor.resume_pending_enable_after_restart().await.unwrap();
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             cleanup: CloudBackupPendingEnableCleanupState::Available,
             ..
@@ -2879,7 +2867,7 @@ async fn no_journal_staged_cleanup_revalidates_before_discarding() {
     supervisor.confirm_pending_enable_cleanup().await.unwrap();
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
@@ -2920,7 +2908,7 @@ async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
     supervisor.resume_pending_enable_after_restart().await.unwrap();
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
@@ -2944,7 +2932,7 @@ async fn pending_enable_restart_projects_unreadable_evidence_without_diagnostics
 
     supervisor.resume_pending_enable_after_restart().await.unwrap();
 
-    let CloudBackupLifecycle::PendingEnableRecovery(recovery) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::PendingEnableRecovery(recovery) = manager.model_state().lifecycle else {
         panic!("expected pending enable recovery");
     };
     assert_eq!(recovery.support_code, "CB-PE-005");
@@ -2994,7 +2982,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
-    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+    assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3022,7 +3010,7 @@ async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
 
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
@@ -3056,7 +3044,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
     supervisor.confirm_pending_enable_cleanup().await.unwrap();
 
     assert!(matches!(
-        manager.state().lifecycle,
+        manager.model_state().lifecycle,
         CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
             support_code,
             cleanup: CloudBackupPendingEnableCleanupState::Available,
@@ -3114,7 +3102,7 @@ async fn stale_completion_is_discarded_without_touching_the_running_operation() 
     // before the snapshot can still land after it, so the comparison leaves sync health out;
     // the state has no PartialEq, so its debug form stands in for it
     let operation_state = || {
-        let mut state = manager.state();
+        let mut state = manager.model_state();
         if let CloudBackupLifecycle::Configured(configured) = &mut state.lifecycle {
             configured.sync_health = cove_device::cloud_storage::CloudSyncHealth::Unknown;
         }
@@ -3147,39 +3135,6 @@ async fn stale_completion_is_discarded_without_touching_the_running_operation() 
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn keep_enabled_finishes_active_disable_operation() {
-    let _guard = async_test_lock().lock().await;
-    let manager = test_supervisor_manager();
-    let mut supervisor = test_supervisor(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
-
-    persist_enabled_under(&mut supervisor);
-    supervisor.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable).unwrap();
-    let disabling = test_disabling_state();
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
-        .unwrap();
-    let DisablingRecord::Committed(committed) = CommittedDisable::from_record(&disabling) else {
-        panic!("the test record is committed");
-    };
-    supervisor
-        .complete_keep_cloud_backup_enabled(Ok(CloudBackupKeepEnabledPreparation::Ready(Box::new(
-            committed,
-        ))))
-        .await
-        .unwrap();
-
-    assert_eq!(supervisor.runtime, None);
-    assert_eq!(manager.projected_exclusive_operation(), None);
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Configured(_)
-    ));
-}
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() {
@@ -4257,7 +4212,6 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
     // its backup is still in the cloud, now as a record that is not on this device
     let detail = public_detail(&manager).unwrap();
     assert!(detail.needs_sync.is_empty());
-    assert_eq!(detail.cloud_only_count, 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4305,7 +4259,6 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
 
     let detail = public_detail(&manager).unwrap();
     assert!(detail.up_to_date.is_empty(), "the deleted wallet is listed as local again");
-    assert_eq!(detail.cloud_only_count, 1);
 
     let cloud_only = public_cloud_only(&manager);
     assert!(
@@ -4322,7 +4275,6 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
 
     let detail = public_detail(&manager).unwrap();
     assert!(detail.up_to_date.is_empty(), "the verification listed the deleted wallet as local");
-    assert_eq!(detail.cloud_only_count, 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4346,7 +4298,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
 
     // a background report carries no listing, so the loaded rows cannot be matched and reset
     manager.apply_verification_effect(CloudBackupVerificationEffect {
-        detail: Some(test_cloud_backup_detail(2)),
+        detail: Some(test_cloud_backup_detail()),
         ..Default::default()
     });
 
@@ -4778,7 +4730,7 @@ fn persisted_drive_account_switch_phase() -> Option<PersistedDriveAccountSwitchP
 fn configured_cloud_backup_state(
     manager: &RustCloudBackupManager,
 ) -> crate::manager::cloud_backup_manager::model::CloudBackupConfiguredState {
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
 
@@ -5015,7 +4967,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     let verification_claim = supervisor.runtime.claim().unwrap();
 
     assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabled);
-    assert_ne!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::SettingUp);
+    assert_ne!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::SettingUp);
     assert_ne!(verification_claim, reinitialize_claim);
     assert_eq!(
         verification_claim.operation(),

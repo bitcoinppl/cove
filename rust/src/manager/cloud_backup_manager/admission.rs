@@ -8,7 +8,7 @@
 
 use super::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
-    CloudBackupManagerAction, CloudBackupVerificationSource, RecordId,
+    CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupVerificationSource, RecordId,
 };
 
 /// A user tap or platform call, before admission
@@ -42,9 +42,19 @@ pub(crate) enum UserIntent {
     RecoverOtherBackups,
     DeleteOtherBackups,
     TurnOff,
-    KeepEnabled,
+    ConfirmDisable {
+        review_id: u64,
+    },
+    CancelDisable,
+    ResumeDisable,
+    StopUsingOnThisDevice,
+    DismissNotice(CloudBackupNoticeKind),
+    ReconnectDrive,
     RefreshDetail,
     EnterDetail,
+    LeaveDetail,
+    RetryLoad,
+    ResetOnThisDevice,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
     /// The platform starts moving Cloud Backup to another Google Drive account
@@ -115,7 +125,15 @@ impl From<CloudBackupManagerAction> for UserIntent {
             A::RecoverOtherBackups => Self::RecoverOtherBackups,
             A::DeleteOtherBackups => Self::DeleteOtherBackups,
             A::DisableCloudBackup => Self::TurnOff,
-            A::KeepCloudBackupEnabled => Self::KeepEnabled,
+            A::ConfirmDisable { review_id } => Self::ConfirmDisable { review_id },
+            A::CancelDisable => Self::CancelDisable,
+            A::ResumeDisable => Self::ResumeDisable,
+            A::StopUsingOnThisDevice => Self::StopUsingOnThisDevice,
+            A::DismissNotice(kind) => Self::DismissNotice(kind),
+            A::ReconnectDrive => Self::ReconnectDrive,
+            A::LeaveDetail => Self::LeaveDetail,
+            A::RetryLoad => Self::RetryLoad,
+            A::ResetOnThisDevice => Self::ResetOnThisDevice,
             A::RefreshDetail => Self::RefreshDetail,
             A::EnterDetail => Self::EnterDetail,
             A::PromptEnablePasskeyChoice(context) => Self::PromptEnablePasskeyChoice(context),
@@ -163,12 +181,15 @@ pub(crate) enum Rejection {
     OtherBackupsNotLoaded,
     RestoreAllUnavailable,
     NothingToCancel,
-    KeepEnabledUnavailable,
     /// Nothing is waiting to be continued or discarded in this lifecycle, such as a saved
     /// passkey with no paused Enable, or a Discard after the Enable finished
     NothingToContinue,
     /// A local reset is wiping Cloud Backup's local state
     Resetting,
+    /// The Turn Off review the confirmation answers is no longer current
+    ReviewStale,
+    /// Stop Using on This Device is offered only after a failed Try Again
+    TryAgainFirst,
 }
 
 /// Why the write lane is not running a command class right now
@@ -199,23 +220,13 @@ pub(crate) enum AdmissionBody {
     Disabled,
     Enabling,
     Restoring,
-    Configured(ConfiguredAdmission),
+    Configured,
     /// A committed Turn Off that still has to finish
     FinishingDisable,
     PendingEnableRecovery,
     LoadFailed,
     /// A local reset closed admission until it finishes
     Resetting,
-}
-
-/// What admission needs to know about a configured backup
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ConfiguredAdmission {
-    Ready,
-    /// The last Turn Off failed before it deleted anything; only Keep Enabled reads this
-    TurnOffFailed {
-        can_keep_enabled: bool,
-    },
 }
 
 /// Detail inventory readiness, as row actions need it
@@ -315,7 +326,7 @@ impl ContinuationOwner {
     /// backup, so the body tells them apart
     pub(crate) fn of_body(body: AdmissionBody) -> Self {
         match body {
-            AdmissionBody::Configured(_) => Self::Reinitialize,
+            AdmissionBody::Configured => Self::Reinitialize,
             AdmissionBody::Disabled
             | AdmissionBody::Enabling
             | AdmissionBody::Restoring
@@ -338,13 +349,13 @@ impl ContinuationOwner {
     fn owns(self, body: AdmissionBody) -> bool {
         match (self, body) {
             (Self::Enable, AdmissionBody::Disabled | AdmissionBody::PendingEnableRecovery)
-            | (Self::Reinitialize, AdmissionBody::Configured(_)) => true,
+            | (Self::Reinitialize, AdmissionBody::Configured) => true,
             (
                 Self::Enable | Self::Reinitialize,
                 AdmissionBody::Disabled
                 | AdmissionBody::Enabling
                 | AdmissionBody::Restoring
-                | AdmissionBody::Configured(_)
+                | AdmissionBody::Configured
                 | AdmissionBody::FinishingDisable
                 | AdmissionBody::PendingEnableRecovery
                 | AdmissionBody::LoadFailed
@@ -450,27 +461,43 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         },
 
         I::TurnOff => match (snapshot.body, snapshot.running) {
-            (AdmissionBody::Configured(_) | AdmissionBody::FinishingDisable, None) => Accepted,
-            (AdmissionBody::Configured(_) | AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
+            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, None) => Accepted,
+            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
                 Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
             }
-            (AdmissionBody::Configured(_) | AdmissionBody::FinishingDisable, Some(running)) => {
+            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, Some(running)) => {
                 Rejected(Rejection::OperationRunning(running))
             }
             (body, _) => Rejected(not_configured(body)),
         },
-        I::KeepEnabled => match (snapshot.body, snapshot.running) {
-            (
-                AdmissionBody::Configured(ConfiguredAdmission::TurnOffFailed {
-                    can_keep_enabled: true,
-                }),
-                None,
-            ) => Accepted,
-            (AdmissionBody::Configured(_) | AdmissionBody::FinishingDisable, Some(running)) => {
+
+        // Turn Off has no review step yet, so no confirmation answers a current review and
+        // nothing is under review or draining to cancel
+        I::ConfirmDisable { .. } => Rejected(Rejection::ReviewStale),
+        I::CancelDisable => Rejected(Rejection::NothingToCancel),
+        I::ResumeDisable => match (snapshot.body, snapshot.running) {
+            (AdmissionBody::FinishingDisable, None) => Accepted,
+            (AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
+            }
+            (AdmissionBody::FinishingDisable, Some(running)) => {
                 Rejected(Rejection::OperationRunning(running))
             }
-            _ => Rejected(Rejection::KeepEnabledUnavailable),
+            _ => Rejected(Rejection::NothingToContinue),
         },
+        I::StopUsingOnThisDevice => match snapshot.body {
+            AdmissionBody::FinishingDisable => Rejected(Rejection::TryAgainFirst),
+            _ => Rejected(Rejection::NothingToContinue),
+        },
+        // a relaunch runs the load again until Try Again can rebuild the runtime in place
+        I::RetryLoad => match snapshot.body {
+            AdmissionBody::LoadFailed => Rejected(Rejection::LoadFailed),
+            _ => Rejected(Rejection::NothingToContinue),
+        },
+        I::ResetOnThisDevice => Rejected(Rejection::NothingToContinue),
+        I::DismissNotice(_) | I::LeaveDetail => Accepted,
+        // Reconnect runs the detail verification, so a repeat joins the one already running
+        I::ReconnectDrive => configured_and_idle(snapshot, Some(Op::Verify)),
 
         I::SyncUnsynced => match configured_and_idle(snapshot, None) {
             Accepted if snapshot.sync_running => Coalesced(CoalescibleIntent::SyncUnsynced),
@@ -520,7 +547,7 @@ fn starts_while_off(
             | AdmissionBody::PendingEnableRecovery,
             None,
         ) => Admission::Accepted,
-        (AdmissionBody::Configured(_), None) => Admission::Rejected(Rejection::NotConfigured),
+        (AdmissionBody::Configured, None) => Admission::Rejected(Rejection::NotConfigured),
         (AdmissionBody::FinishingDisable, None) => Admission::Rejected(Rejection::TurnOffCommitted),
         (AdmissionBody::LoadFailed, None) => Admission::Rejected(Rejection::LoadFailed),
         (AdmissionBody::Resetting, None) => Admission::Rejected(Rejection::Resetting),
@@ -536,15 +563,13 @@ fn configured_and_idle(
     operation: Option<CloudBackupExclusiveOperation>,
 ) -> Admission {
     match (snapshot.body, snapshot.running) {
-        (AdmissionBody::Configured(_), Some(running)) if Some(running) == operation => {
+        (AdmissionBody::Configured, Some(running)) if Some(running) == operation => {
             Admission::Coalesced(CoalescibleIntent::RepeatOfRunning(running))
         }
-        (AdmissionBody::Configured(_), Some(running)) => {
+        (AdmissionBody::Configured, Some(running)) => {
             Admission::Rejected(Rejection::OperationRunning(running))
         }
-        // a Turn Off refused before its commit persisted nothing and holds no work; its refusal
-        // asks the user to restore or delete what blocked it, which needs these actions
-        (AdmissionBody::Configured(_), None) => Admission::Accepted,
+        (AdmissionBody::Configured, None) => Admission::Accepted,
         (body, _) => Admission::Rejected(not_configured(body)),
     }
 }
@@ -596,7 +621,7 @@ fn not_configured(body: AdmissionBody) -> Rejection {
         AdmissionBody::LoadFailed => Rejection::LoadFailed,
         AdmissionBody::FinishingDisable => Rejection::TurnOffCommitted,
         AdmissionBody::Resetting => Rejection::Resetting,
-        AdmissionBody::Configured(_)
+        AdmissionBody::Configured
         | AdmissionBody::Enabling
         | AdmissionBody::Restoring
         | AdmissionBody::PendingEnableRecovery => Rejection::NotConfigured,

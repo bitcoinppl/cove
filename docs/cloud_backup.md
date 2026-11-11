@@ -4,7 +4,7 @@ Cloud Backup is split between a UI-facing manager, a reducer-backed state
 projection, and a set of actors that own long-running work. The Rust core is
 the source of truth for lifecycle state, inventory completeness and generations,
 passkey policy, cloud writes, local database updates, and Restore All. Swift and
-Kotlin consume `CloudBackupState` and send actions through the manager instead
+Kotlin consume `CloudBackupScreen` and send actions through the manager instead
 of rebuilding cloud backup rules in UI code.
 
 ## Ownership Model
@@ -13,9 +13,39 @@ of rebuilding cloud backup rules in UI code.
 snapshots and reconcile messages, and forwards long-running work to
 `CloudBackupSupervisor`.
 
-`CloudBackupStateReducer` keeps the private lifecycle model and projects the
-public UniFFI state. It also filters stale exclusive-operation completions so an
-older async path cannot erase a newer operation.
+`CloudBackupStateReducer` keeps the private lifecycle model. It also filters
+stale exclusive-operation completions so an older async path cannot erase a
+newer operation.
+
+## Screen Contract
+
+Swift and Kotlin draw only `CloudBackupScreen`. `state()` returns the first
+one. After every reducer change Rust projects the screen again, diffs it
+against the one it last sent, and sends what changed as one `Screen` reconcile
+message holding a `CloudBackupScreenDelta`. Each platform applies it with
+`CloudBackupScreen.applying(delta)` in a single state assignment, so no frame
+shows half an update.
+
+The screen has a body (`Disabled`, `Enabling`, `Restoring`, `Configured`,
+`FinishingDisable`, `DriveAccountSwitch`, `PendingEnableRecovery`, `LoadFailed`
+or `Corrupted`), the Settings row, the persisted heal notice, the last outcome,
+the root prompt and the global actions. A configured body lists its sections in
+the order they are drawn, and Turn Off is in every one. Listed cloud rows carry
+their own row actions.
+
+Every action is an entry with its availability, decided by the same admission
+dispatch uses. A platform draws a control only for an action in the list and
+enables it only when it is available; an unavailable action carries the reason
+to show as its caption. Rust marks the Google Drive actions as Android only.
+
+The Settings row shows `TurnOffIncomplete` while a committed Turn Off still has
+to finish, and `TurnedOnAgain` while the heal notice is on a configured backup.
+Dismissing the notice dispatches `DismissNotice(Heal)`, which clears it from
+the stored record.
+
+Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
+body and the main configured states, which the platform contract tests render.
+Release builds return none.
 
 `PendingEnableCoordinator` owns the local keychain transaction for fresh and
 recovered enables. It keeps CSPP staging and promotion ordered with the durable
@@ -171,7 +201,7 @@ Each native detail screen projects one progress presentation from verification
 state, inventory state, retained detail, and visible wallet rows. Verification
 progress takes priority over inventory progress. It uses a standalone card when
 no wallet rows are visible and an inline row when local or loaded cloud-only
-wallet rows stay on screen. `cloudOnlyCount` is not a visible row by itself.
+wallet rows stay on screen.
 The verification section does not render a second running indicator.
 
 Cloud-only rows split into two sections on both platforms. Rows Rust marks

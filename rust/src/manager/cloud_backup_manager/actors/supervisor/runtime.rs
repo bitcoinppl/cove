@@ -30,9 +30,7 @@ use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::actors::write::{
     ConfigGeneration, ConfiguredWriter, ConfiguredWrites, OffWrites, PolicyBody, WritePolicy,
 };
-use crate::manager::cloud_backup_manager::admission::{
-    AdmissionBody, ConfiguredAdmission, PauseReason,
-};
+use crate::manager::cloud_backup_manager::admission::{AdmissionBody, PauseReason};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDisableOutcome, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupPendingEnableRecovery, CloudBackupStatus,
@@ -418,7 +416,7 @@ impl Runtime {
     }
 
     /// The body admission decides on, with the running operation's kind
-    pub(crate) fn admission_body(&self, configured: ConfiguredAdmission) -> AdmissionBody {
+    pub(crate) fn admission_body(&self) -> AdmissionBody {
         match self {
             Self::Disabled { op: None | Some(DisabledOp::DiscardEnable(_)) }
             | Self::Corrupted { op: None | Some(DisabledOp::DiscardEnable(_)), .. } => {
@@ -428,9 +426,7 @@ impl Runtime {
             | Self::Corrupted { op: Some(DisabledOp::Enable(_)), .. } => AdmissionBody::Enabling,
             Self::Disabled { op: Some(DisabledOp::Restore(_)) }
             | Self::Corrupted { op: Some(DisabledOp::Restore(_)), .. } => AdmissionBody::Restoring,
-            Self::Configured { .. } | Self::DriveAccountSwitch { .. } => {
-                AdmissionBody::Configured(configured)
-            }
+            Self::Configured { .. } | Self::DriveAccountSwitch { .. } => AdmissionBody::Configured,
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
             Self::PendingEnableRecovery { .. } => AdmissionBody::PendingEnableRecovery,
             Self::LoadFailed { .. } => AdmissionBody::LoadFailed,
@@ -590,10 +586,8 @@ impl Runtime {
         use CloudBackupExclusiveOperation as Op;
 
         let operation = new.claim().operation();
-        let unstartable = |runtime: &Self| Unstartable {
-            body: runtime.admission_body(ConfiguredAdmission::Ready),
-            operation,
-        };
+        let unstartable =
+            |runtime: &Self| Unstartable { body: runtime.admission_body(), operation };
         if self.is_some() {
             return Err(unstartable(self));
         }
@@ -974,7 +968,7 @@ impl Runtime {
                 debug!("Cloud Backup runtime is LoadFailed: {error}");
                 (Some(CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())), None)
             }
-            // a committed failure only goes forward, so Keep Enabled is never offered for it
+            // a committed failure only goes forward
             Self::FinishingDisable {
                 committed: CommittedDisable { last_error: Some(message), .. },
                 op: None,

@@ -541,7 +541,7 @@ pub(crate) enum PasskeyMode {
     /// Answer with the scripted mock results
     #[default]
     Succeeds,
-    /// The user dismissed the sheet; today's error is `UserCancelled`
+    /// The user dismissed the sheet; its error is `NotCompleted`
     NotCompleted,
     /// The provider failed after presenting
     ProviderFailure,
@@ -625,7 +625,7 @@ impl HarnessPasskey {
 
         match mode {
             PasskeyMode::Succeeds => answer(),
-            PasskeyMode::NotCompleted => Err(PasskeyError::UserCancelled),
+            PasskeyMode::NotCompleted => Err(PasskeyError::NotCompleted),
             PasskeyMode::ProviderFailure => Err(PasskeyError::RequestFailed {
                 operation,
                 reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
@@ -640,7 +640,7 @@ impl HarnessPasskey {
             PasskeyMode::NeverCompletes => unreachable!("never-answered requests park above"),
             PasskeyMode::FailOnAnyInteractiveCall => {
                 self.calls.lock().forbidden.push(id);
-                Err(PasskeyError::UserCancelled)
+                Err(PasskeyError::NotCompleted)
             }
         }
     }

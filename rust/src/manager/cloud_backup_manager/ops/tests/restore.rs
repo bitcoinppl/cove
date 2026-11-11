@@ -518,7 +518,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_native_cancellation_after_match_restores_retained_matches_without_refresh() {
-    assert_terminal_native_stop_restores_retained_matches(PasskeyError::UserCancelled).await;
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::NotCompleted).await;
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]

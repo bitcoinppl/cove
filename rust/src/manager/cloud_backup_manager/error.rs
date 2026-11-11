@@ -83,7 +83,9 @@ impl From<crate::manager::cloud_backup_manager::admission::Rejection>
 
         match rejection {
             R::CloudBackupOff | R::NotConfigured => Self::NotConfigured,
-            R::NothingToCancel | R::NothingToContinue => Self::InvalidTransition,
+            R::NothingToCancel | R::NothingToContinue | R::ReviewStale | R::TryAgainFirst => {
+                Self::InvalidTransition
+            }
             R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
             // a committed Turn Off is still finishing, so the platform retries later
             R::TurnOffCommitted
@@ -91,7 +93,6 @@ impl From<crate::manager::cloud_backup_manager::admission::Rejection>
             | R::DetailInventoryNotLoaded
             | R::OtherBackupsNotLoaded
             | R::RestoreAllUnavailable
-            | R::KeepEnabledUnavailable
             | R::Resetting => Self::Busy,
         }
     }
@@ -529,7 +530,7 @@ impl CloudBackupError {
                     operation: PasskeyOperation::Registration,
                     reason: PasskeyFailureReason::DeviceNotConfigured,
                 }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
-                Some(PasskeyError::UserCancelled) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+                Some(PasskeyError::NotCompleted) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
                 Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
                 Some(PasskeyError::PrfUnsupportedProvider) => {
                     UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
@@ -725,7 +726,7 @@ mod tests {
 
     #[test]
     fn reader_message_keeps_distinct_passkey_outcomes() {
-        let cancellation = CloudBackupError::from(PasskeyError::UserCancelled).reader_message();
+        let cancellation = CloudBackupError::from(PasskeyError::NotCompleted).reader_message();
         let missing = CloudBackupError::from(PasskeyError::NoCredentialFound).reader_message();
         let unsupported =
             CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();

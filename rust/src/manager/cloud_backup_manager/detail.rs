@@ -97,7 +97,7 @@ pub(crate) enum RecoveryState {
     Failed { action: RecoveryAction, error: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudOnlyState {
     NotFetched,
     Loading,
@@ -310,7 +310,7 @@ impl RustCloudBackupManager {
                 self.apply_verification_state(VerificationState::Idle);
                 self.apply_recovery_state(RecoveryState::Idle);
             }
-            DeepVerificationResult::UserCancelled(detail) => {
+            DeepVerificationResult::NotCompleted(detail) => {
                 if let Some(detail) = detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
                         detail,
@@ -544,7 +544,8 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn projected_restore_all_state(&self) -> CloudBackupRestoreAllState {
-        let super::CloudBackupLifecycle::Configured(configured) = self.state().lifecycle else {
+        let super::CloudBackupLifecycle::Configured(configured) = self.model_state().lifecycle
+        else {
             return CloudBackupRestoreAllState::NotShown;
         };
 

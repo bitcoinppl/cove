@@ -11,7 +11,7 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
     configure_enabled_cloud_backup(&manager, globals, 0);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     seed_verifiable_cloud_master_key(globals);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
     globals.cloud.fail_list_wallet_files("list should not run before passkey auth");
 
     let discover_count = globals.passkey.discover_count();
@@ -38,7 +38,7 @@ async fn deep_verify_corrupted_persisted_state_short_circuits() {
         )
         .unwrap();
     globals.cloud.fail_list_namespaces("verify should not read cloud storage");
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let step = manager
         .prepare_deep_verify_cloud_backup(
@@ -540,7 +540,7 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     let discover_result =
         DiscoveredPasskeyResult { prf_output: vec![7; 32], credential_id: vec![1, 2, 3] };
 
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
     call!(manager.supervisor.start_verification(true)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(2), "expected cancelled verification", || {
         matches!(manager.model_snapshot().verification, VerificationState::Cancelled)

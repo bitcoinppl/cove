@@ -1077,6 +1077,6 @@ impl VerificationSession {
 
     fn resolve_cancellation_outcome(&self) -> DeepVerificationResult {
         info!("Passkey verification cancelled by user");
-        DeepVerificationResult::UserCancelled(self.detail())
+        DeepVerificationResult::NotCompleted(self.detail())
     }
 }

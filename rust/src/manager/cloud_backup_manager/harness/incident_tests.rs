@@ -41,11 +41,9 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         // the reporter opens the app after the stuck Turn Off: the record heals at load, and
         // nothing reaches the passkey provider on any step that follows without a tap
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current().then_can(&[N::Verify, N::SyncUnsynced]).then_cannot(&[
-            N::Enable,
-            N::KeepEnabled,
-            N::RestoreFromCloudBackup,
-        ]);
+        app.current()
+            .then_can(&[N::Verify, N::SyncUnsynced])
+            .then_cannot(&[N::Enable, N::RestoreFromCloudBackup]);
         let namespace = keychain_namespace().expect("the heal keeps the namespace");
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
 
@@ -53,7 +51,7 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         for _ in 0..3 {
             app.event("foreground with a connection", foreground)
                 .then_can(&[N::Verify, N::SyncUnsynced])
-                .then_cannot(&[N::Enable, N::KeepEnabled]);
+                .then_cannot(&[N::Enable]);
         }
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "a resume deleted the backup");
 
@@ -67,12 +65,12 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
             change_a_wallet(app).expect("a lived-in wallet");
         })
         .then_can(&[N::TurnOff])
-        .then_cannot(&[N::Enable, N::KeepEnabled]);
+        .then_cannot(&[N::Enable]);
         app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
         assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads + 1);
 
         // the app is closed and opened again: still configured, with the notice still there
-        app.relaunch().then_can(&[N::Verify]).then_cannot(&[N::Enable, N::KeepEnabled]);
+        app.relaunch().then_can(&[N::Verify]).then_cannot(&[N::Enable]);
         let PersistedCloudBackupState::Configured(configured) = persisted() else {
             panic!("the relaunch lost the healed configuration:\n{}", app.describe());
         };
@@ -80,11 +78,11 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
 
         // Turn Off now runs instead of hanging: it refuses with a reason while records that are
         // not on this device remain, deletes nothing, and stays available to try again. The
-        // refusal holds no other work
+        // refusal is a result, so it holds nothing else
         load_detail(&mut app);
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
             .then_can(&[N::TurnOff, N::Verify])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::Enable]);
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
         assert!(app.cloud.inner.has_namespace(&namespace), "a refused Turn Off deleted the backup");
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
@@ -92,7 +90,7 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         // and coming back to the app keeps every way out, still without a passkey prompt
         app.event("foreground with a connection", foreground)
             .then_can(&[N::TurnOff])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::Enable]);
         assert!(app.passkey.interactive_calls().is_empty());
     });
 }

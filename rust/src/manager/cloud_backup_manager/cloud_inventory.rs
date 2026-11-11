@@ -113,15 +113,9 @@ impl CloudWalletInventory {
             .filter(|record_id| !local_record_ids.contains(*record_id))
             .cloned()
             .collect();
-        let cloud_only_count = cloud_only_record_ids.len() as u32;
 
         CloudBackupListedDetail {
-            detail: CloudBackupDetail {
-                last_sync: self.last_sync,
-                up_to_date,
-                needs_sync,
-                cloud_only_count,
-            },
+            detail: CloudBackupDetail { last_sync: self.last_sync, up_to_date, needs_sync },
             cloud_only_record_ids,
         }
     }

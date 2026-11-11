@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::wallet::metadata::{WalletMode as LocalWalletMode, WalletType};
 
-use super::{CloudBackupInventoryIncompleteReason, CloudBackupVerificationSource};
+use super::{
+    CloudBackupInventoryIncompleteReason, CloudBackupNoticeKind, CloudBackupVerificationSource,
+};
 
 /// Shared settings row state projected for Swift and Kotlin presentation
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -26,6 +28,10 @@ pub enum CloudBackupSettingsRowStatus {
     RecoveryRequired,
     Error(String),
     AuthorizationRequired(String),
+    /// A committed Turn Off has not finished; the row opens the detail screen to finish it
+    TurnOffIncomplete,
+    /// An older build's Turn Off never deleted anything, so Cloud Backup was turned on again
+    TurnedOnAgain,
 }
 
 /// Whether onboarding may recover a lost enable-completion event from durable state
@@ -114,9 +120,27 @@ pub enum CloudBackupManagerAction {
     RecoverOtherBackups,
     DeleteOtherBackups,
     DisableCloudBackup,
-    KeepCloudBackupEnabled,
+    /// Confirms the review the user saw; a stale id is rejected
+    ConfirmDisable {
+        review_id: u64,
+    },
+    /// Every way out of the Turn Off review or drain: Cancel, backdrop, back, screen pop
+    CancelDisable,
+    /// Try Again on a committed Turn Off
+    ResumeDisable,
+    /// Finishes a committed Turn Off locally and leaves the remote data
+    StopUsingOnThisDevice,
+    DismissNotice(CloudBackupNoticeKind),
+    /// Google Drive authorization, separate from verification
+    ReconnectDrive,
     RefreshDetail,
     EnterDetail,
+    /// The detail screen went away; a Turn Off review still open is cancelled
+    LeaveDetail,
+    /// Runs the failed load again
+    RetryLoad,
+    /// Resets a corrupted Cloud Backup on this device
+    ResetOnThisDevice,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
@@ -188,8 +212,6 @@ pub struct CloudBackupDetail {
     pub last_sync: Option<u64>,
     pub up_to_date: Vec<CloudBackupWalletItem>,
     pub needs_sync: Vec<CloudBackupWalletItem>,
-    /// Number of wallets in the cloud that aren't on this device
-    pub cloud_only_count: u32,
 }
 
 /// Summary state for backup namespaces that do not match the active device
@@ -264,7 +286,8 @@ pub enum DeepVerificationResult {
     AwaitingUploadConfirmation(DeepVerificationReport),
     PasskeyConfirmed(Option<CloudBackupDetail>),
     PasskeyMissing(Option<CloudBackupDetail>),
-    UserCancelled(Option<CloudBackupDetail>),
+    /// The passkey request did not complete; nothing is marked missing and nothing retries
+    NotCompleted(Option<CloudBackupDetail>),
     NotEnabled,
     Failed(DeepVerificationFailure),
 }

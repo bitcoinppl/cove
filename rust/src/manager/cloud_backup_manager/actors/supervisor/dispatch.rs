@@ -1,14 +1,13 @@
 use super::*;
+use crate::manager::cloud_backup_manager::CloudBackupNoticeKind;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionSnapshot, ConfiguredAdmission, ContinuationOwner, ContinuationStage,
-    DetailInventory, EnableIntent, EnablePromptAnswers, PausedContinuation, Rejection,
-    RestoreAllAdmission, UserIntent, evaluate_admission,
-};
-use crate::manager::cloud_backup_manager::model::{
-    CloudBackupDestructiveOperationState, CloudBackupLifecycle,
+    Admission, AdmissionSnapshot, ContinuationOwner, ContinuationStage, DetailInventory,
+    EnableIntent, EnablePromptAnswers, PausedContinuation, Rejection, RestoreAllAdmission,
+    UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
+    CloudBackupStateReducer,
 };
 use tracing::debug;
 
@@ -82,26 +81,7 @@ impl CloudBackupSupervisor {
     }
 
     pub(crate) fn admission_snapshot(&self, manager: &RustCloudBackupManager) -> AdmissionSnapshot {
-        // whether the last Turn Off failed is presentation the reducer still holds; it moves
-        // into `Configured`'s facts once Turn Off has a review step
-        let configured = match &manager.state().lifecycle {
-            CloudBackupLifecycle::Configured(configured) => match &configured.destructive_operation
-            {
-                CloudBackupDestructiveOperationState::DisableFailed {
-                    can_keep_enabled, ..
-                } => ConfiguredAdmission::TurnOffFailed { can_keep_enabled: *can_keep_enabled },
-                CloudBackupDestructiveOperationState::Idle
-                | CloudBackupDestructiveOperationState::RecreatingManifest
-                | CloudBackupDestructiveOperationState::ReinitializingBackup
-                | CloudBackupDestructiveOperationState::Disabling => ConfiguredAdmission::Ready,
-            },
-            CloudBackupLifecycle::Disabled
-            | CloudBackupLifecycle::Enabling(_)
-            | CloudBackupLifecycle::Restoring(_)
-            | CloudBackupLifecycle::PendingEnableRecovery(_)
-            | CloudBackupLifecycle::Failed(_) => ConfiguredAdmission::Ready,
-        };
-        let body = self.runtime.admission_body(configured);
+        let body = self.runtime.admission_body();
 
         let detail_inventory = {
             let state = manager.state.read();
@@ -133,19 +113,7 @@ impl CloudBackupSupervisor {
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
             continuation: self.paused_continuation(manager),
-            enable_prompt: Self::enable_prompt_answers(manager),
-        }
-    }
-
-    /// What each answer to the Enable prompt on screen starts
-    fn enable_prompt_answers(manager: &RustCloudBackupManager) -> EnablePromptAnswers {
-        let state = manager.state.read();
-        let starts =
-            |choice| state.enable_prompt_answer(choice).map(|accepted| enable_of(accepted).0);
-
-        EnablePromptAnswers {
-            use_existing: starts(CloudBackupEnablePromptChoice::UseExisting),
-            create_new: starts(CloudBackupEnablePromptChoice::CreateNew),
+            enable_prompt: enable_prompt_answers(&manager.state.read()),
         }
     }
 
@@ -260,12 +228,25 @@ impl CloudBackupSupervisor {
             // started in this turn, so the operation is allocated with its admission
             I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),
             I::DeleteOtherBackups => self.begin_delete_other_backups_operation(),
-            I::TurnOff => {
+            I::TurnOff | I::ResumeDisable => {
                 self.start_disable_operation().await?;
             }
-            I::KeepEnabled => {
-                self.keep_cloud_backup_enabled().await?;
+            I::DismissNotice(CloudBackupNoticeKind::Heal) => {
+                self.runtime.commit(|lifecycle| manager.dismiss_heal_notice(lifecycle));
             }
+            // no last outcome is published on the screen yet, so there is nothing to dismiss
+            I::DismissNotice(CloudBackupNoticeKind::LastOutcome) => {}
+            // Google Drive authorization runs through the detail verification, as it did before
+            // it had its own intent
+            I::ReconnectDrive => {
+                self.start_user_verification(
+                    manager,
+                    CloudBackupVerificationSource::CloudBackupDetail,
+                    false,
+                );
+            }
+            // no Turn Off review is held yet, so leaving the detail screen changes nothing
+            I::LeaveDetail => {}
             I::RefreshDetail => {
                 self.start_refresh_detail().await?;
             }
@@ -297,9 +278,29 @@ impl CloudBackupSupervisor {
             | I::LocalReset => {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
             }
+            // admission rejects these until their flows exist
+            I::ConfirmDisable { .. }
+            | I::CancelDisable
+            | I::StopUsingOnThisDevice
+            | I::RetryLoad
+            | I::ResetOnThisDevice => {
+                warn!("Cloud Backup admitted {intent:?}, which has no flow yet");
+            }
         }
 
         Produces::ok(())
+    }
+}
+
+/// What each answer to the Enable prompt on screen starts
+///
+/// The reducer holds the prompt, so dispatch and the screen projection both read it from there
+pub(crate) fn enable_prompt_answers(state: &CloudBackupStateReducer) -> EnablePromptAnswers {
+    let starts = |choice| state.enable_prompt_answer(choice).map(|accepted| enable_of(accepted).0);
+
+    EnablePromptAnswers {
+        use_existing: starts(CloudBackupEnablePromptChoice::UseExisting),
+        create_new: starts(CloudBackupEnablePromptChoice::CreateNew),
     }
 }
 

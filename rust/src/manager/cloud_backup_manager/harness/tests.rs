@@ -25,8 +25,11 @@ use crate::manager::cloud_backup_manager::admission::{
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
+use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
+use crate::manager::cloud_backup_manager::screen::CloudBackupScreenAction;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupManagerAction, CloudBackupVerificationSource,
+    CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupSettingsRowStatus,
+    CloudBackupVerificationSource,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 
@@ -93,7 +96,7 @@ fn soft_relaunch_keeps_durable_state_without_prompting() {
         // the relaunched app has not loaded its detail inventory, and Turn Off is still admitted
         app.relaunch()
             .then_can(&[N::Verify, N::SyncUnsynced, N::TurnOff])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::Enable]);
 
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(keychain_namespace().as_deref(), Some(namespace.as_str()));
@@ -162,7 +165,6 @@ fn held_namespace_delete_reports_entered_and_finished() {
 
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[
             N::TurnOff,
-            N::KeepEnabled,
             N::Verify,
             N::Enable,
         ]);
@@ -223,7 +225,7 @@ fn refused_turn_off_leaves_the_actions_that_clear_its_blocker() {
 
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
             .then_can(&[N::TurnOff, N::Verify, N::SyncUnsynced])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::Enable]);
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
@@ -269,7 +271,7 @@ fn killed_after_namespace_delete_resumes_to_disabled_on_next_launch() {
         };
 
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::KeepEnabled]);
+        app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
         assert_eq!(keychain_namespace(), None);
     });
@@ -294,9 +296,7 @@ fn legacy_stuck_disabling_record_heals_at_load() {
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
 
         // writes are allowed again; Turn Off still waits for the detail inventory today
-        app.current()
-            .then_can(&[N::Verify, N::SyncUnsynced])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+        app.current().then_can(&[N::Verify, N::SyncUnsynced]).then_cannot(&[N::Enable]);
         let PersistedCloudBackupState::Configured(configured) = persisted() else {
             panic!("the legacy record did not heal:\n{}", app.describe());
         };
@@ -305,6 +305,63 @@ fn legacy_stuck_disabling_record_heals_at_load() {
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
         assert!(app.passkey.interactive_calls().is_empty());
         assert!(keychain_namespace().is_some(), "the heal keeps the namespace");
+    });
+}
+
+/// The UI test seam writes the legacy record at launch, only over a configured backup, and the
+/// same launch heals it: the screen shows the notice until the user dismisses it
+#[test]
+fn ui_test_seam_seeds_the_legacy_record_that_the_launch_heals() {
+    let test =
+        concat!(module_path!(), "::ui_test_seam_seeds_the_legacy_record_that_the_launch_heals");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        let root = child_root().expect("a harness child has a data root");
+        let request = root.join(ui_test_legacy_record::REQUEST_FILE);
+
+        if phase == 0 {
+            let _app = TestApp::launch();
+            std::fs::write(&request, b"").expect("write the seed request");
+            return;
+        }
+
+        // SAFETY: the child runs this one test on one thread, and nothing has started reading
+        // the environment yet
+        unsafe { std::env::set_var(ui_test_legacy_record::LEGACY_STUCK_RECORD_ENV, &root) };
+
+        if phase == 1 {
+            // nothing is configured, so there is nothing to seed over: the request waits
+            let app = TestApp::launch();
+            assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+            assert!(request.exists(), "a seed with nothing to replace kept its request");
+
+            FakeAccount::new(2, 0).seed(&app);
+            return;
+        }
+
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        assert!(!request.exists(), "the seed deleted its request");
+
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("the seeded record did not heal:\n{}", app.describe());
+        };
+        assert!(configured.heal_notice.is_some(), "the heal persisted its notice");
+
+        let screen = app.manager().state();
+        assert!(screen.heal_notice.is_some(), "the screen shows the heal notice");
+        assert_eq!(screen.settings_row, CloudBackupSettingsRowStatus::TurnedOnAgain);
+        assert!(screen.actions.is_available(CloudBackupScreenAction::DismissHealNotice));
+
+        app.dispatch(CloudBackupManagerAction::DismissNotice(CloudBackupNoticeKind::Heal))
+            .then_cannot(&[N::Enable]);
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("dismissing the notice changed the record:\n{}", app.describe());
+        };
+        assert_eq!(configured.heal_notice, None);
+
+        let screen = app.manager().state();
+        assert_eq!(screen.heal_notice, None);
+        assert!(screen.actions.availability(CloudBackupScreenAction::DismissHealNotice).is_none());
+        assert!(app.passkey.interactive_calls().is_empty());
     });
 }
 
@@ -333,13 +390,7 @@ fn failed_heal_write_keeps_the_legacy_record_and_fails_the_load() {
             let unchanged =
                 stuck.disabling().is_some_and(|record| record.delete_started_at.is_none());
             assert!(unchanged, "the failed heal changed the record:\n{}", app.describe());
-            app.current().then_cannot(&[
-                N::Enable,
-                N::Verify,
-                N::SyncUnsynced,
-                N::TurnOff,
-                N::KeepEnabled,
-            ]);
+            app.current().then_cannot(&[N::Enable, N::Verify, N::SyncUnsynced, N::TurnOff]);
             assert_eq!(persisted(), stuck, "{}", app.describe());
             // the record gives no status; the owner's `LoadFailed` body shows the load failure
             assert_eq!(RustCloudBackupManager::runtime_status_for(&persisted()), None);
@@ -449,7 +500,7 @@ fn passkey_modes_answer_interactive_calls() {
         };
 
         passkey.set_mode(PasskeyMode::NotCompleted);
-        assert!(matches!(authenticate(&passkey), Err(PasskeyError::UserCancelled)));
+        assert!(matches!(authenticate(&passkey), Err(PasskeyError::NotCompleted)));
 
         passkey.set_mode(PasskeyMode::ProviderFailure);
         assert!(matches!(authenticate(&passkey), Err(PasskeyError::RequestFailed { .. })));
