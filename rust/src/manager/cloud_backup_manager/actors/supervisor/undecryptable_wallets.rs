@@ -12,7 +12,8 @@ impl CloudBackupSupervisor {
         };
 
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_delete_undecryptable_wallet_backups().await;
+            let owner = WriteOwner::Operation(claim);
+            let result = manager.prepare_delete_undecryptable_wallet_backups(owner).await;
             send!(addr.complete_delete_undecryptable_wallet_backups_preparation(claim, result));
         });
     }

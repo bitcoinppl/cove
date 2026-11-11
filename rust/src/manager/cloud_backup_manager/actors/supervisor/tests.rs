@@ -21,6 +21,7 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
+    background_owner,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
     configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
     hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
@@ -427,7 +428,7 @@ async fn seed_local_wallet_with_cloud_duplicate(
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(background_owner(manager).await).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -3881,7 +3882,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     supervisor.active_cloud_only_fetch_request = Some(3);
     let generation = manager.state.read().cloud_only_listing_generation();
     let fetch = manager
-        .do_fetch_cloud_only_wallets_with_client(CloudStorage::global_silent_client(), generation)
+        .do_fetch_cloud_only_wallets_with_client(background_owner(&manager).await, CloudStorage::global_silent_client(), generation)
         .await
         .unwrap();
     assert_eq!(fetch.unresolved_record_ids, vec![record_id]);
@@ -3963,7 +3964,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     ])));
     let generation = manager.state.read().cloud_only_listing_generation();
     let prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(&record_id)], generation)
+        .prepare_restore_all_cloud_wallets(background_owner(&manager).await, vec![test_cloud_only_wallet(&record_id)], generation)
         .await;
 
     let mut supervisor = test_supervisor(
@@ -3991,8 +3992,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
 
     let generation = manager.state.read().cloud_only_listing_generation();
     let prepared = manager
-        .prepare_restore_all_cloud_wallets(
-            vec![test_cloud_only_wallet(duplicate_record_id)],
+        .prepare_restore_all_cloud_wallets(background_owner(&manager).await, vec![test_cloud_only_wallet(duplicate_record_id)],
             generation,
         )
         .await
@@ -4151,7 +4151,7 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     list_test_wallet_files(&namespace, &[local_record_id.as_str()]);
 
@@ -4196,7 +4196,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
 
     // a refresh and a verification both read the wallet as local before it is deleted
@@ -4359,7 +4359,7 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let secret = test_seed_secret();
 
     let (local_wallet, local_record_id) = upload_test_seed_backup(&namespace, &secret);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -4675,7 +4675,7 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
         save_local_watch_only_wallet_with_address_type(&secret, WalletAddressType::WrappedSegwit);
     let (seed_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
 
-    let prepared = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let prepared = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     let outcome = prepared.restore_record(&seed_record_id).await.unwrap();
 
     // both watch-only wallets match the seed, so it becomes its own hot wallet
@@ -4908,7 +4908,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     );
 
     let master_key_reads = globals.cloud.master_key_download_attempt_count();
-    let step = manager.prepare_deep_verify_cloud_backup(false).await;
+    let step = manager.prepare_deep_verify_cloud_backup(background_owner(manager).await, false).await;
 
     assert!(
         !matches!(step, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled)),

@@ -23,7 +23,7 @@ use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNa
 use super::uploads::CloudBackupUploadWorker;
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
+    CloudBackupWriteCompletion, CloudBackupWriteSupervisor, WriteOwner,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{

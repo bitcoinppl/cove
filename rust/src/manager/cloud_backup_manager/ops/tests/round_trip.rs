@@ -135,7 +135,10 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
     manager.do_upload_wallet_if_dirty(&wallet.id).await.unwrap();
     assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));
 
-    let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let outcome = manager
+        .do_restore_cloud_wallet(background_owner(&manager).await, &record_id)
+        .await
+        .unwrap();
     assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None }));
 
     let restored = Database::global()

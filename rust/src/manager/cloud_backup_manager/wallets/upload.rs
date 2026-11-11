@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, Decision,
+    CloudBackupWriteCompletion, Decision, WriteOwner,
 };
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
@@ -129,6 +129,7 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
+                writes.owner(),
                 &namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
             )
@@ -411,16 +412,17 @@ impl RustCloudBackupManager {
             Err(error) => return Err(error),
         };
 
-        let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata).await {
-            Ok(prepared_upload) => prepared_upload,
-            Err(error) => {
-                return self.handle_dirty_wallet_upload_error(
-                    &current_state,
-                    error.revision_hash,
-                    error.source,
-                );
-            }
-        };
+        let prepared_upload =
+            match self.prepare_dirty_wallet_upload(writes.owner(), &namespace, &metadata).await {
+                Ok(prepared_upload) => prepared_upload,
+                Err(error) => {
+                    return self.handle_dirty_wallet_upload_error(
+                        &current_state,
+                        error.revision_hash,
+                        error.source,
+                    );
+                }
+            };
 
         let PreparedDirtyWalletUpload { prepared, wallet_json } = prepared_upload;
         let cloud = CloudStorage::global_silent_client();
@@ -566,6 +568,7 @@ impl RustCloudBackupManager {
 
     async fn prepare_dirty_wallet_upload(
         &self,
+        owner: WriteOwner,
         namespace: &str,
         metadata: &WalletMetadata,
     ) -> Result<PreparedDirtyWalletUpload, DirtyWalletUploadPreparationError> {
@@ -577,6 +580,7 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = load_master_key_for_cloud_action(&cspp, namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
+                owner,
                 namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
             )

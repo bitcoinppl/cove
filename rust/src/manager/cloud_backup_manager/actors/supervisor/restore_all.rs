@@ -87,8 +87,10 @@ impl CloudBackupSupervisor {
         manager.apply_restore_all_started(claim, frozen_count);
 
         addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.prepare_restore_all_cloud_wallets(frozen_wallets, listing_generation).await;
+            let owner = WriteOwner::Operation(claim);
+            let result = manager
+                .prepare_restore_all_cloud_wallets(owner, frozen_wallets, listing_generation)
+                .await;
             send!(addr.complete_restore_all_preparation(claim, result));
         });
     }

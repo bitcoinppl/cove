@@ -2063,6 +2063,18 @@ pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
     call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
 }
 
+/// The background owner of the current configuration, for a test that runs a producer outside an
+/// operation
+///
+/// The checkpoint comes first, so the ticket reflects every policy the owner published before
+pub(crate) async fn background_owner(
+    manager: &RustCloudBackupManager,
+) -> crate::manager::cloud_backup_manager::actors::WriteOwner {
+    supervisor_checkpoint(manager).await;
+    let generation = manager.write_ticket().await.expect("write ticket").generation;
+    crate::manager::cloud_backup_manager::actors::WriteOwner::Background(generation)
+}
+
 /// Runs the pending upload confirmation the way the verifier does, waiting for the settle
 pub(crate) async fn finalize_pending_verification_for_test(manager: &RustCloudBackupManager) {
     let basis = call!(manager.supervisor.wallet_set_basis()).await.expect("wallet set basis");

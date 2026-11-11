@@ -876,12 +876,14 @@ impl RustCloudBackupManager {
         })
     }
 
-    /// Hands keychain writes a worker prepared to the owner, which applies them in its handler
+    /// Hands keychain writes a worker prepared for `owner` to the lifecycle owner, which applies
+    /// them in its handler while `owner` still holds the configuration
     pub(crate) async fn apply_owned_keychain_writes(
         &self,
+        owner: actors::write::WriteOwner,
         writes: Vec<actors::supervisor::OwnedKeychainWrite>,
     ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.apply_keychain_writes(writes))
+        call!(self.supervisor.apply_keychain_writes(owner, writes))
             .await
             .map_err(CloudBackupError::internal)?
     }

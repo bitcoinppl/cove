@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use cove_cspp::master_key::MasterKey;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::DiscoveredPasskeyResult;
 
@@ -15,14 +16,23 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
+use crate::manager::cloud_backup_manager::ops::test_support::background_owner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
-    CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
+    CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupKeychain,
+    CloudBackupManagerAction, CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
     DriveAccountSwitchReconcileAction,
 };
+
+fn local_master_key() -> MasterKey {
+    cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read local master key")
+        .expect("a local master key")
+}
 
 fn local_master_key_present() -> bool {
     cove_cspp::Cspp::new(Keychain::global().clone())
@@ -233,6 +243,55 @@ fn wipe_during_verification_leaves_no_stale_key() {
         assert!(!local_master_key_present(), "the wiped master key came back");
         assert_eq!(CloudBackupKeychain::global().load_credential_id().expect("read"), None);
         assert_eq!(keychain_namespace(), None);
+    });
+}
+
+/// Keys a background worker prepared for one configuration never land on the next: after Turn
+/// Off and a new configuration, the first configuration's late keychain write is refused and the
+/// new configuration's own write still lands
+#[test]
+fn a_turned_off_configurations_late_keychain_write_is_refused() {
+    let test =
+        concat!(module_path!(), "::a_turned_off_configurations_late_keychain_write_is_refused");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let manager = app.manager().clone();
+        let first = FakeAccount::new(1, 0).seed(&app);
+        let first_key = *local_master_key().as_bytes();
+        let first_owner = app.block_on("the first owner", background_owner(&manager));
+        load_detail(&mut app);
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        let second = FakeAccount::new(1, 0).seed(&app);
+        let second_key = *local_master_key().as_bytes();
+        let second_credential = CloudBackupKeychain::global().load_credential_id().expect("read");
+        assert_ne!(first, second);
+        assert_ne!(first_key, second_key);
+
+        // the first configuration's worker answers late with its keys
+        let late = vec![
+            OwnedKeychainWrite::Passkey { credential_id: vec![0xa1; 16], prf_salt: [0xa2; 32] },
+            OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(first_key)),
+        ];
+        let refused =
+            app.block_on("the late write", manager.apply_owned_keychain_writes(first_owner, late));
+
+        assert!(matches!(refused, Err(CloudBackupError::Cancelled)), "{refused:?}");
+        assert_eq!(keychain_namespace(), Some(second));
+        assert_eq!(*local_master_key().as_bytes(), second_key);
+        assert_eq!(
+            CloudBackupKeychain::global().load_credential_id().expect("read"),
+            second_credential
+        );
+
+        // the current configuration's background work still owns its keys
+        let second_owner = app.block_on("the second owner", background_owner(&manager));
+        let own = vec![OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(second_key))];
+        let applied = app
+            .block_on("the current write", manager.apply_owned_keychain_writes(second_owner, own));
+        assert!(applied.is_ok(), "{applied:?}");
     });
 }
 

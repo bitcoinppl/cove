@@ -44,9 +44,13 @@ impl CloudBackupSupervisor {
         let listing_generation = manager.state.read().cloud_only_listing_generation();
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
+        // the listing may recover a missing master key, which belongs to the configuration the
+        // fetch started under
+        let owner = WriteOwner::Background(self.runtime.generation());
         self.addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.do_fetch_cloud_only_wallets_with_client(cloud, listing_generation).await;
+            let result = manager
+                .do_fetch_cloud_only_wallets_with_client(owner, cloud, listing_generation)
+                .await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }
@@ -67,7 +71,8 @@ impl CloudBackupSupervisor {
         // read before the restore reads the local wallets, so a later change can discard its result
         let listing_generation = manager.state.read().cloud_only_listing_generation();
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_restore_cloud_wallet(&record_id).await;
+            let owner = WriteOwner::Operation(claim);
+            let result = manager.do_restore_cloud_wallet(owner, &record_id).await;
             send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));
         });
     }

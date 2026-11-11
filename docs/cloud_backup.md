@@ -42,9 +42,12 @@ supervisor, but the supervisor never waits on the write supervisor: it sends a
 message and handles the reply as a later completion, so the two actors can't
 deadlock waiting on each other.
 
-Workers prepare keychain writes and the supervisor applies them, so a write that
-arrives after a reset or Turn Off began is refused instead of restoring wiped
-state. An effect that can't be cancelled once it starts, such as Turn Off's local
+Workers prepare keychain writes and the supervisor applies them. Each write
+carries its producer's authority: the running operation's claim, or the
+configuration generation that background work read. The supervisor applies it
+only while that authority is current, so a write that arrives after a reset, a
+Turn Off, a new configuration or a reinitialize is refused instead of restoring
+wiped or older keys. An effect that can't be cancelled once it starts, such as Turn Off's local
 cleanup or a passkey registration, puts its operation in an `Effecting` stage,
 and the operation keeps the slot until the effect reports. A local reset, which
 a full wipe uses, closes admission, cancels running operations, waits for any

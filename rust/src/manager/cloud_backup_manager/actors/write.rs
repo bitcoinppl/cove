@@ -10,7 +10,7 @@ mod supervisor;
 mod types;
 mod worker;
 
-pub(crate) use self::client::CloudBackupWriteClient;
+pub(crate) use self::client::{CloudBackupWriteClient, WriteOwner};
 #[cfg(test)]
 pub(crate) use self::policy::CommandClass;
 pub(crate) use self::policy::{

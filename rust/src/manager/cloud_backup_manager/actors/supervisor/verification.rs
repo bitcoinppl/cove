@@ -224,7 +224,8 @@ impl CloudBackupSupervisor {
     ) {
         let force_discoverable = run.continuation.force_discoverable();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
+            let owner = WriteOwner::Operation(run.claim);
+            let result = manager.prepare_deep_verify_cloud_backup(owner, force_discoverable).await;
             send!(addr.complete_verification(run, result));
         });
     }

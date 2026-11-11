@@ -10,6 +10,7 @@ use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, W
 use cove_cspp::master_key::MasterKey;
 
 use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
+use crate::manager::cloud_backup_manager::actors::write::WriteOwner;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -239,6 +240,8 @@ pub(crate) struct VerificationSession {
     pub(crate) wallet_record_ids: Option<Vec<String>>,
     pub(crate) wallets_missing: bool,
     pub(crate) force_discoverable: bool,
+    /// The operation the keys this run repairs belong to
+    pub(crate) owner: WriteOwner,
 }
 
 /// Why a wallet backup read pass stopped before it could judge every wallet
@@ -352,6 +355,7 @@ impl WalletBackupReadPass {
 impl VerificationSession {
     pub(crate) fn new(
         manager: &RustCloudBackupManager,
+        owner: WriteOwner,
         force_discoverable: bool,
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
@@ -379,6 +383,7 @@ impl VerificationSession {
             wallet_record_ids: None,
             wallets_missing: false,
             force_discoverable,
+            owner,
         })
     }
 
@@ -572,7 +577,9 @@ impl VerificationSession {
                     credential_id: authenticated.credential_id.clone(),
                     prf_salt,
                 };
-                if let Err(error) = self.manager.apply_owned_keychain_writes(vec![write]).await {
+                if let Err(error) =
+                    self.manager.apply_owned_keychain_writes(self.owner, vec![write]).await
+                {
                     return Ok(MasterKeyResolution::Finished(
                         self.retry_result(
                             CloudBackupError::internal_context("save cloud backup passkey", error)
@@ -643,9 +650,11 @@ impl VerificationSession {
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
         let write = OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes()));
-        self.manager.apply_owned_keychain_writes(vec![write]).await.map_err(|error| match error {
-            CloudBackupError::Cancelled => CloudBackupError::Cancelled,
-            error => CloudBackupError::internal_context("repair local master key", error),
+        self.manager.apply_owned_keychain_writes(self.owner, vec![write]).await.map_err(|error| {
+            match error {
+                CloudBackupError::Cancelled => CloudBackupError::Cancelled,
+                error => CloudBackupError::internal_context("repair local master key", error),
+            }
         })
     }
 
