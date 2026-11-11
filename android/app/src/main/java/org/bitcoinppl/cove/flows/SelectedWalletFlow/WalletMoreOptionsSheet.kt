@@ -35,7 +35,6 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.flows.TapSignerFlow.rememberBackupExportLauncher
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AfterPinAction
@@ -172,13 +171,6 @@ fun WalletMoreOptionsSheet(
             if (hardwareMetadata is HardwareWalletMetadata.TapSigner) {
                 val tapSigner = hardwareMetadata.v1
 
-                // launcher for creating backup file
-                val createBackupLauncher =
-                    rememberBackupExportLauncher(app) {
-                        app.getTapSignerBackup(tapSigner) // throws KeychainException
-                            ?: throw IllegalStateException("Backup not available")
-                    }
-
                 // change PIN
                 MenuOption(
                     icon = { Icon(Icons.Default.Key, contentDescription = null) },
@@ -205,8 +197,12 @@ fun WalletMoreOptionsSheet(
                         try {
                             val backup = app.getTapSignerBackup(tapSigner)
                             if (backup != null) {
+                                // this sheet is already dismissed, so the app-level host saves it
                                 val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
-                                createBackupLauncher.launch(fileName)
+                                app.tapSignerBackupExports.request(fileName) {
+                                    app.getTapSignerBackup(tapSigner) // throws KeychainException
+                                        ?: throw IllegalStateException("Backup not available")
+                                }
                             } else {
                                 val route =
                                     TapSignerRoute.EnterPin(

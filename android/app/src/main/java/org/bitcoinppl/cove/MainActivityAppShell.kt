@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
+import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerBackupExportHost
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -106,6 +107,9 @@ internal fun MainActivityAppShell(
                                 app = app,
                                 snackbarHostState = snackbarHostState,
                             )
+
+                            // outlives the TAPSIGNER sheets, which close while the picker is open
+                            TapSignerBackupExportHost(app = app)
                         }
                     }
                 }

@@ -21,6 +21,7 @@ import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportSendStartResult
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
+import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerBackupExports
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.device.KeychainException
@@ -116,6 +117,9 @@ class AppManager private constructor() : FfiReconcile {
 
     var alertState by mutableStateOf<TaggedItem<AppAlertState>?>(null)
     var sheetState by mutableStateOf<TaggedItem<AppSheetState>?>(null)
+
+    /** TAPSIGNER backup saves, kept here so they finish after the requesting sheet closes */
+    val tapSignerBackupExports = TapSignerBackupExports()
     internal var corruptedWalletDeletionRetry by mutableStateOf<CorruptedWalletDeletionRetry?>(null)
         private set
 
