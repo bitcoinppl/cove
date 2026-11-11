@@ -1571,15 +1571,6 @@ pub(crate) mod test_support {
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
 
-    impl CloudBackupSupervisor {
-        /// Whether this supervisor's sync-health worker has no refresh in flight or queued
-        pub(crate) async fn sync_health_refresh_idle_for_test(&mut self) -> ActorResult<bool> {
-            let sync_health = self.sync_health.addr_for_test();
-            let idle = call!(sync_health.sync_health_refresh_idle_for_test()).await?;
-            Produces::ok(idle)
-        }
-    }
-
     impl CloudBackupKeychain {
         /// Clears local state the way the lifecycle owner does, for test setup
         pub(crate) fn clear_local_state_for_test(
