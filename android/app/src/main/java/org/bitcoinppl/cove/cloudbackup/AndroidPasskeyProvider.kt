@@ -84,7 +84,9 @@ class AndroidPasskeyProvider(
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyCreateError(error).also { logPasskeyFailure("registration", error, it) }
+                val mapped = mapPasskeyCreateError(error)
+                logPasskeyFailure("registration", error, mapped)
+                throw mapped
             }
         }
     }
@@ -117,8 +119,9 @@ class AndroidPasskeyProvider(
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error, PasskeyOperation.AUTHENTICATE_ASSERTION)
-                    .also { logPasskeyFailure("authentication", error, it) }
+                val mapped = mapPasskeyGetError(error, PasskeyOperation.AUTHENTICATE_ASSERTION)
+                logPasskeyFailure("authentication", error, mapped)
+                throw mapped
             }
         }
     }
@@ -154,8 +157,9 @@ class AndroidPasskeyProvider(
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
-                    .also { logPasskeyFailure("discovery", error, it) }
+                val mapped = mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
+                logPasskeyFailure("discovery", error, mapped)
+                throw mapped
             }
         }
 
@@ -411,19 +415,16 @@ private fun logPasskeyFailure(
         }
     val reason =
         when (mapped) {
-            is PasskeyException.RequestFailed -> mapped.reason
-            is PasskeyException.NotSupported -> mapped.reason
+            is PasskeyException.RequestFailed -> mapped.reason.javaClass.simpleName
+            is PasskeyException.NotSupported -> mapped.reason.javaClass.simpleName
             else -> null
         }
-    val details =
-        listOfNotNull(
-            "error=${error::class.java.simpleName}",
-            domType?.let { "dom=$it" },
-            "mapped=${mapped::class.java.simpleName}",
-            reason?.let { "reason=${it::class.java.simpleName}" },
-        ).joinToString(" ")
 
-    Log.w(PASSKEY_LOG_TAG, "passkey $stage failed: $details")
+    Log.w(
+        PASSKEY_LOG_TAG,
+        "passkey $stage failed: error=${error.javaClass.simpleName} dom=$domType " +
+            "mapped=${mapped.javaClass.simpleName} reason=$reason",
+    )
 }
 
 private const val PASSKEY_LOG_TAG = "AndroidPasskeyProvider"
