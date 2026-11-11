@@ -313,9 +313,13 @@ fn failed_heal_write_keeps_the_legacy_record_and_fails_the_load() {
                 N::KeepEnabled,
             ]);
             assert_eq!(persisted(), stuck, "{}", app.describe());
+            // the record gives no status; the owner's `LoadFailed` body shows the load failure
+            assert_eq!(RustCloudBackupManager::runtime_status_for(&persisted()), None);
             assert_eq!(
-                RustCloudBackupManager::runtime_status_for(&persisted()),
-                CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())
+                app.manager().current_status(),
+                CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into()),
+                "{}",
+                app.describe()
             );
 
             // Turn Off cannot run on an unnormalized record, and nothing is deleted

@@ -428,16 +428,18 @@ impl RustCloudBackupManager {
         })
     }
 
-    pub(crate) fn runtime_status_for(state: &PersistedCloudBackupState) -> CloudBackupStatus {
-        match state.status() {
+    /// The status a lifecycle record shows, or `None` for a record that can't give one
+    ///
+    /// Only a failed load leaves an unnormalized Disabling record, and the lifecycle owner's
+    /// `LoadFailed` body projects the status for it, so the record projection leaves it alone
+    pub(crate) fn runtime_status_for(
+        state: &PersistedCloudBackupState,
+    ) -> Option<CloudBackupStatus> {
+        let status = match state.status() {
             PersistedCloudBackupStatus::Disabled => CloudBackupStatus::Disabled,
-            // an unnormalized record means the load heal failed; until the exported status has
-            // a `LoadFailed` variant it projects as today's error status, never as Disabled
             PersistedCloudBackupStatus::Disabling => match DisablingRecord::of(state) {
                 Some(DisablingRecord::Committed(_)) | None => CloudBackupStatus::Disabling,
-                Some(DisablingRecord::Unnormalized) => {
-                    CloudBackupStatus::Error(ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())
-                }
+                Some(DisablingRecord::Unnormalized) => return None,
             },
             PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
                 CloudBackupStatus::Enabled
@@ -446,7 +448,9 @@ impl RustCloudBackupManager {
             PersistedCloudBackupStatus::Corrupted => {
                 CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
             }
-        }
+        };
+
+        Some(status)
     }
 
     pub(crate) fn status_for_operation_error(error: &CloudBackupError) -> CloudBackupStatus {
@@ -1082,7 +1086,9 @@ impl RustCloudBackupManager {
     pub fn sync_persisted_state(&self) {
         let db_state = Self::load_persisted_state();
         if !self.has_in_flight_operation() {
-            self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
+            if let Some(status) = Self::runtime_status_for(&db_state) {
+                self.reconcile_runtime_status(status);
+            }
             self.reconcile_persisted_restore_all(&db_state);
         }
 
@@ -1402,7 +1408,7 @@ mod tests {
             RustCloudBackupManager::runtime_status_for(&PersistedCloudBackupState::corrupted(
                 "decode failed"
             )),
-            CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
+            Some(CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into()))
         );
     }
 

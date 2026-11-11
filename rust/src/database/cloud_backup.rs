@@ -52,6 +52,10 @@ impl CloudBackupStateTable {
     }
 
     pub fn get(&self) -> Result<PersistedCloudBackupState, Error> {
+        // a test can fail reads of the record, as a transient redb read error would
+        #[cfg(test)]
+        Self::take_read_fault()?;
+
         let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
         let table =
             read_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;

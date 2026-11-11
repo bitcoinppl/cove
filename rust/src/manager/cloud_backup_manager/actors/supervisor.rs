@@ -98,7 +98,7 @@ use owned_runtime::OwnedRuntime;
 pub(crate) use owned_runtime::{OpTransition, OwnerView};
 #[cfg(test)]
 pub(crate) use runtime::Finish;
-use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
+use runtime::{Effect, ResetStart, RestoreRun, Runtime};
 use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
@@ -387,15 +387,8 @@ impl CloudBackupSupervisor {
         lifecycle: LifecycleWriter,
         load_error: Option<DatabaseError>,
     ) -> Self {
-        let runtime = Runtime::at_load(
-            load_error,
-            IdleFacts {
-                record: &RustCloudBackupManager::load_persisted_state(),
-                pending_enable_recovery: None,
-            },
-        );
-
-        let runtime = OwnedRuntime::new(runtime, lifecycle, cloud_writes.clone(), manager.clone());
+        let runtime =
+            OwnedRuntime::at_load(load_error, lifecycle, cloud_writes.clone(), manager.clone());
 
         Self {
             addr: WeakAddr::default(),
@@ -1391,10 +1384,14 @@ impl CloudBackupSupervisor {
                     tracing::info!("restore_from_cloud_backup: no cloud backups found");
                     let _ =
                         operation.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await;
+                    // off the actor: the owner's record isn't reachable, and an unreadable or
+                    // unnormalized record leaves the status to the owner's projection
                     let status = RustCloudBackupManager::runtime_status_for(
                         &RustCloudBackupManager::load_persisted_state(),
                     );
-                    let _ = operation.apply_status(status).await;
+                    if let Some(status) = status {
+                        let _ = operation.apply_status(status).await;
+                    }
                     send!(addr.complete_exclusive_operation(claim));
                 }
                 Err(error) => {
@@ -1455,10 +1452,14 @@ impl CloudBackupSupervisor {
                     tracing::info!("restore_from_cloud_backup: no cloud backups found");
                     let _ =
                         operation.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await;
+                    // off the actor: the owner's record isn't reachable, and an unreadable or
+                    // unnormalized record leaves the status to the owner's projection
                     let status = RustCloudBackupManager::runtime_status_for(
                         &RustCloudBackupManager::load_persisted_state(),
                     );
-                    let _ = operation.apply_status(status).await;
+                    if let Some(status) = status {
+                        let _ = operation.apply_status(status).await;
+                    }
                     operation.send_event_if_current(CloudBackupRestoreEvent::NoBackupFound).await;
                     send!(addr.complete_exclusive_operation(claim));
                 }
@@ -1490,9 +1491,7 @@ impl CloudBackupSupervisor {
 
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
-            &RustCloudBackupManager::load_persisted_state(),
-        ));
+        manager.reconcile_runtime_status(self.runtime.status());
         tracing::info!("restore_from_cloud_backup: cancellation requested for active restore");
         Produces::ok(())
     }
@@ -1577,28 +1576,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let after = match outcome {
-            LocalResetOutcome::Wiped => Runtime::off(),
-
-            // the wipe never ran, so a recovery the reset set aside goes on while its evidence
-            // remains; evidence the abandoned wipe did clear ends it
-            LocalResetOutcome::Abandoned => {
-                let pending_enable_recovery = self
-                    .runtime
-                    .recovery_held_by_reset()
-                    .cloned()
-                    .filter(|_| RustCloudBackupManager::pending_enable_evidence_remains());
-
-                Runtime::at_load(
-                    None,
-                    IdleFacts {
-                        record: &RustCloudBackupManager::load_persisted_state(),
-                        pending_enable_recovery,
-                    },
-                )
-            }
-        };
-        self.runtime.finish_reset(after);
+        self.runtime.finish_reset(outcome);
         debug!("Cloud Backup local reset finished: {outcome:?}");
 
         Produces::ok(())

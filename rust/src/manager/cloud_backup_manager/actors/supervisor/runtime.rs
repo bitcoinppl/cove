@@ -5,7 +5,8 @@
 //! value: `DisabledOp` has no Turn Off and `FinishingDisable` holds only `ResumeDisable`
 //!
 //! The body moves in three ways only:
-//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch
+//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch.
+//!   An idle body with no record the owner ever read becomes `LoadFailed` the same way
 //! - while idle: the supervisor rebases the body on its own committed record when it starts work
 //! - while an operation runs, the operation holds its body until it ends or hands off
 //! - a local reset replaces the body with `Resetting`, which nothing can start in, and the owner
@@ -246,10 +247,20 @@ pub(crate) struct Unstartable {
 
 /// The owner's facts an idle body is rebased on
 pub(crate) struct IdleFacts<'a> {
-    /// The record as the supervisor's writer last committed it
+    /// The record as the supervisor's writer last read or committed it
     pub(crate) record: &'a PersistedCloudBackupState,
     /// The interrupted Enable the owner holds, while its keychain evidence remains
     pub(crate) pending_enable_recovery: Option<CloudBackupPendingEnableRecovery>,
+}
+
+impl<'a> IdleFacts<'a> {
+    /// The facts for the owner's record, or the error of a record it never read
+    pub(crate) fn of(
+        record: &'a Result<PersistedCloudBackupState, DatabaseError>,
+        pending_enable_recovery: Option<CloudBackupPendingEnableRecovery>,
+    ) -> Result<Self, DatabaseError> {
+        record.as_ref().map(|record| Self { record, pending_enable_recovery }).map_err(Clone::clone)
+    }
 }
 
 /// The operation a start places, before the body decides where it goes
@@ -268,16 +279,14 @@ impl NewOp {
 }
 
 impl Runtime {
-    /// The body at bootstrap, before any operation
-    pub(crate) fn at_load(load_error: Option<DatabaseError>, facts: IdleFacts<'_>) -> Self {
-        match load_error {
-            Some(error) => Self::LoadFailed { error },
-            None => Self::idle(facts),
-        }
-    }
-
-    fn idle(facts: IdleFacts<'_>) -> Self {
+    /// The idle body the owner's facts give; a record the owner could not read gives `LoadFailed`
+    pub(crate) fn idle(facts: Result<IdleFacts<'_>, DatabaseError>) -> Self {
         use PersistedCloudBackupState as State;
+
+        let facts = match facts {
+            Ok(facts) => facts,
+            Err(error) => return Self::LoadFailed { error },
+        };
 
         // a held recovery outranks only an off or configured record
         if let Some(recovery) = facts.pending_enable_recovery
@@ -310,7 +319,7 @@ impl Runtime {
     }
 
     /// Moves an idle body onto the owner's current facts; a running operation holds its body
-    pub(crate) fn rebase_idle(&mut self, facts: IdleFacts<'_>) {
+    pub(crate) fn rebase_idle(&mut self, facts: Result<IdleFacts<'_>, DatabaseError>) {
         if self.claim().is_some()
             || matches!(self, Self::LoadFailed { .. } | Self::Resetting { .. })
         {
@@ -326,7 +335,7 @@ impl Runtime {
     /// failed load read, so a supervisor shared across tests is not stuck on an earlier test's
     /// legacy record
     #[cfg(test)]
-    pub(crate) fn reload_idle(&mut self, facts: IdleFacts<'_>) {
+    pub(crate) fn reload_idle(&mut self, facts: Result<IdleFacts<'_>, DatabaseError>) {
         if self.claim().is_some() || matches!(self, Self::Resetting { .. }) {
             return;
         }
@@ -341,7 +350,7 @@ impl Runtime {
     #[cfg(test)]
     pub(crate) fn idle_policy_on(
         &self,
-        facts: IdleFacts<'_>,
+        facts: Result<IdleFacts<'_>, DatabaseError>,
         generation: ConfigGeneration,
     ) -> Option<WritePolicy> {
         if self.claim().is_some()
@@ -703,7 +712,7 @@ impl Runtime {
         &mut self,
         from: CloudBackupExclusiveOperationClaim,
         to: CloudBackupExclusiveOperationClaim,
-        facts: IdleFacts<'_>,
+        facts: Result<IdleFacts<'_>, DatabaseError>,
     ) -> Result<(), Unstartable> {
         debug_assert!(self.is_current(from));
         let held = std::mem::replace(self, Self::Disabled { op: None });

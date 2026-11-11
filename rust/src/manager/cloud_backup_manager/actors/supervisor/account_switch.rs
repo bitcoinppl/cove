@@ -259,9 +259,7 @@ impl CloudBackupSupervisor {
         self.runtime.finish(claim);
         manager.apply_recovery_state(RecoveryState::Idle);
         manager.project_exclusive_operation_finished(claim);
-        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
-            &RustCloudBackupManager::load_persisted_state(),
-        ));
+        manager.reconcile_runtime_status(self.runtime.status());
 
         Produces::ok(Ok(()))
     }

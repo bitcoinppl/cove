@@ -114,9 +114,7 @@ impl CloudBackupSupervisor {
                 );
             }
             error => {
-                let runtime_status = RustCloudBackupManager::runtime_status_for(
-                    &RustCloudBackupManager::load_persisted_state(),
-                );
+                let runtime_status = self.runtime.status();
                 manager.reconcile_runtime_status(runtime_status);
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::ReinitializeBackup,
@@ -165,9 +163,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         manager.apply_recovery_state(RecoveryState::Idle);
-        let runtime_status = RustCloudBackupManager::runtime_status_for(
-            &RustCloudBackupManager::load_persisted_state(),
-        );
+        let runtime_status = self.runtime.status();
 
         if matches!(runtime_status, CloudBackupStatus::Enabled) {
             // the reinitialize claim reports the backup as still enabling, and verification only

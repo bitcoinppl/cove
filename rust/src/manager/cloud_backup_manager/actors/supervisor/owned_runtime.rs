@@ -14,16 +14,19 @@ use act_zero::{Addr, send};
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
+use super::LocalResetOutcome;
 use super::runtime::{Effect, Finish, IdleFacts, ResetStart, RestoreRun, Runtime, Unstartable};
 use crate::database::cloud_backup::PersistedCloudBackupState;
-use crate::manager::cloud_backup_manager::RustCloudBackupManager;
+use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
+use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, LifecycleWriter};
+use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
 #[derive(Debug)]
@@ -51,12 +54,20 @@ impl Deref for OwnedRuntime {
 }
 
 impl OwnedRuntime {
-    pub(crate) fn new(
-        runtime: Runtime,
+    /// The body bootstrap left: `LoadFailed` when normalization failed, otherwise the idle body
+    /// of the record the writer read
+    pub(crate) fn at_load(
+        load_error: Option<DatabaseError>,
         lifecycle: LifecycleWriter,
         write: Addr<CloudBackupWriteSupervisor>,
         manager: Weak<RustCloudBackupManager>,
     ) -> Self {
+        let record = match load_error {
+            Some(error) => Err(error),
+            None => lifecycle.record(),
+        };
+
+        let runtime = Runtime::idle(IdleFacts::of(&record, None));
         let generation = ConfigGeneration::next();
         let mut owned = Self {
             published: VersionedPolicy { version: 0, policy: WritePolicy::starting() },
@@ -97,13 +108,37 @@ impl OwnedRuntime {
         result
     }
 
-    /// Rebases an idle body on the record, then publishes the policy if it changed
+    /// Rebases an idle body on the owner's record, then publishes the policy if it changed
     fn publish(&mut self) {
-        let record = RustCloudBackupManager::load_persisted_state();
+        let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
-        self.runtime.rebase_idle(IdleFacts { record: &record, pending_enable_recovery });
+        self.runtime.rebase_idle(IdleFacts::of(&record, pending_enable_recovery));
         self.publish_policy();
         self.project_pending_enable_recovery(&record);
+    }
+
+    /// The status the owner's body and record give
+    ///
+    /// A body with a status of its own, such as `LoadFailed`, gives that; otherwise the record
+    /// does. The record is the owner's, so a failed read never shows as another status
+    pub(crate) fn status(&self) -> CloudBackupStatus {
+        Self::status_on(&self.runtime, &self.lifecycle.record())
+    }
+
+    fn status_on(
+        runtime: &Runtime,
+        record: &Result<PersistedCloudBackupState, DatabaseError>,
+    ) -> CloudBackupStatus {
+        if let Some(status) = runtime.exported().status {
+            return status;
+        }
+
+        // only `LoadFailed` has no record, and it exports its own status above
+        record
+            .as_ref()
+            .ok()
+            .and_then(RustCloudBackupManager::runtime_status_for)
+            .unwrap_or_else(|| CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into()))
     }
 
     /// The interrupted Enable this runtime holds, while the keychain still holds its evidence
@@ -119,7 +154,10 @@ impl OwnedRuntime {
     ///
     /// While an operation runs in recovery its own projection shows; Discard keeps the recovery
     /// screen, and Enable shows its progress
-    fn project_pending_enable_recovery(&self, record: &PersistedCloudBackupState) {
+    fn project_pending_enable_recovery(
+        &self,
+        record: &Result<PersistedCloudBackupState, DatabaseError>,
+    ) {
         let Some(manager) = self.manager.upgrade() else { return };
         let projected = manager.state.read().projected_pending_enable_recovery().cloned();
 
@@ -135,9 +173,7 @@ impl OwnedRuntime {
             // abandoned reset returns to it
             Runtime::Resetting { recovery: Some(_), .. } => {}
             _ if projected.is_some() => {
-                manager.clear_pending_enable_recovery(RustCloudBackupManager::runtime_status_for(
-                    record,
-                ));
+                manager.clear_pending_enable_recovery(Self::status_on(&self.runtime, record));
             }
             _ => {}
         }
@@ -187,9 +223,9 @@ impl OwnedRuntime {
     /// Loads an idle body again from a record a test seeded without the owner, and publishes
     #[cfg(test)]
     pub(crate) fn rebase_after_test_write(&mut self) {
-        let record = RustCloudBackupManager::load_persisted_state();
+        let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
-        self.runtime.reload_idle(IdleFacts { record: &record, pending_enable_recovery });
+        self.runtime.reload_idle(IdleFacts::of(&record, pending_enable_recovery));
         self.publish();
     }
 
@@ -239,9 +275,9 @@ impl OwnedRuntime {
         from: CloudBackupExclusiveOperationClaim,
         to: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), Unstartable> {
-        let record = RustCloudBackupManager::load_persisted_state();
+        let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
-        let facts = IdleFacts { record: &record, pending_enable_recovery };
+        let facts = IdleFacts::of(&record, pending_enable_recovery);
         self.mutate(|runtime| runtime.hand_off(from, to, facts))
     }
 
@@ -273,7 +309,29 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.begin_reset(ready))
     }
 
-    pub(crate) fn finish_reset(&mut self, after: Runtime) {
+    /// Ends a local reset with the body it left
+    ///
+    /// After a wipe Cloud Backup is off whatever the record said, and the writer's copy of the
+    /// record is the default one; an abandoned reset goes back to the owner's record
+    pub(crate) fn finish_reset(&mut self, outcome: LocalResetOutcome) {
+        let after = match outcome {
+            LocalResetOutcome::Wiped => {
+                self.lifecycle.forget_wiped_record();
+                Runtime::off()
+            }
+            // the wipe never ran, so a recovery the reset set aside goes on while its evidence
+            // remains; evidence the abandoned wipe did clear ends it
+            LocalResetOutcome::Abandoned => {
+                let pending_enable_recovery = self
+                    .runtime
+                    .recovery_held_by_reset()
+                    .cloned()
+                    .filter(|_| RustCloudBackupManager::pending_enable_evidence_remains());
+
+                Runtime::idle(IdleFacts::of(&self.lifecycle.record(), pending_enable_recovery))
+            }
+        };
+
         self.mutate(|runtime| runtime.finish_reset(after));
     }
 
@@ -341,9 +399,9 @@ impl OwnedRuntime {
     /// Reads the owner for the harness invariants, taking the transitions recorded since the
     /// last read
     pub(crate) fn take_view(&mut self) -> OwnerView {
-        let record = RustCloudBackupManager::load_persisted_state();
+        let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
-        let facts = IdleFacts { record: &record, pending_enable_recovery };
+        let facts = IdleFacts::of(&record, pending_enable_recovery);
 
         OwnerView {
             claim: self.runtime.claim(),

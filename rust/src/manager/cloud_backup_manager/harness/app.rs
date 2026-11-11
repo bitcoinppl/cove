@@ -201,6 +201,19 @@ impl TestApp {
         Step(self)
     }
 
+    /// A user tap whose step settles without the invariant check
+    ///
+    /// For a tap made while a test fails reads of the lifecycle record: the check reads the
+    /// record itself, so it runs at the next event, once reads work again. The step's admission
+    /// asserts ask only the owner
+    pub(crate) fn dispatch_unchecked(&mut self, action: CloudBackupManagerAction) -> Step<'_> {
+        self.begin_event(format!("dispatch {action:?}, unchecked"));
+        self.invariants.expect_dispatch(action.clone().into());
+        self.manager.dispatch(action);
+        self.settle();
+        Step(self)
+    }
+
     /// Soft relaunch: a new manager on the open database handle
     ///
     /// Keeps the database, keychain and fake cloud, and drops the in-memory caches a relaunch

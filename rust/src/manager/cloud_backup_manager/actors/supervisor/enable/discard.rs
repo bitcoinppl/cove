@@ -8,9 +8,7 @@ impl CloudBackupSupervisor {
     ) {
         self.enable_continuation = None;
         let status = if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
-            RustCloudBackupManager::runtime_status_for(
-                &RustCloudBackupManager::load_persisted_state(),
-            )
+            self.runtime.status()
         } else {
             CloudBackupStatus::Disabled
         };
@@ -195,9 +193,7 @@ impl CloudBackupSupervisor {
 
     fn finish_pending_enable_discard(&mut self) {
         if let Some(manager) = self.manager() {
-            let status = RustCloudBackupManager::runtime_status_for(
-                &RustCloudBackupManager::load_persisted_state(),
-            );
+            let status = self.runtime.status();
             manager.apply_enable_state(CloudBackupEnableState::Idle);
             manager.reconcile_runtime_status(status);
         }

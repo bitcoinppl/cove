@@ -14,7 +14,9 @@ use zeroize::Zeroizing;
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::PersistedCloudBackupState;
-use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
+use crate::manager::cloud_backup_manager::ops::{
+    CLOUD_BACKUP_LOAD_FAILED_MESSAGE, try_restore_from_local_master_key,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
     NamespacePasskeyMatcher, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
@@ -565,7 +567,10 @@ impl RestoreOperation {
                     return Ok(CloudBackupStatus::Enabled);
                 }
 
-                Ok(RustCloudBackupManager::runtime_status_for(&state))
+                // an unnormalized record admits no restore, so the fallback is never reached
+                Ok(RustCloudBackupManager::runtime_status_for(&state).unwrap_or_else(|| {
+                    CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())
+                }))
             }
 
             RestoreResolution::Nothing => {

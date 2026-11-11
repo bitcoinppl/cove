@@ -6,7 +6,8 @@
 //! activation, the account switch, Turn Off) call the typed methods here with their results;
 //! none of them can build a mutation of the record themselves
 
-use tracing::{error, info};
+use parking_lot::Mutex;
+use tracing::{error, info, warn};
 
 use crate::database::Database;
 use crate::database::Error as DatabaseError;
@@ -35,8 +36,15 @@ pub(crate) type Committed<T> = CommittedCloudBackupStateMutation<T>;
 ///
 /// Not `Clone`. Bootstrap moves the one production writer into `CloudBackupSupervisor`, which
 /// keeps it in a private field, so only the supervisor's own handlers can write the record
+///
+/// The writer also owns the record it last read or committed, so the lifecycle owner never takes
+/// a failed read for a different record; see [`Self::record`]
 #[derive(Debug)]
-pub(crate) struct LifecycleWriter(LifecycleCapability);
+pub(crate) struct LifecycleWriter {
+    capability: LifecycleCapability,
+    /// The record as this writer last read or committed it; `None` until the first good read
+    owned: Mutex<Option<PersistedCloudBackupState>>,
+}
 
 /// What load normalization did with the stored record
 #[derive(Debug)]
@@ -137,9 +145,13 @@ impl LifecycleWriter {
     ) -> (Self, LifecycleLoad) {
         debug_assert!(ownership.manager_initialized && !ownership.recovery_cleanup_active);
 
-        let writer = Self(LifecycleCapability(()));
+        let writer = Self::with_capability(LifecycleCapability(()));
         let load = writer.normalize_on_load(heal);
         (writer, load)
+    }
+
+    fn with_capability(capability: LifecycleCapability) -> Self {
+        Self { capability, owned: Mutex::new(None) }
     }
 
     fn normalize_on_load(
@@ -153,6 +165,8 @@ impl LifecycleWriter {
                 return LifecycleLoad::Failed(error);
             }
         };
+
+        *self.owned.lock() = Some(stored.clone());
 
         if DisablingRecord::of(&stored) != Some(DisablingRecord::Unnormalized) {
             return LifecycleLoad::Loaded;
@@ -192,11 +206,50 @@ impl LifecycleWriter {
         })
     }
 
+    /// The lifecycle record the owner derives its body from
+    ///
+    /// A good read replaces the owned copy. A failed read gives the owned copy, the record this
+    /// writer last read or committed: every production write of the record goes through this
+    /// writer, and a full wipe tells it through [`Self::forget_wiped_record`], so a read error
+    /// never reads as another record. It reads the table instead of trusting the copy alone
+    /// because tests seed the record beside the owner, and a test supervisor writes beside the
+    /// manager's own
+    ///
+    /// The error is returned only when no read has succeeded since bootstrap
+    pub(crate) fn record(&self) -> Result<PersistedCloudBackupState, DatabaseError> {
+        let mut owned = self.owned.lock();
+        let error = match Database::global().cloud_backup_state.get() {
+            Ok(record) => {
+                *owned = Some(record.clone());
+                return Ok(record);
+            }
+            Err(error) => error,
+        };
+
+        let Some(record) = owned.as_ref() else {
+            error!("Cloud Backup could not read its lifecycle record: {error}");
+            return Err(error);
+        };
+
+        warn!("Cloud Backup could not read its lifecycle record, keeping its own copy: {error}");
+        Ok(record.clone())
+    }
+
+    /// A full wipe reset the database, so the record is the default one
+    ///
+    /// The wipe replaces the database outside this writer, so without this the owned copy would
+    /// still hold the configuration the wipe removed
+    pub(crate) fn forget_wiped_record(&self) {
+        *self.owned.lock() = Some(PersistedCloudBackupState::default());
+    }
+
     fn mutate<T>(
         &self,
         mutation: impl FnOnce(&mut PersistedCloudBackupState) -> T,
     ) -> Result<Committed<T>, DatabaseError> {
-        Database::global().cloud_backup_state.mutate(&self.0, mutation)
+        let committed = Database::global().cloud_backup_state.mutate(&self.capability, mutation)?;
+        *self.owned.lock() = Some(committed.state.clone());
+        Ok(committed)
     }
 
     /// Verification finished with `result`
@@ -410,10 +463,13 @@ impl LifecycleWriter {
         dirty_states: &[PersistedCloudBlobSyncState],
     ) -> Result<(), DatabaseError> {
         Database::global().cloud_backup_state.persist_restored_namespace_activation(
-            &self.0,
+            &self.capability,
             configured,
             dirty_states,
-        )
+        )?;
+
+        *self.owned.lock() = Some(configured.clone());
+        Ok(())
     }
 
     /// A Drive account switch is starting
@@ -581,7 +637,7 @@ pub(crate) mod test_support {
 
     /// The writer a test supervisor owns, as bootstrap would hand it over
     pub(crate) fn owner_writer() -> LifecycleWriter {
-        LifecycleWriter(LifecycleCapability(()))
+        LifecycleWriter::with_capability(LifecycleCapability(()))
     }
 
     /// A writer for tests that seed the record through the owner's typed writes
@@ -589,7 +645,7 @@ pub(crate) mod test_support {
     /// It writes beside the supervisor's own writer, so dropping it tells every test supervisor
     /// to rebase, as the supervisor's commit does
     pub(crate) fn writer() -> SeedWriter {
-        SeedWriter(LifecycleWriter(LifecycleCapability(())))
+        SeedWriter(LifecycleWriter::with_capability(LifecycleCapability(())))
     }
 
     /// A test writer that tells the owner when it is done writing

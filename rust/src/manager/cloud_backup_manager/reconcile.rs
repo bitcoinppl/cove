@@ -176,7 +176,9 @@ impl RustCloudBackupManager {
 
     /// Projects a just-persisted cloud backup state into runtime status and flags
     pub(crate) fn reconcile_persisted_state(&self, state: &PersistedCloudBackupState) {
-        self.reconcile_runtime_status(Self::runtime_status_for(state));
+        if let Some(status) = Self::runtime_status_for(state) {
+            self.reconcile_runtime_status(status);
+        }
         self.refresh_persisted_flags();
     }
 

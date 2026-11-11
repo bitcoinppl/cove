@@ -116,6 +116,13 @@ construct. Bootstrap creates it once, inside the exclusive bootstrap phase that
 normalizes the stored record, and moves it into the supervisor. The database has
 no other production route that writes the Cloud Backup tables.
 
+The writer also keeps the record it last read or committed, and the supervisor
+derives its body, write policy and status from that record. A failed read gives
+the writer's copy instead of a default, so a transient database error can't turn
+a configured backup into an off one. A full wipe tells the writer the record is
+the default one. If no read has succeeded since the load, the body is
+`LoadFailed`, which admits nothing.
+
 ## Inventory
 
 The detail inventory is explicitly progressive:
