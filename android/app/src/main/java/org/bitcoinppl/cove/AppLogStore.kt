@@ -32,9 +32,11 @@ enum class AppLogLevel {
  * snapshot includes them. They block, so call them off the main thread
  */
 class AppLogStore(
-    private val logsDirectory: File,
+    logsDirectory: File,
     private val diskExecutor: Executor = serialDiskExecutor(),
 ) {
+    // only touched on the disk executor
+    private val files = RotatingLogFiles(logsDirectory)
     private val pendingWrites = AtomicInteger(0)
     private val droppedEntries = AtomicInteger(0)
 
@@ -100,31 +102,17 @@ class AppLogStore(
     private fun readAll(): String {
         val text = StringBuilder()
         lastWriteError?.let { text.append("failed to write Android diagnostics log file: $it\n") }
-
-        for (file in filesOldestFirst()) {
-            if (!file.exists()) continue
-
-            try {
-                text.append(file.readText(Charsets.UTF_8))
-            } catch (error: IOException) {
-                text.append("failed to read Android diagnostics log file ${file.name}: ${error.message}\n")
-            }
-        }
+        files.readInto(text)
 
         return text.ifEmpty { FALLBACK_TEXT }.toString()
     }
 
     private fun deleteAll() {
         try {
-            for (file in filesOldestFirst()) {
-                if (file.exists() && !file.delete()) {
-                    throw IOException("unable to delete ${file.name}")
-                }
-            }
-
+            files.deleteAll()
             lastWriteError = null
             droppedEntries.set(0)
-            appendEntry("android diagnostics logs cleared at ${Instant.now()}\n")
+            files.append("android diagnostics logs cleared at ${Instant.now()}\n")
         } catch (error: IOException) {
             lastWriteError = error.message ?: error.javaClass.simpleName
 
@@ -137,59 +125,15 @@ class AppLogStore(
             val dropped = droppedEntries.getAndSet(0)
             if (dropped > 0) {
                 val now = Instant.now()
-                appendEntry("$now WARN AppLogStore: dropped $dropped log lines, the write queue was full\n")
+                files.append("$now WARN AppLogStore: dropped $dropped log lines, the write queue was full\n")
             }
 
-            appendEntry(entry)
+            files.append(entry)
         } catch (error: IOException) {
             // the store cannot log its own failure without recursing, so the snapshot reports it
             lastWriteError = error.message ?: error.javaClass.simpleName
         }
     }
-
-    private fun appendEntry(entry: String) {
-        if (!logsDirectory.isDirectory && !logsDirectory.mkdirs()) {
-            throw IOException("unable to create ${logsDirectory.name}")
-        }
-
-        val bytes = entry.toByteArray(Charsets.UTF_8)
-
-        // size is read from disk each time because a data reset deletes the directory under us
-        val current = currentFile()
-        if (current.length() > 0 && current.length() + bytes.size > LOG_FILE_BYTES) {
-            rotate()
-        }
-
-        FileOutputStream(current, true).use { it.write(bytes) }
-    }
-
-    private fun rotate() {
-        val oldest = archiveFile(ARCHIVE_FILE_COUNT)
-        if (oldest.exists() && !oldest.delete()) {
-            throw IOException("unable to delete ${oldest.name}")
-        }
-
-        for (index in ARCHIVE_FILE_COUNT - 1 downTo 1) {
-            renameIfExists(archiveFile(index), archiveFile(index + 1))
-        }
-
-        renameIfExists(currentFile(), archiveFile(1))
-    }
-
-    private fun renameIfExists(
-        source: File,
-        destination: File,
-    ) {
-        if (source.exists() && !source.renameTo(destination)) {
-            throw IOException("unable to rename ${source.name} to ${destination.name}")
-        }
-    }
-
-    private fun filesOldestFirst(): List<File> = (ARCHIVE_FILE_COUNT downTo 1).map(::archiveFile) + currentFile()
-
-    private fun currentFile(): File = File(logsDirectory, CURRENT_FILE_NAME)
-
-    private fun archiveFile(index: Int): File = File(logsDirectory, "cove-android.$index.log")
 
     companion object {
         /** Bytes one file may hold before it rotates */
@@ -198,8 +142,6 @@ class AppLogStore(
         /** Files kept including the current one, so the store never exceeds 2 MiB */
         const val MAX_FILE_COUNT = 8
 
-        private const val ARCHIVE_FILE_COUNT = MAX_FILE_COUNT - 1
-        private const val CURRENT_FILE_NAME = "cove-android.log"
         private const val FALLBACK_TEXT = "no Android app logs captured\n"
         private const val WRITE_QUEUE_CAPACITY = 1024
 
@@ -248,5 +190,88 @@ class AppLogStore(
 
             return "${substring(0, end)} [truncated ${length - end} chars]"
         }
+    }
+}
+
+/**
+ * The store's files on disk: the current file and up to [AppLogStore.MAX_FILE_COUNT] - 1 archives,
+ * rotated when the current file would pass [AppLogStore.LOG_FILE_BYTES]
+ *
+ * Not thread safe; [AppLogStore] only calls it from its serial disk executor
+ */
+private class RotatingLogFiles(
+    private val directory: File,
+) {
+    /** Appends [entry] to the current file, rotating first when it would overflow */
+    @Throws(IOException::class)
+    fun append(entry: String) {
+        if (!directory.isDirectory && !directory.mkdirs()) {
+            throw IOException("unable to create ${directory.name}")
+        }
+
+        val bytes = entry.toByteArray(Charsets.UTF_8)
+
+        // size is read from disk each time because a data reset deletes the directory under us
+        val current = currentFile()
+        if (current.length() > 0 && current.length() + bytes.size > AppLogStore.LOG_FILE_BYTES) {
+            rotate()
+        }
+
+        FileOutputStream(current, true).use { it.write(bytes) }
+    }
+
+    /** Appends every file's text, oldest first, noting a file that could not be read in its place */
+    fun readInto(text: StringBuilder) {
+        for (file in filesOldestFirst()) {
+            if (!file.exists()) continue
+
+            try {
+                text.append(file.readText(Charsets.UTF_8))
+            } catch (error: IOException) {
+                text.append("failed to read Android diagnostics log file ${file.name}: ${error.message}\n")
+            }
+        }
+    }
+
+    @Throws(IOException::class)
+    fun deleteAll() {
+        for (file in filesOldestFirst()) {
+            if (file.exists() && !file.delete()) {
+                throw IOException("unable to delete ${file.name}")
+            }
+        }
+    }
+
+    private fun rotate() {
+        val oldest = archiveFile(ARCHIVE_FILE_COUNT)
+        if (oldest.exists() && !oldest.delete()) {
+            throw IOException("unable to delete ${oldest.name}")
+        }
+
+        for (index in ARCHIVE_FILE_COUNT - 1 downTo 1) {
+            renameIfExists(archiveFile(index), archiveFile(index + 1))
+        }
+
+        renameIfExists(currentFile(), archiveFile(1))
+    }
+
+    private fun renameIfExists(
+        source: File,
+        destination: File,
+    ) {
+        if (source.exists() && !source.renameTo(destination)) {
+            throw IOException("unable to rename ${source.name} to ${destination.name}")
+        }
+    }
+
+    private fun filesOldestFirst(): List<File> = (ARCHIVE_FILE_COUNT downTo 1).map(::archiveFile) + currentFile()
+
+    private fun currentFile(): File = File(directory, CURRENT_FILE_NAME)
+
+    private fun archiveFile(index: Int): File = File(directory, "cove-android.$index.log")
+
+    private companion object {
+        const val ARCHIVE_FILE_COUNT = AppLogStore.MAX_FILE_COUNT - 1
+        const val CURRENT_FILE_NAME = "cove-android.log"
     }
 }
