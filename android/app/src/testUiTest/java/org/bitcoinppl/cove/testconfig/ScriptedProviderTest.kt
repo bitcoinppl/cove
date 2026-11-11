@@ -11,6 +11,7 @@ import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyFailureReason
 import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
+import org.bitcoinppl.cove_core.device.RemoteBackupLocation
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -218,6 +219,37 @@ class ScriptedProviderTest {
                 ScriptedCloudBackupFixture.walletWrapper(recordId),
                 valid,
             )
+        }
+
+    @Test
+    fun fixtureNamespaceDeleteRemovesTheWholeBackupUntilAMasterKeyUpload() =
+        runBlocking {
+            val namespace = ScriptedCloudBackupFixture.NAMESPACE
+            ScriptedCloudStorageAccess.configureProductionFixtureRestore()
+
+            ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT)
+
+            assertTrue(ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT).isEmpty())
+            assertTrue(
+                runCatching {
+                    ScriptedCloudStorageAccess.downloadMasterKeyBackup(namespace, emptyList(), CloudAccessPolicy.SILENT)
+                }.exceptionOrNull() is CloudStorageException.NotFound,
+            )
+            assertTrue(
+                runCatching {
+                    ScriptedCloudStorageAccess.listWalletFiles(namespace, CloudAccessPolicy.SILENT)
+                }.exceptionOrNull() is CloudStorageException.NotFound,
+            )
+            assertEquals(1, ScriptedCloudStorageAccess.namespaceDeleteCount())
+
+            // enabling again writes the master key first, which brings the namespace back
+            ScriptedCloudStorageAccess.uploadMasterKeyBackup(
+                namespace,
+                RemoteBackupLocation("cspp-master-key-v1.json"),
+                byteArrayOf(1),
+                CloudAccessPolicy.SILENT,
+            )
+            assertEquals(listOf(namespace), ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT))
         }
 
     private fun ByteArray.sha256(): String =

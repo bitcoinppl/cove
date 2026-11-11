@@ -104,6 +104,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var walletUploadBlock: WalletUploadBlock? = null
 
+    // the fixture's namespace is built in, so deleting it leaves this mark until a master key
+    // upload recreates it, as the iOS host's deleted-namespace marker does
+    private val fixtureNamespaceDeleted = AtomicBoolean(false)
+
     enum class NamespaceResult {
         EMPTY,
         BACKUP_FOUND,
@@ -201,6 +205,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         releaseAllWalletDownloadHolds()
         walletDownloadHolds.clear()
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
+        fixtureNamespaceDeleted.set(false)
         resetUploads()
     }
 
@@ -275,7 +280,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
      */
     fun mostUploadStatusChecksOfOneRecord(): Int = uploadStatusChecks.values.maxOfOrNull { it.get() } ?: 0
 
-    /** Namespaces the fresh-enable cloud was asked to delete */
+    /** Namespace deletes either cloud was asked to make */
     fun namespaceDeleteCount(): Int = namespaceDeletes.get()
 
     fun walletListCount(): Int = walletLists.get()
@@ -569,7 +574,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val enableScenario = freshEnableScenario
 
         return if (enableScenario == null) {
-            namespaceScenario.next(policy)
+            namespaceScenario.next(policy).filterNot(::isDeletedFixtureNamespace)
         } else if (enableScenario.isVisibilityReleased()) {
             enableScenario.masterNamespaces()
         } else {
@@ -595,6 +600,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             scenario.visibleConfirmationRead.countDown()
 
             return backup.copyOf()
+        }
+
+        if (isDeletedFixtureNamespace(namespace)) {
+            throw CloudStorageException.NotFound("cloud backup was deleted")
         }
 
         return ScriptedCloudBackupFixture.masterWrapper.copyOf()
@@ -638,6 +647,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
             "unexpected fixture namespace $namespace"
         }
+        if (isDeletedFixtureNamespace(namespace)) {
+            throw CloudStorageException.NotFound("cloud backup is not available")
+        }
 
         return visibleFixtureWalletRecordIds().map(::walletFilename)
     }
@@ -670,6 +682,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         if (fixtureRestoreEnabled) {
             return if (
                 namespace == ScriptedCloudBackupFixture.NAMESPACE &&
+                    !isDeletedFixtureNamespace(namespace) &&
                     (recordId == MASTER_KEY_RECORD_ID || recordId in visibleFixtureWalletRecordIds())
             ) {
                 CloudBackupUploadStatus.UPLOADED
@@ -723,6 +736,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                 "unexpected fixture namespace $namespace"
             }
             ScriptedConnectivityAccess.throwIfOffline()
+            fixtureNamespaceDeleted.set(false)
 
             return
         }
@@ -820,6 +834,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val scenario = freshEnableScenario
         if (scenario == null) {
             if (fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+                if (isDeletedFixtureNamespace(namespace)) {
+                    throw CloudStorageException.NotFound("cloud backup was deleted")
+                }
+
                 // a deleted backup stays gone even if Cove uploaded it earlier in the test
                 if (recordId !in deletedFixtureWalletRecordIds) {
                     uploadedFixtureWalletBackups[recordId]?.let { backup -> return backup.copyOf() }
@@ -923,10 +941,28 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy,
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
-        val scenario = freshEnableScenario ?: unsupported()
         namespaceDeletes.incrementAndGet()
-        scenario.deleteNamespace(namespace)
+
+        val scenario = freshEnableScenario
+        if (scenario != null) {
+            scenario.deleteNamespace(namespace)
+            return
+        }
+
+        if (!fixtureRestoreEnabled) unsupported()
+
+        check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+            "unexpected fixture namespace $namespace"
+        }
+
+        // the delete takes the device's uploads with it; the built-in fixture records stay
+        // hidden behind the mark
+        fixtureNamespaceDeleted.set(true)
+        uploadedFixtureWalletBackups.clear()
     }
+
+    private fun isDeletedFixtureNamespace(namespace: String): Boolean =
+        fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE && fixtureNamespaceDeleted.get()
 
     private fun unsupported(): Nothing =
         throw CloudStorageException.NotAvailable("operation is not scripted for UI tests")
