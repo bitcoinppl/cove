@@ -146,19 +146,22 @@ impl Invariants {
 
     /// Checks every invariant turned on against the app settled at `boundary`
     pub(crate) fn check(&mut self, app: &TestApp, boundary: &Boundary) -> Result<(), Violation> {
-        let supervisor = app.manager().supervisor.clone();
-        let view = app
-            .block_on("the supervisor's invariant view", async move {
-                call!(supervisor.harness_invariant_view()).await
-            })
-            .expect("supervisor invariant view");
-
+        // the lane is read first: while a call is held, settling returns with other work still
+        // running, and the owner publishes a policy before the lane applies it, so a lane read
+        // before the owner never sees a policy the owner's view doesn't have yet
         let writes = app.writes();
         let lane = app
             .block_on("the write lane's invariant view", async move {
                 call!(writes.harness_lane_view()).await
             })
             .expect("write lane invariant view");
+
+        let supervisor = app.manager().supervisor.clone();
+        let view = app
+            .block_on("the supervisor's invariant view", async move {
+                call!(supervisor.harness_invariant_view()).await
+            })
+            .expect("supervisor invariant view");
 
         let uploads = view.uploads.clone();
         let finishes = app

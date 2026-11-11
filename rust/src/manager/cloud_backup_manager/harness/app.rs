@@ -31,12 +31,13 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
     CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyScreen,
     CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRowDeleteConsent,
-    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
-    initialize_cloud_backup_manager_with,
+    CLOUD_BACKUP_MANAGER, CloudBackupBatchDeleteConsent, CloudBackupEnableContext,
+    CloudBackupManagerAction, CloudBackupPendingEnableRecovery, CloudBackupResetPermit,
+    CloudBackupRowDeleteConsent, CloudBackupRuntimeOwnership, CloudBackupVerificationSource,
+    RecordId, RustCloudBackupManager, initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -638,6 +639,28 @@ impl TestApp {
             .flat_map(|row| row.actions)
             .find_map(|action| match action.action {
                 CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+                _ => None,
+            })
+    }
+
+    /// The consent the Delete Unreadable Backups control carries on the published screen
+    pub(crate) fn undecryptable_delete(&self) -> Option<CloudBackupBatchDeleteConsent> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        configured
+            .sections
+            .into_iter()
+            .flat_map(|section| match section {
+                CloudBackupSection::Verification(section) => section.controls,
+                _ => Vec::new(),
+            })
+            .find_map(|control| match control {
+                CloudBackupVerificationControl::DeleteUnreadableBackups { consent } => {
+                    Some(consent)
+                }
                 _ => None,
             })
     }
