@@ -10,14 +10,23 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
+
 use crate::database::cloud_backup::CloudStorageIssue;
-use crate::manager::cloud_backup_manager::CloudBackupInventoryIncompleteReason;
+use crate::manager::cloud_backup_manager::admission::{RestoreTarget, ReviewExit, UserIntent};
 use crate::manager::cloud_backup_manager::inventory::{
     InventoryImpactInputs, InventoryListedClass,
+};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommittedDisable, DisableDisposition,
 };
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupDisableConfirmation, CloudBackupDisableImpact, CloudBackupDisableReview,
     CloudBackupInventoryAssessment, CloudBackupNamedCount, CloudBackupTurnOffFailure,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupExclusiveOperationClaim, CloudBackupInventoryIncompleteReason,
+    CloudBackupVerificationSource, RecordId,
 };
 
 /// The most wallet names a dialog lists before "and N more"; set here so both apps agree
@@ -55,6 +64,16 @@ pub(crate) enum TurnOffReview {
     /// The provider can't be reached, so the delete couldn't run either
     Offline,
     Reviewing(DisableReview),
+}
+
+impl TurnOffReview {
+    /// The id of the review on screen, once it has one to consent to
+    pub(crate) fn reviewing_id(&self) -> Option<ReviewId> {
+        match self {
+            Self::Reviewing(review) => Some(review.review_id),
+            Self::Preparing { .. } | Self::Offline => None,
+        }
+    }
 }
 
 /// What Turn Off would delete, bound to the evidence it was computed from
@@ -252,6 +271,32 @@ impl DisableImpact {
         impact
     }
 
+    /// What Restore Them First restores: the one wallet not on this device, or all of them
+    pub(crate) fn restore_target(&self) -> Option<RestoreTarget> {
+        match self.not_on_device.len() {
+            0 => None,
+            1 => Some(RestoreTarget::OneWallet),
+            _ => Some(RestoreTarget::AllWallets),
+        }
+    }
+
+    /// The work a review button leaves this review for, picked here so the platform never
+    /// composes a Cancel and a second intent
+    pub(crate) fn exit_intent(&self, exit: ReviewExit) -> Option<UserIntent> {
+        match exit {
+            ReviewExit::VerifyFirst => Some(UserIntent::StartVerification {
+                source: CloudBackupVerificationSource::CloudBackupDetail,
+                discoverable: false,
+            }),
+            ReviewExit::RestoreFirst => match self.restore_target()? {
+                RestoreTarget::OneWallet => self.not_on_device.keys().next().map(|record_id| {
+                    UserIntent::RestoreCloudWallet(RecordId::from(record_id.clone()))
+                }),
+                RestoreTarget::AllWallets => Some(UserIntent::StartRestoreAll),
+            },
+        }
+    }
+
     /// Whether anything could be lost, or Cove couldn't check
     pub(crate) fn confirmation(&self) -> CloudBackupDisableConfirmation {
         let at_risk = !self.not_on_device.is_empty()
@@ -334,18 +379,93 @@ pub(crate) enum AutomaticResume {
     CloudReachable,
 }
 
+/// Who started a finishing run that deletes the namespace, which decides whether the provider
+/// may ask the user for consent on the way
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeleteAuthority {
+    /// The user confirmed the review, and the committed Turn Off goes on to delete
+    Commit,
+    /// A launch, a reconnect or a cloud change resumed it with nobody tapping anything
+    Automatic,
+    /// The user tapped Try Again, or Reconnect after the provider asked for consent
+    TryAgain,
+}
+
+impl DeleteAuthority {
+    /// The provider client the run deletes with
+    ///
+    /// A run nobody tapped for only gets a silent client, so the provider can't show its consent
+    /// sheet: an automatic resume that needs consent fails with `AuthorizationRequired` and waits
+    /// for the user's Reconnect or Try Again
+    pub(crate) fn cloud_client(self) -> CloudStorageClient {
+        match self {
+            Self::Automatic => CloudStorage::global_silent_client(),
+            Self::Commit | Self::TryAgain => CloudStorage::global_explicit_client(),
+        }
+    }
+}
+
 /// How a committed Turn Off's finishing run started
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FinishStart {
-    /// The confirmed Turn Off committed and goes on to delete
-    Commit,
-    /// A launch, a reconnect or a cloud change resumed it, silently
-    Automatic,
-    /// The user tapped Try Again
-    TryAgain,
+    /// Delete the namespace, then clean up this device
+    Delete(DeleteAuthority),
     /// The user chose to stop using Cloud Backup on this device after a failed Try Again: the
     /// local cleanup runs and the remote backups stay
     LocalOnly,
+}
+
+impl FinishStart {
+    /// How a run started with `authority` finishes a committed disable whose record holds
+    /// `disposition`
+    ///
+    /// The disposition outranks the authority: once the user chose to keep the remote backups,
+    /// no resume or retry deletes them
+    pub(crate) fn of(disposition: DisableDisposition, authority: DeleteAuthority) -> Self {
+        match disposition {
+            DisableDisposition::DeleteRemote => Self::Delete(authority),
+            DisableDisposition::LocalOnly => Self::LocalOnly,
+        }
+    }
+}
+
+/// The one automatic retry a committed Turn Off keeps armed for a reconnect that came before
+/// its last failure's `retry_after`
+///
+/// The finishing body holds at most one, for its attempt and deadline: a finishing run that
+/// starts clears it, and a body that moves to another attempt or out of `FinishingDisable` drops
+/// it, so a wake that fires after either finds nothing to resume
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RetryWake {
+    pub(crate) attempt_id: u64,
+    /// The `retry_after` it waits for, in Unix seconds
+    pub(crate) at: u64,
+}
+
+/// A confirmed Turn Off, as admission produced it: the review the user consented to, taken out of
+/// the idle configured body, and the drain operation allocated in its place
+#[derive(Debug)]
+pub(crate) struct ConfirmedTurnOff {
+    pub(crate) claim: CloudBackupExclusiveOperationClaim,
+    pub(crate) review: DisableReview,
+}
+
+/// A finishing run of the committed Turn Off, as admission or an automatic resume produced it:
+/// the committed state the idle finishing body held, and the run allocated on it
+#[derive(Debug)]
+pub(crate) struct AdmittedFinish {
+    pub(crate) run: FinishRun,
+    pub(crate) committed: CommittedDisable,
+}
+
+/// One finishing run of a committed Turn Off: its operation and how it started
+///
+/// Only the runtime makes one, as it allocates the run's operation, and every completion of the
+/// run carries it, so each step reads how the run started from the run itself
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FinishRun {
+    pub(crate) claim: CloudBackupExclusiveOperationClaim,
+    pub(crate) start: FinishStart,
 }
 
 /// Why the last finishing run of a committed Turn Off stopped
@@ -366,9 +486,18 @@ impl FinishFailure {
     ) -> Self {
         match (previous, start) {
             (Some(Self::TryAgainFailed(_)), _)
-            | (_, FinishStart::TryAgain | FinishStart::LocalOnly) => Self::TryAgainFailed(reason),
-            (_, FinishStart::Commit | FinishStart::Automatic) => Self::Failed(reason),
+            | (_, FinishStart::Delete(DeleteAuthority::TryAgain) | FinishStart::LocalOnly) => {
+                Self::TryAgainFailed(reason)
+            }
+            (_, FinishStart::Delete(DeleteAuthority::Commit | DeleteAuthority::Automatic)) => {
+                Self::Failed(reason)
+            }
         }
+    }
+
+    /// Whether a Try Again the user tapped has failed, which offers Stop Using on This Device
+    pub(crate) fn try_again_failed(self) -> bool {
+        matches!(self, Self::TryAgainFailed(_))
     }
 
     pub(crate) fn reason(self) -> CloudBackupTurnOffFailure {
@@ -412,6 +541,32 @@ pub(crate) mod test_support {
             secret_missing_locally: BTreeMap::new(),
             secret_unchecked: BTreeMap::new(),
             assessment,
+        };
+
+        DisableReview {
+            review_id: ReviewId::next(),
+            namespace_id: namespace_id.to_owned(),
+            impact: DisableImpact::assess(&evidence, &facts),
+            changed_since_confirmation: false,
+        }
+    }
+
+    /// A review of a backup under `namespace_id` that lists one wallet not on this device for
+    /// each of `names`, from a complete inventory
+    pub(crate) fn review_not_on_device(namespace_id: &str, names: &[&str]) -> DisableReview {
+        let record_id = |name: &str| format!("record-{name}");
+        let evidence = DisableEvidence {
+            listing: Ok(names.iter().map(|&name| record_id(name)).collect()),
+            ..empty_evidence(namespace_id)
+        };
+        let facts = ImpactFacts {
+            listed: names
+                .iter()
+                .map(|&name| (record_id(name), ListedClass::NotOnDevice { name: name.into() }))
+                .collect(),
+            secret_missing_locally: BTreeMap::new(),
+            secret_unchecked: BTreeMap::new(),
+            assessment: CloudBackupInventoryAssessment::Complete,
         };
 
         DisableReview {
@@ -580,13 +735,16 @@ mod tests {
     fn a_failed_try_again_stays_failed_after_try_again() {
         use CloudBackupTurnOffFailure as Reason;
 
-        let first = FinishFailure::after(None, FinishStart::Commit, Reason::Offline);
+        let start = |authority| FinishStart::Delete(authority);
+        let first = FinishFailure::after(None, start(DeleteAuthority::Commit), Reason::Offline);
         assert_eq!(first, FinishFailure::Failed(Reason::Offline));
 
-        let tapped = FinishFailure::after(Some(first), FinishStart::TryAgain, Reason::Other);
+        let tapped =
+            FinishFailure::after(Some(first), start(DeleteAuthority::TryAgain), Reason::Other);
         assert_eq!(tapped, FinishFailure::TryAgainFailed(Reason::Other));
 
-        let later = FinishFailure::after(Some(tapped), FinishStart::Automatic, Reason::Offline);
+        let later =
+            FinishFailure::after(Some(tapped), start(DeleteAuthority::Automatic), Reason::Offline);
         assert_eq!(later, FinishFailure::TryAgainFailed(Reason::Offline));
     }
 }

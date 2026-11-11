@@ -346,6 +346,13 @@ pub struct CloudBackupNamedCount {
     pub more: u32,
 }
 
+impl CloudBackupNamedCount {
+    /// How many there are in all, named or not
+    pub fn total(&self) -> u32 {
+        u32::try_from(self.names.len()).unwrap_or(u32::MAX).saturating_add(self.more)
+    }
+}
+
 /// How many dialogs Turn Off asks through
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupDisableConfirmation {
@@ -581,6 +588,11 @@ pub enum CloudBackupScreenAction {
     TurnOff,
     ConfirmDisable,
     CancelDisable,
+    /// Restore Them First on the Turn Off review, offered while it names wallets not on this
+    /// device
+    RestoreFirst,
+    /// Verify First on the Turn Off review, offered while it has backups Cove couldn't check
+    VerifyFirst,
     /// Try Again on a committed Turn Off
     ResumeDisable,
     StopUsingOnThisDevice,

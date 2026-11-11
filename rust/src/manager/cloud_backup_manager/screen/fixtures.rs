@@ -71,8 +71,6 @@ mod debug {
             fixture("configured-clean", clean()),
             fixture("configured-empty-inventory", empty_inventory()),
             fixture("configured-passkey-missing", passkey_missing()),
-            fixture("configured-verification-prompt", verification_prompt()),
-            fixture("configured-verification-prompt-busy", verification_prompt_busy()),
             fixture("configured-passkey-needs-repair", passkey_needs_repair()),
             fixture("configured-verification-not-completed", verification_not_completed()),
             fixture("configured-verification-failed", verification_failed()),
@@ -80,6 +78,8 @@ mod debug {
             fixture("configured-verification-recreate-manifest", recreate_manifest()),
             fixture("configured-verification-reinitialize-backup", reinitialize_backup()),
             fixture("configured-needs-attention-undecryptable", undecryptable()),
+            fixture("configured-verification-prompt", verification_prompt()),
+            fixture("configured-verification-prompt-busy", verification_prompt_busy()),
             fixture("configured-inventory-incomplete", inventory_incomplete()),
             fixture("configured-other-backups", other_backups()),
             fixture("configured-other-backups-check-failed", other_backups_check_failed()),
@@ -90,6 +90,10 @@ mod debug {
             fixture("configured-extra-copy-only-copy", extra_copy_only_copy()),
             fixture("configured-extra-copy-gone", extra_copy_gone()),
             fixture("turn-off-review", turn_off_review()),
+            fixture("turn-off-review-restore-all", turn_off_review_restore_all()),
+            fixture("turn-off-review-restore-one", turn_off_review_restore_one()),
+            fixture("turn-off-review-restore-unavailable", turn_off_review_restore_unavailable()),
+            fixture("turn-off-review-verify-first", turn_off_review_verify_first()),
             fixture("finishing-disable", finishing_disable()),
             fixture(
                 "finishing-disable-authorization-required",
@@ -586,6 +590,39 @@ mod debug {
         )
     }
 
+    /// A verification failed on the passkey: its card offers Add New Passkey beside Verify
+    fn passkey_needs_repair() -> CloudBackupScreen {
+        let mut actions = configured_actions();
+        actions.push(A::RepairPasskey);
+
+        let passkey =
+            CloudBackupPasskeyState::NeedsRepair { state: CloudBackupPasskeyRepairState::Idle };
+        let mut screen = screen(
+            configured_body(passkey, CloudBackupDisableScreen::Idle),
+            CloudBackupSettingsRowStatus::PasskeyMissing,
+            available(&actions),
+        );
+
+        set_verification_state(&mut screen, CloudBackupVerificationState::NotVerified);
+        screen
+    }
+
+    /// The user dismissed the passkey sheet: the outcome shows beside Verify, with no repair
+    fn verification_not_completed() -> CloudBackupScreen {
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        set_verification_state(&mut screen, CloudBackupVerificationState::NotCompleted);
+        screen
+    }
+
+    /// A verification failed off the passkey, such as offline: Verify again, with no repair
+    fn verification_failed() -> CloudBackupScreen {
+        let failure =
+            DeepVerificationFailure::retry(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, None, None);
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        set_verification_state(&mut screen, CloudBackupVerificationState::Failed(failure));
+        screen
+    }
+
     /// After an upload, the root prompt asks to verify the backup
     fn verification_prompt() -> CloudBackupScreen {
         let mut screen = configured(CloudBackupDisableScreen::Idle, None);
@@ -604,6 +641,32 @@ mod debug {
                     },
                 };
             }
+        }
+
+        screen
+    }
+
+    /// Shows `state` in place of the verified one; each state these fixtures use draws Verify
+    fn set_verification_state(screen: &mut CloudBackupScreen, state: CloudBackupVerificationState) {
+        let CloudBackupScreenBody::Configured(configured) = &mut screen.body else { return };
+        for section in &mut configured.sections {
+            if let CloudBackupSection::Verification(verification) = section {
+                verification.view.state = state.clone();
+            }
+        }
+    }
+
+    /// The inventory check failed, so its section offers Check Again above the rows it kept
+    fn inventory_incomplete() -> CloudBackupScreen {
+        let mut screen = configured(CloudBackupDisableScreen::Idle, Some(&[A::RefreshDetail]));
+        if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
+            configured.sections.insert(
+                0,
+                CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+                    controls: vec![CloudBackupInventoryControl::CheckAgain],
+                }),
+            );
         }
 
         screen
@@ -690,65 +753,6 @@ mod debug {
             .collect()
     }
 
-    /// A verification failed on the passkey: its card offers Add New Passkey beside Verify
-    fn passkey_needs_repair() -> CloudBackupScreen {
-        let mut actions = configured_actions();
-        actions.push(A::RepairPasskey);
-
-        let passkey =
-            CloudBackupPasskeyState::NeedsRepair { state: CloudBackupPasskeyRepairState::Idle };
-        let mut screen = screen(
-            configured_body(passkey, CloudBackupDisableScreen::Idle),
-            CloudBackupSettingsRowStatus::PasskeyMissing,
-            available(&actions),
-        );
-
-        set_verification_state(&mut screen, CloudBackupVerificationState::NotVerified);
-        screen
-    }
-
-    /// The user dismissed the passkey sheet: the outcome shows beside Verify, with no repair
-    fn verification_not_completed() -> CloudBackupScreen {
-        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
-        set_verification_state(&mut screen, CloudBackupVerificationState::NotCompleted);
-        screen
-    }
-
-    /// A verification failed off the passkey, such as offline: Verify again, with no repair
-    fn verification_failed() -> CloudBackupScreen {
-        let failure =
-            DeepVerificationFailure::retry(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, None, None);
-        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
-        set_verification_state(&mut screen, CloudBackupVerificationState::Failed(failure));
-        screen
-    }
-
-    /// Shows `state` in place of the verified one; each state these fixtures use draws Verify
-    fn set_verification_state(screen: &mut CloudBackupScreen, state: CloudBackupVerificationState) {
-        let CloudBackupScreenBody::Configured(configured) = &mut screen.body else { return };
-        for section in &mut configured.sections {
-            if let CloudBackupSection::Verification(verification) = section {
-                verification.view.state = state.clone();
-            }
-        }
-    }
-
-    /// The inventory check failed, so its section offers Check Again above the rows it kept
-    fn inventory_incomplete() -> CloudBackupScreen {
-        let mut screen = configured(CloudBackupDisableScreen::Idle, Some(&[A::RefreshDetail]));
-        if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
-            configured.sections.insert(
-                0,
-                CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
-                    reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
-                    controls: vec![CloudBackupInventoryControl::CheckAgain],
-                }),
-            );
-        }
-
-        screen
-    }
-
     fn operation_running() -> CloudBackupScreen {
         let running = CloudBackupActionAvailability::Unavailable {
             reason: CloudBackupRejection::OperationRunning {
@@ -812,33 +816,90 @@ mod debug {
         screen
     }
 
-    fn turn_off_review() -> CloudBackupScreen {
-        let review = CloudBackupDisableReview {
-            review_id: 1,
-            impact: CloudBackupDisableImpact {
-                assessment: CloudBackupInventoryAssessment::Partial {
-                    reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
-                },
-                own_backups: 2,
-                not_on_device: CloudBackupNamedCount {
-                    names: vec!["Cold Storage".into()],
-                    more: 0,
-                },
-                own_secret_missing_locally: CloudBackupNamedCount::default(),
-                extra_copies: 1,
-                unchecked: 1,
-                unreadable: 0,
-                unsupported: 0,
-                other_backups: 0,
-                confirmation: CloudBackupDisableConfirmation::Two,
+    /// A review that asks twice for `not_on_device` and `unchecked`, from a complete inventory
+    fn review_impact(not_on_device: &[&str], unchecked: u32) -> CloudBackupDisableImpact {
+        CloudBackupDisableImpact {
+            assessment: CloudBackupInventoryAssessment::Complete,
+            own_backups: 2,
+            not_on_device: CloudBackupNamedCount {
+                names: not_on_device.iter().map(|&name| name.into()).collect(),
+                more: 0,
             },
-            changed_since_confirmation: false,
+            own_secret_missing_locally: CloudBackupNamedCount::default(),
+            extra_copies: 0,
+            unchecked,
+            unreadable: 0,
+            unsupported: 0,
+            other_backups: 0,
+            confirmation: CloudBackupDisableConfirmation::Two,
+        }
+    }
+
+    fn reviewing(impact: CloudBackupDisableImpact, leave: &[A]) -> CloudBackupScreen {
+        let review =
+            CloudBackupDisableReview { review_id: 1, impact, changed_since_confirmation: false };
+        let mut actions = vec![A::ConfirmDisable, A::CancelDisable];
+        actions.extend(leave);
+
+        configured(CloudBackupDisableScreen::Reviewing(review), Some(&actions))
+    }
+
+    fn turn_off_review() -> CloudBackupScreen {
+        let impact = CloudBackupDisableImpact {
+            assessment: CloudBackupInventoryAssessment::Partial {
+                reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+            },
+            extra_copies: 1,
+            ..review_impact(&["Cold Storage"], 1)
         };
 
-        configured(
-            CloudBackupDisableScreen::Reviewing(review),
-            Some(&[A::ConfirmDisable, A::CancelDisable]),
-        )
+        reviewing(impact, &[A::RestoreFirst, A::VerifyFirst])
+    }
+
+    /// Restore Them First restores every wallet not on this device through Restore All
+    fn turn_off_review_restore_all() -> CloudBackupScreen {
+        reviewing(review_impact(&["Cold Storage", "Spending"], 0), &[A::RestoreFirst])
+    }
+
+    /// Restore Them First restores the one wallet not on this device
+    fn turn_off_review_restore_one() -> CloudBackupScreen {
+        reviewing(review_impact(&["Cold Storage"], 0), &[A::RestoreFirst])
+    }
+
+    /// The listing is incomplete, so Restore All can't start and Restore Them First says why
+    fn turn_off_review_restore_unavailable() -> CloudBackupScreen {
+        let impact = CloudBackupDisableImpact {
+            assessment: CloudBackupInventoryAssessment::Partial {
+                reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+            },
+            ..review_impact(&["Cold Storage", "Spending"], 0)
+        };
+
+        let mut screen = reviewing(impact, &[A::RestoreFirst]);
+        let unavailable = CloudBackupActionAvailability::Unavailable {
+            reason: CloudBackupRejection::RestoreAllUnavailable,
+        };
+        for entry in &mut screen.actions.entries {
+            if matches!(entry.action, A::RestoreFirst | A::StartRestoreAll) {
+                entry.availability = unavailable;
+            }
+        }
+
+        if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
+            for section in &mut configured.sections {
+                if let CloudBackupSection::NotOnDevice(not_on_device) = section {
+                    not_on_device.restore_all =
+                        CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 };
+                }
+            }
+        }
+
+        screen
+    }
+
+    /// Verify First verifies the backups the review couldn't check
+    fn turn_off_review_verify_first() -> CloudBackupScreen {
+        reviewing(review_impact(&[], 2), &[A::VerifyFirst])
     }
 
     fn finishing_disable() -> CloudBackupScreen {

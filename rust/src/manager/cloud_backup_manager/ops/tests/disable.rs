@@ -597,6 +597,8 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
             delete_started_at: Some(43),
             last_error: Some("interrupted".into()),
             retry_after: Some(44),
+            disposition: PersistedDisableDisposition::DeleteRemote,
+            try_again_failed: false,
         }))
         .unwrap();
 

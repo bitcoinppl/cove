@@ -43333,6 +43333,32 @@ sealed class CloudBackupManagerAction {
 
 
     /**
+     * Restore Them First on the review the user saw: ends it and restores the wallets it found
+     * only in the cloud; a stale id is rejected
+     */
+    data class RestoreBeforeTurnOff(
+        val `reviewId`: kotlin.ULong) : CloudBackupManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Verify First on the review the user saw: ends it and verifies the backups it couldn't
+     * check; a stale id is rejected
+     */
+    data class VerifyBeforeTurnOff(
+        val `reviewId`: kotlin.ULong) : CloudBackupManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
      * Try Again on a committed Turn Off
      */
     object ResumeDisable : CloudBackupManagerAction()
@@ -43462,21 +43488,27 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 FfiConverterULong.read(buf),
                 )
             29 -> CloudBackupManagerAction.CancelDisable
-            30 -> CloudBackupManagerAction.ResumeDisable
-            31 -> CloudBackupManagerAction.StopUsingOnThisDevice
-            32 -> CloudBackupManagerAction.DismissNotice(
+            30 -> CloudBackupManagerAction.RestoreBeforeTurnOff(
+                FfiConverterULong.read(buf),
+                )
+            31 -> CloudBackupManagerAction.VerifyBeforeTurnOff(
+                FfiConverterULong.read(buf),
+                )
+            32 -> CloudBackupManagerAction.ResumeDisable
+            33 -> CloudBackupManagerAction.StopUsingOnThisDevice
+            34 -> CloudBackupManagerAction.DismissNotice(
                 FfiConverterTypeCloudBackupNoticeKind.read(buf),
                 )
-            33 -> CloudBackupManagerAction.ReconnectDrive
-            34 -> CloudBackupManagerAction.RefreshDetail
-            35 -> CloudBackupManagerAction.EnterDetail
-            36 -> CloudBackupManagerAction.LeaveDetail
-            37 -> CloudBackupManagerAction.RetryLoad
-            38 -> CloudBackupManagerAction.ResetOnThisDevice
-            39 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+            35 -> CloudBackupManagerAction.ReconnectDrive
+            36 -> CloudBackupManagerAction.RefreshDetail
+            37 -> CloudBackupManagerAction.EnterDetail
+            38 -> CloudBackupManagerAction.LeaveDetail
+            39 -> CloudBackupManagerAction.RetryLoad
+            40 -> CloudBackupManagerAction.ResetOnThisDevice
+            41 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            40 -> CloudBackupManagerAction.AcceptEnablePrompt(
+            42 -> CloudBackupManagerAction.AcceptEnablePrompt(
                 FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -43664,6 +43696,20 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+            )
+        }
+        is CloudBackupManagerAction.RestoreBeforeTurnOff -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`reviewId`)
+            )
+        }
+        is CloudBackupManagerAction.VerifyBeforeTurnOff -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`reviewId`)
             )
         }
         is CloudBackupManagerAction.ResumeDisable -> {
@@ -43863,50 +43909,60 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 buf.putInt(29)
                 Unit
             }
-            is CloudBackupManagerAction.ResumeDisable -> {
+            is CloudBackupManagerAction.RestoreBeforeTurnOff -> {
                 buf.putInt(30)
+                FfiConverterULong.write(value.`reviewId`, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.VerifyBeforeTurnOff -> {
+                buf.putInt(31)
+                FfiConverterULong.write(value.`reviewId`, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.ResumeDisable -> {
+                buf.putInt(32)
                 Unit
             }
             is CloudBackupManagerAction.StopUsingOnThisDevice -> {
-                buf.putInt(31)
+                buf.putInt(33)
                 Unit
             }
             is CloudBackupManagerAction.DismissNotice -> {
-                buf.putInt(32)
+                buf.putInt(34)
                 FfiConverterTypeCloudBackupNoticeKind.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.ReconnectDrive -> {
-                buf.putInt(33)
-                Unit
-            }
-            is CloudBackupManagerAction.RefreshDetail -> {
-                buf.putInt(34)
-                Unit
-            }
-            is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(35)
                 Unit
             }
-            is CloudBackupManagerAction.LeaveDetail -> {
+            is CloudBackupManagerAction.RefreshDetail -> {
                 buf.putInt(36)
                 Unit
             }
-            is CloudBackupManagerAction.RetryLoad -> {
+            is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(37)
                 Unit
             }
-            is CloudBackupManagerAction.ResetOnThisDevice -> {
+            is CloudBackupManagerAction.LeaveDetail -> {
                 buf.putInt(38)
                 Unit
             }
-            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+            is CloudBackupManagerAction.RetryLoad -> {
                 buf.putInt(39)
+                Unit
+            }
+            is CloudBackupManagerAction.ResetOnThisDevice -> {
+                buf.putInt(40)
+                Unit
+            }
+            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+                buf.putInt(41)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.AcceptEnablePrompt -> {
-                buf.putInt(40)
+                buf.putInt(42)
                 FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }
@@ -46089,6 +46145,15 @@ enum class CloudBackupScreenAction {
     TURN_OFF,
     CONFIRM_DISABLE,
     CANCEL_DISABLE,
+    /**
+     * Restore Them First on the Turn Off review, offered while it names wallets not on this
+     * device
+     */
+    RESTORE_FIRST,
+    /**
+     * Verify First on the Turn Off review, offered while it has backups Cove couldn't check
+     */
+    VERIFY_FIRST,
     /**
      * Try Again on a committed Turn Off
      */

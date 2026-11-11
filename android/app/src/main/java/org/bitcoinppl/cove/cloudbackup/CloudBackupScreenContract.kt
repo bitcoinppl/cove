@@ -34,82 +34,131 @@ import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupConfiguredScreen
 import org.bitcoinppl.cove_core.CloudBackupLastOutcome
+import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupNoticeKind
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupProgressSection
+import org.bitcoinppl.cove_core.CloudBackupRowAction
 import org.bitcoinppl.cove_core.CloudBackupRowActionKind
+import org.bitcoinppl.cove_core.CloudBackupRowControl
+import org.bitcoinppl.cove_core.CloudBackupRowTarget
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupSection
+import org.bitcoinppl.cove_core.CloudBackupUiElement
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationView
 
 /**
- * Test tags shared with the iOS accessibility identifiers, listed in docs/cloud_backup.md
+ * Test tags: the accessibility identifiers iOS gives the same elements, listed in docs/cloud_backup.md
  *
- * Global actions and row actions take their tag from Rust's action names, so the contract test
- * can find the control for every entry Rust sends
+ * Rust owns the mapping in `CloudBackupUiElement.accessibilityIdentifier()`. This is a copy,
+ * because previews and screenshot tests run without the Rust library, and
+ * `CloudBackupScreenContractTest` checks it against every element Rust lists
  */
 internal object CloudBackupTags {
-    const val TURN_OFF_PREPARING = "cloudBackup.turnOff.preparing"
-    const val TURN_OFF_OFFLINE = "cloudBackup.turnOff.offline"
-    const val TURN_OFF_OFFLINE_RETRY = "cloudBackup.turnOff.offline.tryAgain"
-    const val TURN_OFF_REVIEW_FIRST = "cloudBackup.turnOff.review.first"
-    const val TURN_OFF_REVIEW_FINAL = "cloudBackup.turnOff.review.final"
-    const val TURN_OFF_REVIEW_CONTINUE = "cloudBackup.turnOff.review.continue"
-    const val TURN_OFF_REVIEW_RESTORE_FIRST = "cloudBackup.turnOff.review.restoreFirst"
-    const val TURN_OFF_REVIEW_VERIFY_FIRST = "cloudBackup.turnOff.review.verifyFirst"
-    const val TURN_OFF_REVIEW_CHECK_AGAIN = "cloudBackup.turnOff.review.checkAgain"
-    const val TURN_OFF_DRAINING = "cloudBackup.turnOff.draining"
-    const val FINISHING_DISABLE = "cloudBackup.finishingDisable"
-    const val HEAL_NOTICE = "cloudBackup.notice.heal"
-    const val HEAL_NOTICE_TURN_OFF = "cloudBackup.notice.heal.turnOff"
-    const val LAST_OUTCOME = "cloudBackup.outcome"
-    const val LAST_OUTCOME_DISMISS = "cloudBackup.outcome.dismiss"
-    const val MENU = "cloudBackup.menu"
-    const val INVENTORY_CHECKING = "cloudBackup.inventory.checking"
-    const val INVENTORY_INCOMPLETE = "cloudBackup.inventory.incomplete"
-    const val LOAD_FAILED = "cloudBackup.loadFailed"
-    const val CORRUPTED = "cloudBackup.corrupted"
-    const val DRIVE_ACCOUNT_SWITCH = "cloudBackup.driveAccountSwitch"
+    val TURN_OFF_PREPARING = of(CloudBackupUiElement.TurnOffPreparing)
+    val TURN_OFF_OFFLINE = of(CloudBackupUiElement.TurnOffOffline)
+    val TURN_OFF_OFFLINE_RETRY = of(CloudBackupUiElement.TurnOffOfflineTryAgain)
+    val TURN_OFF_REVIEW_FIRST = of(CloudBackupUiElement.TurnOffReview)
+    val TURN_OFF_REVIEW_FINAL = of(CloudBackupUiElement.TurnOffFinal)
+    val TURN_OFF_REVIEW_CONTINUE = of(CloudBackupUiElement.TurnOffContinue)
+    val TURN_OFF_REVIEW_CHECK_AGAIN = of(CloudBackupUiElement.TurnOffCheckAgain)
+    val TURN_OFF_DRAINING = of(CloudBackupUiElement.TurnOffDraining)
+    val FINISHING_DISABLE = of(CloudBackupUiElement.FinishingDisable)
+    val HEAL_NOTICE = of(CloudBackupUiElement.HealNotice)
+    val HEAL_NOTICE_TURN_OFF = of(CloudBackupUiElement.HealNoticeTurnOff)
+    val LAST_OUTCOME = of(CloudBackupUiElement.LastOutcome)
+    val LAST_OUTCOME_DISMISS = of(CloudBackupUiElement.LastOutcomeDismiss)
+    val MENU = of(CloudBackupUiElement.Menu)
+    val INVENTORY_CHECKING = of(CloudBackupUiElement.InventoryChecking)
+    val INVENTORY_INCOMPLETE = of(CloudBackupUiElement.InventoryIncomplete)
+    val RECOVERY_SUPPORT_CODE = of(CloudBackupUiElement.RecoverySupportCode)
+    val LOAD_FAILED = of(CloudBackupUiElement.LoadFailed)
+    val CORRUPTED = of(CloudBackupUiElement.Corrupted)
+    val DRIVE_ACCOUNT_SWITCH = of(CloudBackupUiElement.DriveAccountSwitch)
+    val ROWS_UNAVAILABLE = of(CloudBackupUiElement.RowsUnavailable)
+    val PROMPT_EXISTING_BACKUP_FOUND = of(CloudBackupUiElement.PromptExistingBackupFound)
+    val PROMPT_PASSKEY_CHOICE = of(CloudBackupUiElement.PromptPasskeyChoice)
+    val PROMPT_PASSKEY_CHOICE_CREATE_NEW_PASSKEY = of(CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey)
+    val PROMPT_MISSING_PASSKEY_REMINDER = of(CloudBackupUiElement.PromptMissingPasskeyReminder)
+    val PROMPT_VERIFICATION = of(CloudBackupUiElement.PromptVerification)
 
-    // the controls that had identifiers before the screen contract keep them, so both UI suites
-    // still find them by the names they already use
-    fun action(action: CloudBackupScreenAction): String =
-        when (action) {
-            CloudBackupScreenAction.ENABLE,
-            CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY,
-            -> "onboarding.cloudBackup.enable"
-            CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP -> "cloudBackup.recovery.removeIncompleteSetup"
-            CloudBackupScreenAction.REFRESH_DETAIL -> "cloudBackup.inventory.checkAgain"
-            else -> "cloudBackup.action.${action.camelName()}"
-        }
+    /** The control that sends a global action, wherever it is drawn */
+    fun action(action: CloudBackupScreenAction): String = of(CloudBackupUiElement.Action(action))
+
+    /** The reason under a disabled action's control */
+    fun unavailable(action: CloudBackupScreenAction): String = of(CloudBackupUiElement.ActionUnavailable(action))
 
     /** The confirm button of the dialog an action opens before it dispatches */
-    fun confirm(action: CloudBackupScreenAction): String = "${action(action)}.confirm"
+    fun confirm(action: CloudBackupScreenAction): String = of(CloudBackupUiElement.ActionConfirm(action))
 
     fun row(
         recordId: String,
         action: CloudBackupRowActionKind,
-    ): String = "cloudBackup.row.$recordId.${action.tagName()}"
+    ): String = of(CloudBackupUiElement.RowAction(CloudBackupRowTarget(recordId, action.control)))
 
-    fun rowOpen(recordId: String): String = "cloudBackup.wallet.$recordId"
+    /** The confirm button of the dialog a row control opens before it dispatches */
+    fun rowConfirm(
+        recordId: String,
+        action: CloudBackupRowActionKind,
+    ): String = of(CloudBackupUiElement.RowConfirm(CloudBackupRowTarget(recordId, action.control)))
 
-    private fun CloudBackupScreenAction.camelName(): String =
+    /** A wallet's row; a listed row opens its action sheet */
+    fun walletRow(recordId: String): String = of(CloudBackupUiElement.WalletRow(recordId))
+
+    // one exhaustive arm per element, so an element Rust adds fails to compile here; splitting it
+    // to lower the count would need an else arm, which would hide that
+    /** The identifier of an element, matching Rust's `accessibilityIdentifier()` */
+    @Suppress("CyclomaticComplexMethod")
+    fun of(element: CloudBackupUiElement): String =
+        when (element) {
+            is CloudBackupUiElement.Action -> "cloudBackup.action.${element.action.tagName()}"
+            is CloudBackupUiElement.ActionUnavailable ->
+                "cloudBackup.action.${element.action.tagName()}.unavailable"
+            is CloudBackupUiElement.ActionConfirm -> "cloudBackup.action.${element.action.tagName()}.confirm"
+            is CloudBackupUiElement.RowAction ->
+                "cloudBackup.row.${element.target.recordId}.${element.target.control.tagName()}"
+            is CloudBackupUiElement.RowConfirm ->
+                "cloudBackup.row.${element.target.recordId}.${element.target.control.tagName()}.confirm"
+            is CloudBackupUiElement.WalletRow -> "cloudBackup.wallet.${element.recordId}"
+            CloudBackupUiElement.RowsUnavailable -> "cloudBackup.rows.unavailable"
+            CloudBackupUiElement.LastOutcome -> "cloudBackup.lastOutcome"
+            CloudBackupUiElement.LastOutcomeDismiss -> "cloudBackup.lastOutcome.dismiss"
+            CloudBackupUiElement.HealNotice -> "cloudBackup.healNotice"
+            CloudBackupUiElement.HealNoticeTurnOff -> "cloudBackup.healNotice.turnOff"
+            CloudBackupUiElement.TurnOffPreparing -> "cloudBackup.turnOff.preparing"
+            CloudBackupUiElement.TurnOffOffline -> "cloudBackup.turnOff.offline"
+            CloudBackupUiElement.TurnOffOfflineTryAgain -> "cloudBackup.turnOff.offline.tryAgain"
+            CloudBackupUiElement.TurnOffReview -> "cloudBackup.turnOff.review"
+            CloudBackupUiElement.TurnOffContinue -> "cloudBackup.turnOff.continue"
+            CloudBackupUiElement.TurnOffCheckAgain -> "cloudBackup.turnOff.checkAgain"
+            CloudBackupUiElement.TurnOffFinal -> "cloudBackup.turnOff.final"
+            CloudBackupUiElement.TurnOffDraining -> "cloudBackup.turnOff.draining"
+            CloudBackupUiElement.FinishingDisable -> "cloudBackup.finishingDisable"
+            CloudBackupUiElement.LoadFailed -> "cloudBackup.loadFailed"
+            CloudBackupUiElement.Corrupted -> "cloudBackup.corrupted"
+            CloudBackupUiElement.DriveAccountSwitch -> "cloudBackup.driveAccountSwitch"
+            CloudBackupUiElement.InventoryChecking -> "cloudBackup.inventory.checking"
+            CloudBackupUiElement.InventoryIncomplete -> "cloudBackup.inventory.incomplete"
+            CloudBackupUiElement.RecoverySupportCode -> "cloudBackup.recovery.supportCode"
+            CloudBackupUiElement.Menu -> "cloudBackup.menu"
+            CloudBackupUiElement.PromptExistingBackupFound -> "cloudBackup.prompt.existingBackupFound"
+            CloudBackupUiElement.PromptPasskeyChoice -> "cloudBackup.prompt.passkeyChoice"
+            CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey ->
+                "cloudBackup.prompt.passkeyChoice.createNewPasskey"
+            CloudBackupUiElement.PromptMissingPasskeyReminder -> "cloudBackup.prompt.missingPasskeyReminder"
+            CloudBackupUiElement.PromptVerification -> "cloudBackup.prompt.verification"
+        }
+
+    // Rust's lower camel case of the case name, from Kotlin's upper snake case; not the generated
+    // identifierName(), which calls Rust and so isn't available in previews
+    private fun Enum<*>.tagName(): String =
         name.lowercase().split('_').mapIndexed { index, part ->
             if (index == 0) part else part.replaceFirstChar(Char::uppercaseChar)
         }.joinToString("")
-
-    private fun CloudBackupRowActionKind.tagName(): String =
-        when (this) {
-            CloudBackupRowActionKind.Restore -> "restore"
-            is CloudBackupRowActionKind.Delete -> "delete"
-            CloudBackupRowActionKind.BackUpFirst -> "backUpFirst"
-            CloudBackupRowActionKind.CheckAgain -> "checkAgain"
-            CloudBackupRowActionKind.Verify -> "verify"
-        }
 }
 
 /** The configured screen, when that is the body */
@@ -190,13 +239,17 @@ internal fun CloudBackupLastOutcomeNote(
 @Composable
 internal fun CloudBackupUnavailableCaption(
     caption: String?,
+    testTag: String?,
     modifier: Modifier = Modifier,
 ) {
     caption ?: return
 
     Text(
         caption,
-        modifier = modifier.padding(horizontal = 14.dp),
+        modifier =
+            modifier
+                .padding(horizontal = 14.dp)
+                .then(testTag?.let { Modifier.testTag(it) } ?: Modifier),
         style = MaterialTheme.typography.bodySmall,
         color = cloudBackupVisualColors().secondaryText,
     )
@@ -254,7 +307,7 @@ internal fun CloudBackupActionButton(
                 }
         }
 
-        CloudBackupUnavailableCaption(availability.caption)
+        CloudBackupUnavailableCaption(availability.caption, CloudBackupTags.unavailable(action))
         CloudBackupLastOutcomeNote(
             outcome = screen.lastOutcome,
             target = CloudBackupOutcomeTarget.Action(action),
@@ -308,7 +361,7 @@ internal fun CloudBackupActionCard(
             }
         }
 
-        CloudBackupUnavailableCaption(availability.caption)
+        CloudBackupUnavailableCaption(availability.caption, CloudBackupTags.unavailable(action))
         CloudBackupLastOutcomeNote(
             outcome = screen.lastOutcome,
             target = CloudBackupOutcomeTarget.Action(action),
@@ -326,6 +379,26 @@ internal fun CloudBackupActionCard(
  */
 internal fun CloudBackupActions.lookup(action: CloudBackupScreenAction): CloudBackupActionAvailability? =
     entries.firstOrNull { it.action == action }?.availability
+
+/**
+ * Which control a row action is drawn as
+ *
+ * Same answer as the exported `CloudBackupRowActionKind.control`, read in Kotlin for the reason
+ * [lookup] gives
+ */
+internal val CloudBackupRowActionKind.control: CloudBackupRowControl
+    get() =
+        when (this) {
+            CloudBackupRowActionKind.Restore -> CloudBackupRowControl.RESTORE
+            is CloudBackupRowActionKind.Delete -> CloudBackupRowControl.DELETE
+            CloudBackupRowActionKind.BackUpFirst -> CloudBackupRowControl.BACK_UP_FIRST
+            CloudBackupRowActionKind.CheckAgain -> CloudBackupRowControl.CHECK_AGAIN
+            CloudBackupRowActionKind.Verify -> CloudBackupRowControl.VERIFY
+        }
+
+/** The row's current action for [control], or null once Rust no longer offers it on this row */
+internal fun CloudBackupListedRow.action(control: CloudBackupRowControl): CloudBackupRowAction? =
+    actions.firstOrNull { it.action.control == control }
 
 /** Whether Rust sent a control for this action, available or not */
 internal fun CloudBackupActions.draws(action: CloudBackupScreenAction): Boolean = lookup(action) != null

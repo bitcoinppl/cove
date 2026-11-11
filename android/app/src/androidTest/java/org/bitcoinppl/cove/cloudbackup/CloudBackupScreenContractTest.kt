@@ -59,9 +59,6 @@ class CloudBackupScreenContractTest {
         )
     }
 
-    // needs Rust part B: the interim projection offers RefreshDetail on every configured screen
-    // and DiscardPendingEnable on pending-enable recovery, which Android draws no control for; see
-    // interimUndrawn
     @Test
     fun everyAvailableActionHasAnEnabledControlOnItsSurface() {
         setFrame()
@@ -78,7 +75,7 @@ class CloudBackupScreenContractTest {
                 unplaced +
                     drawn
                         .filter { screen.actions.lookup(it.action) is CloudBackupActionAvailability.Available }
-                        .filterNot { (fixture.shortName to it.action) in interimUndrawn }
+                        .filterNot { it.action in DRAWN_OFF_FRAME }
                         .mapNotNull { control ->
                             show(screen)
                             reach(screen, control)
@@ -121,7 +118,7 @@ class CloudBackupScreenContractTest {
                 fixture.screen.listedRows().flatMap { row ->
                     row.actions.mapNotNull { rowAction ->
                         show(fixture.screen)
-                        compose.onNodeWithTag(CloudBackupTags.rowOpen(row.recordId)).performScrollTo().performClick()
+                        compose.onNodeWithTag(CloudBackupTags.walletRow(row.recordId)).performScrollTo().performClick()
                         compose.waitForIdle()
 
                         val tag = CloudBackupTags.row(row.recordId, rowAction.action)
@@ -152,6 +149,12 @@ class CloudBackupScreenContractTest {
                             manager = manager,
                             actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
                         )
+
+                        // the app's root host draws the prompt over every screen; its choices are
+                        // actions like any other
+                        manager.screen.rootPrompt.toRootPresentation()?.let { presentation ->
+                            CloudBackupRootPromptDialog(presentation, manager.screen, PROMPT_HOST)
+                        }
                     }
                 }
             }
@@ -230,23 +233,34 @@ class CloudBackupScreenContractTest {
     )
 
     private companion object {
+        /**
+         * Available actions whose control this test can't find in what it renders, and where the
+         * app draws them instead
+         *
+         * iOS keeps the same map for its detail screen (`drawnOffDetail` in
+         * `CloudBackupIOSSafetyHelpersTests`). Android's is smaller because this test also renders
+         * the root prompts and opens the Turn Off dialogs, so the controls drawn there are checked
+         */
+        val DRAWN_OFF_FRAME: Map<CloudBackupScreenAction, String> =
+            mapOf(
+                CloudBackupScreenAction.DISCARD_PENDING_ENABLE to
+                    "the Existing Backup Found prompt's dismiss, or the Enable step's Cancel at the " +
+                    "passkey choice, while Enable waits on one of its prompts; neither has a control to tag",
+            )
+
+        val PROMPT_HOST =
+            CloudBackupRootPromptHost(
+                onDispatch = {},
+                onClose = {},
+                consumeHostDismiss = { false },
+                onOpenCloudBackup = {},
+            )
+
         val ACKNOWLEDGEMENTS =
             listOf(
                 "my passkey is required",
                 "need access to my Google account",
                 "manually back up my 12 or 24 words",
-            )
-
-        // actions the interim Rust projection offers without a section that draws them; Rust part
-        // B's projection owns removing them or adding the section, and this list goes with it
-        val interimUndrawn =
-            setOf(
-                "configured" to CloudBackupScreenAction.REFRESH_DETAIL,
-                "configured-passkey-missing" to CloudBackupScreenAction.REFRESH_DETAIL,
-                "configured-operation-running" to CloudBackupScreenAction.REFRESH_DETAIL,
-                "configured-heal-notice" to CloudBackupScreenAction.REFRESH_DETAIL,
-                "turn-off-review" to CloudBackupScreenAction.REFRESH_DETAIL,
-                "pending-enable-recovery" to CloudBackupScreenAction.DISCARD_PENDING_ENABLE,
             )
     }
 }

@@ -26581,6 +26581,18 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
      */
     case cancelDisable
     /**
+     * Restore Them First on the review the user saw: ends it and restores the wallets it found
+     * only in the cloud; a stale id is rejected
+     */
+    case restoreBeforeTurnOff(reviewId: UInt64
+    )
+    /**
+     * Verify First on the review the user saw: ends it and verifies the backups it couldn't
+     * check; a stale id is rejected
+     */
+    case verifyBeforeTurnOff(reviewId: UInt64
+    )
+    /**
      * Try Again on a committed Turn Off
      */
     case resumeDisable
@@ -26699,29 +26711,35 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case 29: return .cancelDisable
 
-        case 30: return .resumeDisable
-
-        case 31: return .stopUsingOnThisDevice
-
-        case 32: return .dismissNotice(try FfiConverterTypeCloudBackupNoticeKind.read(from: &buf)
+        case 30: return .restoreBeforeTurnOff(reviewId: try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 33: return .reconnectDrive
-
-        case 34: return .refreshDetail
-
-        case 35: return .enterDetail
-
-        case 36: return .leaveDetail
-
-        case 37: return .retryLoad
-
-        case 38: return .resetOnThisDevice
-
-        case 39: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        case 31: return .verifyBeforeTurnOff(reviewId: try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 40: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
+        case 32: return .resumeDisable
+
+        case 33: return .stopUsingOnThisDevice
+
+        case 34: return .dismissNotice(try FfiConverterTypeCloudBackupNoticeKind.read(from: &buf)
+        )
+
+        case 35: return .reconnectDrive
+
+        case 36: return .refreshDetail
+
+        case 37: return .enterDetail
+
+        case 38: return .leaveDetail
+
+        case 39: return .retryLoad
+
+        case 40: return .resetOnThisDevice
+
+        case 41: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
+
+        case 42: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -26856,50 +26874,60 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(29))
 
 
-        case .resumeDisable:
+        case let .restoreBeforeTurnOff(reviewId):
             writeInt(&buf, Int32(30))
+            FfiConverterUInt64.write(reviewId, into: &buf)
+
+
+        case let .verifyBeforeTurnOff(reviewId):
+            writeInt(&buf, Int32(31))
+            FfiConverterUInt64.write(reviewId, into: &buf)
+
+
+        case .resumeDisable:
+            writeInt(&buf, Int32(32))
 
 
         case .stopUsingOnThisDevice:
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(33))
 
 
         case let .dismissNotice(v1):
-            writeInt(&buf, Int32(32))
+            writeInt(&buf, Int32(34))
             FfiConverterTypeCloudBackupNoticeKind.write(v1, into: &buf)
 
 
         case .reconnectDrive:
-            writeInt(&buf, Int32(33))
-
-
-        case .refreshDetail:
-            writeInt(&buf, Int32(34))
-
-
-        case .enterDetail:
             writeInt(&buf, Int32(35))
 
 
-        case .leaveDetail:
+        case .refreshDetail:
             writeInt(&buf, Int32(36))
 
 
-        case .retryLoad:
+        case .enterDetail:
             writeInt(&buf, Int32(37))
 
 
-        case .resetOnThisDevice:
+        case .leaveDetail:
             writeInt(&buf, Int32(38))
 
 
-        case let .promptEnablePasskeyChoice(v1):
+        case .retryLoad:
             writeInt(&buf, Int32(39))
+
+
+        case .resetOnThisDevice:
+            writeInt(&buf, Int32(40))
+
+
+        case let .promptEnablePasskeyChoice(v1):
+            writeInt(&buf, Int32(41))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
         case let .acceptEnablePrompt(v1):
-            writeInt(&buf, Int32(40))
+            writeInt(&buf, Int32(42))
             FfiConverterTypeCloudBackupEnablePromptChoice.write(v1, into: &buf)
 
         }
@@ -29083,6 +29111,15 @@ public enum CloudBackupScreenAction: Equatable, Hashable {
     case confirmDisable
     case cancelDisable
     /**
+     * Restore Them First on the Turn Off review, offered while it names wallets not on this
+     * device
+     */
+    case restoreFirst
+    /**
+     * Verify First on the Turn Off review, offered while it has backups Cove couldn't check
+     */
+    case verifyFirst
+    /**
      * Try Again on a committed Turn Off
      */
     case resumeDisable
@@ -29189,23 +29226,27 @@ public struct FfiConverterTypeCloudBackupScreenAction: FfiConverterRustBuffer {
 
         case 22: return .cancelDisable
 
-        case 23: return .resumeDisable
+        case 23: return .restoreFirst
 
-        case 24: return .stopUsingOnThisDevice
+        case 24: return .verifyFirst
 
-        case 25: return .dismissHealNotice
+        case 25: return .resumeDisable
 
-        case 26: return .reconnectDrive
+        case 26: return .stopUsingOnThisDevice
 
-        case 27: return .switchDriveAccount
+        case 27: return .dismissHealNotice
 
-        case 28: return .retryDriveAccountSwitchRecovery
+        case 28: return .reconnectDrive
 
-        case 29: return .cancelDriveAccountSwitch
+        case 29: return .switchDriveAccount
 
-        case 30: return .retryLoad
+        case 30: return .retryDriveAccountSwitchRecovery
 
-        case 31: return .resetOnThisDevice
+        case 31: return .cancelDriveAccountSwitch
+
+        case 32: return .retryLoad
+
+        case 33: return .resetOnThisDevice
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29303,40 +29344,48 @@ public struct FfiConverterTypeCloudBackupScreenAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(22))
 
 
-        case .resumeDisable:
+        case .restoreFirst:
             writeInt(&buf, Int32(23))
 
 
-        case .stopUsingOnThisDevice:
+        case .verifyFirst:
             writeInt(&buf, Int32(24))
 
 
-        case .dismissHealNotice:
+        case .resumeDisable:
             writeInt(&buf, Int32(25))
 
 
-        case .reconnectDrive:
+        case .stopUsingOnThisDevice:
             writeInt(&buf, Int32(26))
 
 
-        case .switchDriveAccount:
+        case .dismissHealNotice:
             writeInt(&buf, Int32(27))
 
 
-        case .retryDriveAccountSwitchRecovery:
+        case .reconnectDrive:
             writeInt(&buf, Int32(28))
 
 
-        case .cancelDriveAccountSwitch:
+        case .switchDriveAccount:
             writeInt(&buf, Int32(29))
 
 
-        case .retryLoad:
+        case .retryDriveAccountSwitchRecovery:
             writeInt(&buf, Int32(30))
 
 
-        case .resetOnThisDevice:
+        case .cancelDriveAccountSwitch:
             writeInt(&buf, Int32(31))
+
+
+        case .retryLoad:
+            writeInt(&buf, Int32(32))
+
+
+        case .resetOnThisDevice:
+            writeInt(&buf, Int32(33))
 
         }
     }

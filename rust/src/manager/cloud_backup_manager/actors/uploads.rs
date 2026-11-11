@@ -534,7 +534,8 @@ mod tests {
     use crate::database::cloud_backup::{
         CloudBlobUploadedPendingConfirmationState, PersistedBackupSyncState,
         PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBlobSyncState,
-        PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup, PersistedPasskeyState,
+        PersistedConfiguredCloudBackup, PersistedDisableDisposition, PersistedDisablingCloudBackup,
+        PersistedPasskeyState,
     };
     use crate::manager::cloud_backup_manager::cspp_exports::master_key_wrapper_revision_hash;
     use crate::manager::cloud_backup_manager::ops::test_support::{
@@ -654,6 +655,8 @@ mod tests {
                 delete_started_at: None,
                 last_error: None,
                 retry_after: None,
+                disposition: PersistedDisableDisposition::DeleteRemote,
+                try_again_failed: false,
             }))
             .unwrap();
         Database::global()

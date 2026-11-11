@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use act_zero::call;
-use cove_device::cloud_storage::CloudStorageError;
+use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorageError};
 use cove_device::passkey::{PasskeyError, PasskeyFailureReason, PasskeyOperation};
 
 use super::process::child_root;
@@ -29,8 +29,10 @@ use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupScreenAction,
-    CloudBackupScreenBody, CloudBackupSection, CloudBackupVerificationControl,
+    CloudBackupActionAvailability, CloudBackupDisableConfirmation,
+    CloudBackupFinishingDisableStage, CloudBackupOutcome, CloudBackupOutcomeTarget,
+    CloudBackupRejection, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupTurnOffFailure, CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupNoticeKind,
@@ -38,6 +40,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
+use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 use CloudBackupScreenAction as A;
 
@@ -253,6 +256,135 @@ fn scripted_namespace_delete_failure_then_retry_disables() {
     });
 }
 
+/// Commits a Turn Off whose first namespace delete fails offline, then takes away Cove's
+/// provider access, so the committed Turn Off can only finish with the user's consent
+fn commit_turn_off_then_revoke_authorization(app: &mut TestApp) -> String {
+    let namespace = FakeAccount::new(1, 0).seed(app);
+    app.cloud.script(
+        CallId::new(CloudCall::DeleteNamespace, 1),
+        CloudFault::Fail(CloudStorageError::Offline("scripted".into())),
+    );
+    load_detail(app);
+
+    app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+    app.confirm_turn_off().then_can(&[N::ResumeDisable]).then_cannot(&[N::Enable]);
+    assert_eq!(persisted().status(), PersistedCloudBackupStatus::Disabling);
+    app.cloud.revoke_authorization();
+    namespace
+}
+
+/// The access policy of every namespace delete after the first `skip`
+fn delete_policies(app: &TestApp, skip: usize) -> Vec<Option<CloudAccessPolicy>> {
+    (skip + 1..=app.cloud.count(CloudCall::DeleteNamespace))
+        .map(|nth| app.cloud.policy_of(CallId::new(CloudCall::DeleteNamespace, nth)))
+        .collect()
+}
+
+/// Where the published screen's committed Turn Off stands
+fn finishing_stage(app: &TestApp) -> Option<CloudBackupFinishingDisableStage> {
+    match app.manager().published_screen().body {
+        CloudBackupScreenBody::FinishingDisable(finishing) => Some(finishing.stage),
+        _ => None,
+    }
+}
+
+/// A committed Turn Off resumes by itself at launch and on reconnect without asking the user for
+/// provider consent; only Try Again, the user's tap, may
+#[test]
+fn automatic_turn_off_resume_never_asks_for_provider_consent() {
+    let test =
+        concat!(module_path!(), "::automatic_turn_off_resume_never_asks_for_provider_consent");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = commit_turn_off_then_revoke_authorization(&mut app);
+
+        app.relaunch().then_can(&[N::ResumeDisable]).then_cannot(&[N::Enable]);
+        let launched = app.cloud.count(CloudCall::DeleteNamespace);
+        assert!(launched > 1, "the launch resumed the delete\n{}", app.describe());
+
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+        app.event("reconnect", |app| {
+            app.manager().handle_connectivity_change(ConnectivityStatus::Connected);
+        })
+        .then_can(&[N::ResumeDisable])
+        .then_cannot(&[N::Enable]);
+        assert!(
+            app.cloud.count(CloudCall::DeleteNamespace) > launched,
+            "the reconnect resumed the delete\n{}",
+            app.describe()
+        );
+
+        let automatic = delete_policies(&app, 1);
+        assert!(
+            automatic.iter().all(|policy| *policy == Some(CloudAccessPolicy::Silent)),
+            "automatic resumes deleted with {automatic:?}"
+        );
+        assert_eq!(app.cloud.consent_sheets(), 0);
+        assert!(app.cloud.inner.has_namespace(&namespace));
+        assert_eq!(
+            finishing_stage(&app),
+            Some(CloudBackupFinishingDisableStage::Failed {
+                reason: CloudBackupTurnOffFailure::AuthorizationRequired,
+            })
+        );
+
+        let resumed = app.cloud.count(CloudCall::DeleteNamespace);
+        app.dispatch(CloudBackupManagerAction::ResumeDisable)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(delete_policies(&app, resumed), vec![Some(CloudAccessPolicy::ConsentAllowed)]);
+        assert_eq!(app.cloud.consent_sheets(), 1);
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+    });
+}
+
+/// A committed Turn Off that stopped for the provider's consent offers Reconnect Google Drive,
+/// which finishes that same Turn Off with the user's consent instead of verifying a backup
+#[test]
+fn reconnect_drive_finishes_the_committed_turn_off_after_an_authorization_failure() {
+    let test = concat!(
+        module_path!(),
+        "::reconnect_drive_finishes_the_committed_turn_off_after_an_authorization_failure"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = commit_turn_off_then_revoke_authorization(&mut app);
+
+        // an offline failure is no reason to reconnect
+        app.current().then_can(&[N::ResumeDisable]).then_cannot(&[N::ReconnectDrive]);
+
+        app.relaunch().then_can(&[N::ResumeDisable, N::ReconnectDrive]).then_cannot(&[
+            N::StopUsingOnThisDevice,
+            N::Verify,
+            N::TurnOff,
+            N::Enable,
+        ]);
+        assert_eq!(
+            app.admission_of(UserIntent::SwitchDriveAccount),
+            Admission::Rejected(Rejection::TurnOffCommitted)
+        );
+
+        let resumed = app.cloud.count(CloudCall::DeleteNamespace);
+        app.dispatch(CloudBackupManagerAction::ReconnectDrive)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff, N::ReconnectDrive]);
+        let deletes = app.cloud.calls();
+        let reconnected = deletes
+            .iter()
+            .filter(|(id, _)| id.kind == CloudCall::DeleteNamespace && id.nth > resumed)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            reconnected,
+            vec![&(CallId::new(CloudCall::DeleteNamespace, resumed + 1), Some(namespace))]
+        );
+        assert_eq!(delete_policies(&app, resumed), vec![Some(CloudAccessPolicy::ConsentAllowed)]);
+        assert_eq!(app.cloud.consent_sheets(), 1);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
 /// A Turn Off refused by a backup that is not on this device persisted nothing, so the actions
 /// its refusal asks for stay open, and Turn Off finishes once the user has taken them
 #[test]
@@ -296,6 +428,124 @@ fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_r
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
         assert!(!app.cloud.inner.has_namespace(&account.namespace));
         assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// Restore Them First on a review naming one wallet not on this device ends the review and
+/// restores that wallet in the same tap, after which Turn Off asks once
+#[test]
+fn restore_first_restores_the_one_wallet_the_review_names() {
+    let test = concat!(module_path!(), "::restore_first_restores_the_one_wallet_the_review_names");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        FakeAccount::new(1, 1).seed_records(&app);
+        load_detail(&mut app);
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable, N::RestoreFirst]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.not_on_device.names.len(), 1, "{review:?}");
+        assert_eq!(control(&app, CloudBackupScreenAction::VerifyFirst), None);
+
+        app.dispatch(CloudBackupManagerAction::RestoreBeforeTurnOff {
+            review_id: review.review_id,
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::ConfirmDisable, N::RestoreFirst]);
+        assert!(app.turn_off_review().is_none(), "{}", app.describe());
+        assert_eq!(app.manager().published_screen().last_outcome, None, "{}", app.describe());
+
+        // the wallet is on this device now, so nothing is at risk and the review asks once
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable])
+            .then_cannot(&[N::RestoreFirst]);
+        let review = app.turn_off_review().expect("the second Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// Restore Them First on a review naming several wallets not on this device starts Restore All
+/// and ends the review; one for a review no longer on screen is stale, starts nothing and leaves
+/// the review open with the reason next to the button
+#[test]
+fn restore_first_restores_every_wallet_the_review_names_through_restore_all() {
+    let test = concat!(
+        module_path!(),
+        "::restore_first_restores_every_wallet_the_review_names_through_restore_all"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        FakeAccount::new(1, 2).seed_records(&app);
+        load_detail(&mut app);
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable, N::RestoreFirst]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.not_on_device.names.len(), 2, "{review:?}");
+
+        let stale = review.review_id + 1;
+        app.dispatch(CloudBackupManagerAction::RestoreBeforeTurnOff { review_id: stale })
+            .then_can(&[N::ConfirmDisable, N::RestoreFirst]);
+        assert_eq!(app.turn_off_review().map(|open| open.review_id), Some(review.review_id));
+        let outcome = app.manager().published_screen().last_outcome.expect("the stale rejection");
+        assert_eq!(
+            outcome.target,
+            CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::RestoreFirst)
+        );
+        assert_eq!(
+            outcome.outcome,
+            CloudBackupOutcome::Rejected { reason: CloudBackupRejection::ReviewStale }
+        );
+
+        app.dispatch(CloudBackupManagerAction::RestoreBeforeTurnOff {
+            review_id: review.review_id,
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::ConfirmDisable, N::RestoreFirst]);
+        assert!(app.turn_off_review().is_none(), "{}", app.describe());
+        assert_eq!(app.manager().published_screen().last_outcome, None, "{}", app.describe());
+
+        // both wallets are on this device now, so the review asks once
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable])
+            .then_cannot(&[N::RestoreFirst]);
+        let review = app.turn_off_review().expect("the second Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// Verify First on a review with backups Cove couldn't check ends the review and runs the
+/// verification; one the user doesn't finish changes nothing, and Turn Off still asks twice
+#[test]
+fn verify_first_ends_the_review_and_runs_the_verification() {
+    let test = concat!(module_path!(), "::verify_first_ends_the_review_and_runs_the_verification");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 1).seed_records(&app);
+        seed_verifiable_master_key(&app);
+
+        // with no inventory loaded, the record not on this device is one Cove couldn't check
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable, N::VerifyFirst])
+            .then_cannot(&[N::RestoreFirst]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert!(review.impact.unchecked > 0, "{review:?}");
+
+        app.passkey.set_mode(PasskeyMode::NotCompleted);
+        app.dispatch(CloudBackupManagerAction::VerifyBeforeTurnOff { review_id: review.review_id })
+            .then_can(&[N::TurnOff, N::Verify])
+            .then_cannot(&[N::ConfirmDisable, N::VerifyFirst]);
+        assert!(app.turn_off_review().is_none(), "{}", app.describe());
+        assert_eq!(verification_state(&app), Some(CloudBackupVerificationState::NotCompleted));
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        let review = app.turn_off_review().expect("the second Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two, "{review:?}");
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
     });
 }
 
@@ -816,7 +1066,6 @@ fn silent_inventory_paths_never_prompt() {
 
     use crate::manager::cloud_backup_manager::screen::CloudBackupListedRecord;
     use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudOnlyRow};
-    use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 
     let test = concat!(module_path!(), "::silent_inventory_paths_never_prompt");
     run_case(test, &[PhaseEnd::Exit], |_| {

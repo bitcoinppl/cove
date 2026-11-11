@@ -97,7 +97,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts["Backup verified"], "verified result", initialWait: 30)
         layout.assertTextFits(layout.staticText(endingWith: "wallet(s) verified"), "verified summary")
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again")
-        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off")
         scenarioState.assertNextActions(
             "the verified inventory should offer what the screen draws",
             available: ["verify", "startRestoreAll", "turnOff"]
@@ -202,11 +202,12 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts.matching(NSPredicate(format: "label == %@", Self.passkeyAccessRecoveryMessage)).firstMatch, "repair failed: error", initialWait: 30)
         assertMissingPasskeyScreenFits("repair failed")
         layout.assertActionFits(app.buttons["Add Passkey"], "repair failed: Add Passkey")
-        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "repair failed: Turn Off")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "repair failed: Turn Off")
     }
 
     /// A verification the provider can't serve the master key backup to fails with Try Again and
-    /// a passkey repair
+    /// no passkey card, since the passkey is fine; one that finds no passkey and can't register a
+    /// new one offers the passkey repair
     func testFailedVerificationKeepsRecoveryActionsReachable() throws {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [firstRecordId])
@@ -228,11 +229,31 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.waitForAppState("the unavailable master key backup should fail verification", timeout: 30) {
             $0.verification == "failed"
         }
-        control.assertNextActions("a failed verification should offer Verify again", available: ["verify", "turnOff"])
+        control.assertNextActions(
+            "a failed download should offer Verify again, not a passkey repair",
+            available: ["verify", "turnOff"],
+            unavailable: ["repairPasskey"]
+        )
 
         layout.assertTextFits(robot.staticText(containing: "temporarily unavailable"), "failed verification: error")
-        layout.assertActionFits(robot.button(startingWith: "Try Again"), "failed verification: Try Again")
-        layout.assertActionFits(app.buttons["Add New Passkey"], "failed verification: Add New Passkey")
+        let tryAgain = layout.assertActionFits(robot.button(startingWith: "Try Again"), "failed verification: Try Again")
+        XCTAssertFalse(app.buttons["Add Passkey"].exists, "a failed download offered a passkey repair")
+
+        // the download answers again, but neither the saved passkey nor discovery does, and the
+        // replacement passkey fails as a provider would after its sheet showed
+        let createsBeforeRetry = control.state.count(.passkeyCreate)
+        try control.answerNextPasskeyAssertions([.noCredential, .noCredential])
+        try control.update {
+            $0.masterDownloadFailure = nil
+            $0.createResults = Array(repeating: .success, count: createsBeforeRetry) + [.postPresentationFailure]
+        }
+        tryAgain.tap()
+        control.assertNextActions(
+            "a verification that failed on the passkey should offer its repair",
+            available: ["repairPasskey", "turnOff"]
+        )
+        assertMissingPasskeyScreenFits("verification failed on the passkey")
+        layout.assertActionFits(app.buttons["Add Passkey"], "missing passkey: Add Passkey")
     }
 
     /// An interrupted setup whose staged key the keychain lost can't be resumed, so the relaunched
@@ -261,12 +282,12 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(robot.staticText(containing: "setup was interrupted"), "recovery description")
         layout.assertTextFits(robot.staticText(containing: "incomplete local setup can be removed"), "recovery explanation")
         layout.assertTextFits(app.staticTexts["Support code"], "support code title")
-        layout.assertTextFits(app.staticTexts["cloudBackup.recovery.supportCode"], "support code")
+        layout.assertTextFits(app.staticTexts[CloudBackupUIIdentifier.recoverySupportCode], "support code")
         layout.assertActionFits(robot.button(startingWith: "Copy Code"), "Copy Code")
         layout.assertActionFits(robot.button(startingWith: "Contact Support"), "Contact Support")
         layout.assertActionFits(app.buttons["Cancel"], "recovery Cancel")
 
-        let removeSetupIdentifier = "cloudBackup.action.confirmPendingEnableCleanup"
+        let removeSetupIdentifier = CloudBackupUIIdentifier.action("confirmPendingEnableCleanup")
         layout.assertActionFits(app.buttons[removeSetupIdentifier], "Remove Incomplete Setup").tap()
 
         // the screen's own button has the same label and sits under the dialog, so match the
@@ -286,7 +307,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
     func testTurnOffDialogsKeepTheirActionsReachable() throws {
         let control = try restoreWalletOneAndOpenDetail(listingOthers: true)
 
-        let turnOff = layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off")
+        let turnOff = layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off")
         turnOff.tap()
         let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "Fixture Wallet Two", "review")
         control.assertNextActions("the review should be confirmable", available: ["confirmDisable", "cancelDisable"])
@@ -304,7 +325,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 10))
 
         try control.setNetworkConnected(false)
-        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off offline").tap()
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off offline").tap()
         let offline = layout.assertAlertFits(app.alerts["Can't Reach iCloud"], containing: "needs a connection", "offline")
         layout.assertAlertActionReachable(offline.buttons["Try Again"], in: offline, "offline: Try Again")
         layout.assertAlertActionReachable(offline.buttons["Cancel"], in: offline, "offline: Cancel").tap()
@@ -329,8 +350,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         // the title carries the notice's identifier, so it is found by its label
         layout.assertTextFits(robot.staticText(containing: "Cloud Backup is on again"), "heal notice: title", initialWait: 15)
         layout.assertTextFits(robot.staticText(containing: "An earlier Turn Off didn't finish"), "heal notice: description")
-        layout.assertActionFits(app.buttons["cloudBackup.healNotice.turnOff"], "heal notice: Turn Off")
-        layout.assertActionFits(app.buttons["cloudBackup.action.dismissHealNotice"], "heal notice: Dismiss")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.healNoticeTurnOff], "heal notice: Turn Off")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("dismissHealNotice")], "heal notice: Dismiss")
     }
 
     /// A Turn Off whose delete failed after the confirmation keeps the Settings row's status and
@@ -339,7 +360,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
         try control.failNamespaceDelete(attempt: 1)
 
-        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off").tap()
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off").tap()
         let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "This deletes the backups", "review")
         layout.assertAlertActionReachable(review.buttons["Turn Off and Delete Backups"], in: review, "review: Turn Off and Delete Backups").tap()
         control.assertNextActions(
@@ -351,7 +372,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
 
         layout.assertTextFits(robot.staticText(containing: "Cloud Backup is being turned off"), "panel: title", initialWait: 15)
         layout.assertTextFits(robot.staticText(containing: "couldn't finish deleting your backups"), "panel: description")
-        layout.assertActionFits(app.buttons["cloudBackup.action.resumeDisable"], "panel: Try Again")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("resumeDisable")], "panel: Try Again")
 
         robot.goBack()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
@@ -471,7 +492,7 @@ private struct LargeTextLayout {
     /// Scrolls a wallet row wholly into view, checks a row that is an action takes a tap there and
     /// is enabled, and fails unless every text in it draws whole
     func assertRowFits(recordId: String, _ name: String, isAction: Bool = true, initialWait: TimeInterval = 10) {
-        let row = app.descendants(matching: .any)["cloudBackup.wallet.\(recordId)"]
+        let row = app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(recordId)]
         scrollWhollyIntoView(row, name, needsHit: isAction, initialWait: initialWait)
         if isAction {
             XCTAssertTrue(row.isEnabled, "\(name) is disabled")

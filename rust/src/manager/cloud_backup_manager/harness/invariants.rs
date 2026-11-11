@@ -7,7 +7,9 @@
 //! and the clock advanced until nothing is left. Production code never calls it; the actors
 //! only keep test-only logs of what they decided, which each check takes.
 //!
-//! Turned on: 1, 2, 3, 4a, 5, 7 and 8; 4b needs the Turn Off review and 6 the passkey permit.
+//! Turned on: 1, 2, 3, 4a, 5, 7 and 8; 4b runs at the end of each model case
+//! (`model_tests.rs`), since it drives the app out of the state it checks, and 6 needs the
+//! passkey permit.
 //! A state that is legitimately between two actors, such as a
 //! policy the owner pushed and the lane has not applied yet, is tracked as pending, never
 //! reported as a violation, and must be acknowledged by the next boundary
@@ -29,10 +31,11 @@ use crate::manager::cloud_backup_manager::actors::write::{
     PolicyBody, VersionedPolicy, WritePolicy,
 };
 use crate::manager::cloud_backup_manager::admission::UserIntent;
+use crate::manager::cloud_backup_manager::inventory::InventoryRows;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupRowActionKind, CloudBackupScreen,
-    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, undrawn_actions,
+    CloudBackupListedRecord, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, undrawn_actions,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupPendingEnableCleanupState, CloudBackupPublishedScreen, RecordId,
@@ -175,7 +178,7 @@ impl Invariants {
 
         self.check_screen_deltas(&screen)?;
         check_exits(&screen.published, boundary, live)?;
-        check_inventory_rows(&screen.published)
+        check_inventory_rows(&screen.published, screen.inventory.as_ref())
     }
 
     /// 3: a platform that starts from a `state()` snapshot and applies every delta sent so far
@@ -615,13 +618,16 @@ fn check_exits(
     ))
 }
 
-/// 8: an extra copy offers Delete only while the wallet it names has a current own row (otherwise it says Back up first), and no record id is both a local wallet's own and a
-/// listed row
+/// 8: an extra copy names a wallet that covers it and offers Delete only while a covering wallet
+/// has a current own row (otherwise it says Back up first), and no record id is both
+/// a local wallet's own and a listed row
 ///
-/// That the named wallet is the one covering the copy is not checked yet: coverage reaches the
-/// rows as the cloud record's own name, which a rename leaves behind, until the inventory owner
-/// carries the covering wallet's identity
-fn check_inventory_rows(screen: &CloudBackupScreen) -> Result<(), Violation> {
+/// The screen names the covering wallet; `inventory` holds which wallets cover the copy, by their
+/// own record ids, so a renamed wallet or another with the same name can't stand in for them
+fn check_inventory_rows(
+    screen: &CloudBackupScreen,
+    inventory: Option<&InventoryRows>,
+) -> Result<(), Violation> {
     let violation = |detail: String| Err(Violation::new(Invariant::InventoryRows, detail));
     let CloudBackupScreenBody::Configured(configured) = &screen.body else { return Ok(()) };
 
@@ -647,13 +653,31 @@ fn check_inventory_rows(screen: &CloudBackupScreen) -> Result<(), Violation> {
         }
 
         let CloudBackupListedRecord::ExtraCopy { covered_by, .. } = &row.record else { continue };
+        let Some(listed) = inventory
+            .and_then(|rows| rows.listed.iter().find(|listed| listed.record_id == row.record_id))
+        else {
+            return violation(format!(
+                "the extra copy {:?} is drawn, but the inventory doesn't list it",
+                row.record_id
+            ));
+        };
+
+        let names_a_covering_wallet = own.iter().any(|own| {
+            own.wallet.name == *covered_by
+                && listed.covered_by.contains(&RecordId::from(own.wallet.record_id.clone()))
+        });
+        if !names_a_covering_wallet {
+            return violation(format!(
+                "the extra copy {:?} names {covered_by:?}, which isn't a wallet covering it",
+                row.record_id
+            ));
+        }
+
         let deletable = row
             .actions
             .iter()
             .any(|action| matches!(action.action, CloudBackupRowActionKind::Delete { .. }));
-        let current = own.iter().any(|own| {
-            own.wallet.name == *covered_by && own.record == CloudBackupOwnRecord::Current
-        });
+        let current = inventory.is_some_and(|rows| rows.copy_has_current_backup(listed));
 
         if deletable && !current {
             return violation(format!(
@@ -707,9 +731,12 @@ fn running_claim(body: &PolicyBody) -> Option<CloudBackupExclusiveOperationClaim
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::inventory::ListedRecord;
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::owner::operation::OperationId;
-    use crate::manager::cloud_backup_manager::screen::cloud_backup_screen_fixtures;
+    use crate::manager::cloud_backup_manager::screen::{
+        CloudBackupListedRow, cloud_backup_screen_fixtures,
+    };
 
     /// 4a: a restore whose last completion was lost passes a pending boundary, which may still
     /// hold work it waits on, and fails at quiescence, where nothing is left to end it
@@ -733,5 +760,66 @@ mod tests {
         let violation = check_nothing_live(&Boundary::Quiescent, orphaned)
             .expect_err("an operation live at quiescence");
         assert_eq!(violation.invariant, Invariant::Exits, "{}", violation.detail);
+    }
+
+    /// The configured fixture's screen and the inventory rows it was drawn from, with its extra
+    /// copy covered by the wallet whose own record is `covering`
+    fn drawn_from(covering: &str) -> (CloudBackupScreen, InventoryRows) {
+        let screen = cloud_backup_screen_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.name.ends_with(":configured"))
+            .expect("the configured fixture")
+            .screen;
+        let CloudBackupScreenBody::Configured(configured) = &screen.body else {
+            panic!("the configured fixture is configured")
+        };
+
+        let mut rows = InventoryRows {
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            listed: Vec::new(),
+            last_sync: None,
+            secret_unchecked: HashSet::new(),
+        };
+        let listed = |row: &CloudBackupListedRow| ListedRecord {
+            record_id: row.record_id.clone(),
+            record: row.record.clone(),
+            covered_by: match row.record {
+                CloudBackupListedRecord::ExtraCopy { .. } => {
+                    vec![RecordId::from(covering.to_owned())]
+                }
+                _ => Vec::new(),
+            },
+        };
+        for section in &configured.sections {
+            match section {
+                CloudBackupSection::Wallets(wallets) => {
+                    rows.up_to_date.clone_from(&wallets.up_to_date);
+                    rows.needs_sync.clone_from(&wallets.needs_sync);
+                }
+                CloudBackupSection::NotOnDevice(section) => {
+                    rows.listed.extend(section.rows.iter().map(listed));
+                }
+                CloudBackupSection::ExtraCopies(section) => {
+                    rows.listed.extend(section.rows.iter().map(listed));
+                }
+                _ => {}
+            }
+        }
+
+        (screen, rows)
+    }
+
+    /// An extra copy must name a wallet that covers it: the name alone matches the wrong wallet
+    /// once a rename or a namesake is involved
+    #[test]
+    fn an_extra_copy_names_a_wallet_that_covers_it() {
+        let (screen, rows) = drawn_from("record-spending");
+        assert!(check_inventory_rows(&screen, Some(&rows)).is_ok());
+
+        // the copy still says "Spending", but the wallet covering it is another one
+        let (screen, rows) = drawn_from("record-savings");
+        let violation = check_inventory_rows(&screen, Some(&rows)).expect_err("a wrong name");
+        assert_eq!(violation.invariant, Invariant::InventoryRows, "{}", violation.detail);
     }
 }

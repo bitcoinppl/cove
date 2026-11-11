@@ -30,9 +30,10 @@ pub(crate) const CLOUD_BACKUP_LOAD_FAILED_MESSAGE: &str = concat!(
 impl RustCloudBackupManager {
     /// Fresh evidence for Turn Off's impact: the namespace's listing and this device's wallets
     ///
-    /// Silent: it lists and never decrypts a record or asks for a passkey. A listing that fails
-    /// for any reason but the connection still returns evidence, whose impact is then unknown,
-    /// so Turn Off never blocks on what the backup holds
+    /// Silent: it lists and never decrypts a record, asks for a passkey or lets the provider ask
+    /// for consent, so the review and the recheck never show a sheet. A listing that fails for
+    /// any reason but the connection still returns evidence, whose impact is then unknown, so
+    /// Turn Off never blocks on what the backup holds
     pub(crate) async fn gather_disable_evidence(
         &self,
     ) -> Result<DisableEvidence, EvidenceUnavailable> {
@@ -44,7 +45,7 @@ impl RustCloudBackupManager {
             EvidenceUnavailable::Local(error.logged_reader_message("Turn Off read the namespace"))
         })?;
 
-        let cloud = CloudStorage::global_explicit_client();
+        let cloud = CloudStorage::global_silent_client();
         let listing = list_active_wallets_for_disable(&cloud, &namespace_id)
             .await
             .map_err(|error| CloudStorageIssue::from(&error));
@@ -90,13 +91,14 @@ impl RustCloudBackupManager {
         lifecycle: &LifecycleWriter,
         committed: &CommittedDisable,
         message: String,
+        try_again_failed: bool,
     ) -> Result<(), CloudBackupError> {
         let retry_after = cove_util::time::unix_timestamp_secs_or_zero().saturating_add(5);
-        let recorded = lifecycle.record_disable_failure(committed, message, retry_after).map_err(
-            |source| {
+        let recorded = lifecycle
+            .record_disable_failure(committed, message, retry_after, try_again_failed)
+            .map_err(|source| {
                 CloudBackupError::internal_context("persist cloud backup disable failure", source)
-            },
-        )?;
+            })?;
         if !recorded {
             return Err(CloudBackupError::Internal(
                 "cloud backup disable transition changed before it could be updated".into(),

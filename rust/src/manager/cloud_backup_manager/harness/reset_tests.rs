@@ -12,8 +12,7 @@ use cove_device::keychain::Keychain;
 
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd,
-    TestApp, change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
-    seed_verifiable_master_key,
+    TestApp, change_a_wallet, finish_wipe, keychain_namespace, load_detail, persisted, run_case,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -55,21 +54,6 @@ fn master_key_bytes() -> Option<Vec<u8>> {
 
 fn credential_id() -> Option<Vec<u8>> {
     CloudBackupKeychain::global().load_credential_id().expect("read credential")
-}
-
-/// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset
-/// commits, and the reset finishes
-fn finish_wipe(
-    app: &TestApp,
-    permit: crate::manager::cloud_backup_manager::CloudBackupResetPermit,
-) {
-    app.block_on("the owner to clear local state", permit.clear_local_state())
-        .expect("clear local state");
-    // the wipe's commit point: `wipe_all_data_with_tier` resets the whole database, so every
-    // Cloud Backup table, the blob sync rows included, is gone before the reset finishes
-    Database::global().dangerous_reset_all_data().expect("reset the database");
-    app.block_on("the reset to finish", permit.complete_after_database_reset())
-        .expect("finish the reset");
 }
 
 /// Turn Off's cleanup runs on a blocking thread, which the runtime park can't see; settle waits

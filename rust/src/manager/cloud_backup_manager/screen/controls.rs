@@ -211,15 +211,23 @@ impl Drawn {
         }
     }
 
-    /// Confirm only on a review, and Cancel while any Turn Off dialog is open
+    /// Confirm only on a review, with its leave buttons for the risks it names, and Cancel while
+    /// any Turn Off dialog is open
     fn turn_off_dialogs(&mut self, disable: &CloudBackupDisableScreen) {
         use CloudBackupScreenAction as A;
 
         let surface = CloudBackupControlSurface::TurnOffDialogs;
         match disable {
             CloudBackupDisableScreen::Idle => {}
-            CloudBackupDisableScreen::Reviewing(_) => {
+            CloudBackupDisableScreen::Reviewing(review) => {
                 self.extend(surface, [A::ConfirmDisable, A::CancelDisable]);
+                if review.impact.not_on_device.total() > 0 {
+                    self.push(surface, A::RestoreFirst);
+                }
+
+                if review.impact.unchecked > 0 {
+                    self.push(surface, A::VerifyFirst);
+                }
             }
             CloudBackupDisableScreen::Preparing
             | CloudBackupDisableScreen::Offline

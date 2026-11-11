@@ -29,7 +29,7 @@ use super::types::{
 use crate::manager::cloud_backup_manager::actors::supervisor::Runtime;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationStage,
-    EnableIntent, Rejection, UserIntent, evaluate_admission,
+    EnableIntent, Rejection, ReviewExit, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::{
     InventoryFacts, InventoryProgress, InventoryRows, InventoryView, ListedRecord,
@@ -513,6 +513,14 @@ fn intent_for(action: CloudBackupScreenAction, admission: &AdmissionSnapshot) ->
             I::ConfirmDisable { review_id: admission.turn_off.review_id().unwrap_or_default() }
         }
         A::CancelDisable => I::CancelDisable,
+        A::RestoreFirst => I::LeaveReview {
+            review_id: admission.turn_off.review_id().unwrap_or_default(),
+            to: ReviewExit::RestoreFirst,
+        },
+        A::VerifyFirst => I::LeaveReview {
+            review_id: admission.turn_off.review_id().unwrap_or_default(),
+            to: ReviewExit::VerifyFirst,
+        },
         A::ResumeDisable => I::ResumeDisable,
         A::StopUsingOnThisDevice => I::StopUsingOnThisDevice,
         A::DismissHealNotice => I::DismissNotice(CloudBackupNoticeKind::Heal),

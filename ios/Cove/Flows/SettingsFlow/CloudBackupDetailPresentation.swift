@@ -26,7 +26,11 @@ enum CloudBackupDetailDialog {
 }
 
 enum CloudBackupDetailAlert {
-    case rowDelete(CloudBackupListedRow, CloudBackupDeleteConfirmation)
+    /// The delete confirmation of a listed row, by the row Rust owns
+    ///
+    /// Only the record is kept here; the title, warning and button are read from the row's
+    /// current delete action, so the alert never shows a decision Rust has replaced
+    case rowDelete(RecordId)
     case undecryptableWalletDeletion(UInt32)
     case turnOff(CloudBackupTurnOffDialog)
     case otherBackupsRecoveryResult(OtherBackupsRecoveryResult)
@@ -133,6 +137,17 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         return alert
     }
 
+    /// The row control an open delete confirmation is bound to
+    private var rowDeleteTarget: CloudBackupRowTarget? {
+        guard case let .rowDelete(recordId) = alert else { return nil }
+        return CloudBackupRowTarget(recordId: recordId, control: .delete)
+    }
+
+    /// The open delete confirmation's target and the delete action Rust offers for it now
+    private var openRowDelete: CloudBackupOpenRowDelete? {
+        rowDeleteTarget.map { CloudBackupOpenRowDelete(target: $0, delete: screen.rowAction(target: $0)) }
+    }
+
     private var review: CloudBackupDisableReview? {
         guard case let .reviewing(review) = screen.configured?.disable else { return nil }
         return review
@@ -167,6 +182,18 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 actions: alertActions,
                 message: alertMessage
             )
+            .onChange(of: openRowDelete, followRowDelete)
+    }
+
+    private func followRowDelete(_ old: CloudBackupOpenRowDelete?, _ new: CloudBackupOpenRowDelete?) {
+        switch CloudBackupOpenRowDelete.follow(from: old, to: new) {
+        case .keep:
+            return
+        case .close:
+            coordinator.dismissCurrentPresentation()
+        case let .replace(recordId):
+            coordinator.transition(to: .alert(.rowDelete(recordId)))
+        }
     }
 
     private func dialogTitle(_ dialog: CloudBackupDetailDialog) -> String {
@@ -189,12 +216,14 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 performDestructiveAction(confirmation)
             }
             .disabled(!actions.isAvailable(action: confirmation.action))
+            .accessibilityIdentifier(CloudBackupUiElement.actionConfirm(action: confirmation.action).identifier)
 
             Button("Cancel", role: .cancel) {}
 
         case .recoverOtherBackups:
             Button("Try Passkey", action: recoverOtherBackups)
                 .disabled(!actions.isAvailable(action: .recoverOtherBackups))
+                .accessibilityIdentifier(CloudBackupUiElement.actionConfirm(action: .recoverOtherBackups).identifier)
 
             Button("Cancel", role: .cancel) {}
         }
@@ -223,8 +252,8 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
     private func alertTitle(_ alert: CloudBackupDetailAlert) -> String {
         switch alert {
-        case let .rowDelete(row, _):
-            "Delete \(row.record.wallet?.name ?? "This Backup")?"
+        case let .rowDelete(recordId):
+            "Delete \(screen.listedRow(recordId: recordId)?.record.wallet?.name ?? "This Backup")?"
         case let .undecryptableWalletDeletion(count):
             "Delete \(count) Inaccessible Wallet \(count == 1 ? "Backup" : "Backups")?"
         case let .turnOff(dialog):
@@ -241,11 +270,15 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     @ViewBuilder
     private func alertActions(_ alert: CloudBackupDetailAlert) -> some View {
         switch alert {
-        case let .rowDelete(row, _):
+        case let .rowDelete(recordId):
             Button("Delete Forever", role: .destructive) {
-                deleteRow(row)
+                deleteRow(recordId)
             }
-            .disabled(!(row.actions.delete?.availability.isAvailable ?? false))
+            .disabled(!(openRowDelete?.delete?.availability.isAvailable ?? false))
+            .accessibilityIdentifier(
+                CloudBackupUiElement.rowConfirm(target: CloudBackupRowTarget(recordId: recordId, control: .delete))
+                    .identifier
+            )
 
             Button("Cancel", role: .cancel) {}
 
@@ -256,6 +289,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 action: deleteUndecryptableWalletBackups
             )
             .disabled(!actions.isAvailable(action: .deleteUnreadableBackups))
+            .accessibilityIdentifier(CloudBackupUiElement.actionConfirm(action: .deleteUnreadableBackups).identifier)
 
             Button("Cancel", role: .cancel) {}
 
@@ -282,6 +316,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         case .otherBackupsFinalDeleteConfirmation:
             Button("Delete", role: .destructive, action: deleteOtherBackups)
                 .disabled(!actions.isAvailable(action: .deleteOtherBackups))
+                .accessibilityIdentifier(CloudBackupUiElement.actionConfirm(action: .deleteOtherBackups).identifier)
 
             Button("Cancel", role: .cancel) {}
         }
@@ -290,14 +325,15 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     @ViewBuilder
     private func alertMessage(_ alert: CloudBackupDetailAlert) -> some View {
         switch alert {
-        case let .rowDelete(_, confirmation):
-            switch confirmation {
-            case .standard:
-                Text("This backup will be permanently removed from iCloud.")
-            case .mayBeOnlyCopy:
+        case .rowDelete:
+            switch openRowDelete?.delete?.action {
+            case .delete(.mayBeOnlyCopy):
                 Text(
                     "This wallet isn't on this device, so this may be its only backup. Without its recovery words, it can't be recovered."
                 )
+            // a missing delete only shows while the alert closes
+            default:
+                Text("This backup will be permanently removed from iCloud.")
             }
         case .undecryptableWalletDeletion:
             Text(
@@ -341,9 +377,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         manager.dispatch(action: .recoverOtherBackups)
     }
 
-    private func deleteRow(_ row: CloudBackupListedRow) {
+    private func deleteRow(_ recordId: RecordId) {
         coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteCloudWallet(row.recordId))
+        manager.dispatch(action: .deleteCloudWallet(recordId))
     }
 
     private func verifyCurrentPasskey() {
@@ -363,6 +399,31 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     private func deleteUndecryptableWalletBackups() {
         coordinator.dismissCurrentPresentation()
         manager.dispatch(action: .deleteUndecryptableWalletBackups)
+    }
+}
+
+/// An open row delete confirmation and the delete Rust offers for its row now; `nil` once Rust
+/// stops offering it
+struct CloudBackupOpenRowDelete: Equatable {
+    let target: CloudBackupRowTarget
+    let delete: CloudBackupRowAction?
+
+    /// What an open delete confirmation does when a new screen arrives
+    enum Follow: Equatable {
+        /// The confirmation still matches the delete Rust offers; its button follows the availability
+        case keep
+        /// Rust withdrew the delete, so nothing is left to confirm
+        case close
+        /// Rust asks for another confirmation; a new alert replaces the old one rather than changing
+        /// the warning under a button the user may already be reaching for
+        case replace(recordId: String)
+    }
+
+    static func follow(from old: Self?, to new: Self?) -> Follow {
+        guard let old, let new, old.target == new.target, let shown = old.delete else { return .keep }
+        guard let current = new.delete else { return .close }
+
+        return current.action == shown.action ? .keep : .replace(recordId: new.target.recordId)
     }
 }
 
@@ -392,7 +453,7 @@ private struct CloudBackupTurnOffDialogActions: View {
         case .offline:
             Button("Try Again", action: tryAgain)
                 .disabled(!actions.isAvailable(action: .turnOff))
-                .accessibilityIdentifier("cloudBackup.turnOff.offline.tryAgain")
+                .accessibilityIdentifier(CloudBackupUiElement.turnOffOfflineTryAgain.identifier)
 
             cancelButton
 
@@ -413,7 +474,7 @@ private struct CloudBackupTurnOffDialogActions: View {
                 confirm(reviewId)
             }
             .disabled(!actions.isAvailable(action: .confirmDisable))
-            .accessibilityIdentifier("cloudBackup.turnOff.confirm")
+            .accessibilityIdentifier(CloudBackupScreenAction.confirmDisable.accessibilityIdentifier)
 
             cancelButton
         }
@@ -424,7 +485,7 @@ private struct CloudBackupTurnOffDialogActions: View {
         Button("Cancel", role: .cancel) {
             manager.dispatch(action: .cancelDisable)
         }
-        .accessibilityIdentifier("cloudBackup.turnOff.cancel")
+        .accessibilityIdentifier(CloudBackupScreenAction.cancelDisable.accessibilityIdentifier)
     }
 
     private func tryAgain() {
@@ -454,51 +515,49 @@ private struct CloudBackupTurnOffReviewActions: View {
                 manager.dispatch(action: .confirmDisable(reviewId: review.reviewId))
             }
             .disabled(!actions.isAvailable(action: .confirmDisable))
-            .accessibilityIdentifier("cloudBackup.turnOff.confirm")
+            .accessibilityIdentifier(CloudBackupScreenAction.confirmDisable.accessibilityIdentifier)
 
         case .two:
-            CloudBackupTurnOffLeaveActions(impact: impact, actions: actions, manager: manager)
+            CloudBackupTurnOffLeaveActions(review: review, actions: actions, manager: manager)
 
             Button("Continue", role: .destructive) {
                 coordinator.transition(to: .alert(.turnOff(.confirm(reviewId: review.reviewId))))
             }
             .disabled(!actions.isAvailable(action: .confirmDisable))
-            .accessibilityIdentifier("cloudBackup.turnOff.continue")
+            .accessibilityIdentifier(CloudBackupUiElement.turnOffContinue.identifier)
         }
     }
 }
 
 /// The review buttons that act on what it warned about before anything is deleted
 private struct CloudBackupTurnOffLeaveActions: View {
-    let impact: CloudBackupDisableImpact
+    let review: CloudBackupDisableReview
     let actions: CloudBackupActions
     let manager: CloudBackupManager
 
     /// Rust couldn't finish counting what Turn Off would remove
     private var couldNotCheck: Bool {
-        if case .complete = impact.assessment { return false }
+        if case .complete = review.impact.assessment { return false }
         return true
     }
 
-    /// Restore and Verify cancel the review before they start anything else, so they wait on
-    /// CancelDisable
+    /// Rust offers Restore Them First and Verify First only for what this review found, picks the
+    /// work each starts, and ends the review in the same turn
     var body: some View {
-        if impact.notOnDevice.total > 0 {
+        if let availability = actions.availability(action: .restoreFirst) {
             Button("Restore Them First") {
-                leaveTurnOff(then: .startRestoreAll)
+                manager.dispatch(action: .restoreBeforeTurnOff(reviewId: review.reviewId))
             }
-            .disabled(!actions.isAvailable(action: .cancelDisable))
-            .accessibilityIdentifier("cloudBackup.turnOff.restoreFirst")
+            .disabled(!availability.isAvailable)
+            .accessibilityIdentifier(CloudBackupScreenAction.restoreFirst.accessibilityIdentifier)
         }
 
-        // placeholder until Rust exports a VerifyFirst action: then draw Verify First only when
-        // Rust offers it, and dispatch that action alone, gated on its own availability
-        if impact.unchecked > 0 {
+        if let availability = actions.availability(action: .verifyFirst) {
             Button("Verify First") {
-                leaveTurnOff(then: .startVerification(.cloudBackupDetail))
+                manager.dispatch(action: .verifyBeforeTurnOff(reviewId: review.reviewId))
             }
-            .disabled(!actions.isAvailable(action: .cancelDisable))
-            .accessibilityIdentifier("cloudBackup.turnOff.verifyFirst")
+            .disabled(!availability.isAvailable)
+            .accessibilityIdentifier(CloudBackupScreenAction.verifyFirst.accessibilityIdentifier)
         }
 
         // a second Turn Off re-prepares the review Rust holds, so Check Again stays in Turn Off
@@ -507,13 +566,8 @@ private struct CloudBackupTurnOffLeaveActions: View {
                 manager.dispatch(action: .disableCloudBackup)
             }
             .disabled(!actions.isAvailable(action: .turnOff))
-            .accessibilityIdentifier("cloudBackup.turnOff.checkAgain")
+            .accessibilityIdentifier(CloudBackupUiElement.turnOffCheckAgain.identifier)
         }
-    }
-
-    private func leaveTurnOff(then action: CloudBackupManagerAction) {
-        manager.dispatch(action: .cancelDisable)
-        manager.dispatch(action: action)
     }
 }
 

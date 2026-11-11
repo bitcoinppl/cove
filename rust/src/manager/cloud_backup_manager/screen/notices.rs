@@ -10,7 +10,7 @@ use super::types::{
     CloudBackupRejection, CloudBackupRowControl, CloudBackupRowTarget, CloudBackupScreenAction,
 };
 use crate::database::cloud_backup::PersistedCloudBackupState;
-use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
+use crate::manager::cloud_backup_manager::admission::{Admission, ReviewExit, UserIntent};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
@@ -181,6 +181,8 @@ fn target_of(intent: &UserIntent) -> Option<CloudBackupOutcomeTarget> {
         I::TurnOff => A::TurnOff,
         I::ConfirmDisable { .. } => A::ConfirmDisable,
         I::CancelDisable => A::CancelDisable,
+        I::LeaveReview { to: ReviewExit::RestoreFirst, .. } => A::RestoreFirst,
+        I::LeaveReview { to: ReviewExit::VerifyFirst, .. } => A::VerifyFirst,
         I::ResumeDisable => A::ResumeDisable,
         I::StopUsingOnThisDevice => A::StopUsingOnThisDevice,
         I::DismissNotice(CloudBackupNoticeKind::Heal) => A::DismissHealNotice,

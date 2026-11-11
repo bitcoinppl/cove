@@ -21,8 +21,9 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupOutcome, CloudBackupRejection, CloudBackupScreenAction, CloudBackupTurnOffFailure,
 };
 use crate::manager::cloud_backup_manager::turn_off::{
-    AutomaticResume, DisableEvidence, DisableImpact, DisableReview, EvidenceUnavailable,
-    FinishFailure, FinishStart, ImpactFacts, ReviewId, TurnOffReview,
+    AdmittedFinish, AutomaticResume, ConfirmedTurnOff, DeleteAuthority, DisableEvidence,
+    DisableImpact, DisableReview, EvidenceUnavailable, FinishFailure, FinishRun, FinishStart,
+    ImpactFacts, RetryWake, ReviewId, TurnOffReview,
 };
 
 impl CloudBackupSupervisor {
@@ -78,22 +79,17 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// The user consented to the review `review_id`: Turn Off starts and drains
+    /// The user consented to the review on screen: the Turn Off admission started drains
     ///
-    /// Admission accepted it only while that review is on screen, so the review is taken here
-    /// and travels with the operation to its recheck
-    pub(crate) fn confirm_disable(&mut self, manager: &RustCloudBackupManager, review_id: u64) {
-        let Some(review) = self.runtime.take_reviewed(ReviewId::from(review_id)) else {
-            warn!("Cloud Backup confirmation found no review {review_id}");
-            return;
-        };
-
-        let Some(claim) =
-            self.begin_exclusive_operation(manager, CloudBackupExclusiveOperation::Disable)
-        else {
-            warn!("Cloud Backup could not start the confirmed Turn Off");
-            return;
-        };
+    /// Admission took the review out of the body as it allocated the operation, so the review
+    /// travels with the operation to its recheck
+    pub(crate) fn confirm_disable(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        confirmed: ConfirmedTurnOff,
+    ) {
+        let ConfirmedTurnOff { claim, review } = confirmed;
+        manager.project_exclusive_operation_started(claim);
 
         // the running Turn Off already pauses ordinary writes through the derived policy; this
         // barrier waits out the write in flight and those queued before it, so an upload that
@@ -211,8 +207,11 @@ impl CloudBackupSupervisor {
 
         match committed {
             Ok(CommitDisable::Committed(committed)) => {
-                self.runtime.commit_turn_off(claim, committed.clone());
-                self.finish_committed(&manager, claim, committed);
+                match self.runtime.commit_turn_off(claim, committed.clone()) {
+                    Some(run) => self.finish_committed(&manager, run, committed),
+                    // the recheck found this claim current in this same turn
+                    None => warn!("Cloud Backup committed a Turn Off whose operation ended"),
+                }
             }
             // the record moved on without this device's backup, so there is nothing to turn off
             Ok(CommitDisable::NotConfigured) => self.end_turn_off(&manager, claim),
@@ -296,6 +295,9 @@ impl CloudBackupSupervisor {
 
     /// A committed Turn Off resumes silently at launch, and on reconnect or a cloud change once
     /// the last failure's `retry_after` has passed
+    ///
+    /// A reconnect before `retry_after` arms the one retry wake instead, so the resume it asked
+    /// for still runs at the deadline when nothing else wakes the supervisor
     pub async fn resume_disable_automatically(
         &mut self,
         trigger: AutomaticResume,
@@ -312,82 +314,102 @@ impl CloudBackupSupervisor {
         };
         if let Some(retry_after) = retry_after.filter(|after| now < *after) {
             debug!("Cloud Backup Turn Off resumes after {retry_after}, not at {now}");
+            self.arm_retry_wake(retry_after, now);
             return Produces::ok(());
         }
 
-        self.begin_finish(&manager, FinishStart::Automatic);
+        match self.runtime.start_finish(DeleteAuthority::Automatic) {
+            Ok(finish) => self.begin_finish(&manager, finish),
+            Err(rejection) => warn!("Cloud Backup could not resume Turn Off: {rejection:?}"),
+        }
+
         Produces::ok(())
     }
 
-    /// Starts a finishing run of the committed Turn Off: Try Again, an automatic resume, or
-    /// the local-only finish that leaves the remote backups
-    pub(crate) fn begin_finish(&mut self, manager: &RustCloudBackupManager, start: FinishStart) {
-        let Runtime::FinishingDisable { committed, op: None, .. } = &*self.runtime else {
-            warn!("Cloud Backup has no committed Turn Off to finish with {start:?}");
-            return;
-        };
+    /// Schedules the automatic retry for `at`, the committed Turn Off's `retry_after`
+    ///
+    /// A timer, because a reconnect that came before the deadline is the last event that may
+    /// arrive: without it the committed Turn Off would wait for the next launch. It is bounded:
+    /// the body keeps one wake for its attempt and deadline, a finishing run or a new body ends
+    /// it, and a timer whose wake is no longer armed does nothing
+    fn arm_retry_wake(&mut self, at: u64, now: u64) {
+        let Some(wake) = self.runtime.arm_retry_wake(at) else { return };
 
-        let committed = committed.clone();
-        let claim = CloudBackupExclusiveOperationClaim::new(
-            CloudBackupExclusiveOperation::Disable,
-            OperationId::next(),
-        );
-        if let Err(unstartable) = self.runtime.start_finish(claim, start) {
-            warn!("Cloud Backup could not start {unstartable:?}");
-            return;
+        // whole seconds from the floored clock always reach `at`
+        let delay = std::time::Duration::from_secs(at.saturating_sub(now));
+        self.addr.send_fut_with(move |addr| async move {
+            tokio::time::sleep(delay).await;
+            send!(addr.retry_wake_fired(wake));
+        });
+    }
+
+    pub async fn retry_wake_fired(&mut self, wake: RetryWake) -> ActorResult<()> {
+        if !self.runtime.take_retry_wake(wake) {
+            debug!("Cloud Backup dropped the Turn Off retry {wake:?}, which no longer applies");
+            return Produces::ok(());
         }
 
-        manager.project_exclusive_operation_started(claim);
+        self.resume_disable_automatically(AutomaticResume::CloudReachable).await
+    }
+
+    /// Starts the finishing run admission or an automatic resume allocated: Try Again, Reconnect,
+    /// an automatic resume, or the local-only finish that leaves the remote backups
+    pub(crate) fn begin_finish(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        finish: AdmittedFinish,
+    ) {
+        let AdmittedFinish { run, committed } = finish;
+        manager.project_exclusive_operation_started(run.claim);
 
         // writes queued before this run, such as a relaunch's, finish before the delete
-        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), run.claim);
         self.addr.send_fut_with(move |addr| async move {
             let drained = writes.drain().await;
-            send!(addr.complete_finish_drain(claim, committed, drained));
+            send!(addr.complete_finish_drain(run, committed, drained));
         });
     }
 
     pub async fn complete_finish_drain(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         committed: CommittedDisable,
         drained: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else { return Produces::ok(()) };
+        let Some(manager) = self.current(run.claim) else { return Produces::ok(()) };
 
         let Some(committed) = manager.committed_disable_if_current(&committed) else {
             // the record moved on, so this run has nothing left to finish
-            self.end_turn_off(&manager, claim);
+            self.end_turn_off(&manager, run.claim);
             return Produces::ok(());
         };
 
         if let Err(error) = drained {
-            self.fail_finish(&manager, claim, committed, error, "drain writes before Turn Off");
+            self.fail_finish(&manager, run, committed, error, "drain writes before Turn Off");
             return Produces::ok(());
         }
 
-        self.finish_committed(&manager, claim, committed);
+        self.finish_committed(&manager, run, committed);
         Produces::ok(())
     }
 
-    /// Clears the runtime caches of a backup that is going away, then deletes it, or only
-    /// cleans up this device for the local-only finish
+    /// Clears the runtime caches of a backup that is going away, then deletes it with the
+    /// provider access its start allows, or only cleans up this device for the local-only finish
     fn finish_committed(
         &mut self,
         manager: &RustCloudBackupManager,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         committed: CommittedDisable,
     ) {
         self.drain_disable_runtime(manager);
-        match self.runtime.finish_start(claim) {
-            Some(FinishStart::LocalOnly) => {
+        match run.start {
+            FinishStart::LocalOnly => {
                 info!("Cloud Backup stops on this device and leaves its remote backups");
-                self.schedule_disable_local_cleanup(claim, committed);
+                self.schedule_disable_local_cleanup(run, committed);
             }
-            Some(FinishStart::Commit | FinishStart::Automatic | FinishStart::TryAgain) => {
-                self.schedule_disable_namespace_delete(claim, committed);
+            FinishStart::Delete(authority) => {
+                self.schedule_disable_namespace_delete(run, authority, committed);
             }
-            None => {}
         }
     }
 
@@ -399,40 +421,41 @@ impl CloudBackupSupervisor {
 
     fn schedule_disable_namespace_delete(
         &self,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
+        authority: DeleteAuthority,
         disabling: CommittedDisable,
     ) {
         let write = self.write.clone();
         self.addr.send_fut_with(move |addr| async move {
-            let result = CloudBackupWriteClient::for_operation(write, claim)
+            let result = CloudBackupWriteClient::for_operation(write, run.claim)
                 .delete_committed_namespace(
-                    CloudStorage::global_explicit_client(),
+                    authority.cloud_client(),
                     disabling.namespace_id.clone(),
                 )
                 .await;
-            send!(addr.complete_disable_namespace_delete(claim, disabling, result));
+            send!(addr.complete_disable_namespace_delete(run, disabling, result));
         });
     }
 
     pub async fn complete_disable_namespace_delete(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         disabling: CommittedDisable,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else { return Produces::ok(()) };
+        let Some(manager) = self.current(run.claim) else { return Produces::ok(()) };
 
         match result {
             Ok(()) | Err(CloudBackupError::CloudStorage(CloudStorageError::NotFound(_))) => {
-                self.schedule_disable_local_cleanup(claim, disabling);
+                self.schedule_disable_local_cleanup(run, disabling);
             }
             Err(CloudBackupError::CloudStorage(error)) => {
                 let error =
                     CloudBackupError::cloud_storage_context("delete cloud backup namespace", error);
-                self.fail_finish(&manager, claim, disabling, error, "delete the backup namespace");
+                self.fail_finish(&manager, run, disabling, error, "delete the backup namespace");
             }
             Err(error) => {
-                self.fail_finish(&manager, claim, disabling, error, "delete the backup namespace");
+                self.fail_finish(&manager, run, disabling, error, "delete the backup namespace");
             }
         }
 
@@ -443,12 +466,8 @@ impl CloudBackupSupervisor {
     ///
     /// The keychain clear can't be taken back once it starts, so a reset that begins meanwhile
     /// waits for `complete_disable_local_cleanup` instead of wiping beside it
-    fn schedule_disable_local_cleanup(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        disabling: CommittedDisable,
-    ) {
-        if !self.runtime.begin_effect(claim, Effect::LocalCleanup) {
+    fn schedule_disable_local_cleanup(&mut self, run: FinishRun, disabling: CommittedDisable) {
+        if !self.runtime.begin_effect(run.claim, Effect::LocalCleanup) {
             return;
         }
 
@@ -461,20 +480,20 @@ impl CloudBackupSupervisor {
                 ))
             })
             .await;
-            send!(addr.complete_disable_local_cleanup(claim, disabling, result));
+            send!(addr.complete_disable_local_cleanup(run, disabling, result));
         });
     }
 
     pub async fn complete_disable_local_cleanup(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         disabling: CommittedDisable,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else { return Produces::ok(()) };
+        let Some(manager) = self.current(run.claim) else { return Produces::ok(()) };
 
         if let Err(error) = result {
-            self.fail_finish(&manager, claim, disabling, error, "clean up Cloud Backup locally");
+            self.fail_finish(&manager, run, disabling, error, "clean up Cloud Backup locally");
             return Produces::ok(());
         }
 
@@ -484,12 +503,12 @@ impl CloudBackupSupervisor {
             .runtime
             .commit(|lifecycle| manager.persist_disabled_after_remote_delete(lifecycle, &disabling))
         {
-            self.fail_finish(&manager, claim, disabling, error, "save Cloud Backup as off");
+            self.fail_finish(&manager, run, disabling, error, "save Cloud Backup as off");
             return Produces::ok(());
         }
 
         info!("Cloud Backup is off");
-        self.end_turn_off(&manager, claim);
+        self.end_turn_off(&manager, run.claim);
         Produces::ok(())
     }
 
@@ -500,7 +519,7 @@ impl CloudBackupSupervisor {
     fn fail_finish(
         &mut self,
         manager: &RustCloudBackupManager,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         disabling: CommittedDisable,
         error: CloudBackupError,
         step: &str,
@@ -509,15 +528,18 @@ impl CloudBackupSupervisor {
         let message =
             error.logged_reader_message(format!("Cloud Backup Turn Off failed to {step}"));
 
-        let persisted = self
-            .runtime
-            .commit(|lifecycle| manager.persist_disabling_failure(lifecycle, &disabling, message));
+        let failure = self.runtime.fail_finish(run, reason);
+        manager.project_exclusive_operation_finished(run.claim);
+
+        // a failed Try Again is saved with the failure, so Stop Using stays offered after a
+        // relaunch
+        let try_again_failed = failure.is_some_and(FinishFailure::try_again_failed);
+        let persisted = self.runtime.commit(|lifecycle| {
+            manager.persist_disabling_failure(lifecycle, &disabling, message, try_again_failed)
+        });
         if let Err(error) = persisted {
             error.logged_reader_message("Failed to save the Cloud Backup Turn Off failure");
         }
-
-        self.runtime.fail_finish(claim, reason);
-        manager.project_exclusive_operation_finished(claim);
     }
 }
 
@@ -560,6 +582,7 @@ impl Runtime {
                 op: None,
                 failure: None,
                 committed: CommittedDisable { last_error: None, .. },
+                ..
             } => CloudBackupFinishingDisableStage::Resuming,
             Self::FinishingDisable { op: None, failure: Some(failure), .. } => {
                 CloudBackupFinishingDisableStage::Failed { reason: failure.reason() }
@@ -576,12 +599,13 @@ impl Runtime {
             Self::Configured(ConfiguredBody::Idle { review: Some(review) }) => match review {
                 TurnOffReview::Preparing { .. } => TurnOffAdmission::Preparing,
                 TurnOffReview::Offline => TurnOffAdmission::Offline,
-                TurnOffReview::Reviewing(review) => {
-                    TurnOffAdmission::Reviewing { review_id: review.review_id.get() }
-                }
+                TurnOffReview::Reviewing(review) => TurnOffAdmission::Reviewing {
+                    review_id: review.review_id.get(),
+                    restore_first: review.impact.restore_target(),
+                },
             },
-            Self::FinishingDisable { failure: Some(FinishFailure::TryAgainFailed(_)), .. } => {
-                TurnOffAdmission::TryAgainFailed
+            Self::FinishingDisable { failure: Some(failure), .. } => {
+                TurnOffAdmission::FinishFailed(*failure)
             }
             _ => TurnOffAdmission::None,
         }

@@ -6,6 +6,8 @@
 //! `CloudBackupSupervisor::dispatch` call the same function, so a projected action and a
 //! dispatched one cannot disagree
 
+use super::screen::CloudBackupTurnOffFailure;
+use super::turn_off::FinishFailure;
 use super::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
     CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupVerificationSource, RecordId,
@@ -46,6 +48,11 @@ pub(crate) enum UserIntent {
         review_id: u64,
     },
     CancelDisable,
+    /// A Turn Off review button that leaves the review for the work it warned about
+    LeaveReview {
+        review_id: u64,
+        to: ReviewExit,
+    },
     ResumeDisable,
     StopUsingOnThisDevice,
     DismissNotice(CloudBackupNoticeKind),
@@ -65,6 +72,15 @@ pub(crate) enum UserIntent {
     RetryDriveAccountSwitchRecovery,
     /// A full wipe resets Cloud Backup's local state
     LocalReset,
+}
+
+/// The work a Turn Off review button leaves the review for
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReviewExit {
+    /// Restore Them First: restore the wallets the review found only in the cloud
+    RestoreFirst,
+    /// Verify First: verify the backups the review couldn't check
+    VerifyFirst,
 }
 
 /// Which Enable the user asked for
@@ -127,6 +143,12 @@ impl From<CloudBackupManagerAction> for UserIntent {
             A::DisableCloudBackup => Self::TurnOff,
             A::ConfirmDisable { review_id } => Self::ConfirmDisable { review_id },
             A::CancelDisable => Self::CancelDisable,
+            A::RestoreBeforeTurnOff { review_id } => {
+                Self::LeaveReview { review_id, to: ReviewExit::RestoreFirst }
+            }
+            A::VerifyBeforeTurnOff { review_id } => {
+                Self::LeaveReview { review_id, to: ReviewExit::VerifyFirst }
+            }
             A::ResumeDisable => Self::ResumeDisable,
             A::StopUsingOnThisDevice => Self::StopUsingOnThisDevice,
             A::DismissNotice(kind) => Self::DismissNotice(kind),
@@ -255,7 +277,8 @@ pub(crate) enum RestoreAllAdmission {
 /// Where Turn Off stands outside a running operation
 ///
 /// The review holds no operation, so it is its own fact; a committed Turn Off whose Try Again
-/// failed is the only state that offers Stop Using on This Device
+/// failed is the only state that offers Stop Using on This Device, and one the provider stopped
+/// for consent the only one that offers Reconnect
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TurnOffAdmission {
     None,
@@ -265,17 +288,27 @@ pub(crate) enum TurnOffAdmission {
     Offline,
     Reviewing {
         review_id: u64,
+        /// What Restore Them First restores, when the review names wallets not on this device
+        restore_first: Option<RestoreTarget>,
     },
-    /// A committed Turn Off whose Try Again failed
-    TryAgainFailed,
+    /// Why the last finishing run of the committed Turn Off stopped
+    FinishFailed(FinishFailure),
+}
+
+/// The restore Restore Them First starts: the one wallet the review found only in the cloud, or
+/// every such wallet through Restore All
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RestoreTarget {
+    OneWallet,
+    AllWallets,
 }
 
 impl TurnOffAdmission {
     /// The review a Confirm would consent to, when one is shown
     pub(crate) fn review_id(self) -> Option<u64> {
         match self {
-            Self::Reviewing { review_id } => Some(review_id),
-            Self::None | Self::Preparing | Self::Offline | Self::TryAgainFailed => None,
+            Self::Reviewing { review_id, .. } => Some(review_id),
+            Self::None | Self::Preparing | Self::Offline | Self::FinishFailed(_) => None,
         }
     }
 }
@@ -530,7 +563,7 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
                 Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
             }
             (AdmissionBody::Configured, None)
-                if snapshot.turn_off == TurnOffAdmission::Reviewing { review_id: *review_id } =>
+                if snapshot.turn_off.review_id() == Some(*review_id) =>
             {
                 Accepted
             }
@@ -550,6 +583,39 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             (AdmissionBody::FinishingDisable, _, _) => Rejected(Rejection::TurnOffCommitted),
             _ => Rejected(Rejection::NothingToCancel),
         },
+        // a leave button answers the review on screen, then is decided as the work it starts, so
+        // a rejection starts nothing and the review stays open
+        I::LeaveReview { review_id, to } => match (snapshot.turn_off, to) {
+            (TurnOffAdmission::Reviewing { review_id: shown, .. }, _) if shown != *review_id => {
+                Rejected(Rejection::ReviewStale)
+            }
+            (
+                TurnOffAdmission::Reviewing {
+                    restore_first: Some(RestoreTarget::OneWallet), ..
+                },
+                ReviewExit::RestoreFirst,
+            ) => restore_cloud_wallet(snapshot),
+            (
+                TurnOffAdmission::Reviewing {
+                    restore_first: Some(RestoreTarget::AllWallets), ..
+                },
+                ReviewExit::RestoreFirst,
+            ) => start_restore_all(snapshot),
+            // the review names no wallet that isn't on this device
+            (TurnOffAdmission::Reviewing { restore_first: None, .. }, ReviewExit::RestoreFirst) => {
+                Rejected(Rejection::RestoreAllUnavailable)
+            }
+            (TurnOffAdmission::Reviewing { .. }, ReviewExit::VerifyFirst) => {
+                start_verification(snapshot)
+            }
+            (
+                TurnOffAdmission::None
+                | TurnOffAdmission::Preparing
+                | TurnOffAdmission::Offline
+                | TurnOffAdmission::FinishFailed(_),
+                _,
+            ) => Rejected(Rejection::ReviewStale),
+        },
         I::ResumeDisable => match (snapshot.body, snapshot.running) {
             (AdmissionBody::FinishingDisable, None) => Accepted,
             (AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
@@ -564,7 +630,11 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             (AdmissionBody::FinishingDisable, Some(running), _) => {
                 Rejected(Rejection::OperationRunning(running))
             }
-            (AdmissionBody::FinishingDisable, None, TurnOffAdmission::TryAgainFailed) => Accepted,
+            (
+                AdmissionBody::FinishingDisable,
+                None,
+                TurnOffAdmission::FinishFailed(FinishFailure::TryAgainFailed(_)),
+            ) => Accepted,
             (AdmissionBody::FinishingDisable, None, _) => Rejected(Rejection::TryAgainFirst),
             _ => Rejected(Rejection::NothingToContinue),
         },
@@ -578,15 +648,30 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             _ => Rejected(Rejection::NothingToContinue),
         },
         I::DismissNotice(_) | I::LeaveDetail => Accepted,
-        // Reconnect runs the detail verification, so a repeat joins the one already running
-        I::ReconnectDrive => configured_and_idle(snapshot, Some(Op::Verify)),
+        // Reconnect on a committed Turn Off the provider stopped for consent resumes it with the
+        // user's consent; on a configured backup it runs the detail verification, so a repeat
+        // joins the one already running
+        I::ReconnectDrive => match (snapshot.body, snapshot.running, snapshot.turn_off) {
+            (AdmissionBody::FinishingDisable, Some(Op::Disable), _) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
+            }
+            (AdmissionBody::FinishingDisable, Some(running), _) => {
+                Rejected(Rejection::OperationRunning(running))
+            }
+            (AdmissionBody::FinishingDisable, None, TurnOffAdmission::FinishFailed(failure))
+                if failure.reason() == CloudBackupTurnOffFailure::AuthorizationRequired =>
+            {
+                Accepted
+            }
+            (AdmissionBody::FinishingDisable, None, _) => Rejected(Rejection::NothingToContinue),
+            _ => configured_and_idle(snapshot, Some(Op::Verify)),
+        },
 
         I::SyncUnsynced => match configured_and_idle(snapshot, None) {
             Accepted if snapshot.sync_running => Coalesced(CoalescibleIntent::SyncUnsynced),
             admission => admission,
         },
-        // a verification is an operation, so a repeat while one runs joins it
-        I::StartVerification { .. } => configured_and_idle(snapshot, Some(Op::Verify)),
+        I::StartVerification { .. } => start_verification(snapshot),
         I::RepairPasskey { .. } => configured_and_idle(snapshot, Some(Op::RepairPasskey)),
         I::DeleteUndecryptableWalletBackups => {
             configured_and_idle(snapshot, Some(Op::DeleteUndecryptableWalletBackups))
@@ -597,19 +682,36 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         I::ReinitializeBackup => {
             needs_inventory(snapshot, Op::ReinitializeBackup, DetailInventory::Complete)
         }
-        I::RestoreCloudWallet(_) => {
-            needs_inventory(snapshot, Op::RestoreCloudWallet, DetailInventory::Ready)
-        }
+        I::RestoreCloudWallet(_) => restore_cloud_wallet(snapshot),
         I::DeleteCloudWallet(_) => {
             needs_inventory(snapshot, Op::DeleteCloudWallet, DetailInventory::Ready)
         }
         I::RecoverOtherBackups => needs_other_backups(snapshot, Op::RecoverOtherBackups),
         I::DeleteOtherBackups => needs_other_backups(snapshot, Op::DeleteOtherBackups),
-        I::StartRestoreAll => needs_restore_all(snapshot, RestoreAllAdmission::StartAvailable),
+        I::StartRestoreAll => start_restore_all(snapshot),
         I::RetryRestoreAllRemaining => {
             needs_restore_all(snapshot, RestoreAllAdmission::RetryAvailable)
         }
     }
+}
+
+/// A detail verification, which a Turn Off review's Verify First also starts
+fn start_verification(snapshot: &AdmissionSnapshot) -> Admission {
+    configured_and_idle(snapshot, Some(CloudBackupExclusiveOperation::Verify))
+}
+
+/// A restore of one wallet that is only in the cloud, which Restore Them First also starts
+fn restore_cloud_wallet(snapshot: &AdmissionSnapshot) -> Admission {
+    needs_inventory(
+        snapshot,
+        CloudBackupExclusiveOperation::RestoreCloudWallet,
+        DetailInventory::Ready,
+    )
+}
+
+/// Restore All, which Restore Them First also starts
+fn start_restore_all(snapshot: &AdmissionSnapshot) -> Admission {
+    needs_restore_all(snapshot, RestoreAllAdmission::StartAvailable)
 }
 
 /// Enable and restore start from a device without a configured backup

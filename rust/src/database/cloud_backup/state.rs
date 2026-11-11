@@ -454,6 +454,40 @@ pub struct PersistedDisablingCloudBackup {
     pub last_error: Option<String>,
     #[serde(default)]
     pub retry_after: Option<u64>,
+    /// What finishing the committed disable still has to do
+    ///
+    /// Written before the local-only finish starts, so a failure or a process death after the
+    /// user chose to keep the remote backups can never resume a remote delete. Absent in records
+    /// written before the choice existed, which all delete the remote backups
+    #[serde(default, skip_serializing_if = "PersistedDisableDisposition::is_delete_remote")]
+    pub disposition: PersistedDisableDisposition,
+    /// A Try Again the user tapped has failed since the commit, so Stop Using on This Device is
+    /// offered; kept across relaunches and by every later failure of the same attempt
+    ///
+    /// A bool beside `last_error` and `retry_after` rather than one typed failure field: those two
+    /// are already in the stored JSON that older builds read, so folding them in would change that
+    /// shape. The failure write sets all three together. The typed reason isn't stored because a
+    /// launch resumes at once and its own failure replaces it, so a stored reason would only be
+    /// stale
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub try_again_failed: bool,
+}
+
+/// What a committed disable still has to do to finish
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedDisableDisposition {
+    /// Delete the namespace, then clean up this device
+    #[default]
+    DeleteRemote,
+    /// The user chose to stop using Cloud Backup on this device: clean up this device only and
+    /// leave the remote backups
+    LocalOnly,
+}
+
+impl PersistedDisableDisposition {
+    fn is_delete_remote(&self) -> bool {
+        *self == Self::DeleteRemote
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

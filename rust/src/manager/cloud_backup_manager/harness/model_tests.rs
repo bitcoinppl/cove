@@ -1,36 +1,56 @@
-//! The model-based sequence test
+//! The model-based sequence tests
 //!
 //! Each case starts from a generated world, applies a generated sequence of taps, dismissals,
 //! provider completions and failures, held calls released later as stale results, timer
-//! advances, Background and Foreground, wallet changes and relaunches, and after every event
-//! checks the harness invariants and the next actions the reference model derives from the durable
-//! record. While a Turn Off is on screen, most draws move it forward (consent, a failed delete,
-//! Try Again, Stop Using on This Device), so cases reach the commit and the escape path.
+//! advances, Background and Foreground, wallet changes, Google Drive account switch steps, local
+//! resets and relaunches, and after every event checks the harness invariants and the next
+//! actions the reference model derives from the durable record. While a Turn Off is on screen,
+//! most draws move it forward (consent, Cancel, a failed delete, Try Again, Stop Using on This
+//! Device), so cases reach the commit and the escape path. One case in [`KILL_ONE_IN`] kills its
+//! process once, mid-operation when a relaunch is drawn while one runs, and goes on in a new
+//! process on the durable state the kill left.
 //!
-//! Every case prints its seed and a compact trace. To replay one case:
+//! [`model_sequences_keep_the_invariants`] checks 4a at quiescence and the escape 4b once, at the
+//! end of each case. [`model_escapes_from_every_reached_state`] checks both from every state a
+//! case reaches: each probe replays the case to one step in a fresh process and starts there,
+//! with whatever calls that step holds still held.
+//!
+//! Both rest on finite-time assumptions about the cooperative fakes the checks switch to: a
+//! released hold answers, the passkey provider answers `Succeeds`, the cloud has no scripted
+//! fault left, the platform finishes a Drive switch within [`PLATFORM_STEPS_LIMIT`] steps, and
+//! every operation timer fires within the clock advances [`TestApp::quiesce`] makes.
+//!
+//! Every case prints its seed and a compact trace. To replay one sequence case:
 //! `COVE_MODEL_SEED=<seed> COVE_MODEL_CASES=1 cargo test -p cove --lib -- model_sequences`
-//! (`COVE_MODEL_STEPS` sets the sequence length). A minimized failure becomes a named test.
+//! (`COVE_MODEL_STEPS` caps the sequence length; each case ends at a length its seed picks, so
+//! the checks at its end start from varied states). A failing probe prints its own replay
+//! command. A minimized failure becomes a named test; a seed that found a production bug is
+//! parked in [`PARKED_SEEDS`] until the bug is fixed, and a dead end many seeds reach is parked
+//! by its durable state in [`parked_dead_end`].
 //!
 //! The reference model is a semantic subset: what the record forbids. Positive availability and
 //! the screen's sections join it once Rust projects the screen
 #![cfg(test)]
 
+use std::future::Future;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use cove_device::cloud_storage::CloudStorageError;
 
-use super::process::child_root;
+use super::fakes;
+use super::process::{checkpoint, child_root};
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyMode, PhaseEnd, TestApp,
-    change_a_wallet, run_case, seed_legacy_stuck_disabling,
+    change_a_wallet, finish_wipe, persisted, run_case, seed_legacy_stuck_disabling,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDriveAccountSwitchPhase};
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupVerificationSource,
-    RustCloudBackupManager,
+    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction, RustCloudBackupManager,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -40,11 +60,77 @@ const DEFAULT_CASES: usize = 24;
 const DEFAULT_STEPS: usize = 60;
 const DEFAULT_SEED: u64 = 0x00C0_7EBA_C0FF_EE00;
 
+/// Probes replay a case once per state it reaches, so they run fewer and shorter cases
+const DEFAULT_PROBE_CASES: usize = 4;
+const DEFAULT_PROBE_STEPS: usize = 16;
+
+/// Mixed into the base seed for the probe cases, so they explore other sequences
+const PROBE_SEED_SALT: u64 = 0x9B0B_E5EE_D000_0000;
+
+/// Mixed into a case's seed for the generator that picks where the case ends
+const CASE_LENGTH_SALT: u64 = 0x5EED_CA5E_1E57_0000;
+
+/// Mixed into a case's seed to decide whether it kills its process, and to draw what follows
+const KILL_SALT: u64 = 0x0D1E_A6A1_0000_0000;
+
+/// One sequence case in this many kills its process once
+const KILL_ONE_IN: usize = 4;
+
+/// The checkpoint a killing case parks at for the parent to kill it
+const MODEL_KILL: &str = "model process death";
+
+/// The platform's durable Drive switch state, which outlives a killed process
+const PLATFORM_FILE: &str = "model-drive-platform.txt";
+
+/// Each step's state as the recording run of a probe case reached it
+const STATES_FILE: &str = "model-probe-states.txt";
+
 /// A held call is released within this many events, inside the harness wait limit
 const MAX_HOLD_AGE: usize = 4;
 
+/// The most events the escape path may take from the end of a case: a review, its recheck's new
+/// review, and a Try Again each take a few
+const ESCAPE_EVENTS_LIMIT: usize = 12;
+
+/// The most steps the cooperative platform takes to finish a Drive switch: stage the selected
+/// account, then reconcile until Rust asks it to commit or roll back, with the reinitialize in
+/// between given the clock and every held call it waits on
+const PLATFORM_STEPS_LIMIT: usize = 6;
+
+/// The credential the passkey provider registers whenever Enable or Reinitialize asks for a new
+/// passkey, and the PRF output it answers every authentication with
+const NEW_CREDENTIAL: [u8; 3] = [4, 5, 6];
+const PRF_OUTPUT: [u8; 32] = [7; 32];
+
+/// Seeds whose case found a production bug, each with what it found; both tests skip them until
+/// the bug is fixed, so the rest of the model keeps guarding. Probe seeds are listed after the
+/// salt is mixed in, as their failure prints them
+const PARKED_SEEDS: &[(u64, &str)] = &[];
+
 fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
     std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
+}
+
+/// A production dead end many seeds reach, matched by the durable state it leaves, with what it
+/// found; an escape that fails there stops and prints it instead of failing, so the rest of the
+/// model keeps guarding until the fix lands and this goes
+///
+/// A Drive switch whose reinitialize failed stays in `AwaitingReinitializationRetry`: Retry
+/// reconciles to no action and starts nothing, Cancel has nothing running to cancel, and
+/// Reinitialize is rejected for the switch, so no step the platform or the user takes leaves it
+fn parked_dead_end() -> Option<&'static str> {
+    let phase = persisted().drive_account_switch().map(|transition| transition.phase);
+    (phase == Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry))
+        .then_some("a failed Drive switch reinitialize has no exit (AwaitingReinitializationRetry)")
+}
+
+fn parked(seed: u64) -> bool {
+    let Some((_, found)) = PARKED_SEEDS.iter().find(|(parked, _)| *parked == seed) else {
+        return false;
+    };
+
+    println!("model seed {seed} is parked: {found}");
+    true
 }
 
 /// splitmix64: small, and stable across crate versions, so a seed replays the same case forever
@@ -69,6 +155,17 @@ impl Rng {
     }
 }
 
+/// How many events a case with `seed` applies, at most `max_steps`; a generator of its own picks
+/// it, so a seed's events stay the same at any length and a longer replay shows what came after
+fn case_length(seed: u64, max_steps: usize) -> usize {
+    1 + Rng(seed ^ CASE_LENGTH_SALT).below(max_steps.max(1))
+}
+
+/// Whether the case with `seed` kills its process once
+fn kills(seed: u64) -> bool {
+    Rng(seed ^ KILL_SALT).below(KILL_ONE_IN) == 0
+}
+
 /// The world a case starts in
 #[derive(Debug, Clone, Copy)]
 enum World {
@@ -86,6 +183,8 @@ enum Tap {
     TurnOff,
     /// Consent to the Turn Off review on screen, which commits and finishes Turn Off
     ConfirmDisable,
+    /// Leave the Turn Off review on screen without turning off
+    CancelDisable,
     /// Try Again on a committed Turn Off that stopped
     ResumeDisable,
     /// The escape path after a failed Try Again: finish Turn Off on this device only
@@ -96,6 +195,9 @@ enum Tap {
     CancelRestore,
     RefreshDetail,
     EnterDetail,
+    Reinitialize,
+    /// The user confirms the passkey Enable or Reinitialize registered was saved
+    ConfirmSavedPasskey,
     DiscardPendingEnable,
     ConfirmPendingEnableCleanup,
     DismissVerificationPrompt,
@@ -104,10 +206,11 @@ enum Tap {
 }
 
 impl Tap {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 19] = [
         Self::Enable,
         Self::TurnOff,
         Self::ConfirmDisable,
+        Self::CancelDisable,
         Self::ResumeDisable,
         Self::StopUsingOnThisDevice,
         Self::Verify,
@@ -116,6 +219,8 @@ impl Tap {
         Self::CancelRestore,
         Self::RefreshDetail,
         Self::EnterDetail,
+        Self::Reinitialize,
+        Self::ConfirmSavedPasskey,
         Self::DiscardPendingEnable,
         Self::ConfirmPendingEnableCleanup,
         Self::DismissVerificationPrompt,
@@ -132,6 +237,7 @@ impl Tap {
             Self::TurnOff => A::DisableCloudBackup,
             // with no review on screen this answers none, which admission rejects as stale
             Self::ConfirmDisable => A::ConfirmDisable { review_id: review_id.unwrap_or_default() },
+            Self::CancelDisable => A::CancelDisable,
             Self::ResumeDisable => A::ResumeDisable,
             Self::StopUsingOnThisDevice => A::StopUsingOnThisDevice,
             Self::Verify => A::StartVerification(CloudBackupVerificationSource::CloudBackupDetail),
@@ -140,12 +246,19 @@ impl Tap {
             Self::CancelRestore => A::CancelRestore,
             Self::RefreshDetail => A::RefreshDetail,
             Self::EnterDetail => A::EnterDetail,
+            Self::Reinitialize => A::ReinitializeBackup,
+            Self::ConfirmSavedPasskey => A::ConfirmSavedPasskey,
             Self::DiscardPendingEnable => A::DiscardPendingEnableCloudBackup,
             Self::ConfirmPendingEnableCleanup => A::ConfirmPendingEnableCleanup,
             Self::DismissVerificationPrompt => A::DismissVerificationPrompt,
             Self::DismissPasskeyChoicePrompt => A::DismissPasskeyChoicePrompt,
             Self::DismissMissingPasskeyReminder => A::DismissMissingPasskeyReminder,
         }
+    }
+
+    /// Whether this tap may register a new passkey, which the provider's next create answers
+    fn registers_a_passkey(self) -> bool {
+        matches!(self, Self::Enable | Self::Reinitialize)
     }
 }
 
@@ -156,6 +269,13 @@ enum PasskeyAnswer {
     /// The user dismissed the sheet: a cancel
     NotCompleted,
     ProviderFailure,
+}
+
+/// How the wipe after a local reset's preparation ends
+#[derive(Debug, Clone, Copy)]
+enum Wipe {
+    Completes,
+    FailsBeforeCommit,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -176,6 +296,14 @@ enum Event {
     /// The oldest held call completes
     ReleaseHeld,
     Passkey(PasskeyAnswer),
+    /// The platform takes the next step of a Google Drive account switch; while the user picks
+    /// an account, `proceed` stages it and its absence cancels the switch
+    DriveSwitch {
+        proceed: bool,
+    },
+    /// A local reset of Cloud Backup on this device
+    Reset(Wipe),
+    /// Quit and launch again; in a case that kills, with an operation running, the process dies
     Relaunch,
 }
 
@@ -187,41 +315,52 @@ const SCRIPTED_CALLS: [CloudCall; 5] = [
     CloudCall::ListNamespaces,
 ];
 
-/// Events that move a Turn Off on screen forward; uniform taps almost never chain consent, a
-/// failed finishing run and a failed Try Again, so the escape path needs this nudge
+/// Events that move a Turn Off on screen forward, or leave it; uniform taps almost never chain
+/// consent, a failed finishing run and a failed Try Again, so the escape path needs this nudge
 ///
 /// A confirmed Turn Off settles within its dispatch, so it stops in `FinishingDisable` only when
 /// its delete fails, which has to be scripted before the confirmation
-const REVIEW_EVENTS: [Event; 2] =
-    [Event::Tap(Tap::ConfirmDisable), Event::FailNext(CloudCall::DeleteNamespace)];
+const REVIEW_EVENTS: [Event; 5] = [
+    Event::Tap(Tap::ConfirmDisable),
+    Event::FailNext(CloudCall::DeleteNamespace),
+    Event::Tap(Tap::ConfirmDisable),
+    Event::FailNext(CloudCall::DeleteNamespace),
+    Event::Tap(Tap::CancelDisable),
+];
 /// A stopped Turn Off: Try Again, which offers Stop Using only once it fails too
 const FINISHING_EVENTS: [Event; 2] =
     [Event::FailNext(CloudCall::DeleteNamespace), Event::Tap(Tap::ResumeDisable)];
 /// A Turn Off whose Try Again failed, which offers the escape path
 const ESCAPE_EVENTS: [Event; 2] =
     [Event::Tap(Tap::StopUsingOnThisDevice), Event::Tap(Tap::ResumeDisable)];
+/// A Drive switch in progress, which otherwise rarely gets the platform steps it needs
+const SWITCH_EVENTS: [Event; 2] =
+    [Event::DriveSwitch { proceed: true }, Event::DriveSwitch { proceed: false }];
 
-/// Draws the next event; while a Turn Off is on screen, three draws in four come from `focus`
+/// Draws the next event; while a Turn Off or a Drive switch is under way, three draws in four come
+/// from `focus`
 fn generate(rng: &mut Rng, held: usize, focus: &[Event]) -> Event {
     if !focus.is_empty() && rng.below(4) < 3 {
         return rng.pick(focus);
     }
 
     // taps weigh the most, so most cases reach operations; the rest is the platform and providers
-    match rng.below(20) {
-        0..=8 => Event::Tap(rng.pick(&Tap::ALL)),
-        9 => Event::WalletChanged,
-        10 => Event::Background,
-        11 => Event::Foreground,
-        12 | 13 => Event::AdvanceClock(rng.pick(&[1, 5, 30, 61, 300])),
-        14 => Event::FailNext(rng.pick(&SCRIPTED_CALLS)),
-        15 => Event::HoldNext(rng.pick(&SCRIPTED_CALLS)),
-        16 if held > 0 => Event::ReleaseHeld,
-        16 | 17 => Event::Passkey(rng.pick(&[
+    match rng.below(24) {
+        0..=9 => Event::Tap(rng.pick(&Tap::ALL)),
+        10 => Event::WalletChanged,
+        11 => Event::Background,
+        12 => Event::Foreground,
+        13 | 14 => Event::AdvanceClock(rng.pick(&[1, 5, 30, 61, 300])),
+        15 => Event::FailNext(rng.pick(&SCRIPTED_CALLS)),
+        16 => Event::HoldNext(rng.pick(&SCRIPTED_CALLS)),
+        17 if held > 0 => Event::ReleaseHeld,
+        17 | 18 => Event::Passkey(rng.pick(&[
             PasskeyAnswer::Succeeds,
             PasskeyAnswer::NotCompleted,
             PasskeyAnswer::ProviderFailure,
         ])),
+        19 | 20 => Event::DriveSwitch { proceed: rng.below(4) != 0 },
+        21 => Event::Reset(rng.pick(&[Wipe::Completes, Wipe::FailsBeforeCommit])),
         _ => Event::Relaunch,
     }
 }
@@ -250,16 +389,222 @@ fn forbidden_by_record(record: &PersistedCloudBackupState) -> &'static [N] {
     }
 }
 
-/// One generated case: its app, the calls it holds, and its trace
+/// The platform's side of a Google Drive account switch, as Android keeps it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DrivePlatform {
+    /// No switch: no selected account is staged
+    Idle,
+    /// Rust claimed a switch and the user is picking an account; nothing is durable yet
+    Choosing(u64),
+    /// The selected account is staged durably and not committed
+    Staged(u64),
+    /// The selected account is committed, and Rust has not released the switch
+    Committed(u64),
+}
+
+impl DrivePlatform {
+    /// What survives the process: an account picker that was open is gone
+    fn durable(self) -> Self {
+        match self {
+            Self::Choosing(_) => Self::Idle,
+            other => other,
+        }
+    }
+
+    /// The stage without its transition id
+    fn stage(self) -> &'static str {
+        match self {
+            Self::Idle => "Idle",
+            Self::Choosing(_) => "Choosing",
+            Self::Staged(_) => "Staged",
+            Self::Committed(_) => "Committed",
+        }
+    }
+
+    fn reported(self) -> DriveAccountSwitchPlatformState {
+        match self {
+            Self::Idle | Self::Choosing(_) => DriveAccountSwitchPlatformState::NoTransition,
+            Self::Staged(id) => DriveAccountSwitchPlatformState::Staged(id),
+            Self::Committed(id) => DriveAccountSwitchPlatformState::Committed(id),
+        }
+    }
+
+    fn encode(self) -> String {
+        match self.durable() {
+            Self::Idle | Self::Choosing(_) => "idle".into(),
+            Self::Staged(id) => format!("staged {id}"),
+            Self::Committed(id) => format!("committed {id}"),
+        }
+    }
+
+    fn decode(text: &str) -> Self {
+        let parsed = match text.trim().split_once(' ') {
+            Some(("staged", id)) => id.parse().ok().map(Self::Staged),
+            Some(("committed", id)) => id.parse().ok().map(Self::Committed),
+            _ => None,
+        };
+
+        parsed.unwrap_or(Self::Idle)
+    }
+
+    /// The platform's next step of the switch, with its state after it
+    fn step(self, app: &TestApp, proceed: bool) -> Self {
+        let manager = app.manager().clone();
+        match self {
+            Self::Idle => {
+                let began = platform_call(app, "a Drive switch to begin", async move {
+                    manager.begin_drive_account_switch().await
+                });
+                match began {
+                    Ok(id) => Self::Choosing(id),
+                    Err(error) => {
+                        println!("model: the Drive switch did not begin: {error:?}");
+                        Self::Idle
+                    }
+                }
+            }
+
+            // the platform stages the selected account durably, then lets Rust go on
+            Self::Choosing(id) if proceed => {
+                let continued = platform_call(app, "the Drive switch to continue", async move {
+                    manager.continue_drive_account_switch(id).await
+                });
+                if let Err(error) = continued {
+                    println!("model: the staged Drive switch did not continue: {error:?}");
+                }
+
+                Self::Staged(id)
+            }
+
+            // nothing was staged, so after Rust rolls back there is nothing to discard
+            Self::Choosing(id) => {
+                let cancelled = platform_call(app, "the Drive switch to cancel", async move {
+                    manager.cancel_drive_account_switch(id).await
+                });
+                if let Err(error) = cancelled {
+                    println!("model: the Drive switch did not cancel: {error:?}");
+                    return Self::Choosing(id);
+                }
+
+                let manager = app.manager().clone();
+                let released = platform_call(app, "the rollback to be confirmed", async move {
+                    manager.confirm_drive_account_switch_rolled_back(id).await
+                });
+                if let Err(error) = released {
+                    println!("model: the cancelled Drive switch was not released: {error:?}");
+                }
+
+                Self::Idle
+            }
+
+            Self::Staged(_) | Self::Committed(_) => self.reconcile(app),
+        }
+    }
+
+    /// Reconciles with Rust and carries out the action it answers, as Android does at launch and
+    /// while a staged switch waits
+    fn reconcile(self, app: &TestApp) -> Self {
+        let manager = app.manager().clone();
+        let reported = self.reported();
+        let action = platform_call(app, "the Drive switch to reconcile", async move {
+            manager.reconcile_drive_account_switch(reported).await
+        });
+
+        let manager = app.manager().clone();
+        match action {
+            Ok(DriveAccountSwitchReconcileAction::None) => self,
+            Ok(DriveAccountSwitchReconcileAction::Commit(id)) => {
+                let released = platform_call(app, "the commit to be confirmed", async move {
+                    manager.confirm_drive_account_switch_committed(id).await
+                });
+                match released {
+                    Ok(()) => Self::Idle,
+                    Err(error) => {
+                        println!("model: the committed Drive switch was not released: {error:?}");
+                        Self::Committed(id)
+                    }
+                }
+            }
+
+            // the platform discards what it staged before telling Rust
+            Ok(DriveAccountSwitchReconcileAction::Rollback(id)) => {
+                let released = platform_call(app, "the rollback to be confirmed", async move {
+                    manager.confirm_drive_account_switch_rolled_back(id).await
+                });
+                if let Err(error) = released {
+                    println!("model: the rolled-back Drive switch was not released: {error:?}");
+                }
+
+                Self::Idle
+            }
+
+            Ok(DriveAccountSwitchReconcileAction::Finalize(_)) => Self::Idle,
+            Err(error) => {
+                println!("model: the Drive switch did not reconcile: {error:?}");
+                self
+            }
+        }
+    }
+}
+
+/// Runs a platform call to the manager that may wait on work already in flight
+///
+/// If the app settles with the call still waiting, the work it waits on is waiting on a held
+/// call, such as a write a Drive switch drains or an effect a reset waits for; the platform
+/// cannot release that itself, so every held call answers and the call goes on
+fn platform_call<T: Send + 'static>(
+    app: &TestApp,
+    what: &str,
+    call: impl Future<Output = T> + Send + 'static,
+) -> T {
+    let call = cove_tokio::task::spawn(call);
+    let _ = app.settle();
+    if !call.is_finished() {
+        fakes::release_held_calls();
+    }
+
+    app.block_on(what, call).expect("the platform call's task")
+}
+
+/// Prepares a local reset and runs or abandons its wipe
+fn local_reset(app: &TestApp, wipe: Wipe) {
+    let manager = app.manager().clone();
+    let prepared =
+        platform_call(
+            app,
+            "the reset to be ready",
+            async move { manager.prepare_local_reset().await },
+        );
+    let permit = match prepared {
+        Ok(permit) => permit,
+        Err(error) => {
+            println!("model: the local reset was refused: {error}");
+            return;
+        }
+    };
+
+    match wipe {
+        Wipe::Completes => finish_wipe(app, permit),
+        Wipe::FailsBeforeCommit => {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        }
+    }
+}
+
+/// One generated case: its app, the calls it holds, the platform's Drive switch, and its trace
 struct Case {
     app: TestApp,
     held: Vec<(Hold, usize)>,
+    platform: DrivePlatform,
+    /// A relaunch while an operation runs kills the process instead of waiting for rest
+    kills: bool,
     trace: Vec<String>,
 }
 
 impl Case {
-    fn start(world: World) -> Self {
-        let mut app = TestApp::launch();
+    fn start(world: World, kills: bool) -> Self {
+        let mut app = launch();
         match world {
             World::Off => {}
             World::Configured => {
@@ -275,10 +620,33 @@ impl Case {
             }
         }
 
-        Self { app, held: Vec::new(), trace: vec![format!("world {world:?}")] }
+        let trace = vec![format!("world {world:?}")];
+        Self { app, held: Vec::new(), platform: DrivePlatform::Idle, kills, trace }
+    }
+
+    /// The app launched again on the durable state a killed process left, and the platform's
+    /// durable Drive switch state with it
+    fn after_kill(step: usize) -> Self {
+        let root = child_root().expect("a harness child");
+        let saved = std::fs::read_to_string(root.join(PLATFORM_FILE)).unwrap_or_default();
+        let platform = DrivePlatform::decode(&saved);
+
+        let mut case = Self {
+            app: launch(),
+            held: Vec::new(),
+            platform,
+            kills: false,
+            trace: vec![format!("launch after the kill, platform {platform:?}")],
+        };
+        case.reconcile_at_launch(step);
+        case
     }
 
     fn apply(&mut self, step: usize, event: Event) {
+        if matches!(event, Event::Relaunch) && self.kills && self.app.runs_operation() {
+            self.kill(step, "a relaunch while an operation runs");
+        }
+
         // the app quits at rest: every held call answers before it closes
         if matches!(event, Event::Relaunch) && !self.held.is_empty() {
             self.apply(step, Event::ReleaseHeld);
@@ -295,11 +663,17 @@ impl Case {
             println!("model step {step}: stopping use on this device");
         }
 
-        let step = match event {
+        let relaunches = matches!(event, Event::Relaunch) && !app.runs_operation();
+        let step_result = match event {
             Event::Tap(tap) => {
                 let review_id = app.turn_off_review().map(|review| review.review_id);
                 if let (Tap::ConfirmDisable, Some(review_id)) = (tap, review_id) {
                     println!("model step {step}: confirming Turn Off review {review_id}");
+                }
+
+                // the provider registers one passkey per create request
+                if tap.registers_a_passkey() {
+                    app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
                 }
 
                 app.dispatch(tap.action(review_id))
@@ -340,8 +714,19 @@ impl Case {
                     PasskeyAnswer::ProviderFailure => PasskeyMode::ProviderFailure,
                 });
             }),
-            Event::Relaunch if app.runs_operation() => {
-                // a relaunch mid-operation is a process kill, which the crash matrix covers
+            Event::DriveSwitch { proceed } => {
+                let platform = &mut self.platform;
+                app.event("the platform's next Drive switch step", move |app| {
+                    *platform = platform.step(app, proceed);
+                })
+            }
+            Event::Reset(wipe) => {
+                app.event(&format!("a local reset whose wipe {wipe:?}"), move |app| {
+                    local_reset(app, wipe);
+                })
+            }
+            Event::Relaunch if !relaunches => {
+                // a relaunch mid-operation is a process kill, which killing cases cover
                 println!("model step {step}: an operation runs, so the app does not relaunch");
                 app.current()
             }
@@ -349,7 +734,7 @@ impl Case {
         };
 
         let record = Database::global().cloud_backup_state.get().expect("read the record");
-        step.then_cannot(forbidden_by_record(&record));
+        step_result.then_cannot(forbidden_by_record(&record));
 
         // the escape path touches no provider, so only a write held in flight can delay it
         if stops_using && self.held.is_empty() {
@@ -362,6 +747,42 @@ impl Case {
         for (_, age) in &mut self.held {
             *age += 1;
         }
+
+        if relaunches {
+            self.reconcile_at_launch(step);
+        }
+    }
+
+    /// The platform reconciles its Drive switch with Rust at launch, as Android does before its
+    /// first cloud refresh
+    fn reconcile_at_launch(&mut self, step: usize) {
+        self.platform = self.platform.durable();
+        let recorded = persisted().drive_account_switch().is_some();
+        if self.platform == DrivePlatform::Idle && !recorded {
+            return;
+        }
+
+        self.trace.push(format!("{step}: the platform reconciles at launch"));
+        let platform = &mut self.platform;
+        let reconciled = self.app.event("the platform reconciles its Drive switch", move |app| {
+            *platform = platform.reconcile(app);
+        });
+
+        let record = Database::global().cloud_backup_state.get().expect("read the record");
+        reconciled.then_cannot(forbidden_by_record(&record));
+    }
+
+    /// The process dies here: the parent kills it at the checkpoint, and the case goes on in a
+    /// new process on the durable state, with the platform's durable switch state
+    fn kill(&mut self, step: usize, why: &str) -> ! {
+        self.trace.push(format!("{step}: the process dies ({why})"));
+        println!("model step {step}: the process dies ({why})");
+
+        let root = child_root().expect("a harness child");
+        std::fs::write(root.join(PLATFORM_FILE), self.platform.encode())
+            .expect("save the platform's switch state");
+        checkpoint(MODEL_KILL);
+        panic!("a killing case passed {MODEL_KILL:?} without being killed");
     }
 
     /// The next event: a held call past its age is released first
@@ -378,10 +799,135 @@ impl Case {
                 &ESCAPE_EVENTS
             }
             CloudBackupScreenBody::FinishingDisable(_) => &FINISHING_EVENTS,
+            _ if self.platform != DrivePlatform::Idle => &SWITCH_EVENTS,
             _ => &[],
         };
 
         generate(rng, self.held.len(), focus)
+    }
+
+    /// The cooperative platform finishes the Drive switch it is in; the reinitialize the switch
+    /// runs gets the clock and every held call between the platform's steps
+    ///
+    /// Answers whether it finished: it stops unfinished only in a [`parked_dead_end`]
+    fn finish_platform_switch(&mut self, steps: usize) -> bool {
+        for _ in 0..PLATFORM_STEPS_LIMIT {
+            if self.platform == DrivePlatform::Idle {
+                return true;
+            }
+
+            let platform = &mut self.platform;
+            self.app
+                .event("the cooperative platform's next Drive switch step", move |app| {
+                    *platform = platform.step(app, true);
+                })
+                .then_cannot(&[]);
+            self.app
+                .event("cooperative fakes answer what they hold", |_| {
+                    fakes::release_held_calls();
+                })
+                .then_cannot(&[]);
+            self.app.advance_clock(Duration::from_secs(61)).then_cannot(&[]);
+        }
+
+        if self.platform != DrivePlatform::Idle
+            && let Some(found) = parked_dead_end()
+        {
+            println!("model step {steps}: the escape stops in a parked dead end: {found}");
+            self.trace.push(format!("{steps}: parked dead end: {found}"));
+            return false;
+        }
+
+        assert_eq!(
+            self.platform,
+            DrivePlatform::Idle,
+            "the cooperative platform did not finish its Drive switch in \
+             {PLATFORM_STEPS_LIMIT} steps\n{}\n{}",
+            self.trace.join("\n"),
+            self.app.describe()
+        );
+        self.trace.push(format!("{steps}: the platform finished its Drive switch"));
+        true
+    }
+
+    /// Invariant 4a at quiescence, then 4b, the escape property: from the state the case
+    /// reached, with cooperative fakes, the app quiesces with nothing live, and Turn Off and
+    /// Confirm reach Disabled, through Try Again when the body is or becomes `FinishingDisable`
+    ///
+    /// Drives the app out of the state it starts from, so it runs once per process: at the end
+    /// of a sequence case, or at the step a probe replayed to. A running Enable or restore takes
+    /// its cooperative exit while the app quiesces: it finishes, and an Enable that stops for
+    /// the user is left by its Discard. A Drive switch is finished by the cooperative platform
+    /// first. A body with no Turn Off (a recovery, an account switch, a failed load or a
+    /// corrupted record) has its own exits, which 4a checks at quiescence
+    fn escape(&mut self, steps: usize) {
+        let starts = self.app.manager().published_screen().body;
+        self.trace.push(format!("{steps}: escape from {}", body_name(&starts)));
+        self.app
+            .event("cooperative fakes", |app| {
+                app.cloud.clear_scripts();
+                app.passkey.set_mode(PasskeyMode::Succeeds);
+                app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
+                CONNECTIVITY_MANAGER.set_status_without_broadcast(ConnectivityStatus::Connected);
+                app.manager().handle_connectivity_change(ConnectivityStatus::Connected);
+            })
+            .then_cannot(&[]);
+        if !self.finish_platform_switch(steps) {
+            return;
+        }
+
+        let quiesced = self.app.quiesce();
+        let record = Database::global().cloud_backup_state.get().expect("read the record");
+        quiesced.then_cannot(forbidden_by_record(&record));
+
+        let quiesced = self.app.manager().published_screen().body;
+        self.trace.push(format!("{steps}: quiescent in {}", body_name(&quiesced)));
+        if !matches!(
+            quiesced,
+            CloudBackupScreenBody::Disabled
+                | CloudBackupScreenBody::Enabling(_)
+                | CloudBackupScreenBody::Configured(_)
+                | CloudBackupScreenBody::FinishingDisable(_)
+        ) {
+            return;
+        }
+
+        for step in steps..steps + ESCAPE_EVENTS_LIMIT {
+            let app = &mut self.app;
+            let body = app.manager().published_screen().body;
+            println!("model escape step {step}: {}", body_name(&body));
+            let step = match body {
+                CloudBackupScreenBody::Disabled => return,
+                _ if app.runs_operation() => app.quiesce(),
+                CloudBackupScreenBody::Configured(_) if app.turn_off_review().is_some() => {
+                    app.confirm_turn_off()
+                }
+                CloudBackupScreenBody::Configured(_) => {
+                    app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+                }
+                CloudBackupScreenBody::FinishingDisable(_) => {
+                    app.dispatch(CloudBackupManagerAction::ResumeDisable)
+                }
+                // with no operation live an Enable waits on the user, and Discard leaves it
+                CloudBackupScreenBody::Enabling(_) => {
+                    app.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup)
+                }
+                other => panic!(
+                    "4b: the escape from {} reached {other:#?}\n{}",
+                    body_name(&starts),
+                    self.trace.join("\n")
+                ),
+            };
+
+            let record = Database::global().cloud_backup_state.get().expect("read the record");
+            step.then_cannot(forbidden_by_record(&record));
+        }
+
+        panic!(
+            "4b: the escape from {} did not reach Disabled in {ESCAPE_EVENTS_LIMIT} events\n{}",
+            body_name(&starts),
+            self.trace.join("\n")
+        );
     }
 
     /// Releases what is still held, so every result arrives before the case ends
@@ -394,10 +940,32 @@ impl Case {
             self.apply(step, Event::ReleaseHeld);
         }
     }
+
+    /// What a replay must reach at a step for its probe to start where the recording did; a
+    /// switch's transition id is random in each process, so only the platform's stage is compared
+    fn state(&self) -> String {
+        format!(
+            "{} {:?} live={} held={} platform={}",
+            body_name(&self.app.manager().published_screen().body),
+            persisted().status(),
+            self.app.runs_operation(),
+            fakes::held_calls().len(),
+            self.platform.stage(),
+        )
+    }
 }
 
-fn run_model_case(case: usize, seed: u64, steps: usize) {
-    let started = Instant::now();
+/// Launches the app with a passkey provider that authenticates with one PRF output, so a passkey
+/// Enable or Reinitialize registers can be used again
+fn launch() -> TestApp {
+    let app = TestApp::launch();
+    app.passkey.inner.set_authenticate_result(Ok(PRF_OUTPUT.to_vec()));
+    app
+}
+
+/// Starts the case with `seed` from its world and applies its first `steps` events, calling
+/// `reached` with the state after the world and after each event
+fn run_events(seed: u64, steps: usize, kills: bool, mut reached: impl FnMut(&Case, usize)) -> Case {
     let mut rng = Rng(seed);
     let world = rng.pick(&[
         World::Off,
@@ -406,26 +974,76 @@ fn run_model_case(case: usize, seed: u64, steps: usize) {
         World::LegacyStuckDisabling,
     ]);
 
-    println!(
-        "model case {case} seed {seed}: replay with COVE_MODEL_SEED={seed} COVE_MODEL_CASES=1 \
-         COVE_MODEL_STEPS={steps}"
-    );
-
-    let mut model = Case::start(world);
+    let mut model = Case::start(world, kills);
+    reached(&model, 0);
     for step in 0..steps {
         let event = model.next_event(&mut rng);
         model.apply(step, event);
+        reached(&model, step + 1);
     }
 
-    model.finish(steps);
+    model
+}
+
+/// One phase of a sequence case
+#[derive(Debug, Clone, Copy)]
+enum SequencePhase {
+    /// The whole case in one process
+    Whole,
+    /// The case until its process dies
+    UntilKill,
+    /// The events after the kill, on the state it left, and the checks at the end
+    AfterKill,
+}
+
+impl SequencePhase {
+    fn end(self) -> PhaseEnd {
+        match self {
+            Self::Whole | Self::AfterKill => PhaseEnd::Exit,
+            Self::UntilKill => PhaseEnd::KillAt(MODEL_KILL),
+        }
+    }
+}
+
+fn run_sequence_phase(case: usize, seed: u64, max_steps: usize, phase: SequencePhase) {
+    let started = Instant::now();
+    let steps = case_length(seed, max_steps);
     println!(
-        "MODEL_TIMING case={case} seed={seed} events={} elapsed_ms={}",
+        "model case {case} seed {seed} ({phase:?}) runs {steps} steps: replay with \
+         COVE_MODEL_SEED={seed} COVE_MODEL_CASES=1 COVE_MODEL_STEPS={max_steps}"
+    );
+
+    let mut model = match phase {
+        SequencePhase::Whole => run_events(seed, steps, false, |_, _| {}),
+        SequencePhase::UntilKill => {
+            let mut model = run_events(seed, steps, true, |_, _| {});
+            model.kill(steps, "a relaunch at the end of the case's events");
+        }
+        SequencePhase::AfterKill => {
+            let mut rng = Rng((seed ^ KILL_SALT).rotate_left(17));
+            let mut model = Case::after_kill(steps);
+            for step in steps..steps + case_length(seed ^ KILL_SALT, max_steps / 2) {
+                let event = model.next_event(&mut rng);
+                model.apply(step, event);
+            }
+
+            model
+        }
+    };
+
+    let events = model.trace.len();
+    model.finish(events);
+    let events = model.trace.len();
+    model.escape(events);
+    println!(
+        "MODEL_TIMING case={case} seed={seed} phase={phase:?} events={} elapsed_ms={}",
         model.trace.len() - 1,
         started.elapsed().as_millis()
     );
 }
 
-/// Generated sequences keep the harness invariants and never offer what the record forbids
+/// Generated sequences keep the harness invariants and never offer what the record forbids, and
+/// each ends at quiescence with nothing live and an escape to Disabled
 #[test]
 fn model_sequences_keep_the_invariants() {
     let test = concat!(module_path!(), "::model_sequences_keep_the_invariants");
@@ -433,21 +1051,114 @@ fn model_sequences_keep_the_invariants() {
     let steps = env_or("COVE_MODEL_STEPS", DEFAULT_STEPS);
     let base = env_or("COVE_MODEL_SEED", DEFAULT_SEED);
 
-    // each case is its own process on a fresh data root, so cases never share state
-    let phases = vec![PhaseEnd::Exit; cases];
-    run_case(test, &phases, |case| {
-        let root = child_root().expect("a harness child");
-        clear_root(&root);
+    // each case runs in its own processes on a fresh data root, so cases never share state; a
+    // killing case's second process goes on from what its first left
+    let plan: Vec<(usize, u64, SequencePhase)> = (0..cases)
+        .map(|case| (case, base.wrapping_add(case as u64)))
+        .filter(|(_, seed)| !parked(*seed))
+        .flat_map(|(case, seed)| {
+            let phases = if kills(seed) {
+                vec![SequencePhase::UntilKill, SequencePhase::AfterKill]
+            } else {
+                vec![SequencePhase::Whole]
+            };
 
-        let seed = base.wrapping_add(case as u64);
-        run_model_case(case, seed, steps);
+            phases.into_iter().map(move |phase| (case, seed, phase))
+        })
+        .collect();
+    let phases: Vec<PhaseEnd> = plan.iter().map(|(_, _, phase)| phase.end()).collect();
+
+    run_case(test, &phases, |index| {
+        let (case, seed, phase) = plan[index];
+        if !matches!(phase, SequencePhase::AfterKill) {
+            clear_root(&child_root().expect("a harness child"), &[]);
+        }
+
+        run_sequence_phase(case, seed, steps, phase);
     });
 }
 
-/// Starts a phase on an empty data root; the previous case's files belong to that case
-fn clear_root(root: &std::path::Path) {
+/// Invariant 4a at quiescence and the escape 4b hold from every state a generated case reaches,
+/// not only the last one: a broken escape the case leaves before it ends is still found
+///
+/// Each case runs once to record the state after every event, then once per reached state: the
+/// probe replays the seed to that step in a new process, checks it reached the recorded state,
+/// and quiesces and escapes from there, with the calls that step holds still held
+#[test]
+fn model_escapes_from_every_reached_state() {
+    let test = concat!(module_path!(), "::model_escapes_from_every_reached_state");
+    let cases = env_or("COVE_MODEL_PROBE_CASES", DEFAULT_PROBE_CASES);
+    let max_steps = env_or("COVE_MODEL_PROBE_STEPS", DEFAULT_PROBE_STEPS);
+    let base = env_or("COVE_MODEL_SEED", DEFAULT_SEED) ^ PROBE_SEED_SALT;
+
+    let plan: Vec<(u64, Option<usize>)> = (0..cases)
+        .map(|case| base.wrapping_add(case as u64))
+        .filter(|seed| !parked(*seed))
+        .flat_map(|seed| {
+            let probes = (0..=case_length(seed, max_steps)).map(Some);
+            std::iter::once(None).chain(probes).map(move |probe| (seed, probe))
+        })
+        .collect();
+    let phases = vec![PhaseEnd::Exit; plan.len()];
+
+    run_case(test, &phases, |index| {
+        let (seed, probe) = plan[index];
+        let root = child_root().expect("a harness child");
+        let steps = case_length(seed, max_steps);
+        let replay = format!(
+            "replay with COVE_MODEL_SEED={} COVE_MODEL_PROBE_CASES=1 COVE_MODEL_PROBE_STEPS={max_steps}",
+            seed ^ PROBE_SEED_SALT
+        );
+
+        let Some(probe) = probe else {
+            clear_root(&root, &[]);
+            println!("model probe seed {seed} records {steps} steps: {replay}");
+            let mut states = Vec::new();
+            run_events(seed, steps, false, |model, _| states.push(model.state()));
+            std::fs::write(root.join(STATES_FILE), states.join("\n")).expect("save the states");
+            return;
+        };
+
+        clear_root(&root, &[STATES_FILE]);
+        println!("model probe seed {seed} from step {probe} of {steps}: {replay}");
+        let recorded = std::fs::read_to_string(root.join(STATES_FILE)).expect("recorded states");
+        let recorded: Vec<&str> = recorded.lines().collect();
+        let mut model = run_events(seed, probe, false, |model, step| {
+            assert_eq!(
+                model.state(),
+                recorded[step],
+                "the replay of seed {seed} diverged at step {step}\n{}",
+                model.trace.join("\n")
+            );
+        });
+        model.escape(probe);
+    });
+}
+
+/// The body's variant name, for the trace
+fn body_name(body: &CloudBackupScreenBody) -> &'static str {
+    match body {
+        CloudBackupScreenBody::Disabled => "Disabled",
+        CloudBackupScreenBody::Enabling(_) => "Enabling",
+        CloudBackupScreenBody::Restoring(_) => "Restoring",
+        CloudBackupScreenBody::Configured(_) => "Configured",
+        CloudBackupScreenBody::FinishingDisable(_) => "FinishingDisable",
+        CloudBackupScreenBody::PendingEnableRecovery(_) => "PendingEnableRecovery",
+        CloudBackupScreenBody::DriveAccountSwitch(_) => "DriveAccountSwitch",
+        CloudBackupScreenBody::LoadFailed => "LoadFailed",
+        CloudBackupScreenBody::Corrupted => "Corrupted",
+    }
+}
+
+/// Starts a phase on an empty data root, keeping only the named files; the previous case's files
+/// belong to that case
+fn clear_root(root: &Path, keep: &[&str]) {
     for entry in std::fs::read_dir(root).expect("read the case root") {
         let path = entry.expect("case root entry").path();
+        if path.file_name().is_some_and(|name| keep.iter().any(|keep| name == *keep)) {
+            continue;
+        }
+
         if path.is_dir() {
             std::fs::remove_dir_all(&path).expect("clear the case root");
         } else {

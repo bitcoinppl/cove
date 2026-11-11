@@ -14,13 +14,15 @@ use tokio::runtime::Handle;
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
 use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
-use super::invariants::{Boundary, Invariants, PendingWork};
+use super::invariants::{Boundary, Invariants, PendingWork, Violation};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteSupervisor;
 use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
-use crate::manager::cloud_backup_manager::admission::{Admission, EnableIntent, UserIntent};
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, EnableIntent, ReviewExit, UserIntent,
+};
 use crate::manager::cloud_backup_manager::ops::test_support::{
     TestGlobals, install_test_globals, register_test_supervisor,
 };
@@ -48,9 +50,15 @@ pub(crate) enum NextAction {
     /// Confirms the Turn Off review on screen
     ConfirmDisable,
     CancelDisable,
+    /// Restore Them First on the Turn Off review on screen
+    RestoreFirst,
+    /// Verify First on the Turn Off review on screen
+    VerifyFirst,
     /// Try Again on a committed Turn Off
     ResumeDisable,
     StopUsingOnThisDevice,
+    /// Reconnect Google Drive, after the provider asked for the user's consent
+    ReconnectDrive,
     Verify,
     SyncUnsynced,
     RetryLoad,
@@ -70,8 +78,17 @@ impl NextAction {
                 UserIntent::ConfirmDisable { review_id: review_id.unwrap_or_default() }
             }
             Self::CancelDisable => UserIntent::CancelDisable,
+            Self::RestoreFirst => UserIntent::LeaveReview {
+                review_id: review_id.unwrap_or_default(),
+                to: ReviewExit::RestoreFirst,
+            },
+            Self::VerifyFirst => UserIntent::LeaveReview {
+                review_id: review_id.unwrap_or_default(),
+                to: ReviewExit::VerifyFirst,
+            },
             Self::ResumeDisable => UserIntent::ResumeDisable,
             Self::StopUsingOnThisDevice => UserIntent::StopUsingOnThisDevice,
+            Self::ReconnectDrive => UserIntent::ReconnectDrive,
             Self::Verify => UserIntent::StartVerification {
                 source: CloudBackupVerificationSource::CloudBackupDetail,
                 discoverable: false,
@@ -90,8 +107,11 @@ impl NextAction {
             Self::TurnOff => CloudBackupScreenAction::TurnOff,
             Self::ConfirmDisable => CloudBackupScreenAction::ConfirmDisable,
             Self::CancelDisable => CloudBackupScreenAction::CancelDisable,
+            Self::RestoreFirst => CloudBackupScreenAction::RestoreFirst,
+            Self::VerifyFirst => CloudBackupScreenAction::VerifyFirst,
             Self::ResumeDisable => CloudBackupScreenAction::ResumeDisable,
             Self::StopUsingOnThisDevice => CloudBackupScreenAction::StopUsingOnThisDevice,
+            Self::ReconnectDrive => CloudBackupScreenAction::ReconnectDrive,
             Self::Verify => CloudBackupScreenAction::Verify,
             Self::SyncUnsynced => CloudBackupScreenAction::SyncUnsynced,
             Self::RetryLoad => CloudBackupScreenAction::RetryLoad,
@@ -415,9 +435,9 @@ impl TestApp {
     /// For tests that show an invariant catches a state the owner must refuse; the step that
     /// follows must not rely on the ledger the failed check left
     pub(crate) fn settled_violation(&mut self) -> Option<Violation> {
-        self.settle();
+        let work = self.settle();
         let mut invariants = std::mem::take(&mut self.invariants);
-        let checked = invariants.check(self);
+        let checked = invariants.check(self, &Boundary::Pending(work));
         self.invariants = invariants;
         checked.err()
     }
@@ -434,17 +454,19 @@ impl TestApp {
         }
     }
 
-    /// Wait until the actors have handled every message and no provider call is running, and
-    /// name the work left for the test to move
+    /// Wait until the actors have handled every message and no off-runtime work is in flight,
+    /// and name the work left for the test to move
     ///
-    /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
-    /// park. A current-thread runtime parks only with an empty run queue, so after a round every
-    /// task the event woke has run as far as it can. The app is settled after a round in which
-    /// no fake call is answering, no blocking call is in flight or answered, and the
-    /// supervisor's stage checkpoint shows no operation in an `Effecting` stage. An effect or a
-    /// blocking call runs off the runtime, so the park alone can't see it. Calls
-    /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
-    /// release holds and advance time as events
+    /// A round waits for the runtime's blocking pool to go quiet, runs a mailbox barrier on both
+    /// actors, and waits for the runtime thread to park. A current-thread runtime parks only
+    /// with an empty run queue, so after a round every task the event woke has run as far as it
+    /// can. A blocking job runs off the runtime, where the park can't see it, and its answer
+    /// wakes a task later. So a round counts only if the pool stayed quiet from before its
+    /// barrier until the park: then no job existed that could still wake a task. The app is
+    /// settled after such a round in which no cloud call is answering and the supervisor's stage
+    /// checkpoint shows no operation in an `Effecting` stage. Calls waiting on a `Hold` and
+    /// tasks waiting on the paused clock count as settled, so tests release holds and advance
+    /// time as events
     pub(crate) fn settle(&self) -> PendingWork {
         let supervisor = self.manager.supervisor.clone();
         let writes = self.manager.cloud_writes.clone();
@@ -497,21 +519,6 @@ impl TestApp {
         }
 
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
-    }
-
-    /// Waits until a blocking call seen in `before` answers its caller, one answered already, or
-    /// a call is held
-    ///
-    /// The answer comes from another thread, so the wait polls. A blocking call that enters a
-    /// hold answers only when the test releases it, so a hold ends the wait and the next round
-    /// settles on it; an in-flight call that never answers fails on the deadline instead of using
-    /// up the settle rounds
-    fn wait_for_blocking_answer(&self, before: cove_tokio::task::BlockingCalls) {
-        let _deadline =
-            Deadline::arm(format!("a blocking call to answer after {}", self.last_event));
-        while cove_tokio::task::blocking_calls() == before && !fakes::any_call_held() {
-            std::thread::sleep(Duration::from_millis(1));
-        }
     }
 
     /// Asserts what dispatch would do with each action, and that the published screen agrees

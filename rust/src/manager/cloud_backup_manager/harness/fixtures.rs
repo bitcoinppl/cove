@@ -15,12 +15,11 @@ use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
-    seed_verifiable_cloud_master_key, test_globals, wallet_entry_with_labels,
-    xpub_only_wallet_metadata,
+    wallet_entry_with_labels, xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupStore,
+    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupStore,
 };
 use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
 use crate::network::Network;
@@ -95,10 +94,18 @@ impl FakeAccount {
             .expect("save local wallets");
 
         let mut files = Vec::with_capacity(self.record_count());
-        for wallet in local.into_iter().chain(elsewhere) {
+        let mut local_records = Vec::with_capacity(local.len());
+        for (index, wallet) in local.into_iter().chain(elsewhere).enumerate() {
             let record_id = wallet_record_id(wallet.metadata.id.as_ref());
             let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
             entry.xpub = Some(wallet.xpub.to_string());
+            if index < self.local_wallets {
+                local_records.push(SeededRecord {
+                    record_id: record_id.clone(),
+                    revision: entry.content_revision_hash.clone(),
+                });
+            }
+
             let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1);
             app.cloud.inner.set_wallet_backup(namespace.clone(), record_id.clone(), backup);
             files.push(wallet_filename_from_record_id(&record_id));
@@ -123,6 +130,49 @@ pub(crate) struct SeededAccount {
     pub(crate) not_on_device: Vec<String>,
 }
 
+/// One seeded wallet backup and the content revision it was written at
+#[derive(Debug, Clone)]
+pub(crate) struct SeededRecord {
+    pub(crate) record_id: String,
+    pub(crate) revision: String,
+}
+
+/// The passkey every verifiable wrapper opens
+pub(crate) const VERIFIABLE_PRF_KEY: [u8; 32] = [7; 32];
+const VERIFIABLE_PRF_SALT: [u8; 32] = [9; 32];
+
+/// The wrapper bytes the scripted passkey opens for `master_key`
+pub(crate) fn verifiable_wrapper(master_key: &cove_cspp::master_key::MasterKey) -> Vec<u8> {
+    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
+        master_key,
+        &VERIFIABLE_PRF_KEY,
+        &VERIFIABLE_PRF_SALT,
+    )
+    .expect("encrypt master key");
+
+    serde_json::to_vec(&encrypted).expect("encode master key wrapper")
+}
+
+/// Replace the seeded placeholder wrapper with one the scripted passkey opens, and keep the
+/// passkey's credential, so verification can recover a missing local master key
+pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
+    let master_key = Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read local master key")
+        .expect("seeded master key");
+
+    app.cloud.inner.set_master_key_backup(namespace.to_string(), verifiable_wrapper(&master_key));
+    app.cloud.persist();
+    CloudBackupKeychain::global()
+        .save_passkey(&[1, 2, 3], VERIFIABLE_PRF_SALT)
+        .expect("save passkey");
+    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: VERIFIABLE_PRF_KEY.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
+}
+
 /// A watch-only wallet with its own key, so no two seeded wallets share an identity
 struct DistinctWallet {
     metadata: WalletMetadata,
@@ -138,13 +188,6 @@ impl DistinctWallet {
 
         Self { metadata, xpub }
     }
-}
-
-/// Replace the seeded account's placeholder master key backup with a real wrapper, and set up
-/// the passkey that opens it, so a verification reaches the passkey and can verify
-pub(crate) fn seed_verifiable_master_key(app: &TestApp) {
-    seed_verifiable_cloud_master_key(test_globals());
-    app.cloud.persist();
 }
 
 /// Persist the reporter's stuck record: a disable that never deleted anything
@@ -206,4 +249,16 @@ pub(crate) fn keychain_namespace() -> Option<String> {
 pub(crate) fn load_detail(app: &mut TestApp) {
     app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[NextAction::Enable]);
     app.advance_clock(Duration::from_secs(60)).then_can(&[NextAction::TurnOff]);
+}
+
+/// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset
+/// commits, and the reset finishes
+pub(crate) fn finish_wipe(app: &TestApp, permit: CloudBackupResetPermit) {
+    app.block_on("the owner to clear local state", permit.clear_local_state())
+        .expect("clear local state");
+    // the wipe's commit point: `wipe_all_data_with_tier` resets the whole database, so every
+    // Cloud Backup table, the blob sync rows included, is gone before the reset finishes
+    Database::global().dangerous_reset_all_data().expect("reset the database");
+    app.block_on("the reset to finish", permit.complete_after_database_reset())
+        .expect("finish the reset");
 }

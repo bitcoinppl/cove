@@ -588,7 +588,8 @@ asks for consent instead.
    running operation replaces that body, so the two never exist together: any
    operation start, body change, Cancel or `LeaveDetail` ends it. The review
    lists the namespace and counts other backup namespaces silently, and never
-   asks for a passkey. The listing proves which records are this device's own
+   asks for a passkey or lets the provider ask for consent; the recheck after
+   the drain lists the same way. The listing proves which records are this device's own
    backups, and the detail inventory says whether an own backup holds a secret
    this device lacks. An own backup whose secret the inventory couldn't check
    counts as unchecked. The review's assessment is always the detail
@@ -610,17 +611,41 @@ asks for consent instead.
    lists again. If the fresh impact puts any new record in a risk category, or
    its assessment is worse, the operation ends and a new review replaces the
    old one with `changed_since_confirmation`. Otherwise Turn Off commits.
-4. **Before the commit** nothing is persisted. `CancelDisable` ends the review
+4. **Leaving for the risk.** A review that names wallets not on this device
+   offers `RestoreFirst`, and one with backups Cove couldn't check offers
+   `VerifyFirst`. Each sends one intent bound to the review, like Confirm:
+   `RestoreBeforeTurnOff { review_id }` or `VerifyBeforeTurnOff { review_id }`.
+   Rust picks the work: Restore Them First restores the one wallet when the
+   review names one, and runs Restore All when it names several; Verify First
+   runs the detail verification. A stale id is rejected as `ReviewStale`;
+   otherwise the button is admitted as the work it starts, so it shows that
+   work's reason when it can't start, such as Restore All over an incomplete
+   inventory. An admitted tap ends the review and starts the work in the same
+   turn, and a failure is drawn next to that work's own control. A rejected one
+   starts nothing and the review stays open. Nothing continues into Turn Off
+   afterwards; the user taps Turn Off again.
+5. **Before the commit** nothing is persisted. `CancelDisable` ends the review
    or the drain. A failure ends it with a `DisableNotStarted` last outcome and
    leaves backup on.
-5. **After the commit** the body is `FinishingDisable` and only goes forward: it
+6. **After the commit** the body is `FinishingDisable` and only goes forward: it
    deletes the namespace (already gone counts as deleted), clears this device's
    Cloud Backup keychain items and sync rows, and writes `Disabled`. A failed
    run shows `Failed { reason }` and persists `retry_after`. `ResumeDisable` is
    Try Again. A launch resumes it at once, and a reconnect or cloud change
-   resumes it after `retry_after`. Once a Try Again has failed,
-   `StopUsingOnThisDevice` finishes on this device alone and leaves the remote
-   backup.
+   resumes it after `retry_after`; a reconnect that comes earlier arms one
+   retry for that deadline, which a run that starts or a new attempt drops.
+   - Admission allocates each finishing run with how it started. A run the
+     user tapped (the commit, Try Again, Reconnect) deletes with a client that
+     may show the provider's consent sheet; an automatic resume deletes
+     silently, so a provider that wants consent fails it with
+     `AuthorizationRequired`.
+   - That failure offers `ReconnectDrive` on Android, which resumes the same
+     committed Turn Off with consent. Switch Google Account stays unavailable.
+   - Once a Try Again has failed, `StopUsingOnThisDevice` finishes on this
+     device alone and leaves the remote backup. The record keeps both facts:
+     a failed Try Again keeps Stop Using offered after a relaunch, and Stop
+     Using saves a local-only disposition before its cleanup starts, so no
+     later resume, retry or relaunch deletes the remote backup.
 
 ## Verification And Recovery
 

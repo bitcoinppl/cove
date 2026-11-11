@@ -10,6 +10,7 @@ mod crash_tests;
 mod deadline;
 mod enable_entry_tests;
 mod fakes;
+mod finishing_tests;
 mod fixtures;
 mod incident_tests;
 mod invariants;
@@ -26,7 +27,7 @@ pub(crate) use self::fakes::{
     CallId, CloudCall, CloudFault, HarnessCloud, HarnessPasskey, Hold, PasskeyCall, PasskeyMode,
 };
 pub(crate) use self::fixtures::{
-    FakeAccount, change_a_wallet, keychain_namespace, load_detail, persisted,
+    FakeAccount, change_a_wallet, finish_wipe, keychain_namespace, load_detail, persisted,
     seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
 };
 pub(crate) use self::process::{PhaseEnd, run_case};

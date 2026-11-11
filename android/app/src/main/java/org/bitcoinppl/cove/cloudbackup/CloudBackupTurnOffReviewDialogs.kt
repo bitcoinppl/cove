@@ -20,13 +20,9 @@ import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.CloudBackupDisableConfirmation
 import org.bitcoinppl.cove_core.CloudBackupDisableReview
 import org.bitcoinppl.cove_core.CloudBackupInventoryAssessment
-import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupRowActionKind
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
-import org.bitcoinppl.cove_core.CloudBackupSection
-import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 
 @Composable
 internal fun TurnOffReviewDialogs(
@@ -88,23 +84,15 @@ private fun TurnOffFirstReviewDialog(
     onContinue: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val impact = review.impact
-    val restoreFirst = turnOffRestoreFirstAction(screen).takeIf { impact.notOnDevice.isNotEmpty() }
-    val verifyFirst =
-        screen.actions.lookup(CloudBackupScreenAction.VERIFY)
-            ?.takeIf { impact.unchecked > 0u && it.isAvailable }
-            ?.let { CloudBackupManagerAction.StartVerification(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL) }
+    // Rust offers Restore Them First and Verify First only for what this review found, picks the
+    // work each starts, and ends the review in the same turn; the user taps Turn Off again
+    // afterwards, nothing continues into Turn Off by itself
+    val restoreFirst = screen.actions.lookup(CloudBackupScreenAction.RESTORE_FIRST)
+    val verifyFirst = screen.actions.lookup(CloudBackupScreenAction.VERIFY_FIRST)
     // checking again is Turn Off sent a second time, which Rust answers by preparing a new review
     val checkAgain =
         screen.actions.lookup(CloudBackupScreenAction.TURN_OFF)
-            ?.takeIf { impact.assessment !is CloudBackupInventoryAssessment.Complete }
-
-    // Restore Them First and Verify First end the review and start their own work; the user taps
-    // Turn Off again afterwards, nothing continues into Turn Off by itself
-    val leaveReviewThen = { action: CloudBackupManagerAction ->
-        onCancel()
-        manager.dispatch(action)
-    }
+            ?.takeIf { review.impact.assessment !is CloudBackupInventoryAssessment.Complete }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -118,17 +106,19 @@ private fun TurnOffFirstReviewDialog(
                     caption = null,
                 )
 
-                restoreFirst?.let { action ->
+                restoreFirst?.let { availability ->
                     TextButton(
-                        onClick = { leaveReviewThen(action) },
-                        modifier = Modifier.testTag(CloudBackupTags.TURN_OFF_REVIEW_RESTORE_FIRST),
+                        enabled = availability.isAvailable,
+                        onClick = { manager.dispatch(CloudBackupManagerAction.RestoreBeforeTurnOff(review.reviewId)) },
+                        modifier = Modifier.testTag(CloudBackupTags.action(CloudBackupScreenAction.RESTORE_FIRST)),
                     ) { Text("Restore Them First") }
                 }
 
-                verifyFirst?.let { action ->
+                verifyFirst?.let { availability ->
                     TextButton(
-                        onClick = { leaveReviewThen(action) },
-                        modifier = Modifier.testTag(CloudBackupTags.TURN_OFF_REVIEW_VERIFY_FIRST),
+                        enabled = availability.isAvailable,
+                        onClick = { manager.dispatch(CloudBackupManagerAction.VerifyBeforeTurnOff(review.reviewId)) },
+                        modifier = Modifier.testTag(CloudBackupTags.action(CloudBackupScreenAction.VERIFY_FIRST)),
                     ) { Text("Verify First") }
                 }
 
@@ -176,28 +166,4 @@ private fun TurnOffReviewText(
             Text(it, style = MaterialTheme.typography.bodySmall)
         }
     }
-}
-
-/**
- * Restore All when Rust offers it, or the single restore when one wallet is eligible
- *
- * Returns null when neither can run, so the dialog doesn't offer a restore Rust would reject
- */
-private fun turnOffRestoreFirstAction(screen: CloudBackupScreen): CloudBackupManagerAction? {
-    if (screen.actions.lookup(CloudBackupScreenAction.START_RESTORE_ALL)?.isAvailable == true) {
-        return CloudBackupManagerAction.StartRestoreAll
-    }
-
-    val restorable =
-        screen.configured
-            ?.section<CloudBackupSection.NotOnDevice>()
-            ?.v1
-            ?.rows
-            ?.filter { row ->
-                row.record is CloudBackupListedRecord.NotOnDevice &&
-                    row.actions.any { it.action == CloudBackupRowActionKind.Restore && it.availability.isAvailable }
-            }
-            .orEmpty()
-
-    return restorable.singleOrNull()?.let { CloudBackupManagerAction.RestoreCloudWallet(it.recordId) }
 }

@@ -126,6 +126,16 @@ pub enum CloudBackupManagerAction {
     },
     /// Every way out of the Turn Off review or drain: Cancel, backdrop, back, screen pop
     CancelDisable,
+    /// Restore Them First on the review the user saw: ends it and restores the wallets it found
+    /// only in the cloud; a stale id is rejected
+    RestoreBeforeTurnOff {
+        review_id: u64,
+    },
+    /// Verify First on the review the user saw: ends it and verifies the backups it couldn't
+    /// check; a stale id is rejected
+    VerifyBeforeTurnOff {
+        review_id: u64,
+    },
     /// Try Again on a committed Turn Off
     ResumeDisable,
     /// Finishes a committed Turn Off locally and leaves the remote data

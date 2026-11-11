@@ -12,13 +12,13 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupOutcome,
 };
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, Rejection, TurnOffAdmission, UserIntent, evaluate_admission,
+    Admission, Rejection, ReviewExit, TurnOffAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::turn_off::{
-    DisableImpact, EvidenceUnavailable, FinishStart, TurnOffReview,
+    DeleteAuthority, DisableImpact, EvidenceUnavailable, FinishRun, FinishStart, TurnOffReview,
 };
 use crate::manager::cloud_backup_manager::turn_off::test_support::{
-    empty_evidence, empty_review, empty_review_assessed,
+    empty_evidence, empty_review, empty_review_assessed, review_not_on_device,
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommittedDisable, DisablingRecord,
@@ -32,7 +32,7 @@ use cove_tokio::FutureTimeoutExt as _;
 use crate::test_support::loaded_host_wait;
 use cove_cspp::CsppStore as _;
 use crate::database::cloud_backup::{
-    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
+    PersistedDisableDisposition, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
@@ -134,6 +134,8 @@ fn test_disabling_state() -> PersistedDisablingCloudBackup {
         delete_started_at: Some(2),
         last_error: None,
         retry_after: None,
+        disposition: PersistedDisableDisposition::DeleteRemote,
+        try_again_failed: false,
     }
 }
 
@@ -1248,9 +1250,16 @@ fn begin_finishing()
             .set(&PersistedCloudBackupState::disabling_transition(disabling))
             .unwrap();
         supervisor.rebase_on_seeded_record();
-        supervisor.begin_finish(manager, FinishStart::TryAgain);
-        supervisor.runtime.claim().expect("the Try Again run started")
+        let finish = supervisor.runtime.start_finish(DeleteAuthority::TryAgain).unwrap();
+        let claim = finish.run.claim;
+        supervisor.begin_finish(manager, finish);
+        claim
     }
+}
+
+/// The Try Again run `claim` names, as a completion of [`begin_finishing`]'s run carries it
+fn try_again_run(claim: CloudBackupExclusiveOperationClaim) -> FinishRun {
+    FinishRun { claim, start: FinishStart::Delete(DeleteAuthority::TryAgain) }
 }
 
 /// Replays one completion handler with a stale claim and then the live claim, so a handler that
@@ -1635,7 +1644,7 @@ async fn supervisor_ignores_stale_turn_off_recheck_completion() {
 async fn supervisor_ignores_stale_disable_delete_completion() {
     assert_completion_ignores_stale_claim(begin_finishing(), async |supervisor, claim| {
             supervisor
-                .complete_disable_namespace_delete(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_namespace_delete(try_again_run(claim), test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1646,7 +1655,7 @@ async fn supervisor_ignores_stale_disable_delete_completion() {
 async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
     assert_completion_ignores_stale_claim(begin_finishing(), async |supervisor, claim| {
             supervisor
-                .complete_disable_local_cleanup(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_local_cleanup(try_again_run(claim), test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -3253,6 +3262,37 @@ async fn an_operation_started_from_the_review_ends_it() {
         evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
         Admission::Accepted
     );
+}
+
+/// A Restore Them First whose restore can't start on this inventory starts nothing and leaves
+/// the same review open: one wallet needs the inventory loaded, and several need Restore All
+#[tokio::test(flavor = "current_thread")]
+async fn a_restore_first_the_inventory_cannot_start_leaves_the_review_open() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    persist_enabled_under(&mut supervisor);
+    let cases: [(&[&str], Rejection); 2] = [
+        (&["Cold Storage"], Rejection::DetailInventoryNotLoaded),
+        (&["Cold Storage", "Spending"], Rejection::RestoreAllUnavailable),
+    ];
+    for (names, rejection) in cases {
+        let review = review_not_on_device(VALID_NAMESPACE_ID, names);
+        let review_id = review.review_id.get();
+        supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
+        let restore_first = UserIntent::LeaveReview { review_id, to: ReviewExit::RestoreFirst };
+        let snapshot = supervisor.admission_snapshot(&manager, &manager.inventory_facts());
+        assert_eq!(evaluate_admission(&restore_first, &snapshot), Admission::Rejected(rejection));
+
+        supervisor.dispatch(restore_first).await.unwrap();
+
+        assert_eq!(supervisor.runtime.turn_off_admission().review_id(), Some(review_id));
+        assert_eq!(supervisor.runtime.claim(), None, "{names:?} started an operation");
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]

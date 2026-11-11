@@ -29,6 +29,7 @@ use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
+use crate::manager::cloud_backup_manager::admission::{Rejection, ReviewExit, UserIntent};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
@@ -37,7 +38,8 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::{
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
 use crate::manager::cloud_backup_manager::turn_off::{
-    DisableReview, FinishStart, ReviewId, TurnOffReview,
+    AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, RetryWake,
+    ReviewId, TurnOffReview,
 };
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
@@ -286,8 +288,8 @@ impl OwnedRuntime {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         committed: CommittedDisable,
-    ) {
-        self.mutate(|runtime| runtime.commit_turn_off(claim, committed));
+    ) -> Option<FinishRun> {
+        self.mutate(|runtime| runtime.commit_turn_off(claim, committed))
     }
 
     /// Replaces the Turn Off review an idle configured body holds
@@ -295,25 +297,44 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.set_turn_off_review(review));
     }
 
-    /// Takes the review the user confirmed, if it is still the one on screen
-    pub(crate) fn take_reviewed(&mut self, review_id: ReviewId) -> Option<DisableReview> {
-        self.mutate(|runtime| runtime.take_reviewed(review_id))
+    /// Consent to the review on screen: takes it and starts Turn Off in one step
+    pub(crate) fn admit_confirm(
+        &mut self,
+        review_id: ReviewId,
+    ) -> Result<ConfirmedTurnOff, Rejection> {
+        self.mutate(|runtime| runtime.admit_confirm(review_id))
+    }
+
+    /// Ends the review on screen for the work the button `to` names
+    pub(crate) fn leave_review(
+        &mut self,
+        review_id: ReviewId,
+        to: ReviewExit,
+    ) -> Result<UserIntent, Rejection> {
+        self.mutate(|runtime| runtime.leave_review(review_id, to))
     }
 
     pub(crate) fn start_finish(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        start: FinishStart,
-    ) -> Result<(), Unstartable> {
-        self.mutate(|runtime| runtime.start_finish(claim, start))
+        authority: DeleteAuthority,
+    ) -> Result<AdmittedFinish, Rejection> {
+        self.mutate(|runtime| runtime.start_finish(authority))
     }
 
     pub(crate) fn fail_finish(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: FinishRun,
         reason: CloudBackupTurnOffFailure,
-    ) {
-        self.mutate(|runtime| runtime.fail_finish(claim, reason));
+    ) -> Option<FinishFailure> {
+        self.mutate(|runtime| runtime.fail_finish(run, reason))
+    }
+
+    pub(crate) fn arm_retry_wake(&mut self, at: u64) -> Option<RetryWake> {
+        self.mutate(|runtime| runtime.arm_retry_wake(at))
+    }
+
+    pub(crate) fn take_retry_wake(&mut self, fired: RetryWake) -> bool {
+        self.mutate(|runtime| runtime.take_retry_wake(fired))
     }
 
     pub(crate) fn hand_off(

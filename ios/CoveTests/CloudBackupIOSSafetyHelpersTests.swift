@@ -1729,7 +1729,6 @@ extension CloudBackupIOSSafetyHelpersTests {
                 switch entry.availability {
                 case .available:
                     guard Self.drawnOffDetail[entry.action] == nil else { continue }
-                    guard !Self.isInterimUndrawn(fixture: fixture.name, action: entry.action) else { continue }
                     XCTAssertEqual(drawnEnabled, true, "\(fixture.name): \(entry.action) is available with no enabled control")
                 case .unavailable:
                     XCTAssertNotEqual(drawnEnabled, true, "\(fixture.name): unavailable \(entry.action) is enabled")
@@ -1753,34 +1752,162 @@ extension CloudBackupIOSSafetyHelpersTests {
         }
     }
 
+    /// Every prompt fixture's alert draws a choice for each entry Rust sends for its actions, enabled
+    /// only when available, and no choice Rust sent no entry for
+    func testEveryPromptFixtureDrawsItsChoicesFromTheirEntries() async throws {
+        let prompts = cloudBackupScreenFixtures().compactMap { fixture in
+            promptChoices(fixture.screen.rootPrompt).map { (fixture, $0) }
+        }
+        XCTAssertGreaterThanOrEqual(prompts.count, 2, "the fixtures must include the Enable prompts")
+
+        for (fixture, choices) in prompts {
+            let recorder = try await render(VStack {
+                CloudBackupPromptChoiceButtons(
+                    choices: choices.offered(on: fixture.screen),
+                    choose: { _ in },
+                    cancel: {}
+                )
+            })
+
+            for action in Set(choices.map(\.action)) {
+                let availability = fixture.screen.actions.availability(action: action)
+                XCTAssertEqual(
+                    recorder.actions[action],
+                    availability.map(\.isAvailable),
+                    "\(fixture.name): the \(action) choice doesn't follow its entry"
+                )
+            }
+        }
+    }
+
+    /// An alert has no room under its buttons, so a disabled choice's reason and a rejected
+    /// choice's outcome are in its message
+    func testPromptMessageCarriesTheReasonAndTheRejection() throws {
+        let fixture = try XCTUnwrap(cloudBackupScreenFixtures().first { $0.name.hasSuffix(":enabling-existing-backup-prompt") })
+        let running = CloudBackupRejection.operationRunning(operation: .restore)
+        var screen = fixture.screen
+        screen.actions = CloudBackupActions(entries: screen.actions.entries.map { entry in
+            entry.action == .acceptEnablePromptCreateNew
+                ? CloudBackupActionEntry(action: entry.action, availability: .unavailable(reason: running))
+                : entry
+        })
+        screen.lastOutcome = CloudBackupLastOutcome(
+            target: .action(.acceptEnablePromptUseExisting),
+            outcome: .failed(message: "The passkey request failed")
+        )
+
+        let message = CloudBackupPromptChoice.existingBackup.offered(on: screen).message("Base", on: screen)
+
+        XCTAssertEqual(message, "Base\n\n\(running.caption)\n\nThe passkey request failed")
+    }
+
+    /// An open delete confirmation follows the row's delete through each screen Rust sends
+    func testOpenRowDeleteFollowsTheRowsDelete() throws {
+        let target = CloudBackupRowTarget(recordId: "record-spending-old", control: .delete)
+        let open = { (name: String) throws -> CloudBackupOpenRowDelete in
+            let fixture = try XCTUnwrap(cloudBackupScreenFixtures().first { $0.name.hasSuffix(":\(name)") })
+            return CloudBackupOpenRowDelete(target: target, delete: fixture.screen.rowAction(target: target))
+        }
+
+        let standard = try open("configured")
+        let held = try open("configured-rows-held")
+        let onlyCopy = try open("configured-extra-copy-only-copy")
+        let gone = try open("configured-extra-copy-gone")
+
+        XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: held), .keep)
+        XCTAssertEqual(held.delete?.availability.isAvailable, false)
+        XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: gone), .close)
+        XCTAssertEqual(
+            CloudBackupOpenRowDelete.follow(from: standard, to: onlyCopy),
+            .replace(recordId: "record-spending-old")
+        )
+        XCTAssertEqual(
+            onlyCopy.delete?.action,
+            .delete(confirmation: .mayBeOnlyCopy),
+            "the replacing alert reads the stronger warning from the screen"
+        )
+    }
+
+    /// The UI tests' identifier helper, which can't link Rust, names every element as Rust does
+    func testUITestIdentifierHelperMatchesRust() {
+        let elements = cloudBackupUiElements()
+        XCTAssertFalse(elements.isEmpty)
+
+        for element in elements {
+            XCTAssertEqual(uiTestIdentifier(element), element.accessibilityIdentifier(), "\(element)")
+        }
+
+        // the UI tests name an action by its Swift case name
+        for case let .action(action) in elements {
+            XCTAssertEqual(String(describing: action), action.identifierName())
+        }
+    }
+
+    private func promptChoices(_ prompt: CloudBackupRootPrompt) -> [CloudBackupPromptChoice]? {
+        switch prompt {
+        case .existingBackupFound: CloudBackupPromptChoice.existingBackup
+        case let .passkeyChoice(intent): CloudBackupPasskeyChoicePresentation(intent: intent).choices
+        case .none, .missingPasskeyReminder, .verification: nil
+        }
+    }
+
+    // one exhaustive arm per element, so an element Rust adds fails to compile here; splitting it
+    // to lower the count would need a default arm, which would hide that
+    // swiftlint:disable:next cyclomatic_complexity
+    private func uiTestIdentifier(_ element: CloudBackupUiElement) -> String {
+        typealias Id = CloudBackupUIIdentifier
+
+        switch element {
+        case let .action(action): return Id.action(action.identifierName())
+        case let .actionUnavailable(action): return Id.unavailable(action.identifierName())
+        case let .actionConfirm(action): return Id.confirm(action.identifierName())
+        case let .rowAction(target): return Id.row(target.recordId, target.control.identifierName())
+        case let .rowConfirm(target): return Id.rowConfirm(target.recordId, target.control.identifierName())
+        case let .walletRow(recordId): return Id.wallet(recordId)
+        case .rowsUnavailable: return Id.rowsUnavailable
+        case .lastOutcome: return Id.lastOutcome
+        case .lastOutcomeDismiss: return Id.lastOutcomeDismiss
+        case .healNotice: return Id.healNotice
+        case .healNoticeTurnOff: return Id.healNoticeTurnOff
+        case .turnOffPreparing: return Id.turnOffPreparing
+        case .turnOffOffline: return Id.turnOffOffline
+        case .turnOffOfflineTryAgain: return Id.turnOffOfflineTryAgain
+        case .turnOffReview: return Id.turnOffReview
+        case .turnOffContinue: return Id.turnOffContinue
+        case .turnOffCheckAgain: return Id.turnOffCheckAgain
+        case .turnOffFinal: return Id.turnOffFinal
+        case .turnOffDraining: return Id.turnOffDraining
+        case .finishingDisable: return Id.finishingDisable
+        case .loadFailed: return Id.loadFailed
+        case .corrupted: return Id.corrupted
+        case .driveAccountSwitch: return Id.driveAccountSwitch
+        case .inventoryChecking: return Id.inventoryChecking
+        case .inventoryIncomplete: return Id.inventoryIncomplete
+        case .recoverySupportCode: return Id.recoverySupportCode
+        case .menu: return Id.menu
+        case .promptExistingBackupFound: return Id.promptExistingBackupFound
+        case .promptPasskeyChoice: return Id.promptPasskeyChoice
+        case .promptPasskeyChoiceCreateNewPasskey: return Id.promptPasskeyChoiceCreateNewPasskey
+        case .promptMissingPasskeyReminder: return Id.promptMissingPasskeyReminder
+        case .promptVerification: return Id.promptVerification
+        }
+    }
+
     /// Actions whose control iOS draws somewhere other than the detail screen's form, and where
     private static let drawnOffDetail: [CloudBackupScreenAction: String] = [
         .enable: "the Settings row and the Enable sheet",
         .restoreFromCloudBackup: "onboarding",
         .cancelRestore: "the onboarding restore screen",
         .confirmSavedPasskey: "the Enable sheet",
-        .acceptEnablePrompt: "the Enable sheet's prompts",
+        .acceptEnablePromptUseExisting: "the root prompts",
+        .acceptEnablePromptCreateNew: "the root prompts",
+        .discardPendingEnable: "the root prompts' Cancel",
         .confirmPendingEnableCleanup: "the Enable sheet",
         .confirmDisable: "the Turn Off dialogs",
         .cancelDisable: "the Turn Off dialogs, and the detail only while Turn Off prepares or drains",
+        .restoreFirst: "the Turn Off review dialog",
+        .verifyFirst: "the Turn Off review dialog",
     ]
-
-    /// actions the interim Rust projection offers without a section that draws them; Rust part B's
-    /// projection owns removing them or adding the section, and this list goes with it, matching
-    /// Android's INTERIM_UNDRAWN so both platforms drop it at once
-    private static let interimUndrawn: Set<String> = [
-        "configured/refreshDetail",
-        "configured-passkey-missing/refreshDetail",
-        "configured-operation-running/refreshDetail",
-        "configured-heal-notice/refreshDetail",
-        "turn-off-review/refreshDetail",
-        "pending-enable-recovery/discardPendingEnable",
-    ]
-
-    private static func isInterimUndrawn(fixture: String, action: CloudBackupScreenAction) -> Bool {
-        let shortName = fixture.replacingOccurrences(of: "cloud-backup-screen-fixture:", with: "")
-        return interimUndrawn.contains("\(shortName)/\(String(describing: action))")
-    }
 
     private func renderDetail(_ screen: CloudBackupScreen) async throws -> CloudBackupControlRecorder {
         try await render(Form {

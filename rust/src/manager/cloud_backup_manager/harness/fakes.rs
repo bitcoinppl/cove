@@ -254,8 +254,21 @@ pub(crate) enum CloudFault {
 struct CloudCalls {
     counts: HashMap<CloudCall, usize>,
     log: Vec<(CallId<CloudCall>, Option<String>)>,
+    policies: HashMap<CallId<CloudCall>, CloudAccessPolicy>,
     scripts: HashMap<CallId<CloudCall>, CloudFault>,
     in_flight: usize,
+    authorization: ProviderAuthorization,
+    consent_sheets: usize,
+}
+
+/// Whether the provider lets Cove in without asking, as Google Drive's app authorization does
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum ProviderAuthorization {
+    #[default]
+    Granted,
+    /// The user removed Cove's access: a silent call fails with `AuthorizationRequired`, and a
+    /// call that may ask for consent shows the provider's sheet, which the user accepts
+    Revoked,
 }
 
 fn label_hold(id: CallId<CloudCall>, fault: &CloudFault) {
@@ -300,6 +313,11 @@ impl HarnessCloud {
         id
     }
 
+    /// Drops every script no call reached yet, so the provider cooperates from here on
+    pub(crate) fn clear_scripts(&self) {
+        self.calls.lock().scripts.clear();
+    }
+
     /// Every call so far with the namespace it targeted
     pub(crate) fn calls(&self) -> Vec<(CallId<CloudCall>, Option<String>)> {
         self.calls.lock().log.clone()
@@ -314,10 +332,26 @@ impl HarnessCloud {
         self.calls.lock().in_flight
     }
 
+    /// The access policy the call with this identity asked for
+    pub(crate) fn policy_of(&self, id: CallId<CloudCall>) -> Option<CloudAccessPolicy> {
+        self.calls.lock().policies.get(&id).copied()
+    }
+
+    /// The user removes Cove's provider access, until a call that may ask for consent gets it
+    pub(crate) fn revoke_authorization(&self) {
+        self.calls.lock().authorization = ProviderAuthorization::Revoked;
+    }
+
+    /// How many times the provider asked the user for consent
+    pub(crate) fn consent_sheets(&self) -> usize {
+        self.calls.lock().consent_sheets
+    }
+
     async fn begin(
         &self,
         kind: CloudCall,
         namespace: Option<&str>,
+        policy: CloudAccessPolicy,
     ) -> Result<Option<CloudFault>, CloudStorageError> {
         let fault = {
             let mut calls = self.calls.lock();
@@ -325,6 +359,22 @@ impl HarnessCloud {
             *nth += 1;
             let id = CallId::new(kind, *nth);
             calls.log.push((id, namespace.map(str::to_string)));
+            calls.policies.insert(id, policy);
+
+            if calls.authorization == ProviderAuthorization::Revoked {
+                match policy {
+                    CloudAccessPolicy::Silent => {
+                        return Err(CloudStorageError::AuthorizationRequired(
+                            "the provider needs the user's consent".into(),
+                        ));
+                    }
+                    CloudAccessPolicy::ConsentAllowed => {
+                        calls.consent_sheets += 1;
+                        calls.authorization = ProviderAuthorization::Granted;
+                    }
+                }
+            }
+
             calls.scripts.remove(&id)
         };
 
@@ -410,7 +460,7 @@ impl CloudStorageAccess for HarnessCloud {
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::UploadMasterKey, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::UploadMasterKey, Some(&namespace), policy).await?;
         let result = self.inner.upload_master_key_backup(namespace, location, data, policy).await;
         self.finish(fault, result)
     }
@@ -423,7 +473,7 @@ impl CloudStorageAccess for HarnessCloud {
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::UploadWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::UploadWallet, Some(&namespace), policy).await?;
         let result =
             self.inner.upload_wallet_backup(namespace, record_id, location, data, policy).await;
         self.finish(fault, result)
@@ -435,7 +485,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let fault = self.begin(CloudCall::DownloadMasterKey, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DownloadMasterKey, Some(&namespace), policy).await?;
         let result = self.inner.download_master_key_backup(namespace, locations, policy).await;
         self.answer(fault, result)
     }
@@ -447,7 +497,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let fault = self.begin(CloudCall::DownloadWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DownloadWallet, Some(&namespace), policy).await?;
         let result =
             self.inner.download_wallet_backup(namespace, record_id, locations, policy).await;
         self.answer(fault, result)
@@ -460,7 +510,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::DeleteWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DeleteWallet, Some(&namespace), policy).await?;
         let result = self.inner.delete_wallet_backup(namespace, record_id, locations, policy).await;
         self.finish(fault, result)
     }
@@ -470,7 +520,7 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::DeleteNamespace, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DeleteNamespace, Some(&namespace), policy).await?;
         if let Some(CloudFault::PartialDeleteThenFail { removed, error }) = &fault {
             self.remove_records(&namespace, removed);
             return self.finish(None, Err(error.clone()));
@@ -484,7 +534,7 @@ impl CloudStorageAccess for HarnessCloud {
         &self,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListNamespaces, None).await?;
+        let fault = self.begin(CloudCall::ListNamespaces, None, policy).await?;
         let result = self.inner.list_namespaces(policy).await;
         self.answer(fault, result)
     }
@@ -494,7 +544,7 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListWalletFiles, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::ListWalletFiles, Some(&namespace), policy).await?;
         let result = match Self::listing_override(&fault) {
             Some(names) => Ok(names),
             None => self.inner.list_wallet_files(namespace, policy).await,
@@ -508,7 +558,8 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<CloudStorageInventorySnapshot, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListWalletFilesSnapshot, Some(&namespace)).await?;
+        let fault =
+            self.begin(CloudCall::ListWalletFilesSnapshot, Some(&namespace), policy).await?;
         let result = match Self::listing_override(&fault) {
             Some(names) => Ok(CloudStorageInventorySnapshot { names, is_complete: true }),
             None => self.inner.list_wallet_files_snapshot(namespace, policy).await,
@@ -524,16 +575,20 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
-        let fault = self.begin(CloudCall::IsBackupUploaded, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::IsBackupUploaded, Some(&namespace), policy).await?;
         let result = self.inner.is_backup_uploaded(namespace, record_id, locations, policy).await;
         self.answer(fault, result)
     }
 
     async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth {
-        match self.begin(CloudCall::SyncHealth, None).await {
+        match self.begin(CloudCall::SyncHealth, None, policy).await {
             Ok(fault) => {
                 let health = self.inner.overall_sync_health(policy).await;
                 self.answer(fault, Ok(health)).expect("sync health has no error path")
+            }
+
+            Err(CloudStorageError::AuthorizationRequired(message)) => {
+                CloudSyncHealth::AuthorizationRequired(message)
             }
 
             // a scripted failure has no error channel here, so report the provider unavailable

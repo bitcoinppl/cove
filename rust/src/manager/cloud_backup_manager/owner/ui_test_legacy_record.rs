@@ -15,7 +15,8 @@ use tracing::{error, info};
 
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    PersistedCloudBackupState, PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup,
+    PersistedCloudBackupState, PersistedConfiguredCloudBackup, PersistedDisableDisposition,
+    PersistedDisablingCloudBackup,
 };
 use crate::manager::cloud_backup_manager::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleCapability;
@@ -44,6 +45,8 @@ pub(crate) fn legacy_stuck_record(
         delete_started_at: None,
         last_error: None,
         retry_after: None,
+        disposition: PersistedDisableDisposition::DeleteRemote,
+        try_again_failed: false,
     })
 }
 

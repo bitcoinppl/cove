@@ -5,12 +5,37 @@ use crate::manager::cloud_backup_manager::admission::{
     evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
-use crate::manager::cloud_backup_manager::turn_off::FinishStart;
+use crate::manager::cloud_backup_manager::turn_off::{
+    AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, ReviewId,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupNoticeKind, CloudBackupStateReducer,
 };
 use tracing::debug;
+
+/// The start an accepted intent's admission produced
+///
+/// Turn Off's own intents allocate their operation as they are admitted, so what they start
+/// holds its operation and is consumed once to start it; every other intent starts its own work
+#[derive(Debug)]
+enum Admitted {
+    /// The work an intent starts by itself, or the work a review button names
+    Work(UserIntent),
+    /// Consent to the review on screen, which took the review and allocated the Turn Off
+    Confirmed(ConfirmedTurnOff),
+    /// A finishing run of the committed Turn Off, allocated on the idle finishing body
+    Finish(AdmittedFinish),
+}
+
+/// Why an accepted intent produced no start
+#[derive(Debug)]
+enum Refused {
+    /// The body no longer holds what admission accepted the intent on
+    Rejected(Rejection),
+    /// Stop Using on This Device couldn't save its choice, so nothing started
+    SaveFailed(CloudBackupError),
+}
 
 /// What the last dispatched intent got, for diagnostics and tests
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,9 +55,21 @@ impl CloudBackupSupervisor {
         #[cfg(test)]
         let record = self.begin_dispatch_record(&intent);
 
-        let started = match self.admit(&manager, &intent) {
-            Admission::Accepted => self.start_and_attribute(manager, intent).await,
-            Admission::Coalesced(_) | Admission::Rejected(_) => Produces::ok(()),
+        let started = match self.admit_start(&manager, &intent) {
+            // a review button starts the work it names in this turn, attributed to that work's
+            // own control, since the review it was drawn on ends with the start
+            Some(Admitted::Work(work)) => self.start_and_attribute(manager, work).await,
+            Some(Admitted::Confirmed(confirmed)) => {
+                self.attribute(confirmed.claim, &intent);
+                self.confirm_disable(&manager, confirmed);
+                Produces::ok(())
+            }
+            Some(Admitted::Finish(finish)) => {
+                self.attribute(finish.run.claim, &intent);
+                self.begin_finish(&manager, finish);
+                Produces::ok(())
+            }
+            None => Produces::ok(()),
         };
 
         #[cfg(test)]
@@ -52,6 +89,109 @@ impl CloudBackupSupervisor {
         intent: &UserIntent,
     ) -> Admission {
         let admission = self.decide(manager, intent);
+        self.record_admission(manager, intent, admission);
+        admission
+    }
+
+    /// Decides `intent`, and for an accepted one produces its start in the same step, then
+    /// records the outcome
+    ///
+    /// An accepted Turn Off intent changes the body as it is admitted, so a body that no longer
+    /// holds what admission read rejects it here, before anything starts
+    fn admit_start(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+    ) -> Option<Admitted> {
+        let decided = self.decide(manager, intent);
+        if decided != Admission::Accepted {
+            self.record_admission(manager, intent, decided);
+            return None;
+        }
+
+        match self.transition(intent) {
+            Ok(admitted) => {
+                self.record_admission(manager, intent, Admission::Accepted);
+                Some(admitted)
+            }
+            Err(Refused::Rejected(rejection)) => {
+                self.record_admission(manager, intent, Admission::Rejected(rejection));
+                None
+            }
+            Err(Refused::SaveFailed(error)) => {
+                self.record_admission(manager, intent, Admission::Accepted);
+                let action = CloudBackupScreenAction::StopUsingOnThisDevice;
+                if self.screen_outcome.action_failed(action, &error) {
+                    manager.request_screen_publish();
+                }
+                None
+            }
+        }
+    }
+
+    /// The start an accepted `intent` produces on the current body
+    fn transition(&mut self, intent: &UserIntent) -> Result<Admitted, Refused> {
+        use UserIntent as I;
+
+        match intent {
+            I::ConfirmDisable { review_id } => self
+                .runtime
+                .admit_confirm(ReviewId::from(*review_id))
+                .map(Admitted::Confirmed)
+                .map_err(Refused::Rejected),
+            I::LeaveReview { review_id, to } => self
+                .runtime
+                .leave_review(ReviewId::from(*review_id), *to)
+                .map(Admitted::Work)
+                .map_err(Refused::Rejected),
+            I::ResumeDisable => self.start_finish(),
+            // Reconnect on the committed Turn Off resumes it with the user's consent
+            I::ReconnectDrive if matches!(*self.runtime, Runtime::FinishingDisable { .. }) => {
+                self.start_finish()
+            }
+            // the choice is saved before the run starts, so no resume after a failure or a kill
+            // can turn this finish back into a remote delete
+            I::StopUsingOnThisDevice => {
+                self.choose_local_only()?;
+                self.start_finish()
+            }
+            intent => Ok(Admitted::Work(intent.clone())),
+        }
+    }
+
+    /// A finishing run the user tapped for, so the provider may ask for consent on the way
+    fn start_finish(&mut self) -> Result<Admitted, Refused> {
+        self.runtime
+            .start_finish(DeleteAuthority::TryAgain)
+            .map(Admitted::Finish)
+            .map_err(Refused::Rejected)
+    }
+
+    /// Saves Stop Using on This Device in the committed record, as its local-only disposition
+    fn choose_local_only(&mut self) -> Result<(), Refused> {
+        let Runtime::FinishingDisable { committed, .. } = &*self.runtime else {
+            return Err(Refused::Rejected(Rejection::NothingToContinue));
+        };
+
+        let committed = committed.clone();
+        match self.runtime.commit(|lifecycle| lifecycle.choose_local_only(&committed)) {
+            Ok(true) => Ok(()),
+            // the record moved on to another attempt or out of Disabling
+            Ok(false) => Err(Refused::Rejected(Rejection::NothingToContinue)),
+            Err(error) => Err(Refused::SaveFailed(CloudBackupError::internal_context(
+                "save Stop Using on This Device",
+                error,
+            ))),
+        }
+    }
+
+    /// Records what `intent` got, and shows a rejection next to the control that sent it
+    fn record_admission(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+        admission: Admission,
+    ) {
         match admission {
             Admission::Accepted => {}
             Admission::Coalesced(into) => {
@@ -72,8 +212,6 @@ impl CloudBackupSupervisor {
         {
             self.invariant_log.admissions += 1;
         }
-
-        admission
     }
 
     /// What dispatch decides for `intent` now, on the body rebased onto the committed record
@@ -146,10 +284,15 @@ impl CloudBackupSupervisor {
         if let Some(claim) = self.runtime.claim()
             && Some(claim) != before
         {
-            self.screen_outcome.started(claim, &intent);
+            self.attribute(claim, &intent);
         }
 
         started
+    }
+
+    /// Remembers that `intent`'s control started the operation `claim`
+    fn attribute(&mut self, claim: CloudBackupExclusiveOperationClaim, intent: &UserIntent) {
+        self.screen_outcome.started(claim, intent);
     }
 
     /// Admits an intent that answers its caller, as a typed error on anything but `Accepted`
@@ -249,10 +392,7 @@ impl CloudBackupSupervisor {
             I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),
             I::DeleteOtherBackups => self.begin_delete_other_backups_operation(),
             I::TurnOff => self.begin_turn_off_review(manager),
-            I::ConfirmDisable { review_id } => self.confirm_disable(&manager, review_id),
             I::CancelDisable => self.cancel_disable(&manager),
-            I::ResumeDisable => self.begin_finish(&manager, FinishStart::TryAgain),
-            I::StopUsingOnThisDevice => self.begin_finish(&manager, FinishStart::LocalOnly),
             I::DismissNotice(CloudBackupNoticeKind::Heal) => {
                 self.runtime.commit(|lifecycle| manager.dismiss_heal_notice(lifecycle));
             }
@@ -261,8 +401,8 @@ impl CloudBackupSupervisor {
                     manager.request_screen_publish();
                 }
             }
-            // Google Drive authorization runs through the detail verification, as it did before
-            // it had its own intent
+            // on a configured backup, Google Drive authorization runs through the detail
+            // verification, as it did before it had its own intent
             I::ReconnectDrive => {
                 self.start_user_verification(
                     manager,
@@ -302,6 +442,13 @@ impl CloudBackupSupervisor {
             | I::RetryDriveAccountSwitchRecovery
             | I::LocalReset => {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
+            }
+            // their admission allocated what they start, and dispatch starts it in their place
+            I::LeaveReview { .. }
+            | I::ConfirmDisable { .. }
+            | I::ResumeDisable
+            | I::StopUsingOnThisDevice => {
+                warn!("Cloud Backup {intent:?} reached a start without its admission");
             }
             I::RetryLoad => self.retry_load(&manager),
             // the reset fences the supervisor through calls to it, so it runs off this handler

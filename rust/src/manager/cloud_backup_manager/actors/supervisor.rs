@@ -1750,6 +1750,9 @@ pub(crate) mod test_support {
         pub(crate) fresh: CloudBackupScreen,
         /// Every screen delta sent since the last view, oldest first
         pub(crate) sent: Vec<CloudBackupScreenDelta>,
+        /// The inventory rows the screen was drawn from, with the coverage the screen leaves out
+        pub(crate) inventory:
+            Option<crate::manager::cloud_backup_manager::inventory::InventoryRows>,
     }
 
     impl CloudBackupSupervisor {
@@ -1858,6 +1861,7 @@ pub(crate) mod test_support {
                 revision,
                 fresh: self.projected_screen(manager),
                 sent,
+                inventory: manager.inventory_facts().view().rows,
             }
         }
 
