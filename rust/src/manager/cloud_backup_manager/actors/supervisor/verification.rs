@@ -138,11 +138,13 @@ impl CloudBackupSupervisor {
     }
 
     fn schedule_verification(
-        &self,
+        &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: Option<CloudBackupExclusiveOperationClaim>,
         continuation: DeepVerificationContinuation,
     ) {
+        // every run reads the wallets afresh, a connectivity retry included
+        self.verification_basis = self.wallet_set;
         let force_discoverable = continuation.force_discoverable();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
@@ -223,6 +225,7 @@ impl CloudBackupSupervisor {
                 None,
                 None,
             ));
+            manager.persist_verification_result(&self.lifecycle, &result);
             manager.handle_deep_verification_result(result);
             return None;
         };
@@ -477,7 +480,8 @@ impl CloudBackupSupervisor {
 
         let (result, pending_completion) = completion.into_parts();
         if let Some(pending_completion) = pending_completion
-            && let Err(error) = manager.replace_pending_verification_completion(pending_completion)
+            && let Err(error) =
+                manager.replace_pending_verification_completion(&self.lifecycle, pending_completion)
         {
             self.finish_deep_verification_continuation_with_error(
                 manager,
@@ -531,12 +535,12 @@ impl CloudBackupSupervisor {
         }
 
         if verification_needs_connectivity_retry(&manager, continuation.attempt(), &result) {
-            manager.persist_verification_result(&result);
+            self.record_verification_evidence(&manager, &result);
             self.schedule_verification(manager, claim, continuation.connectivity_retry());
             return;
         }
 
-        manager.persist_verification_result(&result);
+        self.record_verification_evidence(&manager, &result);
         manager.handle_deep_verification_result(result);
 
         if should_refresh_open_detail {
@@ -728,7 +732,8 @@ impl CloudBackupSupervisor {
                 }
 
                 self.detail_workflow.set_authorization(authorization);
-                if let Err(error) = manager.finish_passkey_wrapper_repair(uploaded) {
+                if let Err(error) = manager.finish_passkey_wrapper_repair(&self.lifecycle, uploaded)
+                {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
                         error: error.logged_reader_message("Repair passkey failed"),
@@ -764,9 +769,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result
-            .and_then(|finalization| manager.apply_passkey_repair_finalization(finalization))
-        {
+        match result.and_then(|finalization| {
+            manager.apply_passkey_repair_finalization(&self.lifecycle, finalization)
+        }) {
             Ok(()) => {
                 let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {

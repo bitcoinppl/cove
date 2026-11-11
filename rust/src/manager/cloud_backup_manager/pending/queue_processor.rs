@@ -4,6 +4,7 @@
 //! expected revision is visible remotely. Authorization failures pause this
 //! verifier without rewriting the persisted blob state
 
+use act_zero::call;
 use cove_cspp::backup_data::EncryptedWalletBackup;
 use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -132,8 +133,18 @@ impl PendingUploadVerifier {
             self.schedule_retry_if_needed(&next_state);
         }
 
-        if !blocked_on_authorization {
-            self.0.finalize_pending_verification_if_ready().await;
+        if !blocked_on_authorization
+            && let Some(settlement) = self.0.ready_pending_verification_settlement().await
+        {
+            // a worker may wait on the lifecycle owner, and waiting here means the pending state
+            // read below already reflects the settle
+            if let Err(error) =
+                call!(self.0.supervisor.settle_pending_verification(settlement)).await
+            {
+                warn!(
+                    "Pending upload verification: lifecycle owner stopped before settling: {error}"
+                );
+            }
         }
 
         let has_pending = self.0.has_pending_cloud_upload_verification();

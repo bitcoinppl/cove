@@ -291,7 +291,12 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
         last_error: None,
         retry_after: None,
     };
-    let restored = manager.restore_configured_cloud_backup_after_disable(&stale).unwrap();
+    let restored = manager
+        .restore_configured_cloud_backup_after_disable(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            &stale,
+        )
+        .unwrap();
 
     assert!(!restored);
     let disabling = persisted_disabling();

@@ -33,6 +33,7 @@ use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::verify::{
@@ -46,11 +47,10 @@ use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, UnpersistedPrfKey, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
-    CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
-    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome,
-    CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
+    BlockingCloudStep, CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
+    CloudBackupCloudOnlyOperationWarning, CloudBackupCloudOnlyWalletOutcome,
+    CloudBackupDetailInventorySnapshot, CloudBackupDetailInventorySnapshotResult,
+    CloudBackupDetailOutcome, CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
     CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupDisablePreparation,
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext,
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
@@ -84,6 +84,7 @@ mod detail_workflow;
 mod disable;
 mod dispatch;
 mod enable;
+mod lifecycle_results;
 mod other_backups;
 mod restore_all;
 mod undecryptable_wallets;
@@ -354,11 +355,37 @@ impl PartialEq<Option<CloudBackupExclusiveOperationClaim>> for ActiveOperation {
     }
 }
 
-/// Actor that owns Cloud Backup operation exclusivity and async completions
+/// Which local wallet set a verification checked
+///
+/// Process-local, like `OperationId`: verification evidence is only valid for the wallet set it
+/// read, and a wallet change that lands while a verification runs makes that evidence stale
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct WalletSetGeneration(u64);
+
+impl WalletSetGeneration {
+    fn next(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
+/// Actor that owns Cloud Backup operation exclusivity, async completions and the durable
+/// lifecycle record
+///
+/// The supervisor is the lifecycle owner: it holds the only [`LifecycleWriter`], so every
+/// durable lifecycle write runs in one of its handlers. Producers off the actor (verification,
+/// the write lane, pending upload confirmation, platform calls) send it a typed message with
+/// their result and claim, and the supervisor applies the write and reconciles
+///
+/// Waiting calls go one way only. The write supervisor and other workers may `call!` the
+/// supervisor and wait for the write's outcome, but the supervisor never waits on the write
+/// supervisor: it `send!`s and handles the reply as a later completion message, matched with
+/// `ActiveOperation::accepts_completion`. A wait in both directions would deadlock, because
+/// each actor runs one handler at a time
 #[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
+    lifecycle: LifecycleWriter,
     cleanup: Addr<CloudBackupCleanupWorker>,
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
@@ -371,6 +398,10 @@ pub(crate) struct CloudBackupSupervisor {
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
     pending_disable_write_drain: Option<PendingDisableWriteDrain>,
+    /// Counts local wallet-set changes this process has seen
+    wallet_set: WalletSetGeneration,
+    /// The wallet set the running verification read when it started
+    verification_basis: WalletSetGeneration,
     last_outcome: Option<DispatchOutcome>,
 }
 
@@ -385,6 +416,7 @@ impl Actor for CloudBackupSupervisor {
 impl CloudBackupSupervisor {
     fn commit_restored_namespace(
         manager: &RustCloudBackupManager,
+        lifecycle: &LifecycleWriter,
         commit: RestoredNamespaceCommit,
     ) -> Result<(), CloudBackupError> {
         let RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids } =
@@ -410,8 +442,7 @@ impl CloudBackupSupervisor {
         restore::save_restore_keychain_entries(&snapshot, master_key, passkey, namespace_id)?;
 
         // keychain, configured state, and dirty-wallet rows are one restore commit
-        if let Err(source) = manager.lifecycle().activate_restored_namespace(&state, &dirty_states)
-        {
+        if let Err(source) = lifecycle.activate_restored_namespace(&state, &dirty_states) {
             let original =
                 CloudBackupError::internal_context("persist restored namespace activation", source);
 
@@ -427,9 +458,11 @@ impl CloudBackupSupervisor {
     pub(crate) fn new(
         manager: Weak<RustCloudBackupManager>,
         cloud_writes: Addr<CloudBackupWriteSupervisor>,
+        lifecycle: LifecycleWriter,
     ) -> Self {
         Self {
             addr: WeakAddr::default(),
+            lifecycle,
             cleanup: spawn_actor(CloudBackupCleanupWorker::new(manager.clone())),
             sync_health: spawn_actor(CloudBackupSyncHealthWorker::new(manager.clone())),
             uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
@@ -443,6 +476,8 @@ impl CloudBackupSupervisor {
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
             pending_disable_write_drain: None,
+            wallet_set: WalletSetGeneration::default(),
+            verification_basis: WalletSetGeneration::default(),
             last_outcome: None,
         }
     }
@@ -708,7 +743,7 @@ impl CloudBackupSupervisor {
 
         let result = manager.reconcile_committed(
             "persist empty restored cloud backup state",
-            manager.lifecycle().record_restore_without_backup(),
+            self.lifecycle.record_restore_without_backup(),
         );
 
         Produces::ok(result)
@@ -726,7 +761,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        Produces::ok(Self::commit_restored_namespace(&manager, commit))
+        Produces::ok(Self::commit_restored_namespace(&manager, &self.lifecycle, commit))
     }
 
     pub async fn start_enable_operation(
@@ -1307,11 +1342,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn clear_pending_verification_completion(&mut self) -> ActorResult<()> {
-        self.detail_workflow.clear_pending_completion();
-        Produces::ok(())
-    }
-
     pub async fn schedule_wallet_upload(
         &mut self,
         wallet_id: WalletId,
@@ -1333,14 +1363,6 @@ impl CloudBackupSupervisor {
 
     pub async fn wake_pending_upload_verifier(&mut self) -> ActorResult<()> {
         call!(self.uploads.wake_pending_upload_verifier()).await?;
-        Produces::ok(())
-    }
-
-    pub async fn unblock_cloud_backup_writes(
-        &mut self,
-        blocker: CloudBackupWriteBlocker,
-    ) -> ActorResult<()> {
-        call!(self.write.unblock(blocker)).await?;
         Produces::ok(())
     }
 

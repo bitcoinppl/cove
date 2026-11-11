@@ -5,6 +5,8 @@ mod pending_completion;
 mod session;
 mod wrapper_repair;
 
+use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
+use act_zero::send;
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
@@ -15,6 +17,7 @@ use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
+pub(crate) use self::pending_completion::PendingVerificationSettlement;
 use self::session::VerificationSession;
 pub(crate) use self::session::{
     CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationAutoSyncUpload,
@@ -205,11 +208,15 @@ impl RustCloudBackupManager {
         resume.resume(uploaded).await
     }
 
-    pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
+    pub(crate) fn persist_verification_result(
+        &self,
+        lifecycle: &LifecycleWriter,
+        result: &DeepVerificationResult,
+    ) {
         let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
         let persisted = self.reconcile_committed(
             "persist verification state",
-            self.lifecycle().record_verification(result, verified_at),
+            lifecycle.record_verification(result, verified_at),
         );
 
         if let Err(error) = persisted {
@@ -219,13 +226,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn mark_verification_required_after_wallet_change(&self) {
         let requested_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let persisted = self.reconcile_committed(
-            "mark cloud backup unverified after wallet change",
-            self.lifecycle().require_verification_after_wallet_change(requested_at),
-        );
-        if let Err(error) = persisted {
-            error!("Failed to mark cloud backup unverified after wallet change: {error}");
-        }
+        send!(self.supervisor.require_verification_after_wallet_change(requested_at));
     }
 
     pub(crate) async fn prepare_passkey_wrapper_repair(
@@ -295,20 +296,24 @@ impl RustCloudBackupManager {
 
     pub(crate) fn finish_passkey_wrapper_repair(
         &self,
+        lifecycle: &LifecycleWriter,
         uploaded: CloudBackupUploadedPasskeyWrapperRepair,
     ) -> Result<(), CloudBackupError> {
-        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: true,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            uploaded.namespace_id,
-            vec![PendingVerificationUpload::master_key_wrapper()],
-        ))?;
+        self.replace_pending_verification_completion(
+            lifecycle,
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: true,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                uploaded.namespace_id,
+                vec![PendingVerificationUpload::master_key_wrapper()],
+            ),
+        )?;
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())
@@ -338,9 +343,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_passkey_repair_finalization(
         &self,
+        lifecycle: &LifecycleWriter,
         finalization: CloudBackupPasskeyRepairFinalization,
     ) -> Result<(), CloudBackupError> {
-        self.lifecycle().persist_enabled(finalization.wallet_count)?;
+        lifecycle.persist_enabled(finalization.wallet_count)?;
         self.reconcile_runtime_status(CloudBackupStatus::Enabled);
         Ok(())
     }

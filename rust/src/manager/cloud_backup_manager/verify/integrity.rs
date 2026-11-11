@@ -1,3 +1,4 @@
+use act_zero::send;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
@@ -242,14 +243,7 @@ impl RustCloudBackupManager {
         };
 
         info!("Cloud backup integrity: applying downgrade={downgrade:?}");
-
-        let persisted = self.reconcile_committed(
-            "persist backup integrity state",
-            self.lifecycle().apply_integrity_downgrade(downgrade),
-        );
-        if let Err(error) = persisted {
-            error!("Failed to persist backup integrity state: {error}");
-        };
+        send!(self.supervisor.apply_integrity_downgrade(downgrade));
     }
 }
 

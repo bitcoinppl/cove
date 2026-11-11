@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::sync::Weak;
 
-use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
+use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, call, send};
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_tokio::task::spawn_actor;
 use tokio::sync::oneshot;
@@ -257,14 +257,33 @@ impl CloudBackupWriteSupervisor {
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<oneshot::Receiver<()>> {
         let (sender, receiver) = oneshot::channel();
-
-        if self.begin_block_until_drained(blocker) {
-            self.drain_receivers.push(sender);
-        } else {
-            let _ = sender.send(());
-        }
-
+        self.notify_when_drained(blocker, sender);
         Produces::ok(receiver)
+    }
+
+    /// Blocks writes for `blocker` and signals `drained` once the in-flight write finishes
+    ///
+    /// The supervisor uses this instead of [`Self::block_until_drained_receiver`] because it
+    /// never waits on this actor; a dropped `drained` tells it the write lane stopped
+    pub(crate) async fn block_until_drained_notify(
+        &mut self,
+        blocker: CloudBackupWriteBlocker,
+        drained: oneshot::Sender<()>,
+    ) -> ActorResult<()> {
+        self.notify_when_drained(blocker, drained);
+        Produces::ok(())
+    }
+
+    fn notify_when_drained(
+        &mut self,
+        blocker: CloudBackupWriteBlocker,
+        drained: oneshot::Sender<()>,
+    ) {
+        if self.begin_block_until_drained(blocker) {
+            self.drain_receivers.push(drained);
+        } else {
+            let _ = drained.send(());
+        }
     }
 
     pub(crate) async fn block_until_drained(
@@ -534,14 +553,7 @@ impl CloudBackupWriteSupervisor {
                 manager.remove_blob_sync_states(std::iter::once(record_id.clone()))?;
 
                 let wallet_count = wallet_record_ids.len() as u32;
-                if let Err(error) = manager.reconcile_committed(
-                    "persist cloud backup state after deleting cloud wallet",
-                    manager.lifecycle().record_wallet_count(wallet_count),
-                ) {
-                    warn!(
-                        "Failed to persist cloud backup state after deleting cloud wallet: {error}"
-                    );
-                }
+                send!(manager.supervisor.record_cloud_wallet_count(wallet_count));
 
                 Ok(())
             }
@@ -555,21 +567,14 @@ impl CloudBackupWriteSupervisor {
                 },
                 CloudBackupRemoteWriteResult::WalletCount(wallet_count),
             ) => {
-                match state_mode {
-                    CloudBackupUploadedWalletsStateMode::PreserveVerification => {
-                        manager.lifecycle().persist_enabled(wallet_count)?;
-                    }
-                    CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
-                        completion,
-                    ) => {
-                        manager
-                            .lifecycle()
-                            .persist_enabled_reset_verification_with_pending_completion(
-                                wallet_count,
-                                completion.clone(),
-                            )?;
-                    }
-                }
+                // waits on the lifecycle owner; the supervisor never waits on this actor
+                call!(manager.supervisor.record_uploaded_wallets(
+                    active.context.origin(),
+                    wallet_count,
+                    state_mode.clone()
+                ))
+                .await
+                .map_err(CloudBackupError::internal)??;
 
                 self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
             }
@@ -584,7 +589,13 @@ impl CloudBackupWriteSupervisor {
                 CloudBackupRemoteWriteResult::ListedWalletCount(listed_wallet_count),
             ) => {
                 let wallet_count = count_refresh.wallet_count(listed_wallet_count);
-                manager.lifecycle().persist_enabled(wallet_count)?;
+                call!(manager.supervisor.record_uploaded_wallets(
+                    active.context.origin(),
+                    wallet_count,
+                    CloudBackupUploadedWalletsStateMode::PreserveVerification
+                ))
+                .await
+                .map_err(CloudBackupError::internal)??;
                 self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
             }
 

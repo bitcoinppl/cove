@@ -1,6 +1,8 @@
 use super::*;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{CommitDisable, CommittedDisable};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommitDisable, CommittedDisable, LifecycleWriter,
+};
 
 /// Shown when the namespace changed between the blocker check and the commit
 const CLOUD_BACKUP_DISABLE_STALE_REVIEW_MESSAGE: &str =
@@ -49,18 +51,12 @@ impl CloudBackupSupervisor {
 
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: attempt.attempt_id() };
 
-        // wait for the active write lane to drain before deleting the namespace so an upload
-        // that already started cannot recreate remote data after disable deletes it
-        if let Err(error) =
-            call!(self.write.block_until_drained(blocker, self.addr.clone(), claim)).await
-        {
-            warn!("Failed to install cloud backup disable fence: {error}");
-            self.fail_disable_operation(&manager, claim, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE.into());
-            return Produces::ok(());
-        }
-
+        // the active write lane drains before the namespace delete so an upload that already
+        // started cannot recreate remote data after disable deletes it; the supervisor never
+        // waits on the write supervisor, which replies with `complete_disable_write_drain`
         self.pending_disable_write_drain =
             Some(PendingDisableWriteDrain { claim, blocker, attempt });
+        send!(self.write.block_until_drained(blocker, self.addr.clone(), claim));
 
         Produces::ok(())
     }
@@ -181,7 +177,7 @@ impl CloudBackupSupervisor {
         }
 
         // the commit point: from here on the disable only goes forward
-        match manager.commit_disable_attempt(&review, attempt_id) {
+        match manager.commit_disable_attempt(&self.lifecycle, &review, attempt_id) {
             Ok(CommitDisable::Committed(committed)) => {
                 self.schedule_disable_namespace_delete(claim, committed);
             }
@@ -210,9 +206,7 @@ impl CloudBackupSupervisor {
     ) {
         if matches!(attempt, DisableAttempt::Uncommitted { .. }) {
             let blocker = CloudBackupWriteBlocker::Disabling { operation_id: attempt.attempt_id() };
-            if let Err(error) = self.unblock_cloud_backup_writes(blocker).await {
-                warn!("Failed to lift cloud backup disable fence: {error}");
-            }
+            send!(self.write.unblock(blocker));
         }
 
         self.finish_disable_operation(manager, claim);
@@ -318,7 +312,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if let Err(error) = manager.persist_disabled_after_remote_delete(&disabling) {
+        if let Err(error) =
+            manager.persist_disabled_after_remote_delete(&self.lifecycle, &disabling)
+        {
             self.fail_disable_after_namespace_delete_started(
                 &manager,
                 claim,
@@ -329,9 +325,7 @@ impl CloudBackupSupervisor {
         }
 
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: disabling.attempt_id };
-        if let Err(error) = call!(self.write.unblock(blocker)).await {
-            warn!("Failed to lift cloud backup disable fence: {error}");
-        }
+        send!(self.write.unblock(blocker));
 
         if !self.active_operation.accepts_completion(claim, "Keep Enabled") {
             return Produces::ok(());
@@ -349,12 +343,13 @@ impl CloudBackupSupervisor {
         disabling: CommittedDisable,
         message: String,
     ) {
-        let message = match manager.persist_disabling_failure(&disabling, message.clone()) {
-            Ok(()) => message,
-            Err(error) => {
-                error.logged_reader_message("Failed to persist cloud backup disable failure")
-            }
-        };
+        let message =
+            match manager.persist_disabling_failure(&self.lifecycle, &disabling, message.clone()) {
+                Ok(()) => message,
+                Err(error) => {
+                    error.logged_reader_message("Failed to persist cloud backup disable failure")
+                }
+            };
         self.fail_disable_operation(manager, claim, message);
     }
 
@@ -407,9 +402,11 @@ impl CloudBackupSupervisor {
             }
             Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled) => {}
             Ok(CloudBackupKeepEnabledPreparation::Ready(disabling)) => {
-                let Some(restored) =
-                    Self::restore_configured_cloud_backup_after_disable(&manager, &disabling)
-                else {
+                let Some(restored) = Self::restore_configured_cloud_backup_after_disable(
+                    &manager,
+                    &self.lifecycle,
+                    &disabling,
+                ) else {
                     return Produces::ok(());
                 };
 
@@ -417,14 +414,9 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                if let Err(error) = self
-                    .unblock_cloud_backup_writes(CloudBackupWriteBlocker::Disabling {
-                        operation_id: disabling.attempt_id,
-                    })
-                    .await
-                {
-                    warn!("Failed to lift cloud backup disable fence: {error}");
-                }
+                send!(self.write.unblock(CloudBackupWriteBlocker::Disabling {
+                    operation_id: disabling.attempt_id,
+                }));
 
                 manager.finish_keep_cloud_backup_enabled();
                 if let Err(error) =
@@ -468,9 +460,10 @@ impl CloudBackupSupervisor {
 
     fn restore_configured_cloud_backup_after_disable(
         manager: &RustCloudBackupManager,
+        lifecycle: &LifecycleWriter,
         disabling: &CommittedDisable,
     ) -> Option<bool> {
-        match manager.restore_configured_cloud_backup_after_disable(disabling) {
+        match manager.restore_configured_cloud_backup_after_disable(lifecycle, disabling) {
             Ok(restored) => Some(restored),
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {

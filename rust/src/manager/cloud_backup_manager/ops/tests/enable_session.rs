@@ -500,7 +500,7 @@ async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespac
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    discard_pending_enable_and_wait_for_remote_delete(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(!globals.cloud.has_namespace(&fixture.namespace));
@@ -526,7 +526,7 @@ async fn discard_pending_enable_fresh_owned_treats_missing_namespace_as_deleted(
     globals.cloud.fail_delete_namespace_not_found("already deleted");
     install_pending_enable_discard_session(&manager, &fixture).await;
 
-    manager.discard_pending_enable_cloud_backup();
+    discard_pending_enable_and_wait_for_remote_delete(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 1);
@@ -651,7 +651,7 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    discard_pending_enable_and_wait_for_remote_delete(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(!globals.cloud.has_namespace(&fixture.namespace));

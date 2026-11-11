@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use act_zero::send;
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -227,8 +228,12 @@ impl RustCloudBackupManager {
         )
     }
 
-    pub(crate) fn start_verification(&self, source: CloudBackupVerificationSource) {
-        if let Err(error) = self.dismiss_verification_prompt_impl() {
+    pub(crate) fn start_verification(
+        &self,
+        lifecycle: &LifecycleWriter,
+        source: CloudBackupVerificationSource,
+    ) {
+        if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
 
@@ -246,8 +251,12 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_verification(false));
     }
 
-    pub(crate) fn start_verification_discoverable(&self, source: CloudBackupVerificationSource) {
-        if let Err(error) = self.dismiss_verification_prompt_impl() {
+    pub(crate) fn start_verification_discoverable(
+        &self,
+        lifecycle: &LifecycleWriter,
+        source: CloudBackupVerificationSource,
+    ) {
+        if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
         self.apply_verification_effect(
@@ -256,8 +265,8 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_verification(true));
     }
 
-    pub(crate) fn dismiss_verification_prompt(&self) {
-        if let Err(error) = self.dismiss_verification_prompt_impl() {
+    pub(crate) fn dismiss_verification_prompt(&self, lifecycle: &LifecycleWriter) {
+        if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
             error!("Failed to dismiss verification prompt: {error}");
         }
         self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision(

@@ -28,6 +28,19 @@ typed completions back through the manager. Exclusive operations carry a
 `CloudBackupExclusiveOperationClaim` so every async completion can prove it
 still belongs to the active operation.
 
+The supervisor is also the only writer of the durable lifecycle record: it holds
+the one `LifecycleWriter`, which bootstrap moves into it. Work that runs off the
+actor, such as the write lane, upload confirmation, wallet changes and the
+integrity check, sends the supervisor a typed result message, and the supervisor
+applies the write and reconciles. Verification evidence is tied to the wallet set
+it read, so a wallet change that lands while a verification runs makes that
+verification's result stale instead of overwriting the reset.
+
+Waits go one way only. The write supervisor and other workers may `call!` the
+supervisor, but the supervisor never waits on the write supervisor: it sends a
+message and handles the reply as a later completion, so the two actors can't
+deadlock waiting on each other.
+
 A finished reinitialize, including one at the end of a Google Drive account
 switch, hands its slot straight to a verification of the new backup under a new
 claim. That verification reports the backup as enabled, so it reads the cloud,
@@ -173,7 +186,8 @@ write starts and again before local completion is applied. Background writes use
 `CloudBackupWriteWorker` is intentionally small. It executes the remote storage
 command and reports the result back to the write supervisor. The supervisor then
 applies any local completion, such as marking uploaded blobs pending
-confirmation or persisting the enabled state after final upload.
+confirmation. It asks the supervisor to persist the enabled state after a final
+upload and waits for that answer before it marks the wallets uploaded.
 
 Disable uses `block_until_drained` before deleting the namespace. That prevents
 an already-started upload from recreating remote data after disable removes the

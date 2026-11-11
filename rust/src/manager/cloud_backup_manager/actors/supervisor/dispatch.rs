@@ -149,12 +149,12 @@ impl CloudBackupSupervisor {
                 self.cancel_restore().await?;
             }
             I::StartVerification { source, discoverable: false } => {
-                manager.start_verification(source);
+                manager.start_verification(&self.lifecycle, source);
             }
             I::StartVerification { source, discoverable: true } => {
-                manager.start_verification_discoverable(source);
+                manager.start_verification_discoverable(&self.lifecycle, source);
             }
-            I::DismissVerificationPrompt => manager.dismiss_verification_prompt(),
+            I::DismissVerificationPrompt => manager.dismiss_verification_prompt(&self.lifecycle),
             I::RecreateManifest => {
                 self.start_recovery_operation(RecoveryAction::RecreateManifest).await?;
             }

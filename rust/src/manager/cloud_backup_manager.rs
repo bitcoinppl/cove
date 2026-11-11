@@ -81,11 +81,10 @@ pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
 pub type CloudBackupState = self::dto::CloudBackupState;
 pub use self::error::CloudBackupDriveAccountSwitchError;
 pub(crate) use self::error::{
-    BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE,
-    CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CLOUD_BACKUP_RECREATE_MESSAGE,
-    CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupError, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    blocking_cloud_error, is_connectivity_related_issue, is_provider_wide_interruption,
-    offline_error_for_step,
+    BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
+    CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupError,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, blocking_cloud_error, is_connectivity_related_issue,
+    is_provider_wide_interruption, offline_error_for_step,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 #[cfg(test)]
@@ -304,9 +303,6 @@ pub struct RustCloudBackupManager {
     /// Whether the last pending verification read of blob sync states failed, so a lasting
     /// database error logs once per change instead of on every queue pass
     pending_sync_states_unreadable: Arc<AtomicBool>,
-    /// The only writer of the durable lifecycle record, created by the bootstrap phase; a
-    /// clone of the manager shares this one writer
-    lifecycle: Arc<LifecycleWriter>,
 }
 
 static NEXT_LOCAL_RESET_ID: AtomicU64 = AtomicU64::new(0);
@@ -671,10 +667,14 @@ impl RustCloudBackupManager {
                 reconciler: ReconcileChannel::new(1000),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
-                supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),
+                // the bootstrap phase hands its writer to the supervisor, the lifecycle owner
+                supervisor: spawn_actor(CloudBackupSupervisor::new(
+                    manager.clone(),
+                    cloud_writes,
+                    lifecycle,
+                )),
                 local_reset_in_progress: Arc::new(AtomicBool::new(false)),
                 pending_sync_states_unreadable: Arc::new(AtomicBool::new(false)),
-                lifecycle: Arc::new(lifecycle),
             }
         });
 
@@ -913,11 +913,6 @@ impl RustCloudBackupManager {
         })
     }
 
-    /// The lifecycle owner's writer; producers call its typed methods with their results
-    pub(crate) fn lifecycle(&self) -> &LifecycleWriter {
-        &self.lifecycle
-    }
-
     /// Projects a committed lifecycle write into runtime status and flags
     pub(crate) fn reconcile_committed<T>(
         &self,
@@ -930,11 +925,14 @@ impl RustCloudBackupManager {
         Ok(committed.outcome)
     }
 
-    pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
+    pub(crate) fn dismiss_verification_prompt_impl(
+        &self,
+        lifecycle: &LifecycleWriter,
+    ) -> Result<(), CloudBackupError> {
         let dismissed_at = cove_util::time::unix_timestamp_secs_or_zero();
         self.reconcile_committed(
             "persist cloud backup prompt dismissal",
-            self.lifecycle.dismiss_verification_request(dismissed_at),
+            lifecycle.dismiss_verification_request(dismissed_at),
         )?;
 
         Ok(())
@@ -954,9 +952,11 @@ impl RustCloudBackupManager {
 
     pub(crate) fn replace_pending_verification_completion(
         &self,
+        lifecycle: &LifecycleWriter,
         completion: PendingVerificationCompletion,
     ) -> Result<(), CloudBackupError> {
         self.replace_pending_verification_completion_for_source(
+            lifecycle,
             completion,
             self.current_verification_source(),
         )
@@ -964,12 +964,13 @@ impl RustCloudBackupManager {
 
     pub(crate) fn replace_pending_verification_completion_for_source(
         &self,
+        lifecycle: &LifecycleWriter,
         completion: PendingVerificationCompletion,
         source: CloudBackupVerificationSource,
     ) -> Result<(), CloudBackupError> {
         let replaced = self.reconcile_committed(
             "persist pending verification completion",
-            self.lifecycle.replace_pending_verification_completion(completion.clone()),
+            lifecycle.replace_pending_verification_completion(completion.clone()),
         )?;
         if !replaced {
             return Err(CloudBackupError::Internal(
@@ -1007,26 +1008,10 @@ impl RustCloudBackupManager {
         Self::load_persisted_state().pending_verification_completion().cloned()
     }
 
+    /// A manual verification is starting, so the lifecycle owner drops any pending upload
+    /// confirmation
     pub(crate) fn clear_pending_verification_completion(&self) {
-        let cleared = self.reconcile_committed(
-            "clear pending verification completion",
-            self.lifecycle.discard_pending_verification_completion(),
-        );
-        let cleared = match cleared {
-            Ok(cleared) => cleared,
-            Err(error) => {
-                error!("Failed to clear pending verification completion: {error}");
-                return;
-            }
-        };
-
-        if !cleared {
-            send!(self.supervisor.clear_pending_verification_completion());
-            return;
-        }
-
-        send!(self.supervisor.clear_pending_verification_completion());
-        self.refresh_pending_upload_verification_state();
+        send!(self.supervisor.discard_pending_verification_completion());
     }
 
     pub(crate) fn project_exclusive_operation_failed(
@@ -1123,13 +1108,10 @@ impl RustCloudBackupManager {
         match current.wallet_count() {
             Some(count) => Some(count),
             None if current.is_configured() => match CloudBackupStore::new(&db).wallet_count() {
+                // the lifecycle owner records the derived count; the caller gets it now
                 Ok(count) => {
-                    let persisted = self
-                        .lifecycle
-                        .record_wallet_count(count)
-                        .map(|mutation| mutation.outcome)
-                        .unwrap_or(false);
-                    persisted.then_some(count)
+                    send!(self.supervisor.record_cloud_wallet_count(count));
+                    Some(count)
                 }
                 Err(error) => {
                     warn!("Failed to derive cloud backup wallet count: {error}");
@@ -1337,9 +1319,7 @@ impl RustCloudBackupManager {
             return;
         }
 
-        if let Err(error) = self.lifecycle().clear_restore_all_marker() {
-            error!("Failed to clear stale Restore All marker: {error}");
-        }
+        send!(self.supervisor.clear_stale_restore_all_marker(marker.namespace_id.clone()));
         self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllReset);
     }
 
@@ -1387,7 +1367,7 @@ mod tests {
     use super::ops::test_support::{
         async_test_lock, complete_loaded_outcome, configure_enabled_cloud_backup,
         ensure_cloud_backup_test_tokio_runtime, listed_detail,
-        persisted_enabled_cloud_backup_state, test_globals, test_lock,
+        persisted_enabled_cloud_backup_state, supervisor_checkpoint, test_globals, test_lock,
     };
     use super::owner::operation::test_support::operation_id;
     use super::*;
@@ -1543,7 +1523,12 @@ mod tests {
             vec![PendingVerificationUpload::master_key_wrapper()],
         );
 
-        let error = manager.replace_pending_verification_completion(completion).unwrap_err();
+        let error = manager
+            .replace_pending_verification_completion(
+                &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+                completion,
+            )
+            .unwrap_err();
 
         assert!(matches!(error, CloudBackupError::Internal(_)));
         assert!(manager.pending_verification_completion().is_none());
@@ -1951,9 +1936,9 @@ mod tests {
         assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
     }
 
-    #[test]
-    fn sync_persisted_restore_all_clears_marker_for_inactive_namespace() {
-        let _guard = test_lock().lock();
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_persisted_restore_all_clears_marker_for_inactive_namespace() {
+        let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         let manager = init_manager();
         configure_enabled_cloud_backup(&manager, globals, 0);
@@ -1962,6 +1947,7 @@ mod tests {
             .unwrap();
 
         manager.sync_persisted_state();
+        supervisor_checkpoint(&manager).await;
 
         assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
         assert_eq!(manager.projected_exclusive_operation(), None);

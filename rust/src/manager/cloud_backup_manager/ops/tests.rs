@@ -379,7 +379,21 @@ fn init_manager() -> Arc<RustCloudBackupManager> {
 /// Dispatch runs on the supervisor; its mailbox barrier proves the intent was handled
 async fn dispatch_and_wait(manager: &RustCloudBackupManager, action: CloudBackupManagerAction) {
     manager.dispatch(action);
-    call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+    supervisor_checkpoint(manager).await;
+}
+
+/// The discard's remote delete runs off the supervisor mailbox and reports back, so the test
+/// waits for the journal it clears and then for the completion message
+async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBackupManager) {
+    manager.discard_pending_enable_cloud_backup();
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "pending enable discard should finish its remote delete",
+        || CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none(),
+    )
+    .await;
+    supervisor_checkpoint(manager).await;
 }
 
 fn operation_write_client_for_test(

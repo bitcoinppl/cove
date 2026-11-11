@@ -18,8 +18,6 @@ const UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE: &str =
     "This passkey provider can't protect Cove backups. Choose another passkey provider.";
 pub(crate) const GENERIC_CLOUD_BACKUP_ERROR_MESSAGE: &str =
     "Cove couldn't complete this cloud backup request. Please try again.";
-pub(crate) const CLOUD_BACKUP_DISABLE_ERROR_MESSAGE: &str =
-    "Cove couldn't disable cloud backup. Please try again.";
 pub(crate) const CLOUD_BACKUP_LABELS_WARNING_MESSAGE: &str =
     "Cove restored the wallet, but couldn't restore its labels.";
 pub(crate) const CLOUD_BACKUP_RECREATE_MESSAGE: &str =

@@ -11,7 +11,7 @@ use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupTransition};
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommitDisable, CommittedDisable, DisableCommitReview, DisablingRecord,
+    CommitDisable, CommittedDisable, DisableCommitReview, DisablingRecord, LifecycleWriter,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDisableOutcome,
@@ -166,10 +166,11 @@ impl RustCloudBackupManager {
     /// Commits the reviewed attempt against the namespace this device uses now
     pub(crate) fn commit_disable_attempt(
         &self,
+        lifecycle: &LifecycleWriter,
         review: &DisableCommitReview,
         attempt_id: u64,
     ) -> Result<CommitDisable, CloudBackupError> {
-        self.lifecycle().commit_disable(review, attempt_id)
+        lifecycle.commit_disable(review, attempt_id)
     }
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
@@ -245,16 +246,16 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_disabling_failure(
         &self,
+        lifecycle: &LifecycleWriter,
         committed: &CommittedDisable,
         message: String,
     ) -> Result<(), CloudBackupError> {
         let retry_after = cove_util::time::unix_timestamp_secs_or_zero().saturating_add(5);
-        let recorded = self
-            .lifecycle()
-            .record_disable_failure(committed, message, retry_after)
-            .map_err(|source| {
+        let recorded = lifecycle.record_disable_failure(committed, message, retry_after).map_err(
+            |source| {
                 CloudBackupError::internal_context("persist cloud backup disable failure", source)
-            })?;
+            },
+        )?;
         if !recorded {
             return Err(CloudBackupError::Internal(
                 "cloud backup disable transition changed before it could be updated".into(),
@@ -266,9 +267,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_disabled_after_remote_delete(
         &self,
+        lifecycle: &LifecycleWriter,
         committed: &CommittedDisable,
     ) -> Result<(), CloudBackupError> {
-        self.lifecycle().finish_disable(committed).map_err(|source| {
+        lifecycle.finish_disable(committed).map_err(|source| {
             CloudBackupError::internal_context("persist disabled cloud backup state", source)
         })?;
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
@@ -347,9 +349,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn restore_configured_cloud_backup_after_disable(
         &self,
+        lifecycle: &LifecycleWriter,
         committed: &CommittedDisable,
     ) -> Result<bool, CloudBackupError> {
-        self.lifecycle().keep_enabled_after_disable(committed.attempt_id).map_err(|source| {
+        lifecycle.keep_enabled_after_disable(committed.attempt_id).map_err(|source| {
             CloudBackupError::internal_context("restore configured cloud backup state", source)
         })
     }

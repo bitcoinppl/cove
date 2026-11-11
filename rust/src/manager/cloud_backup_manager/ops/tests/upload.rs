@@ -136,6 +136,8 @@ async fn backup_new_wallet_marks_verification_required() {
 
     manager.backup_new_wallet(xpub_only_wallet_metadata());
 
+    supervisor_checkpoint(&manager).await;
+
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
     assert!(state.last_verification_requested_at().is_some());
@@ -166,6 +168,8 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     manager.reconcile_runtime_status(CloudBackupStatus::Error("offline".into()));
 
     manager.backup_new_wallet(metadata);
+
+    supervisor_checkpoint(&manager).await;
 
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);

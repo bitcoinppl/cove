@@ -202,8 +202,11 @@ impl CloudBackupSupervisor {
         self.pending_enable_session = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
-        if should_finalize_now {
-            manager.finalize_pending_verification_if_ready().await;
+        // this handler runs on the lifecycle owner, so it settles in place rather than messaging
+        if should_finalize_now
+            && let Some(settlement) = manager.ready_pending_verification_settlement().await
+        {
+            self.apply_pending_verification_settlement(&manager, settlement);
         }
 
         info!("Cloud backup enabled (recovered existing namespace)");

@@ -1844,6 +1844,21 @@ pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
         .expect("resume wallet uploads from persisted state");
 }
 
+/// Lifecycle results reach the supervisor as messages; its mailbox barrier proves every message
+/// sent before it was handled
+pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
+    call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+}
+
+/// Runs the pending upload confirmation the way the verifier does, waiting for the settle
+pub(crate) async fn finalize_pending_verification_for_test(manager: &RustCloudBackupManager) {
+    if let Some(settlement) = manager.ready_pending_verification_settlement().await {
+        call!(manager.supervisor.settle_pending_verification(settlement))
+            .await
+            .expect("settle pending verification");
+    }
+}
+
 pub(crate) async fn verify_pending_uploads_once_for_test_async(
     manager: &RustCloudBackupManager,
 ) -> bool {

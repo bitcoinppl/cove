@@ -91,21 +91,50 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if Self::journal_owns_started_remote_writes(&journal)
-            && let Err(error) = self.delete_pending_enable_remote_namespace(&journal).await
-        {
-            self.fail_pending_enable_discard(pending, error);
+        if !Self::journal_owns_started_remote_writes(&journal) {
+            self.discard_pending_enable_local_state(&manager, pending, &journal);
             return Produces::ok(());
         }
 
-        if let Err(error) = manager.pending_enable.discard_pending_enable_local_state(&journal) {
+        // the delete is a write-lane command, and the supervisor never waits on the write
+        // supervisor, so the delete runs off the mailbox and reports back
+        let writes = CloudBackupWriteClient::new(self.write.clone());
+        self.addr().send_fut_with(move |addr| async move {
+            let result = Self::delete_pending_enable_remote_namespace(writes, &journal).await;
+            send!(addr.complete_pending_enable_remote_discard(pending, journal, result));
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_pending_enable_remote_discard(
+        &mut self,
+        pending: PendingEnableSession,
+        journal: PendingEnableJournal,
+        result: Result<(), CloudBackupError>,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        match result {
+            Ok(()) => self.discard_pending_enable_local_state(&manager, pending, &journal),
+            Err(error) => self.fail_pending_enable_discard(pending, error),
+        }
+
+        Produces::ok(())
+    }
+
+    fn discard_pending_enable_local_state(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        pending: PendingEnableSession,
+        journal: &PendingEnableJournal,
+    ) {
+        if let Err(error) = manager.pending_enable.discard_pending_enable_local_state(journal) {
             self.fail_pending_enable_discard(pending, error);
-            return Produces::ok(());
+            return;
         }
 
         self.finish_pending_enable_discard();
-
-        Produces::ok(())
     }
 
     fn pending_enable_is_durably_committed(
@@ -134,10 +163,10 @@ impl CloudBackupSupervisor {
     }
 
     async fn delete_pending_enable_remote_namespace(
-        &self,
+        writes: CloudBackupWriteClient,
         journal: &PendingEnableJournal,
     ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::new(self.write.clone())
+        writes
             .delete_namespace_background(
                 CloudStorage::global_explicit_client(),
                 journal.namespace_id().to_owned(),

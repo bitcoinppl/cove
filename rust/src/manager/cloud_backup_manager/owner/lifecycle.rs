@@ -32,6 +32,9 @@ pub(crate) struct LifecycleCapability(());
 pub(crate) type Committed<T> = CommittedCloudBackupStateMutation<T>;
 
 /// The single writer of the durable Cloud Backup lifecycle record
+///
+/// Not `Clone`. Bootstrap moves the one production writer into `CloudBackupSupervisor`, which
+/// keeps it in a private field, so only the supervisor's own handlers can write the record
 #[derive(Debug)]
 pub(crate) struct LifecycleWriter(LifecycleCapability);
 
@@ -373,6 +376,26 @@ impl LifecycleWriter {
             .map_err(|source| {
                 CloudBackupError::internal_context("clear Restore All marker", source)
             })
+    }
+
+    /// The Restore All marker for `namespace_id` is stale because this device uses another
+    /// namespace now
+    ///
+    /// Bound to the marker's namespace, so a marker a newer Restore All wrote in the meantime
+    /// stays
+    pub(crate) fn clear_stale_restore_all_marker(
+        &self,
+        namespace_id: &str,
+    ) -> Result<bool, CloudBackupError> {
+        self.mutate(|state| {
+            let stale = state
+                .pending_restore_all()
+                .is_some_and(|marker| marker.namespace_id == namespace_id);
+
+            stale && state.clear_pending_restore_all()
+        })
+        .map(|mutation| mutation.outcome)
+        .map_err(|source| CloudBackupError::internal_context("clear Restore All marker", source))
     }
 
     /// A restore from Cloud Backup finished without a namespace to activate

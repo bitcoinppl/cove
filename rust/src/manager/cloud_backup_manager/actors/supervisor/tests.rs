@@ -49,6 +49,18 @@ use cove_device::keychain::WalletSecret as KeychainWalletSecret;
 
 const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
 
+/// A standalone supervisor with its own test writer, beside the manager's spawned one
+fn test_supervisor(
+    manager: Weak<RustCloudBackupManager>,
+    writes: Addr<CloudBackupWriteSupervisor>,
+) -> CloudBackupSupervisor {
+    CloudBackupSupervisor::new(
+        manager,
+        writes,
+        crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+    )
+}
+
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     let globals = test_globals();
 
@@ -729,7 +741,7 @@ fn enable_recovery_completion_debug_redacts_nested_items() {
 async fn supervisor_rejects_second_exclusive_operation_while_active() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -772,7 +784,7 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     persist_enabled_for_supervisor_test();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -836,7 +848,7 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -870,7 +882,7 @@ async fn drive_account_switch_restart_preserves_failed_reinitialization_for_retr
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -912,7 +924,7 @@ async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -948,7 +960,7 @@ async fn stale_drive_account_switch_completion_cannot_finish_live_operation() {
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1002,7 +1014,7 @@ async fn failed_drive_account_reinitialization_does_not_request_account_commit()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1044,7 +1056,7 @@ async fn drive_account_switch_reports_busy_while_disable_is_persisted() {
         .cloud_backup_state
         .set(&PersistedCloudBackupState::disabling_transition(disabling))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1067,7 +1079,7 @@ async fn drive_account_switch_restart_finalizes_platform_only_commit() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     persist_enabled_for_supervisor_test();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1095,7 +1107,7 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1153,7 +1165,7 @@ async fn assert_completion_ignores_stale_claim(
 ) {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1612,7 +1624,7 @@ async fn supervisor_ignores_stale_delete_other_backups_completion() {
 async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1648,7 +1660,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1712,7 +1724,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1766,7 +1778,7 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1803,7 +1815,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1854,7 +1866,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1885,7 +1897,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1920,7 +1932,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
 async fn supervisor_ignores_stale_sync_request_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1945,7 +1957,7 @@ async fn supervisor_ignores_stale_sync_request_completion() {
 async fn supervisor_ignores_stale_sync_refresh_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1971,7 +1983,7 @@ async fn supervisor_ignores_stale_sync_refresh_completion() {
 async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2011,7 +2023,7 @@ async fn enable_recovery_finalization_requires_durable_pending_completion_before
         .cloud_backup_state
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2055,7 +2067,7 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
         .cloud_backup_state
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2107,7 +2119,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
         finalization.pending_completion.clone()
     ));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2145,7 +2157,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
 async fn supervisor_accepts_registered_enable_passkey_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2182,7 +2194,7 @@ async fn supervisor_accepts_registered_enable_passkey_confirmation() {
 async fn supervisor_consumes_retry_pending_enable_upload() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2218,7 +2230,7 @@ async fn enable_upload_finalization_requires_durable_pending_completion_before_s
         .cloud_backup_state
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2253,7 +2265,7 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
         .cloud_backup_state
         .set(&persisted_state)
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2290,7 +2302,7 @@ async fn pending_enable_restart_discards_stage_interrupted_after_ownership_claim
         ))
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2323,7 +2335,7 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
             previous_metadata.clone(),
         ))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2361,7 +2373,7 @@ async fn pending_enable_restart_hydrates_registered_passkey_for_manual_confirmat
         provider_hint: passkey.provider_hint.clone(),
     }));
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2408,7 +2420,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
     }));
     assert!(journal.mark_remote_writes_started());
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2477,7 +2489,7 @@ async fn pending_enable_restart_finishes_promoted_state_with_matching_completion
         finalization.pending_completion.clone()
     ));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2523,7 +2535,7 @@ async fn pending_enable_restart_finishes_after_commit_cleared_staging_slot() {
     );
 
     cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2560,7 +2572,7 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
     let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     let (finalization, staged_master_key) = test_enable_upload_finalization();
     prepare_test_enable_local_promotion(&manager, &finalization, &staged_master_key);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2600,7 +2612,7 @@ async fn pending_enable_restart_fails_closed_on_conflicting_completion() {
         vec![PendingVerificationUpload::master_key_wrapper()],
     )));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2642,7 +2654,7 @@ async fn pending_enable_restart_fails_closed_on_unowned_cspp_staging() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2662,7 +2674,7 @@ async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2685,7 +2697,7 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2717,7 +2729,7 @@ async fn pending_enable_recovery_survives_persisted_state_reconcile() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2753,7 +2765,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2787,7 +2799,7 @@ async fn no_journal_staged_cleanup_revalidates_before_discarding() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2837,7 +2849,7 @@ async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
     }));
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
     cspp.promote_staged_master_key().unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2862,7 +2874,7 @@ async fn pending_enable_restart_projects_unreadable_evidence_without_diagnostics
         crate::manager::cloud_backup_manager::keychain::CSPP_PENDING_ENABLE_JOURNAL_KEY,
         "not valid journal json",
     )]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2904,7 +2916,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
         ))
         .unwrap();
     let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2938,7 +2950,7 @@ async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
             cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2973,7 +2985,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
         ))
         .unwrap();
     globals.keychain.fail_delete_at(3);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2997,7 +3009,7 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3020,7 +3032,7 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
 async fn stale_completion_is_discarded_without_touching_the_running_operation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3057,7 +3069,7 @@ async fn stale_completion_is_discarded_without_touching_the_running_operation() 
 async fn keep_enabled_finishes_active_disable_operation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3099,7 +3111,7 @@ async fn keep_enabled_finishes_active_disable_operation() {
 async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3126,11 +3138,9 @@ async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() 
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
+async fn write_supervisor_defers_writes_until_unblocked() {
     let _guard = async_test_lock().lock().await;
-    let manager = test_supervisor_manager();
     let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
-    let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
     let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 9 };
     let namespace = "0123456789abcdef0123456789abcdef";
 
@@ -3149,7 +3159,7 @@ async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
     let blocked_write = blocked_write.into_result();
     assert!(matches!(blocked_write, Err(CloudBackupError::Deferred(_))));
 
-    supervisor.unblock_cloud_backup_writes(blocker).await.unwrap();
+    call!(writes.unblock(blocker)).await.unwrap();
 
     let allowed_write = call!(writes.upload_wallet_backup(
         CloudStorage::global_explicit_client(),
@@ -3170,7 +3180,7 @@ async fn restore_all_restart_marker_enters_detail_without_passkey_verification()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let supervisor = CloudBackupSupervisor::new(
+    let supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3186,7 +3196,7 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3203,7 +3213,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3232,7 +3242,7 @@ async fn cloud_only_refetch_retains_restore_all_marker_when_wallets_remain() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3254,7 +3264,7 @@ async fn cloud_only_refetch_failure_retains_restore_all_marker() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3283,7 +3293,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
         test_cloud_only_wallet("a"),
         test_cloud_only_wallet("b"),
     ]));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3333,7 +3343,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
         test_cloud_only_wallet(b),
     ]));
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3372,7 +3382,7 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
         test_cloud_only_wallet(second),
     ]));
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[second, third]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3407,7 +3417,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
     prepare_restore_all_marker(&manager);
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3429,7 +3439,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
 async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3453,7 +3463,7 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
 async fn supplemental_inventory_does_not_cancel_restore_all() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3478,7 +3488,7 @@ async fn supplemental_inventory_does_not_cancel_restore_all() {
 async fn completed_other_backups_scan_remains_cached() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3745,7 +3755,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3774,7 +3784,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
 async fn stale_restore_all_record_dispatch_does_not_mutate_current_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3806,7 +3816,7 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3850,7 +3860,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         wallet.clone(),
     ]));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3888,7 +3898,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3931,7 +3941,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
         record_id.as_str(),
     ])));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -4023,7 +4033,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
         .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(&record_id)], generation)
         .await;
 
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -4068,7 +4078,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     );
     assert!(prepared.ordered_queue().is_empty());
 
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -4775,7 +4785,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     seed_verifiable_cloud_master_key(test_globals());
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -4897,7 +4907,7 @@ async fn reinitialize_backup_verification_reads_the_new_backup() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     seed_verifiable_cloud_master_key(test_globals());
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -4999,4 +5009,111 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         configured_cloud_backup_state(manager).verification,
         CloudBackupVerificationState::Verified { .. }
     ));
+}
+
+fn persisted_verification() -> crate::database::cloud_backup::PersistedBackupVerificationState {
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected a configured Cloud Backup record");
+    };
+
+    configured.verification
+}
+
+/// PLAN §4.4 Writers: verification evidence that arrives after a wallet change
+#[tokio::test(flavor = "current_thread")]
+async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_reset() {
+    use crate::database::cloud_backup::PersistedBackupVerificationState;
+
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let manual = DeepVerificationContinuation::Manual {
+        force_discoverable: false,
+        attempt: VerificationAttempt::Initial,
+    };
+    let verified = || {
+        CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::Verified(
+            test_pending_completion(VALID_NAMESPACE_ID.into(), Vec::new()).report(),
+        ))
+    };
+
+    // a manual verification reads the wallets, then a wallet is added before its evidence lands
+    supervisor.start_verification(false).await.unwrap();
+    supervisor.require_verification_after_wallet_change(20).await.unwrap();
+    supervisor.complete_verification(None, verified(), manual).await.unwrap();
+
+    assert!(
+        matches!(
+            persisted_verification(),
+            PersistedBackupVerificationState::Required { requested_at: Some(20), .. }
+        ),
+        "old evidence overwrote the wallet-change reset: {:?}",
+        persisted_verification()
+    );
+
+    // a verification that starts after the change reads the new wallet set, so it counts
+    supervisor.start_verification(false).await.unwrap();
+    supervisor.complete_verification(None, verified(), manual).await.unwrap();
+
+    assert!(matches!(persisted_verification(), PersistedBackupVerificationState::Verified { .. }));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn write_lane_result_for_an_ended_operation_is_discarded() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let wallet_count = || RustCloudBackupManager::load_persisted_state().wallet_count();
+    let before = wallet_count();
+
+    let ended = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
+        .unwrap();
+    supervisor.complete_exclusive_operation(ended).await.unwrap();
+    let running = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+        .unwrap();
+
+    // the ended operation's upload finished late; the owner refuses it and the write lane
+    // reports it cancelled instead of marking wallets uploaded
+    let Produces::Value(late) = supervisor
+        .record_uploaded_wallets(
+            Some(ended),
+            9,
+            CloudBackupUploadedWalletsStateMode::PreserveVerification,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("the supervisor answers the write lane");
+    };
+
+    assert!(matches!(late, Err(CloudBackupError::Cancelled)));
+    assert_eq!(wallet_count(), before);
+    assert_eq!(supervisor.active_operation, Some(running));
+
+    let Produces::Value(current) = supervisor
+        .record_uploaded_wallets(
+            Some(running),
+            9,
+            CloudBackupUploadedWalletsStateMode::PreserveVerification,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("the supervisor answers the write lane");
+    };
+
+    current.unwrap();
+    assert_eq!(wallet_count(), Some(9));
 }

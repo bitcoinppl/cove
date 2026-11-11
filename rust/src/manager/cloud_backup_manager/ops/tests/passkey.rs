@@ -1279,7 +1279,12 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fa
     globals.cloud.fail_list_wallet_files("timed out");
 
     let finalization = manager.prepare_passkey_repair_finalization().await.unwrap();
-    manager.apply_passkey_repair_finalization(finalization).unwrap();
+    manager
+        .apply_passkey_repair_finalization(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            finalization,
+        )
+        .unwrap();
 
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Enabled);
@@ -1306,7 +1311,12 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_listing_is
     );
 
     let finalization = manager.prepare_passkey_repair_finalization().await.unwrap();
-    manager.apply_passkey_repair_finalization(finalization).unwrap();
+    manager
+        .apply_passkey_repair_finalization(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            finalization,
+        )
+        .unwrap();
 
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Enabled);
