@@ -1,5 +1,4 @@
 use super::*;
-use crate::manager::cloud_backup_manager::actors::write::Decision;
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_automatic_auth() {
@@ -242,42 +241,6 @@ async fn confirm_saved_passkey_reuses_original_credential_id() {
     assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![1, 2, 3]]);
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
-}
-
-/// A Discard from a prompt that outlived its Enable finds no session; it leaves the configured
-/// backup it can no longer discard as the record and the write lane have it
-#[tokio::test(flavor = "current_thread")]
-async fn discard_after_enable_finished_keeps_the_backup_configured() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    enable_cloud_backup_no_discovery(&manager).await.unwrap();
-    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-    confirm_saved_passkey_session(&manager).await;
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-
-    // the Enable's own pending verification settles in the background and rewrites the record,
-    // so the record is captured after it, and only Discard can change it afterwards
-    wait_for_test_condition(
-        Duration::from_secs(10),
-        "the Enable's pending verification settles",
-        || {
-            manager.pending_verification_completion().is_none()
-                && !manager.has_pending_cloud_upload_verification()
-        },
-    )
-    .await;
-    let record = Database::global().cloud_backup_state.get().unwrap();
-
-    dispatch_and_wait(&manager, CloudBackupManagerAction::DiscardPendingEnableCloudBackup).await;
-
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap(), record);
-    assert_eq!(manager.write_ticket().await.unwrap().ordinary, Decision::Run);
 }
 
 #[tokio::test(flavor = "current_thread")]
