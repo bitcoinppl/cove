@@ -945,6 +945,10 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    // attach points the process-global panic marker dir at its own directory, so tests that
+    // attach serialize to keep a parallel attach from redirecting another test's panic marker
+    static MARKER_DIR_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
     fn writer_that_replaces_current_file_on_shutdown(dir: &Path) -> LogWriter {
         let writer_dir = dir.to_path_buf();
         let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
@@ -1003,6 +1007,7 @@ mod tests {
 
     #[test]
     fn write_error_keeps_disk_history_and_gap_survives_restart() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
 
         // a directory where rotation expects the oldest archive makes the next rotation fail
@@ -1035,6 +1040,7 @@ mod tests {
 
     #[test]
     fn panic_marker_survives_into_next_snapshot_until_cleared() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         {
             let mut state = CaptureState::default();
@@ -1111,6 +1117,7 @@ mod tests {
 
     #[test]
     fn attach_replays_ring_once() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.record_line("before attach");
@@ -1126,6 +1133,7 @@ mod tests {
 
     #[test]
     fn reattach_stops_previous_writer_before_opening_replacement() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         std::fs::write(current_log_path(dir.path()), "original\n")?;
 
@@ -1144,6 +1152,7 @@ mod tests {
 
     #[test]
     fn snapshot_reads_persisted_current_file_after_restart() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         {
             let mut state = CaptureState::default();
@@ -1161,6 +1170,7 @@ mod tests {
 
     #[test]
     fn snapshot_reads_archives_before_current_file() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         std::fs::write(archived_log_path(dir.path(), 2), "oldest\n")?;
         std::fs::write(archived_log_path(dir.path(), 1), "older\n")?;
@@ -1176,6 +1186,7 @@ mod tests {
 
     #[test]
     fn snapshot_appends_unpersisted_lines_while_writer_fails() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;
@@ -1199,6 +1210,7 @@ mod tests {
 
     #[test]
     fn clear_reopens_file_with_marker() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;
