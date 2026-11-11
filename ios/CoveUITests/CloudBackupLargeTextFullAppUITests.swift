@@ -122,11 +122,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.release("wallet-two")
     }
 
-    /// A passkey repair started from a cancelled verification shows the missing passkey screen
-    /// while it runs and, once the new passkey's registration fails, again with the error and Add
-    /// Passkey to try once more
+    /// A cancelled verification offers only Verify. A verification that finds no passkey and can't
+    /// register a new one leaves the missing passkey card, whose Add Passkey shows the card again
+    /// while its repair runs and, once that registration fails too, with the error and Add Passkey
     ///
-    /// The screen also shows for a backup whose saved state lost its passkey, which only older
+    /// The card also shows for a backup whose saved state lost its passkey, which only older
     /// databases hold; both cases draw the same view
     func testMissingPasskeyRecoveryKeepsAddPasskeyReachable() throws {
         let control = try CloudBackupHostControl(
@@ -141,24 +141,39 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
                 && !$0.awaitingUploadConfirmation
         }
 
+        // a cancel shows nothing about the passkey being gone, so Verify is the only way on
         try control.answerNextPasskeyAssertions([.userCancelled])
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again").tap()
-        control.waitForAppState("cancelling the passkey should leave verification cancelled") {
+        control.waitForAppState("cancelling the passkey should leave verification not completed") {
             $0.verification == "notCompleted"
         }
 
         layout.assertTextFits(app.staticTexts["Cloud Backup Not Verified"], "cancelled verification")
-        layout.assertTextFits(robot.staticText(containing: "If your passkey was deleted"), "cancelled verification help")
-        layout.assertActionFits(app.buttons["Verify Now"], "cancelled verification: Verify Now")
+        let verifyNow = layout.assertActionFits(app.buttons["Verify Now"], "cancelled verification: Verify Now")
+        XCTAssertFalse(app.buttons["Add New Passkey"].exists, "a cancelled verification offered a passkey repair")
+        XCTAssertFalse(
+            robot.staticText(containing: "If your passkey was deleted").exists,
+            "a cancelled verification said the passkey may be deleted"
+        )
 
-        // the repair registers a new passkey, which the host holds and then fails as a provider
-        // would after its sheet showed
-        let createsSoFar = control.state.count(.passkeyCreate)
+        // neither the saved passkey nor discovery answers, so verification registers a new passkey
+        // to protect the master key again, and the host fails it as a provider would after its
+        // sheet showed
+        let createsBeforeVerify = control.state.count(.passkeyCreate)
+        try control.answerNextPasskeyAssertions([.noCredential, .noCredential])
         try control.update {
-            $0.createResults = Array(repeating: .success, count: createsSoFar) + [.postPresentationFailure]
-            $0.holds.append(.init(id: "repair-create", point: .passkeyCreate, matchingCallsToSkip: createsSoFar))
+            $0.createResults = Array(repeating: .success, count: createsBeforeVerify) + [.postPresentationFailure]
         }
-        layout.assertActionFits(app.buttons["Add New Passkey"], "cancelled verification: Add New Passkey").tap()
+        verifyNow.tap()
+        assertMissingPasskeyScreenFits("verification failed on the passkey")
+
+        // the card's own repair registers once more, held so the running card can be checked
+        let createsBeforeRepair = control.state.count(.passkeyCreate)
+        try control.update {
+            $0.createResults = Array(repeating: .success, count: createsBeforeRepair) + [.postPresentationFailure]
+            $0.holds.append(.init(id: "repair-create", point: .passkeyCreate, matchingCallsToSkip: createsBeforeRepair))
+        }
+        layout.assertActionFits(app.buttons["Add Passkey"], "missing passkey: Add Passkey").tap()
         control.waitForHold("repair-create")
 
         assertMissingPasskeyScreenFits("repair running")
@@ -248,6 +263,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts["Cloud Backup Passkey Missing"], "\(screen): title", initialWait: 15)
         layout.assertTextFits(robot.staticText(containing: "is not accessible until you use an existing passkey"), "\(screen): description")
         layout.assertTextFits(robot.staticText(containing: "to make your cloud backup accessible again"), "\(screen): help")
+        layout.assertTextFits(robot.staticText(containing: "If your passkey was deleted"), "\(screen): deleted passkey help")
     }
 
     private func openCloudBackupDetail(scenario: String) {

@@ -8,7 +8,6 @@ import SwiftUI
 struct VerificationSection: View {
     let section: CloudBackupVerificationSection
     let actions: CloudBackupActions
-    let passkeyRepair: CloudBackupPasskeyRepairState?
     let wallets: CloudBackupWalletsSection?
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
@@ -49,20 +48,12 @@ struct VerificationSection: View {
             CloudBackupUploadConfirmationPendingSection()
 
         case .notCompleted:
-            CloudBackupVerificationNotCompletedSection(
-                controls: controls(verify: verifyNow),
-                actions: actions,
-                passkeyRepair: passkeyRepair,
-                onRepairPasskey: repairPasskey
-            )
+            CloudBackupVerificationNotCompletedSection(controls: controls(verify: verifyNow))
 
         case let .failed(failure):
             CloudBackupVerificationFailureSection(
                 failure: failure,
-                controls: controls(verify: retry(failure)),
-                actions: actions,
-                passkeyRepair: passkeyRepair,
-                onRepairPasskey: repairPasskey
+                controls: controls(verify: retry(failure))
             )
         }
     }
@@ -108,10 +99,6 @@ struct VerificationSection: View {
 
     private func startVerification() {
         manager.dispatch(action: .startVerification(.cloudBackupDetail))
-    }
-
-    private func repairPasskey() {
-        manager.dispatch(action: .repairPasskeyNoDiscovery)
     }
 
     private func confirmDestructive(_ confirmation: CloudBackupDestructiveConfirmation) {
@@ -208,9 +195,6 @@ private struct CloudBackupVerificationStartSection: View {
 /// repair, since nothing showed the passkey is gone, so Verify is the way forward
 private struct CloudBackupVerificationNotCompletedSection: View {
     let controls: CloudBackupVerificationControls
-    let actions: CloudBackupActions
-    let passkeyRepair: CloudBackupPasskeyRepairState?
-    let onRepairPasskey: () -> Void
 
     var body: some View {
         Section {
@@ -220,20 +204,12 @@ private struct CloudBackupVerificationNotCompletedSection: View {
             )
             .foregroundStyle(Color.statusWarning)
 
-            Text(
-                "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey."
-            )
-            .font(.caption)
-            .uiTestTruncationProbe()
-            .foregroundStyle(.secondary)
+            Text("Verification didn't finish. Verify again to confirm your cloud backup can be restored.")
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.secondary)
 
             controls
-
-            CloudBackupRepairPasskeyButton(
-                actions: actions,
-                passkeyRepair: passkeyRepair,
-                onRepair: onRepairPasskey
-            )
         }
     }
 }
@@ -382,14 +358,6 @@ private struct CloudBackupUndecryptableWalletIssue: View {
 private struct CloudBackupVerificationFailureSection: View {
     let failure: DeepVerificationFailure
     let controls: CloudBackupVerificationControls
-    let actions: CloudBackupActions
-    let passkeyRepair: CloudBackupPasskeyRepairState?
-    let onRepairPasskey: () -> Void
-
-    private var passkeyRepairError: String? {
-        guard case let .failed(error) = passkeyRepair else { return nil }
-        return error
-    }
 
     var body: some View {
         Section {
@@ -413,17 +381,7 @@ private struct CloudBackupVerificationFailureSection: View {
             }
 
             controls
-
-            if case .retry = failure {
-                CloudBackupRepairPasskeyButton(
-                    actions: actions,
-                    passkeyRepair: passkeyRepair,
-                    onRepair: onRepairPasskey
-                )
-            }
         }
-
-        CloudBackupPasskeyRepairErrorSection(error: passkeyRepairError)
     }
 }
 
@@ -556,47 +514,6 @@ struct CloudBackupSyncNowControl: View {
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
-        }
-    }
-}
-
-private struct CloudBackupPasskeyRepairErrorSection: View {
-    let error: String?
-
-    var body: some View {
-        if let error {
-            Section {
-                ProbedLabel(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(Color.statusError)
-                    .font(.caption)
-            }
-        }
-    }
-}
-
-/// Add New Passkey, drawn only when Rust lists the repair action
-private struct CloudBackupRepairPasskeyButton: View {
-    let actions: CloudBackupActions
-    let passkeyRepair: CloudBackupPasskeyRepairState?
-    let onRepair: () -> Void
-
-    private var isRepairing: Bool {
-        if case .running = passkeyRepair { return true }
-        return false
-    }
-
-    var body: some View {
-        CloudBackupActionControl(action: .repairPasskey, actions: actions, perform: onRepair) {
-            if isRepairing {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 4)
-                    Text("Creating Passkey...")
-                        .uiTestTruncationProbe()
-                }
-            } else {
-                ProbedLabel("Add New Passkey", systemImage: "person.badge.key")
-            }
         }
     }
 }

@@ -104,7 +104,6 @@ private struct CloudBackupSectionContent: View {
             VerificationSection(
                 section: verification,
                 actions: screen.actions,
-                passkeyRepair: configured.passkeyCard?.repairState,
                 wallets: configured.wallets,
                 manager: manager,
                 presentationCoordinator: presentationCoordinator
@@ -215,7 +214,7 @@ private struct CloudBackupInventoryCheckingSection: View {
                 Text("Refreshing the wallet backup list...")
             }
             .foregroundStyle(.secondary)
-            .accessibilityIdentifier("cloudBackup.inventory.checking")
+            .accessibilityIdentifier(CloudBackupUiElement.inventoryChecking.identifier)
         }
     }
 }
@@ -233,7 +232,7 @@ private struct CloudBackupInventoryIncompleteSection: View {
             Label("Cloud backup inventory is incomplete", systemImage: "exclamationmark.icloud")
                 .foregroundStyle(Color.statusError)
                 .accessibilityFocused($isFocused)
-                .accessibilityIdentifier("cloudBackup.inventory.incomplete")
+                .accessibilityIdentifier(CloudBackupUiElement.inventoryIncomplete.identifier)
 
             Text(reason.inventoryMessage)
                 .font(.caption)
@@ -327,7 +326,7 @@ private struct CloudBackupHealNoticeSection: View {
         Section {
             ProbedLabel("Cloud Backup is on again", systemImage: "checkmark.icloud")
                 .foregroundStyle(Color.statusInfo)
-                .accessibilityIdentifier("cloudBackup.healNotice")
+                .accessibilityIdentifier(CloudBackupUiElement.healNotice.identifier)
 
             Text(
                 "An earlier Turn Off didn't finish, so Cove turned Cloud Backup back on. Cove is backing up your wallets again."
@@ -341,7 +340,7 @@ private struct CloudBackupHealNoticeSection: View {
                 action: .turnOff,
                 actions: actions,
                 role: .destructive,
-                identifier: "cloudBackup.healNotice.turnOff",
+                element: .healNoticeTurnOff,
                 perform: { manager.dispatch(action: .disableCloudBackup) }
             ) {
                 ProbedLabel("Turn Off Cloud Backup", systemImage: "icloud.slash")
@@ -368,7 +367,7 @@ private struct CloudBackupFinishingDisableSection: View {
         Section {
             ProbedLabel("Cloud Backup is being turned off", systemImage: "icloud.slash")
                 .foregroundStyle(Color.statusWarning)
-                .accessibilityIdentifier("cloudBackup.finishingDisable")
+                .accessibilityIdentifier(CloudBackupUiElement.finishingDisable.identifier)
 
             Text(
                 "Cove couldn't finish deleting your backups from iCloud. Your wallets on this device aren't affected. Some backups may already be deleted, and new changes aren't being backed up."
@@ -462,7 +461,7 @@ private struct CloudBackupLoadFailedSection: View {
         Section {
             ProbedLabel("Cove couldn't load Cloud Backup", systemImage: "exclamationmark.icloud")
                 .foregroundStyle(Color.statusError)
-                .accessibilityIdentifier("cloudBackup.loadFailed")
+                .accessibilityIdentifier(CloudBackupUiElement.loadFailed.identifier)
 
             Text("Your wallets on this device aren't affected.")
                 .font(.caption)
@@ -488,7 +487,7 @@ private struct CloudBackupCorruptedSection: View {
         Section {
             ProbedLabel("Cove can't read the Cloud Backup settings", systemImage: "exclamationmark.icloud")
                 .foregroundStyle(Color.statusError)
-                .accessibilityIdentifier("cloudBackup.corrupted")
+                .accessibilityIdentifier(CloudBackupUiElement.corrupted.identifier)
 
             Text(
                 "Cloud Backup's settings on this device are damaged. Contact support before changing Cloud Backup settings. Resetting turns Cloud Backup off on this device; your wallets on this device aren't affected."

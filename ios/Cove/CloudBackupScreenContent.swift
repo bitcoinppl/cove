@@ -40,8 +40,8 @@ extension CloudBackupScreen {
         guard let lastOutcome, case let .action(action) = lastOutcome.target else { return nil }
 
         switch action {
-        case .enable, .acceptEnablePrompt, .confirmSavedPasskey, .discardPendingEnable,
-             .confirmPendingEnableCleanup:
+        case .enable, .acceptEnablePromptUseExisting, .acceptEnablePromptCreateNew, .confirmSavedPasskey,
+             .discardPendingEnable, .confirmPendingEnableCleanup:
             return lastOutcome.outcome
         default:
             return nil
@@ -60,18 +60,9 @@ extension CloudBackupScreen {
         switch lastOutcome.target {
         case let .action(action):
             return drawsOnIOS(action) ? nil : lastOutcome.outcome
-        case let .row(recordId, _):
-            return configured?.listedRow(recordId) == nil ? lastOutcome.outcome : nil
+        case let .row(target):
+            return listedRow(recordId: target.recordId) == nil ? lastOutcome.outcome : nil
         }
-    }
-
-    /// The last outcome when it answers a row control, so it is drawn on that row
-    func lastOutcome(forRecord recordId: String) -> CloudBackupOutcome? {
-        guard let lastOutcome, case let .row(target, _) = lastOutcome.target, target == recordId else {
-            return nil
-        }
-
-        return lastOutcome.outcome
     }
 }
 
@@ -103,22 +94,6 @@ extension CloudBackupConfiguredScreen {
         return nil
     }
 
-    /// The listed row with `recordId`, in whichever section lists it
-    func listedRow(_ recordId: RecordId) -> CloudBackupListedRow? {
-        for section in sections {
-            switch section {
-            case let .notOnDevice(notOnDevice):
-                if let row = notOnDevice.rows.first(where: { $0.recordId == recordId }) { return row }
-            case let .extraCopies(extraCopies):
-                if let row = extraCopies.rows.first(where: { $0.recordId == recordId }) { return row }
-            default:
-                continue
-            }
-        }
-
-        return nil
-    }
-
     /// The passkey card's state, when the configured screen shows one
     var passkeyCard: CloudBackupPasskeyState? {
         for case let .passkeyCard(state) in sections {
@@ -144,14 +119,6 @@ extension CloudBackupEnableFlow {
     }
 }
 
-extension CloudBackupPasskeyState {
-    /// The passkey repair in progress or failed, when the card is the needs-repair one
-    var repairState: CloudBackupPasskeyRepairState? {
-        guard case let .needsRepair(state) = self else { return nil }
-        return state
-    }
-}
-
 extension CloudBackupActionAvailability {
     var isAvailable: Bool {
         self == .available
@@ -168,21 +135,6 @@ extension CloudBackupActionAvailability? {
     /// Whether a drawn control is enabled; a missing entry draws no control
     var isAvailable: Bool {
         self == .available
-    }
-}
-
-extension [CloudBackupRowAction] {
-    /// The row's action of `kind`, matching any delete confirmation when `kind` is a delete
-    func action(_ kind: CloudBackupRowActionKind) -> CloudBackupRowAction? {
-        first { $0.action == kind }
-    }
-
-    /// The row's delete action and the confirmation it asks for
-    var delete: CloudBackupRowAction? {
-        first {
-            if case .delete = $0.action { return true }
-            return false
-        }
     }
 }
 
@@ -342,17 +294,6 @@ extension CloudBackupNamedCount {
 }
 
 extension CloudBackupRowActionKind {
-    /// The row action's part of its accessibility identifier, shared with Android
-    var identifierName: String {
-        switch self {
-        case .restore: "restore"
-        case .delete: "delete"
-        case .backUpFirst: "backUpFirst"
-        case .checkAgain: "checkAgain"
-        case .verify: "verify"
-        }
-    }
-
     var title: String {
         switch self {
         case .restore: "Restore"

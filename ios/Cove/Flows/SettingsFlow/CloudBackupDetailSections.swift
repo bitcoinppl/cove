@@ -82,6 +82,11 @@ private struct MissingPasskeyContent: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
+            Text("If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey.")
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.secondary)
+
             if let repairError {
                 ProbedLabel(repairError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.statusError)
@@ -153,6 +158,11 @@ struct CloudBackupTurnOffSection: View {
         }
     }
 
+    private var progressElement: CloudBackupUiElement {
+        if case .preparing = disable { return .turnOffPreparing }
+        return .turnOffDraining
+    }
+
     var body: some View {
         Section {
             if let progressTitle {
@@ -163,7 +173,7 @@ struct CloudBackupTurnOffSection: View {
                         .font(.footnote)
                         .uiTestTruncationProbe()
                 }
-                .accessibilityIdentifier("cloudBackup.turnOff.progress")
+                .accessibilityIdentifier(progressElement.identifier)
 
                 CloudBackupActionControl(
                     action: .cancelDisable,
