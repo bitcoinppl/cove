@@ -190,6 +190,7 @@ impl CloudBackupKeychain {
 
         let journal: PendingEnableJournal = serde_json::from_str(&encoded)
             .map_err(|error| CloudBackupKeychainError::DecodePendingEnable(error.into()))?;
+
         if journal.version() != PENDING_ENABLE_JOURNAL_VERSION {
             return Err(CloudBackupKeychainError::UnsupportedPendingEnableVersion(
                 journal.version(),

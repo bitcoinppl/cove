@@ -674,6 +674,7 @@ impl<S: CsppStore> Cspp<S> {
             hex::decode(hex.as_str())
                 .map_err(|_| CsppError::InvalidData("master key is not valid hex".into()))?,
         );
+
         let bytes: [u8; 32] = decoded
             .as_slice()
             .try_into()
@@ -783,6 +784,7 @@ impl<S: CsppStore> Cspp<S> {
         let journal: MasterKeyPromotionJournal = serde_json::from_str(&serialized)
             .map_err(JsonDecodeError::from)
             .map_err_str(CsppError::Deserialization)?;
+
         if journal.version != MASTER_KEY_PROMOTION_JOURNAL_VERSION {
             return Err(CsppError::InvalidData(format!(
                 "unsupported master key promotion journal version {}",
