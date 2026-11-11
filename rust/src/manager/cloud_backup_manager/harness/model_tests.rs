@@ -81,6 +81,8 @@ enum World {
 enum Tap {
     Enable,
     TurnOff,
+    /// Consent to the Turn Off review on screen, which commits and finishes Turn Off
+    ConfirmDisable,
     Verify,
     SyncUnsynced,
     Restore,
@@ -95,9 +97,10 @@ enum Tap {
 }
 
 impl Tap {
-    const ALL: [Self; 13] = [
+    const ALL: [Self; 14] = [
         Self::Enable,
         Self::TurnOff,
+        Self::ConfirmDisable,
         Self::Verify,
         Self::SyncUnsynced,
         Self::Restore,
@@ -111,12 +114,15 @@ impl Tap {
         Self::DismissMissingPasskeyReminder,
     ];
 
-    fn action(self) -> CloudBackupManagerAction {
+    /// The action this tap dispatches, given the Turn Off review on screen
+    fn action(self, review_id: Option<u64>) -> CloudBackupManagerAction {
         use CloudBackupManagerAction as A;
 
         match self {
             Self::Enable => A::EnableCloudBackup(CloudBackupEnableContext::settings_manual()),
             Self::TurnOff => A::DisableCloudBackup,
+            // with no review on screen this answers none, which admission rejects as stale
+            Self::ConfirmDisable => A::ConfirmDisable { review_id: review_id.unwrap_or_default() },
             Self::Verify => A::StartVerification(CloudBackupVerificationSource::CloudBackupDetail),
             Self::SyncUnsynced => A::SyncUnsynced,
             Self::Restore => A::RestoreFromCloudBackup,
@@ -254,7 +260,14 @@ impl Case {
 
         let app = &mut self.app;
         let step = match event {
-            Event::Tap(tap) => app.dispatch(tap.action()),
+            Event::Tap(tap) => {
+                let review_id = app.turn_off_review().map(|review| review.review_id);
+                if let (Tap::ConfirmDisable, Some(review_id)) = (tap, review_id) {
+                    println!("model step {step}: confirming Turn Off review {review_id}");
+                }
+
+                app.dispatch(tap.action(review_id))
+            }
             Event::WalletChanged => app.event("a local wallet changed", |app| {
                 change_a_wallet(app);
             }),
