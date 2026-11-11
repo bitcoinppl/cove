@@ -71,6 +71,27 @@ The child actors under `cloud_backup_manager::actors` own narrower work:
 - `cleanup` owns namespace cleanup after merge or recovery flows
 - `write` owns serialized cloud writes and post-write local completion
 
+### Who Writes What
+
+Each fact has one writer. Other code sends that writer a typed result and never
+writes the fact itself.
+
+| Fact | Single writer | Typed inputs from producers |
+|---|---|---|
+| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it only through `commit`, which publishes the write policy after every write | Verification results, upload confirmations (carrying the wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
+| Runtime operation (the body and the operation nested in it) | The supervisor's `OwnedRuntime` | Worker completions carrying the operation's claim |
+| Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
+| Cloud Backup keychain namespace | The supervisor, which applies the keychain writes workers prepare | `OwnedKeychainWrite` results |
+| Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
+| Detail inventory | The reducer | Detail refresh results |
+| Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
+
+Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
+`LifecycleCapability`, whose private field only `owner/lifecycle.rs` can
+construct. Bootstrap creates it once, inside the exclusive bootstrap phase that
+normalizes the stored record, and moves it into the supervisor. The database has
+no other production route that writes the Cloud Backup tables.
+
 ## Inventory
 
 The detail inventory is explicitly progressive:
@@ -221,6 +242,21 @@ decision is one of three:
 
 For every class without a pause, a write that does not meet the "Runs when"
 condition is stale.
+
+The same rules by runtime body:
+
+| Runtime body | Policy body | Runs | Everything else |
+|---|---|---|---|
+| `Configured`, no operation | `Configured` | `Ordinary` and `SourceCleanup` of the current generation | stale |
+| `Configured`, Turn Off before its commit | `Configured` (Turn Off writer) | Turn Off's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`TurnOff`), the rest stale |
+| `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` | stale |
+| `Disabled`, `Corrupted`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
+| `FinishingDisable` | `FinishingDisable` | `TurnOffDelete` of the committed namespace and `Operation`, both of the running claim | `Ordinary` paused (`TurnOff`), the rest stale |
+| `DriveAccountSwitch` | `AccountSwitch` | `Operation` of the running claim | `Ordinary` paused (`AccountSwitch`), the rest stale |
+| `LoadFailed` | `Closed(LoadFailed)` | nothing | `Ordinary` paused, the rest stale |
+| `Resetting` | `Closed(LocalReset)` | nothing | `Ordinary` paused, the rest stale |
 
 A configuration generation is a process-local number. The supervisor starts a
 new one when the body changes kind, for example when backup turns on or off, or

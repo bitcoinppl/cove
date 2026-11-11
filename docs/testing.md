@@ -195,7 +195,24 @@ Rust sequence tests for Cloud Backup run the real manager through `rust/src/mana
 - **Every wait has a deadline.** Barriers, idle waits, `Hold` acknowledgements, held calls, event closures, the runtime start and the parked kill checkpoint each arm a real-time deadline (10s). A watchdog ends the child if one expires, and the parent fails the test with the name of the wait. The parent also bounds each phase (30s) and reaping a killed or exited child. `PhaseEnd::TimesOutOn(text)` asserts that a phase hangs on the named wait, using a 200ms limit.
 - **Every harness test runs in a child.** Even a test that drives only the fakes goes through `run_case`, because deadlines may end the process.
 - **Fixtures.** `FakeAccount::new(local, not_on_device)` seeds real encrypted backups; use the smallest account that shows the case. `FakeAccount::lived_in()` (35 records) is only for the incident replay and layout tests.
-- `TestApp::relaunch` is a soft relaunch: a new manager on the open database handle. Use a new phase when a test needs a real relaunch.
+- `TestApp::relaunch` is a soft relaunch: a new manager on the open database handle. It models quitting at rest, so it panics if an operation is still running, and it fences the replaced manager the way a local reset does, so that manager's queued writes and timers can't act beside the new one. Use a new phase when a test needs a real relaunch, and `PhaseEnd::KillAt` for a relaunch mid-operation.
+- **Invariants after every event.** Each event settles, then `Invariants::check` runs against the settled app. Production code never calls it; the actors keep test-only logs of their decisions, which each check takes. A failure names the invariant, the event and the app's state. These are turned on:
+
+  | # | Invariant |
+  |---|---|
+  | 1 | The runtime holds a committed disable exactly when the record holds a Disabling with a commit time, for the same namespace and attempt |
+  | 2 | The published write policy equals the policy derived from the runtime; an idle runtime's policy equals the one its record derives; versions only grow; the lane decides under non-decreasing versions and runs a command only when the policy it applied owns that command's class and generation. A policy published but not yet applied is pending, and must be applied by the next check |
+  | 5 | An operation starts and finishes once and never starts again, the screen shows only the running operation, and every dispatched intent gets exactly one admission, in order |
+  | 7 | A paused upload never arms a retry timer and never leaves a Failed blob row |
+
+  Invariants 3, 4, 6 and 8 (screen deltas, quiescent exits, passkey permits and inventory) are not checked yet. A change to an invariant is listed at the top of its pull request.
+- **Model test.** `model_tests::model_sequences_keep_the_invariants` runs generated cases, one child process each. A case starts from a generated world (off, configured, configured with a cloud-only record, or the legacy stuck Disabling record) and applies generated taps, dismissals, wallet changes, Background and Foreground, clock advances, scripted failures, held calls released later as stale results, passkey answers and relaunches. After each event it checks the invariants and that nothing the durable record forbids is offered. Every case prints its seed and trace, and a failing case prints its replay command:
+
+  ```sh
+  COVE_MODEL_SEED=<seed> COVE_MODEL_CASES=1 COVE_MODEL_STEPS=<steps> cargo test -p cove --lib -- model_sequences --nocapture
+  ```
+
+  CI runs 24 cases of 60 events, about 10s. Measured on an M4 Pro, an event costs about 6ms and a case at 80 events stays under 1s, far inside the 30s phase limit. For a deeper run, raise `COVE_MODEL_CASES` and `COVE_MODEL_STEPS` and pick another `COVE_MODEL_SEED`; 100 cases of 80 events take under a minute. Make a minimized failing sequence its own named test.
 
 ## Cloud Backup UI tests
 
