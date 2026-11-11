@@ -228,8 +228,9 @@ impl TestApp {
         self.begin_event("relaunch".into());
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
         CONNECTIVITY_MANAGER.set_connection_state(true);
-        self.manager =
-            self.block_on("relaunch: a new manager", async { RustCloudBackupManager::init() });
+        self.manager = self.block_on("relaunch: a new manager", async {
+            crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
+        });
         self.settle();
         Step(self)
     }

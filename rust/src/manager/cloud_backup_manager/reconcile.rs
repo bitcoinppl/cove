@@ -1,7 +1,6 @@
 use act_zero::send;
 use cove_device::cloud_storage::CloudSyncHealth;
 
-use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
 use super::model::{
@@ -11,7 +10,7 @@ use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupError, CloudBackupLifecycle,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
     PendingUploadVerificationState, RustCloudBackupManager,
@@ -195,22 +194,6 @@ impl RustCloudBackupManager {
     pub(crate) fn reconcile_persisted_state(&self, state: &PersistedCloudBackupState) {
         self.reconcile_runtime_status(Self::runtime_status_for(state));
         self.refresh_persisted_flags();
-    }
-
-    /// Persists `state`, then projects it into runtime status and flags
-    pub(crate) fn persist_cloud_backup_state(
-        &self,
-        state: &PersistedCloudBackupState,
-        context: impl std::fmt::Display,
-    ) -> Result<(), CloudBackupError> {
-        Database::global()
-            .cloud_backup_state
-            .set(state)
-            .map_err(|source| CloudBackupError::internal_context(context, source))?;
-
-        self.reconcile_persisted_state(state);
-
-        Ok(())
     }
 
     fn apply_pending_upload_verification_value(&self, pending: PendingUploadVerificationState) {

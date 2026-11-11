@@ -5,11 +5,13 @@ use super::{
     PersistedCloudBackupState, PersistedCloudBlobSyncState,
 };
 use crate::database::Error;
+use crate::manager::cloud_backup_manager::LifecycleCapability;
 
 impl CloudBackupStateTable {
     /// Writes restored configured state and dirty-wallet rows in one transaction
     pub(crate) fn persist_restored_namespace_activation(
         &self,
+        _owner: &LifecycleCapability,
         configured: &PersistedCloudBackupState,
         dirty_states: &[PersistedCloudBlobSyncState],
     ) -> Result<(), Error> {

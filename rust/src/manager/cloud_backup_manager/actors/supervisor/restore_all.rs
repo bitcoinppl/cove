@@ -33,7 +33,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        match CloudBackupStore::global().clear_restore_all_marker() {
+        match manager.lifecycle().clear_restore_all_marker() {
             Ok(_) => manager.reset_restore_all(),
             Err(error) => {
                 manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
@@ -75,7 +75,7 @@ impl CloudBackupSupervisor {
                 return;
             }
         };
-        if let Err(error) = CloudBackupStore::global().persist_restore_all_marker(namespace_id) {
+        if let Err(error) = manager.lifecycle().persist_restore_all_marker(namespace_id) {
             self.fail_restore_all_before_marker(&manager, claim, error);
             return;
         }
@@ -352,7 +352,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        if let Err(error) = CloudBackupStore::global().clear_restore_all_marker() {
+        if let Err(error) = manager.lifecycle().clear_restore_all_marker() {
             self.finish_restore_all_retry_required(manager, claim, error);
             return;
         }

@@ -441,34 +441,6 @@ impl PersistedCloudBackupState {
         }
     }
 
-    pub(crate) fn begin_disabling(
-        &mut self,
-        namespace_id: String,
-        disable_generation: u64,
-        started_at: u64,
-    ) -> bool {
-        match std::mem::take(self) {
-            Self::Configured(configured) => {
-                *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(
-                    PersistedDisablingCloudBackup {
-                        previous_configured: configured,
-                        namespace_id,
-                        disable_generation,
-                        started_at,
-                        delete_started_at: None,
-                        last_error: None,
-                        retry_after: None,
-                    },
-                ));
-                true
-            }
-            other => {
-                *self = other;
-                false
-            }
-        }
-    }
-
     pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
         Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
     }
@@ -486,23 +458,6 @@ impl PersistedCloudBackupState {
                 false
             }
         }
-    }
-
-    pub(crate) fn update_disabling(&mut self, update: &PersistedDisablingCloudBackup) -> bool {
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) = self
-        else {
-            return false;
-        };
-        if disabling.disable_generation != update.disable_generation
-            || disabling.namespace_id != update.namespace_id
-        {
-            return false;
-        }
-
-        disabling.delete_started_at = update.delete_started_at;
-        disabling.last_error.clone_from(&update.last_error);
-        disabling.retry_after = update.retry_after;
-        true
     }
 }
 

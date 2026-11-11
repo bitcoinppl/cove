@@ -841,7 +841,7 @@ mod tests {
         ensure_cloud_backup_test_tokio_runtime();
         test_globals().reset();
         Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
-        RustCloudBackupManager::init()
+        crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
     }
 
     fn cloud_backup_wallet_item(record_id: &str) -> CloudBackupWalletItem {

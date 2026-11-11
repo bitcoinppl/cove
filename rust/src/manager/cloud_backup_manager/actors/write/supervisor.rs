@@ -19,8 +19,8 @@ use crate::database::cloud_backup::{
     DriveAccountSwitchId, PersistedCloudBackupState, PersistedCloudBackupTransition,
 };
 use crate::manager::cloud_backup_manager::CloudBackupError;
+use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
-use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
 
 use super::super::supervisor::CloudBackupSupervisor;
 use super::types::{
@@ -534,9 +534,9 @@ impl CloudBackupWriteSupervisor {
                 manager.remove_blob_sync_states(std::iter::once(record_id.clone()))?;
 
                 let wallet_count = wallet_record_ids.len() as u32;
-                if let Err(error) = manager.mutate_persisted_cloud_backup_state(
+                if let Err(error) = manager.reconcile_committed(
                     "persist cloud backup state after deleting cloud wallet",
-                    |state| state.set_wallet_count(Some(wallet_count)),
+                    manager.lifecycle().record_wallet_count(wallet_count),
                 ) {
                     warn!(
                         "Failed to persist cloud backup state after deleting cloud wallet: {error}"
@@ -557,12 +557,13 @@ impl CloudBackupWriteSupervisor {
             ) => {
                 match state_mode {
                     CloudBackupUploadedWalletsStateMode::PreserveVerification => {
-                        CloudBackupStore::global().persist_enabled(wallet_count)?;
+                        manager.lifecycle().persist_enabled(wallet_count)?;
                     }
                     CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
                         completion,
                     ) => {
-                        CloudBackupStore::global()
+                        manager
+                            .lifecycle()
                             .persist_enabled_reset_verification_with_pending_completion(
                                 wallet_count,
                                 completion.clone(),
@@ -583,7 +584,7 @@ impl CloudBackupWriteSupervisor {
                 CloudBackupRemoteWriteResult::ListedWalletCount(listed_wallet_count),
             ) => {
                 let wallet_count = count_refresh.wallet_count(listed_wallet_count);
-                CloudBackupStore::global().persist_enabled(wallet_count)?;
+                manager.lifecycle().persist_enabled(wallet_count)?;
                 self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
             }
 
@@ -1008,7 +1009,7 @@ mod tests {
     async fn operation_origin_currentness_rejects_stale_supervisor_operation() {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
         let supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
@@ -1028,7 +1029,7 @@ mod tests {
     async fn stale_operation_write_is_rejected_before_starting_remote_execution() {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
         let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
@@ -1053,7 +1054,7 @@ mod tests {
     async fn stale_queued_operation_write_is_rejected_before_starting_remote_execution() {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
         let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         supervisor.in_flight_write =
@@ -1085,7 +1086,7 @@ mod tests {
     async fn stale_in_flight_operation_error_reports_cancelled() {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
         let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
@@ -1128,7 +1129,7 @@ mod tests {
     async fn wallet_finalization_persists_enabled_state_and_pending_completion_together() {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
         let supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let completion = PendingVerificationCompletion::new(

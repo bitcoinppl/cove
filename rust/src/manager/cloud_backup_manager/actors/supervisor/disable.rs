@@ -1,4 +1,10 @@
 use super::*;
+use crate::manager::cloud_backup_manager::ops::DisableAttempt;
+use crate::manager::cloud_backup_manager::owner::lifecycle::{CommitDisable, CommittedDisable};
+
+/// Shown when the namespace changed between the blocker check and the commit
+const CLOUD_BACKUP_DISABLE_STALE_REVIEW_MESSAGE: &str =
+    "Cloud Backup changed before it could be turned off. Nothing was deleted. Try again.";
 
 impl CloudBackupSupervisor {
     pub(crate) fn begin_disable_operation(&mut self) {
@@ -25,25 +31,23 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let disabling = match result {
+        let attempt = match result {
             Ok(CloudBackupDisablePreparation::AlreadyDisabled) => {
                 self.finish_disable_operation(&manager, claim);
                 return Produces::ok(());
             }
-            Ok(CloudBackupDisablePreparation::Ready(disabling)) => *disabling,
+            Ok(CloudBackupDisablePreparation::Ready(attempt)) => *attempt,
             Err(error) => {
                 self.fail_disable_operation(
                     &manager,
                     claim,
                     error.logged_reader_message("Failed to prepare cloud backup disable"),
-                    manager.disable_can_keep_enabled(),
                 );
                 return Produces::ok(());
             }
         };
 
-        let blocker =
-            CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
+        let blocker = CloudBackupWriteBlocker::Disabling { operation_id: attempt.attempt_id() };
 
         // wait for the active write lane to drain before deleting the namespace so an upload
         // that already started cannot recreate remote data after disable deletes it
@@ -51,17 +55,12 @@ impl CloudBackupSupervisor {
             call!(self.write.block_until_drained(blocker, self.addr.clone(), claim)).await
         {
             warn!("Failed to install cloud backup disable fence: {error}");
-            self.fail_disable_operation(
-                &manager,
-                claim,
-                CLOUD_BACKUP_DISABLE_ERROR_MESSAGE.into(),
-                manager.disable_can_keep_enabled(),
-            );
+            self.fail_disable_operation(&manager, claim, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE.into());
             return Produces::ok(());
         }
 
         self.pending_disable_write_drain =
-            Some(PendingDisableWriteDrain { claim, blocker, disabling });
+            Some(PendingDisableWriteDrain { claim, blocker, attempt });
 
         Produces::ok(())
     }
@@ -87,21 +86,25 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let Some(disabling) = manager.current_disabling_if_current(&pending.disabling) else {
-            self.finish_disable_operation(&manager, claim);
+        let Some(attempt) = manager.disable_attempt_if_current(&pending.attempt) else {
+            self.release_uncommitted_disable(&manager, claim, &pending.attempt).await;
             return Produces::ok(());
         };
 
         manager.apply_disable_outcome(CloudBackupDisableOutcome::Started);
         if let Err(error) = self.drain_disable_runtime(&manager).await {
-            self.fail_disable_before_namespace_delete_started(
-                &manager,
-                claim,
-                disabling,
-                error.logged_reader_message(
-                    "Failed to clear cloud backup runtime state before disable",
-                ),
-            );
+            let message = error
+                .logged_reader_message("Failed to clear cloud backup runtime state before disable");
+            match attempt {
+                DisableAttempt::Uncommitted { .. } => {
+                    self.fail_uncommitted_disable(&manager, claim, &attempt, message).await;
+                }
+                DisableAttempt::Committed(committed) => {
+                    self.fail_disable_after_namespace_delete_started(
+                        &manager, claim, committed, message,
+                    );
+                }
+            }
             return Produces::ok(());
         }
 
@@ -109,10 +112,13 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if disabling.delete_started_at.is_some() {
-            self.schedule_disable_namespace_delete(claim, disabling);
-        } else {
-            self.schedule_disable_blocker_check(manager, claim, disabling);
+        match attempt {
+            DisableAttempt::Committed(committed) => {
+                self.schedule_disable_namespace_delete(claim, committed);
+            }
+            DisableAttempt::Uncommitted { .. } => {
+                self.schedule_disable_blocker_check(manager, claim, attempt);
+            }
         }
 
         Produces::ok(())
@@ -141,66 +147,97 @@ impl CloudBackupSupervisor {
         &self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        attempt: DisableAttempt,
     ) {
+        let DisableAttempt::Uncommitted { review, .. } = &attempt else { return };
+        let namespace_id = review.namespace_id.clone();
         self.addr.send_fut_with(move |addr| async move {
             let cloud = CloudStorage::global_explicit_client();
-            let result = manager.check_disable_blockers(&cloud, &disabling).await;
-            send!(addr.complete_disable_blocker_check(claim, disabling, result));
+            let result = manager.check_disable_blockers(&cloud, &namespace_id).await;
+            send!(addr.complete_disable_blocker_check(claim, attempt, result));
         });
     }
 
     pub async fn complete_disable_blocker_check(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        attempt: DisableAttempt,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
-        let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
-            self.finish_disable_operation(&manager, claim);
+        let Some(DisableAttempt::Uncommitted { review, attempt_id }) =
+            manager.disable_attempt_if_current(&attempt)
+        else {
+            self.release_uncommitted_disable(&manager, claim, &attempt).await;
             return Produces::ok(());
         };
 
         if let Err(error) = result {
             let message = error.logged_reader_message("Cloud backup disable blocker check failed");
-            if let Err(error) = manager.rollback_disable_before_delete(&disabling, message) {
-                self.fail_disable_operation(
-                    &manager,
-                    claim,
-                    error.logged_reader_message("Failed to roll back cloud backup disable"),
-                    manager.disable_can_keep_enabled(),
-                );
-            } else {
-                self.finish_disable_operation(&manager, claim);
-            }
+            self.fail_uncommitted_disable(&manager, claim, &attempt, message).await;
             return Produces::ok(());
         }
 
-        match manager.mark_disable_delete_started_if_current(&disabling) {
-            Ok(Some(disabling)) => self.schedule_disable_namespace_delete(claim, disabling),
-            Ok(None) => self.finish_disable_operation(&manager, claim),
+        // the commit point: from here on the disable only goes forward
+        match manager.commit_disable_attempt(&review, attempt_id) {
+            Ok(CommitDisable::Committed(committed)) => {
+                self.schedule_disable_namespace_delete(claim, committed);
+            }
+            Ok(CommitDisable::NotConfigured) => {
+                self.release_uncommitted_disable(&manager, claim, &attempt).await;
+            }
+            Ok(CommitDisable::StaleReview) => {
+                let message = CLOUD_BACKUP_DISABLE_STALE_REVIEW_MESSAGE.to_string();
+                self.fail_uncommitted_disable(&manager, claim, &attempt, message).await;
+            }
             Err(error) => {
-                self.fail_disable_operation(
-                    &manager,
-                    claim,
-                    error.logged_reader_message(
-                        "Failed to mark cloud backup namespace delete started",
-                    ),
-                    manager.disable_can_keep_enabled(),
-                );
+                let message = error.logged_reader_message("Failed to commit cloud backup disable");
+                self.fail_uncommitted_disable(&manager, claim, &attempt, message).await;
             }
         }
 
         Produces::ok(())
     }
 
+    /// Ends an attempt that never committed: nothing was deleted, so writes resume
+    async fn release_uncommitted_disable(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        attempt: &DisableAttempt,
+    ) {
+        if matches!(attempt, DisableAttempt::Uncommitted { .. }) {
+            let blocker = CloudBackupWriteBlocker::Disabling { operation_id: attempt.attempt_id() };
+            if let Err(error) = self.unblock_cloud_backup_writes(blocker).await {
+                warn!("Failed to lift cloud backup disable fence: {error}");
+            }
+        }
+
+        self.finish_disable_operation(manager, claim);
+    }
+
+    async fn fail_uncommitted_disable(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        attempt: &DisableAttempt,
+        message: String,
+    ) {
+        // callers log the cause before building the reader message, so logging it here again
+        // would add a second line with less detail
+        manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
+            message,
+            can_keep_enabled: false,
+        });
+        self.release_uncommitted_disable(manager, claim, attempt).await;
+    }
+
     fn schedule_disable_namespace_delete(
         &self,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        disabling: CommittedDisable,
     ) {
         let write = self.write.clone();
         self.addr.send_fut_with(move |addr| async move {
@@ -217,7 +254,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_disable_namespace_delete(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        disabling: CommittedDisable,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
@@ -253,7 +290,7 @@ impl CloudBackupSupervisor {
         &self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        disabling: CommittedDisable,
     ) {
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.finish_disable_local_cleanup();
@@ -264,7 +301,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_disable_local_cleanup(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        disabling: CommittedDisable,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
@@ -281,7 +318,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if let Err(error) = manager.persist_disabled_after_remote_delete() {
+        if let Err(error) = manager.persist_disabled_after_remote_delete(&disabling) {
             self.fail_disable_after_namespace_delete_started(
                 &manager,
                 claim,
@@ -291,8 +328,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let blocker =
-            CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
+        let blocker = CloudBackupWriteBlocker::Disabling { operation_id: disabling.attempt_id };
         if let Err(error) = call!(self.write.unblock(blocker)).await {
             warn!("Failed to lift cloud backup disable fence: {error}");
         }
@@ -306,39 +342,20 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    fn fail_disable_before_namespace_delete_started(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
-        message: String,
-    ) {
-        if let Err(error) = manager.rollback_disable_before_delete(&disabling, message) {
-            self.fail_disable_operation(
-                manager,
-                claim,
-                error.logged_reader_message("Failed to roll back cloud backup disable"),
-                manager.disable_can_keep_enabled(),
-            );
-        } else {
-            self.finish_disable_operation(manager, claim);
-        }
-    }
-
     fn fail_disable_after_namespace_delete_started(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
-        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        disabling: CommittedDisable,
         message: String,
     ) {
-        let message = match manager.persist_disabling_failure(disabling, message.clone()) {
+        let message = match manager.persist_disabling_failure(&disabling, message.clone()) {
             Ok(()) => message,
             Err(error) => {
                 error.logged_reader_message("Failed to persist cloud backup disable failure")
             }
         };
-        self.fail_disable_operation(manager, claim, message, manager.disable_can_keep_enabled());
+        self.fail_disable_operation(manager, claim, message);
     }
 
     fn fail_disable_operation(
@@ -346,12 +363,16 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
         message: String,
-        can_keep_enabled: bool,
     ) {
         // callers log the cause before building the reader message, so logging it here again
         // would add a second line with less detail
-        manager
-            .apply_disable_outcome(CloudBackupDisableOutcome::Failed { message, can_keep_enabled });
+        //
+        // nothing uncommitted is persisted and a committed disable only goes forward, so a
+        // failure never offers Keep Enabled
+        manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
+            message,
+            can_keep_enabled: false,
+        });
         self.finish_disable_operation(manager, claim);
     }
 
@@ -398,7 +419,7 @@ impl CloudBackupSupervisor {
 
                 if let Err(error) = self
                     .unblock_cloud_backup_writes(CloudBackupWriteBlocker::Disabling {
-                        operation_id: disabling.disable_generation,
+                        operation_id: disabling.attempt_id,
                     })
                     .await
                 {
@@ -447,7 +468,7 @@ impl CloudBackupSupervisor {
 
     fn restore_configured_cloud_backup_after_disable(
         manager: &RustCloudBackupManager,
-        disabling: &PersistedDisablingCloudBackup,
+        disabling: &CommittedDisable,
     ) -> Option<bool> {
         match manager.restore_configured_cloud_backup_after_disable(disabling) {
             Ok(restored) => Some(restored),

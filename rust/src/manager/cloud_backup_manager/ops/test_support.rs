@@ -1584,12 +1584,9 @@ pub(crate) fn enable_cloud_backup_without_reset(
     CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
-    manager
-        .persist_cloud_backup_state(
-            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
-            "set cloud backup enabled for test",
-        )
-        .unwrap();
+    let state = persisted_enabled_cloud_backup_state(Some(wallet_count));
+    Database::global().cloud_backup_state.set(&state).unwrap();
+    manager.reconcile_persisted_state(&state);
     manager.sync_persisted_state();
 }
 
@@ -1819,12 +1816,9 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
     CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
-    manager
-        .persist_cloud_backup_state(
-            &persisted_enabled_cloud_backup_state(None),
-            "set cloud backup enabled for test",
-        )
-        .unwrap();
+    let state = persisted_enabled_cloud_backup_state(None);
+    Database::global().cloud_backup_state.set(&state).unwrap();
+    manager.reconcile_persisted_state(&state);
 
     let mut metadata = crate::wallet::metadata::WalletMetadata::preview_new();
     metadata.wallet_type = crate::wallet::metadata::WalletType::WatchOnly;

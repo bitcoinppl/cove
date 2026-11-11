@@ -27,8 +27,7 @@ use super::write::{
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
-    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase,
+    PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
@@ -64,7 +63,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
     CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
     CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
-    CloudBackupStatus, CloudBackupStore, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
@@ -210,7 +209,7 @@ fn verification_needs_connectivity_retry(
 struct PendingDisableWriteDrain {
     claim: CloudBackupExclusiveOperationClaim,
     blocker: CloudBackupWriteBlocker,
-    disabling: PersistedDisablingCloudBackup,
+    attempt: crate::manager::cloud_backup_manager::ops::DisableAttempt,
 }
 
 /// A restore or Restore All run, whose worker keeps draining until it observes cancellation
@@ -390,9 +389,7 @@ impl CloudBackupSupervisor {
         restore::save_restore_keychain_entries(&snapshot, master_key, passkey, namespace_id)?;
 
         // keychain, configured state, and dirty-wallet rows are one restore commit
-        if let Err(source) = Database::global()
-            .cloud_backup_state
-            .persist_restored_namespace_activation(&state, &dirty_states)
+        if let Err(source) = manager.lifecycle().activate_restored_namespace(&state, &dirty_states)
         {
             let original =
                 CloudBackupError::internal_context("persist restored namespace activation", source);
@@ -679,11 +676,9 @@ impl CloudBackupSupervisor {
         Produces::ok(Ok(()))
     }
 
-    pub async fn persist_restore_cloud_backup_state(
+    pub async fn record_restore_without_backup(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        state: PersistedCloudBackupState,
-        context: String,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if !self.restore_operation_is_current(claim) {
             return Produces::ok(Err(CloudBackupError::Cancelled));
@@ -692,7 +687,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        let result = manager.persist_cloud_backup_state(&state, context);
+        let result = manager.reconcile_committed(
+            "persist empty restored cloud backup state",
+            manager.lifecycle().record_restore_without_backup(),
+        );
 
         Produces::ok(result)
     }

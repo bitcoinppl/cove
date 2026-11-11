@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::owner::lifecycle::DriveAccountSwitchStart;
 use cove_util::ResultExt as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,7 +49,7 @@ impl CloudBackupSupervisor {
             transition_id,
             phase: PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
         };
-        if let Err(error) = Self::persist_drive_account_switch(transition) {
+        if let Err(error) = Self::persist_drive_account_switch(&manager, transition) {
             self.active_operation.clear();
             manager.project_exclusive_operation_finished(claim);
             return Produces::ok(Err(error));
@@ -59,7 +60,8 @@ impl CloudBackupSupervisor {
         let receiver = match call!(self.write.block_until_drained_receiver(blocker)).await {
             Ok(receiver) => receiver,
             Err(error) => {
-                if let Err(clear_error) = Self::clear_drive_account_switch(transition.transition_id)
+                if let Err(clear_error) =
+                    Self::clear_drive_account_switch(&manager, transition.transition_id)
                 {
                     error!(
                         "Failed to clear Google Drive account switch after write fence failure: {clear_error}"
@@ -109,7 +111,8 @@ impl CloudBackupSupervisor {
         }
 
         if let Some(transition_id) = transition_id
-            && let Err(error) = Self::clear_drive_account_switch(transition_id)
+            && let Some(manager) = self.manager()
+            && let Err(error) = Self::clear_drive_account_switch(&manager, transition_id)
         {
             error!(
                 "Failed to clear Google Drive account switch after write fence stopped: {error}"
@@ -144,6 +147,7 @@ impl CloudBackupSupervisor {
         };
 
         if let Err(error) = Self::set_drive_account_switch_phase(
+            &manager,
             transition_id,
             PersistedDriveAccountSwitchPhase::Reinitializing,
         ) {
@@ -164,7 +168,13 @@ impl CloudBackupSupervisor {
         ) {
             return Produces::ok(Err(error));
         }
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
+                "cloud backup manager stopped".into(),
+            )));
+        };
         if let Err(error) = Self::set_drive_account_switch_phase(
+            &manager,
             transition_id,
             PersistedDriveAccountSwitchPhase::AwaitingAccountRollback,
         ) {
@@ -205,7 +215,7 @@ impl CloudBackupSupervisor {
             Err(error) => return Produces::ok(Err(error)),
         };
 
-        if let Err(error) = Self::clear_drive_account_switch(transition_id) {
+        if let Err(error) = Self::clear_drive_account_switch(&manager, transition_id) {
             return Produces::ok(Err(error));
         }
 
@@ -245,7 +255,7 @@ impl CloudBackupSupervisor {
             Err(error) => return Produces::ok(Err(error)),
         };
 
-        if let Err(error) = Self::clear_drive_account_switch(transition_id) {
+        if let Err(error) = Self::clear_drive_account_switch(&manager, transition_id) {
             return Produces::ok(Err(error));
         }
 
@@ -336,6 +346,7 @@ impl CloudBackupSupervisor {
                     Err(error) => return Produces::ok(Err(error)),
                 };
                 if let Err(error) = Self::set_drive_account_switch_phase(
+                    &manager,
                     transition.transition_id,
                     PersistedDriveAccountSwitchPhase::Reinitializing,
                 ) {
@@ -365,6 +376,7 @@ impl CloudBackupSupervisor {
                 DriveAccountSwitchPlatformState::NoTransition,
             ) => {
                 if let Err(error) = Self::set_drive_account_switch_phase(
+                    &manager,
                     transition.transition_id,
                     PersistedDriveAccountSwitchPhase::AwaitingAccountRollback,
                 ) {
@@ -438,7 +450,9 @@ impl CloudBackupSupervisor {
         } else {
             PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry
         };
-        if let Err(error) = Self::set_drive_account_switch_phase(transition.transition_id, phase) {
+        if let Err(error) =
+            Self::set_drive_account_switch_phase(manager, transition.transition_id, phase)
+        {
             error!("Failed to persist Google Drive account switch completion: {error}");
             Self::report_drive_account_switch_recovery_required(
                 manager,
@@ -473,6 +487,7 @@ impl CloudBackupSupervisor {
                 }
             };
         if let Err(error) = Self::set_drive_account_switch_phase(
+            &manager,
             transition.transition_id,
             PersistedDriveAccountSwitchPhase::Reinitializing,
         ) {
@@ -529,44 +544,45 @@ impl CloudBackupSupervisor {
     }
 
     fn persist_drive_account_switch(
+        manager: &RustCloudBackupManager,
         account_switch: PersistedDriveAccountSwitch,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        let mutation = Database::global()
-            .cloud_backup_state
-            .mutate(|state| state.set_drive_account_switch(account_switch))
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
-
-        if mutation.outcome {
-            return Ok(());
+        match manager
+            .lifecycle()
+            .begin_drive_account_switch(account_switch)
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+        {
+            DriveAccountSwitchStart::Started => Ok(()),
+            DriveAccountSwitchStart::Busy => Err(CloudBackupDriveAccountSwitchError::Busy),
+            DriveAccountSwitchStart::NotConfigured => {
+                Err(CloudBackupDriveAccountSwitchError::NotConfigured)
+            }
         }
-        if mutation.state.exclusive_transition().is_some() {
-            return Err(CloudBackupDriveAccountSwitchError::Busy);
-        }
-
-        Err(CloudBackupDriveAccountSwitchError::NotConfigured)
     }
 
     fn set_drive_account_switch_phase(
+        manager: &RustCloudBackupManager,
         transition_id: DriveAccountSwitchId,
         phase: PersistedDriveAccountSwitchPhase,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        let mutation = Database::global()
-            .cloud_backup_state
-            .mutate(|state| state.set_drive_account_switch_phase(transition_id, phase))
+        let applied = manager
+            .lifecycle()
+            .set_drive_account_switch_phase(transition_id, phase)
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
 
-        mutation.outcome.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
+        applied.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
     }
 
     fn clear_drive_account_switch(
+        manager: &RustCloudBackupManager,
         transition_id: DriveAccountSwitchId,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        let mutation = Database::global()
-            .cloud_backup_state
-            .mutate(|state| state.clear_drive_account_switch(transition_id))
+        let cleared = manager
+            .lifecycle()
+            .clear_drive_account_switch(transition_id)
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
 
-        mutation.outcome.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
+        cleared.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
     }
 
     fn report_drive_account_switch_recovery_required(

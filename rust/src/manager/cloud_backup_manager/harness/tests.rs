@@ -16,11 +16,12 @@ use super::{
     PhaseEnd, TestApp, open_durable_state, run_case, seed_legacy_stuck_disabling,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::{
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
-};
+use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
+use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::fail_next_heal_write;
 use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudBackupManagerAction};
+use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 
 fn persisted() -> PersistedCloudBackupState {
     Database::global().cloud_backup_state.get().expect("read cloud backup state")
@@ -172,12 +173,12 @@ fn killed_after_namespace_delete_resumes_to_disabled_on_next_launch() {
     });
 }
 
-/// Today's deadlock on the reporter's record. Phase B's load normalization flips this test:
-/// the record becomes Configured with the heal notice, and Turn Off works without a passkey
+/// The reporter's record heals at load: a disable that never deleted anything becomes its
+/// configuration again, with a persisted notice, and nothing prompts for a passkey
 #[test]
-fn legacy_stuck_disabling_record_deadlocks_today() {
-    let test = concat!(module_path!(), "::legacy_stuck_disabling_record_deadlocks_today");
-    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+fn legacy_stuck_disabling_record_heals_at_load() {
+    let test = concat!(module_path!(), "::legacy_stuck_disabling_record_heals_at_load");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
         let account = FakeAccount::lived_in();
         assert_eq!(account.record_count(), 35);
 
@@ -189,26 +190,71 @@ fn legacy_stuck_disabling_record_deadlocks_today() {
         }
 
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current().then_cannot(&[N::Enable, N::Verify, N::SyncUnsynced]);
-        let stuck = persisted();
-        let PersistedCloudBackupState::ExclusiveTransition(
-            PersistedCloudBackupTransition::Disabling(disabling),
-        ) = &stuck
-        else {
-            panic!("launch moved the legacy record:\n{}", app.describe());
-        };
-        assert_eq!(disabling.delete_started_at, None, "{}", app.describe());
-        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
-        // Turn Off again without the detail inventory: today's Rust drops it, nothing moves
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[
-            N::Enable,
-            N::Verify,
-            N::SyncUnsynced,
-        ]);
-        assert_eq!(persisted(), stuck, "{}", app.describe());
+        // writes are allowed again; Turn Off still waits for the detail inventory today
+        app.current()
+            .then_can(&[N::Verify, N::SyncUnsynced])
+            .then_cannot(&[N::Enable, N::KeepEnabled]);
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("the legacy record did not heal:\n{}", app.describe());
+        };
+        // phase 2 is a full relaunch: the notice is still on the record it healed
+        assert!(configured.heal_notice.is_some(), "phase {phase}: the heal notice is persisted");
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
         assert!(app.passkey.interactive_calls().is_empty());
+        assert!(keychain_namespace().is_some(), "the heal keeps the namespace");
+    });
+}
+
+/// A failed heal write leaves the legacy record unchanged and fails the load, never Disabled;
+/// the next launch heals it
+#[test]
+fn failed_heal_write_keeps_the_legacy_record_and_fails_the_load() {
+    let test =
+        concat!(module_path!(), "::failed_heal_write_keeps_the_legacy_record_and_fails_the_load");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        let account = FakeAccount::new(2, 0);
+
+        if phase == 0 {
+            let app = TestApp::launch();
+            let namespace = account.seed(&app);
+            seed_legacy_stuck_disabling(&namespace, app.clock.now_secs());
+            return;
+        }
+
+        if phase == 1 {
+            fail_next_heal_write();
+            let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+            let stuck = persisted();
+            let unchanged =
+                stuck.disabling().is_some_and(|record| record.delete_started_at.is_none());
+            assert!(unchanged, "the failed heal changed the record:\n{}", app.describe());
+            app.current().then_cannot(&[
+                N::Enable,
+                N::Verify,
+                N::SyncUnsynced,
+                N::TurnOff,
+                N::KeepEnabled,
+            ]);
+            assert_eq!(persisted(), stuck, "{}", app.describe());
+            assert_eq!(
+                RustCloudBackupManager::runtime_status_for(&persisted()),
+                CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())
+            );
+
+            // Turn Off cannot run on an unnormalized record, and nothing is deleted
+            app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[N::Enable]);
+            assert_eq!(persisted(), stuck, "{}", app.describe());
+            assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
+            return;
+        }
+
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        app.current().then_can(&[N::Verify, N::SyncUnsynced]);
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("the relaunch did not heal:\n{}", app.describe());
+        };
+        assert!(configured.heal_notice.is_some());
     });
 }
 

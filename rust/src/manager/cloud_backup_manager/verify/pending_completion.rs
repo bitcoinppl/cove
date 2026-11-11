@@ -1,9 +1,10 @@
 use std::sync::atomic::Ordering;
 
+use act_zero::send;
 use ahash::HashMap;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use zeroize::Zeroizing;
 
 use super::{
@@ -60,29 +61,56 @@ impl RustCloudBackupManager {
             PendingVerificationUploadsReadiness::Pending => return,
             PendingVerificationUploadsReadiness::Confirmed => {}
             PendingVerificationUploadsReadiness::TerminalFailure(error) => {
-                self.apply_failed_verification(DeepVerificationFailure::retry(
-                    error,
-                    completion.report().detail,
-                    None,
-                ));
-                self.clear_pending_verification_completion();
+                let failure =
+                    DeepVerificationFailure::retry(error, completion.report().detail, None);
+                self.settle_pending_verification(
+                    &completion,
+                    DeepVerificationResult::Failed(failure),
+                );
                 return;
             }
         }
 
-        match self.finalize_pending_verification(completion.clone()).await {
+        let result = match self.finalize_pending_verification(completion.clone()).await {
             Ok(FinalizePendingVerificationResult::Pending) => return,
             Ok(FinalizePendingVerificationResult::Completed(report)) => {
                 if report.wallet_issues.is_empty() {
-                    self.apply_verified_report(report);
+                    DeepVerificationResult::Verified(report)
                 } else {
-                    self.apply_needs_attention_report(report);
+                    DeepVerificationResult::NeedsAttention(report)
                 }
             }
-            Err(failure) => self.apply_failed_verification(*failure),
-        }
+            Err(failure) => DeepVerificationResult::Failed(*failure),
+        };
 
-        self.clear_pending_verification_completion();
+        self.settle_pending_verification(&completion, result);
+    }
+
+    /// Hands a finished upload confirmation to the lifecycle owner
+    ///
+    /// The owner accepts it only while `completion` is still the stored marker. A confirmation
+    /// that a manual verification or a newer marker superseded is dropped without effects
+    pub(crate) fn settle_pending_verification(
+        &self,
+        completion: &PendingVerificationCompletion,
+        result: DeepVerificationResult,
+    ) {
+        let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
+        let settled = self.reconcile_committed(
+            "settle pending verification completion",
+            self.lifecycle()
+                .settle_pending_verification_completion(completion, Some((&result, verified_at))),
+        );
+
+        match settled {
+            Ok(true) => {
+                self.apply_verification_result_effect(result);
+                send!(self.supervisor.clear_pending_verification_completion());
+                self.refresh_pending_upload_verification_state();
+            }
+            Ok(false) => debug!("Dropped an upload confirmation that is no longer pending"),
+            Err(error) => error!("Failed to settle pending verification completion: {error}"),
+        }
     }
 
     fn pending_enable_finalization_owns_completion() -> bool {
@@ -104,12 +132,12 @@ impl RustCloudBackupManager {
         warn!(
             "Pending verification expired after {PENDING_VERIFICATION_COMPLETION_TTL_SECONDS}s without confirmed uploads"
         );
-        self.apply_failed_verification(DeepVerificationFailure::retry(
+        let failure = DeepVerificationFailure::retry(
             "cloud backup upload confirmation expired; start verification again",
             completion.report().detail,
             None,
-        ));
-        self.clear_pending_verification_completion();
+        );
+        self.settle_pending_verification(&completion, DeepVerificationResult::Failed(failure));
     }
 
     fn pending_verification_uploads_readiness(
@@ -406,6 +434,28 @@ impl RustCloudBackupManager {
         self.apply_verification_effect(CloudBackupVerificationCoordinator::needs_attention(
             source, report,
         ));
+    }
+
+    /// Applies the in-memory effect of a verification result the owner already accepted
+    fn apply_verification_result_effect(&self, result: DeepVerificationResult) {
+        let source = self.current_verification_source();
+        let effect = match result {
+            DeepVerificationResult::Verified(report) => {
+                CloudBackupVerificationCoordinator::complete(source, report)
+            }
+            DeepVerificationResult::NeedsAttention(report) => {
+                CloudBackupVerificationCoordinator::needs_attention(source, report)
+            }
+            DeepVerificationResult::Failed(failure) => {
+                CloudBackupVerificationCoordinator::fail(source, failure)
+            }
+            other => {
+                debug!("Pending upload confirmation settled with {other:?}");
+                return;
+            }
+        };
+
+        self.apply_verification_effect(effect);
     }
 
     pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {

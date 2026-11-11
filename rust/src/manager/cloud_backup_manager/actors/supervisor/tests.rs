@@ -1,5 +1,9 @@
 
 use super::*;
+use crate::manager::cloud_backup_manager::ops::DisableAttempt;
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommittedDisable, DisableCommitReview, DisablingRecord,
+};
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
 };
@@ -30,7 +34,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle, CloudBackupListedDetail,
     CloudBackupOtherBackupsSummary,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
     PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
 };
@@ -50,7 +54,7 @@ fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     // a new manager resumes any persisted transition on init and blocks its writes for it, so a
     // transition an earlier test left behind must be gone first
     let _ = Database::global().cloud_backup_state.delete();
-    let manager = RustCloudBackupManager::init();
+    let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
     reset_cloud_backup_test_state(&manager, globals);
     manager
 }
@@ -60,6 +64,20 @@ fn persist_enabled_for_supervisor_test() {
         .cloud_backup_state
         .set(&PersistedCloudBackupState::mark_enabled_reset_verification(0, 0))
         .unwrap();
+}
+
+fn test_committed_disable() -> CommittedDisable {
+    match CommittedDisable::from_record(&test_disabling_state()) {
+        DisablingRecord::Committed(committed) => committed,
+        DisablingRecord::Unnormalized => panic!("the test record is committed"),
+    }
+}
+
+fn test_uncommitted_attempt() -> DisableAttempt {
+    DisableAttempt::Uncommitted {
+        review: DisableCommitReview { namespace_id: VALID_NAMESPACE_ID.into() },
+        attempt_id: 7,
+    }
 }
 
 fn test_disabling_state() -> PersistedDisablingCloudBackup {
@@ -96,7 +114,7 @@ fn prepare_restore_all_marker(manager: &RustCloudBackupManager) {
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
     CloudBackupKeychain::global().save_namespace_id(VALID_NAMESPACE_ID).unwrap();
-    CloudBackupStore::global()
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer()
         .persist_restore_all_marker(VALID_NAMESPACE_ID.into())
         .unwrap();
     manager.sync_persisted_state();
@@ -1514,7 +1532,7 @@ async fn supervisor_ignores_stale_disable_preparation_completion() {
 async fn supervisor_ignores_stale_disable_blocker_completion() {
     assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_blocker_check(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_blocker_check(claim, test_uncommitted_attempt(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1525,7 +1543,7 @@ async fn supervisor_ignores_stale_disable_blocker_completion() {
 async fn supervisor_ignores_stale_disable_delete_completion() {
     assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_namespace_delete(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_namespace_delete(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1536,7 +1554,7 @@ async fn supervisor_ignores_stale_disable_delete_completion() {
 async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
     assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_local_cleanup(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_local_cleanup(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -2974,7 +2992,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
 
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_disable_blocker_completion_after_keep_enabled_restores_configured() {
+async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
@@ -2986,24 +3004,15 @@ async fn supervisor_ignores_disable_blocker_completion_after_keep_enabled_restor
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
-        .unwrap();
+    test_disabling_state();
+    Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
 
-    assert!(manager.restore_configured_cloud_backup_after_disable(&disabling).unwrap());
-
-    supervisor.complete_disable_blocker_check(claim, disabling, Ok(())).await.unwrap();
+    supervisor.complete_disable_blocker_check(claim, test_uncommitted_attempt(), Ok(())).await.unwrap();
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Configured(_)
-    ));
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap(), PersistedCloudBackupState::Disabled);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3018,21 +3027,23 @@ async fn keep_enabled_finishes_active_disable_operation() {
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
+    let disabling = test_disabling_state();
     Database::global()
         .cloud_backup_state
         .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
         .unwrap();
+    let DisablingRecord::Committed(committed) = CommittedDisable::from_record(&disabling) else {
+        panic!("the test record is committed");
+    };
     supervisor.pending_disable_write_drain = Some(PendingDisableWriteDrain {
         claim,
-        blocker: CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation },
-        disabling: disabling.clone(),
+        blocker: CloudBackupWriteBlocker::Disabling { operation_id: committed.attempt_id },
+        attempt: DisableAttempt::Committed(committed.clone()),
     });
 
     supervisor
         .complete_keep_cloud_backup_enabled(Ok(CloudBackupKeepEnabledPreparation::Ready(Box::new(
-            disabling,
+            committed,
         ))))
         .await
         .unwrap();
@@ -3047,7 +3058,7 @@ async fn keep_enabled_finishes_active_disable_operation() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn disable_runtime_drain_failure_remains_pre_delete() {
+async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = CloudBackupSupervisor::new(
@@ -3059,32 +3070,22 @@ async fn disable_runtime_drain_failure_remains_pre_delete() {
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
-        .unwrap();
-    let blocker =
-        CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
+    test_disabling_state();
+    let attempt = test_uncommitted_attempt();
+    let blocker = CloudBackupWriteBlocker::Disabling { operation_id: attempt.attempt_id() };
     supervisor.pending_disable_write_drain =
-        Some(PendingDisableWriteDrain { claim, blocker, disabling });
+        Some(PendingDisableWriteDrain { claim, blocker, attempt });
 
     supervisor.complete_disable_write_drain(claim, blocker).await.unwrap();
 
+    // nothing was committed, so the record is still configured and nothing can be kept
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
-    let state = Database::global().cloud_backup_state.get().unwrap();
-    let disabling = state.disabling().expect("expected persisted disabling state");
-    assert!(disabling.delete_started_at.is_none());
-    assert!(disabling.last_error.is_some());
-    assert!(manager.disable_can_keep_enabled());
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Configured(_)
+    ));
 }
-
-
-
-
-
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
@@ -3880,7 +3881,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the provider lists the record but its download is not available yet
@@ -3924,7 +3925,7 @@ async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_aga
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the provider lists the record before its download is available
@@ -3967,7 +3968,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the selected wallet is listed but its download fails, so preparation queues nothing
@@ -4007,7 +4008,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    CloudBackupStore::global().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
     manager.sync_persisted_state();
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
         duplicate_record_id,
@@ -4077,7 +4078,7 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     let cloud = CloudStorage::global_silent_client();
     let disabling = disabling_for_current_namespace(&manager);
     assert!(matches!(
-        manager.check_disable_blockers(&cloud, &disabling).await,
+        manager.check_disable_blockers(&cloud, &disabling.namespace_id).await,
         Err(CloudBackupError::RecoveryRequired(_))
     ));
 
@@ -4095,7 +4096,7 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     // only the cloud record went away, the local wallet and its own backup stay
     assert!(local_wallet_exists(&fixture.local_wallet));
     assert!(globals.cloud.has_wallet_backup(&fixture.namespace, &fixture.local_record_id));
-    assert!(manager.check_disable_blockers(&cloud, &disabling).await.is_ok());
+    assert!(manager.check_disable_blockers(&cloud, &disabling.namespace_id).await.is_ok());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4425,7 +4426,7 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the detail lists a record that another device deletes before the fetch lists again

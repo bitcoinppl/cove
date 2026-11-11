@@ -373,7 +373,7 @@ fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
 
 fn init_manager() -> Arc<RustCloudBackupManager> {
     ensure_cloud_backup_test_tokio_runtime();
-    RustCloudBackupManager::init()
+    crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
 }
 
 fn operation_write_client_for_test(

@@ -27,7 +27,6 @@ pub(crate) use self::wrapper_repair::{
     CloudBackupUploadedPasskeyWrapperRepair,
 };
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
-use super::CloudBackupStore;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
     CloudBackupRetryAction, CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport,
@@ -44,12 +43,15 @@ use crate::manager::cloud_backup_manager::actors::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IntegrityDowngrade {
+pub(crate) enum IntegrityDowngrade {
     Unverified,
 }
 
 impl IntegrityDowngrade {
-    fn apply_to(&self, current: &PersistedCloudBackupState) -> Option<PersistedCloudBackupState> {
+    pub(crate) fn apply_to(
+        &self,
+        current: &PersistedCloudBackupState,
+    ) -> Option<PersistedCloudBackupState> {
         match self {
             Self::Unverified => match current.status() {
                 PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
@@ -205,10 +207,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
         let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let persisted = self
-            .mutate_persisted_cloud_backup_state("persist verification state", |state| {
-                apply_persisted_verification_result(state, result, verified_at)
-            });
+        let persisted = self.reconcile_committed(
+            "persist verification state",
+            self.lifecycle().record_verification(result, verified_at),
+        );
 
         if let Err(error) = persisted {
             error!("Failed to persist verification state: {error}");
@@ -217,13 +219,9 @@ impl RustCloudBackupManager {
 
     pub(crate) fn mark_verification_required_after_wallet_change(&self) {
         let requested_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let persisted = self.mutate_persisted_cloud_backup_state(
+        let persisted = self.reconcile_committed(
             "mark cloud backup unverified after wallet change",
-            |state| {
-                let previous = state.clone();
-                state.mark_verification_required_after_wallet_change(Some(requested_at));
-                *state != previous
-            },
+            self.lifecycle().require_verification_after_wallet_change(requested_at),
         );
         if let Err(error) = persisted {
             error!("Failed to mark cloud backup unverified after wallet change: {error}");
@@ -342,7 +340,7 @@ impl RustCloudBackupManager {
         &self,
         finalization: CloudBackupPasskeyRepairFinalization,
     ) -> Result<(), CloudBackupError> {
-        CloudBackupStore::global().persist_enabled(finalization.wallet_count)?;
+        self.lifecycle().persist_enabled(finalization.wallet_count)?;
         self.reconcile_runtime_status(CloudBackupStatus::Enabled);
         Ok(())
     }
@@ -469,7 +467,7 @@ impl RustCloudBackupManager {
     }
 }
 
-fn apply_persisted_verification_result(
+pub(crate) fn apply_persisted_verification_result(
     state: &mut PersistedCloudBackupState,
     result: &DeepVerificationResult,
     verified_at: u64,

@@ -495,7 +495,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         ensure_cloud_backup_test_tokio_runtime();
         let globals = test_globals();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         configure_enabled_cloud_backup(&manager, globals, 0);
 
         let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
