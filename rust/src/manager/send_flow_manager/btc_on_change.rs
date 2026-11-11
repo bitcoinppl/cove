@@ -130,7 +130,8 @@ impl BtcOnChangeHandler {
         let amount = if let Some(a) = amount {
             a
         } else {
-            debug!("unable to parse amount: {unformatted}");
+            // the unparsed text is raw user input, so it stays out of the log
+            debug!("unable to parse amount, {} chars", unformatted.len());
             return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         };
 
