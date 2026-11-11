@@ -121,6 +121,16 @@ impl std::fmt::Debug for MockKeychain {
 }
 
 impl MockKeychain {
+    /// Every stored entry, for harnesses that persist the keychain across processes
+    pub(crate) fn entries_snapshot(&self) -> HashMap<String, String> {
+        self.entries.lock().clone()
+    }
+
+    /// Replace every stored entry, for harnesses that resume a killed process
+    pub(crate) fn restore_entries(&self, entries: HashMap<String, String>) {
+        *self.entries.lock() = entries;
+    }
+
     pub(crate) fn reset(&self) {
         self.entries.lock().clear();
         *self.fail_save_at.lock() = None;

@@ -252,9 +252,39 @@ pub(crate) struct MockCloudStorage {
     state: Arc<Mutex<MockCloudState>>,
 }
 
+/// What a provider would still hold after the app process dies
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct MockCloudDurableContents {
+    pub(crate) wallet_files: HashMap<String, Vec<String>>,
+    pub(crate) master_key_backups: HashMap<String, Vec<u8>>,
+    pub(crate) wallet_backups: Vec<((String, String), Vec<u8>)>,
+}
+
 impl MockCloudStorage {
     pub(crate) fn reset(&self) {
         *self.state.lock() = MockCloudState::default();
+    }
+
+    /// The remote files only, without fault scripts, gates or call counters
+    pub(crate) fn durable_contents(&self) -> MockCloudDurableContents {
+        let state = self.state.lock();
+        MockCloudDurableContents {
+            wallet_files: state.wallet_files.clone(),
+            master_key_backups: state.master_key_backups.clone(),
+            wallet_backups: state
+                .wallet_backups
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        }
+    }
+
+    /// Replace the remote files, keeping fault scripts and counters
+    pub(crate) fn restore_durable_contents(&self, contents: MockCloudDurableContents) {
+        let mut state = self.state.lock();
+        state.wallet_files = contents.wallet_files;
+        state.master_key_backups = contents.master_key_backups;
+        state.wallet_backups = contents.wallet_backups.into_iter().collect();
     }
 
     pub(crate) fn set_wallet_files(&self, namespace: String, wallet_files: Vec<String>) {
@@ -1224,9 +1254,30 @@ pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
     crate::test_support::ensure_tokio_runtime();
 }
 
+static TEST_GLOBALS: OnceLock<TestGlobals> = OnceLock::new();
+
+impl TestGlobals {
+    /// Mocks a harness process owns, behind its own call-identity wrappers
+    pub(crate) fn unregistered() -> Self {
+        Self {
+            keychain: MockKeychain::default(),
+            cloud: MockCloudStorage::default(),
+            passkey: MockPasskeyProviderImpl::default(),
+        }
+    }
+}
+
+/// Make `globals` the process mocks that `test_globals()` returns
+///
+/// The harness installs wrapped providers itself, so shared helpers that take
+/// `test_globals()` drive the same mocks the harness wraps
+pub(crate) fn install_test_globals(globals: TestGlobals) -> &'static TestGlobals {
+    assert!(TEST_GLOBALS.set(globals).is_ok(), "test globals were already initialized");
+    TEST_GLOBALS.get().expect("test globals just installed")
+}
+
 pub(crate) fn test_globals() -> &'static TestGlobals {
-    static GLOBALS: OnceLock<TestGlobals> = OnceLock::new();
-    GLOBALS.get_or_init(|| {
+    TEST_GLOBALS.get_or_init(|| {
         crate::database::test_support::init_test_database();
         ensure_cloud_backup_test_tokio_runtime();
         TestGlobals::init()

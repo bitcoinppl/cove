@@ -23,6 +23,19 @@ pub fn init() {
     let _ = TOKIO.set(Handle::current());
 }
 
+/// Install an explicit runtime handle for every later `spawn`, `spawn_actor` and `block_on`
+///
+/// Used by test harnesses that own a dedicated runtime; production calls [`init`] from inside
+/// the app runtime instead
+///
+/// # Errors
+///
+/// Returns the rejected handle when a runtime is already installed, so a harness can fail
+/// instead of silently running actors on someone else's runtime
+pub fn install_runtime(handle: Handle) -> Result<(), Handle> {
+    TOKIO.set(handle)
+}
+
 pub fn is_tokio_initialized() -> bool {
     TOKIO.get().is_some()
 }

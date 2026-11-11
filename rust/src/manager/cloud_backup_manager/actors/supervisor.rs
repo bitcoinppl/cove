@@ -1479,6 +1479,11 @@ pub(crate) mod test_support {
     use super::*;
 
     impl CloudBackupSupervisor {
+        /// The exclusive slot, for harness failure messages only
+        pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
+            Produces::ok(format!("{:?}", self.active_operation))
+        }
+
         pub async fn run_wallet_upload_inline_for_test(
             &mut self,
             wallet_id: WalletId,

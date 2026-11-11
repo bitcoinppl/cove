@@ -273,6 +273,11 @@ pub(crate) mod test_support {
     /// Remove the process test root on normal exit; the stale sweep covers killed processes
     #[dtor::dtor(unsafe)]
     fn remove_process_test_root() {
+        // a borrowed root belongs to the parent harness process, which resumes on it
+        if borrowed_test_root().is_some() {
+            return;
+        }
+
         if let Some(root) = TEST_ROOT.get() {
             let _ = std::fs::remove_dir_all(root);
         }
@@ -415,8 +420,35 @@ pub(crate) mod test_support {
         std::fs::create_dir_all(wallet_data_dir).expect("failed to recreate wallet data test dir");
     }
 
+    /// Env var naming a data root owned by a parent harness process
+    pub(crate) const BORROWED_TEST_ROOT_ENV: &str = "COVE_TEST_DATA_ROOT";
+
+    /// A fresh data root for one harness case, inside this process's test root
+    pub(crate) fn harness_case_root(test_name: &str) -> PathBuf {
+        let parent = process_test_data_dir().join("harness");
+        std::fs::create_dir_all(&parent).expect("create harness case parent");
+
+        tempfile::Builder::new()
+            .prefix(&test_name.replace("::", "-"))
+            .tempdir_in(parent)
+            .expect("create harness case root")
+            .keep()
+    }
+
+    fn borrowed_test_root() -> Option<PathBuf> {
+        std::env::var_os(BORROWED_TEST_ROOT_ENV).map(PathBuf::from)
+    }
+
     fn process_test_data_dir() -> &'static PathBuf {
         TEST_ROOT.get_or_init(|| {
+            // a harness child process reopens its parent's database, keychain and cloud files
+            if let Some(path) = borrowed_test_root() {
+                cove_common::consts::set_root_data_dir(path.clone())
+                    .expect("borrowed test root must be installed before any data access");
+
+                return path;
+            }
+
             let parent = std::env::temp_dir();
             sweep_stale_test_data_dirs(&parent);
 

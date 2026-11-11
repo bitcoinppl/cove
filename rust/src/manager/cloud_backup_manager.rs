@@ -6,6 +6,8 @@ mod cspp_exports;
 mod detail;
 mod dto;
 mod error;
+#[cfg(test)]
+mod harness;
 mod keychain;
 mod model;
 mod ops;

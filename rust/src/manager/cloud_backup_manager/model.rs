@@ -17,7 +17,7 @@ use super::{
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 mod cloud_only_inventory;
 mod events;
@@ -667,11 +667,11 @@ impl CloudBackupReducerState {
             return true;
         };
 
-        let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        let Some(now) = cove_util::time::unix_timestamp_secs() else {
             return false;
         };
 
-        now.as_secs().saturating_sub(last_verified_at) >= STALE_VERIFICATION_THRESHOLD.as_secs()
+        now.saturating_sub(last_verified_at) >= STALE_VERIFICATION_THRESHOLD.as_secs()
     }
 
     fn active_operation(&self) -> Option<CloudBackupExclusiveOperationClaim> {
