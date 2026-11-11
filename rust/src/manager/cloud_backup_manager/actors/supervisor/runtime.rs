@@ -33,7 +33,7 @@ use crate::manager::cloud_backup_manager::admission::{
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDisableOutcome, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
-    CloudBackupStatus,
+    CloudBackupPendingEnableRecovery, CloudBackupStatus,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, DisablingRecord};
@@ -54,7 +54,10 @@ pub(crate) enum Runtime {
     DriveAccountSwitch {
         op: Option<SwitchOp>,
     },
+    /// An interrupted Enable the owner found at restart; it holds until its keychain evidence is
+    /// gone, whatever the record says
     PendingEnableRecovery {
+        recovery: CloudBackupPendingEnableRecovery,
         op: Option<RecoveryOp>,
     },
     /// Load normalization failed; the legacy record is unchanged and nothing can start
@@ -230,8 +233,8 @@ pub(crate) struct Unstartable {
 pub(crate) struct IdleFacts<'a> {
     /// The record as the supervisor's writer last committed it
     pub(crate) record: &'a PersistedCloudBackupState,
-    /// The supervisor projected an interrupted Enable it found at restart
-    pub(crate) pending_enable_recovery: bool,
+    /// The interrupted Enable the owner holds, while its keychain evidence remains
+    pub(crate) pending_enable_recovery: Option<CloudBackupPendingEnableRecovery>,
 }
 
 /// The operation a start places, before the body decides where it goes
@@ -261,6 +264,13 @@ impl Runtime {
     fn idle(facts: IdleFacts<'_>) -> Self {
         use PersistedCloudBackupState as State;
 
+        // a held recovery outranks only an off or configured record
+        if let Some(recovery) = facts.pending_enable_recovery
+            && matches!(facts.record, State::Disabled | State::Configured(_))
+        {
+            return Self::PendingEnableRecovery { recovery, op: None };
+        }
+
         match facts.record {
             State::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)) => {
                 match DisablingRecord::of(facts.record) {
@@ -279,9 +289,6 @@ impl Runtime {
                 Self::DriveAccountSwitch { op: None }
             }
             State::Corrupted { error } => Self::Corrupted { error: error.clone(), op: None },
-            State::Disabled | State::Configured(_) if facts.pending_enable_recovery => {
-                Self::PendingEnableRecovery { op: None }
-            }
             State::Configured(_) => Self::Configured { op: None },
             State::Disabled => Self::Disabled { op: None },
         }
@@ -296,6 +303,40 @@ impl Runtime {
         }
 
         *self = Self::idle(facts);
+    }
+
+    /// The interrupted Enable this body holds, running operation or not
+    pub(crate) fn pending_enable_recovery(&self) -> Option<&CloudBackupPendingEnableRecovery> {
+        match self {
+            Self::PendingEnableRecovery { recovery, .. } => Some(recovery),
+            _ => None,
+        }
+    }
+
+    /// Enters recovery for an interrupted Enable the owner assessed, or updates the snapshot of
+    /// the one it holds
+    ///
+    /// Only an idle off or configured body can enter: a running operation owns its body, and a
+    /// committed disable, account switch, failed load or corrupt record outranks the recovery
+    pub(crate) fn enter_pending_enable_recovery(
+        &mut self,
+        next: CloudBackupPendingEnableRecovery,
+    ) -> bool {
+        match self {
+            Self::PendingEnableRecovery { recovery, .. } => *recovery = next,
+            Self::Disabled { op: None } | Self::Configured { op: None } => {
+                *self = Self::PendingEnableRecovery { recovery: next, op: None };
+            }
+            Self::Disabled { op: Some(_) }
+            | Self::Configured { op: Some(_) }
+            | Self::Corrupted { .. }
+            | Self::FinishingDisable { .. }
+            | Self::DriveAccountSwitch { .. }
+            | Self::LoadFailed { .. }
+            | Self::Resetting { .. } => return false,
+        }
+
+        true
     }
 
     /// The body admission decides on, with the running operation's kind

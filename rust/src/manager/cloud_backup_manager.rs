@@ -520,6 +520,11 @@ impl RustCloudBackupManager {
         ));
     }
 
+    /// Ends the recovery projection once the supervisor's runtime left it
+    pub(crate) fn clear_pending_enable_recovery(&self, status: CloudBackupStatus) {
+        self.apply_model_event(CloudBackupStateReducerEvent::PendingEnableRecoveryCleared(status));
+    }
+
     fn has_in_flight_lifecycle(status: &CloudBackupStatus) -> bool {
         matches!(
             status,
@@ -536,7 +541,7 @@ impl RustCloudBackupManager {
 
     /// Whether the keychain holds an enable journal or staged master key material, counting an
     /// unreadable keychain as holding them, since unknown state must not look like no setup
-    fn pending_enable_evidence_remains() -> bool {
+    pub(crate) fn pending_enable_evidence_remains() -> bool {
         match CloudBackupKeychain::global().load_pending_enable_journal() {
             Ok(Some(_)) => return true,
             Ok(None) => {}

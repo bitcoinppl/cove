@@ -140,6 +140,11 @@ Promotion happens only for journal-owned staged material. Failure or
 cancellation restores the prior local metadata and only cleans remote material
 that is proven to be incomplete and owned by that fresh attempt.
 
+When an interrupted Enable leaves that evidence behind, the supervisor holds it
+as its own runtime body, `PendingEnableRecovery`, which can run one recovery
+operation at a time. The screen only shows this body. The body ends when the
+supervisor finds the evidence gone. A status update from elsewhere can't end it.
+
 Automatic passkey retry is shared and bounded. It applies only to a typed
 platform-authorization failure that occurred before native presentation.
 Presented failures, user cancellation, credential mismatch, unsupported

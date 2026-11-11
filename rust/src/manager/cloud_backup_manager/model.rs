@@ -30,7 +30,7 @@ pub(crate) use self::events::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect,
     CloudBackupRestoreAllRuntimeState, CloudBackupStateReducerEffects,
-    CloudBackupStateReducerEvent, PendingEnableEvidence,
+    CloudBackupStateReducerEvent,
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
@@ -1549,7 +1549,17 @@ impl CloudBackupStateReducer {
 
     /// Whether the lifecycle shows recovery for an incomplete enable
     pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
-        matches!(self.state.phase, CloudBackupLifecyclePhase::PendingEnableRecovery(_))
+        self.projected_pending_enable_recovery().is_some()
+    }
+
+    /// The recovery the lifecycle shows, as the supervisor last projected it
+    pub(crate) fn projected_pending_enable_recovery(
+        &self,
+    ) -> Option<&CloudBackupPendingEnableRecovery> {
+        match &self.state.phase {
+            CloudBackupLifecyclePhase::PendingEnableRecovery(recovery) => Some(recovery),
+            _ => None,
+        }
     }
 
     pub(crate) fn verification(&self) -> VerificationState {
@@ -1633,14 +1643,10 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::EnableContextStarted(context) => {
                 self.state.active_enable_context = Some(context);
             }
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-                status,
-                pending_enable_evidence,
-            } => {
-                // a status read before the recovery was projected, or while its evidence remains,
-                // is older than the recovery; an operation that now owns the lifecycle still wins
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled(status) => {
+                // the supervisor ends a recovery it projected, so a persisted status never
+                // replaces it; an operation that now owns the lifecycle still wins
                 let keeps_recovery = self.shows_pending_enable_recovery()
-                    && pending_enable_evidence != PendingEnableEvidence::Gone
                     && !matches!(
                         status,
                         CloudBackupStatus::Enabling
@@ -1655,6 +1661,11 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(recovery) => {
                 self.state.active_enable_context = None;
                 self.state.phase = CloudBackupLifecyclePhase::PendingEnableRecovery(recovery);
+            }
+            CloudBackupStateReducerEvent::PendingEnableRecoveryCleared(status) => {
+                if self.shows_pending_enable_recovery() {
+                    self.state.apply_status(status);
+                }
             }
             CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
                 context,
@@ -2052,12 +2063,9 @@ mod tests {
         )
     }
 
-    /// A status reconcile from a caller that found no recovery to check evidence for
+    /// A status reconcile, as the manager sends from the persisted record
     fn runtime_status_event(status: CloudBackupStatus) -> CloudBackupStateReducerEvent {
-        CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-            status,
-            pending_enable_evidence: PendingEnableEvidence::NotChecked,
-        }
+        CloudBackupStateReducerEvent::RuntimeStatusReconciled(status)
     }
 
     fn effect_lifecycle(effects: &CloudBackupStateReducerEffects) -> Option<&CloudBackupLifecycle> {
@@ -3622,7 +3630,7 @@ mod tests {
     }
 
     #[test]
-    fn persisted_status_replaces_pending_enable_recovery_only_once_its_evidence_is_gone() {
+    fn only_the_owner_or_an_operation_ends_a_projected_pending_enable_recovery() {
         let recovering = || {
             let mut model = CloudBackupStateReducer::default();
             model.apply_event(CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(
@@ -3633,31 +3641,30 @@ mod tests {
             ));
             model
         };
-        let reconcile = |status, pending_enable_evidence| {
+        let after = |event| {
             let mut model = recovering();
-            model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-                status,
-                pending_enable_evidence,
-            });
+            model.apply_event(event);
             model.public_state().lifecycle
         };
 
-        // not checked means the status was read before the recovery was projected
-        for evidence in [PendingEnableEvidence::NotChecked, PendingEnableEvidence::Remains] {
-            for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
-                assert!(matches!(
-                    reconcile(status, evidence),
-                    CloudBackupLifecycle::PendingEnableRecovery(_)
-                ));
-            }
+        // the persisted record can't see the keychain evidence the recovery stands on
+        for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
+            assert!(matches!(
+                after(CloudBackupStateReducerEvent::RuntimeStatusReconciled(status)),
+                CloudBackupLifecycle::PendingEnableRecovery(_)
+            ));
         }
 
         assert_eq!(
-            reconcile(CloudBackupStatus::Disabled, PendingEnableEvidence::Gone),
+            after(CloudBackupStateReducerEvent::PendingEnableRecoveryCleared(
+                CloudBackupStatus::Disabled
+            )),
             CloudBackupLifecycle::Disabled
         );
         assert!(matches!(
-            reconcile(CloudBackupStatus::Enabling, PendingEnableEvidence::Remains),
+            after(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+                CloudBackupStatus::Enabling
+            )),
             CloudBackupLifecycle::Enabling(_)
         ));
     }

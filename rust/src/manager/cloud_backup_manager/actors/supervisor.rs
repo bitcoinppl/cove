@@ -339,7 +339,7 @@ impl CloudBackupSupervisor {
             load_error,
             IdleFacts {
                 record: &RustCloudBackupManager::load_persisted_state(),
-                pending_enable_recovery: false,
+                pending_enable_recovery: None,
             },
         );
 
@@ -1512,7 +1512,7 @@ impl CloudBackupSupervisor {
                 None,
                 IdleFacts {
                     record: &RustCloudBackupManager::load_persisted_state(),
-                    pending_enable_recovery: false,
+                    pending_enable_recovery: None,
                 },
             ),
         };

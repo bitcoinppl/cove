@@ -116,7 +116,7 @@ impl CloudBackupSupervisor {
             let assessment = Self::pending_enable_recovery_assessment().unwrap_or_else(|| {
                 Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence)
             });
-            manager.project_pending_enable_recovery(assessment.public_state());
+            self.enter_pending_enable_recovery(assessment.public_state());
         }
 
         Produces::ok(())
@@ -577,11 +577,11 @@ impl CloudBackupSupervisor {
         };
         let public_assessment = assessment.public_state();
         let Some(plan) = assessment.cleanup_plan else {
-            manager.project_pending_enable_recovery(public_assessment);
+            self.enter_pending_enable_recovery(public_assessment);
             return Produces::ok(());
         };
 
-        manager.project_pending_enable_recovery(CloudBackupPendingEnableRecovery {
+        self.enter_pending_enable_recovery(CloudBackupPendingEnableRecovery {
             support_code: assessment.reason.support_code().into(),
             cleanup: CloudBackupPendingEnableCleanupState::Cleaning,
         });
@@ -593,7 +593,7 @@ impl CloudBackupSupervisor {
                 .map_or(CloudBackupPendingEnableCleanupState::SupportOnly, |_| {
                     CloudBackupPendingEnableCleanupState::Available
                 });
-            manager.project_pending_enable_recovery(CloudBackupPendingEnableRecovery {
+            self.enter_pending_enable_recovery(CloudBackupPendingEnableRecovery {
                 support_code: PendingEnableRecoveryReason::CleanupFailed.support_code().into(),
                 cleanup,
             });
@@ -602,9 +602,19 @@ impl CloudBackupSupervisor {
 
         self.pending_enable_session = None;
         manager.clear_enable_progress_report();
+
+        // the evidence is gone, so the rebase leaves the recovery and ends its projection
+        self.rebase_idle_runtime();
         manager.sync_persisted_state();
 
         Produces::ok(())
+    }
+
+    /// Holds an interrupted Enable in the runtime, which projects it
+    fn enter_pending_enable_recovery(&mut self, recovery: CloudBackupPendingEnableRecovery) {
+        if !self.runtime.enter_pending_enable_recovery(recovery) {
+            warn!("Cloud Backup body outranks the pending Enable recovery: {:?}", *self.runtime);
+        }
     }
 
     fn clean_pending_enable_local_evidence(

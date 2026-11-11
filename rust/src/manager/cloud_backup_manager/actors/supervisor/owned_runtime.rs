@@ -13,11 +13,14 @@ use tokio::sync::oneshot;
 use tracing::debug;
 
 use super::runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime, Unstartable};
+use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
-use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::model::{
+    CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
+};
 use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
 
 /// The stored runtime and the write policy last published for it
@@ -80,16 +83,43 @@ impl OwnedRuntime {
     /// Rebases an idle body on the record, then publishes the policy if it changed
     fn publish(&mut self) {
         let record = RustCloudBackupManager::load_persisted_state();
-        let pending_enable_recovery = self.shows_pending_enable_recovery();
+        let pending_enable_recovery = self.held_pending_enable_recovery();
         self.runtime.rebase_idle(IdleFacts { record: &record, pending_enable_recovery });
         self.publish_policy();
+        self.project_pending_enable_recovery(&record);
     }
 
-    /// The supervisor projected an interrupted Enable it found at restart
-    fn shows_pending_enable_recovery(&self) -> bool {
-        self.manager
-            .upgrade()
-            .is_some_and(|manager| manager.state.read().shows_pending_enable_recovery())
+    /// The interrupted Enable this runtime holds, while the keychain still holds its evidence
+    ///
+    /// The keychain is read only while the body is in recovery, and an unreadable keychain counts
+    /// as evidence, so unknown state never ends a recovery
+    fn held_pending_enable_recovery(&self) -> Option<CloudBackupPendingEnableRecovery> {
+        let recovery = self.runtime.pending_enable_recovery()?;
+        RustCloudBackupManager::pending_enable_evidence_remains().then(|| recovery.clone())
+    }
+
+    /// Shows the recovery an idle body holds, and ends the recovery projection once the body left
+    ///
+    /// While an operation runs in recovery its own projection shows; Discard keeps the recovery
+    /// screen, and Enable shows its progress
+    fn project_pending_enable_recovery(&self, record: &PersistedCloudBackupState) {
+        let Some(manager) = self.manager.upgrade() else { return };
+        let projected = manager.state.read().projected_pending_enable_recovery().cloned();
+
+        match &self.runtime {
+            Runtime::PendingEnableRecovery { recovery, op: None } => {
+                if projected.as_ref() != Some(recovery) {
+                    manager.project_pending_enable_recovery(recovery.clone());
+                }
+            }
+            Runtime::PendingEnableRecovery { op: Some(_), .. } => {}
+            _ if projected.is_some() => {
+                manager.clear_pending_enable_recovery(RustCloudBackupManager::runtime_status_for(
+                    record,
+                ));
+            }
+            _ => {}
+        }
     }
 
     fn publish_policy(&mut self) {
@@ -153,9 +183,17 @@ impl OwnedRuntime {
         to: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), Unstartable> {
         let record = RustCloudBackupManager::load_persisted_state();
-        let pending_enable_recovery = self.shows_pending_enable_recovery();
+        let pending_enable_recovery = self.held_pending_enable_recovery();
         let facts = IdleFacts { record: &record, pending_enable_recovery };
         self.mutate(|runtime| runtime.hand_off(from, to, facts))
+    }
+
+    /// Enters or updates the recovery for an interrupted Enable; false when the body outranks it
+    pub(crate) fn enter_pending_enable_recovery(
+        &mut self,
+        recovery: CloudBackupPendingEnableRecovery,
+    ) -> bool {
+        self.mutate(|runtime| runtime.enter_pending_enable_recovery(recovery))
     }
 
     pub(crate) fn begin_effect(
