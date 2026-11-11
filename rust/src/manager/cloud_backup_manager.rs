@@ -431,8 +431,8 @@ impl RustCloudBackupManager {
     pub(crate) fn runtime_status_for(state: &PersistedCloudBackupState) -> CloudBackupStatus {
         match state.status() {
             PersistedCloudBackupStatus::Disabled => CloudBackupStatus::Disabled,
-            // an unnormalized record means the load heal failed; until PR 2 adds
-            // `LoadFailed` it projects as today's error status, never as Disabled
+            // an unnormalized record means the load heal failed; until the exported status has
+            // a `LoadFailed` variant it projects as today's error status, never as Disabled
             PersistedCloudBackupStatus::Disabling => match DisablingRecord::of(state) {
                 Some(DisablingRecord::Committed(_)) | None => CloudBackupStatus::Disabling,
                 Some(DisablingRecord::Unnormalized) => {

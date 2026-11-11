@@ -1,8 +1,7 @@
 //! Real-manager sequence-test harness for Cloud Backup
 //!
 //! Each harness test body runs in its own child process (see [`process`]), so the case owns the
-//! Tokio runtime every `spawn_actor` lands on, the provider globals and the database file.
-//! Phase 0 decisions behind this design live in the PR 1 description
+//! Tokio runtime every `spawn_actor` lands on, the provider globals and the database file
 
 mod app;
 mod clock;

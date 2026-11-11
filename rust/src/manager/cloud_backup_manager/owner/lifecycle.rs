@@ -72,9 +72,8 @@ pub(crate) enum DisablingRecord {
 
 /// What the user reviewed before Turn Off commits
 ///
-/// This is today's minimal equivalent of the review: the namespace that was checked for
-/// blockers. PR 2 replaces it with `DisableReview`, which adds the inventory and configuration
-/// generation the user confirmed
+/// This is the minimal form of the review: the namespace that was checked for blockers. It
+/// does not yet carry the inventory or configuration generation the user confirmed
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DisableCommitReview {
     pub(crate) namespace_id: String,
@@ -557,7 +556,7 @@ impl LifecycleWriter {
 
     /// Keep Enabled after a committed disable whose namespace still exists
     ///
-    /// PR 2 deletes Keep Enabled; until then it is routed through the owner like every write
+    /// Routed through the owner like every other record write
     pub(crate) fn keep_enabled_after_disable(
         &self,
         attempt_id: u64,

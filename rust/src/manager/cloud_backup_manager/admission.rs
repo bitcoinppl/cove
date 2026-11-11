@@ -127,7 +127,10 @@ pub(crate) enum Admission {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CoalescibleIntent {
     /// A detail refresh is already loading, and the inventory shows it loading
-    #[expect(dead_code, reason = "PR 2's inventory owner reports a refresh in flight")]
+    #[expect(
+        dead_code,
+        reason = "reserved for an inventory owner that reports a refresh in flight"
+    )]
     RefreshDetail,
     /// A sync is already running, and the wallet rows show it syncing
     SyncUnsynced,

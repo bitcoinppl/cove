@@ -4995,7 +4995,7 @@ fn persisted_verification() -> crate::database::cloud_backup::PersistedBackupVer
     configured.verification
 }
 
-/// PLAN §4.4 Writers: verification evidence that arrives after a wallet change
+/// Verification evidence that arrives after a wallet change has one writer: the owner drops it
 #[tokio::test(flavor = "current_thread")]
 async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_reset() {
     use crate::database::cloud_backup::PersistedBackupVerificationState;

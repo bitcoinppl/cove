@@ -11,8 +11,8 @@ static NEXT_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Identity of one exclusive operation run
 ///
-/// Ids are unique for the life of the process. They are never persisted, because PLAN §8.6
-/// rules out a durable generation counter; a relaunch starts no operation from a stored id
+/// Ids are unique for the life of the process. They are never persisted: a durable generation
+/// counter was ruled out, and a relaunch starts no operation from a stored id
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct OperationId(u64);
 

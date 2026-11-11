@@ -108,7 +108,7 @@ pub(crate) enum StageBound {
     /// A synchronous platform keychain call on a blocking thread, which returns or fails
     KeychainCall,
     /// The platform's interactive passkey timeout: five minutes on iOS
-    /// (`PasskeyProviderImpl.interactiveRequestTimeout`); Android's cap is PR 3's
+    /// (`PasskeyProviderImpl.interactiveRequestTimeout`); Android has no request-level cap yet
     PlatformPasskeyTimeout,
 }
 
@@ -880,7 +880,7 @@ impl Runtime {
 /// What the runtime shows through today's exported types
 ///
 /// Read-only: it never feeds back into `Runtime`. `None` fields leave the projection to the
-/// reducer, which still owns presentation detail for the bodies PR 2 reshapes
+/// reducer, which still owns presentation detail for bodies the exported types can't express
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExportedRuntime {
     pub(crate) status: Option<CloudBackupStatus>,
@@ -891,8 +891,8 @@ pub(crate) struct ExportedRuntime {
 impl Runtime {
     /// The adapter from the stored runtime onto today's exported types
     ///
-    /// PR 1 changes no exported shape, so each body that has no exported variant of its own
-    /// shows as the nearest one today's platforms already render
+    /// Each body that has no exported variant of its own shows as the nearest one today's
+    /// platforms already render
     pub(crate) fn exported(&self) -> ExportedRuntime {
         let (status, disable) = match self {
             Self::LoadFailed { error } => {

@@ -79,7 +79,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn admission_snapshot(&self, manager: &RustCloudBackupManager) -> AdmissionSnapshot {
         // whether the last Turn Off failed is presentation the reducer still holds; it moves
-        // into `Configured`'s facts with PR 2's review
+        // into `Configured`'s facts once Turn Off has a review step
         let configured = match &manager.state().lifecycle {
             CloudBackupLifecycle::Configured(configured) => match &configured.destructive_operation
             {

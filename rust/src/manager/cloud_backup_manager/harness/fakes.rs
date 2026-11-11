@@ -499,7 +499,7 @@ pub(crate) enum PasskeyMode {
     /// Wait for the test to release the request, then answer with the mock results
     Slow(Hold),
     /// Never answer
-    #[expect(dead_code, reason = "the PR 3 bounded-request tests use it")]
+    #[expect(dead_code, reason = "reserved for bounded passkey request tests")]
     NeverCompletes,
     /// Any interactive request is a test failure, reported by [`HarnessPasskey::interactive_calls`]
     FailOnAnyInteractiveCall,
