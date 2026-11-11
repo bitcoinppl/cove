@@ -333,6 +333,15 @@ impl RustCloudBackupManager {
             .await
         {
             Ok(()) => Err(upload_error),
+
+            // the lane paused the batch, and recording its uploads is a lane write the same pause
+            // stops: the batch was paused, not broken
+            Err(CloudBackupError::WritesPaused(_))
+                if matches!(upload_error, CloudBackupError::WritesPaused(_)) =>
+            {
+                Err(upload_error)
+            }
+
             Err(persist_error) => Err(CloudBackupError::Internal(format!(
                 "wallet upload failed: {upload_error}; persist partial wallet upload batch failed: {persist_error}"
             )

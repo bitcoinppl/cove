@@ -204,7 +204,8 @@ decision is one of three:
 - `Run`: the write starts
 - `Paused(PauseReason)`: the write answers `CloudBackupError::WritesPaused`. A
   paused upload stays `Dirty` and sets no retry timer. Only a lost connection
-  defers an upload with a retry timer.
+  defers an upload with a retry timer. A wallet batch paused part-way answers
+  the pause too, even when recording the uploads it finished is paused as well.
 - `Stale`: the write belongs to an operation that ended, or to an older
   configuration. It is dropped with a debug log.
 

@@ -90,6 +90,52 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
     ));
 }
 
+/// Turn Off that starts in the middle of a background batch lets the upload in flight finish,
+/// pauses the rest of the batch instead of failing it, and then deletes the backup
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_mid_batch_pauses_the_rest_of_the_batch() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let first = xpub_only_wallet_metadata();
+    let second = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![first.clone(), second.clone()]);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let uploads = globals.cloud.wallet_backup_upload_attempt_count();
+
+    let gate = globals.cloud.gate_next_wallet_upload();
+    let batching = manager.clone();
+    let batch =
+        tokio::spawn(async move { backup_wallets_for_test(&batching, &[first, second]).await });
+    gate.wait_until_blocked().await;
+
+    call!(manager.supervisor.start_disable_operation()).await.unwrap();
+    wait_for_queued_lane_write(&manager).await;
+    gate.release();
+
+    // Turn Off may commit before the next upload reaches the lane, which then drops it as
+    // stale rather than paused; both are pauses
+    let error = batch.await.unwrap().unwrap_err();
+    assert!(matches!(error, CloudBackupError::WritesPaused(_)), "{error:?}");
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), uploads + 1);
+
+    wait_for_test_condition(
+        Duration::from_secs(5),
+        "the disable finishes after the batch's upload",
+        || manager.projected_exclusive_operation().is_none(),
+    )
+    .await;
+
+    assert!(!globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn backup_new_wallet_marks_verification_required() {
     let _guard = async_test_lock().lock().await;
