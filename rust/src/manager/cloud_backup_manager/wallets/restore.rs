@@ -146,6 +146,7 @@ impl WalletBackupReader {
         };
 
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
+            .map_err(JsonDecodeError::from)
             .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
 
         match encrypted.backup_version() {

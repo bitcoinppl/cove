@@ -486,7 +486,7 @@ impl VerificationSession {
         match self.cloud.download_master_key_backup(self.namespace.clone()).await {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
-                    serde_json::from_slice(&json).map_err(CloudBackupError::internal)?;
+                    serde_json::from_slice(&json).map_err(CloudBackupError::from)?;
                 encrypted.remote_metadata.normalized_master_key(&self.namespace).map_err(
                     |error| {
                         CloudBackupError::Internal(

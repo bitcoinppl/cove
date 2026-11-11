@@ -237,8 +237,15 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
     let wallet_id_marker = "private-user-text-in-wallet-id";
     let wallet_name_marker = "private-user-text-in-wallet-name";
     let label_marker = "private-user-text-in-wallet-label";
-    let markers =
-        [metadata_marker, entry_marker, wallet_id_marker, wallet_name_marker, label_marker];
+    let envelope_marker = "private-text-in-backup-envelope";
+    let markers = [
+        metadata_marker,
+        entry_marker,
+        wallet_id_marker,
+        wallet_name_marker,
+        label_marker,
+        envelope_marker,
+    ];
 
     let mut record_ids = Vec::new();
     let mut upload = |metadata: &WalletMetadata, entry: serde_json::Value| {
@@ -293,6 +300,15 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
     entry["xpub"] = serde_json::Value::from("not-an-xpub");
     upload(&wallet, entry);
 
+    // the encrypted envelope around the backup fails to parse
+    let envelope_record_id = cove_cspp::backup_data::wallet_record_id("malformed-envelope");
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        envelope_record_id.clone(),
+        serde_json::to_vec(&serde_json::json!({ "version": envelope_marker })).unwrap(),
+    );
+    record_ids.push(envelope_record_id.clone());
+
     globals.cloud.set_wallet_files(
         namespace.clone(),
         record_ids.iter().map(String::as_str).map(wallet_filename_from_record_id).collect(),
@@ -309,7 +325,9 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
         zeroize::Zeroizing::new(master_key.critical_data_key()),
     );
     let mut errors = Vec::new();
-    for record_id in [&bad_metadata_record_id, &bad_entry_record_id, &wallet_id_record_id] {
+    let malformed_record_ids =
+        [&bad_metadata_record_id, &bad_entry_record_id, &wallet_id_record_id, &envelope_record_id];
+    for record_id in malformed_record_ids {
         match reader.lookup(record_id).await {
             Ok(WalletBackupLookup::Found(_)) => panic!("malformed wallet backup was read"),
             Ok(_) => panic!("malformed wallet backup was not found"),
@@ -332,8 +350,8 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
     }
 
     assert_eq!(report.wallets_restored, 1);
-    assert_eq!(report.wallets_failed, 4);
-    assert_eq!(logs.matches("Failed to download wallet backup").count(), 3, "download logs");
+    assert_eq!(report.wallets_failed, 5);
+    assert_eq!(logs.matches("Failed to download wallet backup").count(), 4, "download logs");
     assert_eq!(logs.matches("Failed to restore wallet backup").count(), 1, "restore logs");
     assert!(logs.contains("parse wallet metadata: data error"), "metadata cause missing");
     assert!(
@@ -341,6 +359,7 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
         "wallet entry cause missing"
     );
     assert!(logs.contains("remote payload wallet_id mismatch"), "wallet id cause missing");
+    assert!(logs.contains("deserialize wallet: data error"), "envelope cause missing");
     assert!(logs.contains("failed to parse xpub"), "xpub cause missing");
     assert!(logs.contains("Failed to restore labels for restored wallet"), "label warning missing");
 }
