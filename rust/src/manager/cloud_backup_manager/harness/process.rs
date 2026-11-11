@@ -131,12 +131,14 @@ impl Drop for PhaseChild {
 /// child per entry of `phases`, in order, on one data root. In a child it runs `body` with the
 /// phase index. A phase body must not assume anything in memory survived the previous phase.
 /// A phase that does not finish within [`PHASE_LIMIT`], or a wait inside it that makes no
-/// progress within [`WAIT_LIMIT`], fails the test with what it was waiting on
+/// progress within [`WAIT_LIMIT`], fails the test with what it was waiting on. A body that
+/// returns stops the case runtime before the child exits; see [`super::runtime::shutdown`]
 pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(usize)) {
     if let Some(phase) = std::env::var_os(PHASE_ENV) {
         let phase = phase.to_str().and_then(|phase| phase.parse().ok()).expect("phase index");
         println!("\n{PHASE_START_PREFIX}{phase}");
         body(phase);
+        super::runtime::shutdown();
         return;
     }
 

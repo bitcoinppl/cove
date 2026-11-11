@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use act_zero::call;
@@ -525,5 +525,61 @@ fn an_action_dispatched_after_the_state_moved_on_is_rejected_with_a_reason() {
         assert_eq!(outcome.admission, Admission::Rejected(Rejection::CloudBackupOff));
         assert_eq!(persisted(), disabled);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), deletes);
+    });
+}
+
+/// A phase whose runtime is inside SQLCipher when its body returns stops that work before exit
+///
+/// Upload work opens wallets' SQLCipher stores on the case runtime, and process exit runs
+/// OpenSSL's atexit cleanup, which frees the state that work uses. This keeps a task calling into
+/// SQLCipher when the body returns, then holds exit open after the cleanup and fails the child if
+/// the task made another call in that window: the race that crashes a loaded machine with SIGSEGV
+#[test]
+fn a_phase_stops_its_sqlcipher_work_before_openssl_cleanup() {
+    let test = concat!(module_path!(), "::a_phase_stops_its_sqlcipher_work_before_openssl_cleanup");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        static CALLS: AtomicU64 = AtomicU64::new(0);
+
+        // atexit handlers run last-registered first, and OpenSSL registers its cleanup on first
+        // use below, so this runs after the cleanup
+        extern "C" fn fail_on_sqlcipher_calls_after_openssl_cleanup() {
+            let before = CALLS.load(Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(200));
+            let after = CALLS.load(Ordering::SeqCst);
+            if after == before {
+                return;
+            }
+
+            eprintln!("{} SQLCipher calls ran after OpenSSL's exit cleanup", after - before);
+            // SAFETY: ends the process without running the remaining exit handlers
+            unsafe { libc::_exit(102) };
+        }
+
+        // SAFETY: the handler only reads an atomic, sleeps and may end the process
+        let registered = unsafe { libc::atexit(fail_on_sqlcipher_calls_after_openssl_cleanup) };
+        assert_eq!(registered, 0, "register the exit check");
+
+        let path = child_root().expect("case root").join("churn.sqlite");
+        let (started, on_started) = std::sync::mpsc::sync_channel(1);
+
+        super::runtime::install().spawn(async move {
+            let conn = rusqlite::Connection::open(&path).expect("open the churn database");
+            conn.pragma_update(None, "key", "churn").expect("key the churn database");
+            conn.execute_batch("CREATE TABLE churn (page BLOB)").expect("create the churn table");
+            let _ = started.send(());
+
+            // every commit encrypts its pages through OpenSSL; a failed call still counts, and
+            // the loop goes on so a failure can't end the work early
+            loop {
+                CALLS.fetch_add(1, Ordering::SeqCst);
+                let _ = conn.execute_batch(
+                    "INSERT INTO churn VALUES (randomblob(65536)); DELETE FROM churn",
+                );
+                tokio::task::yield_now().await;
+            }
+        });
+
+        let _deadline = super::deadline::Deadline::arm("the SQLCipher churn task to start");
+        on_started.recv().expect("the churn task started");
     });
 }
