@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::model::CloudBackupSyncState;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
 #[test]
@@ -909,5 +910,37 @@ async fn paused_upload_stays_dirty_and_the_lane_wake_uploads_it_once() {
 
     // the paused attempt and the change made meanwhile coalesce into one remote upload
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), attempts_before + 1);
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+/// A sync whose upload meets a pause ends idle, not failed: pausing is not failing, and the
+/// wallet it didn't reach stays unsynced for the next sync
+#[tokio::test(flavor = "current_thread")]
+async fn sync_paused_by_a_turn_off_ends_idle_not_failed() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    let attempts_before = globals.cloud.wallet_backup_upload_attempt_count();
+
+    // the sync was admitted before the Turn Off; its upload reaches the lane after the Turn Off
+    // holds the configured body, so the lane answers paused
+    let (claim, _writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Disable).await;
+    call!(manager.supervisor.start_sync_operation()).await.unwrap();
+
+    let sync_state = || manager.state.read().configured_state().map(|configured| configured.sync);
+    wait_for_test_condition(Duration::from_secs(5), "the sync request ends", || {
+        sync_state() != Some(CloudBackupSyncState::Syncing)
+    })
+    .await;
+
+    assert_eq!(sync_state(), Some(CloudBackupSyncState::Idle));
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), attempts_before);
+
+    finish_operation_for_test(&manager, claim).await;
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

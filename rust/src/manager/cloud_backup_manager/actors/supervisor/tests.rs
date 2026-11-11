@@ -1958,14 +1958,20 @@ async fn supervisor_ignores_stale_sync_request_completion() {
     supervisor.active_sync_request = Some(7);
 
     supervisor
-        .complete_sync_request(6, Err(CloudBackupError::Internal("stale completion".into())))
+        .complete_sync_request(
+            6,
+            SyncRequestOutcome::Failed(CloudBackupError::Internal("stale completion".into())),
+        )
         .await
         .unwrap();
 
     assert_eq!(supervisor.active_sync_request, Some(7));
 
     supervisor
-        .complete_sync_request(7, Err(CloudBackupError::Internal("current completion".into())))
+        .complete_sync_request(
+            7,
+            SyncRequestOutcome::Failed(CloudBackupError::Internal("current completion".into())),
+        )
         .await
         .unwrap();
 

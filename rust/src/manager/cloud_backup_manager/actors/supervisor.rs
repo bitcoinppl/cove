@@ -31,7 +31,9 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::database::error::DatabaseError;
-use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, PauseReason, Rejection, UserIntent,
+};
 use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
@@ -241,6 +243,28 @@ pub(crate) struct WalletSetGeneration(u64);
 impl WalletSetGeneration {
     fn next(self) -> Self {
         Self(self.0.wrapping_add(1))
+    }
+}
+
+/// How a user's sync request ended
+///
+/// A pause is not a failure. The write lane stops the sync's writes while Turn Off, a
+/// reinitialize, an account switch or a reset holds the backup, and the wallets it didn't reach
+/// stay unsynced for the next sync, so the sync shows idle instead of an error
+#[derive(Debug)]
+pub(crate) enum SyncRequestOutcome {
+    Synced,
+    Paused(PauseReason),
+    Failed(CloudBackupError),
+}
+
+impl From<Result<(), CloudBackupError>> for SyncRequestOutcome {
+    fn from(result: Result<(), CloudBackupError>) -> Self {
+        match result {
+            Ok(()) => Self::Synced,
+            Err(CloudBackupError::WritesPaused(reason)) => Self::Paused(reason),
+            Err(error) => Self::Failed(error),
+        }
     }
 }
 
@@ -755,15 +779,15 @@ impl CloudBackupSupervisor {
         manager.apply_sync_state(SyncState::Syncing);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_sync_unsynced_wallets().await;
-            send!(addr.complete_sync_request(request_id, result));
+            let outcome = manager.do_sync_unsynced_wallets().await.into();
+            send!(addr.complete_sync_request(request_id, outcome));
         });
     }
 
     pub async fn complete_sync_request(
         &mut self,
         request_id: u64,
-        result: Result<(), CloudBackupError>,
+        outcome: SyncRequestOutcome,
     ) -> ActorResult<()> {
         if self.active_sync_request != Some(request_id) {
             return Produces::ok(());
@@ -773,8 +797,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(()) => {
+        match outcome {
+            SyncRequestOutcome::Synced => {
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
@@ -786,7 +810,14 @@ impl CloudBackupSupervisor {
                     ));
                 });
             }
-            Err(error) => {
+
+            SyncRequestOutcome::Paused(reason) => {
+                info!("Cloud backup sync paused: {reason:?}");
+                manager.apply_sync_state(SyncState::Idle);
+                self.active_sync_request = None;
+            }
+
+            SyncRequestOutcome::Failed(error) => {
                 manager.apply_sync_state(SyncState::Failed(
                     error.logged_reader_message("Cloud backup sync failed"),
                 ));
