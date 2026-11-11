@@ -119,33 +119,18 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertTrue(label.contains("Try again"))
     }
 
-    func testRestoreAllPresentationUsesRustOwnedAvailabilityAndCount() {
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .notShown),
-            .hidden
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .startAvailable(walletCount: 3)),
-            .action(CloudBackupRestoreAllActionPresentation(
-                title: "Restore All (3)",
-                intent: .start
-            ))
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .startDisabled(walletCount: 3)),
-            .disabled(title: "Restore All (3)")
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .retryAvailable(walletCount: 1)),
-            .action(CloudBackupRestoreAllActionPresentation(
-                title: "Retry Remaining (1)",
-                intent: .retry
-            ))
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .retryDisabled(walletCount: 1)),
-            .disabled(title: "Retry Remaining (1)")
-        )
+    /// Restore All titles carry Rust's wallet count whether or not the action can run now, since
+    /// availability comes from the screen's actions and draws as a disabled control with its reason
+    func testRestoreAllPresentationTitlesCarryRustsCount() {
+        XCTAssertEqual(cloudBackupRestoreAllPresentation(state: .notShown), .hidden)
+
+        for state in [CloudBackupRestoreAllState.startAvailable(walletCount: 3), .startDisabled(walletCount: 3)] {
+            XCTAssertEqual(cloudBackupRestoreAllPresentation(state: state), .start(title: "Restore All (3)"))
+        }
+
+        for state in [CloudBackupRestoreAllState.retryAvailable(walletCount: 1), .retryDisabled(walletCount: 1)] {
+            XCTAssertEqual(cloudBackupRestoreAllPresentation(state: state), .retry(title: "Retry Remaining (1)"))
+        }
     }
 
     func testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation() {
@@ -162,7 +147,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 title: "Restoring Savings",
                 detail: "Completed 1 of 3",
                 accessibilityValue: "Restoring Savings, Completed 1 of 3",
-                canCancel: true
+                cancellationRequested: false
             ))
         )
 
@@ -176,7 +161,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             return XCTFail("expected running presentation")
         }
 
-        XCTAssertFalse(progress.canCancel)
+        XCTAssertTrue(progress.cancellationRequested)
         XCTAssertTrue(progress.accessibilityValue.contains("Cancel requested"))
         XCTAssertTrue(progress.accessibilityValue.contains("current wallet will finish"))
     }
