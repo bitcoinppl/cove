@@ -4,11 +4,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Levels the app log store keeps; debug lines never reach it */
@@ -26,15 +26,19 @@ enum class AppLogLevel {
  * 256 KiB files, matching iOS `SwiftLogStore`. Lines are written raw; the report redacts them
  * when it is built
  *
- * `record` only queues the write, so it is safe on the main thread. `snapshot` and `clear` touch
- * the disk on the calling thread
+ * Every disk access runs on [diskExecutor], which must run tasks one at a time in order. `record`
+ * only queues its write, so it is safe on the main thread. `snapshot` and `clear` queue their work
+ * behind every write already queued and wait for it, so a clear removes those lines and a
+ * snapshot includes them. They block, so call them off the main thread
  */
 class AppLogStore(
     private val logsDirectory: File,
-    private val writeExecutor: Executor = boundedWriteExecutor(),
+    private val diskExecutor: Executor = serialDiskExecutor(),
 ) {
-    private val lock = Any()
+    private val pendingWrites = AtomicInteger(0)
     private val droppedEntries = AtomicInteger(0)
+
+    // only read and written on the disk executor
     private var lastWriteError: String? = null
 
     /** Queues one log line for the store, counting it as dropped when the write queue is full */
@@ -46,68 +50,100 @@ class AppLogStore(
     ) {
         val timestamp = Instant.now()
 
+        // only writes are bounded, so a full queue drops log lines but never a snapshot or clear
+        if (pendingWrites.incrementAndGet() > WRITE_QUEUE_CAPACITY) {
+            pendingWrites.decrementAndGet()
+            droppedEntries.incrementAndGet()
+            return
+        }
+
         try {
-            writeExecutor.execute { write(formatEntry(timestamp, level, tag, message, throwable)) }
+            diskExecutor.execute {
+                try {
+                    write(formatEntry(timestamp, level, tag, message, throwable))
+                } finally {
+                    pendingWrites.decrementAndGet()
+                }
+            }
         } catch (_: RejectedExecutionException) {
+            pendingWrites.decrementAndGet()
             droppedEntries.incrementAndGet()
         }
     }
 
     /** Returns every stored line, oldest first, with any write failure noted at the top */
-    fun snapshot(): String =
-        synchronized(lock) {
-            val text = StringBuilder()
-            lastWriteError?.let { text.append("failed to write Android diagnostics log file: $it\n") }
-
-            for (file in filesOldestFirst()) {
-                if (!file.exists()) continue
-
-                try {
-                    text.append(file.readText(Charsets.UTF_8))
-                } catch (error: IOException) {
-                    text.append("failed to read Android diagnostics log file ${file.name}: ${error.message}\n")
-                }
-            }
-
-            text.ifEmpty { FALLBACK_TEXT }.toString()
-        }
+    fun snapshot(): String = onDiskExecutor(::readAll)
 
     /** Deletes every stored file and starts a new one with a marker line */
     @Throws(IOException::class)
     fun clear() {
-        synchronized(lock) {
+        onDiskExecutor(::deleteAll)
+    }
+
+    // runs after every write queued before it, and rethrows what the task threw
+    private fun <T> onDiskExecutor(task: () -> T): T {
+        val future = FutureTask(task)
+
+        try {
+            diskExecutor.execute(future)
+        } catch (error: RejectedExecutionException) {
+            throw IOException("Android diagnostics log store is shut down", error)
+        }
+
+        try {
+            return future.get()
+        } catch (error: ExecutionException) {
+            throw error.cause ?: error
+        }
+    }
+
+    private fun readAll(): String {
+        val text = StringBuilder()
+        lastWriteError?.let { text.append("failed to write Android diagnostics log file: $it\n") }
+
+        for (file in filesOldestFirst()) {
+            if (!file.exists()) continue
+
             try {
-                for (file in filesOldestFirst()) {
-                    if (file.exists() && !file.delete()) {
-                        throw IOException("unable to delete ${file.name}")
-                    }
-                }
-
-                lastWriteError = null
-                droppedEntries.set(0)
-                appendEntry("android diagnostics logs cleared at ${Instant.now()}\n")
+                text.append(file.readText(Charsets.UTF_8))
             } catch (error: IOException) {
-                lastWriteError = error.message ?: error.javaClass.simpleName
-
-                throw error
+                text.append("failed to read Android diagnostics log file ${file.name}: ${error.message}\n")
             }
+        }
+
+        return text.ifEmpty { FALLBACK_TEXT }.toString()
+    }
+
+    private fun deleteAll() {
+        try {
+            for (file in filesOldestFirst()) {
+                if (file.exists() && !file.delete()) {
+                    throw IOException("unable to delete ${file.name}")
+                }
+            }
+
+            lastWriteError = null
+            droppedEntries.set(0)
+            appendEntry("android diagnostics logs cleared at ${Instant.now()}\n")
+        } catch (error: IOException) {
+            lastWriteError = error.message ?: error.javaClass.simpleName
+
+            throw error
         }
     }
 
     private fun write(entry: String) {
-        synchronized(lock) {
-            try {
-                val dropped = droppedEntries.getAndSet(0)
-                if (dropped > 0) {
-                    val now = Instant.now()
-                    appendEntry("$now WARN AppLogStore: dropped $dropped log lines, the write queue was full\n")
-                }
-
-                appendEntry(entry)
-            } catch (error: IOException) {
-                // the store cannot log its own failure without recursing, so the snapshot reports it
-                lastWriteError = error.message ?: error.javaClass.simpleName
+        try {
+            val dropped = droppedEntries.getAndSet(0)
+            if (dropped > 0) {
+                val now = Instant.now()
+                appendEntry("$now WARN AppLogStore: dropped $dropped log lines, the write queue was full\n")
             }
+
+            appendEntry(entry)
+        } catch (error: IOException) {
+            // the store cannot log its own failure without recursing, so the snapshot reports it
+            lastWriteError = error.message ?: error.javaClass.simpleName
         }
     }
 
@@ -182,16 +218,10 @@ class AppLogStore(
             }
         }
 
-        private fun boundedWriteExecutor(): Executor =
-            ThreadPoolExecutor(
-                1,
-                1,
-                0L,
-                TimeUnit.MILLISECONDS,
-                LinkedBlockingQueue(WRITE_QUEUE_CAPACITY),
-                { runnable -> Thread(runnable, "cove-app-log-store").apply { isDaemon = true } },
-                ThreadPoolExecutor.AbortPolicy(),
-            )
+        private fun serialDiskExecutor(): Executor =
+            Executors.newSingleThreadExecutor { runnable ->
+                Thread(runnable, "cove-app-log-store").apply { isDaemon = true }
+            }
 
         private fun formatEntry(
             timestamp: Instant,
