@@ -275,6 +275,56 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertEqual(secondRecords, [record])
         XCTAssertEqual(source.startCount, 1)
     }
+
+    /// What was queued before the manager read its snapshot, a Turn Off finishing, then a new
+    /// Enable and its completion, is skipped by revision instead of replayed over the snapshot:
+    /// the screen never goes back to Finishing or Disabled, and the completion event, which has
+    /// no revision, still arrives in order. The next delta after the snapshot applies
+    func testScreenDeltasQueuedBeforeTheSnapshotAreSkipped() throws {
+        let fixtures = cloudBackupScreenFixtures()
+        let screen = { (name: String) in
+            try XCTUnwrap(fixtures.first { $0.name.hasSuffix(":\(name)") }?.screen)
+        }
+        let configured = try screen("configured")
+        let finishing = try screen("finishing-disable")
+        let disabled = try screen("disabled")
+        let delta = { (revision: UInt64, body: CloudBackupScreenBody) in
+            CloudBackupScreenDelta(
+                revision: revision,
+                body: body,
+                settingsRow: nil,
+                healNotice: nil,
+                lastOutcome: nil,
+                rootPrompt: nil,
+                actions: nil
+            )
+        }
+        let snapshot = CloudBackupPublishedScreen(revision: 3, screen: configured)
+
+        // the fake handle is never called: the manager is not listening, and nothing dispatches
+        let manager = CloudBackupManager(rust: RustCloudBackupManager(noHandle: .init()), published: snapshot)
+
+        manager.apply(.screen(delta(1, finishing.body)))
+        XCTAssertEqual(manager.published, snapshot)
+
+        manager.apply(.screen(delta(2, disabled.body)))
+        XCTAssertEqual(manager.published, snapshot)
+
+        manager.apply(.enableCompleted(CloudBackupEnableContext(
+            savedPasskeyConfirmation: .manual,
+            verificationSource: .settings
+        )))
+        XCTAssertNotNil(manager.enableCompletion)
+
+        manager.apply(.screen(delta(3, configured.body)))
+        XCTAssertEqual(manager.published, snapshot)
+        XCTAssertNotNil(manager.enableCompletion)
+
+        manager.apply(.screen(delta(4, disabled.body)))
+        XCTAssertEqual(manager.published.revision, 4)
+        XCTAssertEqual(manager.screen.body, .disabled)
+        XCTAssertNil(manager.enableCompletion)
+    }
 }
 
 extension CloudBackupIOSSafetyHelpersTests {
