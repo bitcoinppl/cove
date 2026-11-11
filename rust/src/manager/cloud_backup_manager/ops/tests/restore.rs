@@ -1588,7 +1588,13 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
         encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1),
     );
 
-    let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+        )
+        .await
+        .unwrap();
 
     let CloudOnlyRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
@@ -1638,7 +1644,13 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let individual_outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let individual_outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+        )
+        .await
+        .unwrap();
     let individual_wallet = Database::global()
         .wallets()
         .get(&wallet.id, wallet.network, wallet.wallet_mode)
@@ -1655,6 +1667,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
 
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
         )
@@ -1725,8 +1738,16 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
         ],
     );
 
+    // recovering the missing local key needs a running operation to own the keychain save
+    let (_claim, writes) = begin_operation_writes_for_test(
+        &manager,
+        CloudBackupExclusiveOperation::RestoreCloudWallet,
+    )
+    .await;
+
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &writes,
             vec![
                 frozen_restore_all_wallet(
                     &first_wallet,
@@ -1859,7 +1880,14 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
         frozen_restore_all_wallet(&stale_wallet, CloudBackupWalletStatus::DeletedFromDevice),
         frozen_restore_all_wallet(&first_wallet, CloudBackupWalletStatus::DeletedFromDevice),
     ];
-    let prepared = manager.prepare_restore_all_cloud_wallets(frozen_wallets, 0).await.unwrap();
+    let prepared = manager
+        .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
+            frozen_wallets,
+            0,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
@@ -1907,6 +1935,7 @@ async fn restore_all_preparation_propagates_wallet_authorization_failure() {
 
     let result = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
         )
@@ -1940,6 +1969,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
     let frozen_wallet = xpub_only_wallet_metadata();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(
                 &frozen_wallet,
                 CloudBackupWalletStatus::DeletedFromDevice,

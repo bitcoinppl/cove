@@ -228,8 +228,9 @@ impl CloudBackupSupervisor {
     ) {
         let run = VerificationRun { claim, continuation, basis: self.wallet_set };
         let force_discoverable = continuation.force_discoverable();
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
+            let result = manager.prepare_deep_verify_cloud_backup(writes, force_discoverable).await;
             send!(addr.complete_verification(run, result));
         });
     }

@@ -1,24 +1,54 @@
 //! Leaf actor for remote Cloud Backup write commands
 //!
-//! This actor performs cloud-storage calls and returns raw remote results to
-//! the write supervisor. It does not mutate manager state directly
+//! This actor performs cloud-storage calls, and the keychain saves producers proved off the actor,
+//! and returns raw results to the write supervisor. It does not mutate manager state directly
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
 use cove_device::cloud_storage::CloudStorageClient;
 use tracing::warn;
 
 use super::CloudBackupWriteError;
+use super::keychain::{KeychainSave, OwnedKeychainWrite, save_owned_keychain_writes};
 use super::supervisor::{CloudBackupWriteCommandContext, CloudBackupWriteSupervisor};
 
 /// Remote storage operation submitted through the serialized write lane
 #[derive(Debug)]
 pub(crate) enum CloudBackupRemoteWriteCommand {
-    UploadWallet { cloud: CloudStorageClient, namespace: String, record_id: String, data: Vec<u8> },
-    UploadMasterKey { cloud: CloudStorageClient, namespace: String, data: Vec<u8> },
-    DeleteActiveWallet { cloud: CloudStorageClient, namespace: String, record_id: String },
-    ListWalletCount { cloud: CloudStorageClient, namespace_id: String, fallback_count: u32 },
-    ListWalletCountOptional { cloud: CloudStorageClient, namespace_id: String },
-    DeleteNamespace { cloud: CloudStorageClient, namespace: String },
+    UploadWallet {
+        cloud: CloudStorageClient,
+        namespace: String,
+        record_id: String,
+        data: Vec<u8>,
+    },
+    UploadMasterKey {
+        cloud: CloudStorageClient,
+        namespace: String,
+        data: Vec<u8>,
+    },
+    DeleteActiveWallet {
+        cloud: CloudStorageClient,
+        namespace: String,
+        record_id: String,
+    },
+    ListWalletCount {
+        cloud: CloudStorageClient,
+        namespace_id: String,
+        fallback_count: u32,
+    },
+    ListWalletCountOptional {
+        cloud: CloudStorageClient,
+        namespace_id: String,
+    },
+    DeleteNamespace {
+        cloud: CloudStorageClient,
+        namespace: String,
+    },
+    /// Keys a producer proved for `namespace_id`; a local effect that runs in the lane so Turn
+    /// Off's drain and a reset's idle wait cover it
+    SaveKeychain {
+        namespace_id: String,
+        writes: Vec<OwnedKeychainWrite>,
+    },
     None,
 }
 
@@ -29,6 +59,7 @@ pub(crate) enum CloudBackupRemoteWriteResult {
     WalletRecordIds(Vec<String>),
     WalletCount(u32),
     ListedWalletCount(Option<u32>),
+    Keychain(KeychainSave),
 }
 
 impl CloudBackupRemoteWriteCommand {
@@ -82,6 +113,16 @@ impl CloudBackupRemoteWriteCommand {
                 cloud.delete_namespace(namespace).await?;
                 Ok(CloudBackupRemoteWriteResult::None)
             }
+            Self::SaveKeychain { namespace_id, writes } => {
+                // a platform keychain call blocks its thread, so it runs off the runtime
+                let saved = cove_tokio::unblock::run_blocking(move || {
+                    save_owned_keychain_writes(&namespace_id, writes)
+                })
+                .await?;
+
+                Ok(CloudBackupRemoteWriteResult::Keychain(saved))
+            }
+
             Self::None => Ok(CloudBackupRemoteWriteResult::None),
         }
     }

@@ -11,8 +11,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_delete_undecryptable_wallet_backups().await;
+            let result = manager.prepare_delete_undecryptable_wallet_backups(&writes).await;
             send!(addr.complete_delete_undecryptable_wallet_backups_preparation(claim, result));
         });
     }

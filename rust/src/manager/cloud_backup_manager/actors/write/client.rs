@@ -4,6 +4,7 @@ use cove_device::cloud_storage::CloudStorageClient;
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
+use super::keychain::OwnedKeychainWrite;
 use super::policy::{CommandClass, ConfigGeneration};
 use super::supervisor::{CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor};
 use super::types::{
@@ -11,13 +12,26 @@ use super::types::{
     CloudBackupWriteCompletion,
 };
 
-/// Who a write client writes for, which gives every command it sends its class
+/// Who a producer writes for, which gives every command or local effect it sends its class
+///
+/// Producers read it before anything they write depends on, so a configuration or operation that
+/// changes after that leaves their writes with an authority the owner no longer accepts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WriteOwner {
     /// Background work, read under this configuration generation
     Background(ConfigGeneration),
     /// The running exclusive operation with this claim
     Operation(CloudBackupExclusiveOperationClaim),
+}
+
+impl WriteOwner {
+    /// The class the write policy decides this owner's writes under
+    fn class(self) -> CommandClass {
+        match self {
+            Self::Background(generation) => CommandClass::Ordinary { generation },
+            Self::Operation(claim) => CommandClass::Operation(claim),
+        }
+    }
 }
 
 /// Handle for submitting writes to the write supervisor
@@ -50,14 +64,6 @@ impl CloudBackupWriteClient {
         match self.owner {
             WriteOwner::Background(_) => None,
             WriteOwner::Operation(claim) => Some(claim),
-        }
-    }
-
-    /// The class of an upload or a local completion this client sends
-    fn write_class(&self) -> CommandClass {
-        match self.owner {
-            WriteOwner::Background(generation) => CommandClass::Ordinary { generation },
-            WriteOwner::Operation(claim) => CommandClass::Operation(claim),
         }
     }
 
@@ -104,7 +110,7 @@ impl CloudBackupWriteClient {
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudBackupError> {
-        let class = self.write_class();
+        let class = self.owner.class();
         let receiver = call!(
             self.supervisor.upload_wallet_backup(class, cloud, namespace, record_id, data, None)
         )
@@ -120,7 +126,7 @@ impl CloudBackupWriteClient {
         data: Vec<u8>,
         completion: CloudBackupWriteCompletion,
     ) -> Result<(), CloudBackupError> {
-        let class = self.write_class();
+        let class = self.owner.class();
         let receiver = call!(self.supervisor.upload_wallet_backup(
             class,
             cloud,
@@ -191,7 +197,7 @@ impl CloudBackupWriteClient {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         count_refresh: CloudBackupWalletCountRefresh,
     ) -> Result<(), CloudBackupError> {
-        let class = self.write_class();
+        let class = self.owner.class();
         let receiver = call!(self.supervisor.complete_uploaded_wallet_batch(
             class,
             cloud,
@@ -279,6 +285,21 @@ impl CloudBackupWriteClient {
         namespace: String,
     ) -> Result<(), CloudBackupError> {
         let receiver = call!(self.supervisor.delete_namespace(class, cloud, namespace)).await;
+        self.await_result(receiver).await
+    }
+
+    /// Saves keys this client's owner proved for `namespace_id`
+    ///
+    /// The lane decides the save under the owner's authority and runs it off the actor, so it is
+    /// refused once the owner's operation ended or its configuration was replaced, and Turn Off and
+    /// a reset wait for a save that already started
+    pub(crate) async fn save_keychain(
+        &self,
+        namespace_id: String,
+        writes: Vec<OwnedKeychainWrite>,
+    ) -> Result<(), CloudBackupError> {
+        let class = self.owner.class();
+        let receiver = call!(self.supervisor.save_keychain(class, namespace_id, writes)).await;
         self.await_result(receiver).await
     }
 

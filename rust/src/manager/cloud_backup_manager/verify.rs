@@ -5,7 +5,7 @@ mod pending_completion;
 mod session;
 mod wrapper_repair;
 
-use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
+use crate::manager::cloud_backup_manager::actors::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use act_zero::send;
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
@@ -127,8 +127,11 @@ impl RustCloudBackupManager {
         ))
     }
 
+    /// Runs one verification pass for the operation `writes` belongs to, which is the authority
+    /// any key it repairs is saved under
     pub(crate) async fn prepare_deep_verify_cloud_backup(
         &self,
+        writes: CloudBackupWriteClient,
         force_discoverable: bool,
     ) -> CloudBackupDeepVerificationStep {
         let state = self.state.read().status().clone();
@@ -137,7 +140,7 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
-        match self.do_deep_verify_cloud_backup(force_discoverable).await {
+        match self.do_deep_verify_cloud_backup(writes, force_discoverable).await {
             Ok(result) => result,
             Err(error) => CloudBackupDeepVerificationStep::Complete(
                 Self::deep_verification_error_result(force_discoverable, error),
@@ -354,18 +357,26 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn do_deep_verify_cloud_backup(
         &self,
+        writes: CloudBackupWriteClient,
         force_discoverable: bool,
     ) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
-        VerificationSession::new(self, force_discoverable)?.run().await
+        VerificationSession::new(self, writes, force_discoverable)?.run().await
     }
 
+    /// Recovers the local master key from the cloud wrapper, for a producer writing through
+    /// `writes`
+    ///
+    /// The lane saves the recovered keys only while `writes`' owner still holds its authority and
+    /// `namespace` is the namespace the keychain holds
     pub(crate) async fn recover_local_master_key_from_cloud(
         &self,
+        writes: &CloudBackupWriteClient,
         namespace: &str,
         recovery_message: &str,
     ) -> Result<MasterKey, CloudBackupError> {
         self.recover_local_master_key_from_cloud_with_policy(
+            writes,
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredThenDiscover,
@@ -374,12 +385,15 @@ impl RustCloudBackupManager {
         .await
     }
 
+    /// [`Self::recover_local_master_key_from_cloud`] with the stored passkey only
     pub(crate) async fn recover_local_master_key_from_cloud_without_discovery(
         &self,
+        writes: &CloudBackupWriteClient,
         namespace: &str,
         recovery_message: &str,
     ) -> Result<MasterKey, CloudBackupError> {
         self.recover_local_master_key_from_cloud_with_policy(
+            writes,
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredOnly,
@@ -390,6 +404,7 @@ impl RustCloudBackupManager {
 
     async fn recover_local_master_key_from_cloud_with_policy(
         &self,
+        writes: &CloudBackupWriteClient,
         namespace: &str,
         recovery_message: &str,
         auth_policy: PasskeyAuthPolicy,
@@ -459,14 +474,14 @@ impl RustCloudBackupManager {
                 }
             })?;
 
-        self.apply_owned_keychain_writes(vec![
+        let keys = vec![
             OwnedKeychainWrite::Passkey {
                 credential_id: authenticated.credential_id.clone(),
                 prf_salt: encrypted.prf_salt,
             },
             OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes())),
-        ])
-        .await?;
+        ];
+        writes.save_keychain(namespace.to_string(), keys).await?;
 
         info!("Recovered local master key from cloud");
         Ok(master_key)

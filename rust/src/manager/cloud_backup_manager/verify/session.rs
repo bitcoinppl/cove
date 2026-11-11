@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
 use cove_cspp::master_key::MasterKey;
 
-use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
+use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, OwnedKeychainWrite};
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -230,6 +230,9 @@ impl CloudBackupDeepVerificationAutoSyncCompletion {
 /// One deep verification run with its cloud and keychain dependencies
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
+    /// The lane and the verification operation this pass writes for; any key it repairs is
+    /// saved under that operation's claim
+    pub(crate) writes: CloudBackupWriteClient,
     pub(crate) cloud_keychain: CloudBackupKeychain,
     pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
@@ -352,6 +355,7 @@ impl WalletBackupReadPass {
 impl VerificationSession {
     pub(crate) fn new(
         manager: &RustCloudBackupManager,
+        writes: CloudBackupWriteClient,
         force_discoverable: bool,
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
@@ -363,6 +367,7 @@ impl VerificationSession {
 
         Ok(Self {
             manager: manager.clone(),
+            writes,
             cloud_keychain,
             cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
@@ -380,6 +385,11 @@ impl VerificationSession {
             wallets_missing: false,
             force_discoverable,
         })
+    }
+
+    /// Saves a keychain write this pass proved, under its operation and namespace
+    async fn save_owned(&self, write: OwnedKeychainWrite) -> Result<(), CloudBackupError> {
+        self.writes.save_keychain(self.namespace.clone(), vec![write]).await
     }
 
     pub(crate) async fn run(mut self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
@@ -572,7 +582,7 @@ impl VerificationSession {
                     credential_id: authenticated.credential_id.clone(),
                     prf_salt,
                 };
-                if let Err(error) = self.manager.apply_owned_keychain_writes(vec![write]).await {
+                if let Err(error) = self.save_owned(write).await {
                     return Ok(MasterKeyResolution::Finished(
                         self.retry_result(
                             CloudBackupError::internal_context("save cloud backup passkey", error)
@@ -643,7 +653,7 @@ impl VerificationSession {
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
         let write = OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes()));
-        self.manager.apply_owned_keychain_writes(vec![write]).await.map_err(|error| match error {
+        self.save_owned(write).await.map_err(|error| match error {
             CloudBackupError::Cancelled => CloudBackupError::Cancelled,
             error => CloudBackupError::internal_context("repair local master key", error),
         })

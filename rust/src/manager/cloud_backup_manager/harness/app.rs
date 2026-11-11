@@ -318,9 +318,10 @@ impl TestApp {
     /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
     /// park. A current-thread runtime parks only with an empty run queue, so after a round every
     /// task the event woke has run as far as it can. The app is settled after a round in which
-    /// no fake call is answering, no blocking call is in flight or answered, and the
-    /// supervisor's stage checkpoint shows no operation in an `Effecting` stage. An effect or a
-    /// blocking call runs off the runtime, so the park alone can't see it. Calls
+    /// no fake call is answering, no blocking call is in flight or answered, the supervisor's
+    /// stage checkpoint shows no operation in an `Effecting` stage, and the write lane has no
+    /// command in flight. An effect, a blocking call and a lane keychain save run off the
+    /// runtime, so the park alone can't see them. Calls
     /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
     /// release holds and advance time as events
     pub(crate) fn settle(&self) {
@@ -360,7 +361,22 @@ impl TestApp {
                 .block_on(&checkpoint, call!(supervisor.harness_effects_settled()))
                 .expect("stage checkpoint");
             if effects_settled.try_recv().is_ok() {
-                return;
+                // the lane saves proven keys on a blocking thread, which the park can't see either
+                let lane = format!("the write lane's idle checkpoint after {}", self.last_event);
+                let mut lane_idle =
+                    self.block_on(&lane, call!(writes.when_idle())).expect("lane checkpoint");
+                if lane_idle.try_recv().is_ok() {
+                    return;
+                }
+
+                let command = format!("the lane's command to finish after {}", self.last_event);
+                self.block_on(&command, async {
+                    tokio::select! {
+                        idle = lane_idle => idle.expect("the write lane stopped with a command in flight"),
+                        () = fakes::until_a_call_is_held() => {}
+                    }
+                });
+                continue;
             }
 
             let effect = format!("the in-flight effect to report after {}", self.last_event);

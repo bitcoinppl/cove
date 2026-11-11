@@ -126,8 +126,9 @@ async fn cancelled_master_key_recovery_keeps_cancel_reader_message() {
     globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
+    let writes = current_background_writes(&manager).await;
     let Err(error) =
-        manager.recover_local_master_key_from_cloud(&namespace, "recovery required").await
+        manager.recover_local_master_key_from_cloud(&writes, &namespace, "recovery required").await
     else {
         panic!("cancelled passkey recovered a master key");
     };

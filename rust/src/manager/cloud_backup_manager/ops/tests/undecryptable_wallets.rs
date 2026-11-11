@@ -80,7 +80,13 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     );
     mark_undecryptable_backups_reported(&manager, 3);
 
-    let prepared = manager.prepare_delete_undecryptable_wallet_backups().await.unwrap();
+    let prepared = manager
+        .prepare_delete_undecryptable_wallet_backups(&unowned_writes(
+            &manager,
+            CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+        ))
+        .await
+        .unwrap();
     let candidates: HashSet<_> = prepared.record_ids().iter().cloned().collect();
     assert_eq!(candidates, HashSet::from([bad_record_id.clone(), recovered_record_id.clone()]));
 

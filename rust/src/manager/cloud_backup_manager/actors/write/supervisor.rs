@@ -20,6 +20,7 @@ use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::admission::PauseReason;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
+use super::keychain::{KeychainSave, OwnedKeychainWrite};
 use super::policy::{CommandClass, ConfigGeneration, Decision, VersionedPolicy, WritePolicy};
 use super::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
@@ -107,6 +108,8 @@ enum CloudBackupWriteLocalCompletion {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         count_refresh: CloudBackupWalletCountRefresh,
     },
+    /// A keychain save, which answers stale when the keychain moved to another namespace
+    KeychainSave,
 }
 
 #[derive(Debug)]
@@ -411,8 +414,22 @@ impl CloudBackupWriteSupervisor {
         active: &CloudBackupInFlightWrite,
         output: CloudBackupRemoteWriteResult,
     ) -> Result<(), CloudBackupError> {
-        let manager = match &active.completion {
-            CloudBackupWriteLocalCompletion::None => return Ok(()),
+        let manager = match (&active.completion, &output) {
+            (CloudBackupWriteLocalCompletion::None, _) => return Ok(()),
+            (
+                CloudBackupWriteLocalCompletion::KeychainSave,
+                CloudBackupRemoteWriteResult::Keychain(KeychainSave::Saved),
+            ) => return Ok(()),
+            (
+                CloudBackupWriteLocalCompletion::KeychainSave,
+                CloudBackupRemoteWriteResult::Keychain(KeychainSave::NamespaceChanged),
+            ) => {
+                debug!(
+                    "Cloud Backup refused keychain writes from {:?} for another namespace",
+                    active.class
+                );
+                return Err(stale_error(&active.class));
+            }
             _ => self
                 .manager
                 .upgrade()
@@ -621,6 +638,21 @@ impl CloudBackupWriteSupervisor {
             class,
             CloudBackupRemoteWriteCommand::None,
             CloudBackupWriteLocalCompletion::Apply(completion),
+        );
+        Produces::ok(receiver)
+    }
+
+    /// Saves keys a producer proved for `namespace_id`, as the producer's class allows
+    pub(crate) async fn save_keychain(
+        &mut self,
+        class: CommandClass,
+        namespace_id: String,
+        writes: Vec<OwnedKeychainWrite>,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+        let receiver = self.submit(
+            class,
+            CloudBackupRemoteWriteCommand::SaveKeychain { namespace_id, writes },
+            CloudBackupWriteLocalCompletion::KeychainSave,
         );
         Produces::ok(receiver)
     }

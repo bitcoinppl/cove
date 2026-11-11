@@ -55,9 +55,17 @@ upload, sync-health and cleanup workers what to do with `send!` and never
 awaits them. So no actor can deadlock waiting on another, and a busy worker
 can't hold a reset or a lifecycle completion behind its mailbox.
 
-Workers prepare keychain writes and the supervisor applies them, so a write that
-arrives after a reset or Turn Off began is refused instead of restoring wiped
-state. An effect that can't be cancelled once it starts, such as Turn Off's local
+Workers that prove a passkey or a master key off the actor don't write the
+keychain themselves. They hand the writes to the write lane with the authority
+they read before their work started: the running operation's claim, or the
+background configuration generation, and the namespace the keys were proven
+for. The lane decides the save at its queue head like any other command, so a
+save from an operation that ended or a configuration that was replaced is
+refused, and background saves wait while Turn Off, an account switch or a reset
+runs. The save then runs on a blocking thread as the lane's in-flight command and
+is refused if the keychain holds another namespace by then. Turn Off's drain and
+a reset's wait for an idle lane both wait for a save that already started, so a
+late proof can't restore wiped keys or replace the next backup's keys. An effect that can't be cancelled once it starts, such as Turn Off's local
 cleanup or a passkey registration, puts its operation in an `Effecting` stage,
 and the operation keeps the slot until the effect reports. A local reset, which
 a full wipe uses, closes admission, cancels running operations, waits for any
@@ -94,7 +102,8 @@ writes the fact itself.
 | Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it only through `commit`, which publishes the write policy after every write | Verification results, upload confirmations (carrying the wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
 | Runtime operation (the body and the operation nested in it) | The supervisor's `OwnedRuntime` | Worker completions carrying the operation's claim |
 | Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
-| Cloud Backup keychain namespace | The supervisor, which applies the keychain writes workers prepare | `OwnedKeychainWrite` results |
+| Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |
+| Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
 | Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
 | Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
 | Detail inventory | The reducer | Detail refresh results |

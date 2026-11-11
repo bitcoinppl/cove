@@ -80,6 +80,7 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
+                &writes,
                 &namespace,
                 RECREATE_MANIFEST_RECOVERY_MESSAGE,
             )

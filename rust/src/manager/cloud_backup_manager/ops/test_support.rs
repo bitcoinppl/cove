@@ -52,6 +52,42 @@ use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
 
+/// A write client for the operation with `claim`, on the manager's own lane
+pub(crate) fn operation_writes(
+    manager: &RustCloudBackupManager,
+    claim: CloudBackupExclusiveOperationClaim,
+) -> CloudBackupWriteClient {
+    CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim)
+}
+
+/// A write client for calling an operation's preparation directly, outside the supervisor
+///
+/// No operation runs under its claim, so the write lane refuses any keychain save it carries: a
+/// test that uses it must seed the keys the preparation reads
+pub(crate) fn unowned_writes(
+    manager: &RustCloudBackupManager,
+    operation: CloudBackupExclusiveOperation,
+) -> CloudBackupWriteClient {
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        operation,
+        crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id(
+            u64::MAX - 1,
+        ),
+    );
+    operation_writes(manager, claim)
+}
+
+/// The background write client of the current configuration, for a test that saves as a
+/// producer outside an operation
+///
+/// The checkpoint comes first, so the ticket reflects every policy the owner published before
+pub(crate) async fn current_background_writes(
+    manager: &RustCloudBackupManager,
+) -> CloudBackupWriteClient {
+    supervisor_checkpoint(manager).await;
+    manager.background_writes().await.expect("background write client")
+}
+
 /// A complete fetch result stamped with the manager's current listing generation
 pub(crate) fn complete_cloud_only_fetch(
     manager: &RustCloudBackupManager,

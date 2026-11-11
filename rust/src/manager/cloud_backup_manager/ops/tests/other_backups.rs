@@ -20,7 +20,17 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let wallets = manager.do_fetch_cloud_only_wallets(0).await.unwrap().wallets;
+    let wallets = manager
+        .do_fetch_cloud_only_wallets(
+            &CloudBackupWriteClient::background(
+                manager.cloud_writes.clone(),
+                ConfigGeneration::next(),
+            ),
+            0,
+        )
+        .await
+        .unwrap()
+        .wallets;
 
     assert_eq!(wallets.len(), 1);
     assert_eq!(wallets[0].record_id, record_id);

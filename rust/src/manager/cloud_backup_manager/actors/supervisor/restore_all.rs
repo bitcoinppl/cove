@@ -86,9 +86,11 @@ impl CloudBackupSupervisor {
         manager.apply_cloud_only_operation(CloudOnlyOperation::Idle);
         manager.apply_restore_all_started(claim, frozen_count);
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.prepare_restore_all_cloud_wallets(frozen_wallets, listing_generation).await;
+            let result = manager
+                .prepare_restore_all_cloud_wallets(&writes, frozen_wallets, listing_generation)
+                .await;
             send!(addr.complete_restore_all_preparation(claim, result));
         });
     }

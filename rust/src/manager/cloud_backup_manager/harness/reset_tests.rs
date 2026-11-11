@@ -19,16 +19,18 @@ use crate::database::cloud_backup::{
     PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBackupStatus,
     PersistedDriveAccountSwitchPhase,
 };
+use crate::manager::cloud_backup_manager::actors::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, CoalescibleIntent, Rejection, UserIntent,
+    Admission, CoalescibleIntent, PauseReason, Rejection, UserIntent,
 };
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
 use crate::manager::cloud_backup_manager::detail::VerificationState;
 use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
+use crate::manager::cloud_backup_manager::ops::test_support::current_background_writes;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
-    CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
+    CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupKeychain,
+    CloudBackupManagerAction, CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
     DriveAccountSwitchReconcileAction,
 };
 
@@ -37,6 +39,18 @@ fn local_master_key_present() -> bool {
         .load_master_key_from_store()
         .expect("read local master key")
         .is_some()
+}
+
+/// The local master key's bytes, which tell one backup's key from another's
+fn master_key_bytes() -> Option<Vec<u8>> {
+    cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read local master key")
+        .map(|master_key| master_key.as_bytes().to_vec())
+}
+
+fn credential_id() -> Option<Vec<u8>> {
+    CloudBackupKeychain::global().load_credential_id().expect("read credential")
 }
 
 /// Replace the seeded placeholder wrapper with one the scripted passkey opens, and keep the
@@ -294,6 +308,132 @@ fn verification_holds_the_slot_and_judges_its_own_wallet_set() {
             app.describe()
         );
     });
+}
+
+/// A key recovery that outlives its configuration can't write the next one's keys: a dirty
+/// upload starts proving backup A's master key, a reset ends A and backup B is enabled before the
+/// proof lands, and B's namespace, master key and passkey stay exactly as B's Enable left them
+#[test]
+fn background_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys() {
+    let test = concat!(
+        module_path!(),
+        "::background_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        assert_held_recovery_leaves_the_next_backups_keys(|app| {
+            app.event("a wallet change needs an upload", |app| {
+                change_a_wallet(app).expect("a local wallet");
+            })
+            .then_can(&[N::TurnOff]);
+            app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+        });
+    });
+}
+
+/// The same for a manual Verify: its claim ends with the reset, so the master key and passkey it
+/// proves for A after B's Enable are refused
+#[test]
+fn verification_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys() {
+    let test = concat!(
+        module_path!(),
+        "::verification_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        assert_held_recovery_leaves_the_next_backups_keys(|app| {
+            app.dispatch(CloudBackupManagerAction::StartVerification(
+                CloudBackupVerificationSource::CloudBackupDetail,
+            ))
+            .then_cannot(&[N::Enable]);
+        });
+    });
+}
+
+/// Keys background work proved under one configuration never land on the next: after Turn Off
+/// and a new Enable, the lane refuses the first configuration's late save and still saves the new
+/// configuration's own
+#[test]
+fn a_turned_off_configurations_late_keychain_save_is_refused() {
+    let test =
+        concat!(module_path!(), "::a_turned_off_configurations_late_keychain_save_is_refused");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let manager = app.manager().clone();
+        let first = FakeAccount::new(1, 0).seed(&app);
+        let first_key = master_key_bytes().expect("A's master key");
+        let first_writes = app.block_on("A's writes", current_background_writes(&manager));
+        load_detail(&mut app);
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        let second = FakeAccount::new(1, 0).seed(&app);
+        let second_key = master_key_bytes().expect("B's master key");
+        let second_credential = credential_id();
+        assert_ne!(first, second);
+        assert_ne!(first_key, second_key);
+
+        // A's worker answers late with A's keys, for B's namespace so only its authority differs
+        let late = vec![
+            OwnedKeychainWrite::Passkey { credential_id: vec![0xa1; 16], prf_salt: [0xa2; 32] },
+            OwnedKeychainWrite::MasterKey(master_key(&first_key)),
+        ];
+        let refused =
+            app.block_on("A's late save", first_writes.save_keychain(second.clone(), late));
+
+        assert!(
+            matches!(
+                refused,
+                Err(CloudBackupError::WritesPaused(PauseReason::ConfigurationChanged))
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(keychain_namespace(), Some(second.clone()));
+        assert_eq!(master_key_bytes(), Some(second_key.clone()));
+        assert_eq!(credential_id(), second_credential);
+
+        // B's own background work still saves its keys
+        let second_writes = app.block_on("B's writes", current_background_writes(&manager));
+        let own = vec![OwnedKeychainWrite::MasterKey(master_key(&second_key))];
+        let saved = app.block_on("B's save", second_writes.save_keychain(second, own));
+        assert!(saved.is_ok(), "{saved:?}");
+    });
+}
+
+fn master_key(bytes: &[u8]) -> cove_cspp::master_key::MasterKey {
+    cove_cspp::master_key::MasterKey::from_bytes(bytes.try_into().expect("a 32 byte master key"))
+}
+
+/// Seeds backup A without a local master key, lets `start` begin a recovery of it whose passkey
+/// answer is held, then resets, enables backup B and releases A's answer
+fn assert_held_recovery_leaves_the_next_backups_keys(start: impl FnOnce(&mut TestApp)) {
+    let mut app = TestApp::launch();
+    let namespace = FakeAccount::new(1, 0).seed(&app);
+    seed_verifiable_master_key(&app, &namespace);
+    load_detail(&mut app);
+    CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
+    let hold = Hold::default();
+    app.passkey.set_mode(PasskeyMode::Slow(hold.clone()));
+
+    start(&mut app);
+    app.block_on("A's key recovery to authenticate", hold.entered());
+
+    let manager = app.manager().clone();
+    let permit = app
+        .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+        .expect("reset permit");
+    finish_wipe(&app, permit);
+
+    let next = FakeAccount::new(1, 0).seed(&app);
+    let next_master_key = master_key_bytes();
+    let next_credential = credential_id();
+    assert_ne!(next, namespace);
+    assert!(next_master_key.is_some(), "B's Enable left no master key");
+
+    app.event("release A's held authentication", |_| hold.release()).then_can(&[N::TurnOff]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+    assert_eq!(keychain_namespace(), Some(next), "{}", app.describe());
+    assert_eq!(master_key_bytes(), next_master_key, "A's master key replaced B's");
+    assert_eq!(credential_id(), next_credential, "A's passkey replaced B's");
 }
 
 /// A wipe during a running verification stops it: the key it proves after the wipe is refused by

@@ -872,15 +872,7 @@ impl RustCloudBackupManager {
     }
 
     /// Hands keychain writes a worker prepared to the owner, which applies them in its handler
-    pub(crate) async fn apply_owned_keychain_writes(
-        &self,
-        writes: Vec<actors::supervisor::OwnedKeychainWrite>,
-    ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.apply_keychain_writes(writes))
-            .await
-            .map_err(CloudBackupError::internal)?
-    }
-
+    /// while their authority still owns the keychain
     /// Projects a committed lifecycle write into runtime status and flags
     pub(crate) fn reconcile_committed<T>(
         &self,

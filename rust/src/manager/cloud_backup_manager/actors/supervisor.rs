@@ -105,7 +105,6 @@ mod workers;
 use enable::EnableContinuation;
 
 pub(crate) use dispatch::DispatchOutcome;
-pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
