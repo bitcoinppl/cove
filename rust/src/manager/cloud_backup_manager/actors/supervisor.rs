@@ -30,6 +30,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::database::error::DatabaseError;
+use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
@@ -1339,10 +1340,16 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         let addr = self.addr();
 
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
-        else {
-            warn!("restore_from_cloud_backup called while another operation is active, ignoring");
+        // onboarding starts this outside dispatch, so it is admitted the same way: a configured
+        // backup or a running operation refuses it
+        let claim = match self.admit(&manager, &UserIntent::RestoreFromCloudBackup) {
+            Admission::Accepted => {
+                self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
+            }
+            Admission::Coalesced(_) | Admission::Rejected(_) => None,
+        };
+        let Some(claim) = claim else {
+            warn!("restore_from_cloud_backup was not admitted, ignoring");
             if let Err(error) = sender
                 .send_async(CloudBackupRestoreEvent::Failed("restore already in progress".into()))
                 .await
@@ -1448,7 +1455,7 @@ pub(crate) mod test_support {
             &mut self,
             intent: crate::manager::cloud_backup_manager::admission::UserIntent,
         ) -> ActorResult<crate::manager::cloud_backup_manager::admission::Admission> {
-            use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
+            use crate::manager::cloud_backup_manager::admission::Rejection;
 
             let admission = match self.manager() {
                 Some(manager) => self.decide(&manager, &intent),

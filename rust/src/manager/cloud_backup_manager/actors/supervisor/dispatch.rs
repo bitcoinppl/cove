@@ -23,7 +23,23 @@ impl CloudBackupSupervisor {
     pub async fn dispatch(&mut self, intent: UserIntent) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        let admission = self.decide(&manager, &intent);
+        if self.admit(&manager, &intent) == Admission::Accepted {
+            self.start_admitted(manager, intent).await?;
+        }
+
+        Produces::ok(())
+    }
+
+    /// Decides `intent` on the supervisor's current body and records the outcome
+    ///
+    /// Dispatch and the named entry points that start work outside it, such as the onboarding
+    /// restore, decide here, so no start skips admission
+    pub(crate) fn admit(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+    ) -> Admission {
+        let admission = self.decide(manager, intent);
         match admission {
             Admission::Accepted => {}
             Admission::Coalesced(into) => {
@@ -35,11 +51,7 @@ impl CloudBackupSupervisor {
         }
 
         self.last_outcome = Some(DispatchOutcome { intent: intent.clone(), admission });
-        if admission == Admission::Accepted {
-            self.start_admitted(manager, intent).await?;
-        }
-
-        Produces::ok(())
+        admission
     }
 
     /// What dispatch decides for `intent` now, on the body rebased onto the committed record

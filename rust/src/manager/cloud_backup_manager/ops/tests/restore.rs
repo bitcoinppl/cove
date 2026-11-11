@@ -815,6 +815,39 @@ async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_u
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn onboarding_restore_is_rejected_while_backup_is_configured() {
+    use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 7);
+    let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+
+    let (sender, receiver) = flume::bounded(1);
+    call!(manager.supervisor.start_restore_from_cloud_backup_with_events(sender)).await.unwrap();
+    let event = receiver
+        .recv_async()
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
+        .await
+        .expect("restore rejection response")
+        .expect("restore rejection event");
+
+    assert!(matches!(event, CloudBackupRestoreEvent::Failed(_)), "{event:?}");
+    let outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap().unwrap();
+    assert_eq!(outcome.admission, Admission::Rejected(Rejection::NotConfigured));
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_eq!(globals.passkey.discover_count(), 0);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(existing_namespace));
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_all_duplicate_wallets_activates_namespace_when_persisted_state_is_empty() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
