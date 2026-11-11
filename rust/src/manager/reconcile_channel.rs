@@ -103,7 +103,7 @@ impl<M: DebugSend> ReconcileChannel<M> {
     /// Forward every message to `sink` from a tokio task
     pub fn listen_sink_async(&self, sink: impl ReconcileSink<M>) {
         self.listen_async(move |field| {
-            trace!("reconcile: {field:?}");
+            trace!("reconcile: {}", field.log_summary());
             match field {
                 SingleOrMany::Single(message) => sink.reconcile(message),
                 SingleOrMany::Many(messages) => sink.reconcile_many(messages),
