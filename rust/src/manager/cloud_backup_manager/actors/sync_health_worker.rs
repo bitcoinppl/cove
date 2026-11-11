@@ -189,6 +189,13 @@ enum SyncHealthRefreshState {
 mod tests {
     use super::*;
 
+    impl CloudBackupSyncHealthWorker {
+        /// Whether no refresh is in flight or queued
+        pub(crate) async fn sync_health_refresh_idle_for_test(&mut self) -> ActorResult<bool> {
+            Produces::ok(self.sync_health_refresh_state == SyncHealthRefreshState::Idle)
+        }
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn queued_sync_health_refresh_invalidates_in_flight_generation() {
         let mut actor = CloudBackupSyncHealthWorker::new(Weak::new());

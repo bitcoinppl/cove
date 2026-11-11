@@ -2059,6 +2059,29 @@ pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
 
 /// Lifecycle results reach the supervisor as messages; its mailbox barrier proves every message
 /// sent before it was handled
+/// Waits until every sync-health refresh requested so far has landed in the manager's state
+///
+/// Setup and lifecycle commits request a refresh that computes off the actor and lands later, so
+/// a test that compares two state snapshots waits for it first instead of racing it. A request
+/// sent before this call is already in the supervisor's mailbox, so it reaches the worker first
+pub(crate) async fn wait_for_sync_health_refresh(manager: &RustCloudBackupManager) {
+    async {
+        loop {
+            let idle = call!(manager.supervisor.sync_health_refresh_idle_for_test())
+                .await
+                .expect("sync health refresh state");
+            if idle {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+    .with_timeout(loaded_host_wait(Duration::from_secs(5)))
+    .await
+    .expect("the requested sync health refresh lands");
+}
+
 pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
     call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
 }
