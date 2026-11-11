@@ -151,6 +151,25 @@ final class CloudBackupHostControl {
         try update { $0.namespaceDeleteFailures.append(.init(attempt: attempt, error: error)) }
     }
 
+    /// Fails every namespace delete numbered in `attempts`, counted from one across every launch
+    ///
+    /// After a failed delete Rust retries on its own once the cloud is reachable again, at times
+    /// the test doesn't control, so a test that keeps Turn Off unfinished fails a range of attempts
+    /// and calls `stopFailingNamespaceDeletes()` when it wants the next one to go through
+    func failNamespaceDeletes(
+        _ attempts: ClosedRange<Int>,
+        error: CloudBackupUITestScript.NamespaceDeleteError = .notAvailable
+    ) throws {
+        try update { script in
+            script.namespaceDeleteFailures += attempts.map { .init(attempt: $0, error: error) }
+        }
+    }
+
+    /// Lets every later namespace delete go through
+    func stopFailingNamespaceDeletes() throws {
+        try update { $0.namespaceDeleteFailures.removeAll() }
+    }
+
     /// Answers the next passkey assertions with `results`, whether the app authenticates with a
     /// known credential or discovers one; the last result repeats
     ///
