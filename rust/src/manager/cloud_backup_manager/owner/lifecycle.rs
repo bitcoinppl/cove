@@ -125,14 +125,25 @@ impl LifecycleWriter {
     /// manager marked initialized, so pre-runtime recovery cleanup cannot start, and no
     /// Cloud Backup actor exists yet. This is the only place the legacy heal runs
     pub(crate) fn bootstrap(ownership: &CloudBackupRuntimeOwnership) -> (Self, LifecycleLoad) {
+        Self::bootstrap_with_heal(ownership, Self::heal_legacy_disabling)
+    }
+
+    // the heal is a parameter so tests can make its write fail without a seam in this path
+    fn bootstrap_with_heal(
+        ownership: &CloudBackupRuntimeOwnership,
+        heal: impl FnOnce(&Self, u64) -> Result<Committed<bool>, DatabaseError>,
+    ) -> (Self, LifecycleLoad) {
         debug_assert!(ownership.manager_initialized && !ownership.recovery_cleanup_active);
 
         let writer = Self(LifecycleCapability(()));
-        let load = writer.normalize_on_load();
+        let load = writer.normalize_on_load(heal);
         (writer, load)
     }
 
-    fn normalize_on_load(&self) -> LifecycleLoad {
+    fn normalize_on_load(
+        &self,
+        heal: impl FnOnce(&Self, u64) -> Result<Committed<bool>, DatabaseError>,
+    ) -> LifecycleLoad {
         let stored = match Database::global().cloud_backup_state.get() {
             Ok(stored) => stored,
             Err(error) => {
@@ -146,7 +157,7 @@ impl LifecycleWriter {
         }
 
         let healed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        match self.heal_legacy_disabling(healed_at) {
+        match heal(self, healed_at) {
             Ok(mutation) if mutation.outcome => {
                 info!("Cloud Backup healed a legacy Disabling record that never deleted anything");
                 LifecycleLoad::Healed
@@ -161,9 +172,6 @@ impl LifecycleWriter {
 
     /// One transaction: the legacy record becomes its latest configuration plus the notice
     fn heal_legacy_disabling(&self, healed_at: u64) -> Result<Committed<bool>, DatabaseError> {
-        #[cfg(test)]
-        test_support::fail_heal_write_if_armed()?;
-
         self.mutate(|state| {
             let PersistedCloudBackupState::ExclusiveTransition(
                 PersistedCloudBackupTransition::Disabling(disabling),
@@ -532,9 +540,10 @@ impl LifecycleWriter {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    use super::{DatabaseError, LifecycleCapability, LifecycleWriter};
+    use super::{
+        CloudBackupRuntimeOwnership, DatabaseError, LifecycleCapability, LifecycleLoad,
+        LifecycleWriter,
+    };
 
     /// A capability for tests that hold a raw transaction open to race the owner
     pub(crate) fn capability() -> LifecycleCapability {
@@ -546,18 +555,12 @@ pub(crate) mod test_support {
         LifecycleWriter(LifecycleCapability(()))
     }
 
-    static FAIL_NEXT_HEAL_WRITE: AtomicBool = AtomicBool::new(false);
-
-    /// Makes the next legacy heal write fail before it commits
-    pub(crate) fn fail_next_heal_write() {
-        FAIL_NEXT_HEAL_WRITE.store(true, Ordering::SeqCst);
-    }
-
-    pub(crate) fn fail_heal_write_if_armed() -> Result<(), DatabaseError> {
-        if FAIL_NEXT_HEAL_WRITE.swap(false, Ordering::SeqCst) {
-            return Err(DatabaseError::DatabaseAccess("injected heal write failure".into()));
-        }
-
-        Ok(())
+    /// Bootstrap whose legacy heal write fails before it commits
+    pub(crate) fn bootstrap_with_failed_heal(
+        ownership: &CloudBackupRuntimeOwnership,
+    ) -> (LifecycleWriter, LifecycleLoad) {
+        LifecycleWriter::bootstrap_with_heal(ownership, |_, _| {
+            Err(DatabaseError::DatabaseAccess("injected heal write failure".into()))
+        })
     }
 }

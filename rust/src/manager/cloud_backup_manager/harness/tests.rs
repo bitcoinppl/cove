@@ -17,10 +17,13 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
-use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::fail_next_heal_write;
-use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudBackupManagerAction};
+use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupVerificationSource,
+};
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 
 fn persisted() -> PersistedCloudBackupState {
@@ -31,7 +34,7 @@ fn keychain_namespace() -> Option<String> {
     CloudBackupKeychain::global().namespace_id().expect("read namespace")
 }
 
-/// Load the detail inventory the way the detail screen does; today's Turn Off waits for it
+/// Load the detail inventory the way the detail screen does
 fn load_detail(app: &mut TestApp) {
     app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
     app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
@@ -69,12 +72,10 @@ fn soft_relaunch_keeps_durable_state_without_prompting() {
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
         let namespace = FakeAccount::new(2, 0).seed(&app);
 
-        // the relaunched app has not loaded its detail inventory, so today's Turn Off is dropped
-        app.relaunch().then_can(&[N::Verify, N::SyncUnsynced]).then_cannot(&[
-            N::TurnOff,
-            N::Enable,
-            N::KeepEnabled,
-        ]);
+        // the relaunched app has not loaded its detail inventory, and Turn Off is still admitted
+        app.relaunch()
+            .then_can(&[N::Verify, N::SyncUnsynced, N::TurnOff])
+            .then_cannot(&[N::Enable, N::KeepEnabled]);
 
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(keychain_namespace().as_deref(), Some(namespace.as_str()));
@@ -223,8 +224,10 @@ fn failed_heal_write_keeps_the_legacy_record_and_fails_the_load() {
         }
 
         if phase == 1 {
-            fail_next_heal_write();
-            let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+            let mut app = TestApp::launch_with_bootstrap(
+                PasskeyMode::FailOnAnyInteractiveCall,
+                bootstrap_with_failed_heal,
+            );
             let stuck = persisted();
             let unchanged =
                 stuck.disabling().is_some_and(|record| record.delete_started_at.is_none());
@@ -378,5 +381,76 @@ fn a_hold_that_never_starts_fails_at_its_deadline() {
 
         futures::executor::block_on(hold.entered());
         unreachable!("nothing calls delete_namespace, so the deadline ends this phase");
+    });
+}
+
+/// Turn Off is admitted from the lifecycle alone: the detail inventory is not one of its inputs,
+/// so a tap before the inventory loads turns Cloud Backup off instead of being dropped
+#[test]
+fn turn_off_is_admitted_before_the_detail_inventory_loads() {
+    let test = concat!(module_path!(), "::turn_off_is_admitted_before_the_detail_inventory_loads");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        assert!(!app.manager().detail_inventory_is_complete(), "{}", app.describe());
+
+        app.current().then_can(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+        let outcome = app.last_outcome().expect("dispatch recorded an outcome");
+        assert_eq!((outcome.intent, outcome.admission), (UserIntent::TurnOff, Admission::Accepted));
+    });
+}
+
+/// A soft relaunch builds a new manager; dispatching to it runs on that manager, not on the
+/// process singleton the first launch created
+#[test]
+fn dispatch_runs_on_the_manager_it_is_called_on() {
+    let test = concat!(module_path!(), "::dispatch_runs_on_the_manager_it_is_called_on");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        let first = app.manager().clone();
+
+        app.relaunch().then_can(&[N::TurnOff]);
+        assert!(!Arc::ptr_eq(&first, app.manager()));
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::Enable]);
+
+        let outcome = app.last_outcome().expect("the new manager admitted the intent");
+        assert_eq!(outcome.admission, Admission::Accepted);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+    });
+}
+
+/// Admission parity: an action the app showed as available, dispatched after the state moved
+/// on, gets one rejection with its reason and changes nothing
+#[test]
+fn an_action_dispatched_after_the_state_moved_on_is_rejected_with_a_reason() {
+    let test = concat!(
+        module_path!(),
+        "::an_action_dispatched_after_the_state_moved_on_is_rejected_with_a_reason"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        app.current().then_can(&[N::TurnOff, N::Verify]);
+
+        // the screen still offers Verify when Turn Off finishes underneath it
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[N::Verify]);
+        let disabled = persisted();
+        let deletes = app.cloud.count(CloudCall::DeleteNamespace);
+
+        let source = CloudBackupVerificationSource::CloudBackupDetail;
+        app.dispatch(CloudBackupManagerAction::StartVerification(source))
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::Verify, N::TurnOff]);
+        let outcome = app.last_outcome().expect("the rejection is recorded");
+        assert_eq!(outcome.admission, Admission::Rejected(Rejection::CloudBackupOff));
+        assert_eq!(persisted(), disabled);
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), deletes);
     });
 }

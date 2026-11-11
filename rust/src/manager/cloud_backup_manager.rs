@@ -1,4 +1,5 @@
 pub(crate) mod actors;
+mod admission;
 mod blob_state;
 mod catastrophic_recovery;
 mod cloud_inventory;
@@ -160,6 +161,16 @@ static CLOUD_BACKUP_RUNTIME_OWNERSHIP: Mutex<CloudBackupRuntimeOwnership> =
 static CLOUD_BACKUP_RUNTIME_CHANGED: Condvar = Condvar::new();
 
 pub(crate) fn initialize_cloud_backup_manager() -> Arc<RustCloudBackupManager> {
+    initialize_cloud_backup_manager_with(LifecycleWriter::bootstrap)
+}
+
+/// Starts a manager whose lifecycle writer comes from `bootstrap`
+///
+/// Production always passes [`LifecycleWriter::bootstrap`]; the parameter lets tests make the
+/// load heal fail without a test seam inside the bootstrap itself
+pub(crate) fn initialize_cloud_backup_manager_with(
+    bootstrap: fn(&CloudBackupRuntimeOwnership) -> (LifecycleWriter, LifecycleLoad),
+) -> Arc<RustCloudBackupManager> {
     // the exclusive bootstrap phase: recovery cleanup is excluded from here on, and load
     // normalization creates the lifecycle writer before any Cloud Backup actor exists
     let (lifecycle, load) = {
@@ -168,7 +179,7 @@ pub(crate) fn initialize_cloud_backup_manager() -> Arc<RustCloudBackupManager> {
             CLOUD_BACKUP_RUNTIME_CHANGED.wait(&mut ownership);
         }
         ownership.manager_initialized = true;
-        LifecycleWriter::bootstrap(&ownership)
+        bootstrap(&ownership)
     };
 
     RustCloudBackupManager::init(lifecycle, load)
@@ -1033,6 +1044,14 @@ impl RustCloudBackupManager {
 
 #[cfg(test)]
 mod manager_test_support {
+
+    // the platform reaches these through dispatch; tests that start them directly use these
+    impl RustCloudBackupManager {
+        pub(crate) fn discard_pending_enable_cloud_backup(&self) {
+            send!(self.supervisor.discard_pending_enable_cloud_backup());
+            self.clear_existing_backup_found_prompt();
+        }
+    }
     use super::*;
 
     impl RustCloudBackupManager {
@@ -1340,31 +1359,12 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_disable_operation());
     }
 
-    pub(crate) fn keep_cloud_backup_enabled(&self) {
-        send!(self.supervisor.keep_cloud_backup_enabled());
-    }
-
     /// Only a committed disable resumes on its own; it goes forward until Disabled
     fn resume_persisted_disable_if_needed(&self) {
         let state = Self::load_persisted_state();
         if let Some(DisablingRecord::Committed(_)) = DisablingRecord::of(&state) {
             self.disable_cloud_backup();
         }
-    }
-
-    /// Dismiss staged enable state for the existing-backup confirmation flow
-    pub(crate) fn discard_pending_enable_cloud_backup(&self) {
-        send!(self.supervisor.discard_pending_enable_cloud_backup());
-        self.clear_existing_backup_found_prompt();
-    }
-
-    pub(crate) fn cancel_restore(&self) {
-        send!(self.supervisor.cancel_restore());
-    }
-
-    pub(crate) fn restore_from_cloud_backup(&self) {
-        info!("restore_from_cloud_backup: enqueueing restore task");
-        send!(self.supervisor.start_restore_from_cloud_backup());
     }
 
     pub(crate) fn restore_from_cloud_backup_with_events(

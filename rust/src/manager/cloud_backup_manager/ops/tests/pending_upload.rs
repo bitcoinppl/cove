@@ -71,7 +71,7 @@ async fn dismiss_verification_prompt_hides_pending_decision() {
     manager.backup_new_wallet(xpub_only_wallet_metadata());
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.dispatch(CloudBackupManagerAction::DismissVerificationPrompt);
+    dispatch_and_wait(&manager, CloudBackupManagerAction::DismissVerificationPrompt).await;
 
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
@@ -104,9 +104,11 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
         .unwrap();
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.dispatch(CloudBackupManagerAction::StartVerification(
-        CloudBackupVerificationSource::RootPrompt,
-    ));
+    dispatch_and_wait(
+        &manager,
+        CloudBackupManagerAction::StartVerification(CloudBackupVerificationSource::RootPrompt),
+    )
+    .await;
 
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);

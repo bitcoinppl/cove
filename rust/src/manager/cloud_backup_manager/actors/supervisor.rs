@@ -81,12 +81,14 @@ mod account_switch;
 mod cloud_only;
 mod detail_workflow;
 mod disable;
+mod dispatch;
 mod enable;
 mod other_backups;
 mod restore_all;
 mod undecryptable_wallets;
 mod verification;
 
+pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
@@ -351,6 +353,7 @@ pub(crate) struct CloudBackupSupervisor {
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
     pending_disable_write_drain: Option<PendingDisableWriteDrain>,
+    last_outcome: Option<DispatchOutcome>,
 }
 
 #[async_trait::async_trait]
@@ -422,6 +425,7 @@ impl CloudBackupSupervisor {
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
             pending_disable_write_drain: None,
+            last_outcome: None,
         }
     }
 
@@ -1477,6 +1481,31 @@ pub(crate) mod test_support {
     use super::*;
 
     impl CloudBackupSupervisor {
+        /// What dispatch would do with `intent` now, without doing it
+        pub(crate) async fn harness_admission(
+            &mut self,
+            intent: crate::manager::cloud_backup_manager::admission::UserIntent,
+        ) -> ActorResult<crate::manager::cloud_backup_manager::admission::Admission> {
+            use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
+
+            let admission = match self.manager() {
+                Some(manager) => {
+                    crate::manager::cloud_backup_manager::admission::evaluate_admission(
+                        &intent,
+                        &self.admission_snapshot(&manager),
+                    )
+                }
+                None => Admission::Rejected(Rejection::NotConfigured),
+            };
+            Produces::ok(admission)
+        }
+
+        pub(crate) async fn harness_last_outcome(
+            &mut self,
+        ) -> ActorResult<Option<DispatchOutcome>> {
+            Produces::ok(self.last_outcome.clone())
+        }
+
         /// The exclusive slot, for harness failure messages only
         pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
             Produces::ok(format!("{:?}", self.active_operation))

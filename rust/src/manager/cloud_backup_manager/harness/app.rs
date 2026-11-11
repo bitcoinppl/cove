@@ -17,16 +17,20 @@ use super::fakes::{HarnessCloud, HarnessKeychain, HarnessPasskey};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::model::CloudBackupDestructiveOperationState;
+use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
+use crate::manager::cloud_backup_manager::admission::{Admission, EnableIntent, UserIntent};
 use crate::manager::cloud_backup_manager::ops::test_support::{TestGlobals, install_test_globals};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupLifecycle, CloudBackupManagerAction, RustCloudBackupManager,
+    CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
+    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RustCloudBackupManager,
+    initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 
 /// A user-visible next action, written as a literal in tests
 ///
-/// The set grows with the intent map; phase B maps each one to its `UserIntent`
+/// The set grows as tests need it; [`NextAction::intent`] maps each one to its `UserIntent`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum NextAction {
     Enable,
@@ -37,62 +41,20 @@ pub(crate) enum NextAction {
     SyncUnsynced,
 }
 
-/// What the app would do with an action right now
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Admission {
-    Accepted,
-    #[expect(dead_code, reason = "phase B's evaluate_admission returns it for the closed set")]
-    Coalesced,
-    Rejected(String),
-}
-
-/// Answers whether the app admits an action in its current state
-///
-/// This is the seam for `evaluate_admission`: phase B implements it by projecting the runtime
-/// snapshot and calling `evaluate_admission(&intent, &snapshot)` for the action's intent, and
-/// deletes [`LegacyActionView`]
-pub(crate) trait AdmissionView: Send + Sync + std::fmt::Debug {
-    fn admission(&self, app: &TestApp, action: NextAction) -> Admission;
-}
-
-/// Today's availability, read from the exported state the way both platforms gate controls
-///
-/// Interim only: it exists so harness tests can assert next actions before admission exists
-#[derive(Debug, Default)]
-pub(crate) struct LegacyActionView;
-
-impl AdmissionView for LegacyActionView {
-    fn admission(&self, app: &TestApp, action: NextAction) -> Admission {
-        use CloudBackupDestructiveOperationState as Destructive;
-        use NextAction as N;
-
-        let rejected = |reason: &str| Admission::Rejected(reason.to_string());
-        match (app.manager.state().lifecycle, action) {
-            (CloudBackupLifecycle::Disabled, N::Enable | N::RestoreFromCloudBackup) => {
-                Admission::Accepted
-            }
-            (CloudBackupLifecycle::Disabled, _) => rejected("cloud backup is off"),
-
-            (CloudBackupLifecycle::Configured(configured), action) => {
-                match (configured.destructive_operation, action) {
-                    // Rust drops Turn Off until the detail inventory has loaded (`detail.rs`)
-                    (Destructive::Idle, N::TurnOff)
-                        if !app.manager.detail_inventory_is_complete() =>
-                    {
-                        rejected("detail inventory not loaded")
-                    }
-                    (Destructive::Idle, N::TurnOff | N::Verify | N::SyncUnsynced) => {
-                        Admission::Accepted
-                    }
-                    (Destructive::DisableFailed { .. }, N::TurnOff) => Admission::Accepted,
-                    (Destructive::DisableFailed { can_keep_enabled: true, .. }, N::KeepEnabled) => {
-                        Admission::Accepted
-                    }
-                    (destructive, _) => rejected(&format!("{destructive:?}")),
-                }
-            }
-
-            (lifecycle, _) => rejected(&format!("legacy view does not model {lifecycle:?}")),
+impl NextAction {
+    /// The intent a tap on this action dispatches
+    pub(crate) fn intent(self) -> UserIntent {
+        let context = CloudBackupEnableContext::settings_manual();
+        match self {
+            Self::Enable => UserIntent::Enable(EnableIntent::Standard, context),
+            Self::RestoreFromCloudBackup => UserIntent::RestoreFromCloudBackup,
+            Self::TurnOff => UserIntent::TurnOff,
+            Self::KeepEnabled => UserIntent::KeepEnabled,
+            Self::Verify => UserIntent::StartVerification {
+                source: CloudBackupVerificationSource::CloudBackupDetail,
+                discoverable: false,
+            },
+            Self::SyncUnsynced => UserIntent::SyncUnsynced,
         }
     }
 }
@@ -149,7 +111,6 @@ pub(crate) struct TestApp {
     pub(crate) cloud: HarnessCloud,
     pub(crate) passkey: HarnessPasskey,
     pub(crate) clock: HarnessClock,
-    view: Box<dyn AdmissionView>,
     last_event: String,
     unasserted: Option<String>,
 }
@@ -164,21 +125,35 @@ impl TestApp {
 
     /// Launch with the passkey provider already answering in `mode`, so launch work sees it
     pub(crate) fn launch_with_passkey(mode: super::PasskeyMode) -> Self {
+        // the singleton, because wallet changes made by fixtures reach Cloud Backup through it
+        Self::launch_manager(mode, || CLOUD_BACKUP_MANAGER.clone())
+    }
+
+    /// Launch a new manager whose bootstrap is `bootstrap`, instead of the process singleton
+    ///
+    /// For load failures a real database cannot be made to produce on demand. Fixture wallet
+    /// changes still reach the singleton, so this app is for phases that seed nothing
+    pub(crate) fn launch_with_bootstrap(
+        mode: super::PasskeyMode,
+        bootstrap: fn(&CloudBackupRuntimeOwnership) -> (LifecycleWriter, LifecycleLoad),
+    ) -> Self {
+        Self::launch_manager(mode, move || initialize_cloud_backup_manager_with(bootstrap))
+    }
+
+    fn launch_manager(
+        mode: super::PasskeyMode,
+        manager: impl FnOnce() -> Arc<RustCloudBackupManager>,
+    ) -> Self {
         let env = env();
         env.passkey.set_mode(mode);
         let clock = HarnessClock::install();
-        // today's dispatch reaches the process singleton (`detail.rs` routes every action
-        // through `CLOUD_BACKUP_MANAGER`), so the app under test is that singleton
-        let manager = bounded_block_on("launch: the manager to start", async {
-            CLOUD_BACKUP_MANAGER.clone()
-        });
+        let manager = bounded_block_on("launch: the manager to start", async { manager() });
 
         let app = Self {
             manager,
             cloud: env.cloud.clone(),
             passkey: env.passkey.clone(),
             clock,
-            view: Box::new(LegacyActionView),
             last_event: "launch".into(),
             unasserted: None,
         };
@@ -206,11 +181,6 @@ impl TestApp {
     /// A user tap or platform call
     pub(crate) fn dispatch(&mut self, action: CloudBackupManagerAction) -> Step<'_> {
         self.begin_event(format!("dispatch {action:?}"));
-        assert!(
-            Arc::ptr_eq(&self.manager, &CLOUD_BACKUP_MANAGER),
-            "after a soft relaunch, dispatch would reach the old singleton; relaunch with a new \
-             case phase instead until dispatch is routed through the instance"
-        );
         self.manager.dispatch(action);
         self.settle();
         Step(self)
@@ -221,9 +191,8 @@ impl TestApp {
     /// Keeps the database, keychain and fake cloud, and drops the in-memory caches a relaunch
     /// loses. The old manager's actors may still be alive, so this is not process death; crash
     /// claims use [`super::run_case`] with [`super::PhaseEnd::KillAt`], and a full relaunch is a
-    /// new case phase, which reopens the database file in a new process. Today's `dispatch`
-    /// reaches the process singleton, so a soft-relaunched app can be observed but not
-    /// dispatched to
+    /// new case phase, which reopens the database file in a new process. `dispatch` runs on the
+    /// instance it is called on, so the new manager can be dispatched to
     pub(crate) fn relaunch(&mut self) -> Step<'_> {
         self.begin_event("relaunch".into());
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
@@ -293,10 +262,11 @@ impl TestApp {
 
     fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
         for action in actions {
-            let admission = self.view.admission(self, *action);
-            let admitted = matches!(admission, Admission::Accepted | Admission::Coalesced);
+            let admission = self.admission(*action);
+            // a coalesced repeat starts nothing new, so it counts as not admitted
+            let admitted = matches!(admission, Admission::Accepted);
             if admitted != expect_admitted {
-                let expected = if expect_admitted { "admitted" } else { "rejected" };
+                let expected = if expect_admitted { "admitted" } else { "not admitted" };
                 panic!(
                     "after {}: expected {action:?} to be {expected}, it was {admission:?}\n{}",
                     self.last_event,
@@ -304,6 +274,22 @@ impl TestApp {
                 );
             }
         }
+    }
+
+    /// What dispatch would do with `action` now, from the same `evaluate_admission` it calls
+    pub(crate) fn admission(&self, action: NextAction) -> Admission {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("the supervisor's admission answer", async move {
+            call!(supervisor.harness_admission(action.intent())).await.expect("admission")
+        })
+    }
+
+    /// The last dispatched intent and what admission said
+    pub(crate) fn last_outcome(&self) -> Option<DispatchOutcome> {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("the supervisor's last outcome", async move {
+            call!(supervisor.harness_last_outcome()).await.expect("last outcome")
+        })
     }
 
     /// Everything a failing step needs to explain itself
@@ -347,7 +333,7 @@ impl<'a> Step<'a> {
         Asserted(self.0).then_can(actions)
     }
 
-    /// These actions are rejected now
+    /// These actions are not admitted now: rejected, or coalesced into work already running
     pub(crate) fn then_cannot(self, actions: &[NextAction]) -> Asserted<'a> {
         Asserted(self.0).then_cannot(actions)
     }

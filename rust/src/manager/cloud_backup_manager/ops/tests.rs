@@ -376,6 +376,12 @@ fn init_manager() -> Arc<RustCloudBackupManager> {
     crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
 }
 
+/// Dispatch runs on the supervisor; its mailbox barrier proves the intent was handled
+async fn dispatch_and_wait(manager: &RustCloudBackupManager, action: CloudBackupManagerAction) {
+    manager.dispatch(action);
+    call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+}
+
 fn operation_write_client_for_test(
     manager: &RustCloudBackupManager,
     claim: CloudBackupExclusiveOperationClaim,
