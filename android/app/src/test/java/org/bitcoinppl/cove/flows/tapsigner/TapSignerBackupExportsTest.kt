@@ -1,6 +1,7 @@
-package org.bitcoinppl.cove.flows.TapSignerFlow
+package org.bitcoinppl.cove.flows.tapsigner
 
 import kotlinx.coroutines.runBlocking
+import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerBackupExports
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
