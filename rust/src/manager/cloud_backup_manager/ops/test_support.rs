@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
-use act_zero::{WeakAddr, call, send};
+use act_zero::{Addr, WeakAddr, call, send};
 use bip39::Mnemonic;
 use cove_cspp::backup_data::{
     MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
@@ -22,7 +22,7 @@ use cove_device::passkey::{
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
     PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use sha2::Digest as _;
 use strum::IntoEnumIterator as _;
 
@@ -39,19 +39,38 @@ use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupKeychain,
-    CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStore, CloudBackupWalletItem,
-    CloudBackupWriteClient, CloudOnlyFetch, PendingEnableJournal,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState,
+    CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStateReducer, CloudBackupStore,
+    CloudBackupWalletItem, CloudBackupWriteClient, CloudOnlyFetch, PendingEnableCoordinator,
+    PendingEnableJournal, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
+    PendingEnableSession, PendingUploadVerificationState,
     actors::restore::RestoreOperation,
     actors::supervisor::{CloudBackupSupervisor, test_support::LeftoverOperationForTest},
     master_key_wrapper_revision_hash,
 };
 
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
+use crate::manager::reconcile_channel::ReconcileChannel;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+
+/// A manager with no supervisor or write lane running
+///
+/// For a test that asserts the state an applied outcome leaves behind. A running supervisor
+/// answers what the outcome asks of it, such as the fetch an invalidated cloud-only cache
+/// requests, and so moves that state on while the test reads it. Messages to this manager's
+/// actors are dropped, which leaves the test as the state's only writer
+pub(crate) fn manager_without_actors() -> Arc<RustCloudBackupManager> {
+    Arc::new(RustCloudBackupManager {
+        state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
+        reconciler: ReconcileChannel::new(1000),
+        pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
+        cloud_writes: Addr::detached(),
+        supervisor: Addr::detached(),
+        local_reset_in_progress: Arc::new(AtomicBool::new(false)),
+        pending_sync_states_unreadable: Arc::new(AtomicBool::new(false)),
+    })
+}
 
 /// A write client for the operation with `claim`, on the manager's own lane
 pub(crate) fn operation_writes(

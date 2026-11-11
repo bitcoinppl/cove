@@ -656,17 +656,19 @@ impl RustCloudBackupManager {
 mod tests {
     use super::super::ops::test_support::{
         complete_loaded_outcome, ensure_cloud_backup_test_tokio_runtime, listed_detail,
-        test_globals, test_lock,
+        manager_without_actors, test_globals, test_lock,
     };
     use super::super::{CloudBackupWalletStatus, PersistedCloudBackupState};
     use super::*;
     use crate::database::Database;
 
+    // these tests assert the cache state an outcome leaves, which a running supervisor would
+    // move on by starting the fetch an invalidated cache asks for
     fn init_manager() -> std::sync::Arc<RustCloudBackupManager> {
         ensure_cloud_backup_test_tokio_runtime();
         test_globals().reset();
         Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
-        crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
+        manager_without_actors()
     }
 
     fn cloud_backup_wallet_item(record_id: &str) -> CloudBackupWalletItem {
