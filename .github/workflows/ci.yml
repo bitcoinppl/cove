@@ -314,6 +314,21 @@ jobs:
       - name: Type check the CI scripts
         run: pipx run --spec mypy==2.4.0 mypy --strict --python-version 3.12 .github/scripts
 
+  # fails once a quarantined Android or Rust test is past its expiry, see
+  # .github/scripts/ci_quarantine.py; it runs whatever changed, since an entry expires without one
+  quarantine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/scripts
+            android/app/src
+            rust
+
+      - name: Check quarantined tests
+        run: python3 -I .github/scripts/ci_quarantine.py
+
   # one job per runner, not a matrix: a matrix job its if skips reports a single check without the
   # runner in its name, while branch protection waits on these two names
   test-ubuntu:

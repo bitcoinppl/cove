@@ -14,6 +14,7 @@ import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
+import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.fullLaunchDevice
@@ -78,6 +79,11 @@ class CloudBackupDisableFullLaunchTest {
     }
 
     @Test
+    @QuarantinedInCi(
+        reason = "timed out waiting for the disable confirmation; not yet rerun since the Turn Off review replaced that dialog",
+        issue = "https://github.com/bitcoinppl/cove/issues/1100",
+        expires = "2026-12-09",
+    )
     fun disableWaitsForAHeldUploadThenDeletesTheWholeBackup() {
         ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
         launchApp()

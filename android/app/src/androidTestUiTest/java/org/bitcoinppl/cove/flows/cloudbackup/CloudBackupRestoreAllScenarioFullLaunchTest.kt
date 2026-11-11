@@ -47,7 +47,11 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi("flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed")
+    @QuarantinedInCi(
+        reason = "flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed",
+        issue = "https://github.com/bitcoinppl/cove/issues/1102",
+        expires = "2026-12-09",
+    )
     fun mixedResultMovesSuccessfulRowAndSupportsRowLocalRetry() {
         restoreFixtureAndOpenCloudBackupDetail()
 
@@ -115,7 +119,11 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi("flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed")
+    @QuarantinedInCi(
+        reason = "flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed",
+        issue = "https://github.com/bitcoinppl/cove/issues/1103",
+        expires = "2026-12-09",
+    )
     fun cancellationFinishesCurrentWalletAndSkipsTheNextWallet() {
         restoreFixtureAndOpenCloudBackupDetail()
 

@@ -54,7 +54,11 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi("flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed")
+    @QuarantinedInCi(
+        reason = "flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed",
+        issue = "https://github.com/bitcoinppl/cove/issues/1104",
+        expires = "2026-12-09",
+    )
     fun postPresentationFailureDoesNotRetry() {
         ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
         ScriptedPasskeyProvider.configureResults(
@@ -136,7 +140,11 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi("flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed")
+    @QuarantinedInCi(
+        reason = "flaky on the emulator: failed in 8 of 12 local reruns, cause not yet diagnosed",
+        issue = "https://github.com/bitcoinppl/cove/issues/1105",
+        expires = "2026-12-09",
+    )
     fun providerSignalWhileRefreshIsInFlightRunsOneTrailingRefresh() {
         ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
         launchFullApp()

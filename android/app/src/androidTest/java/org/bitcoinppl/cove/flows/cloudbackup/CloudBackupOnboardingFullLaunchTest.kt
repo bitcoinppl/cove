@@ -61,7 +61,11 @@ class CloudBackupOnboardingFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi("the system create-passkey sheet never appears on the emulator")
+    @QuarantinedInCi(
+        reason = "the system create-passkey sheet never appears on the emulator",
+        issue = "https://github.com/bitcoinppl/cove/issues/1101",
+        expires = "2026-12-09",
+    )
     fun newUserCloudBackupEnableOpensCreatePasskeySheet() {
         val targetPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         assumeFalse(

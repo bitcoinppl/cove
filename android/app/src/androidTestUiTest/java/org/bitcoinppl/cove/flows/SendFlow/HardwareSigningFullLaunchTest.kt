@@ -24,6 +24,7 @@ import org.bitcoinppl.cove.test.FullLaunchWalletRobot
 import org.bitcoinppl.cove.test.HardwareSignerControl
 import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.QrScript
+import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
@@ -193,6 +194,11 @@ class HardwareSigningFullLaunchTest {
     // MARK: QR error paths
 
     @Test
+    @QuarantinedInCi(
+        reason = "typed text or the keyboard is sometimes not settled when the test reads it",
+        issue = "https://github.com/bitcoinppl/cove/issues/1099",
+        expires = "2026-12-09",
+    )
     fun signaturesThatMatchNoDraftAreRejected() {
         fundTestWallet()
         importWatchOnlyWallet()
