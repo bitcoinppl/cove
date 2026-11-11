@@ -5,7 +5,7 @@ use tracing::warn;
 use zeroize::Zeroizing;
 
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret};
-use cove_types::network::Network;
+use cove_types::{WalletId, network::Network};
 use cove_util::result_ext::ResultExt as _;
 
 use crate::custom_block_explorer::CustomBlockExplorerTemplate;
@@ -24,6 +24,18 @@ use super::model::{
     AppSettings, BackupPayload, BackupResult, DescriptorPair, WalletBackup, WalletSecret,
 };
 
+/// Why an export left part of a wallet out
+///
+/// The log names only the wallet id and this reason; the warning the user sees names the wallet,
+/// which is raw user input and stays out of logs
+#[derive(Debug, Clone, Copy, strum::Display)]
+enum WalletExportWarning {
+    #[strum(to_string = "TAPSIGNER backup missing, exported without it")]
+    TapSignerBackupMissing,
+    #[strum(to_string = "labels could not be exported")]
+    LabelsNotExported,
+}
+
 struct BackupExporter {
     db: Arc<Database>,
     keychain: &'static Keychain,
@@ -35,9 +47,10 @@ impl BackupExporter {
         Self { db: Database::global(), keychain: Keychain::global(), warnings: Vec::new() }
     }
 
-    fn warn(&mut self, msg: String) {
-        warn!("{msg}");
-        self.warnings.push(msg);
+    /// Records a warning for the user and logs it without the wallet name
+    fn warn_wallet(&mut self, id: &WalletId, warning: WalletExportWarning, user_message: String) {
+        warn!("backup export for wallet id={id}: {warning}");
+        self.warnings.push(user_message);
     }
 
     async fn gather_wallets(&mut self) -> Result<Vec<WalletBackup>, BackupError> {
@@ -73,12 +86,12 @@ impl BackupExporter {
                             ),
                             Ok(None) => {
                                 return Err(BackupError::Gather(format!(
-                                    "hot wallet '{name}' ({network}){mode_tag} has no private key in keychain"
+                                    "hot wallet id={id} ({network}){mode_tag} has no private key in keychain"
                                 )));
                             }
                             Err(e) => {
                                 return Err(BackupError::Keychain(format!(
-                                    "failed to get private key for wallet '{name}' ({network}){mode_tag}: {e}"
+                                    "failed to get private key for wallet id={id} ({network}){mode_tag}: {e}"
                                 )));
                             }
                         },
@@ -93,12 +106,16 @@ impl BackupExporter {
                                         WalletSecret::TapSignerBackup(backup.to_vec())
                                     }
                                     Ok(None) => {
-                                        self.warn(format!("Tap signer wallet '{name}' ({network}){mode_tag} has no backup, exporting without it"));
+                                        self.warn_wallet(
+                                            id,
+                                            WalletExportWarning::TapSignerBackupMissing,
+                                            format!("Tap signer wallet '{name}' ({network}){mode_tag} has no backup, exporting without it"),
+                                        );
                                         WalletSecret::None
                                     }
                                     Err(e) => {
                                         return Err(BackupError::Keychain(format!(
-                                            "failed to read tap signer backup for wallet '{name}' ({network}){mode_tag}: {e}"
+                                            "failed to read tap signer backup for wallet id={id} ({network}){mode_tag}: {e}"
                                         )));
                                     }
                                 }
@@ -114,14 +131,14 @@ impl BackupExporter {
                         Ok(None) => None,
                         Err(e) => {
                             return Err(BackupError::Keychain(format!(
-                                "failed to read xpub for wallet '{name}' ({network}){mode_tag}: {e}"
+                                "failed to read xpub for wallet id={id} ({network}){mode_tag}: {e}"
                             )));
                         }
                     };
 
                     let descriptors = manual_backup_descriptors(&metadata).map_err(|e| {
                         BackupError::Gather(format!(
-                            "failed to load authoritative descriptors for wallet '{name}' ({network}){mode_tag}: {e}"
+                            "failed to load authoritative descriptors for wallet id={id} ({network}){mode_tag}: {e}"
                         ))
                     })?;
 
@@ -129,8 +146,11 @@ impl BackupExporter {
                     let labels_jsonl = match export_labels(id.clone()).await {
                         Ok(labels) => Some(labels),
                         Err(e) => {
-                            warn!("failed to export labels for wallet {id}: {e}");
-                            self.warn(format!("Failed to export labels for wallet '{name}' ({network}){mode_tag}: {e}"));
+                            self.warn_wallet(
+                                id,
+                                WalletExportWarning::LabelsNotExported,
+                                format!("Failed to export labels for wallet '{name}' ({network}){mode_tag}: {e}"),
+                            );
                             None
                         }
                     };
