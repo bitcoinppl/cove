@@ -287,9 +287,9 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.commit_turn_off(claim, committed));
     }
 
-    /// Replaces the Turn Off review; false when the body holds none, as an operation runs
-    pub(crate) fn set_turn_off_review(&mut self, review: Option<TurnOffReview>) -> bool {
-        self.mutate(|runtime| runtime.set_turn_off_review(review))
+    /// Replaces the Turn Off review an idle configured body holds
+    pub(crate) fn set_turn_off_review(&mut self, review: Option<TurnOffReview>) {
+        self.mutate(|runtime| runtime.set_turn_off_review(review));
     }
 
     /// Takes the review the user confirmed, if it is still the one on screen

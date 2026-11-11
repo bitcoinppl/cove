@@ -78,8 +78,8 @@ pub(crate) fn project(
 /// What admission reads, rebuilt from the reducer and the runtime
 ///
 /// The supervisor's runtime is the authority dispatch uses; the reducer mirrors its body and
-/// running operation, which is what a control's availability needs. A finishing Turn Off and the
-/// Turn Off review are the runtime's own
+/// running operation, which is what a control's availability needs. A finishing Turn Off, a
+/// recorded account switch and the Turn Off review are the runtime's own
 fn admission_snapshot(
     runtime: &Runtime,
     reducer: &CloudBackupStateReducer,
@@ -87,6 +87,9 @@ fn admission_snapshot(
     inventory: &InventoryView,
 ) -> AdmissionSnapshot {
     let body = match lifecycle {
+        _ if matches!(runtime, Runtime::DriveAccountSwitch { .. }) => {
+            AdmissionBody::DriveAccountSwitch
+        }
         CloudBackupLifecycle::Disabled => AdmissionBody::Disabled,
         // a paused Enable holds no claim, so the supervisor's runtime is still Disabled
         CloudBackupLifecycle::Enabling(flow) if paused_stage(flow, reducer).is_some() => {
@@ -622,6 +625,9 @@ impl From<Rejection> for CloudBackupRejection {
             Rejection::Resetting => Self::Resetting,
             Rejection::ReviewStale => Self::ReviewStale,
             Rejection::TryAgainFirst => Self::TryAgainFirst,
+            Rejection::DriveAccountSwitch => {
+                Self::OperationRunning { operation: CloudBackupOperationKind::DriveAccountSwitch }
+            }
         }
     }
 }

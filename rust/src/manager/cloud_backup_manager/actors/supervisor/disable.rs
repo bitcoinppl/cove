@@ -31,14 +31,11 @@ impl CloudBackupSupervisor {
     /// Turn Off tapped: builds the review the dialogs show
     ///
     /// Nothing runs and nothing pauses until the user confirms; a tap while a review is on
-    /// screen builds a fresh one, which is the dialogs' Check Again
+    /// screen builds a fresh one, which is the dialogs' Check Again. Admission accepts Turn Off
+    /// only in an idle configured body, which is the one body that holds a review
     pub(crate) fn begin_turn_off_review(&mut self, manager: Arc<RustCloudBackupManager>) {
         let review_id = ReviewId::next();
-        if !self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id })) {
-            warn!("Cloud Backup Turn Off has no idle configured backup to review");
-            return;
-        }
-
+        self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id }));
         manager.clear_turn_off_outcome();
         self.addr.send_fut_with(move |addr| async move {
             let evidence = manager.gather_disable_evidence().await;

@@ -467,7 +467,8 @@ impl Runtime {
             | Self::Corrupted { op: Some(DisabledOp::Enable(_)), .. } => AdmissionBody::Enabling,
             Self::Disabled { op: Some(DisabledOp::Restore(_)) }
             | Self::Corrupted { op: Some(DisabledOp::Restore(_)), .. } => AdmissionBody::Restoring,
-            Self::Configured { .. } | Self::DriveAccountSwitch { .. } => AdmissionBody::Configured,
+            Self::Configured { .. } => AdmissionBody::Configured,
+            Self::DriveAccountSwitch { .. } => AdmissionBody::DriveAccountSwitch,
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
             Self::PendingEnableRecovery { .. } => AdmissionBody::PendingEnableRecovery,
             Self::LoadFailed { .. } => AdmissionBody::LoadFailed,
@@ -806,11 +807,16 @@ impl Runtime {
 
     /// Replaces the Turn Off review; only an idle configured body holds one
     ///
-    /// Returns false, changing nothing, when an operation runs or the body isn't configured
-    pub(crate) fn set_turn_off_review(&mut self, next: Option<TurnOffReview>) -> bool {
-        let Self::Configured { op: None, review } = self else { return false };
+    /// Admission starts a review only in an idle configured body, and a review that completes
+    /// late finds its own `Preparing` there first, so only a clear reaches another body, where
+    /// there is no review to clear
+    pub(crate) fn set_turn_off_review(&mut self, next: Option<TurnOffReview>) {
+        let Self::Configured { op: None, review } = self else {
+            debug_assert!(next.is_none(), "Cloud Backup showed a Turn Off review in {self:?}");
+            return;
+        };
+
         *review = next;
-        true
     }
 
     /// Takes the review `review_id` names out of the body, if it is the one under review

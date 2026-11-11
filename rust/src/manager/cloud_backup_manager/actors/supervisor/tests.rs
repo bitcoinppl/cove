@@ -943,6 +943,48 @@ async fn drive_account_switch_restart_preserves_failed_reinitialization_for_retr
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_recorded_drive_account_switch_admits_only_its_retry_and_cancel() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let transition = PersistedDriveAccountSwitch {
+        transition_id: 7.into(),
+        phase: PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry,
+    };
+    let mut persisted = RustCloudBackupManager::load_persisted_state();
+    assert!(persisted.set_drive_account_switch(transition));
+    Database::global().cloud_backup_state.set(&persisted).unwrap();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+
+    let snapshot = supervisor.admission_snapshot(&manager);
+    let switch_holds = Admission::Rejected(Rejection::DriveAccountSwitch);
+    assert_eq!(evaluate_admission(&UserIntent::TurnOff, &snapshot), switch_holds);
+    assert_eq!(evaluate_admission(&UserIntent::SyncUnsynced, &snapshot), switch_holds);
+    assert_eq!(evaluate_admission(&UserIntent::RecreateManifest, &snapshot), switch_holds);
+    assert_eq!(
+        evaluate_admission(&UserIntent::RetryDriveAccountSwitchRecovery, &snapshot),
+        Admission::Accepted
+    );
+
+    // the Turn Off review never opens, so nothing pauses beside the switch
+    supervisor.dispatch(UserIntent::TurnOff).await.unwrap().await.unwrap();
+    assert_eq!(supervisor.runtime.turn_off_admission(), TurnOffAdmission::None);
+
+    // the platform retries a second switch later rather than treating the backup as off
+    let busy = supervisor
+        .begin_drive_account_switch()
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(busy, CloudBackupDriveAccountSwitchError::Busy);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
@@ -3154,7 +3196,7 @@ async fn a_configuration_change_makes_the_turn_off_review_stale() {
     let generation = supervisor.runtime.generation();
     let review = empty_review(VALID_NAMESPACE_ID);
     let review_id = review.review_id.get();
-    assert!(supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review))));
+    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
     let confirm = UserIntent::ConfirmDisable { review_id };
     assert_eq!(
         evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager)),
@@ -3188,7 +3230,8 @@ async fn an_operation_started_from_the_review_ends_it() {
 
     persist_enabled_under(&mut supervisor);
     let review = empty_review(VALID_NAMESPACE_ID);
-    assert!(supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review))));
+    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
+    assert!(supervisor.runtime.turn_off_review().is_some());
 
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)

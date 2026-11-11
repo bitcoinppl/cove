@@ -186,6 +186,8 @@ pub(crate) enum Rejection {
     ReviewStale,
     /// Stop Using on This Device is offered only after a failed Try Again
     TryAgainFirst,
+    /// A recorded Google Drive account switch holds the backup until its Retry or Cancel
+    DriveAccountSwitch,
 }
 
 /// Why the write lane is not running a command class right now
@@ -220,6 +222,8 @@ pub(crate) enum AdmissionBody {
     /// A committed Turn Off that still has to finish
     FinishingDisable,
     PendingEnableRecovery,
+    /// A recorded Google Drive account switch; only its Retry and Cancel reach it
+    DriveAccountSwitch,
     LoadFailed,
     /// A local reset closed admission until it finishes
     Resetting,
@@ -360,6 +364,7 @@ impl ContinuationOwner {
             | AdmissionBody::Restoring
             | AdmissionBody::FinishingDisable
             | AdmissionBody::PendingEnableRecovery
+            | AdmissionBody::DriveAccountSwitch
             | AdmissionBody::LoadFailed
             | AdmissionBody::Resetting => Self::Enable,
         }
@@ -386,6 +391,7 @@ impl ContinuationOwner {
                 | AdmissionBody::Configured
                 | AdmissionBody::FinishingDisable
                 | AdmissionBody::PendingEnableRecovery
+                | AdmissionBody::DriveAccountSwitch
                 | AdmissionBody::LoadFailed
                 | AdmissionBody::Resetting,
             ) => false,
@@ -613,6 +619,9 @@ fn starts_while_off(
             None,
         ) => Admission::Accepted,
         (AdmissionBody::Configured, None) => Admission::Rejected(Rejection::NotConfigured),
+        (AdmissionBody::DriveAccountSwitch, None) => {
+            Admission::Rejected(Rejection::DriveAccountSwitch)
+        }
         (AdmissionBody::FinishingDisable, None) => Admission::Rejected(Rejection::TurnOffCommitted),
         (AdmissionBody::LoadFailed, None) => Admission::Rejected(Rejection::LoadFailed),
         (AdmissionBody::Resetting, None) => Admission::Rejected(Rejection::Resetting),
@@ -686,6 +695,7 @@ fn not_configured(body: AdmissionBody) -> Rejection {
         AdmissionBody::LoadFailed => Rejection::LoadFailed,
         AdmissionBody::FinishingDisable => Rejection::TurnOffCommitted,
         AdmissionBody::Resetting => Rejection::Resetting,
+        AdmissionBody::DriveAccountSwitch => Rejection::DriveAccountSwitch,
         AdmissionBody::Configured
         | AdmissionBody::Enabling
         | AdmissionBody::Restoring

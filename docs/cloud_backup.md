@@ -38,6 +38,10 @@ Every action is an entry with its availability, decided by the same admission
 dispatch uses. A platform draws a control only for an action in the list and
 enables it only when it is available; an unavailable action carries the reason
 to show as its caption. Rust marks the Google Drive actions as Android only.
+A recorded Google Drive account switch is its own admission body: it admits
+only the switch's Retry and Cancel, and rejects everything else, Turn Off
+included, as the switch running. A second switch call during one answers
+`Busy`.
 
 `just qa-check` enforces this in the Cloud Backup views: every Kotlin
 `enabled =` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an
