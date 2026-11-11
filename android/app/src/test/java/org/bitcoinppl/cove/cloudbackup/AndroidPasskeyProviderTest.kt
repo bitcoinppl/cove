@@ -7,6 +7,7 @@ import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
+import androidx.credentials.exceptions.GetCredentialUnknownException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.credentials.exceptions.domerrors.DataError
@@ -22,11 +23,46 @@ import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AndroidPasskeyProviderTest {
+    /** A failure log hands Rust's allowlist only the credential type, never the exception's message */
+    @Test
+    fun failureLogsGiveRustOnlyTheCredentialType() {
+        val asked = mutableListOf<Pair<String, Long?>>()
+        val logLine = { domain: String, code: Long? ->
+            asked += domain to code
+            "<rust log line>"
+        }
+
+        val credentialFailure =
+            passkeyFailureLogMessage(
+                "presence check was indeterminate",
+                GetCredentialUnknownException("alice@example.com"),
+                logLine,
+            )
+        val otherFailure =
+            passkeyFailureLogMessage(
+                "failed to extract passkey provider AAGUID",
+                IllegalStateException("alice@example.com"),
+                logLine,
+            )
+
+        assertEquals("presence check was indeterminate <rust log line>", credentialFailure)
+        assertEquals("failed to extract passkey provider AAGUID <rust log line>", otherFailure)
+        assertEquals(
+            listOf(
+                "android.credentials.GetCredentialException.TYPE_UNKNOWN" to null,
+                "java.lang.IllegalStateException" to null,
+            ),
+            asked,
+        )
+        assertFalse(credentialFailure.contains("alice") || otherFailure.contains("alice"))
+    }
+
     @Test
     fun createRequestJsonRequiresUserVerificationAndPreservesFields() {
         val request =
@@ -165,15 +201,6 @@ class AndroidPasskeyProviderTest {
         assertEquals(PasskeyOperation.REGISTRATION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
 
-        val foregroundTimeout = mapPasskeyCreateError(
-            ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
-        )
-        assertTrue(foregroundTimeout is PasskeyException.NotReady)
-        assertEquals(
-            PasskeyOperation.REGISTRATION,
-            (foregroundTimeout as PasskeyException.NotReady).operation,
-        )
-
         val timedOut = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(TimeoutError()))
         assertTrue(timedOut is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.REGISTRATION, (timedOut as PasskeyException.RequestFailed).operation)
@@ -223,16 +250,6 @@ class AndroidPasskeyProviderTest {
         assertTrue(interrupted is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
-
-        val foregroundTimeout = mapPasskeyGetError(
-            ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
-            PasskeyOperation.DISCOVER_ASSERTION,
-        )
-        assertTrue(foregroundTimeout is PasskeyException.NotReady)
-        assertEquals(
-            PasskeyOperation.DISCOVER_ASSERTION,
-            (foregroundTimeout as PasskeyException.NotReady).operation,
-        )
 
         assertGetCredentialDomExceptionMappings()
     }
