@@ -27,7 +27,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
-    staged_pending_enable_journal, unowned_writes, wait_for_background_refreshes, wait_for_test_condition, wallet_entry_with_labels,
+    staged_pending_enable_journal, supervisor_checkpoint, wait_for_background_refreshes,
+    wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
@@ -1163,6 +1164,9 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
         supervisor.runtime.claim().and_then(CloudBackupExclusiveOperationClaim::drive_account_switch_id),
         None
     );
+
+    // the manager's supervisor publishes the screen, after the recovery this one reported
+    supervisor_checkpoint(&manager).await;
     let CloudBackupScreenBody::DriveAccountSwitch(screen) = manager.published_screen().body else {
         panic!("the recovery card is not on screen: {:?}", manager.published_screen().body);
     };

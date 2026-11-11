@@ -20,9 +20,10 @@ newer operation.
 ## Screen Contract
 
 Swift and Kotlin draw only `CloudBackupScreen`. `state()` returns the first
-one. After every reducer change Rust projects the screen again, diffs it
-against the one it last sent, and sends what changed as one `Screen` reconcile
-message holding a `CloudBackupScreenDelta`. Each platform applies it with
+one. After every reducer change the supervisor projects the screen again from
+its runtime, the reducer, the inventory facts and the notices, diffs it against
+the one it last sent, and sends what changed as one `Screen` reconcile message
+holding a `CloudBackupScreenDelta`. Each platform applies it with
 `CloudBackupScreen.applying(delta)` in a single state assignment, so no frame
 shows half an update.
 

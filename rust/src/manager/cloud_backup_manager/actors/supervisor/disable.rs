@@ -1,6 +1,10 @@
+use super::runtime::ConfiguredOp;
 use super::*;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{CommitDisable, CommittedDisable};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupTurnOffFailure,
+};
 
 /// Shown when the namespace changed between the blocker check and the commit
 const CLOUD_BACKUP_DISABLE_STALE_REVIEW_MESSAGE: &str =
@@ -353,5 +357,33 @@ impl CloudBackupSupervisor {
     ) {
         self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
+    }
+}
+
+impl Runtime {
+    /// The Turn Off flow a configured screen shows
+    ///
+    /// Until the review flow lands, a running Turn Off drains and nothing else shows
+    pub(crate) fn disable_screen(&self) -> CloudBackupDisableScreen {
+        match self {
+            Self::Configured { op: Some(ConfiguredOp::TurnOff(_)) } => {
+                CloudBackupDisableScreen::Draining
+            }
+            _ => CloudBackupDisableScreen::Idle,
+        }
+    }
+
+    /// Where a Turn Off that only goes forward stands, for the Finishing Turn Off screen
+    ///
+    /// Until Resume lands, only a resume that is running shows as resuming
+    pub(crate) fn finishing_disable_stage(&self) -> CloudBackupFinishingDisableStage {
+        match self {
+            Self::FinishingDisable { op: Some(_), .. } => {
+                CloudBackupFinishingDisableStage::Resuming
+            }
+            _ => CloudBackupFinishingDisableStage::Failed {
+                reason: CloudBackupTurnOffFailure::Other,
+            },
+        }
     }
 }

@@ -9,6 +9,7 @@ mod dto;
 mod error;
 #[cfg(test)]
 mod harness;
+mod inventory;
 mod keychain;
 mod model;
 mod ops;

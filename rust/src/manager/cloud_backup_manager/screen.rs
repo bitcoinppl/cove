@@ -1,27 +1,37 @@
 //! The Cloud Backup screen: the exported contract, its projection and how it is published
 //!
-//! Every change the reducer applies is projected into one [`CloudBackupScreen`], diffed against
-//! the last one published, and sent as a single [`CloudBackupScreenDelta`]
+//! After every change the reducer applies, the supervisor projects its runtime, the reducer, the
+//! inventory facts and the notices into one [`CloudBackupScreen`], diffs it against the last one
+//! published, and sends what changed as a single [`CloudBackupScreenDelta`]
 
 mod delta;
 mod fixtures;
 mod identifiers;
+mod notices;
 mod project;
 mod targets;
 mod types;
 
+use act_zero::send;
 use parking_lot::Mutex;
 use tracing::error;
 
+use self::notices::Notices;
 use self::types::CloudBackupActions;
 #[cfg(test)]
 pub(crate) use self::types::CloudBackupScreenAction;
+pub(crate) use self::types::{
+    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupListedRecord,
+    CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupTurnOffFailure,
+};
 pub use self::types::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
     CloudBackupScreen, CloudBackupScreenBody, CloudBackupScreenDelta,
 };
 use crate::database::cloud_backup::PersistedHealNotice;
 
+use super::actors::supervisor::Runtime;
+use super::inventory::InventoryFacts;
 use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
 
 /// The screen last sent to the platform, which the next projection is diffed against
@@ -54,13 +64,28 @@ impl RustCloudBackupManager {
         self.published_screen.0.lock().clone()
     }
 
+    /// Asks the supervisor to publish the screen
+    ///
+    /// The projection reads the supervisor's runtime, so publishing runs there; the request
+    /// queues behind the handler that made the change, so the projection sees it
+    pub(crate) fn request_screen_publish(&self) {
+        send!(self.supervisor.publish_screen());
+    }
+
     /// Projects the current state and sends what changed since the last published screen
     ///
-    /// The published lock is held across the projection and the send, so two publishes can't
-    /// interleave and deliver an older screen after a newer one
-    pub(crate) fn publish_screen(&self) {
+    /// Only the supervisor calls this, with its runtime. The published lock is held across the
+    /// projection and the send, so two publishes can't interleave and deliver an older screen
+    /// after a newer one
+    pub(crate) fn publish_screen(&self, runtime: &Runtime) {
         let mut published = self.published_screen.0.lock();
-        let next = project::project(&self.state.read());
+        let next = {
+            let reducer = self.state.read();
+            let inventory = InventoryFacts::from_reducer(&reducer);
+            let notices = Notices::from_reducer(&reducer);
+            project::project(runtime, &reducer, &inventory, &notices)
+        };
+
         let Some(delta) = CloudBackupScreenDelta::between(&published, &next) else { return };
 
         *published = next;

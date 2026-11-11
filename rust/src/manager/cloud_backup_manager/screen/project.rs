@@ -1,47 +1,58 @@
-//! The projection from the reducer's presentation state to the exported screen
+//! The projection of the runtime, the reducer, the inventory facts and the notices onto the
+//! exported screen
 //!
-//! The body, sections and rows come from what the reducer already holds. Every control's
-//! availability comes from `evaluate_admission`, on a snapshot rebuilt from the same state, so the
-//! screen never offers what dispatch would refuse for a reason the reducer can see
+//! The body and sections come from the reducer, the rows from the inventory facts, and the Turn
+//! Off states from the runtime. Every control's availability comes from `evaluate_admission`, on
+//! a snapshot rebuilt from the reducer, so the screen never offers what dispatch would refuse for
+//! a reason the reducer can see
 
 use cove_device::cloud_storage::CloudSyncHealth;
 
+use super::notices::Notices;
 use super::types::{
     CloudBackupActionAvailability, CloudBackupActionEntry, CloudBackupActions,
-    CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation, CloudBackupDisableScreen,
+    CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation,
     CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
-    CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen,
-    CloudBackupFinishingDisableStage, CloudBackupHealNotice, CloudBackupListedRecord,
-    CloudBackupListedRow, CloudBackupNotOnDeviceSection, CloudBackupNoticeKind,
-    CloudBackupOperationKind, CloudBackupOtherBackupsSection, CloudBackupOwnRecord,
-    CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupRecoveryOperation,
-    CloudBackupRejection, CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen,
-    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
-    CloudBackupVerificationView, CloudBackupWalletsSection,
+    CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen, CloudBackupHealNotice,
+    CloudBackupListedRecord, CloudBackupListedRow, CloudBackupNotOnDeviceSection,
+    CloudBackupNoticeKind, CloudBackupOperationKind, CloudBackupOtherBackupsSection,
+    CloudBackupRecoveryOperation, CloudBackupRejection, CloudBackupRowAction,
+    CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody,
+    CloudBackupSection, CloudBackupVerificationView, CloudBackupWalletsSection,
 };
-use crate::manager::cloud_backup_manager::actors::supervisor::enable_prompt_answers;
+use crate::manager::cloud_backup_manager::actors::supervisor::{Runtime, enable_prompt_answers};
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
     ContinuationStage, DetailInventory, EnableIntent, PausedContinuation, Rejection,
     RestoreAllAdmission, UserIntent, evaluate_admission,
 };
+use crate::manager::cloud_backup_manager::inventory::{
+    InventoryFacts, InventoryView, ListedRecord,
+};
 use crate::manager::cloud_backup_manager::{
     CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupConfiguredState,
-    CloudBackupDestructiveOperationState, CloudBackupDetailState, CloudBackupEnableContext,
-    CloudBackupEnableFlow, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
+    CloudBackupDestructiveOperationState, CloudBackupEnableContext, CloudBackupEnableFlow,
+    CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupLifecycle, CloudBackupOtherBackupsState,
     CloudBackupPasskeyState, CloudBackupPendingEnableCleanupState, CloudBackupRestoreAllState,
     CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStateReducer,
     CloudBackupSyncState, CloudBackupVerificationSource, CloudBackupVerificationState,
-    CloudBackupWalletItem, CloudBackupWalletStatus, CloudOnlyState, LoadedCloudBackupDetail,
-    RecordId,
 };
 
-/// The screen for the reducer's current state
-pub(crate) fn project(reducer: &CloudBackupStateReducer) -> CloudBackupScreen {
+/// The screen for the runtime, the reducer, the inventory and the notices as they stand
+///
+/// The reducer still holds the flows, passkey, verification and sync presentation; the runtime,
+/// the inventory facts and the notices take over the rest
+pub(crate) fn project(
+    runtime: &Runtime,
+    reducer: &CloudBackupStateReducer,
+    inventory: &InventoryFacts,
+    notices: &Notices,
+) -> CloudBackupScreen {
     let state = reducer.public_state();
-    let heal_notice = reducer.heal_notice();
-    let snapshot = admission_snapshot(reducer, &state.lifecycle);
+    let inventory = inventory.view();
+    let heal_notice = notices.heal;
+    let snapshot = admission_snapshot(reducer, &state.lifecycle, inventory.readiness);
 
     let root_prompt = match &state.lifecycle {
         CloudBackupLifecycle::Configured(configured) => configured.root_prompt.clone(),
@@ -49,10 +60,17 @@ pub(crate) fn project(reducer: &CloudBackupStateReducer) -> CloudBackupScreen {
     };
 
     let actions = global_actions(&state.lifecycle, heal_notice, &snapshot, reducer);
-    let body = body(reducer, state.lifecycle, &snapshot);
+    let body = body(runtime, reducer, state.lifecycle, inventory, &snapshot);
     let settings_row = settings_row(&body, heal_notice, state.settings_row_status);
 
-    CloudBackupScreen { body, settings_row, heal_notice, last_outcome: None, root_prompt, actions }
+    CloudBackupScreen {
+        body,
+        settings_row,
+        heal_notice,
+        last_outcome: notices.last_outcome.clone(),
+        root_prompt,
+        actions,
+    }
 }
 
 /// What admission reads, rebuilt from the reducer
@@ -62,6 +80,7 @@ pub(crate) fn project(reducer: &CloudBackupStateReducer) -> CloudBackupScreen {
 fn admission_snapshot(
     reducer: &CloudBackupStateReducer,
     lifecycle: &CloudBackupLifecycle,
+    detail_inventory: DetailInventory,
 ) -> AdmissionSnapshot {
     let body = match lifecycle {
         CloudBackupLifecycle::Disabled => AdmissionBody::Disabled,
@@ -82,14 +101,6 @@ fn admission_snapshot(
             AdmissionBody::Disabled
         }
         CloudBackupLifecycle::Failed(_) => AdmissionBody::LoadFailed,
-    };
-
-    let detail_inventory = if reducer.detail_inventory_is_complete() {
-        DetailInventory::Complete
-    } else if reducer.detail_inventory_is_ready() {
-        DetailInventory::Ready
-    } else {
-        DetailInventory::NotLoaded
     };
 
     let (sync_running, restore_all) = match lifecycle {
@@ -175,8 +186,10 @@ fn finishing_disable(configured: &CloudBackupConfiguredState) -> bool {
 }
 
 fn body(
+    runtime: &Runtime,
     reducer: &CloudBackupStateReducer,
     lifecycle: CloudBackupLifecycle,
+    inventory: InventoryView,
     snapshot: &AdmissionSnapshot,
 ) -> CloudBackupScreenBody {
     if let Some(recovery) = reducer.drive_account_switch_recovery() {
@@ -198,14 +211,12 @@ fn body(
         CloudBackupLifecycle::Failed(_) => CloudBackupScreenBody::LoadFailed,
         CloudBackupLifecycle::Configured(configured) if finishing_disable(&configured) => {
             CloudBackupScreenBody::FinishingDisable(CloudBackupFinishingDisableScreen {
-                stage: CloudBackupFinishingDisableStage::Failed {
-                    reason: CloudBackupTurnOffFailure::Other,
-                },
+                stage: runtime.finishing_disable_stage(),
             })
         }
-        CloudBackupLifecycle::Configured(configured) => {
-            CloudBackupScreenBody::Configured(configured_screen(reducer, configured, snapshot))
-        }
+        CloudBackupLifecycle::Configured(configured) => CloudBackupScreenBody::Configured(
+            configured_screen(runtime, reducer, configured, inventory, snapshot),
+        ),
     }
 }
 
@@ -218,28 +229,20 @@ fn drive_account_switch_body(
 }
 
 fn configured_screen(
+    runtime: &Runtime,
     reducer: &CloudBackupStateReducer,
     configured: CloudBackupConfiguredState,
+    inventory: InventoryView,
     snapshot: &AdmissionSnapshot,
 ) -> CloudBackupConfiguredScreen {
-    let loaded = loaded_detail(&configured.detail);
     let mut sections = Vec::new();
 
     if configured.passkey != CloudBackupPasskeyState::Available {
         sections.push(CloudBackupSection::PasskeyCard(configured.passkey.clone()));
     }
 
-    match &configured.detail {
-        CloudBackupDetailState::Checking { .. } => {
-            sections
-                .push(CloudBackupSection::Progress(CloudBackupProgressSection::InventoryChecking));
-        }
-        CloudBackupDetailState::Failed { reason, .. } => {
-            sections.push(CloudBackupSection::Progress(
-                CloudBackupProgressSection::InventoryIncomplete { reason: *reason },
-            ));
-        }
-        CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Complete { .. } => {}
+    if let Some(progress) = inventory.progress {
+        sections.push(CloudBackupSection::Progress(progress));
     }
 
     sections.push(CloudBackupSection::Verification(CloudBackupVerificationView {
@@ -248,14 +251,15 @@ fn configured_screen(
         recovery: recovery_operation(&configured.destructive_operation),
     }));
 
-    if let Some(loaded) = loaded {
+    let last_sync = inventory.rows.as_ref().and_then(|rows| rows.last_sync);
+    if let Some(rows) = inventory.rows {
         sections.push(CloudBackupSection::Wallets(CloudBackupWalletsSection {
-            up_to_date: loaded.detail.up_to_date.iter().map(own_row).collect(),
-            needs_sync: loaded.detail.needs_sync.iter().map(own_row).collect(),
+            up_to_date: rows.up_to_date,
+            needs_sync: rows.needs_sync,
             sync: configured.sync.clone(),
         }));
 
-        let (not_on_device, extra_copies) = listed_rows(&loaded.cloud_only, snapshot);
+        let (not_on_device, extra_copies) = listed_rows(rows.listed, snapshot);
         if !not_on_device.is_empty()
             || configured.restore_all != CloudBackupRestoreAllState::NotShown
         {
@@ -282,26 +286,11 @@ fn configured_screen(
 
     sections.push(CloudBackupSection::TurnOff);
 
-    let disable = match configured.destructive_operation {
-        CloudBackupDestructiveOperationState::Disabling => CloudBackupDisableScreen::Draining,
-        _ => CloudBackupDisableScreen::Idle,
-    };
-
     CloudBackupConfiguredScreen {
         sections,
-        last_sync: loaded.and_then(|loaded| loaded.detail.last_sync),
+        last_sync,
         sync_health: configured.sync_health,
-        disable,
-    }
-}
-
-/// The detail rows to draw: a finished load, or the rows a refresh or failure kept
-fn loaded_detail(detail: &CloudBackupDetailState) -> Option<&LoadedCloudBackupDetail> {
-    match detail {
-        CloudBackupDetailState::Complete { state } => Some(state),
-        CloudBackupDetailState::Checking { retained }
-        | CloudBackupDetailState::Failed { retained, .. } => retained.as_ref(),
-        CloudBackupDetailState::NotLoaded => None,
+        disable: runtime.disable_screen(),
     }
 }
 
@@ -323,93 +312,48 @@ fn recovery_operation(
     }
 }
 
-fn own_row(wallet: &CloudBackupWalletItem) -> CloudBackupOwnRow {
-    let record = match wallet.sync_status {
-        CloudBackupWalletStatus::Confirmed | CloudBackupWalletStatus::AlreadyOnDevice => {
-            CloudBackupOwnRecord::Current
-        }
-        CloudBackupWalletStatus::Dirty
-        | CloudBackupWalletStatus::Uploading
-        | CloudBackupWalletStatus::UploadedPendingConfirmation => CloudBackupOwnRecord::Pending,
-        CloudBackupWalletStatus::Failed => CloudBackupOwnRecord::Stale,
-        CloudBackupWalletStatus::DeletedFromDevice => CloudBackupOwnRecord::SecretMissingLocally,
-        CloudBackupWalletStatus::UnsupportedVersion
-        | CloudBackupWalletStatus::RemoteStateUnknown => CloudBackupOwnRecord::Missing,
-    };
-
-    CloudBackupOwnRow { wallet: wallet.clone(), record }
-}
-
 /// The listed rows, split into Not on This Device and Extra Copies
 fn listed_rows(
-    cloud_only: &CloudOnlyState,
+    listed: Vec<ListedRecord>,
     snapshot: &AdmissionSnapshot,
 ) -> (Vec<CloudBackupListedRow>, Vec<CloudBackupListedRow>) {
-    let CloudOnlyState::Loaded { wallets, .. } = cloud_only else {
-        return (Vec::new(), Vec::new());
-    };
-
-    let (extra_copies, not_on_device) = wallets
-        .iter()
-        .map(|wallet| listed_row(wallet, snapshot))
+    let (extra_copies, not_on_device) = listed
+        .into_iter()
+        .map(|listed| listed_row(listed, snapshot))
         .partition(|row| matches!(row.record, CloudBackupListedRecord::ExtraCopy { .. }));
 
     (not_on_device, extra_copies)
 }
 
-fn listed_row(
-    wallet: &CloudBackupWalletItem,
-    snapshot: &AdmissionSnapshot,
-) -> CloudBackupListedRow {
-    let record_id = RecordId::from(wallet.record_id.clone());
+fn listed_row(listed: ListedRecord, snapshot: &AdmissionSnapshot) -> CloudBackupListedRow {
+    let ListedRecord { record_id, record } = listed;
     let restore = UserIntent::RestoreCloudWallet(record_id.clone());
     let delete = UserIntent::DeleteCloudWallet(record_id.clone());
+    let standard_delete =
+        CloudBackupRowActionKind::Delete { confirmation: CloudBackupDeleteConfirmation::Standard };
 
-    let (record, actions) = match wallet.sync_status {
-        CloudBackupWalletStatus::AlreadyOnDevice => (
-            CloudBackupListedRecord::ExtraCopy {
-                wallet: wallet.clone(),
-                covered_by: wallet.name.clone(),
-            },
-            vec![row_action(
+    let actions = match &record {
+        CloudBackupListedRecord::ExtraCopy { .. } | CloudBackupListedRecord::Unsupported => {
+            vec![row_action(standard_delete, &delete, snapshot)]
+        }
+        CloudBackupListedRecord::Unchecked => vec![row_action(
+            CloudBackupRowActionKind::CheckAgain,
+            &UserIntent::RefreshDetail,
+            snapshot,
+        )],
+        CloudBackupListedRecord::NotOnDevice { .. } => vec![
+            row_action(CloudBackupRowActionKind::Restore, &restore, snapshot),
+            row_action(
                 CloudBackupRowActionKind::Delete {
-                    confirmation: CloudBackupDeleteConfirmation::Standard,
+                    confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
                 },
                 &delete,
                 snapshot,
-            )],
-        ),
-        CloudBackupWalletStatus::UnsupportedVersion => (
-            CloudBackupListedRecord::Unsupported,
-            vec![row_action(
-                CloudBackupRowActionKind::Delete {
-                    confirmation: CloudBackupDeleteConfirmation::Standard,
-                },
-                &delete,
-                snapshot,
-            )],
-        ),
-        CloudBackupWalletStatus::RemoteStateUnknown => (
-            CloudBackupListedRecord::Unchecked,
-            vec![row_action(
-                CloudBackupRowActionKind::CheckAgain,
-                &UserIntent::RefreshDetail,
-                snapshot,
-            )],
-        ),
-        _ => (
-            CloudBackupListedRecord::NotOnDevice { wallet: wallet.clone() },
-            vec![
-                row_action(CloudBackupRowActionKind::Restore, &restore, snapshot),
-                row_action(
-                    CloudBackupRowActionKind::Delete {
-                        confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
-                    },
-                    &delete,
-                    snapshot,
-                ),
-            ],
-        ),
+            ),
+        ],
+        // the reducer lists no unreadable record, so none reaches here until the inventory owner
+        // lists them and the projection gives them their controls
+        CloudBackupListedRecord::Unreadable { .. } => Vec::new(),
     };
 
     CloudBackupListedRow { record_id, record, actions }

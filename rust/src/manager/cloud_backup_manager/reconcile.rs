@@ -92,7 +92,7 @@ impl RustCloudBackupManager {
     pub(crate) fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         // the projection reads more than the lifecycle, so every change is diffed against the
         // published screen, and only a real difference is sent
-        self.publish_screen();
+        self.request_screen_publish();
 
         if let Some(context) = effects.enable_completed {
             self.send(Message::EnableCompleted(context));

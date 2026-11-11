@@ -95,9 +95,8 @@ mod runtime;
 use owned_runtime::OwnedRuntime;
 #[cfg(test)]
 pub(crate) use owned_runtime::{OpTransition, OwnerView};
-#[cfg(test)]
-pub(crate) use runtime::Finish;
-use runtime::{Effect, ResetStart, RestoreRun, Runtime};
+pub(crate) use runtime::Runtime;
+use runtime::{Effect, IdleFacts, ResetStart, RestoreRun};
 use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
@@ -547,6 +546,15 @@ impl CloudBackupSupervisor {
         }
 
         Some(claim)
+    }
+
+    /// Publishes the screen for the runtime and the reducer as they stand now
+    pub async fn publish_screen(&mut self) -> ActorResult<()> {
+        if let Some(manager) = self.manager() {
+            manager.publish_screen(&self.runtime);
+        }
+
+        Produces::ok(())
     }
 
     /// Shows the runtime through the read-only adapter onto today's exported types
