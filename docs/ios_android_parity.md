@@ -250,12 +250,34 @@ Only pre-presentation platform unavailability receives bounded automatic retry.
 Presented failure, cancellation, mismatch, unsupported provider, invalid result,
 and no credential do not retry automatically. Only the typed no-credential
 result may continue into the owning enable or repair flow's explicit
-registration step; every other failure stops. iOS bounds interactive
-Authentication Services registration and assertion requests to five minutes,
-then cancels the controller on the main queue and reports a presented platform
-authorization failure. Its separate non-interactive presence probe keeps the
-one-second indeterminate timeout. Android retains its platform-owned interactive
-request lifetime.
+registration step; every other failure stops.
+
+Both platforms use the same presenter readiness and request bounds:
+
+- A request starts only from a ready presenter: on iOS, a visible key window of
+  a foreground-active scene whose presented chain is idle on two checks in a
+  row; on Android, a resumed activity. Each waits up to 1.5 seconds for one and
+  otherwise reports not ready without starting the request. Not ready reaches
+  Rust as `PasskeyError::NotReady`, which stops the operation like a request
+  the user left without completing.
+- On both, a presenter is ready only while the app lock is down, read from
+  `AuthManager` (`lockState` on iOS, `isLocked` on Android). The lock leaves
+  the window active and the activity resumed, so a locked app reports not
+  ready at once instead of waiting for an unlock.
+- In the step that starts the request, both platforms ask Rust whether the
+  operation that started it still holds its permit
+  (`passkeyRequestMayPresent`), and report `NotCompleted` without starting the
+  request when it doesn't. On iOS that step is the main-queue turn that calls
+  `performRequests()`, which also checks the settled window is still ready,
+  because the blocked request waits for the main queue after readiness.
+- The ready presenter carries the window or activity the request anchors to,
+  so neither platform can start a request without one.
+- Interactive registration and assertion requests are bounded at five minutes.
+  The bound cancels the system request (the iOS controller on the main queue,
+  the Android Credential Manager call through its cancellation signal) and
+  reports a presented platform authorization failure.
+- The presence check is bounded at one second, and a presence check that is not
+  ready or runs past its bound is indeterminate.
 
 ### Restore All parity
 

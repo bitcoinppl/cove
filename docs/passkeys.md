@@ -69,16 +69,69 @@ one, and only inside the operation that tap started.
   `NSError`'s domain and code, and Android a credential exception's type, to
   `passkeyRequestLogLine`, which applies the same allowlist.
 
+## Presenter readiness
+
+A passkey request starts only when the app can show the system passkey sheet:
+
+- iOS: the app lock is down, and a visible key window of a foreground-active
+  scene has no alert, presentation, dismissal, or transition in its presented
+  chain on two checks in a row (`PresenterIdle`)
+- Android: the app lock is down, and an activity is resumed
+  (`ForegroundUiBridge.awaitPresenter`)
+
+The app lock draws over a window that stays active and idle on iOS, and over an
+activity that stays resumed on Android, so neither fact shows the lock. Both
+apps read the lock from `AuthManager`'s mirror of Rust's lock (`lockState` on
+iOS, `isLocked` on Android), the same state that draws it.
+
+Each platform waits up to 1.5 seconds for a ready presenter. When none appears,
+the request reports not ready and never starts: it is not sent over an inactive
+scene, the app lock, a dismissing alert, or an app in the background. A locked
+app is not ready at once, without waiting: only the user's credential opens the
+lock, and that is not the tap that started the request, so a request never
+waits for an unlock. Both apps read the lock before the wait and again after
+it, so a request that arrives locked stays refused even when the user unlocks
+and a presenter becomes ready within the wait. The lock stops only presentation. Manager work that shows
+no sheet keeps running while the app is locked.
+
+The last readiness check is part of the step that starts the system sheet:
+
+- iOS: the blocked request waits for the main queue after its presenter
+  settles, with no bound, and the app can lock or Rust can revoke the permit
+  during that wait. So the main-queue turn that calls `performRequests()`
+  first checks that the settled window is still ready
+  (`PresenterIdle.isStillReady`) and then asks `passkey_request_may_present`.
+  A presenter that is no longer ready reports not ready, and a revoked permit
+  reports `NotCompleted`. Either way nothing starts.
+- Android: the request starts on the coroutine that took the readiness answer,
+  with no suspension between that answer, the permit check, and the Credential
+  Manager call.
+
+Not ready reaches Rust as `PasskeyError::NotReady` with the operation it was
+for. Rust treats it like a request the user left without completing: it is not
+retried, it does not fall back to discovery or registration, and it does not
+mark the stored credential missing. A presence check that is not ready is
+indeterminate.
+
+The ready presenter carries the window (iOS) or activity (Android) the request
+anchors to, so a request cannot be built without one.
+
 ## Interactive request timeout
 
-iOS registration and assertion requests wait at most five minutes for
-Authentication Services to complete. When that bound is reached, Cove cancels
-the authorization controller on the main queue and reports a presented platform
-authorization failure. Delegate completion is terminal and idempotent, so a
-late success, cancellation, or error callback cannot replace the timeout result.
+Registration and assertion requests wait at most five minutes on both
+platforms, counted from when the presenter is ready. When that bound is reached:
 
-The one-second presence probe is separate and remains intentionally short. A
-presence timeout is indeterminate rather than an interactive request failure.
+- iOS cancels the authorization controller on the main queue. Delegate
+  completion is terminal and idempotent, so a late success, cancellation, or
+  error callback cannot replace the timeout result.
+- Android cancels the Credential Manager call, which cancels the system request
+  through its `CancellationSignal`.
+
+Both report a presented platform authorization failure.
+
+The one-second presence probe is separate and remains intentionally short on
+both platforms. A presence timeout is indeterminate rather than an interactive
+request failure.
 
 ## Presence checks
 
