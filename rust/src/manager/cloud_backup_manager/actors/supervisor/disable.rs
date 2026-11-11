@@ -8,7 +8,7 @@
 //! `DisableNotStarted` and leaves backup on. After the commit the body is `FinishingDisable`,
 //! whose runs delete the namespace, clean up this device and write `Disabled`
 
-use super::runtime::ConfiguredOp;
+use super::runtime::{ConfiguredBody, ConfiguredOp};
 use super::*;
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::admission::TurnOffAdmission;
@@ -247,7 +247,7 @@ impl CloudBackupSupervisor {
             Some(claim)
                 if matches!(
                     &*self.runtime,
-                    Runtime::Configured { op: Some(ConfiguredOp::TurnOff(_)), .. }
+                    Runtime::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(_)))
                 ) =>
             {
                 info!("Cloud Backup Turn Off cancelled before it committed");
@@ -531,10 +531,10 @@ impl Runtime {
     /// The Turn Off flow a configured screen shows
     pub(crate) fn disable_screen(&self) -> CloudBackupDisableScreen {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::TurnOff(_)), .. } => {
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(_))) => {
                 CloudBackupDisableScreen::Draining
             }
-            Self::Configured { op: None, review: Some(review) } => match review {
+            Self::Configured(ConfiguredBody::Idle { review: Some(review) }) => match review {
                 TurnOffReview::Preparing { .. } => CloudBackupDisableScreen::Preparing,
                 TurnOffReview::Offline => CloudBackupDisableScreen::Offline,
                 TurnOffReview::Reviewing(review) => {
@@ -569,7 +569,7 @@ impl Runtime {
     /// Where Turn Off stands outside a running operation, as admission reads it
     pub(crate) fn turn_off_admission(&self) -> TurnOffAdmission {
         match self {
-            Self::Configured { op: None, review: Some(review) } => match review {
+            Self::Configured(ConfiguredBody::Idle { review: Some(review) }) => match review {
                 TurnOffReview::Preparing { .. } => TurnOffAdmission::Preparing,
                 TurnOffReview::Offline => TurnOffAdmission::Offline,
                 TurnOffReview::Reviewing(review) => {

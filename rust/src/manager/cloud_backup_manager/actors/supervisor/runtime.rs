@@ -2,7 +2,9 @@
 //!
 //! There is no operation slot beside the lifecycle. Each body names the operations that can run
 //! in it, so "Turn Off while backup is off" and "verify during a committed disable" have no
-//! value: `DisabledOp` has no Turn Off and `FinishingDisable` holds only `ResumeDisable`
+//! value: `DisabledOp` has no Turn Off and `FinishingDisable` holds only `ResumeDisable`. A
+//! configured body is either idle, where the Turn Off review lives, or running one operation, so
+//! a review beside a running operation has no value either
 //!
 //! The body moves in three ways only:
 //! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch.
@@ -48,12 +50,7 @@ pub(crate) enum Runtime {
     Disabled {
         op: Option<DisabledOp>,
     },
-    Configured {
-        op: Option<ConfiguredOp>,
-        /// Turn Off between the tap and consent; presentation that holds no operation, so any
-        /// operation that starts here ends it
-        review: Option<TurnOffReview>,
-    },
+    Configured(ConfiguredBody),
     FinishingDisable {
         committed: CommittedDisable,
         op: Option<ResumeDisable>,
@@ -152,6 +149,23 @@ pub(crate) enum DisabledOp {
     Restore(RestoreRun),
     /// Discarding an Enable that stopped at a prompt, before any recovery was projected
     DiscardEnable(OpRun),
+}
+
+/// A configured backup: idle, where the Turn Off review lives, or running one operation
+///
+/// The review holds no operation and is bound to evidence any operation may change, so a body
+/// never holds both: starting an operation replaces the idle body and the review with it
+#[derive(Debug)]
+pub(crate) enum ConfiguredBody {
+    Idle {
+        /// Turn Off between the tap and consent
+        review: Option<TurnOffReview>,
+    },
+    Running(ConfiguredOp),
+}
+
+impl ConfiguredBody {
+    const IDLE: Self = Self::Idle { review: None };
 }
 
 /// Work on a configured backup
@@ -334,7 +348,7 @@ impl Runtime {
                 Self::DriveAccountSwitch { op: None }
             }
             State::Corrupted { error } => Self::Corrupted { error: error.clone(), op: None },
-            State::Configured(_) => Self::Configured { op: None, review: None },
+            State::Configured(_) => Self::Configured(ConfiguredBody::IDLE),
             State::Disabled => Self::Disabled { op: None },
         }
     }
@@ -356,7 +370,7 @@ impl Runtime {
     /// Off last stopped
     fn idle_presentation(&mut self) -> IdlePresentation {
         match self {
-            Self::Configured { review, .. } => {
+            Self::Configured(ConfiguredBody::Idle { review }) => {
                 review.take().map_or(IdlePresentation::None, IdlePresentation::Review)
             }
             Self::FinishingDisable { committed, failure: Some(failure), .. } => {
@@ -370,8 +384,8 @@ impl Runtime {
     /// belongs to: a review stays with a configured body, a failure with the same attempt
     fn keep_idle_presentation(&mut self, held: IdlePresentation) {
         match (self, held) {
-            (Self::Configured { review, .. }, IdlePresentation::Review(held)) => {
-                *review = Some(held);
+            (Self::Configured(body), IdlePresentation::Review(held)) => {
+                *body = ConfiguredBody::Idle { review: Some(held) };
             }
             (
                 Self::FinishingDisable { committed, failure, .. },
@@ -441,11 +455,11 @@ impl Runtime {
     ) -> bool {
         match self {
             Self::PendingEnableRecovery { recovery, .. } => *recovery = next,
-            Self::Disabled { op: None } | Self::Configured { op: None, .. } => {
+            Self::Disabled { op: None } | Self::Configured(ConfiguredBody::Idle { .. }) => {
                 *self = Self::PendingEnableRecovery { recovery: next, op: None };
             }
             Self::Disabled { op: Some(_) }
-            | Self::Configured { op: Some(_), .. }
+            | Self::Configured(ConfiguredBody::Running(_))
             | Self::Corrupted { .. }
             | Self::FinishingDisable { .. }
             | Self::DriveAccountSwitch { .. }
@@ -467,7 +481,7 @@ impl Runtime {
             | Self::Corrupted { op: Some(DisabledOp::Enable(_)), .. } => AdmissionBody::Enabling,
             Self::Disabled { op: Some(DisabledOp::Restore(_)) }
             | Self::Corrupted { op: Some(DisabledOp::Restore(_)), .. } => AdmissionBody::Restoring,
-            Self::Configured { .. } => AdmissionBody::Configured,
+            Self::Configured(_) => AdmissionBody::Configured,
             Self::DriveAccountSwitch { .. } => AdmissionBody::DriveAccountSwitch,
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
             Self::PendingEnableRecovery { .. } => AdmissionBody::PendingEnableRecovery,
@@ -481,7 +495,7 @@ impl Runtime {
     }
 
     pub(crate) fn is_restore_all(&self) -> bool {
-        matches!(self, Self::Configured { op: Some(ConfiguredOp::RestoreAll(_)), .. })
+        matches!(self, Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(_))))
     }
 
     /// The claim of the running operation, which carries its `OperationId`
@@ -490,7 +504,8 @@ impl Runtime {
             Self::Disabled { op } | Self::Corrupted { op, .. } => {
                 op.as_ref().map(DisabledOp::claim)
             }
-            Self::Configured { op, .. } => op.as_ref().map(ConfiguredOp::claim),
+            Self::Configured(ConfiguredBody::Running(op)) => Some(op.claim()),
+            Self::Configured(ConfiguredBody::Idle { .. }) => None,
             Self::FinishingDisable { op, .. } => op.as_ref().map(|op| op.run.claim),
             Self::DriveAccountSwitch { op } => op.as_ref().map(|op| op.0.claim),
             Self::PendingEnableRecovery { op, .. } => op.as_ref().map(RecoveryOp::claim),
@@ -515,22 +530,18 @@ impl Runtime {
                 op: Some(RecoveryOp::Continue(run) | RecoveryOp::Discard(run)),
                 ..
             }
-            | Self::Configured {
-                op:
-                    Some(
-                        ConfiguredOp::TurnOff(run)
-                        | ConfiguredOp::Verify(run)
-                        | ConfiguredOp::RepairPasskey(run)
-                        | ConfiguredOp::RestoreCloudWallet(run)
-                        | ConfiguredOp::DeleteRecords(run)
-                        | ConfiguredOp::RecoverOtherBackups(run)
-                        | ConfiguredOp::DeleteOtherBackups(run)
-                        | ConfiguredOp::Reinitialize(run)
-                        | ConfiguredOp::RecreateManifest(run)
-                        | ConfiguredOp::DiscardReinitialize(run),
-                    ),
-                ..
-            } => Some(run),
+            | Self::Configured(ConfiguredBody::Running(
+                ConfiguredOp::TurnOff(run)
+                | ConfiguredOp::Verify(run)
+                | ConfiguredOp::RepairPasskey(run)
+                | ConfiguredOp::RestoreCloudWallet(run)
+                | ConfiguredOp::DeleteRecords(run)
+                | ConfiguredOp::RecoverOtherBackups(run)
+                | ConfiguredOp::DeleteOtherBackups(run)
+                | ConfiguredOp::Reinitialize(run)
+                | ConfiguredOp::RecreateManifest(run)
+                | ConfiguredOp::DiscardReinitialize(run),
+            )) => Some(run),
             Self::Resetting { held, .. } => held.as_mut(),
             _ => None,
         }
@@ -651,20 +662,19 @@ impl Runtime {
             {
                 *op = Some(DisabledOp::Restore(run));
             }
-            (Self::Configured { op, review }, NewOp::Restore(run))
+            (Self::Configured(body), NewOp::Restore(run))
                 if operation == Op::RestoreAllCloudWallets =>
             {
-                *review = None;
-                *op = Some(ConfiguredOp::RestoreAll(run));
+                *body = ConfiguredBody::Running(ConfiguredOp::RestoreAll(run));
             }
             // an account switch's reinitialize runs in the switch body, which holds background
             // writes until the switch ends
-            (Self::Configured { .. }, NewOp::Standard(run))
+            (Self::Configured(_), NewOp::Standard(run))
                 if run.claim.drive_account_switch_id().is_some() =>
             {
                 *self = Self::DriveAccountSwitch { op: Some(SwitchOp(run)) };
             }
-            (Self::Configured { op, review }, NewOp::Standard(run)) => {
+            (Self::Configured(body), NewOp::Standard(run)) => {
                 let configured = match operation {
                     Op::Disable => ConfiguredOp::TurnOff(run),
                     Op::VerifyReinitializedBackup | Op::Verify => ConfiguredOp::Verify(run),
@@ -684,9 +694,7 @@ impl Runtime {
                     | Op::Restore
                     | Op::RestoreAllCloudWallets => return Err(unstartable(self)),
                 };
-                // the review was bound to evidence this operation may change
-                *review = None;
-                *op = Some(configured);
+                *body = ConfiguredBody::Running(configured);
             }
             (Self::DriveAccountSwitch { op }, NewOp::Standard(run))
                 if operation == Op::ReinitializeBackup =>
@@ -722,7 +730,7 @@ impl Runtime {
             (
                 Self::Disabled { .. }
                 | Self::Corrupted { .. }
-                | Self::Configured { .. }
+                | Self::Configured(_)
                 | Self::FinishingDisable { .. }
                 | Self::DriveAccountSwitch { .. }
                 | Self::PendingEnableRecovery { .. }
@@ -742,12 +750,18 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
         committed: CommittedDisable,
     ) {
-        let Self::Configured { op, .. } = self else { return };
-        if !matches!(op, Some(ConfiguredOp::TurnOff(run)) if run.claim == claim) {
+        let Self::Configured(body) = self else { return };
+        if !matches!(body, ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) if run.claim == claim)
+        {
             return;
         }
 
-        let Some(ConfiguredOp::TurnOff(run)) = op.take() else { return };
+        let ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) =
+            std::mem::replace(body, ConfiguredBody::IDLE)
+        else {
+            return;
+        };
+
         let op = Some(ResumeDisable { run, start: FinishStart::Commit });
         *self = Self::FinishingDisable { committed, op, failure: None };
     }
@@ -800,7 +814,7 @@ impl Runtime {
     /// The Turn Off review an idle configured body holds
     pub(crate) fn turn_off_review(&self) -> Option<&TurnOffReview> {
         match self {
-            Self::Configured { op: None, review } => review.as_ref(),
+            Self::Configured(ConfiguredBody::Idle { review }) => review.as_ref(),
             _ => None,
         }
     }
@@ -811,7 +825,7 @@ impl Runtime {
     /// late finds its own `Preparing` there first, so only a clear reaches another body, where
     /// there is no review to clear
     pub(crate) fn set_turn_off_review(&mut self, next: Option<TurnOffReview>) {
-        let Self::Configured { op: None, review } = self else {
+        let Self::Configured(ConfiguredBody::Idle { review }) = self else {
             debug_assert!(next.is_none(), "Cloud Backup showed a Turn Off review in {self:?}");
             return;
         };
@@ -821,7 +835,7 @@ impl Runtime {
 
     /// Takes the review `review_id` names out of the body, if it is the one under review
     pub(crate) fn take_reviewed(&mut self, review_id: ReviewId) -> Option<DisableReview> {
-        let Self::Configured { op: None, review } = self else { return None };
+        let Self::Configured(ConfiguredBody::Idle { review }) = self else { return None };
         if !matches!(review, Some(TurnOffReview::Reviewing(held)) if held.review_id == review_id) {
             return None;
         }
@@ -870,7 +884,7 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<&RestoreRun> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::RestoreAll(run)), .. }
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(run)))
                 if run.claim == claim =>
             {
                 Some(run)
@@ -884,7 +898,7 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<&mut RestoreRun> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::RestoreAll(run)), .. }
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(run)))
                 if run.claim == claim =>
             {
                 Some(run)
@@ -958,9 +972,9 @@ impl Runtime {
                 DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run) => TakenOp::Standard(run),
                 DisabledOp::Restore(run) => TakenOp::Restore(run),
             }),
-            Self::Configured { op, review } => {
-                *review = None;
-                op.take().map(|op| match op {
+            Self::Configured(body) => match std::mem::replace(body, ConfiguredBody::IDLE) {
+                ConfiguredBody::Idle { .. } => None,
+                ConfiguredBody::Running(op) => Some(match op {
                     ConfiguredOp::RestoreAll(run) => TakenOp::Restore(run),
                     ConfiguredOp::TurnOff(run)
                     | ConfiguredOp::Verify(run)
@@ -972,8 +986,8 @@ impl Runtime {
                     | ConfiguredOp::Reinitialize(run)
                     | ConfiguredOp::RecreateManifest(run)
                     | ConfiguredOp::DiscardReinitialize(run) => TakenOp::Standard(run),
-                })
-            }
+                }),
+            },
             Self::FinishingDisable { op, .. } => op.take().map(|op| TakenOp::Standard(op.run)),
             Self::DriveAccountSwitch { op } => op.take().map(|op| TakenOp::Standard(op.0)),
             Self::PendingEnableRecovery { op, .. } => op.take().map(|op| match op {
@@ -1003,7 +1017,9 @@ impl Runtime {
     fn clear(&mut self) {
         match self {
             Self::Disabled { op } | Self::Corrupted { op, .. } => *op = None,
-            Self::Configured { op, .. } => *op = None,
+            // an idle body keeps its review; a running one has none to keep
+            Self::Configured(body @ ConfiguredBody::Running(_)) => *body = ConfiguredBody::IDLE,
+            Self::Configured(ConfiguredBody::Idle { .. }) => {}
             Self::FinishingDisable { op, .. } => *op = None,
             Self::DriveAccountSwitch { op } => *op = None,
             Self::PendingEnableRecovery { op, .. } => *op = None,
@@ -1044,8 +1060,13 @@ impl Runtime {
                     RecoveryOp::Restore(run) => OffWrites::Restore(run.claim),
                 }),
             },
-            Self::Configured { op, .. } => PolicyBody::Configured {
-                op: op.as_ref().map(|op| ConfiguredWrites { claim: op.claim(), kind: op.writer() }),
+            Self::Configured(body) => PolicyBody::Configured {
+                op: match body {
+                    ConfiguredBody::Idle { .. } => None,
+                    ConfiguredBody::Running(op) => {
+                        Some(ConfiguredWrites { claim: op.claim(), kind: op.writer() })
+                    }
+                },
             },
             Self::FinishingDisable { committed, op, .. } => PolicyBody::FinishingDisable {
                 namespace_id: committed.namespace_id.clone(),
@@ -1067,7 +1088,9 @@ impl Runtime {
     /// the configuration generation changes when it ends
     pub(crate) fn replacing_configuration(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::Reinitialize(run)), .. } => Some(run.claim),
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::Reinitialize(run))) => {
+                Some(run.claim)
+            }
             _ => None,
         }
     }
@@ -1100,7 +1123,7 @@ impl Runtime {
             }
             Self::Disabled { .. }
             | Self::FinishingDisable { op: None, .. }
-            | Self::Configured { .. }
+            | Self::Configured(_)
             | Self::DriveAccountSwitch { .. }
             | Self::PendingEnableRecovery { .. }
             // the reset's own projection shows the wipe

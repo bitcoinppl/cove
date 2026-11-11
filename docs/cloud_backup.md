@@ -513,21 +513,21 @@ Turn Off never blocks on what the backup holds. It shows what would be lost and
 asks for consent instead.
 
 1. **Review.** `DisableCloudBackup` builds a review without running an
-   operation or pausing writes. The configured body holds it, so any operation
-   start, body change, Cancel or `LeaveDetail` ends it. The review lists the
-   namespace and counts other backup namespaces silently, and never asks for a
-   passkey. The listing proves which records are this device's own backups,
-   and the detail inventory says whether an own backup holds a secret this
-   device lacks. An own backup whose secret the inventory couldn't check counts
-   as unchecked. The review's assessment is always the detail inventory's, so
-   an inventory that isn't complete asks twice even when every listed record is
-   this device's own. Other records are classified by the detail
-   inventory as not on this device, extra copies, unreadable, unsupported or
-   unchecked. A record the inventory hasn't classified counts as unchecked. The
-   screen shows `Preparing`, then
-   `Reviewing` with a `CloudBackupDisableImpact`, or `Offline` when the
-   provider can't be reached. Tapping Turn Off again is the dialogs' Check
-   Again.
+   operation or pausing writes. Only an idle configured body holds it, and a
+   running operation replaces that body, so the two never exist together: any
+   operation start, body change, Cancel or `LeaveDetail` ends it. The review
+   lists the namespace and counts other backup namespaces silently, and never
+   asks for a passkey. The listing proves which records are this device's own
+   backups, and the detail inventory says whether an own backup holds a secret
+   this device lacks. An own backup whose secret the inventory couldn't check
+   counts as unchecked. The review's assessment is always the detail
+   inventory's, so an inventory that isn't complete asks twice even when every
+   listed record is this device's own. Other records are classified by the
+   detail inventory as not on this device, extra copies, unreadable,
+   unsupported or unchecked. A record the inventory hasn't classified counts as
+   unchecked. The screen shows `Preparing`, then `Reviewing` with a
+   `CloudBackupDisableImpact`, or `Offline` when the provider can't be reached.
+   Tapping Turn Off again is the dialogs' Check Again.
 2. **Confirmation.** The impact asks once when only this device's backups and
    extra copies would be deleted. It asks twice when anything is not on this
    device, a local wallet's secret is missing, anything is unchecked, unreadable
