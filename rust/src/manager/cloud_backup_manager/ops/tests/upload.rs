@@ -273,8 +273,10 @@ async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespac
     let globals = test_globals();
     globals.reset();
 
+    // a configured backup whose master key is gone; without the record, writes are paused as off
     let namespace = "0123456789abcdef0123456789abcdef";
     CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
+    Database::global().cloud_backup_state.set(&persisted_enabled_cloud_backup_state(None)).unwrap();
 
     let manager = init_manager();
     let metadata = xpub_only_wallet_metadata();
