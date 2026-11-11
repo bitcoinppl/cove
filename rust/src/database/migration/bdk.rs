@@ -299,7 +299,6 @@ mod tests {
     use super::recovery::{recover_at_path, recovery_target_path};
     use super::*;
     use crate::database::encrypted_backend;
-    use crate::database::encrypted_backend::tests::set_test_encryption_key;
     use std::sync::atomic::AtomicBool;
     use tempfile::TempDir;
 
@@ -307,10 +306,6 @@ mod tests {
         fn with_dir(dir: PathBuf, migration: Arc<Migration>) -> Self {
             Self { dir, migration }
         }
-    }
-
-    fn setup_test_key() {
-        set_test_encryption_key();
     }
 
     fn test_migration(total: u32) -> Arc<Migration> {
@@ -341,7 +336,6 @@ mod tests {
 
     /// Create a real encrypted SQLCipher database at the given path
     fn create_encrypted_db_at(path: &Path) {
-        setup_test_key();
         let key = encrypted_backend::encryption_key().unwrap();
         let hex_key = format!("x'{}'", hex::encode(key));
         let conn = rusqlite::Connection::open(path).unwrap();
@@ -371,8 +365,6 @@ mod tests {
 
     #[test]
     fn migrate_single_bdk_database_roundtrip() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = create_plaintext_bdk_db(&dir, "bdk_wallet_sqlite_test.db");
 
@@ -448,7 +440,6 @@ mod tests {
 
     #[test]
     fn recover_bdk_crash_after_bak_rename() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
         let bak_path = dir.path().join("bdk_wallet_sqlite_test.db.bak");
@@ -494,7 +485,6 @@ mod tests {
 
     #[test]
     fn recover_bdk_cleans_auxiliary_files() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
         let bak_path = dir.path().join("bdk_wallet_sqlite_test.db.bak");
@@ -533,8 +523,6 @@ mod tests {
 
     #[test]
     fn migrate_path_with_single_quote() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let quoted_dir = dir.path().join("bob's wallet");
         std::fs::create_dir_all(&quoted_dir).unwrap();
@@ -566,8 +554,6 @@ mod tests {
 
     #[test]
     fn migrate_empty_bdk_database_succeeds() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_empty.db");
 
@@ -600,8 +586,6 @@ mod tests {
 
     #[test]
     fn bak_retained_after_migration() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = create_plaintext_bdk_db(&dir, "bdk_wallet_sqlite_test.db");
         let bak_path = db_path.with_extension("db.bak");
@@ -616,7 +600,6 @@ mod tests {
 
     #[test]
     fn bak_cleaned_on_recovery_when_encrypted_db_valid() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = create_plaintext_bdk_db(&dir, "bdk_wallet_sqlite_test.db");
         let bak_path = db_path.with_extension("db.bak");
@@ -634,7 +617,6 @@ mod tests {
 
     #[test]
     fn bak_restored_when_encrypted_db_invalid() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
         let bak_path = db_path.with_extension("db.bak");
@@ -653,7 +635,6 @@ mod tests {
 
     #[test]
     fn mixed_directory_only_migrates_matching_plaintext() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
 
         // matching plaintext BDK databases — should be migrated
@@ -709,7 +690,6 @@ mod tests {
 
     #[test]
     fn recover_preserves_wal_for_non_migration_db() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
 
@@ -728,7 +708,6 @@ mod tests {
 
     #[test]
     fn migrate_continues_past_bad_db() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
 
         // corrupt plaintext DB (has SQLite header but invalid content)
@@ -777,7 +756,6 @@ mod tests {
 
     #[test]
     fn wal_data_survives_checkpoint_then_cleanup() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
 
@@ -826,7 +804,6 @@ mod tests {
     fn checkpoint_failure_preserves_wal() {
         use std::os::unix::fs::PermissionsExt as _;
 
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
 
@@ -928,7 +905,6 @@ mod tests {
 
     #[test]
     fn recover_corrupt_db_restores_backup_auxiliary_files() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
         let bak_path = db_path.with_extension("db.bak");
@@ -966,8 +942,6 @@ mod tests {
 
     #[test]
     fn bdk_migration_stops_on_cancellation() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         create_plaintext_bdk_db_at(&dir.path().join("bdk_wallet_sqlite_aaa.db"));
         create_plaintext_bdk_db_at(&dir.path().join("bdk_wallet_sqlite_bbb.db"));
@@ -988,8 +962,6 @@ mod tests {
 
     #[test]
     fn bdk_migration_mid_flight_cancellation() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         create_plaintext_bdk_db_at(&dir.path().join("bdk_wallet_sqlite_aaa.db"));
         create_plaintext_bdk_db_at(&dir.path().join("bdk_wallet_sqlite_bbb.db"));
@@ -1032,7 +1004,6 @@ mod tests {
 
     #[test]
     fn integrity_check_catches_corruption() {
-        setup_test_key();
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("bdk_wallet_sqlite_test.db");
 

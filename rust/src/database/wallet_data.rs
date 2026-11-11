@@ -730,7 +730,6 @@ pub(crate) mod test_support {
     use super::*;
 
     pub(crate) fn new_test_wallet_data_db(id: WalletId) -> (WalletDataDb, tempfile::TempDir) {
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
         clear_wallet_registry_entry(&id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         let db =
@@ -791,7 +790,6 @@ mod tests {
 
     #[test]
     fn concurrent_new_or_existing_calls_share_one_database_handle() {
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
         let wallet_id = WalletId::preview_new_random();
         test_support::clear_wallet_registry_entry(&wallet_id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
@@ -824,7 +822,6 @@ mod tests {
 
     #[test]
     fn concurrent_opens_for_different_wallets_succeed_independently() {
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
         let wallet_ids = (0..8).map(|_| WalletId::preview_new_random()).collect::<Vec<_>>();
         for wallet_id in &wallet_ids {
             test_support::clear_wallet_registry_entry(wallet_id);
@@ -867,7 +864,6 @@ mod tests {
 
     #[test]
     fn storage_gate_blocks_database_open_until_cleanup_releases_it() {
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
         let wallet_id = WalletId::preview_new_random();
         test_support::clear_wallet_registry_entry(&wallet_id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");

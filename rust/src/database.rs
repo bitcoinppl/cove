@@ -285,7 +285,6 @@ pub(crate) mod test_support {
 
     pub(crate) fn init_test_database() {
         let root = process_test_data_dir();
-        crate::bootstrap::tests::set_test_bootstrapped();
         crate::app::reconcile::test_support::init_noop_updater();
         let _ = DATABASE_LOCATION_OVERRIDE.set(root.join("cove.encrypted.db"));
     }
