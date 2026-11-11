@@ -115,7 +115,8 @@ fun TapSignerBackupExportHost(app: AppManager) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to save TAPSIGNER backup", e)
+                    // the exception message can name the chosen file, so log only the kind
+                    Log.e(TAG, "Failed to save TAPSIGNER backup: ${e.javaClass.simpleName}")
                     app.alertState =
                         TaggedItem(
                             AppAlertState.General(
