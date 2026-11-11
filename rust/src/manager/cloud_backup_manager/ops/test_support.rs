@@ -34,6 +34,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedPasskeyState,
 };
+use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
@@ -86,6 +87,14 @@ pub(crate) async fn current_background_writes(
 ) -> CloudBackupWriteClient {
     supervisor_checkpoint(manager).await;
     manager.background_writes().await.expect("background write client")
+}
+
+/// The supervisor's current configuration generation, for a test that runs a producer directly
+pub(crate) async fn current_config(manager: &RustCloudBackupManager) -> ConfigGeneration {
+    call!(manager.supervisor.evidence_basis_for_confirmation())
+        .await
+        .expect("evidence basis")
+        .config()
 }
 
 /// A complete fetch result stamped with the manager's current listing generation

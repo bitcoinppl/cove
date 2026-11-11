@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use cove_cspp::MasterKeyPromotionStatus;
+use cove_cspp::backup_data::wallet_record_id;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::DiscoveredPasskeyResult;
 
@@ -16,8 +17,9 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBackupStatus,
-    PersistedDriveAccountSwitchPhase,
+    CloudBlobUploadedPendingConfirmationState, PersistedBackupVerificationState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState, PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::actors::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::admission::{
@@ -26,12 +28,14 @@ use crate::manager::cloud_backup_manager::admission::{
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
 use crate::manager::cloud_backup_manager::detail::VerificationState;
 use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
-use crate::manager::cloud_backup_manager::ops::test_support::current_background_writes;
+use crate::manager::cloud_backup_manager::ops::test_support::{
+    current_background_writes, wallet_entry_with_labels,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupKeychain,
-    CloudBackupManagerAction, CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
-    DriveAccountSwitchReconcileAction,
+    CloudBackupManagerAction, CloudBackupStore, CloudBackupVerificationSource,
+    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
 };
 
 fn local_master_key_present() -> bool {
@@ -305,6 +309,87 @@ fn verification_holds_the_slot_and_judges_its_own_wallet_set() {
         assert!(
             !matches!(app.manager().model_snapshot().verification, VerificationState::Verified(_)),
             "evidence from before the wallet change shows as verified\n{}",
+            app.describe()
+        );
+    });
+}
+
+/// A read of backup A that outlives its configuration proves nothing about backup B: a detail
+/// refresh of A is held inside its wallet download, a reset ends A, B is enabled, and B's upload of
+/// the same wallet revision waits for its confirmation. Once A's read lands, B's upload still
+/// waits, because only B's own cloud can confirm it
+#[test]
+fn a_held_read_of_an_ended_backup_confirms_nothing_in_the_next_one() {
+    let test = concat!(
+        module_path!(),
+        "::a_held_read_of_an_ended_backup_confirms_nothing_in_the_next_one"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let first = FakeAccount::new(1, 0).seed(&app);
+        let wallet = CloudBackupStore::global().all_wallets().expect("read wallets").remove(0);
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        // the revision A's cloud holds for the wallet, as the seed wrote it
+        let revision = wallet_entry_with_labels(&wallet, None).content_revision_hash.clone();
+
+        let hold = Hold::default();
+        let held_download =
+            app.cloud.script_next(CloudCall::DownloadWallet, CloudFault::Hold(hold.clone()));
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_can(&[N::TurnOff]);
+        app.block_on("A's detail read to download the wallet", hold.entered());
+
+        let manager = app.manager().clone();
+        let permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+        finish_wipe(&app, permit);
+
+        let second = FakeAccount::new(1, 0).seed(&app);
+        assert_ne!(second, first);
+
+        // the same wallet is on this device again, and B's upload of it landed but B's cloud
+        // doesn't show it yet
+        let mut wallets = CloudBackupStore::global().all_wallets().expect("read wallets");
+        wallets.push(wallet.clone());
+        Database::global()
+            .wallets()
+            .save_all_wallets(wallet.network, wallet.wallet_mode, wallets)
+            .expect("save the wallet again");
+        let waiting = PersistedCloudBlobSyncState::wallet(
+            second.clone(),
+            wallet.id,
+            record_id.clone(),
+            PersistedCloudBlobState::UploadedPendingConfirmation(
+                CloudBlobUploadedPendingConfirmationState {
+                    revision_hash: revision,
+                    uploaded_at: cove_util::time::unix_timestamp_secs_or_zero(),
+                    attempt_count: 0,
+                    last_checked_at: None,
+                },
+            ),
+        );
+        Database::global().cloud_blob_sync_states.set(&waiting).expect("persist B's upload");
+
+        app.event("release A's held wallet download", |_| hold.release()).then_can(&[N::TurnOff]);
+
+        let held_namespace = app
+            .cloud
+            .calls()
+            .into_iter()
+            .find_map(|(id, namespace)| (id == held_download).then_some(namespace))
+            .flatten();
+        assert_eq!(held_namespace, Some(first), "the held download was not A's read");
+
+        let row = Database::global()
+            .cloud_blob_sync_states
+            .get(&record_id)
+            .expect("read the wallet's row")
+            .expect("B's upload row");
+        assert_eq!(row.namespace_id, second);
+        assert!(
+            matches!(row.state, PersistedCloudBlobState::UploadedPendingConfirmation(_)),
+            "A's read confirmed B's upload: {:?}\n{}",
+            row.state,
             app.describe()
         );
     });

@@ -230,7 +230,9 @@ impl CloudBackupSupervisor {
         let force_discoverable = continuation.force_discoverable();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_deep_verify_cloud_backup(writes, force_discoverable).await;
+            let result = manager
+                .prepare_deep_verify_cloud_backup(writes, run.basis.config(), force_discoverable)
+                .await;
             send!(addr.complete_verification(run, result));
         });
     }
@@ -731,8 +733,9 @@ impl CloudBackupSupervisor {
         }) {
             Ok(()) => {
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_repair_passkey_refresh_detail(claim, detail_claim, result));
                 });
             }

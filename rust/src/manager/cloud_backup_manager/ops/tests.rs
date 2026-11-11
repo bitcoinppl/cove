@@ -99,7 +99,11 @@ async fn deep_verify_for_test(
         .await
         .unwrap();
     let step = manager
-        .prepare_deep_verify_cloud_backup(operation_writes(manager, run.claim), force_discoverable)
+        .prepare_deep_verify_cloud_backup(
+            operation_writes(manager, run.claim),
+            run.basis.config(),
+            force_discoverable,
+        )
         .await;
     call!(manager.supervisor.complete_verification(run, step)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {

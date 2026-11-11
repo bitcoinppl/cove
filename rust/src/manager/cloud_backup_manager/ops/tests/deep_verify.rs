@@ -43,6 +43,7 @@ async fn deep_verify_corrupted_persisted_state_short_circuits() {
     let step = manager
         .prepare_deep_verify_cloud_backup(
             unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
+            current_config(&manager).await,
             true,
         )
         .await;
@@ -345,8 +346,13 @@ async fn deep_verify_reads_each_wallet_backup_once() {
     let downloads_before = globals.cloud.wallet_backup_download_attempt_count();
 
     let run = call!(manager.supervisor.begin_verification_run_for_test(true)).await.unwrap();
-    let step =
-        manager.prepare_deep_verify_cloud_backup(operation_writes(&manager, run.claim), true).await;
+    let step = manager
+        .prepare_deep_verify_cloud_backup(
+            operation_writes(&manager, run.claim),
+            run.basis.config(),
+            true,
+        )
+        .await;
 
     assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
 
@@ -581,6 +587,7 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
         let step = manager
             .prepare_deep_verify_cloud_backup(
                 unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
+                current_config(&manager).await,
                 false,
             )
             .await;

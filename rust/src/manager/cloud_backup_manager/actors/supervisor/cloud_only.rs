@@ -180,8 +180,9 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
@@ -254,8 +255,9 @@ impl CloudBackupSupervisor {
 
         manager.refresh_sync_health();
         let detail_claim = self.detail_workflow.start_operation_result();
+        let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.refresh_cloud_backup_detail().await;
+            let result = manager.refresh_cloud_backup_detail(config).await;
             send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
         });
 

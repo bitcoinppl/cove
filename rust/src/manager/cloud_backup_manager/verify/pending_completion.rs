@@ -13,6 +13,7 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
+use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::actors::supervisor::EvidenceBasis;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
@@ -85,17 +86,18 @@ impl RustCloudBackupManager {
             }
         }
 
-        let result = match self.finalize_pending_verification(completion.clone()).await {
-            Ok(FinalizePendingVerificationResult::Pending) => return None,
-            Ok(FinalizePendingVerificationResult::Completed(report)) => {
-                if report.wallet_issues.is_empty() {
-                    DeepVerificationResult::Verified(report)
-                } else {
-                    DeepVerificationResult::NeedsAttention(report)
+        let result =
+            match self.finalize_pending_verification(completion.clone(), basis.config()).await {
+                Ok(FinalizePendingVerificationResult::Pending) => return None,
+                Ok(FinalizePendingVerificationResult::Completed(report)) => {
+                    if report.wallet_issues.is_empty() {
+                        DeepVerificationResult::Verified(report)
+                    } else {
+                        DeepVerificationResult::NeedsAttention(report)
+                    }
                 }
-            }
-            Err(failure) => DeepVerificationResult::Failed(*failure),
-        };
+                Err(failure) => DeepVerificationResult::Failed(*failure),
+            };
 
         Some(PendingVerificationSettlement { basis, completion, result })
     }
@@ -215,6 +217,7 @@ impl RustCloudBackupManager {
     async fn finalize_pending_verification(
         &self,
         completion: PendingVerificationCompletion,
+        config: ConfigGeneration,
     ) -> Result<FinalizePendingVerificationResult, Box<DeepVerificationFailure>> {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = match cspp.load_master_key_from_store() {
@@ -289,7 +292,7 @@ impl RustCloudBackupManager {
             }
         }
 
-        report.detail = self.pending_verification_detail(&completion).await;
+        report.detail = self.pending_verification_detail(&completion, config).await;
         Ok(FinalizePendingVerificationResult::Completed(report))
     }
 
@@ -391,8 +394,9 @@ impl RustCloudBackupManager {
     async fn pending_verification_detail(
         &self,
         completion: &PendingVerificationCompletion,
+        config: ConfigGeneration,
     ) -> Option<CloudBackupDetail> {
-        match self.refresh_cloud_backup_detail().await {
+        match self.refresh_cloud_backup_detail(config).await {
             Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) => {
                 Some(listed.detail)
             }

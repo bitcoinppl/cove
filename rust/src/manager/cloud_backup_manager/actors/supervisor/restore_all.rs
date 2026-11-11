@@ -162,10 +162,20 @@ impl CloudBackupSupervisor {
         }
 
         manager.apply_restore_all_started(claim, ordered_queue.len() as u32);
+        // the claim holds the configuration until Restore All ends, so its reads stay under this one
+        let config = self.runtime.generation();
         let addr = self.addr.clone();
         addr.send_fut_with(move |addr| async move {
-            run_restore_all_queue(addr, manager, claim, cancellation, &prepared, ordered_queue)
-                .await;
+            run_restore_all_queue(
+                addr,
+                manager,
+                claim,
+                config,
+                cancellation,
+                &prepared,
+                ordered_queue,
+            )
+            .await;
         });
 
         Produces::ok(())
@@ -418,6 +428,7 @@ async fn run_restore_all_queue(
     addr: WeakAddr<CloudBackupSupervisor>,
     manager: Arc<RustCloudBackupManager>,
     claim: CloudBackupExclusiveOperationClaim,
+    config: ConfigGeneration,
     cancellation: Arc<AtomicBool>,
     prepared: &CloudBackupPreparedRestoreAll,
     ordered_queue: Vec<CloudBackupWalletItem>,
@@ -464,7 +475,7 @@ async fn run_restore_all_queue(
             let Ok(detail_claim) = call!(addr.start_detail_result_claim()).await else {
                 return;
             };
-            let result = manager.refresh_cloud_backup_detail().await;
+            let result = manager.refresh_cloud_backup_detail(config).await;
             let Ok(true) =
                 call!(addr.complete_restore_all_record_refresh(claim, detail_claim, result)).await
             else {

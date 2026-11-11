@@ -27,12 +27,16 @@ impl RustCloudBackupManager {
         .build_detail())
     }
 
+    /// Reads the revision of every local wallet's backup in `namespace`
+    ///
+    /// The caller names the namespace, so the truth is from the namespace it holds, even if the
+    /// keychain moved to another one meanwhile
     pub(crate) async fn load_remote_wallet_truth(
         &self,
+        namespace: &str,
         wallet_record_ids: &[String],
         cloud: CloudStorageClient,
     ) -> Result<RemoteWalletTruth, CloudBackupError> {
-        let namespace = self.current_namespace_id()?;
         let db = Database::global();
         let local_wallets = CloudBackupStore::new(&db).all_wallets()?;
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
@@ -52,7 +56,7 @@ impl RustCloudBackupManager {
         let mut summaries = stream::iter(local_wallets)
             .map(|wallet| {
                 let cloud = cloud.clone();
-                let namespace = namespace.clone();
+                let namespace = namespace.to_owned();
 
                 async move {
                     let record_id = wallet_record_id(wallet.id.as_ref());

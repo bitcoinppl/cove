@@ -18,6 +18,6 @@ pub(crate) use self::supervisor::CloudBackupSupervisor;
 pub(crate) use self::uploads::UploadFinish;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
-    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor, Decision,
-    OwnedKeychainWrite, WriteTicket,
+    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
+    ConfigGeneration, Decision, OwnedKeychainWrite, WriteTicket,
 };

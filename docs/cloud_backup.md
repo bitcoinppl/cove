@@ -107,6 +107,7 @@ writes the fact itself.
 | Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
 | Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
 | Detail inventory | The reducer | Detail refresh results |
+| Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
 
 Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
@@ -341,6 +342,15 @@ Pending upload verification confirms that blobs marked
 `UploadedPendingConfirmation` are visible in cloud storage with the expected
 revision. Authorization failures pause the verifier without rewriting the blob
 state, so the app can resume after the platform cloud authorization is restored.
+
+A detail refresh or a verification pass that reads a wallet's revision can also
+confirm an upload waiting for it. The read is tagged with the namespace it read
+and the configuration generation its producer started under
+(`RemoteRevisionEvidence`), and the supervisor confirms only waiting rows in that
+namespace, only while that configuration is current. A read of one backup that
+outlives a reset and an Enable of another, or a Drive account switch, therefore
+confirms nothing in the backup that replaced it, even when both hold the same
+wallet revision.
 
 Deep verification checks the cloud master-key wrapper, local keychain state,
 wallet blobs, and pending uploads. A verification the user starts, from Verify,

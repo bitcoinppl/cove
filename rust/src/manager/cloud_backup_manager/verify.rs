@@ -44,6 +44,7 @@ use crate::database::cloud_backup::{
 };
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient, CloudBackupWriteCompletion,
+    ConfigGeneration,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,10 +129,11 @@ impl RustCloudBackupManager {
     }
 
     /// Runs one verification pass for the operation `writes` belongs to, which is the authority
-    /// any key it repairs is saved under
+    /// any key it repairs is saved under, started under configuration generation `config`
     pub(crate) async fn prepare_deep_verify_cloud_backup(
         &self,
         writes: CloudBackupWriteClient,
+        config: ConfigGeneration,
         force_discoverable: bool,
     ) -> CloudBackupDeepVerificationStep {
         let state = self.state.read().status().clone();
@@ -140,7 +142,7 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
-        match self.do_deep_verify_cloud_backup(writes, force_discoverable).await {
+        match self.do_deep_verify_cloud_backup(writes, config, force_discoverable).await {
             Ok(result) => result,
             Err(error) => CloudBackupDeepVerificationStep::Complete(
                 Self::deep_verification_error_result(force_discoverable, error),
@@ -358,10 +360,11 @@ impl RustCloudBackupManager {
     pub(crate) async fn do_deep_verify_cloud_backup(
         &self,
         writes: CloudBackupWriteClient,
+        config: ConfigGeneration,
         force_discoverable: bool,
     ) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
-        VerificationSession::new(self, writes, force_discoverable)?.run().await
+        VerificationSession::new(self, writes, config, force_discoverable)?.run().await
     }
 
     /// Recovers the local master key from the cloud wrapper, for a producer writing through

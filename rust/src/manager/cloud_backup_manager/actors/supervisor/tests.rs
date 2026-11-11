@@ -4992,6 +4992,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
                 supervisor.write.clone(),
                 supervisor.runtime.claim().unwrap(),
             ),
+            supervisor.runtime.generation(),
             false,
         )
         .await;

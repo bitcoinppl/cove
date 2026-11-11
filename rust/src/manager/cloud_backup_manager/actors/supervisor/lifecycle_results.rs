@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::manager::cloud_backup_manager::actors::write::CloudBackupUploadedWalletsStateMode;
+use crate::manager::cloud_backup_manager::pending::RemoteRevisionEvidence;
 use crate::manager::cloud_backup_manager::verify::{
     IntegrityDowngrade, PendingVerificationSettlement,
 };
@@ -181,6 +182,30 @@ impl CloudBackupSupervisor {
             Ok(false) => debug!("Dropped an upload confirmation that is no longer pending"),
             Err(error) => error!("Failed to settle pending verification completion: {error}"),
         }
+    }
+
+    /// Confirms the pending uploads that remote evidence proved
+    ///
+    /// The evidence names the namespace it was read from and the configuration its producer
+    /// started under. It confirms only rows in that namespace, and only while that configuration
+    /// is current, so a read of one backup held across a reset and an Enable of another, or across
+    /// a Drive account switch, confirms nothing in the backup that replaced it
+    pub async fn confirm_remote_revisions(
+        &mut self,
+        evidence: RemoteRevisionEvidence,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if evidence.config() != self.runtime.generation() {
+            debug!("Dropped remote revision evidence read under an older configuration");
+            return Produces::ok(());
+        }
+
+        if evidence.confirm_pending_uploads() {
+            manager.refresh_pending_upload_verification_state();
+        }
+
+        Produces::ok(())
     }
 
     /// A sync found the Restore All marker for `namespace_id` while this device uses another

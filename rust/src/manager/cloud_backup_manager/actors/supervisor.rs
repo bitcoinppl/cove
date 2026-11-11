@@ -281,6 +281,13 @@ pub(crate) struct EvidenceBasis {
     wallet_set: WalletSetGeneration,
 }
 
+impl EvidenceBasis {
+    /// The configuration generation this basis was read under
+    pub(crate) fn config(self) -> ConfigGeneration {
+        self.config
+    }
+}
+
 /// Actor that owns Cloud Backup operation exclusivity, async completions and the durable
 /// lifecycle record
 ///
@@ -822,8 +829,9 @@ impl CloudBackupSupervisor {
             SyncRequestOutcome::Synced => {
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_sync_request_refresh_detail(
                         request_id,
                         detail_claim,
@@ -958,9 +966,10 @@ impl CloudBackupSupervisor {
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
     ) {
+        let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
             let completion =
-                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot, config).await;
             send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim));
         });
     }
@@ -972,8 +981,10 @@ impl CloudBackupSupervisor {
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
     ) {
+        let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.confirm_cloud_backup_detail_inventory(confirmation.clone()).await;
+            let result =
+                manager.confirm_cloud_backup_detail_inventory(confirmation.clone(), config).await;
             send!(addr.complete_confirm_refresh_detail(confirmation, result, attempt, claim));
         });
     }

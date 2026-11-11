@@ -128,15 +128,17 @@ impl RustCloudBackupManager {
             }
         };
 
-        let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
-                Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => {
-                    warn!("Backup integrity: remote truth refresh failed: {error}");
-                    issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
-                    return;
-                }
-            };
+        let remote_wallet_truth = match self
+            .load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud.clone())
+            .await
+        {
+            Ok(remote_wallet_truth) => remote_wallet_truth,
+            Err(error) => {
+                warn!("Backup integrity: remote truth refresh failed: {error}");
+                issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
+                return;
+            }
+        };
 
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -207,7 +209,8 @@ impl RustCloudBackupManager {
         };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
+            match self.load_remote_wallet_truth(namespace, &wallet_record_ids, cloud.clone()).await
+            {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => {
                     warn!("Backup integrity: detail remote truth refresh failed: {error}");

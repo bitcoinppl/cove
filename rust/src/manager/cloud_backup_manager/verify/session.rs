@@ -23,7 +23,10 @@ use super::wrapper_repair::{
     CloudBackupPasskeyWrapperRepairUpload, CloudBackupPreparedPasskeyWrapperRepair,
     WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy,
 };
-use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
+use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
+use crate::manager::cloud_backup_manager::pending::{
+    RemoteRevisionEvidence, remote_wallet_revision_matches,
+};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
@@ -233,6 +236,9 @@ pub(crate) struct VerificationSession {
     /// The lane and the verification operation this pass writes for; any key it repairs is
     /// saved under that operation's claim
     pub(crate) writes: CloudBackupWriteClient,
+    /// The configuration generation the run started under, which the uploads its reads confirm
+    /// are judged against
+    pub(crate) config: ConfigGeneration,
     pub(crate) cloud_keychain: CloudBackupKeychain,
     pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
@@ -356,6 +362,7 @@ impl VerificationSession {
     pub(crate) fn new(
         manager: &RustCloudBackupManager,
         writes: CloudBackupWriteClient,
+        config: ConfigGeneration,
         force_discoverable: bool,
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
@@ -368,6 +375,7 @@ impl VerificationSession {
         Ok(Self {
             manager: manager.clone(),
             writes,
+            config,
             cloud_keychain,
             cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
@@ -385,6 +393,16 @@ impl VerificationSession {
             wallets_missing: false,
             force_discoverable,
         })
+    }
+
+    /// Hands what this pass read from its namespace to the supervisor, which confirms the uploads
+    /// it proves while the run's configuration is current
+    fn confirm_remote_revisions(&self, truth: &RemoteWalletTruth) {
+        self.manager.confirm_remote_revisions(RemoteRevisionEvidence::new(
+            self.namespace.clone(),
+            self.config,
+            truth,
+        ));
     }
 
     /// Saves a keychain write this pass proved, under its operation and namespace
@@ -747,7 +765,7 @@ impl VerificationSession {
         );
         self.report.wallets_verified = read_pass.verified;
         self.report.wallet_issues = read_pass.issues;
-        self.manager.cleanup_confirmed_pending_blobs(&read_pass.remote_wallet_truth);
+        self.confirm_remote_revisions(&read_pass.remote_wallet_truth);
 
         let inventory_result = CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -819,7 +837,7 @@ impl VerificationSession {
 
         let remote_wallet_truth = match self
             .manager
-            .load_remote_wallet_truth(&updated_ids, self.cloud.clone())
+            .load_remote_wallet_truth(&self.namespace, &updated_ids, self.cloud.clone())
             .await
         {
             Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -830,7 +848,7 @@ impl VerificationSession {
             }
         };
 
-        self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
+        self.confirm_remote_revisions(&remote_wallet_truth);
 
         let unconfirmed_pending_uploads = pending_uploads
             .iter()

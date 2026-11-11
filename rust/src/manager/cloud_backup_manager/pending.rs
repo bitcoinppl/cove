@@ -1,5 +1,6 @@
 mod detail;
 mod queue_processor;
+mod remote_evidence;
 
 use std::time::Duration;
 
@@ -17,6 +18,7 @@ use crate::database::cloud_backup::{
 };
 
 pub(crate) use detail::remote_wallet_revision_matches;
+pub(crate) use remote_evidence::RemoteRevisionEvidence;
 
 pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
@@ -31,6 +33,15 @@ pub(crate) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
 }
 
 impl RustCloudBackupManager {
+    /// Hands remote revision evidence to the supervisor, the one owner that confirms uploads
+    /// from it
+    ///
+    /// Sent rather than awaited: an Enable recovery refreshes the detail inside a supervisor
+    /// handler, so waiting for the supervisor here would deadlock it
+    pub(crate) fn confirm_remote_revisions(&self, evidence: RemoteRevisionEvidence) {
+        send!(self.supervisor.confirm_remote_revisions(evidence));
+    }
+
     pub(crate) fn replace_blob_state_if_current(
         &self,
         current_state: &PersistedCloudBlobSyncState,

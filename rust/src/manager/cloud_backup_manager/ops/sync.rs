@@ -39,15 +39,16 @@ impl RustCloudBackupManager {
         info!("Sync: listing cloud wallet backups for namespace {namespace}");
 
         let cloud = CloudStorage::global_explicit_client();
-        let wallet_record_ids = cloud.list_wallet_backups(namespace).await.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::Sync,
-                CloudBackupError::cloud_storage_context("list wallet backups", error),
-            )
-        })?;
+        let wallet_record_ids =
+            cloud.list_wallet_backups(namespace.clone()).await.map_err(|error| {
+                blocking_cloud_error(
+                    BlockingCloudStep::Sync,
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
+                )
+            })?;
 
         let remote_wallet_truth =
-            self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await?;
+            self.load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud.clone()).await?;
         let inventory =
             CloudWalletInventory::load_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
                 .await?;

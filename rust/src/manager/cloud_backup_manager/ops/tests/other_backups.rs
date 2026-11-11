@@ -84,7 +84,7 @@ async fn detail_reports_other_backup_namespaces() {
     );
 
     let Some(CloudBackupDetailResult::SuccessWithAuthority { .. }) =
-        manager.refresh_cloud_backup_detail().await
+        manager.refresh_cloud_backup_detail(current_config(&manager).await).await
     else {
         panic!("expected cloud backup detail");
     };
@@ -207,7 +207,7 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
     let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
-        manager.refresh_cloud_backup_detail().await
+        manager.refresh_cloud_backup_detail(current_config(&manager).await).await
     else {
         panic!("expected usable current cloud backup detail");
     };
