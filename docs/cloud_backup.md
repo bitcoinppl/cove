@@ -47,6 +47,28 @@ Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
 body and the main configured states, which the platform contract tests render.
 Release builds return none.
 
+Both platforms give the controls the same accessibility identifiers, so UI tests
+on either can find a control by the action it sends:
+
+| Control | Identifier |
+|---|---|
+| A global action | `cloudBackup.action.<action>`, such as `cloudBackup.action.turnOff` |
+| An unavailable action's reason | `cloudBackup.action.<action>.unavailable` |
+| A row action | `cloudBackup.row.<recordId>.<rowAction>`, such as `cloudBackup.row.<id>.restore` |
+| The reason every row in a section shares | `cloudBackup.rows.unavailable` |
+| The last outcome and its dismiss | `cloudBackup.lastOutcome`, `cloudBackup.lastOutcome.dismiss` |
+| The heal notice and its Turn Off | `cloudBackup.healNotice`, `cloudBackup.healNotice.turnOff` |
+| Turn Off dialog buttons | `cloudBackup.turnOff.confirm`, `.continue`, `.cancel`, `.restoreFirst`, `.verifyFirst`, `.checkAgain`, `.offline.tryAgain` |
+| Turn Off progress | `cloudBackup.turnOff.progress` |
+| Body panels | `cloudBackup.finishingDisable`, `cloudBackup.loadFailed`, `cloudBackup.corrupted` |
+| Inventory progress | `cloudBackup.inventory.checking`, `cloudBackup.inventory.incomplete` |
+| Other backups' Check Again | `cloudBackup.otherBackups.checkAgain` |
+
+`<action>` is the action's case name in lower camel case, such as `turnOff`, on
+both platforms, and `<rowAction>` is one of `restore`, `delete`, `backUpFirst`,
+`checkAgain` or `verify`. A dialog button may not carry its identifier on every
+OS version, so UI tests match dialog buttons by label too.
+
 `PendingEnableCoordinator` owns the local keychain transaction for fresh and
 recovered enables. It keeps CSPP staging and promotion ordered with the durable
 pending-enable journal while the manager and supervisor retain cloud writes,
@@ -197,18 +219,15 @@ mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.
 The platform result feeds the same Rust reducer on both platforms.
 
-Each native detail screen projects one progress presentation from verification
-state, inventory state, retained detail, and visible wallet rows. Verification
-progress takes priority over inventory progress. It uses a standalone card when
-no wallet rows are visible and an inline row when local or loaded cloud-only
-wallet rows stay on screen.
-The verification section does not render a second running indicator.
+Rust projects the progress section from verification and inventory state.
+Verification progress takes priority over inventory progress: a standalone card
+when no wallet rows are listed, an inline row when they are. The verification
+section draws no second running indicator.
 
-Cloud-only rows split into two sections on both platforms. Rows Rust marks
-`AlreadyOnDevice`, another backup record of a wallet this device already holds,
-list under Extra Copies, where only delete applies. Every other cloud-only row
-lists under Not on This Device, which also holds Restore All and the incomplete
-list's Check Again, so it stays up while either has something to show.
+Rust also splits the cloud rows. A record of a wallet this device already holds
+lists under Extra Copies, where only delete applies, and every other cloud row
+under Not on This Device, with Restore All. The platforms draw the sections in
+the order Rust lists them and derive none of them.
 
 ## Passkeys And Enable
 

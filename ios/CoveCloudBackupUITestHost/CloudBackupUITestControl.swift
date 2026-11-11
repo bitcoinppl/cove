@@ -299,54 +299,58 @@ enum CloudBackupUITestCall: Equatable {
     }
 }
 
-/// The cloud backup manager's state as the app holds it, which the host writes to
-/// `app-state.json` whenever it changes
+/// The Cloud Backup screen Rust projects, as the host writes it to `app-state.json` whenever it
+/// changes
 ///
-/// The Cloud Backup form builds only the rows near the screen, so a test checks what the app holds
-/// here and what a person sees on screen
+/// The Cloud Backup form builds only the rows near the screen, so a test checks what the app may
+/// do next here, by case and action name, and what a person sees on screen
 struct CloudBackupUITestAppState: Codable, Equatable {
-    /// `none`, `notLoaded`, `checking`, `complete` (provider confirmed), `completeUnconfirmed` or `failed`
-    var detail: String
-    /// `idle`, `operating`, `warning` or `failed`
-    var operation: String
-    /// Cloud-only wallet record ids, empty unless the cloud-only list is loaded
-    var cloudOnly: [String]
-    var cloudOnlyIncomplete: Bool
-    /// Whether a cloud-only row may restore or delete its wallet
-    var inventoryReady: Bool
-    /// Whether the provider confirmed the whole inventory, which Restore All needs
-    var inventoryComplete: Bool
+    /// What Rust decided is on the Cloud Backup screen
+    var screen: Screen
+    /// The inventory progress: `checking`, `incomplete`, `loaded` (the wallet list is drawn) or
+    /// `notLoaded`
+    var inventory: String
+    /// Why the inventory is incomplete, such as `offline`, nil unless it is
     var inventoryError: String?
+    /// The Not on This Device operation: `idle`, `operating`, `warning` or `failed`
+    var operation: String
+    /// The listed rows, Not on This Device first, then Extra Copies
+    var rows: [Row]
     /// The Restore All state, such as `startAvailable(2)` or `running(1/2)`
     var restoreAll: String
     /// The verification case, such as `verified` or `awaitingUploadConfirmation`, or `none`
     var verification: String
-    /// Whether verification waits for the provider to confirm uploads
-    var pendingUploadVerification: Bool
     /// `idle`, `syncing`, `blocked`, `failed` or `none`
     var sync: String
     var syncError: String?
     /// The on-device wallets the detail lists, up to date first, then those that need a sync
     var wallets: [Wallet]
-    /// The lifecycle case, such as `configured`, `enabling` or `pendingEnableRecovery`
-    var lifecycle: String
     /// The Settings row status case without its message, such as `confirming`, `active` or
-    /// `settingUp`
+    /// `turnOffIncomplete`
     var settingsRow: String
-    /// What Rust decided is on the Cloud Backup screen, nil while the manager exposes no screen
-    var screen: Screen?
 
-    /// The screen Rust projects, by case and action name, so a test checks what the app may do
-    /// next rather than which controls the lazily built form has drawn
+    /// The screen's body, actions, Turn Off case and notices
     struct Screen: Codable, Equatable {
         /// The body case, such as `configured` or `finishingDisable`
         var body: String
         /// The global actions available now, such as `turnOff` or `verify`
         var actions: [String]
-        /// The Turn Off review or progress case, nil when no Turn Off is under way
+        /// The global actions drawn but unavailable, with Rust's reason, such as
+        /// `turnOff: operationRunning(deleteRecords)`
+        var unavailable: [String: String]
+        /// The Turn Off case, such as `idle`, `reviewing` or `draining`, nil off the configured body
         var disable: String?
-        /// The notices shown, such as `heal`, and the last outcome with the intent it answers
+        /// The notices shown: `heal`, and `lastOutcome:<target>:<outcome>` for the last outcome
         var notices: [String]
+    }
+
+    /// A listed row by record id, with what it is and the row actions available now
+    struct Row: Codable, Equatable {
+        var recordId: String
+        /// `notOnDevice`, `extraCopy`, `unsupported`, `unreadable` or `unchecked`
+        var record: String
+        /// The row actions available now, such as `restore` or `delete`
+        var actions: [String]
     }
 
     struct Wallet: Codable, Equatable {
@@ -355,5 +359,30 @@ struct CloudBackupUITestAppState: Codable, Equatable {
         /// The sync status, such as `confirmed`, `failed` or `dirty`
         var status: String
         var needsSync: Bool
+    }
+
+    /// The Not on This Device and Extra Copies record ids, in order
+    var listedRecordIds: [String] {
+        rows.map(\.recordId)
+    }
+
+    /// The Not on This Device record ids, in order
+    var notOnDeviceRecordIds: [String] {
+        rows.filter { $0.record == "notOnDevice" }.map(\.recordId)
+    }
+
+    /// Whether the inventory finished and its wallet list is drawn
+    var inventoryLoaded: Bool {
+        inventory == "loaded"
+    }
+
+    /// Whether the backup is still waiting for the provider to confirm its uploads
+    var awaitingUploadConfirmation: Bool {
+        verification == "awaitingUploadConfirmation"
+    }
+
+    /// Whether the screen offers `action` now, by its case name such as `turnOff`
+    func canDo(_ action: String) -> Bool {
+        screen.actions.contains(action)
     }
 }

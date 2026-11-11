@@ -30,6 +30,15 @@ final class PresentationTransitionCoordinator<Presentation> {
         readinessRequestID != nil
     }
 
+    /// The presentation on screen or, while the presenter finishes a dismissal, the one queued to
+    /// replace it
+    ///
+    /// A caller deciding what to show reads this rather than `currentPresentation`, which is nil
+    /// for the whole wait, so it doesn't replace a queued next step with the step it follows
+    var pendingPresentation: Presentation? {
+        currentPresentation?.item ?? queuedPresentation
+    }
+
     var hasPresentationActivity: Bool {
         currentPresentation != nil || queuedPresentation != nil || readinessRequestID != nil
     }

@@ -39,7 +39,7 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
         XCTAssertFalse(walletRow(recordId: secondRecordId).exists)
         XCTAssertFalse(walletRow(recordId: thirdRecordId).exists)
 
-        let checkAgain = app.buttons["cloudBackup.inventory.checkAgain"]
+        let checkAgain = app.buttons["cloudBackup.action.refreshDetail"]
         XCTAssertTrue(checkAgain.waitForExistence(timeout: 5))
         XCTAssertTrue(checkAgain.isHittable)
         checkAgain.tap()

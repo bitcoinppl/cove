@@ -241,6 +241,28 @@ final class CloudBackupHostControl {
         )
     }
 
+    /// Waits until the screen's body is `body`, every action in `available` is offered and none in
+    /// `unavailable` is, by case name such as `turnOff`
+    ///
+    /// Checks what the user may do next as Rust decided it, rather than what the lazily built form
+    /// happens to have on screen. Actions named in neither set aren't checked, so a test names
+    /// only the ones its scenario is about
+    func assertNextActions(
+        _ message: String,
+        body: String = "configured",
+        available: Set<String> = [],
+        unavailable: Set<String> = [],
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForAppState(message, timeout: timeout, file: file, line: line) { state in
+            let offered = Set(state.screen.actions)
+            return state.screen.body == body && available.isSubset(of: offered)
+                && unavailable.isDisjoint(with: offered)
+        }
+    }
+
     var state: CloudBackupUITestHostState {
         let url = directory.appendingPathComponent(CloudBackupUITestControl.stateFileName)
         guard let data = try? Data(contentsOf: url),

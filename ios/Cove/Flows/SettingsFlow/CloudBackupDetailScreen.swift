@@ -1,107 +1,51 @@
 import SwiftUI
 
-enum CloudBackupDetailProgressPresentation: Equatable {
-    case none
-    case inventoryInline
-    case verificationCard
-    case verificationInline
-}
-
-func cloudBackupDetailProgressPresentation(
-    verificationState: CloudBackupVerificationState?,
-    isInventoryChecking: Bool,
-    hasRetainedDetail: Bool,
-    hasVisibleWalletRows: Bool
-) -> CloudBackupDetailProgressPresentation {
-    if case .running = verificationState {
-        return hasVisibleWalletRows ? .verificationInline : .verificationCard
-    }
-
-    if isInventoryChecking, hasRetainedDetail {
-        return .inventoryInline
-    }
-
-    return .none
-}
-
-func cloudBackupHasVisibleWalletRows(
-    detail: CloudBackupDetail?,
-    cloudOnly: CloudOnlyState
-) -> Bool {
-    guard let detail else { return false }
-
-    if !detail.upToDate.isEmpty || !detail.needsSync.isEmpty {
-        return true
-    }
-
-    // an incomplete list shows Check Again even with no rows, so verification must stay inline
-    guard case let .loaded(wallets, incomplete) = cloudOnly else { return false }
-    return incomplete || !wallets.isEmpty
-}
-
+/// Settings > Cloud Backup
+///
+/// Draws the body and sections Rust projects, in Rust's order, and gates every control on the
+/// screen's actions. The Turn Off dialogs are a function of the review Rust holds
 struct CloudBackupDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(CloudBackupPresentationCoordinator.self)
     private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
     @State private var presentationCoordinator =
         PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
 
-    private var hasVerificationResult: Bool {
-        switch manager.verificationState {
-        case .verified, .needsAttention, .awaitingUploadConfirmation, .cancelled, .failed: true
-        default: false
+    private var screen: CloudBackupScreen {
+        manager.screen
+    }
+
+    private var disable: CloudBackupDisableScreen {
+        screen.configured?.disable ?? .idle
+    }
+
+    private var otherBackupsOperation: OtherBackupsOperation? {
+        for case let .otherBackups(section) in screen.configured?.sections ?? [] {
+            return section.operation
         }
+
+        return nil
     }
 
-    private var isCancelled: Bool {
-        if case .cancelled = manager.verificationState {
-            return true
+    private var outcomes: CloudBackupOutcomeContext {
+        CloudBackupOutcomeContext(lastOutcome: screen.lastOutcome) {
+            manager.dispatch(action: .dismissNotice(.lastOutcome))
         }
-        return false
-    }
-
-    private var isPasskeyMissing: Bool {
-        manager.isPasskeyMissing
-    }
-
-    private var isUnsupportedPasskeyProvider: Bool {
-        manager.isUnsupportedPasskeyProvider
-    }
-
-    private var shouldShowLoadingState: Bool {
-        manager.detail == nil && !hasVerificationResult && !isCancelled
-    }
-
-    private var progressPresentation: CloudBackupDetailProgressPresentation {
-        cloudBackupDetailProgressPresentation(
-            verificationState: manager.verificationState,
-            isInventoryChecking: manager.isDetailInventoryChecking,
-            hasRetainedDetail: manager.detail != nil,
-            hasVisibleWalletRows: cloudBackupHasVisibleWalletRows(
-                detail: manager.detail,
-                cloudOnly: manager.cloudOnly
-            )
-        )
-    }
-
-    private var hasCloudBackupPresentationBlocker: Bool {
-        presentationCoordinator.hasPresentationActivity
     }
 
     var body: some View {
-        CloudBackupDetailForm(
-            manager: manager,
-            isCancelled: isCancelled,
-            isPasskeyMissing: isPasskeyMissing,
-            isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
-            shouldShowLoadingState: shouldShowLoadingState,
-            progressPresentation: progressPresentation,
-            presentationCoordinator: presentationCoordinator,
-            recreateConfirmationIsPresented: confirmationBinding(for: .recreate),
-            reinitializeConfirmationIsPresented: confirmationBinding(for: .reinitialize)
-        )
+        Form {
+            CloudBackupDetailBody(
+                screen: screen,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
+        }
+        .environment(\.cloudBackupOutcomes, outcomes)
         .cloudBackupDetailPresentations(
+            screen: screen,
             manager: manager,
             coordinator: presentationCoordinator
         )
@@ -109,50 +53,42 @@ struct CloudBackupDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .presentationTransitionHost(presentationCoordinator)
         .task(enterDetail)
-        .onDisappear(perform: clearDetailPresentation)
-        .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
+        .onDisappear(perform: leaveDetail)
+        .onChange(of: presentationCoordinator.hasPresentationActivity, initial: true) { _, active in
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
         }
-        .onChange(of: manager.otherBackupsOperation, handleOtherBackupsOperationChange)
-        .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
-            if isDisabled {
-                dismiss()
-            }
+        .onChange(of: otherBackupsOperation, handleOtherBackupsOperationChange)
+        .onChange(of: disable, initial: true) { _, disable in
+            presentationCoordinator.syncTurnOffDialog(CloudBackupTurnOffDialogDemand(disable))
         }
-    }
-
-    private func confirmationBinding(
-        for confirmation: CloudBackupDestructiveConfirmation
-    ) -> Binding<Bool> {
-        let presentationBinding = presentationCoordinator.isPresented { presentation in
-            guard case let .dialog(.destructive(current)) = presentation else {
-                return false
-            }
-
-            return current == confirmation
+        .onChange(of: scenePhase) { _, phase in
+            // the app lock dismisses presented dialogs; a review Rust still holds comes back on unlock
+            guard phase == .active else { return }
+            presentationCoordinator.syncTurnOffDialog(CloudBackupTurnOffDialogDemand(disable))
         }
-
-        return Binding(
-            get: { presentationBinding.wrappedValue },
-            set: { presented in
-                if presented {
-                    guard manager.isDetailInventoryComplete else { return }
-
-                    presentationCoordinator.present(.dialog(.destructive(confirmation)))
-                } else {
-                    presentationBinding.wrappedValue = false
-                }
-            }
-        )
+        .onChange(of: screen.body) { _, body in
+            if case .disabled = body { dismiss() }
+        }
     }
 
     private func enterDetail() async {
         manager.dispatch(action: .enterDetail)
     }
 
+    private func leaveDetail() {
+        // leaving the screen is a way out of the Turn Off review, like its Cancel button
+        if case .reviewing = disable {
+            manager.dispatch(action: .cancelDisable)
+        }
+
+        manager.dispatch(action: .leaveDetail)
+        presentationCoordinator.discardAll()
+        cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
+    }
+
     private func handleOtherBackupsOperationChange(
-        _: OtherBackupsOperation,
-        _ operation: OtherBackupsOperation
+        _: OtherBackupsOperation?,
+        _ operation: OtherBackupsOperation?
     ) {
         guard case let .recovered(walletsRestored, walletsFailed, failedWalletErrors) = operation else {
             return
@@ -169,10 +105,5 @@ struct CloudBackupDetailScreen: View {
                 )
             )
         )
-    }
-
-    private func clearDetailPresentation() {
-        presentationCoordinator.discardAll()
-        cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
     }
 }

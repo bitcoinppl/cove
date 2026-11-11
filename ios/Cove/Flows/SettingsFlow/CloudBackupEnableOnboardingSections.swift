@@ -14,6 +14,7 @@ struct CloudBackupEnableCancelButton: View {
             .foregroundStyle(.white)
             .font(.headline)
             .frame(minWidth: 44, minHeight: 44)
+            // the sheet stays up while Enable runs; Enable has no cancel, so it runs to its bound
             .disabled(isBusy)
         }
         .padding(.horizontal)
@@ -148,7 +149,7 @@ struct CloudBackupEnableButton: View {
 
     let title: String
     let allChecked: Bool
-    let isBusy: Bool
+    let availability: CloudBackupActionAvailability?
     let onEnable: () -> Void
 
     var body: some View {
@@ -158,7 +159,7 @@ struct CloudBackupEnableButton: View {
             Text(title)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
-        .disabled(!allChecked || isBusy)
+        .disabled(!allChecked || !availability.isAvailable)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: allChecked)
     }
 }
@@ -225,6 +226,8 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
 }
 
 struct CloudBackupEnableConfirmationView: View {
+    /// Whether Rust admits Confirm Saved Passkey now
+    let continueAvailability: CloudBackupActionAvailability?
     let onContinue: () -> Void
     let onCancel: () -> Void
 
@@ -252,6 +255,7 @@ struct CloudBackupEnableConfirmationView: View {
                 Button("Continue", action: onContinue)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .disabled(!continueAvailability.isAvailable)
 
                 Button("Cancel", role: .cancel, action: onCancel)
                     .buttonStyle(.bordered)

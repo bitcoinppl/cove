@@ -24,7 +24,7 @@ struct WalletSettingsView: View {
     }
 
     private var finalDeleteConfirmationMessage: String {
-        if cloudBackupManager.isCloudBackupEnabled {
+        if cloudBackupManager.screen.configured != nil {
             return "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen, or permanently delete it from there."
         }
 
@@ -32,7 +32,7 @@ struct WalletSettingsView: View {
     }
 
     private var finalDeleteButtonTitle: String {
-        cloudBackupManager.isCloudBackupEnabled ? "Delete" : "Delete Forever"
+        cloudBackupManager.screen.configured != nil ? "Delete" : "Delete Forever"
     }
 
     private var showLabels: Binding<Bool> {

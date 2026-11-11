@@ -219,8 +219,8 @@ that depend on an authoritative set. A single cloud-only row may restore or
 delete its wallet from `Complete`, or from `Failed` when the retained rows were
 provider-confirmed or a trusted local snapshot, unless the failure was offline:
 an offline device keeps the rows listed with their actions disabled until a check
-succeeds. Rust's `detail_inventory_is_ready` owns that rule, and each app's
-`isDetailInventoryReady` mirrors it. Retry requests are Rust-coordinated: one refresh
+succeeds. Rust owns that rule and sends it as each row action's availability;
+neither app keeps a readiness flag of its own. Retry requests are Rust-coordinated: one refresh
 may run, one trailing request is retained, starts are at least five seconds
 apart, and stale or closed-owner results are ignored.
 

@@ -33,7 +33,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
             $0.mostUploadStatusChecksOfOneRecord >= 2
         }
         control.waitForAppState("Settings should show the backup as confirming while its writes stay hidden") {
-            $0.settingsRow == "confirming" && $0.pendingUploadVerification
+            $0.settingsRow == "confirming" && $0.awaitingUploadConfirmation
         }
 
         robot.openSettings()
@@ -134,7 +134,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         // the lifecycle reads disabled before restart recovery runs, so the journal's removal is
         // what shows the staged key was discarded
         try control.waitForKeychainItemRemoved(journal, "relaunch kept the interrupted enable's staged key")
-        control.waitForAppState("relaunch should discard the interrupted enable") { $0.lifecycle == "disabled" }
+        control.waitForAppState("relaunch should discard the interrupted enable") { $0.screen.body == "disabled" }
 
         // with no passkey to confirm, onboarding resumes either on the Cloud Backup details or on
         // its choice of backup method; runs have landed on both
@@ -230,7 +230,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         control.releaseVisibility()
         robot.killAndRelaunch()
 
-        control.waitForAppState("relaunch should finish the promoted enable") { $0.lifecycle == "configured" }
+        control.waitForAppState("relaunch should finish the promoted enable") { $0.screen.body == "configured" }
         XCTAssertFalse(
             app.buttons["Confirm Passkey"].waitForExistence(timeout: 5),
             "relaunch asked to confirm a passkey the promotion already committed"
@@ -239,7 +239,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
 
         // the finished backup then confirms in the background like any other
         control.waitForAppState("the promoted backup never verified", timeout: 60) {
-            !$0.pendingUploadVerification && $0.verification == "verified"
+            !$0.awaitingUploadConfirmation && $0.verification == "verified"
         }
 
         let state = control.state

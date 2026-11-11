@@ -95,22 +95,15 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         assertLocalWalletStillOnDevice()
     }
 
-    /// The cloud backup manager's detail state, which the host writes to `<delete log>.state`
-    private struct AppState: Decodable, Equatable {
-        let detail: String
-        let operation: String
-        let cloudOnly: [String]
-        let cloudOnlyIncomplete: Bool
-    }
-
     private var statePath: String {
         deleteLogPath + ".state"
     }
 
-    private func appState() -> AppState? {
+    /// The Cloud Backup screen, which the host writes to `<delete log>.state`
+    private func appState() -> CloudBackupUITestAppState? {
         guard let data = FileManager.default.contents(atPath: statePath) else { return nil }
 
-        return try? JSONDecoder().decode(AppState.self, from: data)
+        return try? JSONDecoder().decode(CloudBackupUITestAppState.self, from: data)
     }
 
     /// Waits until the provider-confirmed inventory is complete, no cloud-only operation is running,
@@ -119,8 +112,8 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(timeout)
         var state = appState()
         while Date() < deadline {
-            if let state, state.detail == "complete", state.operation == "idle", !state.cloudOnlyIncomplete,
-               state.cloudOnly.count == cloudOnly.count, Set(state.cloudOnly) == cloudOnly
+            if let state, state.inventoryLoaded, state.operation == "idle",
+               state.notOnDeviceRecordIds.count == cloudOnly.count, Set(state.notOnDeviceRecordIds) == cloudOnly
             {
                 return
             }
@@ -155,24 +148,25 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         )
     }
 
-    /// Opens the selected row's action dialog, checks it names the wallet, and returns the
-    /// Delete Forever confirmation it leads to
+    /// Taps the selected row's Delete, checks it names the wallet, and returns the Delete Forever
+    /// confirmation it leads to
     private func openDeleteConfirmation() -> XCUIElement {
-        let row = walletRow(recordId: selectedRecordId)
-        robot.scrollToHittable(row)
-        row.tap()
-
-        let deleteFromCloud = app.buttons["Delete from iCloud"]
-        XCTAssertTrue(deleteFromCloud.waitForExistence(timeout: 10), "the wallet's action dialog never opened")
+        let deleteFromCloud = robot.rowAction(selectedRecordId, "delete")
+        robot.scrollToHittable(deleteFromCloud)
+        XCTAssertTrue(deleteFromCloud.isEnabled, "the selected row's Delete is unavailable")
         XCTAssertTrue(
-            app.staticTexts[selectedWalletName].exists,
-            "the action dialog should be titled with the selected wallet"
+            deleteFromCloud.label.contains(selectedWalletName),
+            "Delete should name the selected wallet: \(deleteFromCloud.label)"
         )
         deleteFromCloud.tap()
 
+        // a backup of a wallet that isn't on this device may be its only copy, so the confirmation
+        // says so
         let alert = app.alerts["Delete \(selectedWalletName)?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 10), "the delete confirmation should name the selected wallet")
-        XCTAssertTrue(alert.staticTexts["This wallet backup will be permanently removed from iCloud"].exists)
+        XCTAssertTrue(alert.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "this may be its only backup")
+        ).firstMatch.exists)
         XCTAssertTrue(alert.buttons["Delete Forever"].exists)
         XCTAssertTrue(alert.buttons["Cancel"].exists)
 

@@ -52,7 +52,7 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
             intent: .enableExistingPasskeyOnly(cloudBackupEnableContext(), nil)
         )
 
-        XCTAssertNil(presentation.secondaryActionTitle)
+        XCTAssertEqual(presentation.choices.map(\.action), [.acceptEnablePromptUseExisting])
         XCTAssertTrue(presentation.message.contains("existing passkey"))
     }
 
@@ -61,13 +61,20 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
             intent: .enable(cloudBackupEnableContext(), nil)
         )
 
-        XCTAssertEqual(presentation.secondaryActionTitle, "Start a New Backup")
+        XCTAssertEqual(presentation.choices.map(\.title), ["Use Existing Passkey", "Start a New Backup"])
+        XCTAssertEqual(
+            presentation.choices.map(\.action),
+            [.acceptEnablePromptUseExisting, .acceptEnablePromptCreateNew]
+        )
     }
 
     func testRepairPasskeyChoiceKeepsCreateNewPasskeyAction() {
         let presentation = CloudBackupPasskeyChoicePresentation(intent: .repairPasskey)
 
-        XCTAssertEqual(presentation.secondaryActionTitle, "Create New Passkey")
+        XCTAssertEqual(presentation.choices.map(\.title), ["Use Existing Passkey", "Create New Passkey"])
+        XCTAssertEqual(presentation.choices.map(\.action), [.repairPasskey, .repairPasskey])
+        // both choices send Repair Passkey, so the second has its own identifier
+        XCTAssertEqual(Set(presentation.choices.map(\.identifier)).count, 2)
     }
 
     func testNormalPolicyAllowsVerificationPromptWhenUnblocked() {

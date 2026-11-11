@@ -137,14 +137,14 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.detail == "complete" && $0.inventoryComplete && $0.verification == "verified"
-                && !$0.pendingUploadVerification
+            $0.inventoryLoaded && $0.verification == "verified"
+                && !$0.awaitingUploadConfirmation
         }
 
         try control.answerNextPasskeyAssertions([.userCancelled])
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again").tap()
         control.waitForAppState("cancelling the passkey should leave verification cancelled") {
-            $0.verification == "cancelled"
+            $0.verification == "notCompleted"
         }
 
         layout.assertTextFits(app.staticTexts["Cloud Backup Not Verified"], "cancelled verification")
@@ -183,8 +183,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.detail == "complete" && $0.inventoryComplete && $0.verification == "verified"
-                && !$0.pendingUploadVerification
+            $0.inventoryLoaded && $0.verification == "verified"
+                && !$0.awaitingUploadConfirmation
         }
 
         let downloadsSoFar = control.state.count(.masterDownload)
@@ -219,7 +219,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         }
 
         control.waitForAppState("the relaunch should hold the interrupted setup for recovery") {
-            $0.lifecycle == "pendingEnableRecovery"
+            $0.screen.body == "pendingEnableRecovery"
         }
         layout.assertTextFits(app.staticTexts["Cloud Backup Needs Recovery"], "recovery title", initialWait: 30)
         layout.assertTextFits(robot.staticText(containing: "setup was interrupted"), "recovery description")
@@ -230,7 +230,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertActionFits(robot.button(startingWith: "Contact Support"), "Contact Support")
         layout.assertActionFits(app.buttons["Cancel"], "recovery Cancel")
 
-        let removeSetupIdentifier = "cloudBackup.recovery.removeIncompleteSetup"
+        let removeSetupIdentifier = "cloudBackup.action.confirmPendingEnableCleanup"
         layout.assertActionFits(app.buttons[removeSetupIdentifier], "Remove Incomplete Setup").tap()
 
         // the screen's own button has the same label and sits under the dialog, so match the

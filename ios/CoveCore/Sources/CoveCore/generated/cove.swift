@@ -15941,6 +15941,10 @@ public func FfiConverterTypeCloudBackupActionEntry_lower(_ value: CloudBackupAct
 
 /**
  * The screen's global actions; a missing action has no control on this screen
+ *
+ * Derived from the controls the body and its sections name
+ * ([`CloudBackupScreen::drawn_controls`]), one entry for each action however many surfaces draw
+ * it; a platform reads an action's availability here and draws it where the shape names it
  */
 public struct CloudBackupActions: Equatable, Hashable {
     public var entries: [CloudBackupActionEntry]
@@ -16027,6 +16031,11 @@ public struct CloudBackupConfiguredScreen: Equatable, Hashable {
      * In the order they are drawn; Turn Off is in every configured screen
      */
     public var sections: [CloudBackupSection]
+    /**
+     * Android's top-bar menu, in the order it lists them; iOS has no menu, and every entry is an
+     * Android-only action
+     */
+    public var menu: [CloudBackupMenuControl]
     public var lastSync: UInt64?
     public var syncHealth: CloudSyncHealth
     /**
@@ -16039,11 +16048,16 @@ public struct CloudBackupConfiguredScreen: Equatable, Hashable {
     public init(
         /**
          * In the order they are drawn; Turn Off is in every configured screen
-         */sections: [CloudBackupSection], lastSync: UInt64?, syncHealth: CloudSyncHealth,
+         */sections: [CloudBackupSection],
+        /**
+         * Android's top-bar menu, in the order it lists them; iOS has no menu, and every entry is an
+         * Android-only action
+         */menu: [CloudBackupMenuControl], lastSync: UInt64?, syncHealth: CloudSyncHealth,
         /**
          * Turn Off's presentation state, which drives its dialogs
          */disable: CloudBackupDisableScreen) {
         self.sections = sections
+        self.menu = menu
         self.lastSync = lastSync
         self.syncHealth = syncHealth
         self.disable = disable
@@ -16066,6 +16080,7 @@ public struct FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
         return
             try CloudBackupConfiguredScreen(
                 sections: FfiConverterSequenceTypeCloudBackupSection.read(from: &buf),
+                menu: FfiConverterSequenceTypeCloudBackupMenuControl.read(from: &buf),
                 lastSync: FfiConverterOptionUInt64.read(from: &buf),
                 syncHealth: FfiConverterTypeCloudSyncHealth.read(from: &buf),
                 disable: FfiConverterTypeCloudBackupDisableScreen.read(from: &buf)
@@ -16074,6 +16089,7 @@ public struct FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
 
     public static func write(_ value: CloudBackupConfiguredScreen, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeCloudBackupSection.write(value.sections, into: &buf)
+        FfiConverterSequenceTypeCloudBackupMenuControl.write(value.menu, into: &buf)
         FfiConverterOptionUInt64.write(value.lastSync, into: &buf)
         FfiConverterTypeCloudSyncHealth.write(value.syncHealth, into: &buf)
         FfiConverterTypeCloudBackupDisableScreen.write(value.disable, into: &buf)
@@ -16334,6 +16350,75 @@ public func FfiConverterTypeCloudBackupDisableReview_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeCloudBackupDisableReview_lower(_ value: CloudBackupDisableReview) -> RustBuffer {
     return FfiConverterTypeCloudBackupDisableReview.lower(value)
+}
+
+
+/**
+ * One control the screen's shape draws, and where
+ */
+public struct CloudBackupDrawnControl: Equatable, Hashable {
+    public var action: CloudBackupScreenAction
+    public var surface: CloudBackupControlSurface
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(action: CloudBackupScreenAction, surface: CloudBackupControlSurface) {
+        self.action = action
+        self.surface = surface
+    }
+
+
+    /**
+     * Whether only Android draws this control; iOS draws nothing for it
+     */
+public func isAndroidOnly() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupdrawncontrol_is_android_only(
+            FfiConverterTypeCloudBackupDrawnControl_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDrawnControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDrawnControl: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDrawnControl {
+        return
+            try CloudBackupDrawnControl(
+                action: FfiConverterTypeCloudBackupScreenAction.read(from: &buf),
+                surface: FfiConverterTypeCloudBackupControlSurface.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupDrawnControl, into buf: inout [UInt8]) {
+        FfiConverterTypeCloudBackupScreenAction.write(value.action, into: &buf)
+        FfiConverterTypeCloudBackupControlSurface.write(value.surface, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDrawnControl_lift(_ buf: RustBuffer) throws -> CloudBackupDrawnControl {
+    return try FfiConverterTypeCloudBackupDrawnControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDrawnControl_lower(_ value: CloudBackupDrawnControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDrawnControl.lower(value)
 }
 
 
@@ -16982,12 +17067,20 @@ public func FfiConverterTypeCloudBackupNotOnDeviceSection_lower(_ value: CloudBa
 public struct CloudBackupOtherBackupsSection: Equatable, Hashable {
     public var state: CloudBackupOtherBackupsState
     public var operation: OtherBackupsOperation
+    /**
+     * In the order they are drawn
+     */
+    public var controls: [CloudBackupOtherBackupsControl]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(state: CloudBackupOtherBackupsState, operation: OtherBackupsOperation) {
+    public init(state: CloudBackupOtherBackupsState, operation: OtherBackupsOperation,
+        /**
+         * In the order they are drawn
+         */controls: [CloudBackupOtherBackupsControl]) {
         self.state = state
         self.operation = operation
+        self.controls = controls
     }
 
 
@@ -17007,13 +17100,15 @@ public struct FfiConverterTypeCloudBackupOtherBackupsSection: FfiConverterRustBu
         return
             try CloudBackupOtherBackupsSection(
                 state: FfiConverterTypeCloudBackupOtherBackupsState.read(from: &buf),
-                operation: FfiConverterTypeOtherBackupsOperation.read(from: &buf)
+                operation: FfiConverterTypeOtherBackupsOperation.read(from: &buf),
+                controls: FfiConverterSequenceTypeCloudBackupOtherBackupsControl.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudBackupOtherBackupsSection, into buf: inout [UInt8]) {
         FfiConverterTypeCloudBackupOtherBackupsState.write(value.state, into: &buf)
         FfiConverterTypeOtherBackupsOperation.write(value.operation, into: &buf)
+        FfiConverterSequenceTypeCloudBackupOtherBackupsControl.write(value.controls, into: &buf)
     }
 }
 
@@ -17497,6 +17592,21 @@ public struct CloudBackupScreen: Equatable, Hashable {
 
 
     /**
+     * Every control this screen draws and the surface that draws it, in drawing order
+     *
+     * `actions` has one entry for each action named here and no other; an action drawn on more
+     * than one surface is named once for each
+     */
+public func drawnControls() -> [CloudBackupDrawnControl]  {
+    return try!  FfiConverterSequenceTypeCloudBackupDrawnControl.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupscreen_drawn_controls(
+            FfiConverterTypeCloudBackupScreen_lower(self),uniffiCallStatus
+    )
+})
+}
+
+    /**
      * This screen with `delta` applied
      *
      * The only way a platform updates its screen, so both apps and the Rust test reconciler
@@ -17692,6 +17802,71 @@ public func FfiConverterTypeCloudBackupScreenFixture_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeCloudBackupScreenFixture_lower(_ value: CloudBackupScreenFixture) -> RustBuffer {
     return FfiConverterTypeCloudBackupScreenFixture.lower(value)
+}
+
+
+/**
+ * The verification section: the verification Rust reports and the controls drawn with it
+ */
+public struct CloudBackupVerificationSection: Equatable, Hashable {
+    public var view: CloudBackupVerificationView
+    /**
+     * In the order they are drawn; empty while verification runs, while an upload waits to be
+     * confirmed with nothing to act on, and for a backup only a newer Cove can read
+     */
+    public var controls: [CloudBackupVerificationControl]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(view: CloudBackupVerificationView,
+        /**
+         * In the order they are drawn; empty while verification runs, while an upload waits to be
+         * confirmed with nothing to act on, and for a backup only a newer Cove can read
+         */controls: [CloudBackupVerificationControl]) {
+        self.view = view
+        self.controls = controls
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupVerificationSection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupVerificationSection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupVerificationSection {
+        return
+            try CloudBackupVerificationSection(
+                view: FfiConverterTypeCloudBackupVerificationView.read(from: &buf),
+                controls: FfiConverterSequenceTypeCloudBackupVerificationControl.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupVerificationSection, into buf: inout [UInt8]) {
+        FfiConverterTypeCloudBackupVerificationView.write(value.view, into: &buf)
+        FfiConverterSequenceTypeCloudBackupVerificationControl.write(value.controls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupVerificationSection_lift(_ buf: RustBuffer) throws -> CloudBackupVerificationSection {
+    return try FfiConverterTypeCloudBackupVerificationSection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupVerificationSection_lower(_ value: CloudBackupVerificationSection) -> RustBuffer {
+    return FfiConverterTypeCloudBackupVerificationSection.lower(value)
 }
 
 
@@ -17984,13 +18159,21 @@ public struct CloudBackupWalletsSection: Equatable, Hashable {
     public var upToDate: [CloudBackupOwnRow]
     public var needsSync: [CloudBackupOwnRow]
     public var sync: CloudBackupSyncState
+    /**
+     * In the order they are drawn
+     */
+    public var controls: [CloudBackupWalletsControl]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(upToDate: [CloudBackupOwnRow], needsSync: [CloudBackupOwnRow], sync: CloudBackupSyncState) {
+    public init(upToDate: [CloudBackupOwnRow], needsSync: [CloudBackupOwnRow], sync: CloudBackupSyncState,
+        /**
+         * In the order they are drawn
+         */controls: [CloudBackupWalletsControl]) {
         self.upToDate = upToDate
         self.needsSync = needsSync
         self.sync = sync
+        self.controls = controls
     }
 
 
@@ -18011,7 +18194,8 @@ public struct FfiConverterTypeCloudBackupWalletsSection: FfiConverterRustBuffer 
             try CloudBackupWalletsSection(
                 upToDate: FfiConverterSequenceTypeCloudBackupOwnRow.read(from: &buf),
                 needsSync: FfiConverterSequenceTypeCloudBackupOwnRow.read(from: &buf),
-                sync: FfiConverterTypeCloudBackupSyncState.read(from: &buf)
+                sync: FfiConverterTypeCloudBackupSyncState.read(from: &buf),
+                controls: FfiConverterSequenceTypeCloudBackupWalletsControl.read(from: &buf)
         )
     }
 
@@ -18019,6 +18203,7 @@ public struct FfiConverterTypeCloudBackupWalletsSection: FfiConverterRustBuffer 
         FfiConverterSequenceTypeCloudBackupOwnRow.write(value.upToDate, into: &buf)
         FfiConverterSequenceTypeCloudBackupOwnRow.write(value.needsSync, into: &buf)
         FfiConverterTypeCloudBackupSyncState.write(value.sync, into: &buf)
+        FfiConverterSequenceTypeCloudBackupWalletsControl.write(value.controls, into: &buf)
     }
 }
 
@@ -24959,6 +25144,147 @@ public func FfiConverterTypeCloudBackupActionAvailability_lower(_ value: CloudBa
 
 
 /**
+ * Where on screen a control is drawn
+ */
+
+public enum CloudBackupControlSurface: Equatable, Hashable {
+
+    /**
+     * The content of a body other than a configured backup, whose exits it draws
+     */
+    case body
+    case healNotice
+    case passkeyCard
+    case inventoryIncomplete
+    case verification
+    case wallets
+    case notOnDevice
+    case otherBackups
+    case turnOff
+    /**
+     * The Turn Off dialogs, while a review or the work before it is open
+     */
+    case turnOffDialogs
+    /**
+     * Android's top-bar menu
+     */
+    case menu
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupControlSurface: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupControlSurface: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupControlSurface
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupControlSurface {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .body
+
+        case 2: return .healNotice
+
+        case 3: return .passkeyCard
+
+        case 4: return .inventoryIncomplete
+
+        case 5: return .verification
+
+        case 6: return .wallets
+
+        case 7: return .notOnDevice
+
+        case 8: return .otherBackups
+
+        case 9: return .turnOff
+
+        case 10: return .turnOffDialogs
+
+        case 11: return .menu
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupControlSurface, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .body:
+            writeInt(&buf, Int32(1))
+
+
+        case .healNotice:
+            writeInt(&buf, Int32(2))
+
+
+        case .passkeyCard:
+            writeInt(&buf, Int32(3))
+
+
+        case .inventoryIncomplete:
+            writeInt(&buf, Int32(4))
+
+
+        case .verification:
+            writeInt(&buf, Int32(5))
+
+
+        case .wallets:
+            writeInt(&buf, Int32(6))
+
+
+        case .notOnDevice:
+            writeInt(&buf, Int32(7))
+
+
+        case .otherBackups:
+            writeInt(&buf, Int32(8))
+
+
+        case .turnOff:
+            writeInt(&buf, Int32(9))
+
+
+        case .turnOffDialogs:
+            writeInt(&buf, Int32(10))
+
+
+        case .menu:
+            writeInt(&buf, Int32(11))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupControlSurface_lift(_ buf: RustBuffer) throws -> CloudBackupControlSurface {
+    return try FfiConverterTypeCloudBackupControlSurface.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupControlSurface_lower(_ value: CloudBackupControlSurface) -> RustBuffer {
+    return FfiConverterTypeCloudBackupControlSurface.lower(value)
+}
+
+
+
+/**
  * What the platform confirms before a row delete
  */
 
@@ -25859,6 +26185,81 @@ public func FfiConverterTypeCloudBackupInventoryAssessment_lower(_ value: CloudB
 
 
 /**
+ * A control the incomplete-inventory section draws
+ */
+
+public enum CloudBackupInventoryControl: Equatable, Hashable {
+
+    /**
+     * Check Again: a silent inventory refresh
+     */
+    case checkAgain
+    /**
+     * Android only: Google Drive needs authorizing before the inventory can load
+     */
+    case reconnectDrive
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupInventoryControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupInventoryControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupInventoryControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupInventoryControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .checkAgain
+
+        case 2: return .reconnectDrive
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupInventoryControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .checkAgain:
+            writeInt(&buf, Int32(1))
+
+
+        case .reconnectDrive:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupInventoryControl_lift(_ buf: RustBuffer) throws -> CloudBackupInventoryControl {
+    return try FfiConverterTypeCloudBackupInventoryControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupInventoryControl_lower(_ value: CloudBackupInventoryControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupInventoryControl.lower(value)
+}
+
+
+
+/**
  * Typed reason why provider inventory could not be confirmed complete
  */
 
@@ -26523,6 +26924,71 @@ public func FfiConverterTypeCloudBackupManagerAction_lower(_ value: CloudBackupM
 
 
 /**
+ * An entry in Android's top-bar menu
+ *
+ * The rebuilds are not here: a rebuild is offered only as the recovery a failed verification
+ * names, on both platforms
+ */
+
+public enum CloudBackupMenuControl: Equatable, Hashable {
+
+    case switchDriveAccount
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupMenuControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupMenuControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupMenuControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupMenuControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .switchDriveAccount
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupMenuControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .switchDriveAccount:
+            writeInt(&buf, Int32(1))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupMenuControl_lift(_ buf: RustBuffer) throws -> CloudBackupMenuControl {
+    return try FfiConverterTypeCloudBackupMenuControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupMenuControl_lower(_ value: CloudBackupMenuControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupMenuControl.lower(value)
+}
+
+
+
+/**
  * Which notice a `DismissNotice` intent dismisses
  */
 
@@ -26823,6 +27289,85 @@ public func FfiConverterTypeCloudBackupOperationKind_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeCloudBackupOperationKind_lower(_ value: CloudBackupOperationKind) -> RustBuffer {
     return FfiConverterTypeCloudBackupOperationKind.lower(value)
+}
+
+
+
+/**
+ * A control the other-backups section draws
+ */
+
+public enum CloudBackupOtherBackupsControl: Equatable, Hashable {
+
+    case recover
+    case delete
+    /**
+     * Checks for other backups again after a check that failed
+     */
+    case checkAgain
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupOtherBackupsControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupOtherBackupsControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupOtherBackupsControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupOtherBackupsControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .recover
+
+        case 2: return .delete
+
+        case 3: return .checkAgain
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupOtherBackupsControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .recover:
+            writeInt(&buf, Int32(1))
+
+
+        case .delete:
+            writeInt(&buf, Int32(2))
+
+
+        case .checkAgain:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupOtherBackupsControl_lift(_ buf: RustBuffer) throws -> CloudBackupOtherBackupsControl {
+    return try FfiConverterTypeCloudBackupOtherBackupsControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupOtherBackupsControl_lower(_ value: CloudBackupOtherBackupsControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupOtherBackupsControl.lower(value)
 }
 
 
@@ -27519,12 +28064,21 @@ public enum CloudBackupProgressSection: Equatable, Hashable {
      */
     case inventoryChecking
     /**
-     * The inventory could not be confirmed complete; Check Again retries
+     * The inventory could not be confirmed complete
      */
-    case inventoryIncomplete(reason: CloudBackupInventoryIncompleteReason
+    case inventoryIncomplete(reason: CloudBackupInventoryIncompleteReason,
+        /**
+         * In the order they are drawn
+         */controls: [CloudBackupInventoryControl]
     )
+    /**
+     * A running verification in place of the rows; it draws no control
+     */
     case verificationCard(CloudBackupVerificationView
     )
+    /**
+     * A running verification above the rows it will update; it draws no control
+     */
     case verificationInline(CloudBackupVerificationView
     )
 
@@ -27550,7 +28104,7 @@ public struct FfiConverterTypeCloudBackupProgressSection: FfiConverterRustBuffer
 
         case 1: return .inventoryChecking
 
-        case 2: return .inventoryIncomplete(reason: try FfiConverterTypeCloudBackupInventoryIncompleteReason.read(from: &buf)
+        case 2: return .inventoryIncomplete(reason: try FfiConverterTypeCloudBackupInventoryIncompleteReason.read(from: &buf), controls: try FfiConverterSequenceTypeCloudBackupInventoryControl.read(from: &buf)
         )
 
         case 3: return .verificationCard(try FfiConverterTypeCloudBackupVerificationView.read(from: &buf)
@@ -27571,9 +28125,10 @@ public struct FfiConverterTypeCloudBackupProgressSection: FfiConverterRustBuffer
             writeInt(&buf, Int32(1))
 
 
-        case let .inventoryIncomplete(reason):
+        case let .inventoryIncomplete(reason,controls):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupInventoryIncompleteReason.write(reason, into: &buf)
+            FfiConverterSequenceTypeCloudBackupInventoryControl.write(controls, into: &buf)
 
 
         case let .verificationCard(v1):
@@ -27719,6 +28274,81 @@ public func FfiConverterTypeCloudBackupReconcileMessage_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeCloudBackupReconcileMessage_lower(_ value: CloudBackupReconcileMessage) -> RustBuffer {
     return FfiConverterTypeCloudBackupReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * Which rebuild recovers a backup that verification can't use
+ */
+
+public enum CloudBackupRecoveryKind: Equatable, Hashable {
+
+    /**
+     * The index is missing and the master key is intact: rebuild the index from this device
+     */
+    case recreateManifest
+    /**
+     * No verified master key is left: replace the backup with this device's wallets
+     */
+    case reinitializeBackup
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupRecoveryKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRecoveryKind: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupRecoveryKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRecoveryKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .recreateManifest
+
+        case 2: return .reinitializeBackup
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupRecoveryKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .recreateManifest:
+            writeInt(&buf, Int32(1))
+
+
+        case .reinitializeBackup:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRecoveryKind_lift(_ buf: RustBuffer) throws -> CloudBackupRecoveryKind {
+    return try FfiConverterTypeCloudBackupRecoveryKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRecoveryKind_lower(_ value: CloudBackupRecoveryKind) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRecoveryKind.lower(value)
 }
 
 
@@ -28879,18 +29509,22 @@ public func FfiConverterTypeCloudBackupScreenBody_lower(_ value: CloudBackupScre
 
 /**
  * One section of the configured screen
+ *
+ * Each section names the controls it draws: a section with a fixed control draws it by its kind,
+ * and every other section carries the list of its controls, so a platform draws exactly what the
+ * section names
  */
 
 public enum CloudBackupSection: Equatable, Hashable {
 
     /**
-     * Missing, unsupported or needs-repair passkey card, above the list
+     * Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
      */
     case passkeyCard(CloudBackupPasskeyState
     )
     case progress(CloudBackupProgressSection
     )
-    case verification(CloudBackupVerificationView
+    case verification(CloudBackupVerificationSection
     )
     case wallets(CloudBackupWalletsSection
     )
@@ -28900,6 +29534,9 @@ public enum CloudBackupSection: Equatable, Hashable {
     )
     case otherBackups(CloudBackupOtherBackupsSection
     )
+    /**
+     * Draws Turn Off
+     */
     case turnOff
 
 
@@ -28928,7 +29565,7 @@ public struct FfiConverterTypeCloudBackupSection: FfiConverterRustBuffer {
         case 2: return .progress(try FfiConverterTypeCloudBackupProgressSection.read(from: &buf)
         )
 
-        case 3: return .verification(try FfiConverterTypeCloudBackupVerificationView.read(from: &buf)
+        case 3: return .verification(try FfiConverterTypeCloudBackupVerificationSection.read(from: &buf)
         )
 
         case 4: return .wallets(try FfiConverterTypeCloudBackupWalletsSection.read(from: &buf)
@@ -28965,7 +29602,7 @@ public struct FfiConverterTypeCloudBackupSection: FfiConverterRustBuffer {
 
         case let .verification(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterTypeCloudBackupVerificationView.write(v1, into: &buf)
+            FfiConverterTypeCloudBackupVerificationSection.write(v1, into: &buf)
 
 
         case let .wallets(v1):
@@ -29466,6 +30103,115 @@ public func FfiConverterTypeCloudBackupUnreadableKind_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeCloudBackupUnreadableKind_lower(_ value: CloudBackupUnreadableKind) -> RustBuffer {
     return FfiConverterTypeCloudBackupUnreadableKind.lower(value)
+}
+
+
+
+/**
+ * A control the verification section draws
+ */
+
+public enum CloudBackupVerificationControl: Equatable, Hashable {
+
+    /**
+     * Verify Now, Verify Again, or Try Again after a failure another verification can fix
+     */
+    case verify
+    /**
+     * The rebuild a failed verification names as the only way to recover the backup
+     */
+    case recover(kind: CloudBackupRecoveryKind
+    )
+    /**
+     * Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
+     * counts them
+     */
+    case deleteUnreadableBackups
+    /**
+     * Try Again on a latest upload Cove couldn't confirm
+     */
+    case retryUpload
+    /**
+     * Android only: the latest upload waits on Google Drive access
+     */
+    case reconnectDrive
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupVerificationControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupVerificationControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupVerificationControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupVerificationControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .verify
+
+        case 2: return .recover(kind: try FfiConverterTypeCloudBackupRecoveryKind.read(from: &buf)
+        )
+
+        case 3: return .deleteUnreadableBackups
+
+        case 4: return .retryUpload
+
+        case 5: return .reconnectDrive
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupVerificationControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .verify:
+            writeInt(&buf, Int32(1))
+
+
+        case let .recover(kind):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeCloudBackupRecoveryKind.write(kind, into: &buf)
+
+
+        case .deleteUnreadableBackups:
+            writeInt(&buf, Int32(3))
+
+
+        case .retryUpload:
+            writeInt(&buf, Int32(4))
+
+
+        case .reconnectDrive:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupVerificationControl_lift(_ buf: RustBuffer) throws -> CloudBackupVerificationControl {
+    return try FfiConverterTypeCloudBackupVerificationControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupVerificationControl_lower(_ value: CloudBackupVerificationControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupVerificationControl.lower(value)
 }
 
 
@@ -30086,6 +30832,71 @@ public func FfiConverterTypeCloudBackupWalletStatus_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeCloudBackupWalletStatus_lower(_ value: CloudBackupWalletStatus) -> RustBuffer {
     return FfiConverterTypeCloudBackupWalletStatus.lower(value)
+}
+
+
+
+/**
+ * A control the wallets section draws
+ */
+
+public enum CloudBackupWalletsControl: Equatable, Hashable {
+
+    /**
+     * Uploads the wallets that need sync, under the list of them
+     */
+    case syncNow
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupWalletsControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupWalletsControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupWalletsControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupWalletsControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .syncNow
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupWalletsControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .syncNow:
+            writeInt(&buf, Int32(1))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupWalletsControl_lift(_ buf: RustBuffer) throws -> CloudBackupWalletsControl {
+    return try FfiConverterTypeCloudBackupWalletsControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupWalletsControl_lower(_ value: CloudBackupWalletsControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupWalletsControl.lower(value)
 }
 
 
@@ -49617,6 +50428,31 @@ fileprivate struct FfiConverterSequenceTypeCloudBackupActionEntry: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupDrawnControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupDrawnControl]
+
+    public static func write(_ value: [CloudBackupDrawnControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupDrawnControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupDrawnControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupDrawnControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupDrawnControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCloudBackupListedRow: FfiConverterRustBuffer {
     typealias SwiftType = [CloudBackupListedRow]
 
@@ -49967,6 +50803,81 @@ fileprivate struct FfiConverterSequenceTypeBlockExplorerOption: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupInventoryControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupInventoryControl]
+
+    public static func write(_ value: [CloudBackupInventoryControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupInventoryControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupInventoryControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupInventoryControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupInventoryControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupMenuControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupMenuControl]
+
+    public static func write(_ value: [CloudBackupMenuControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupMenuControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupMenuControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupMenuControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupMenuControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupOtherBackupsControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupOtherBackupsControl]
+
+    public static func write(_ value: [CloudBackupOtherBackupsControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupOtherBackupsControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupOtherBackupsControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupOtherBackupsControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupOtherBackupsControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustBuffer {
     typealias SwiftType = [CloudBackupSection]
 
@@ -49984,6 +50895,56 @@ fileprivate struct FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustB
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCloudBackupSection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupVerificationControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupVerificationControl]
+
+    public static func write(_ value: [CloudBackupVerificationControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupVerificationControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupVerificationControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupVerificationControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupVerificationControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupWalletsControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupWalletsControl]
+
+    public static func write(_ value: [CloudBackupWalletsControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupWalletsControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupWalletsControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupWalletsControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupWalletsControl.read(from: &buf))
         }
         return seq
     }

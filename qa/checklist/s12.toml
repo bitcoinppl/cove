@@ -157,7 +157,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_projects_promotion_mismatch_as_support_only",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/enable/restart.rs::recovery_support_codes_are_stable_and_privacy_safe",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::pendingEnableRecoveryShowsSupportCodeAndSafeCleanupAction",
-  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryOffersCleanupOnlyWhenRustDoes",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledEnableRecoversThroughRelaunchWithoutNewPasskey",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyRegistrationStartsOverOnRelaunch",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyConfirmationRecoversWithoutNewPasskey",
@@ -237,7 +237,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_remote_data",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/enable/restart.rs::cleanup_compatibility_rejects_incomplete_or_active_promotion_before_phase",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::supportOnlyRecoveryDoesNotOfferCleanup",
-  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryOffersCleanupOnlyWhenRustDoes",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 

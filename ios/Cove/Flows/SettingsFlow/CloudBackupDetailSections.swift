@@ -1,152 +1,38 @@
 import SwiftUI
 
-/// The loaded cloud-only rows, split so a backup of a wallet this device already holds never
-/// lists under Not on This Device
-struct CloudBackupCloudOnlyRows {
-    /// Backups of wallets missing from this device, which a restore can bring back
-    let notOnDevice: [CloudBackupWalletItem]
-
-    /// More backups of wallets this device already holds, which only delete applies to
-    let extraCopies: [CloudBackupWalletItem]
-
-    /// Some listed backups could not be read, so rows may be missing
-    let incomplete: Bool
-
-    init(wallets: [CloudBackupWalletItem], incomplete: Bool) {
-        notOnDevice = wallets.filter { $0.syncStatus != .alreadyOnDevice }
-        extraCopies = wallets.filter { $0.syncStatus == .alreadyOnDevice }
-        self.incomplete = incomplete
-    }
-
-    /// Not on This Device stays up while it has rows, an incomplete list's Check Again, or a
-    /// Restore All control to show
-    func showsNotOnDevice(restoreAllState: CloudBackupRestoreAllState) -> Bool {
-        if !notOnDevice.isEmpty || incomplete { return true }
-        if case .notShown = restoreAllState { return false }
-        return true
-    }
-}
-
-func cloudBackupVisibleCloudOnlyRows(_ cloudOnly: CloudOnlyState) -> CloudBackupCloudOnlyRows? {
-    // an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
-    guard case let .loaded(wallets, incomplete) = cloudOnly, !wallets.isEmpty || incomplete else {
-        return nil
-    }
-
-    return CloudBackupCloudOnlyRows(wallets: wallets, incomplete: incomplete)
-}
-
-func cloudBackupVisibleOtherBackupsSummary(
-    _ otherBackups: CloudBackupOtherBackupsState
-) -> CloudBackupOtherBackupsSummary? {
-    guard case let .loaded(summary) = otherBackups, summary.namespaceCount > 0 else {
-        return nil
-    }
-
-    return summary
-}
-
-func cloudBackupCloudOnlyFailureMessage(_ cloudOnly: CloudOnlyState) -> String? {
-    guard case let .failed(error) = cloudOnly else { return nil }
-    return error
-}
-
-func cloudBackupOtherBackupsFailureMessage(_ otherBackups: CloudBackupOtherBackupsState) -> String? {
-    guard case let .loadFailed(reason) = otherBackups else { return nil }
-
-    switch reason {
-    case .providerSyncPending:
-        return "Cove could not check for backups with another key because iCloud Drive is still syncing. Check again when syncing is complete."
-    case .offline:
-        return "Cove could not check for backups with another key because this device is offline. Connect to the internet, then check again."
-    case .authorizationRequired:
-        return "Cove cannot check for backups with another key. Turn on iCloud Drive for Cove, then check again."
-    case .providerUnavailable:
-        return "Cove cannot check for backups with another key because iCloud Drive is not available now. Try again later."
-    case .unknown:
-        return "Cove could not check for backups with another key. Try again."
-    }
-}
-
-struct DetailFormContent: View {
-    let detail: CloudBackupDetail
-    let syncHealth: CloudSyncHealth
-    let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-
-    var body: some View {
-        HeaderSection(lastSync: detail.lastSync, syncHealth: syncHealth)
-        if !wallets.isEmpty {
-            WalletSections(wallets: wallets)
-        }
-        if let cloudOnlyRows = cloudBackupVisibleCloudOnlyRows(manager.cloudOnly) {
-            CloudOnlySection(
-                rows: cloudOnlyRows,
-                manager: manager,
-                presentationCoordinator: presentationCoordinator
-            )
-        }
-        if let summary = cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState) {
-            OtherBackupsSection(
-                summary: summary,
-                manager: manager,
-                presentationCoordinator: presentationCoordinator
-            )
-        }
-
-        SupplementalInventoryFailureSections(manager: manager)
-    }
-
-    private var wallets: [CloudBackupWalletItem] {
-        detail.upToDate + detail.needsSync
-    }
-}
-
-private struct SupplementalInventoryFailureSections: View {
+/// The passkey card above the list, for a passkey Cloud Backup can't use
+struct CloudBackupPasskeyCard: View {
+    let state: CloudBackupPasskeyState
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
 
     var body: some View {
-        if let message = cloudBackupCloudOnlyFailureMessage(manager.cloudOnly) {
-            SupplementalInventoryFailureSection(title: "Not on This Device", message: message, manager: manager)
-        }
-
-        if let message = cloudBackupOtherBackupsFailureMessage(manager.otherBackupsState) {
-            SupplementalInventoryFailureSection(title: "Backups with Another Key", message: message, manager: manager)
-        }
-    }
-}
-
-private struct SupplementalInventoryFailureSection: View {
-    let title: String
-    let message: String
-    let manager: CloudBackupManager
-
-    var body: some View {
-        Section(header: Text(title)) {
-            Text(message)
-                .font(.caption)
-                .foregroundStyle(Color.statusError)
-
-            Button("Check Again") {
-                manager.dispatch(action: .refreshDetail)
-            }
+        switch state {
+        case .available:
+            EmptyView()
+        case .missing:
+            MissingPasskeyContent(repairState: nil, actions: actions, manager: manager)
+        case let .needsRepair(repairState):
+            MissingPasskeyContent(repairState: repairState, actions: actions, manager: manager)
+        case .unsupportedProvider:
+            UnsupportedPasskeyProviderContent(actions: actions, manager: manager)
         }
     }
 }
 
-struct MissingPasskeyContent: View {
+private struct MissingPasskeyContent: View {
+    let repairState: CloudBackupPasskeyRepairState?
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
 
     private var isRepairing: Bool {
-        if case .running = manager.passkeyRepairState { return true }
+        if case .running = repairState { return true }
         return false
     }
 
     private var repairError: String? {
-        if case let .failed(error) = manager.passkeyRepairState {
-            return error
-        }
-        return nil
+        guard case let .failed(error) = repairState else { return nil }
+        return error
     }
 
     var body: some View {
@@ -174,9 +60,11 @@ struct MissingPasskeyContent: View {
         }
 
         Section {
-            Button {
-                manager.dispatch(action: .repairPasskeyNoDiscovery)
-            } label: {
+            CloudBackupActionControl(
+                action: .repairPasskey,
+                actions: actions,
+                perform: { manager.dispatch(action: .repairPasskeyNoDiscovery) }
+            ) {
                 if isRepairing {
                     HStack {
                         ProgressView()
@@ -188,16 +76,13 @@ struct MissingPasskeyContent: View {
                     ProbedLabel("Add Passkey", systemImage: "person.badge.key")
                 }
             }
-            .disabled(isRepairing)
 
             Text("Use an existing passkey or add a new one to make your cloud backup accessible again")
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
-        }
 
-        if let repairError {
-            Section {
+            if let repairError {
                 ProbedLabel(repairError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
@@ -206,149 +91,100 @@ struct MissingPasskeyContent: View {
     }
 }
 
-struct DisableCloudBackupSection: View {
+private struct UnsupportedPasskeyProviderContent: View {
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
-    let detail: CloudBackupDetail?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-
-    private var unavailableMessage: String? {
-        if manager.isDisablingCloudBackup {
-            return "Cove is already disabling Cloud Backup."
-        }
-
-        if manager.isPerformingDestructiveAction, manager.disableFailure == nil {
-            return "Cove is waiting for the current Cloud Backup operation to finish."
-        }
-
-        if case .operating = manager.cloudOnlyOperation {
-            return "Cove is waiting for the current cloud-only wallet operation to finish."
-        }
-
-        switch manager.otherBackupsOperation {
-        case .recovering, .deleting:
-            return "Cove is waiting for the current other-backup operation to finish."
-        default:
-            break
-        }
-
-        if let detail {
-            if detail.cloudOnlyCount > 0 {
-                return "Restore or delete wallets that are only in Cloud Backup before disabling."
-            }
-
-            if case let .loaded(summary) = manager.otherBackupsState,
-               summary.namespaceCount > 0
-            {
-                return "Recover or delete other Cloud Backups before disabling."
-            }
-        }
-
-        return nil
-    }
-
-    var body: some View {
-        DisableCloudBackupControls(
-            manager: manager,
-            unavailableMessage: unavailableMessage,
-            presentationCoordinator: presentationCoordinator
-        )
-    }
-}
-
-private struct DisableCloudBackupControls: View {
-    let manager: CloudBackupManager
-    let unavailableMessage: String?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Section {
-            if manager.isDisablingCloudBackup {
-                DisableCloudBackupProgress()
-            }
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.red)
 
-            if let failure = manager.disableFailure {
-                DisableCloudBackupFailureControls(
-                    manager: manager,
-                    message: failure.message,
-                    canKeepEnabled: failure.canKeepEnabled
+                Text("Passkey Not Supported for Cloud Backup")
+                    .font(.headline)
+                    .foregroundStyle(.red)
+
+                Text(
+                    "This passkey provider can't create the secure passkey required for Cloud Backup."
                 )
+                .font(.subheadline)
+                .foregroundStyle(.red.opacity(0.85))
+                .multilineTextAlignment(.center)
+
+                Text(
+                    "Try again with a supported password manager on iOS such as Apple Passwords, 1Password, or Bitwarden."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             }
-
-            DisableCloudBackupRequestButton(
-                manager: manager,
-                unavailableMessage: unavailableMessage,
-                presentationCoordinator: presentationCoordinator
-            )
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
         }
-    }
-}
 
-private struct DisableCloudBackupRequestButton: View {
-    let manager: CloudBackupManager
-    let unavailableMessage: String?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-
-    var body: some View {
-        Button(role: .destructive, action: requestDisable) {
-            Text("Disable Cloud Backup")
-                .font(.footnote)
-                .uiTestTruncationProbe()
-        }
-        .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
-    }
-
-    private func requestDisable() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        if let unavailableMessage {
-            presentationCoordinator.present(.alert(.disableUnavailable(unavailableMessage)))
-        } else {
-            presentationCoordinator.present(.dialog(.disableCloudBackup))
-        }
-    }
-}
-
-private struct DisableCloudBackupProgress: View {
-    var body: some View {
-        HStack {
-            ProgressView()
-                .padding(.trailing, 8)
-            Text("Deleting cloud backups...")
-                .font(.footnote)
-        }
-    }
-}
-
-private struct DisableCloudBackupFailureControls: View {
-    let manager: CloudBackupManager
-    let message: String
-    let canKeepEnabled: Bool
-
-    var body: some View {
-        Text(message)
-            .font(.caption)
-            .foregroundStyle(Color.statusError)
-
-        Button(action: retryDisable) {
-            Label("Try Again", systemImage: "arrow.clockwise")
-        }
-        .disabled(!manager.isDetailInventoryComplete)
-
-        if canKeepEnabled {
-            Button(action: keepEnabled) {
-                Label("Keep Cloud Backup Enabled", systemImage: "icloud")
+        Section {
+            // a configured backup gets a new passkey through repair; Enable is for a backup that is off
+            CloudBackupActionControl(
+                action: .repairPasskey,
+                actions: actions,
+                perform: { manager.dispatch(action: .repairPasskeyNoDiscovery) }
+            ) {
+                Label("Try Again", systemImage: "arrow.clockwise")
             }
         }
     }
+}
 
-    private func retryDisable() {
-        guard manager.isDetailInventoryComplete else { return }
+/// Turn Off, with the progress of a Turn Off Rust is preparing or draining
+///
+/// The review and the offline case are dialogs, drawn by the detail screen's presentations
+struct CloudBackupTurnOffSection: View {
+    let disable: CloudBackupDisableScreen
+    let actions: CloudBackupActions
+    let manager: CloudBackupManager
 
-        manager.dispatch(action: .disableCloudBackup)
+    private var progressTitle: String? {
+        switch disable {
+        case .preparing: "Checking what's in Cloud Backup..."
+        case .draining: "Turning off Cloud Backup..."
+        case .idle, .reviewing, .offline: nil
+        }
     }
 
-    private func keepEnabled() {
-        manager.dispatch(action: .keepCloudBackupEnabled)
+    var body: some View {
+        Section {
+            if let progressTitle {
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 8)
+                    Text(progressTitle)
+                        .font(.footnote)
+                        .uiTestTruncationProbe()
+                }
+                .accessibilityIdentifier("cloudBackup.turnOff.progress")
+
+                CloudBackupActionControl(
+                    action: .cancelDisable,
+                    actions: actions,
+                    perform: { manager.dispatch(action: .cancelDisable) }
+                ) {
+                    Text("Cancel").font(.footnote).uiTestTruncationProbe()
+                }
+            }
+
+            CloudBackupActionControl(
+                action: .turnOff,
+                actions: actions,
+                role: .destructive,
+                perform: { manager.dispatch(action: .disableCloudBackup) }
+            ) {
+                Text("Turn Off Cloud Backup")
+                    .font(.footnote)
+                    .uiTestTruncationProbe()
+            }
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+        }
     }
 }

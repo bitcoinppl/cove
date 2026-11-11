@@ -287,4 +287,10 @@ struct CloudBackupHostRobot {
     func staticText(containing fragment: String) -> XCUIElement {
         app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", fragment)).firstMatch
     }
+
+    /// A listed row's action button, by the identifier both platforms share, such as `restore` or
+    /// `delete` (`docs/cloud_backup.md`)
+    func rowAction(_ recordId: String, _ action: String) -> XCUIElement {
+        app.buttons["cloudBackup.row.\(recordId).\(action)"]
+    }
 }

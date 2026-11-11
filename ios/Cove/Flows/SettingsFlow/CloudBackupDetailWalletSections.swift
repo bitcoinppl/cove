@@ -69,7 +69,7 @@ struct WalletItemRow: View {
             item: item,
             action: accessibilityAction
         ))
-        .accessibilityIdentifier("cloudBackup.wallet.\(item.recordId)")
+        .accessibilityIdentifier(CloudBackupUiElement.walletRow(recordId: item.recordId).identifier)
     }
 
     private var name: some View {

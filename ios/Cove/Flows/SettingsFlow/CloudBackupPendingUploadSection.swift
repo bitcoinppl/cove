@@ -1,50 +1,45 @@
 import SwiftUI
 
 enum CloudBackupPendingUploadAccessibilityStatus: Hashable {
-    case hidden
     case confirming
     case authorizationRequired
     case failed
 }
 
+/// The status of an upload Cove is still confirming, by what blocks the sync
 func cloudBackupPendingUploadAccessibilityStatus(
-    verificationState: CloudBackupVerificationState?,
     syncState: CloudBackupSyncState?
 ) -> CloudBackupPendingUploadAccessibilityStatus {
-    guard case .awaitingUploadConfirmation = verificationState else { return .hidden }
-
-    return switch syncState {
+    switch syncState {
     case .blocked: .authorizationRequired
     case .failed: .failed
     default: .confirming
     }
 }
 
+/// Drawn while verification waits for the latest upload to be confirmed, with the controls the
+/// verification section names for it
 struct CloudBackupPendingUploadConfirmationSection: View {
-    let manager: CloudBackupManager
+    let syncState: CloudBackupSyncState?
+    let controls: CloudBackupVerificationControls
 
     @AccessibilityFocusState private var focusedStatus: CloudBackupPendingUploadAccessibilityStatus?
 
     private var accessibilityStatus: CloudBackupPendingUploadAccessibilityStatus {
-        cloudBackupPendingUploadAccessibilityStatus(
-            verificationState: manager.verificationState,
-            syncState: manager.syncState
-        )
+        cloudBackupPendingUploadAccessibilityStatus(syncState: syncState)
     }
 
     var body: some View {
         Group {
             switch accessibilityStatus {
-            case .hidden:
-                EmptyView()
             case .confirming:
                 CloudBackupUploadConfirmingSection()
             case .authorizationRequired:
                 CloudBackupUploadAuthorizationRequiredSection(focusedStatus: $focusedStatus)
             case .failed:
-                if case let .failed(message) = manager.syncState {
+                if case let .failed(message) = syncState {
                     CloudBackupUploadConfirmationFailedSection(
-                        manager: manager,
+                        controls: controls,
                         message: message,
                         focusedStatus: $focusedStatus
                     )
@@ -55,7 +50,7 @@ struct CloudBackupPendingUploadConfirmationSection: View {
             switch status {
             case .authorizationRequired, .failed:
                 focusedStatus = status
-            case .hidden, .confirming:
+            case .confirming:
                 focusedStatus = nil
             }
         }
@@ -88,7 +83,7 @@ private struct CloudBackupUploadAuthorizationRequiredSection: View {
 }
 
 private struct CloudBackupUploadConfirmationFailedSection: View {
-    let manager: CloudBackupManager
+    let controls: CloudBackupVerificationControls
     let message: String
     @AccessibilityFocusState.Binding var focusedStatus: CloudBackupPendingUploadAccessibilityStatus?
 
@@ -103,13 +98,7 @@ private struct CloudBackupUploadConfirmationFailedSection: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: syncUnsynced) {
-                Label("Try Again", systemImage: "arrow.clockwise")
-            }
+            controls
         }
-    }
-
-    private func syncUnsynced() {
-        manager.dispatch(action: .syncUnsynced)
     }
 }

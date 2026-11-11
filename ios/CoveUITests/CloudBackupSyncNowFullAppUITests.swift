@@ -32,6 +32,7 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
     func testSyncNowUploadsPendingWalletAndRefreshesDetail() throws {
         let (control, pending) = try restoreFixtureWithPendingWallet()
+        control.assertNextActions("a wallet waiting to upload should offer Sync Now", available: ["syncUnsynced", "turnOff"])
 
         tapSyncNow()
 
@@ -41,6 +42,7 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
     func testOfflineSyncNowUploadsNothingThenUploadsAfterReconnect() throws {
         let (control, pending) = try restoreFixtureWithPendingWallet()
+        control.assertNextActions("a wallet waiting to upload should offer Sync Now", available: ["syncUnsynced", "turnOff"])
 
         try control.setNetworkConnected(false)
         let beforeOfflineSync = control.state
@@ -77,6 +79,7 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
     func testCancelledVerificationRetriesWithTheSamePasskey() throws {
         let control = try restoreFixtureAndOpenDetail()
+        control.assertNextActions("a verified backup should offer Verify", available: ["verify", "turnOff"])
         let before = control.state
         try control.answerNextPasskeyAssertions([.userCancelled, .success])
 
@@ -84,8 +87,8 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
         robot.scrollToHittable(verifyAgain)
         verifyAgain.tap()
 
-        control.waitForAppState("cancelling the passkey should leave verification cancelled") {
-            $0.verification == "cancelled"
+        control.waitForAppState("cancelling the passkey should leave verification not completed") {
+            $0.verification == "notCompleted"
         }
         robot.scrollToHittable(app.staticTexts["Cloud Backup Not Verified"])
         XCTAssertEqual(passkeyAssertions(control.state), passkeyAssertions(before) + 1)
@@ -128,8 +131,8 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.detail == "complete" && $0.inventoryComplete && $0.verification == "verified"
-                && !$0.pendingUploadVerification && $0.wallets.map(\.recordId) == [Self.walletOneRecordId]
+            $0.inventoryLoaded && $0.verification == "verified"
+                && !$0.awaitingUploadConfirmation && $0.wallets.map(\.recordId) == [Self.walletOneRecordId]
         }
 
         return control
@@ -192,11 +195,11 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     /// shows that too: the wallet's row says Confirmed and Sync Now is gone
     private func assertSyncedDetailShows(_ wallet: CloudBackupUITestAppState.Wallet, _ control: CloudBackupHostControl) {
         control.waitForAppState("the sync should finish and the detail refresh to show the wallet up to date") {
-            $0.sync == "idle" && $0.inventoryComplete && $0.wallets.allSatisfy { !$0.needsSync }
+            $0.sync == "idle" && $0.inventoryLoaded && $0.wallets.allSatisfy { !$0.needsSync }
                 && $0.wallets.contains { $0.recordId == wallet.recordId && $0.status == "confirmed" }
         }
 
-        let row = app.descendants(matching: .any)["cloudBackup.wallet.\(wallet.recordId)"]
+        let row = app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(wallet.recordId)]
         robot.scrollToHittable(row)
         XCTAssertTrue(row.label.contains(wallet.name), "the row is not the synced wallet: \(row.label)")
         XCTAssertTrue(row.label.contains("Confirmed"), "the synced wallet's row is not Confirmed: \(row.label)")

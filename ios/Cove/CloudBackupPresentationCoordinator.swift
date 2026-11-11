@@ -86,26 +86,26 @@ enum CloudBackupVerificationFeedback: Equatable {
     case failureAlert(title: String, message: String)
 }
 
-struct CloudBackupPasskeyChoicePresentation: Equatable {
+/// The passkey-choice prompt's copy and its choices, which Rust's entries then bind
+struct CloudBackupPasskeyChoicePresentation {
     let passkeyHint: CloudBackupPasskeyHint?
     let message: String
-    let secondaryActionTitle: String?
+    let choices: [CloudBackupPromptChoice]
 
     init(intent: CloudBackupPasskeyChoiceIntent) {
         switch intent {
         case let .enable(_, passkeyHint):
             self.passkeyHint = passkeyHint
             message = "Would you like to use an existing passkey or start a new backup?"
-            secondaryActionTitle = "Start a New Backup"
         case let .enableExistingPasskeyOnly(_, passkeyHint):
             self.passkeyHint = passkeyHint
             message = "Cloud Backup may already exist. Use your existing passkey to continue, or cancel and try again later."
-            secondaryActionTitle = nil
         case .repairPasskey:
             passkeyHint = nil
             message = "Would you like to use an existing passkey or create a new one?"
-            secondaryActionTitle = "Create New Passkey"
         }
+
+        choices = CloudBackupPromptChoice.passkeyChoice(intent, hint: passkeyHint)
     }
 }
 
@@ -149,7 +149,7 @@ final class CloudBackupPresentationCoordinator {
         presentationTransitions.queuedPresentation
     }
 
-    init(rootPrompt: @escaping () -> CloudBackupRootPrompt = { CloudBackupManager.shared.rootPrompt }) {
+    init(rootPrompt: @escaping () -> CloudBackupRootPrompt = { CloudBackupManager.shared.screen.rootPrompt }) {
         self.rootPrompt = rootPrompt
     }
 
@@ -393,24 +393,11 @@ struct CloudBackupPresentationHost<Content: View>: View {
         )
     }
 
-    private func handlePasskeyChoice(existing: Bool) {
-        guard let intent = passkeyChoiceIntent else { return }
+    /// An alert closes on any tap, so the prompt goes down here; when Rust rejects the choice it
+    /// still projects the prompt, and the rejection brings the prompt back with it
+    private func choose(_ choice: CloudBackupPromptChoice) {
         coordinator.dismissCurrentPresentation()
-
-        switch (intent, existing) {
-        case (.enable, true):
-            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-        case (.enable, false):
-            manager.dispatch(action: .acceptEnablePrompt(.createNew))
-        case (.enableExistingPasskeyOnly, true):
-            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-        case (.enableExistingPasskeyOnly, false):
-            return
-        case (.repairPasskey, true):
-            manager.dispatch(action: .repairPasskey)
-        case (.repairPasskey, false):
-            manager.dispatch(action: .repairPasskeyNoDiscovery)
-        }
+        manager.dispatch(action: choice.intent)
     }
 
     private func openCloudBackupScreen() {
@@ -424,27 +411,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
         app.pushRoute(route)
     }
 
-    private func createNewBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .acceptEnablePrompt(.createNew))
-    }
-
-    private func useExistingBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-    }
-
     private func cancelExistingBackupPrompt() {
         coordinator.dismissCurrentPresentation()
         manager.dispatch(action: .discardPendingEnableCloudBackup)
-    }
-
-    private func chooseExistingPasskey() {
-        handlePasskeyChoice(existing: true)
-    }
-
-    private func chooseSecondaryPasskeyAction() {
-        handlePasskeyChoice(existing: false)
     }
 
     private func cancelPasskeyChoice() {
@@ -462,14 +431,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
         manager.dispatch(action: .dismissVerificationPrompt)
     }
 
+    /// The cover stays until Rust stops projecting the prompt, so a rejected start is drawn in it
     private func verifyCloudBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.startVerification(source: .rootPrompt)
-    }
-
-    private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
-        guard let hint else { return "Use Existing Passkey" }
-        return "Use Existing Passkey (\(hint.nameSuffix))"
+        manager.dispatch(action: .startVerification(.rootPrompt))
     }
 
     private func existingBackupMessage(for hint: CloudBackupPasskeyHint?) -> String {
@@ -535,29 +499,32 @@ struct CloudBackupPresentationHost<Content: View>: View {
             )
             .modifier(CloudBackupObservationModifier(
                 presentationContext: presentationContext,
-                rootPrompt: manager.rootPrompt,
-                verificationState: manager.verificationState,
-                verificationPresentation: manager.verificationPresentation,
+                rootPrompt: manager.screen.rootPrompt,
+                lastOutcome: manager.screen.lastOutcome,
+                verificationState: manager.screen.verification?.state,
+                verificationPresentation: manager.screen.verification?.presentation
+                    ?? .hidden(source: nil),
                 updateContext: coordinator.update,
                 reconcile: coordinator.reconcile,
                 handleVerificationPresentation: handleVerificationPresentation,
                 onDisappear: dismissSuccessFloater
             ))
-            .modifier(ExistingBackupAlertModifier(
+            .modifier(CloudBackupPromptAlertModifier(
+                title: "Existing Cloud Backup Found",
                 isPresented: showingExistingBackupPrompt,
                 message: existingBackupMessage(for: existingBackupPasskeyHint),
-                createNew: createNewBackup,
-                useExisting: useExistingBackup,
+                choices: CloudBackupPromptChoice.existingBackup,
+                screen: manager.screen,
+                choose: choose,
                 cancel: cancelExistingBackupPrompt
             ))
-            .modifier(PasskeyChoiceAlertModifier(
+            .modifier(CloudBackupPromptAlertModifier(
+                title: "Passkey Options",
                 isPresented: showingPasskeyChoicePrompt,
-                presentation: passkeyChoicePresentation,
-                existingButtonTitle: existingPasskeyButtonTitle(
-                    for: passkeyChoicePresentation?.passkeyHint
-                ),
-                chooseExisting: chooseExistingPasskey,
-                chooseSecondary: chooseSecondaryPasskeyAction,
+                message: passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.",
+                choices: passkeyChoicePresentation?.choices ?? [],
+                screen: manager.screen,
+                choose: choose,
                 cancel: cancelPasskeyChoice
             ))
             .modifier(MissingPasskeyAlertModifier(
@@ -601,6 +568,7 @@ private struct CloudBackupSuccessFloaterOverlay: View {
 private struct CloudBackupObservationModifier: ViewModifier {
     let presentationContext: CloudBackupPresentationContext
     let rootPrompt: CloudBackupRootPrompt
+    let lastOutcome: CloudBackupLastOutcome?
     let verificationState: CloudBackupVerificationState?
     let verificationPresentation: CloudBackupVerificationPresentation
     let updateContext: (CloudBackupPresentationContext) -> Void
@@ -616,6 +584,10 @@ private struct CloudBackupObservationModifier: ViewModifier {
             .onChange(of: rootPrompt) { _, _ in
                 reconcile()
             }
+            // a rejected choice leaves the prompt Rust projects, which the tap already took down
+            .onChange(of: lastOutcome) { _, outcome in
+                if outcome != nil { reconcile() }
+            }
             .onChange(of: verificationState) { _, _ in
                 reconcile()
             }
@@ -628,43 +600,23 @@ private struct CloudBackupObservationModifier: ViewModifier {
     }
 }
 
-private struct ExistingBackupAlertModifier: ViewModifier {
+/// A root prompt alert whose buttons are the choices Rust offers for it now
+struct CloudBackupPromptAlertModifier: ViewModifier {
+    let title: String
     @Binding var isPresented: Bool
     let message: String
-    let createNew: () -> Void
-    let useExisting: () -> Void
+    let choices: [CloudBackupPromptChoice]
+    let screen: CloudBackupScreen
+    let choose: (CloudBackupPromptChoice) -> Void
     let cancel: () -> Void
 
     func body(content: Content) -> some View {
-        content.alert("Existing Cloud Backup Found", isPresented: $isPresented) {
-            Button("Create New Backup", role: .destructive, action: createNew)
-            Button("Try Existing Passkey", action: useExisting)
-            Button("Cancel", role: .cancel, action: cancel)
+        let offered = choices.offered(on: screen)
+
+        content.alert(title, isPresented: $isPresented) {
+            CloudBackupPromptChoiceButtons(choices: offered, choose: choose, cancel: cancel)
         } message: {
-            Text(message)
-        }
-    }
-}
-
-private struct PasskeyChoiceAlertModifier: ViewModifier {
-    @Binding var isPresented: Bool
-    let presentation: CloudBackupPasskeyChoicePresentation?
-    let existingButtonTitle: String
-    let chooseExisting: () -> Void
-    let chooseSecondary: () -> Void
-    let cancel: () -> Void
-
-    func body(content: Content) -> some View {
-        content.alert("Passkey Options", isPresented: $isPresented) {
-            Button(existingButtonTitle, action: chooseExisting)
-
-            if let secondaryActionTitle = presentation?.secondaryActionTitle {
-                Button(secondaryActionTitle, action: chooseSecondary)
-            }
-
-            Button("Cancel", role: .cancel, action: cancel)
-        } message: {
-            Text(presentation?.message ?? "Choose how to continue with Cloud Backup.")
+            Text(offered.message(message, on: screen))
         }
     }
 }
@@ -709,13 +661,12 @@ private struct CloudBackupVerificationPromptView: View {
     let onVerify: () -> Void
 
     private var isVerifying: Bool {
-        if case .running = manager.verificationState { return true }
+        if case .running = manager.screen.verification?.state { return true }
         return false
     }
 
     private var failure: DeepVerificationFailure? {
-        guard !manager.shouldPromptVerification else { return nil }
-        if case let .failed(failure) = manager.verificationState { return failure }
+        if case let .failed(failure) = manager.screen.verification?.state { return failure }
         return nil
     }
 
@@ -735,6 +686,15 @@ private struct CloudBackupVerificationPromptView: View {
 
     private var primaryButtonTitle: String {
         failure == nil ? "Verify" : "Try Again"
+    }
+
+    /// The outcome of a Verify that didn't simply start, drawn under the button that sent it
+    private var verifyOutcome: CloudBackupOutcome? {
+        guard let lastOutcome = manager.screen.lastOutcome, case .action(.verify) = lastOutcome.target else {
+            return nil
+        }
+
+        return lastOutcome.outcome
     }
 
     private var heroIconName: String {
@@ -758,10 +718,13 @@ private struct CloudBackupVerificationPromptView: View {
             heroTint: heroTint,
             heroFillColor: heroFillColor,
             isVerifying: isVerifying,
+            verifyAvailability: manager.screen.actions.availability(action: .verify),
+            verifyOutcome: verifyOutcome,
             onDismiss: onDismiss,
             onVerify: onVerify
         )
         .background(CloudBackupVerificationBackground(heroTint: heroTint))
+        .accessibilityIdentifier(CloudBackupUiElement.promptVerification.identifier)
     }
 }
 
@@ -773,6 +736,8 @@ private struct CloudBackupVerificationPromptContent: View {
     let heroTint: Color
     let heroFillColor: Color
     let isVerifying: Bool
+    let verifyAvailability: CloudBackupActionAvailability?
+    let verifyOutcome: CloudBackupOutcome?
     let onDismiss: () -> Void
     let onVerify: () -> Void
 
@@ -801,6 +766,8 @@ private struct CloudBackupVerificationPromptContent: View {
                 CloudBackupVerificationActions(
                     primaryButtonTitle: primaryButtonTitle,
                     isVerifying: isVerifying,
+                    verifyAvailability: verifyAvailability,
+                    verifyOutcome: verifyOutcome,
                     verify: onVerify,
                     dismiss: onDismiss
                 )
@@ -877,6 +844,8 @@ private struct CloudBackupVerificationCopy: View {
 private struct CloudBackupVerificationActions: View {
     let primaryButtonTitle: String
     let isVerifying: Bool
+    let verifyAvailability: CloudBackupActionAvailability?
+    let verifyOutcome: CloudBackupOutcome?
     let verify: () -> Void
     let dismiss: () -> Void
 
@@ -895,7 +864,22 @@ private struct CloudBackupVerificationActions: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
-            .disabled(isVerifying)
+            .disabled(!verifyAvailability.isAvailable)
+            .accessibilityIdentifier(CloudBackupScreenAction.verify.accessibilityIdentifier)
+
+            if let reason = verifyAvailability?.unavailableReason {
+                Text(reason.caption)
+                    .font(.caption)
+                    .foregroundStyle(.coveLightGray.opacity(0.76))
+                    .accessibilityIdentifier(CloudBackupUiElement.actionUnavailable(action: .verify).identifier)
+            }
+
+            if let verifyOutcome {
+                Text(verifyOutcome.message)
+                    .font(.caption)
+                    .foregroundStyle(Color.statusWarning)
+                    .accessibilityIdentifier(CloudBackupUiElement.lastOutcome.identifier)
+            }
 
             Button(isVerifying ? "Hide" : "Not Now", action: dismiss)
                 .buttonStyle(OnboardingSecondaryButtonStyle())

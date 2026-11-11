@@ -1,12 +1,6 @@
 import SwiftUI
 import UIKit
 
-func cloudBackupPendingEnableCleanupIsAvailable(
-    _ state: CloudBackupPendingEnableCleanupState
-) -> Bool {
-    state == .available
-}
-
 func cloudBackupPendingEnableSupportEmailURL(
     supportCode: String,
     appVersion: String
@@ -32,29 +26,21 @@ struct SettingsCloudBackupEnableSheet: View {
     let onComplete: () -> Void
     let onDismiss: () -> Void
 
-    private var message: String? {
-        if manager.isUnsupportedPasskeyProvider {
-            "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        } else {
-            manager.lifecycleFailureMessage
-        }
+    private var screen: CloudBackupScreen {
+        manager.screen
     }
 
-    private var isBusy: Bool {
-        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
-            return false
+    private var message: String? {
+        if case .unsupportedProvider = screen.configured?.passkeyCard {
+            return "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
         }
 
-        if isAwaitingEnablePrompt(manager.rootPrompt) {
-            return false
-        }
-
-        return manager.isLifecycleEnabling
+        return screen.enableSheetOutcome?.message
     }
 
     private var showingPasskeyChoice: Binding<Bool> {
         Binding(
-            get: { isEnablePasskeyChoice(manager.rootPrompt) },
+            get: { isEnablePasskeyChoice(screen.rootPrompt) },
             set: { isPresented in
                 guard !isPresented else { return }
                 handlePromptDismiss()
@@ -65,7 +51,7 @@ struct SettingsCloudBackupEnableSheet: View {
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
             get: {
-                if case .existingBackupFound = manager.rootPrompt { return true }
+                if case .existingBackupFound = screen.rootPrompt { return true }
                 return false
             },
             set: { isPresented in
@@ -76,7 +62,7 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
-        guard case let .passkeyChoice(intent) = manager.rootPrompt else { return nil }
+        guard case let .passkeyChoice(intent) = screen.rootPrompt else { return nil }
 
         return intent
     }
@@ -88,7 +74,7 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
-        guard case let .existingBackupFound(_, passkeyHint) = manager.rootPrompt else {
+        guard case let .existingBackupFound(_, passkeyHint) = screen.rootPrompt else {
             return nil
         }
 
@@ -112,7 +98,6 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func beginEnableChoice() {
-        guard !isBusy, !isAwaitingEnablePrompt(manager.rootPrompt) else { return }
         manager.dispatch(action: .promptEnablePasskeyChoice(.init(
             savedPasskeyConfirmation: .manual,
             verificationSource: .settings
@@ -130,7 +115,7 @@ struct SettingsCloudBackupEnableSheet: View {
             return
         }
 
-        switch manager.rootPrompt {
+        switch screen.rootPrompt {
         case .existingBackupFound:
             manager.dispatch(action: .discardPendingEnableCloudBackup)
         case .passkeyChoice(.enable), .passkeyChoice(.enableExistingPasskeyOnly):
@@ -147,11 +132,6 @@ struct SettingsCloudBackupEnableSheet: View {
         onComplete()
     }
 
-    private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
-        guard let hint else { return "Use Existing Passkey" }
-        return "Use Existing Passkey (\(hint.nameSuffix))"
-    }
-
     private var existingBackupMessage: String {
         guard let existingBackupPasskeyHint else {
             return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
@@ -160,56 +140,48 @@ struct SettingsCloudBackupEnableSheet: View {
         return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(existingBackupPasskeyHint.nameSuffix)), use that passkey instead."
     }
 
+    /// The prompts' alerts are bound to the screen's root prompt, so a choice Rust rejects leaves
+    /// the prompt it still projects, and the alert comes back with the rejection in it
     var body: some View {
-        CloudBackupExistingBackupAlertHost(
+        CloudBackupEnableRootContent(
+            screen: screen,
+            message: message,
+            onRemoveIncompleteSetup: confirmPendingEnableCleanup,
+            onConfirmSavedPasskey: confirmSavedPasskey,
+            onCancelConfirmation: cancelSavedPasskeyConfirmation,
+            onEnable: beginEnableChoice,
+            onCancel: onDismiss
+        )
+        .modifier(CloudBackupPromptAlertModifier(
+            title: "Existing Cloud Backup Found",
             isPresented: showingExistingBackupPrompt,
             message: existingBackupMessage,
-            createNewBackup: acceptCreateNewPasskey,
-            useExistingPasskey: acceptExistingPasskey,
+            choices: CloudBackupPromptChoice.existingBackup,
+            screen: screen,
+            choose: choose,
             cancel: discardPendingEnable
-        ) {
-            CloudBackupPasskeyChoiceAlertHost(
-                isPresented: showingPasskeyChoice,
-                existingPasskeyButtonTitle: existingPasskeyButtonTitle(
-                    for: passkeyChoicePresentation?.passkeyHint
-                ),
-                secondaryActionTitle: passkeyChoicePresentation?.secondaryActionTitle,
-                message: passkeyChoicePresentation?.message
-                    ?? "Choose how to continue with Cloud Backup.",
-                useExistingPasskey: acceptExistingPasskey,
-                createNewPasskey: acceptCreateNewPasskey,
-                cancel: dismissPasskeyChoice
-            ) {
-                CloudBackupEnableRootContent(
-                    recovery: manager.pendingEnableRecovery,
-                    enableFlow: manager.enableFlow,
-                    verificationPresentation: manager.verificationPresentation,
-                    message: message,
-                    isBusy: isBusy,
-                    onRemoveIncompleteSetup: confirmPendingEnableCleanup,
-                    onConfirmSavedPasskey: confirmSavedPasskey,
-                    onCancelConfirmation: cancelSavedPasskeyConfirmation,
-                    onEnable: beginEnableChoice,
-                    onCancel: onDismiss
-                )
-            }
-        }
+        ))
+        .modifier(CloudBackupPromptAlertModifier(
+            title: "Passkey Options",
+            isPresented: showingPasskeyChoice,
+            message: passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.",
+            choices: passkeyChoicePresentation?.choices ?? [],
+            screen: screen,
+            choose: choose,
+            cancel: dismissPasskeyChoice
+        ))
         .onChange(of: manager.enableCompletion, initial: true) { _, completion in
             completeIfReady(completion)
         }
-        .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
+        .onChange(of: screen.rootPrompt, initial: true) { _, rootPrompt in
             if !isAwaitingEnablePrompt(rootPrompt) {
                 ignoreNextPromptDismiss = false
             }
         }
     }
 
-    private func acceptExistingPasskey() {
-        dispatchPromptAction(.acceptEnablePrompt(.useExisting))
-    }
-
-    private func acceptCreateNewPasskey() {
-        dispatchPromptAction(.acceptEnablePrompt(.createNew))
+    private func choose(_ choice: CloudBackupPromptChoice) {
+        dispatchPromptAction(choice.intent)
     }
 
     private func dismissPasskeyChoice() {
@@ -235,24 +207,24 @@ struct SettingsCloudBackupEnableSheet: View {
 }
 
 private struct CloudBackupEnableRootContent: View {
-    let recovery: CloudBackupPendingEnableRecovery?
-    let enableFlow: CloudBackupEnableFlow?
-    let verificationPresentation: CloudBackupVerificationPresentation
+    let screen: CloudBackupScreen
     let message: String?
-    let isBusy: Bool
     let onRemoveIncompleteSetup: () -> Void
     let onConfirmSavedPasskey: () -> Void
     let onCancelConfirmation: () -> Void
     let onEnable: () -> Void
     let onCancel: () -> Void
 
+    private var isWorking: Bool {
+        screen.enableFlow?.isWorking ?? false
+    }
+
     var body: some View {
         ZStack {
             CloudBackupEnableFlowContent(
-                recovery: recovery,
-                enableFlow: enableFlow,
+                screen: screen,
                 message: message,
-                isBusy: isBusy,
+                isBusy: isWorking,
                 onRemoveIncompleteSetup: onRemoveIncompleteSetup,
                 onConfirmSavedPasskey: onConfirmSavedPasskey,
                 onCancelConfirmation: onCancelConfirmation,
@@ -260,11 +232,8 @@ private struct CloudBackupEnableRootContent: View {
                 onCancel: onCancel
             )
 
-            if isBusy {
-                CloudBackupEnableBusyOverlay(
-                    enableFlow: enableFlow,
-                    verificationPresentation: verificationPresentation
-                )
+            if isWorking {
+                CloudBackupEnableBusyOverlay(enableFlow: screen.enableFlow)
             }
         }
     }
@@ -274,8 +243,7 @@ private struct CloudBackupEnableFlowContent: View {
     private let content: AnyView
 
     init(
-        recovery: CloudBackupPendingEnableRecovery?,
-        enableFlow: CloudBackupEnableFlow?,
+        screen: CloudBackupScreen,
         message: String?,
         isBusy: Bool,
         onRemoveIncompleteSetup: @escaping () -> Void,
@@ -284,14 +252,16 @@ private struct CloudBackupEnableFlowContent: View {
         onEnable: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
-        if let recovery {
+        if let recovery = screen.pendingEnableRecovery {
             content = AnyView(CloudBackupPendingEnableRecoveryView(
                 recovery: recovery,
+                actions: screen.actions,
                 onRemoveIncompleteSetup: onRemoveIncompleteSetup,
                 onCancel: onCancel
             ))
-        } else if case .awaitingSavedPasskeyConfirmation(.manual) = enableFlow {
+        } else if case .awaitingSavedPasskeyConfirmation(.manual) = screen.enableFlow {
             content = AnyView(CloudBackupEnableConfirmationView(
+                continueAvailability: screen.actions.availability(action: .confirmSavedPasskey),
                 onContinue: onConfirmSavedPasskey,
                 onCancel: onCancelConfirmation
             ))
@@ -300,7 +270,8 @@ private struct CloudBackupEnableFlowContent: View {
                 onEnable: onEnable,
                 onCancel: onCancel,
                 message: message,
-                isBusy: isBusy
+                isBusy: isBusy,
+                primaryAvailability: screen.actions.availability(action: .enable)
             ))
         }
     }
@@ -310,60 +281,11 @@ private struct CloudBackupEnableFlowContent: View {
     }
 }
 
-private struct CloudBackupPasskeyChoiceAlertHost<Content: View>: View {
-    @Binding var isPresented: Bool
-    let existingPasskeyButtonTitle: String
-    let secondaryActionTitle: String?
-    let message: String
-    let useExistingPasskey: () -> Void
-    let createNewPasskey: () -> Void
-    let cancel: () -> Void
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
-            .alert("Passkey Options", isPresented: $isPresented) {
-                Button(existingPasskeyButtonTitle, action: useExistingPasskey)
-
-                if let secondaryActionTitle {
-                    Button(secondaryActionTitle, action: createNewPasskey)
-                }
-
-                Button("Cancel", role: .cancel, action: cancel)
-            } message: {
-                Text(message)
-            }
-    }
-}
-
-private struct CloudBackupExistingBackupAlertHost<Content: View>: View {
-    @Binding var isPresented: Bool
-    let message: String
-    let createNewBackup: () -> Void
-    let useExistingPasskey: () -> Void
-    let cancel: () -> Void
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
-            .alert("Existing Cloud Backup Found", isPresented: $isPresented) {
-                Button(
-                    "Create New Backup",
-                    role: .destructive,
-                    action: createNewBackup
-                )
-                Button("Try Existing Passkey", action: useExistingPasskey)
-                Button("Cancel", role: .cancel, action: cancel)
-            } message: {
-                Text(message)
-            }
-    }
-}
-
 struct CloudBackupPendingEnableRecoveryView: View {
     @Environment(\.openURL) private var openURL
 
     let recovery: CloudBackupPendingEnableRecovery
+    let actions: CloudBackupActions
     let onRemoveIncompleteSetup: () -> Void
     let onCancel: () -> Void
 
@@ -371,8 +293,9 @@ struct CloudBackupPendingEnableRecoveryView: View {
         recovery.cleanup == .cleaning
     }
 
+    /// the explanation names cleanup only when this setup has local data Cove can remove
     private var canRemoveIncompleteSetup: Bool {
-        cloudBackupPendingEnableCleanupIsAvailable(recovery.cleanup)
+        recovery.cleanup != .supportOnly
     }
 
     var body: some View {
@@ -392,7 +315,7 @@ struct CloudBackupPendingEnableRecoveryView: View {
                     )
                     CloudBackupRecoveryActions(
                         isCleaning: isCleaning,
-                        canRemoveIncompleteSetup: canRemoveIncompleteSetup,
+                        actions: actions,
                         removeIncompleteSetup: onRemoveIncompleteSetup
                     )
                 }
@@ -471,7 +394,7 @@ private struct CloudBackupRecoverySupportCodeCard: View {
                 .font(.title3.monospaced().weight(.semibold))
                 .uiTestTruncationProbe()
                 .foregroundStyle(.white)
-                .accessibilityIdentifier("cloudBackup.recovery.supportCode")
+                .accessibilityIdentifier(CloudBackupUiElement.recoverySupportCode.identifier)
             CloudBackupRecoverySupportButtons(copy: copy, contactSupport: contactSupport)
                 .buttonStyle(.bordered)
                 .tint(.white)
@@ -520,14 +443,17 @@ private struct CloudBackupRecoverySupportButtons: View {
 
 private struct CloudBackupRecoveryActions: View {
     let isCleaning: Bool
-    let canRemoveIncompleteSetup: Bool
+    let actions: CloudBackupActions
     let removeIncompleteSetup: () -> Void
 
     var body: some View {
         if isCleaning {
             CloudBackupRecoveryCleanupProgress()
-        } else if canRemoveIncompleteSetup {
-            CloudBackupRecoveryCleanupButton(removeIncompleteSetup: removeIncompleteSetup)
+        } else {
+            CloudBackupRecoveryCleanupButton(
+                actions: actions,
+                removeIncompleteSetup: removeIncompleteSetup
+            )
         }
     }
 }
@@ -546,13 +472,17 @@ private struct CloudBackupRecoveryCleanupProgress: View {
 }
 
 private struct CloudBackupRecoveryCleanupButton: View {
+    let actions: CloudBackupActions
     let removeIncompleteSetup: () -> Void
     @State private var showConfirmation = false
 
     var body: some View {
-        Button(role: .destructive) {
-            showConfirmation = true
-        } label: {
+        CloudBackupActionControl(
+            action: .confirmPendingEnableCleanup,
+            actions: actions,
+            role: .destructive,
+            perform: { showConfirmation = true }
+        ) {
             Text("Remove Incomplete Setup")
                 .uiTestTruncationProbe()
                 .frame(maxWidth: .infinity)
@@ -562,7 +492,6 @@ private struct CloudBackupRecoveryCleanupButton: View {
             foregroundColor: .red.opacity(0.95),
             borderColor: Color.red.opacity(0.22)
         ))
-        .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
         .confirmationDialog(
             "Remove incomplete Cloud Backup setup?",
             isPresented: $showConfirmation,
