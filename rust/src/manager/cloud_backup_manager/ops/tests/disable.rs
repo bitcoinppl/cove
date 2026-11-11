@@ -1,5 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
+use crate::manager::cloud_backup_manager::ops::{CloudBackupDisablePreparation, DisableAttempt};
 use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
@@ -353,6 +354,34 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
         Some(CloudBackupExclusiveOperation::RecreateManifest)
     );
     manager.project_exclusive_operation_finished(claim);
+}
+
+/// Each Turn Off attempt gets its own id, so a result from an earlier attempt can never pass as
+/// the current one
+#[tokio::test(flavor = "current_thread")]
+async fn each_turn_off_attempt_gets_its_own_id_and_persists_nothing() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut attempt_ids = Vec::new();
+    for _ in 0..2 {
+        let preparation = manager.prepare_disable_cloud_backup().await.unwrap();
+        let CloudBackupDisablePreparation::Ready(attempt) = preparation else {
+            panic!("expected a Turn Off attempt, got {preparation:?}");
+        };
+        let DisableAttempt::Uncommitted { attempt_id, .. } = *attempt else {
+            panic!("expected an uncommitted attempt, got {attempt:?}");
+        };
+        attempt_ids.push(attempt_id);
+    }
+
+    assert_ne!(attempt_ids[0], attempt_ids[1]);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

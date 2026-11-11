@@ -724,6 +724,7 @@ mod tests {
         let enable = claim(Op::Enable, 4);
         let discard = claim(Op::DiscardPendingEnable, 5);
         let switch = CloudBackupExclusiveOperationClaim::drive_account_switch(7.into());
+        let other_switch = CloudBackupExclusiveOperationClaim::drive_account_switch(8.into());
         let verify = claim(Op::VerificationRepair, 6);
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
@@ -853,6 +854,11 @@ mod tests {
                 Decision::Run,
             ),
             (
+                policy(PolicyBody::AccountSwitch { op: Some(switch) }),
+                CommandClass::Operation(other_switch),
+                Decision::Stale,
+            ),
+            (
                 policy(PolicyBody::AccountSwitch { op: None }),
                 CommandClass::Operation(switch),
                 Decision::Stale,
@@ -962,6 +968,30 @@ mod tests {
         }
         assert!(supervisor.in_flight_write.is_none());
         assert!(supervisor.pending_writes.is_empty());
+    }
+
+    /// An operation that ended while its write was in flight gets Cancelled whatever the remote
+    /// answered: the caller is gone, and a cloud error would read as this operation failing
+    #[tokio::test(flavor = "current_thread")]
+    async fn ended_operation_write_reports_cancelled_over_its_remote_error() {
+        let mut supervisor = CloudBackupWriteSupervisor::default();
+        let generation = ConfigGeneration::next();
+        let verify = claim(CloudBackupExclusiveOperation::VerificationRepair, 1);
+        let writes = ConfiguredWrites { claim: verify, kind: ConfiguredWriter::Other };
+        set_policy(&mut supervisor, generation, configured(Some(writes)));
+
+        let write = submit_none(&mut supervisor, CommandClass::Operation(verify));
+        set_policy(&mut supervisor, generation, configured(None));
+        supervisor
+            .complete_remote_write(
+                CloudBackupWriteCommandContext::new(0, Some(verify)),
+                Err(CloudBackupError::Offline("the cloud is unreachable".into())),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(write.await.unwrap().into_result(), Err(CloudBackupError::Cancelled)));
+        assert!(supervisor.in_flight_write.is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]

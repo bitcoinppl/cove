@@ -6,15 +6,18 @@
 
 mod app;
 mod clock;
+mod crash_tests;
 mod deadline;
 mod fakes;
 mod fixtures;
+mod incident_tests;
 mod invariants;
 mod model_tests;
 mod process;
 mod reset_tests;
 mod runtime;
 mod tests;
+mod write_policy_tests;
 
 pub(crate) use self::app::{NextAction, TestApp, open_durable_state};
 pub(crate) use self::fakes::{
