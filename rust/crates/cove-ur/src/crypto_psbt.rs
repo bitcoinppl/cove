@@ -38,7 +38,7 @@ impl CryptoPsbt {
     /// # Errors
     /// Returns error if PSBT deserialization fails
     pub fn from_bytes(psbt_bytes: &[u8]) -> Result<Self> {
-        let psbt = BdkPsbt::deserialize(psbt_bytes)
+        let psbt = cove_util::psbt::deserialize(psbt_bytes)
             .map_err_prefix("Invalid PSBT", UrError::CborDecodeError)?;
         Ok(Self { psbt })
     }
@@ -91,7 +91,7 @@ impl CryptoPsbt {
         let psbt_bytes = decoder.bytes().map_err_cbor_decode()?.to_vec();
 
         // deserialize PSBT
-        let psbt = BdkPsbt::deserialize(&psbt_bytes)
+        let psbt = cove_util::psbt::deserialize(&psbt_bytes)
             .map_err_prefix("Invalid PSBT", UrError::CborDecodeError)?;
 
         Ok(Self { psbt })

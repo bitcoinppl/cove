@@ -214,10 +214,10 @@ impl MultiFormat {
                 Err(error) => Some(error),
             };
 
-        // only the probe error kind is logged, its message can echo characters of the input
+        // signed import errors never quote the input, so the PSBT parse reason is safe to keep
         warn!(
             input_len = string.len(),
-            signed_import_error = signed_import_error.as_ref().map(SignedImportError::kind),
+            signed_import_error = signed_import_error.as_ref().map(tracing::field::display),
             "could not parse string as MultiFormat"
         );
         Err(MultiFormatError::UnrecognizedFormat)
@@ -885,5 +885,37 @@ mod tests {
         assert_eq!(bip84.fingerprint().map(|f| f.to_string()).as_deref(), Some("817e7be0"));
         assert_eq!(bip84.xpub().unwrap().to_string(), ACCOUNT_XPUB);
         assert_eq!(first_address.to_string(), "bc1q0g0vn4yqyk0zjwxw0zv5pltyyczty004zc9g7r");
+    }
+
+    #[test]
+    fn malformed_psbt_import_keeps_the_payload_out_of_errors_and_logs() {
+        use crate::test_support::{log_capture::LogCapture, malformed_psbt::MalformedPsbt};
+        use base64::{Engine as _, prelude::BASE64_STANDARD};
+
+        for fixture in MalformedPsbt::all() {
+            fixture.assert_parser_echoes_payload();
+
+            let mut cbor = Vec::new();
+            minicbor::Encoder::new(&mut cbor).bytes(&fixture.bytes).unwrap();
+            let ur = UR::new("crypto-psbt", &cbor).to_string();
+            let base64 = BASE64_STANDARD.encode(&fixture.bytes);
+
+            let capture = LogCapture::start();
+            let errors = [
+                MultiFormat::try_from_string(&base64).unwrap_err(),
+                MultiFormat::try_from_string(&ur).unwrap_err(),
+                MultiFormat::try_from_data(&fixture.bytes).unwrap_err(),
+            ];
+            let logs = capture.text();
+
+            // both the text probe and the UR decoder logged their failure
+            assert!(logs.contains("could not parse string as MultiFormat"), "{logs}");
+            assert!(logs.contains("payload not recognized at crypto-psbt decode"), "{logs}");
+            fixture.assert_absent_from("captured logs", &logs);
+
+            for error in errors {
+                fixture.assert_absent_from("error text", &error.to_string());
+            }
+        }
     }
 }

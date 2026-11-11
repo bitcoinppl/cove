@@ -6,7 +6,7 @@
 //!
 //! This module provides [`SignedTransactionOrPsbt`] to detect and parse both formats.
 
-use cove_util::result_ext::ResultExt as _;
+use cove_util::psbt::PsbtDecodeError;
 use std::sync::Arc;
 
 use base64::{Engine as _, prelude::BASE64_STANDARD};
@@ -39,17 +39,21 @@ pub enum SignedTransactionOrPsbt {
     SignedPsbt(Arc<Psbt>),
 }
 
+/// Why a signed transaction import could not be parsed
+///
+/// Its text reaches logs and the import alert, so no variant quotes the input
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SignedImportError {
-    #[error("Failed to decode hex: {0}")]
-    HexDecodeError(String),
+    // the decoder errors quote a character or byte of the input, so they are dropped
+    #[error("Failed to decode hex")]
+    HexDecodeError,
 
-    #[error("Failed to decode base64: {0}")]
-    Base64DecodeError(String),
+    #[error("Failed to decode base64")]
+    Base64DecodeError,
 
     #[error("Failed to parse PSBT: {0}")]
-    PsbtParseError(String),
+    PsbtParseError(#[from] PsbtDecodeError),
 
     #[error("Unrecognized format: input is neither a valid PSBT nor transaction")]
     UnrecognizedFormat,
@@ -60,18 +64,6 @@ pub enum SignedImportError {
 
 type Error = SignedImportError;
 
-impl SignedImportError {
-    /// A stable name for the failure, safe to log because it never echoes the input
-    pub(crate) const fn kind(&self) -> &'static str {
-        match self {
-            Self::HexDecodeError(_) => "hex_decode",
-            Self::Base64DecodeError(_) => "base64_decode",
-            Self::PsbtParseError(_) => "psbt_parse",
-            Self::UnrecognizedFormat => "unrecognized_format",
-            Self::NotSigned => "not_signed",
-        }
-    }
-}
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn psbt_has_signatures(psbt: &Psbt) -> bool {
@@ -110,7 +102,7 @@ impl SignedTransactionOrPsbt {
     pub fn try_from_bytes(data: &[u8]) -> Result<Self> {
         // check for PSBT magic bytes first
         if data.len() >= PSBT_MAGIC.len() && &data[..PSBT_MAGIC.len()] == PSBT_MAGIC {
-            let psbt = Psbt::try_new(data.to_vec()).map_err_str(Error::PsbtParseError)?;
+            let psbt = Psbt::decode(data)?;
             if !psbt_has_signatures(&psbt) {
                 return Err(Error::NotSigned);
             }
@@ -147,9 +139,9 @@ impl SignedTransactionOrPsbt {
     fn try_parse_psbt_string(input: &str) -> Result<Self> {
         // base64-encoded PSBT detection (case-sensitive for base64)
         if input.starts_with(PSBT_BASE64_PREFIX) {
-            let bytes = BASE64_STANDARD.decode(input).map_err_str(Error::Base64DecodeError)?;
+            let bytes = BASE64_STANDARD.decode(input).map_err(|_| Error::Base64DecodeError)?;
 
-            let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
+            let psbt = Psbt::decode(&bytes)?;
             if !psbt_has_signatures(&psbt) {
                 return Err(Error::NotSigned);
             }
@@ -160,9 +152,9 @@ impl SignedTransactionOrPsbt {
         // hex-encoded PSBT detection (case-insensitive)
         let input_lower = input.to_ascii_lowercase();
         if input_lower.starts_with(PSBT_HEX_PREFIX) {
-            let bytes = hex::decode(input).map_err_str(Error::HexDecodeError)?;
+            let bytes = hex::decode(input).map_err(|_| Error::HexDecodeError)?;
 
-            let psbt = Psbt::try_new(bytes).map_err_str(Error::PsbtParseError)?;
+            let psbt = Psbt::decode(&bytes)?;
             if !psbt_has_signatures(&psbt) {
                 return Err(Error::NotSigned);
             }
@@ -457,13 +449,38 @@ mod tests {
         assert!(
             matches!(
                 base64,
-                Err(SignedImportError::Base64DecodeError(_) | SignedImportError::PsbtParseError(_))
+                Err(SignedImportError::Base64DecodeError | SignedImportError::PsbtParseError(_))
             ),
             "{base64:?}"
         );
 
         let hex = SignedTransactionOrPsbt::try_parse("70736274ff0100");
         assert!(matches!(hex, Err(SignedImportError::PsbtParseError(_))), "{hex:?}");
+    }
+
+    #[test]
+    fn malformed_psbt_errors_never_quote_the_payload() {
+        use crate::test_support::malformed_psbt::MalformedPsbt;
+
+        let expected = [PsbtDecodeError::PreimageHashMismatch, PsbtDecodeError::InvalidKey];
+
+        for (fixture, expected) in MalformedPsbt::all().into_iter().zip(expected) {
+            fixture.assert_parser_echoes_payload();
+
+            let base64 = BASE64_STANDARD.encode(&fixture.bytes);
+            let hex = hex::encode(&fixture.bytes);
+            let errors = [
+                SignedTransactionOrPsbt::try_from_bytes(&fixture.bytes).unwrap_err(),
+                SignedTransactionOrPsbt::try_parse(&base64).unwrap_err(),
+                SignedTransactionOrPsbt::try_parse(&hex).unwrap_err(),
+            ];
+
+            for error in errors {
+                assert_eq!(error, SignedImportError::PsbtParseError(expected));
+                fixture.assert_absent_from("error text", &error.to_string());
+                fixture.assert_absent_from("error debug", &format!("{error:?}"));
+            }
+        }
     }
 
     #[test]

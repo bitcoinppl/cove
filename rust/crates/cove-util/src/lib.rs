@@ -1,6 +1,7 @@
 pub mod encryption;
 pub mod format;
 pub mod generation;
+pub mod psbt;
 pub mod result_ext;
 pub mod time;
 
