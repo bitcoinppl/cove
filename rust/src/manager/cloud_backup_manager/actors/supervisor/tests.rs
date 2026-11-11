@@ -27,6 +27,9 @@ use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
 };
 use super::verification::{DeepVerificationContinuation, VerificationRun};
+use crate::manager::cloud_backup_manager::wallets::{
+    PasskeyRequestAuthority, PermitGrant, PermitIntent,
+};
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_tokio::FutureTimeoutExt as _;
 use crate::test_support::loaded_host_wait;
@@ -41,7 +44,7 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
     configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
-    hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
+    hold_wallet_upload_in_flight, listed_detail, permit, tap, wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
     staged_pending_enable_journal, supervisor_checkpoint, unowned_writes, current_config,
@@ -464,7 +467,7 @@ async fn seed_local_wallet_with_cloud_duplicate(
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(manager, CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -836,6 +839,32 @@ fn local_reset_cancels_restore_and_revokes_its_claim() {
     assert!(effects_settled.try_recv().is_ok());
     assert!(!active.accepts_completion(claim, "restore completion"));
     assert!(active.restore(claim).is_none());
+}
+
+/// A cancelled restore keeps its claim while the worker drains, but its permit is revoked at the
+/// cancel, so a passkey request the worker had not started yet can't present
+#[test]
+fn restore_cancellation_revokes_its_permit_and_keeps_its_claim() {
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Restore,
+        operation_id(u64::MAX),
+    );
+    let cancellation = Arc::new(AtomicBool::new(false));
+    let mut active = Runtime::Disabled { op: None };
+    active.start_restore(RestoreRun::new(claim, Arc::clone(&cancellation))).unwrap();
+    active.bind_grant(claim, PermitGrant::new(tap(PermitIntent::RestoreFromCloudBackup)));
+    let PasskeyRequestAuthority::Interactive(permit) = active.authority(claim) else {
+        panic!("the restore holds its tap's permit");
+    };
+    assert!(permit.check_live().is_ok());
+
+    assert!(active.cancel_restore(claim));
+
+    assert!(cancellation.load(Ordering::Acquire));
+    assert!(permit.check_live().is_err(), "the cancel revoked the permit");
+    assert!(matches!(active.authority(claim), PasskeyRequestAuthority::Silent));
+    assert!(active.accepts_completion(claim, "restore completion"));
+    assert!(!active.cancel_restore(claim), "a second cancel is a no-op");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1378,9 +1407,7 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
                 .complete_verification(
                     VerificationRun {
                         claim,
-                        continuation: DeepVerificationContinuation::RecreateManifest {
-                            attempt: VerificationAttempt::Initial,
-                        },
+                        continuation: DeepVerificationContinuation::RecreateManifest,
                         basis: supervisor.evidence_basis(),
                         read_at: InventoryReadAt::default(),
                     },
@@ -1395,10 +1422,7 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
-            let continuation = DeepVerificationContinuation::Manual {
-                force_discoverable: true,
-                attempt: VerificationAttempt::Initial,
-            };
+            let continuation = DeepVerificationContinuation::Manual { force_discoverable: true };
             supervisor
                 .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() }, Err(CloudBackupError::Internal("completion".into())))
                 .await
@@ -1410,10 +1434,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
-            let continuation = DeepVerificationContinuation::Manual {
-                force_discoverable: true,
-                attempt: VerificationAttempt::Initial,
-            };
+            let continuation = DeepVerificationContinuation::Manual { force_discoverable: true };
             supervisor
                 .complete_deep_verification_wrapper_repair_resume(
                     VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
@@ -1428,10 +1449,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
-            let continuation = DeepVerificationContinuation::Manual {
-                force_discoverable: true,
-                attempt: VerificationAttempt::Initial,
-            };
+            let continuation = DeepVerificationContinuation::Manual { force_discoverable: true };
             supervisor
                 .complete_deep_verification_auto_sync_upload(
                     VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
@@ -1446,10 +1464,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
-            let continuation = DeepVerificationContinuation::Manual {
-                force_discoverable: true,
-                attempt: VerificationAttempt::Initial,
-            };
+            let continuation = DeepVerificationContinuation::Manual { force_discoverable: true };
             supervisor
                 .complete_deep_verification_auto_sync_finalization(
                     VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
@@ -1464,10 +1479,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
-            let continuation = DeepVerificationContinuation::Manual {
-                force_discoverable: true,
-                attempt: VerificationAttempt::Initial,
-            };
+            let continuation = DeepVerificationContinuation::Manual { force_discoverable: true };
             supervisor
                 .complete_deep_verification_auto_sync_resume(
                     VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
@@ -1496,9 +1508,7 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
                 .complete_verification(
                     VerificationRun {
                         claim,
-                        continuation: DeepVerificationContinuation::ReinitializeBackup {
-                            attempt: VerificationAttempt::Initial,
-                        },
+                        continuation: DeepVerificationContinuation::ReinitializeBackup,
                         basis: supervisor.evidence_basis(),
                         read_at: InventoryReadAt::default(),
                     },
@@ -3703,7 +3713,7 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
         ],
     );
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
         manager.projected_exclusive_operation().is_none()
     })
@@ -3767,7 +3777,7 @@ async fn restore_all_provider_failure_stops_before_scheduling_the_next_wallet() 
         CloudStorageError::Offline("provider disconnected".into()),
     );
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     wait_for_test_condition(Duration::from_secs(2), "provider stop should settle", || {
         manager.projected_exclusive_operation().is_none()
     })
@@ -3806,6 +3816,85 @@ async fn restore_all_provider_failure_stops_before_scheduling_the_next_wallet() 
     ));
 }
 
+/// Sol PR 3 finding 2: Cancel ends Restore All's authority to present at once, while the run
+/// keeps its claim until its preparation drains. The local key goes missing while the listing is
+/// held, so the preparation reaches key recovery after the cancel, and recovery presents nothing
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_cancellation_revokes_key_recovery_still_to_come() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    // Restore All shows only with two or more wallets to restore
+    let first_wallet = xpub_only_wallet_metadata();
+    let mut second_wallet = xpub_only_wallet_metadata();
+    second_wallet.network = Network::Testnet;
+    let (namespace, items) = prepare_restore_all_queue_fixture(
+        &manager,
+        vec![
+            (first_wallet.clone(), wallet_entry_with_labels(&first_wallet, None)),
+            (second_wallet.clone(), wallet_entry_with_labels(&second_wallet, None)),
+        ],
+    );
+    let globals = test_globals();
+
+    // the cloud copy of the key and a discoverable passkey would recover it if anything asked
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    globals.passkey.set_discover_result(Ok(cove_device::passkey::DiscoveredPasskeyResult {
+        prf_output: vec![7; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let listing = globals.cloud.gate_wallet_backup_download_after_successes(
+        namespace.clone(),
+        items[0].record_id.clone(),
+        0,
+    );
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
+    listing
+        .wait_until_blocked()
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
+        .await
+        .expect("Restore All's listing should reach the held read");
+
+    CloudBackupKeychain::global().delete_master_key().unwrap();
+    cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+    call!(manager.supervisor.cancel_restore_all_operation()).await.unwrap();
+    assert!(matches!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::Running { cancellation_requested: true, .. }
+    ));
+
+    listing.release();
+    wait_for_test_condition(Duration::from_secs(5), "cancelled Restore All should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // the preparation reached key recovery, and recovery asked for no passkey
+    assert_eq!(globals.cloud.master_key_download_attempt_count(), 1);
+    assert_eq!(globals.passkey.discover_count(), 0);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+
+    // a cancelled run that drains clears its marker, as one cancelled during preparation does
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+    for wallet in [&first_wallet, &second_wallet] {
+        assert!(
+            Database::global()
+                .wallets()
+                .get(&wallet.id, wallet.network, wallet.wallet_mode)
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next() {
     let _guard = async_test_lock().lock().await;
@@ -3827,7 +3916,7 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
         1,
     );
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     gate.wait_until_blocked()
         .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
@@ -3894,7 +3983,7 @@ async fn reentering_detail_keeps_the_running_restore_all_batch() {
         1,
     );
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     gate.wait_until_blocked()
         .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
@@ -4280,7 +4369,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
 &unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
-vec![test_cloud_only_wallet(&record_id)], generation)
+vec![test_cloud_only_wallet(&record_id)], generation, permit(PermitIntent::RestoreAll))
         .await;
 
     let mut supervisor = test_supervisor(
@@ -4316,6 +4405,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
             &unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![test_cloud_only_wallet(duplicate_record_id)],
             generation,
+            permit(PermitIntent::RestoreAll),
         )
         .await
         .unwrap();
@@ -4479,7 +4569,7 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     list_test_wallet_files(&namespace, &[local_record_id.as_str()]);
 
@@ -4526,7 +4616,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
 
     // a refresh and a verification both read the wallet as local before it is deleted
@@ -4607,7 +4697,7 @@ async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wa
         CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
     );
 
-    let restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     restore.restore_record(&restored_record_id).await.unwrap();
     manager.handle_local_wallets_changed();
     supervisor_checkpoint(&manager).await;
@@ -4719,7 +4809,7 @@ async fn seed_backup_matching_only_a_watch_only_wallet_restores_into_that_wallet
     );
     assert_eq!(restore_all_batch_size(&manager), Some(1));
 
-    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into()))
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into(), Some(tap(PermitIntent::RestoreCloudWallet))))
         .await
         .unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the restore should finish", || {
@@ -4755,7 +4845,7 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let secret = test_seed_secret();
 
     let (local_wallet, local_record_id) = upload_test_seed_backup(&namespace, &secret);
-    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -4797,7 +4887,7 @@ async fn restore_all_adds_a_seed_backup_to_the_matching_watch_only_wallet() {
     // the fixture starts from no local wallets, so the watch-only wallet is added afterwards
     let local_wallet = save_local_watch_only_wallet(&secret);
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
         manager.projected_exclusive_operation().is_none()
     })
@@ -4891,7 +4981,7 @@ async fn restoring_one_of_three_copies_leaves_the_others_already_on_device() {
         CloudBackupRestoreAllState::StartAvailable { wallet_count: 3 }
     );
 
-    call!(manager.supervisor.start_restore_cloud_wallet_operation(first.into())).await.unwrap();
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(first.into(), Some(tap(PermitIntent::RestoreCloudWallet)))).await.unwrap();
 
     // the same record IDs stay listed, but the restored wallet now covers both of them
     wait_for_cloud_only_statuses(&manager, &[
@@ -4932,7 +5022,7 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
         1,
     );
 
-    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
     gate.wait_until_blocked()
         .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
@@ -5005,7 +5095,7 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     )])
     .await;
 
-    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into()))
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into(), Some(tap(PermitIntent::RestoreCloudWallet))))
         .await
         .unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the restore should finish", || {
@@ -5083,7 +5173,7 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
         save_local_watch_only_wallet_with_address_type(&secret, WalletAddressType::WrappedSegwit);
     let (seed_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
 
-    let prepared = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
+    let prepared = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet), permit(PermitIntent::RestoreCloudWallet)).await.unwrap();
     let outcome = prepared.restore_record(&seed_record_id).await.unwrap();
 
     // both watch-only wallets match the seed, so it becomes its own hot wallet
@@ -5290,7 +5380,7 @@ async fn reinitialize_backup_verification_reads_the_new_backup() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+    supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup, Some(tap(PermitIntent::Reinitialize)));
     let claim = supervisor.runtime.claim().unwrap();
 
     assert_eq!(claim.operation(), CloudBackupExclusiveOperation::ReinitializeBackup);
@@ -5331,14 +5421,14 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     );
 
     let master_key_reads = globals.cloud.master_key_download_attempt_count();
+    let claim = supervisor.runtime.claim().unwrap();
+    let authority = supervisor.runtime.authority(claim);
     let step = manager
         .prepare_deep_verify_cloud_backup(
-            CloudBackupWriteClient::for_operation(
-                supervisor.write.clone(),
-                supervisor.runtime.claim().unwrap(),
-            ),
+            CloudBackupWriteClient::for_operation(supervisor.write.clone(), claim),
             supervisor.runtime.generation(),
             false,
+            authority,
         )
         .await;
 
@@ -5367,9 +5457,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         .complete_verification(
             VerificationRun {
                 claim: reinitialize_claim,
-                continuation: DeepVerificationContinuation::ReinitializeBackup {
-                    attempt: VerificationAttempt::Initial,
-                },
+                continuation: DeepVerificationContinuation::ReinitializeBackup,
                 basis: supervisor.evidence_basis(),
                 read_at: manager.inventory_read_at(),
             },
@@ -5386,9 +5474,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         .complete_verification(
             VerificationRun {
                 claim: verification_claim,
-                continuation: DeepVerificationContinuation::ReinitializeBackup {
-                    attempt: VerificationAttempt::Initial,
-                },
+                continuation: DeepVerificationContinuation::ReinitializeBackup,
                 basis: supervisor.evidence_basis(),
                 read_at: manager.inventory_read_at(),
             },

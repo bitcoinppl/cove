@@ -5,7 +5,7 @@ use tracing::info;
 use super::blocking_cloud_error;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyRequestAuthority,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
@@ -17,6 +17,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn do_recover_other_backups(
         &self,
         writes: &CloudBackupWriteClient,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RecoverOtherBackups)?;
 
@@ -35,7 +36,7 @@ impl RustCloudBackupManager {
             return Err(CloudBackupError::Internal("no other cloud backups found".into()));
         }
 
-        let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
+        let matcher = NamespacePasskeyMatcher::new(&cloud, passkey, &authority);
         let matches = match matcher.match_namespaces(&namespaces).await? {
             NamespaceMatchOutcome::Matched(matches) => matches,
             NamespaceMatchOutcome::UserDeclined => {

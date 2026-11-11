@@ -224,9 +224,7 @@ impl CloudBackupSupervisor {
             self.start_verification_with_context(
                 manager,
                 verification_claim,
-                DeepVerificationContinuation::ReinitializeBackup {
-                    attempt: VerificationAttempt::Initial,
-                },
+                DeepVerificationContinuation::ReinitializeBackup,
             );
             return;
         }

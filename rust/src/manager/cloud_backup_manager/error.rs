@@ -44,6 +44,10 @@ pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
 const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
 const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request did not complete. Try again.";
+const NEEDS_PASSKEY_MESSAGE: &str =
+    "Cloud Backup needs your passkey. Open Cloud Backup and tap Verify to continue.";
+const PASSKEY_BUSY_MESSAGE: &str =
+    "Another passkey request is still open. Finish or close it, then try again.";
 const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
     "Cove unlocked your backup, but some saved wallet data on this device does not match it. ",
     "Cove kept that data unchanged."
@@ -282,6 +286,8 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::LocalWalletConflict(_)
+            | CloudBackupError::NeedsPasskey
+            | CloudBackupError::PasskeyBusy
             | CloudBackupError::Cancelled => Self::Other,
         }
     }
@@ -438,6 +444,14 @@ pub(crate) enum CloudBackupError {
     #[error("restore cancelled")]
     Cancelled,
 
+    /// Work no user tap started needed the passkey, so it stopped without asking for it
+    #[error("background work needs the passkey, which only a user action may request")]
+    NeedsPasskey,
+
+    /// Another passkey request was still on screen, so this one was not presented
+    #[error("another passkey request is on screen")]
+    PasskeyBusy,
+
     /// A restore kept local wallet data unchanged because it did not match the backup
     #[error("local wallet conflict: {0}")]
     LocalWalletConflict(#[source] LocalWalletConflict),
@@ -571,6 +585,8 @@ impl CloudBackupError {
             // a bare platform cancellation does not prove the reader cancelled, so the
             // copy states the outcome instead of claiming intent
             Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+            Self::NeedsPasskey => NEEDS_PASSKEY_MESSAGE.into(),
+            Self::PasskeyBusy => PASSKEY_BUSY_MESSAGE.into(),
             Self::PasskeyMismatch | Self::NoBackupFound | Self::Cancelled => self.to_string(),
         }
     }
@@ -597,6 +613,10 @@ impl CloudBackupError {
 
             // the reader stopped the operation, so it is an expected outcome
             Self::Cancelled | Self::PasskeyDiscoveryCancelled => info!("{operation}: {self}"),
+
+            // work no tap started stopped before a passkey sheet, or a tap found another sheet
+            // on screen; both are expected and the user's next tap goes on
+            Self::NeedsPasskey | Self::PasskeyBusy => info!("{operation}: {self}"),
 
             Self::NotSupported(_)
             | Self::UnsupportedPasskeyProvider

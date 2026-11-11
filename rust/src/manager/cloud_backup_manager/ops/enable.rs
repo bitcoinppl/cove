@@ -14,7 +14,7 @@ use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
-    PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey,
+    PasskeyMaterialOutcome, PasskeyRequestAuthority, PreparedWalletBackup, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupProgress,
@@ -66,6 +66,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn prepare_enable(
         &self,
         context: CloudBackupEnableContext,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupEnablePreparation, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         let passkey = PasskeyAccess::global();
@@ -97,7 +98,7 @@ impl RustCloudBackupManager {
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
-        let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
+        let matcher = NamespacePasskeyMatcher::new(&cloud, passkey, &authority);
         let (match_outcome, passkey_hint) = matcher.match_namespaces_with_hint(&namespaces).await?;
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
@@ -141,6 +142,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn prepare_create_new_enable_passkey(
         &self,
         context: CloudBackupEnableContext,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupEnablePasskeyPreparation, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         let passkey_access = PasskeyAccess::global();
@@ -150,7 +152,7 @@ impl RustCloudBackupManager {
 
         let namespace_id = master_key.namespace_id();
         info!("Enable: namespace_id={namespace_id}, getting passkey");
-        let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
+        let acquirer = PasskeyMaterialAcquirer::new(passkey_access, &authority);
         match acquirer.discover_or_register_for_enable().await {
             Ok(PasskeyMaterialOutcome::Authenticated(passkey)) => {
                 self.pending_enable.record_pending_enable_passkey(&master_key, &passkey)?;
@@ -210,7 +212,12 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            let matcher = NamespacePasskeyMatcher::new(&cloud, PasskeyAccess::global());
+            // reading the hint presents nothing, so it needs no permit
+            let matcher = NamespacePasskeyMatcher::new(
+                &cloud,
+                PasskeyAccess::global(),
+                &PasskeyRequestAuthority::Silent,
+            );
             let passkey_hint = matcher.passkey_hint_for_namespaces(&existing_namespaces).await;
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
@@ -225,6 +232,7 @@ impl RustCloudBackupManager {
         &self,
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupEnablePasskeyRegistration, CloudBackupError> {
         let log_context = flow.log_context();
         let cancelled_context = flow.cancelled_context();
@@ -239,7 +247,7 @@ impl RustCloudBackupManager {
         info!("{log_context}: namespace_id={namespace_id}, creating passkey");
         let acquisition = self
             .acquire_enable_passkey(|| {
-                let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
+                let acquirer = PasskeyMaterialAcquirer::new(passkey_access, &authority);
                 async move { acquirer.register_for_enable().await }
             })
             .await;
@@ -287,11 +295,12 @@ impl RustCloudBackupManager {
     pub(crate) async fn confirm_saved_passkey_from_session(
         &self,
         pending: PendingEnableSession,
+        authority: PasskeyRequestAuthority,
     ) -> CloudBackupSavedPasskeyConfirmation {
         let context = pending.context();
         let (master_key, staged_passkey) = pending.into_staged_parts();
         let passkey_access = PasskeyAccess::global();
-        let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
+        let acquirer = PasskeyMaterialAcquirer::new(passkey_access, &authority);
 
         match acquirer.confirm_registered_for_enable(&staged_passkey).await {
             Ok(passkey) => {
@@ -301,8 +310,11 @@ impl RustCloudBackupManager {
                     context,
                 })
             }
-            Err(error @ CloudBackupError::PasskeyDiscoveryCancelled)
-            | Err(error @ CloudBackupError::Passkey(_)) => {
+            Err(
+                error @ (CloudBackupError::PasskeyDiscoveryCancelled
+                | CloudBackupError::Passkey(_)
+                | CloudBackupError::PasskeyBusy),
+            ) => {
                 let pending = PendingEnableSession::awaiting_saved_passkey_confirmation(
                     Zeroizing::new(cove_cspp::master_key::MasterKey::from_bytes(
                         *master_key.as_bytes(),

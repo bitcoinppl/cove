@@ -1121,6 +1121,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_cloud_backup_ui_elements(
     ): Short
+    external fun uniffi_cove_checksum_func_passkey_request_may_present(
+    ): Short
     external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
     ): Short
     external fun uniffi_cove_checksum_func_balance_presentation_provisional(
@@ -3705,6 +3707,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cloud_backup_ui_elements(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_passkey_request_may_present(uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_balance_presentation_provisional(uniffi_out_err: UniffiRustCallStatus,
@@ -3979,6 +3983,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_cloud_backup_ui_elements() != 21236.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_passkey_request_may_present() != 31752.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
@@ -75248,6 +75255,24 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
             return FfiConverterSequenceTypeCloudBackupUiElement.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_cloud_backup_ui_elements(
+
+        _status)
+}
+    )
+    }
+
+
+        /**
+         * Whether the passkey request the platform is about to show may still show
+         *
+         * The platform asks after its presenter is ready and right before it starts the system sheet.
+         * The operation that started the request can end while the platform waits for a presenter; the
+         * request then answers false, and the platform reports it as not completed without showing
+         * anything. Only interactive requests hold the gate, so a presence check doesn't ask
+         */ fun `passkeyRequestMayPresent`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_passkey_request_may_present(
 
         _status)
 }

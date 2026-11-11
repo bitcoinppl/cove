@@ -91,8 +91,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertRowFits(recordId: secondRecordId, "cloud-only row two")
         layout.assertRowFits(recordId: thirdRecordId, "cloud-only row three")
 
-        // restore can finish verification on its own, which turns Verify Now into Verify Again
-        layout.assertActionFits(robot.button(startingWith: "Verify"), "Verify").tap()
+        // a restore doesn't count as verification, so the card offers Verify Now
+        layout.assertActionFits(robot.button(startingWith: "Verify Now"), "Verify Now").tap()
 
         layout.assertTextFits(app.staticTexts["Backup verified"], "verified result", initialWait: 30)
         layout.assertTextFits(layout.staticText(endingWith: "wallet(s) verified"), "verified summary")
@@ -145,10 +145,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.restoreFromCloudBackup()
         robot.openSettings()
         robot.openCloudBackupDetail()
-        control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.inventoryLoaded && $0.verification == "verified"
-                && !$0.awaitingUploadConfirmation
-        }
+        robot.verifyRestoredBackup(control)
 
         // a cancel shows nothing about the passkey being gone, so Verify is the only way on
         try control.answerNextPasskeyAssertions([.userCancelled])
@@ -216,10 +213,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.restoreFromCloudBackup()
         robot.openSettings()
         robot.openCloudBackupDetail()
-        control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.inventoryLoaded && $0.verification == "verified"
-                && !$0.awaitingUploadConfirmation
-        }
+        robot.verifyRestoredBackup(control)
 
         let downloadsSoFar = control.state.count(.masterDownload)
         try control.update {
@@ -380,8 +374,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(robot.staticText(containing: "Open to finish turning off"), "Settings row: message")
     }
 
-    /// Restores Fixture Wallet One at the largest text size and opens Cloud Backup once it is
-    /// verified, with wallets two and three listed only in the cloud when `listingOthers`
+    /// Restores Fixture Wallet One at the largest text size, opens Cloud Backup and verifies it with
+    /// Verify Now, with wallets two and three listed only in the cloud when `listingOthers`
     private func restoreWalletOneAndOpenDetail(listingOthers: Bool) throws -> CloudBackupHostControl {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [firstRecordId])
@@ -395,6 +389,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         let notOnDevice = listingOthers ? [secondRecordId, thirdRecordId] : []
         robot.openSettings()
         robot.openCloudBackupDetail()
+        robot.verifyRestoredBackup(control)
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
             $0.inventoryLoaded && $0.verification == "verified" && !$0.awaitingUploadConfirmation
                 && $0.notOnDeviceRecordIds == notOnDevice

@@ -220,6 +220,7 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         }
         robot.openSettings()
         robot.openCloudBackupDetail()
+        robot.assertRestoredBackupNotVerified(control)
         robot.scrollToHittable(robot.button(startingWith: "Restore All (2)"), initialWait: 30)
 
         return control
@@ -272,9 +273,18 @@ struct RestoreAllScreen {
     }
 
     /// Whether the wallet's row is in the cloud-only section, whose status reads Not on device
+    ///
+    /// The list builds only rows near the screen, and the cards above the rows can push them below
+    /// it, so the row is scrolled to rather than expected on the first screen
     func isNotOnDevice(_ recordId: String) -> Bool {
         let row = row(recordId)
-        return row.waitForExistence(timeout: 5) && row.label.contains("Not on device")
+        var swipes = 0
+        while !(row.waitForExistence(timeout: swipes == 0 ? 5 : 1) && row.isHittable), swipes < 8 {
+            app.swipeUp(velocity: .slow)
+            swipes += 1
+        }
+
+        return row.exists && row.label.contains("Not on device")
     }
 
     /// Fixture wallet names, which each row's label starts with

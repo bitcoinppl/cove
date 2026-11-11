@@ -16,6 +16,10 @@ use cove_device::cloud_storage::{
 use cove_device::keychain::Keychain;
 use cove_tokio::FutureTimeoutExt as _;
 
+use crate::manager::cloud_backup_manager::actors::{PermitTicket, dispatch_test_support};
+use crate::manager::cloud_backup_manager::wallets::{
+    PasskeyRequestAuthority, PermitIntent, authority_test_support,
+};
 use crate::test_support::{LoadedHostDeadline, MockKeychain, loaded_host_wait};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
@@ -1864,7 +1868,8 @@ pub(crate) async fn recover_other_backups_for_test(
     )
     .await;
 
-    let result = manager.do_recover_other_backups(&writes).await;
+    let result =
+        manager.do_recover_other_backups(&writes, permit(PermitIntent::RecoverOtherBackups)).await;
     finish_operation_for_test(manager, claim).await;
     result
 }
@@ -2325,4 +2330,14 @@ pub(crate) fn master_wrapper_for_test(
     .unwrap();
 
     serde_json::to_vec(&encrypted).unwrap()
+}
+
+/// The ticket an admitted tap for `intent` carries
+pub(crate) fn tap(intent: PermitIntent) -> PermitTicket {
+    dispatch_test_support::ticket(intent)
+}
+
+/// A live permit for driving one passkey-presenting step by hand
+pub(crate) fn permit(intent: PermitIntent) -> PasskeyRequestAuthority {
+    authority_test_support::live_permit(intent)
 }

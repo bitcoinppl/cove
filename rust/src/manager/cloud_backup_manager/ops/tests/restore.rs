@@ -1593,6 +1593,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
         .do_restore_cloud_wallet(
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
             &record_id,
+            permit(PermitIntent::RestoreCloudWallet),
         )
         .await
         .unwrap();
@@ -1649,6 +1650,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
         .do_restore_cloud_wallet(
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
             &record_id,
+            permit(PermitIntent::RestoreCloudWallet),
         )
         .await
         .unwrap();
@@ -1671,6 +1673,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
+            permit(PermitIntent::RestoreAll),
         )
         .await
         .unwrap();
@@ -1763,6 +1766,7 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
                 ),
             ],
             0,
+            permit(PermitIntent::RestoreAll),
         )
         .await
         .unwrap();
@@ -1897,6 +1901,7 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             frozen_wallets,
             0,
+            permit(PermitIntent::RestoreAll),
         )
         .await
         .unwrap();
@@ -1950,6 +1955,7 @@ async fn restore_all_preparation_propagates_wallet_authorization_failure() {
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
+            permit(PermitIntent::RestoreAll),
         )
         .await;
     let error = match result {
@@ -1987,6 +1993,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
                 CloudBackupWalletStatus::DeletedFromDevice,
             )],
             0,
+            permit(PermitIntent::RestoreAll),
         )
         .await
         .unwrap();

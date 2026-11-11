@@ -12,8 +12,10 @@ async fn enable_uses_one_wrapper_download_per_namespace() {
     seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
     seed_master_key_wrapper(globals, &[8; 32], &[9; 32], 2);
 
-    let preparation =
-        manager.prepare_enable(CloudBackupEnableContext::settings_manual()).await.unwrap();
+    let preparation = manager
+        .prepare_enable(CloudBackupEnableContext::settings_manual(), permit(PermitIntent::Enable))
+        .await
+        .unwrap();
 
     assert!(matches!(preparation, CloudBackupEnablePreparation::ExistingBackupFound { .. }));
     assert_eq!(globals.cloud.master_key_download_attempt_count(), 2);
@@ -35,6 +37,7 @@ async fn passkey_candidate_loads_are_limited_to_four_concurrent_wrapper_reads() 
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let task = tokio::spawn(async move { matcher.match_namespaces(&namespaces).await });
 
@@ -68,6 +71,7 @@ async fn passkey_candidate_cancellation_does_not_start_queued_wrapper_reads() {
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let cancellation = Arc::new(AtomicBool::new(false));
     let cancellation_for_task = Arc::clone(&cancellation);
@@ -123,6 +127,7 @@ async fn passkey_matches_keep_registration_order_after_concurrent_loads() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&namespaces)
     .await
@@ -151,6 +156,7 @@ async fn pending_and_missing_upload_states_skip_wrapper_downloads() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[pending_namespace, missing_namespace])
     .await
@@ -171,9 +177,10 @@ async fn non_missing_discovery_failure_never_registers_enable_passkey() {
     }));
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
 
-    let result = PasskeyMaterialAcquirer::new(PasskeyAccess::global())
-        .discover_or_register_for_enable()
-        .await;
+    let result =
+        PasskeyMaterialAcquirer::new(PasskeyAccess::global(), &permit(PermitIntent::Enable))
+            .discover_or_register_for_enable()
+            .await;
 
     assert!(matches!(result, Err(CloudBackupError::Passkey(_))));
     assert_eq!(globals.passkey.discover_count(), 1);
@@ -198,6 +205,7 @@ async fn passkey_match_treats_missing_credential_as_no_match() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await
@@ -224,6 +232,7 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await
@@ -249,6 +258,7 @@ async fn passkey_match_propagates_upload_state_authorization_required() {
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await;
@@ -281,6 +291,7 @@ async fn passkey_match_propagates_master_wrapper_authorization_required() {
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await;
@@ -310,6 +321,7 @@ async fn passkey_match_keeps_pending_upload_state_inconclusive() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await
@@ -332,6 +344,7 @@ async fn passkey_match_keeps_transient_master_wrapper_failure_inconclusive() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await
@@ -374,6 +387,7 @@ async fn passkey_match_conclusive_mismatch_is_not_masked_by_another_namespace_fa
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[unavailable_namespace, mismatched_namespace])
     .await
@@ -407,6 +421,7 @@ async fn passkey_match_pending_supported_candidate_outweighs_stale_mismatch() {
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
 
@@ -463,6 +478,7 @@ async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[supported_namespace, unsupported_namespace])
     .await
@@ -489,6 +505,7 @@ async fn passkey_match_discovery_propagates_unsupported_provider() {
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[namespace])
     .await;
@@ -533,6 +550,7 @@ async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[first_namespace, second_namespace])
     .await;
@@ -579,6 +597,7 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[first_namespace.clone(), second_namespace.clone()])
     .await
@@ -635,6 +654,7 @@ async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&[matched_namespace.clone(), cancelled_namespace.clone()])
     .await
@@ -680,6 +700,7 @@ async fn passkey_match_session_authenticates_new_namespace_after_discovery_refre
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
     let first = session.match_snapshot(std::slice::from_ref(&old_namespace)).await.unwrap();
@@ -725,6 +746,7 @@ async fn passkey_match_session_refreshes_changed_wrapper_and_preserves_auth_para
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
     let first = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
@@ -786,6 +808,7 @@ async fn passkey_match_session_retries_targeted_auth_failure_before_presentation
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
     let first = session.match_snapshot(std::slice::from_ref(&stale_namespace)).await.unwrap();
@@ -849,6 +872,7 @@ async fn passkey_match_session_does_not_retry_targeted_auth_failure_after_presen
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
     let first = session.match_snapshot(std::slice::from_ref(&stale_namespace)).await.unwrap();
@@ -907,6 +931,7 @@ async fn passkey_match_stops_after_terminal_targeted_auth_failure() {
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&candidates)
     .await;
@@ -945,6 +970,7 @@ async fn passkey_match_keeps_earlier_matches_after_terminal_targeted_auth_failur
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     )
     .match_namespaces(&candidates)
     .await
@@ -977,6 +1003,7 @@ async fn passkey_match_session_does_not_prompt_for_unchanged_wrapper() {
     let matcher = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
         PasskeyAccess::global(),
+        &permit(PermitIntent::RecoverOtherBackups),
     );
     let mut session = matcher.start_session();
 
@@ -996,7 +1023,8 @@ async fn wrapper_repair_discovery_propagates_unsupported_provider() {
     globals.reset();
     globals.passkey.set_discover_result(Err(PasskeyError::PrfUnsupportedProvider));
 
-    let acquirer = PasskeyMaterialAcquirer::new(PasskeyAccess::global());
+    let acquirer =
+        PasskeyMaterialAcquirer::new(PasskeyAccess::global(), &permit(PermitIntent::Enable));
     let discovery_result = acquirer.discover_or_create_for_wrapper_repair().await;
     let error = match discovery_result {
         Ok(_) => panic!("expected unsupported passkey provider error"),
@@ -1368,7 +1396,10 @@ async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
         CloudStorageError::NotFound("wallet files missing".into()),
     );
 
-    let error = manager.prepare_passkey_wrapper_repair_no_discovery().await.unwrap_err();
+    let error = manager
+        .prepare_passkey_wrapper_repair_no_discovery(permit(PermitIntent::RepairPasskey))
+        .await
+        .unwrap_err();
 
     assert!(error.to_string().contains("wallet files missing"), "{error}");
 }
@@ -1403,7 +1434,10 @@ async fn wrapper_repair_keeps_malformed_decrypted_values_out_of_logs() {
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
     let capture = LogCapture::start();
-    let error = manager.prepare_passkey_wrapper_repair_no_discovery().await.unwrap_err();
+    let error = manager
+        .prepare_passkey_wrapper_repair_no_discovery(permit(PermitIntent::RepairPasskey))
+        .await
+        .unwrap_err();
     let logs = capture.text();
 
     // failure messages never print the logs or the error, which would carry the marker

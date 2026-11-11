@@ -11,6 +11,7 @@ use rand::RngExt as _;
 use tracing::{debug, info, warn};
 
 use super::super::{StagedPrfKey, UnpersistedPrfKey};
+use super::authority::PasskeyRequestAuthority;
 use super::authorization_retry::PlatformAuthorizationRetrier;
 use super::prf_output_to_key;
 use crate::manager::cloud_backup_manager::CloudBackupError;
@@ -83,12 +84,17 @@ impl PasskeyMaterialPurpose {
 /// Acquires passkey PRF material without persisting it to the keychain
 pub(crate) struct PasskeyMaterialAcquirer {
     passkey: PasskeyAccess,
+    authority: PasskeyRequestAuthority,
 }
 
 impl PasskeyMaterialAcquirer {
-    /// Builds an acquirer from the passkey service handle
-    pub(crate) fn new(passkey: &PasskeyAccess) -> Self {
-        Self { passkey: passkey.clone() }
+    /// Builds an acquirer that presents requests under `authority`
+    pub(crate) fn new(passkey: &PasskeyAccess, authority: &PasskeyRequestAuthority) -> Self {
+        Self { passkey: passkey.clone(), authority: authority.clone() }
+    }
+
+    fn retrier(&self) -> PlatformAuthorizationRetrier {
+        PlatformAuthorizationRetrier::new(self.authority.clone())
     }
 
     /// Creates a passkey for wrapper repair without persisting keychain state
@@ -96,7 +102,7 @@ impl PasskeyMaterialAcquirer {
         &self,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         info!("Creating new passkey for wrapper repair");
-        let retrier = PlatformAuthorizationRetrier::new();
+        let retrier = self.retrier();
 
         self.create_new_prf_key_with_mapper(map_wrapper_repair_passkey_error, &retrier).await
     }
@@ -104,7 +110,7 @@ impl PasskeyMaterialAcquirer {
     /// Registers an enable passkey without immediately authenticating it
     pub(crate) async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
         info!("Registering new passkey for cloud backup enable");
-        let retrier = PlatformAuthorizationRetrier::new();
+        let retrier = self.retrier();
 
         self.register_for_enable_with_retrier(&retrier).await
     }
@@ -129,7 +135,7 @@ impl PasskeyMaterialAcquirer {
         &self,
         staged: &StagedPrfKey,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        let retrier = PlatformAuthorizationRetrier::new();
+        let retrier = self.retrier();
         let prf_output = self
             .authenticate_registered(
                 &staged.credential_id,
@@ -174,9 +180,9 @@ impl PasskeyMaterialAcquirer {
     ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
         info!("{}", purpose.attempt_message());
         let prf_salt: [u8; 32] = rand::rng().random();
-        let retrier = PlatformAuthorizationRetrier::new();
+        let retrier = self.retrier();
 
-        match retrier.discover(&self.passkey, prf_salt).await {
+        match retrier.discover(&self.passkey, prf_salt).await? {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
                 info!("{}", purpose.discovered_message());
@@ -255,7 +261,7 @@ impl PasskeyMaterialAcquirer {
         retrier: &PlatformAuthorizationRetrier,
     ) -> Result<(PasskeyRegistrationResult, String), CloudBackupError> {
         let (user, name_suffix) = passkey_registration_user();
-        let registration = retrier.create(&self.passkey, user).await.map_err(map_passkey_error)?;
+        let registration = retrier.create(&self.passkey, user).await?.map_err(map_passkey_error)?;
 
         Ok((registration, name_suffix))
     }
@@ -269,7 +275,7 @@ impl PasskeyMaterialAcquirer {
     ) -> Result<Vec<u8>, CloudBackupError> {
         retrier
             .authenticate(&self.passkey, credential_id, prf_salt)
-            .await
+            .await?
             .map_err(map_passkey_error)
     }
 }

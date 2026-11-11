@@ -1,0 +1,7 @@
+# a passkey request presents platform UI, so it may start only under a live user permit; the
+# authorization retrier checks one before each attempt and is the only allowed caller
+disallowed-methods = [
+    { path = "cove_device::passkey::PasskeyAccess::create_passkey", reason = "present passkey requests through PlatformAuthorizationRetrier, which checks the user permit" },
+    { path = "cove_device::passkey::PasskeyAccess::authenticate_with_prf", reason = "present passkey requests through PlatformAuthorizationRetrier, which checks the user permit" },
+    { path = "cove_device::passkey::PasskeyAccess::discover_and_authenticate_with_prf", reason = "present passkey requests through PlatformAuthorizationRetrier, which checks the user permit" },
+]

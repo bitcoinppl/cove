@@ -103,6 +103,7 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
                 CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
             ),
             confirmed,
+            permit(PermitIntent::DeleteUndecryptableWalletBackups),
         )
         .await
         .unwrap();

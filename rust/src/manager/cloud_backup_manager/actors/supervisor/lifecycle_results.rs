@@ -220,22 +220,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// Records a verification run's evidence, unless the configuration or wallet set changed
-    /// since the run read the wallets at `basis`
-    pub(crate) fn record_verification_evidence(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        basis: EvidenceBasis,
-        result: &DeepVerificationResult,
-    ) {
-        if basis != self.evidence_basis() {
-            debug!("Cloud Backup discarded verification evidence for an older basis {basis:?}");
-            return;
-        }
-
-        self.runtime.commit(|lifecycle| manager.persist_verification_result(lifecycle, result));
-    }
-
     /// Records a finished verification run's evidence and shows its result, or, when the
     /// configuration or wallet set changed since the run read the wallets at `basis`, ends the
     /// run without either

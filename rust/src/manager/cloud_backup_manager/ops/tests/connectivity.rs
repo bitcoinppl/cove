@@ -247,8 +247,10 @@ async fn connectivity_reconnect_reports_no_files_when_nothing_was_uploaded() {
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::NoFiles);
 }
 
+/// A verification that failed offline waits for the user's Verify tap; the
+/// reconnect alone presents no passkey
 #[tokio::test(flavor = "current_thread")]
-async fn reconnect_retries_verification_after_offline_failure() {
+async fn reconnect_leaves_offline_verification_failure_without_passkey() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -256,7 +258,9 @@ async fn reconnect_retries_verification_after_offline_failure() {
     seed_verifiable_cloud_master_key(globals);
     CONNECTIVITY_MANAGER.set_connection_state(false);
 
-    call!(manager.supervisor.start_verification(false)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(false, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(
         Duration::from_secs(1),
         "expected offline verification failure",
@@ -264,11 +268,25 @@ async fn reconnect_retries_verification_after_offline_failure() {
     )
     .await;
 
+    let authentications = globals.passkey.authenticate_count();
     CONNECTIVITY_MANAGER.set_connection_state(true);
+    manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
+    assert_test_condition_stays_true(
+        Duration::from_millis(150),
+        "reconnect left the offline failure for the user",
+        || matches!(manager.model_snapshot().verification, VerificationState::Failed(_)),
+    )
+    .await;
+    assert_eq!(globals.passkey.authenticate_count(), authentications);
+
+    // the Failed state's retry is the user's own tap
+    call!(manager.supervisor.start_verification_for_test(false, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(
         Duration::from_secs(1),
-        "expected reconnect to retry and verify backup",
+        "expected the tapped retry to verify the backup",
         || matches!(manager.model_snapshot().verification, VerificationState::Verified(_)),
     )
     .await;
@@ -384,8 +402,10 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     assert!(globals.cloud.list_wallet_files_snapshot_attempt_count() > snapshot_attempts);
 }
 
+/// A connected connectivity failure settles once instead of retrying the
+/// verification, which would present the passkey a second time
 #[tokio::test(flavor = "current_thread")]
-async fn connected_connectivity_failure_retries_verification_once() {
+async fn connected_connectivity_failure_settles_verification_without_retry() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -394,14 +414,23 @@ async fn connected_connectivity_failure_retries_verification_once() {
     seed_verifiable_cloud_master_key(globals);
     globals.cloud.fail_next_list_wallet_files_offline("offline");
 
-    call!(manager.supervisor.start_verification(false)).await.unwrap();
-
+    call!(manager.supervisor.start_verification_for_test(false, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(
         Duration::from_secs(1),
-        "expected connected offline failure to retry verification",
-        || matches!(manager.model_snapshot().verification, VerificationState::Verified(_)),
+        "expected the connected offline failure to settle",
+        || matches!(manager.model_snapshot().verification, VerificationState::Failed(_)),
     )
     .await;
+
+    assert_test_condition_stays_true(
+        Duration::from_millis(150),
+        "the failure stays until the user taps Verify",
+        || matches!(manager.model_snapshot().verification, VerificationState::Failed(_)),
+    )
+    .await;
+    assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -413,42 +442,14 @@ async fn unknown_connectivity_does_not_block_verification() {
     seed_verifiable_cloud_master_key(globals);
     CONNECTIVITY_MANAGER.set_connection_status(ConnectivityStatus::Unknown);
 
-    call!(manager.supervisor.start_verification(false)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(false, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
 
     wait_for_test_condition(
         Duration::from_secs(1),
         "expected unknown connectivity to attempt verification",
         || matches!(manager.model_snapshot().verification, VerificationState::Verified(_)),
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.cloud.fail_list_wallet_files("list failed");
-
-    call!(manager.supervisor.start_verification(false)).await.unwrap();
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "expected non-connectivity verification failure",
-        || matches!(manager.model_snapshot().verification, VerificationState::Failed(_)),
-    )
-    .await;
-
-    CONNECTIVITY_MANAGER.set_connection_state(false);
-    manager.handle_connectivity_change(ConnectivityStatus::Disconnected);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    manager.handle_connectivity_change(ConnectivityStatus::Connected);
-
-    assert_test_condition_stays_true(
-        Duration::from_millis(150),
-        "non-connectivity failure should stay failed after reconnect",
-        || matches!(manager.model_snapshot().verification, VerificationState::Failed(_)),
     )
     .await;
 }

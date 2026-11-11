@@ -1,39 +1,22 @@
 use super::*;
 
 /// What follows a verification run, which decides how it ends
+///
+/// A run is tried once: a connectivity failure settles as a failure whose retry is the user's
+/// Verify tap, since a retry the app starts on its own would present a passkey nobody asked for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DeepVerificationContinuation {
-    Manual { force_discoverable: bool, attempt: VerificationAttempt },
-    RecreateManifest { attempt: VerificationAttempt },
-    ReinitializeBackup { attempt: VerificationAttempt },
+    Manual { force_discoverable: bool },
+    RecreateManifest,
+    ReinitializeBackup,
 }
 
 impl DeepVerificationContinuation {
-    fn attempt(self) -> VerificationAttempt {
-        match self {
-            Self::Manual { attempt, .. }
-            | Self::RecreateManifest { attempt }
-            | Self::ReinitializeBackup { attempt } => attempt,
-        }
-    }
-
     fn force_discoverable(self) -> bool {
         match self {
-            Self::Manual { force_discoverable, .. } => force_discoverable,
-            Self::RecreateManifest { .. } | Self::ReinitializeBackup { .. } => false,
+            Self::Manual { force_discoverable } => force_discoverable,
+            Self::RecreateManifest | Self::ReinitializeBackup => false,
         }
-    }
-
-    fn with_attempt(self, attempt: VerificationAttempt) -> Self {
-        match self {
-            Self::Manual { force_discoverable, .. } => Self::Manual { force_discoverable, attempt },
-            Self::RecreateManifest { .. } => Self::RecreateManifest { attempt },
-            Self::ReinitializeBackup { .. } => Self::ReinitializeBackup { attempt },
-        }
-    }
-
-    fn connectivity_retry(self) -> Self {
-        self.with_attempt(VerificationAttempt::AutomaticConnectivityRetry)
     }
 }
 
@@ -54,40 +37,53 @@ pub(crate) struct VerificationRun {
 }
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_recovery_operation(&mut self, action: RecoveryAction) {
+    pub(crate) fn begin_recovery_operation(
+        &mut self,
+        action: RecoveryAction,
+        ticket: Option<PermitTicket>,
+    ) {
         match action {
-            RecoveryAction::RecreateManifest => self.start_recreate_manifest_recovery(),
+            RecoveryAction::RecreateManifest => self.start_recreate_manifest_recovery(ticket),
             RecoveryAction::ReinitializeBackup => {
-                if !self.retry_drive_account_switch_reinitialization() {
-                    self.start_reinitialize_backup_operation();
+                if let Err(ticket) = self.retry_drive_account_switch_reinitialization(ticket) {
+                    self.start_reinitialize_backup_operation(ticket);
                 }
             }
-            RecoveryAction::RepairPasskey => self.begin_repair_passkey_operation(false),
+            RecoveryAction::RepairPasskey => self.begin_repair_passkey_operation(false, ticket),
         }
     }
 
-    fn start_recreate_manifest_recovery(&mut self) {
+    fn start_recreate_manifest_recovery(&mut self, ticket: Option<PermitTicket>) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(claim) = self
-            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::RecreateManifest,
+            ticket,
+        ) else {
             return;
         };
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_reupload_all_wallets(writes).await;
+            let result = manager.prepare_reupload_all_wallets(writes, authority).await;
             send!(addr.complete_recreate_manifest_recovery(claim, result));
         });
     }
 
-    pub(crate) fn begin_repair_passkey_operation(&mut self, no_discovery: bool) {
+    pub(crate) fn begin_repair_passkey_operation(
+        &mut self,
+        no_discovery: bool,
+        ticket: Option<PermitTicket>,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::RepairPasskey,
+            ticket,
+        ) else {
             return;
         };
 
@@ -100,29 +96,32 @@ impl CloudBackupSupervisor {
         }
 
         manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
             let result = if no_discovery {
-                manager.prepare_passkey_wrapper_repair_no_discovery().await
+                manager.prepare_passkey_wrapper_repair_no_discovery(authority).await
             } else {
-                manager.prepare_passkey_wrapper_repair().await
+                manager.prepare_passkey_wrapper_repair(authority).await
             };
             send!(addr.complete_repair_passkey_wrapper(claim, result));
         });
     }
 
     /// A dispatched Verify: it joins the uploads already waiting for confirmation, or starts its
-    /// own operation
+    /// own operation, which holds the tap's permit
     ///
     /// The operation is allocated before the prompt is dismissed or the screen changes, in the
-    /// admission turn, so nothing can start between the admission and the verification
+    /// admission turn, so nothing can start between the admission and the verification. It holds
+    /// through authentication, checking, the auto-sync of missing wallets and wrapper repair
     pub(crate) fn start_verification_intent(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         source: CloudBackupVerificationSource,
         force_discoverable: bool,
+        ticket: Option<PermitTicket>,
     ) {
         // the pending upload verifier confirms those uploads and judges its evidence against the
-        // wallet set it read, so this intent only shows that confirmation
+        // wallet set it read, so this intent only shows that confirmation, presenting no passkey
         if !force_discoverable && manager.has_pending_cloud_upload_verification() {
             self.runtime.commit(|lifecycle| {
                 manager.join_pending_upload_confirmation(lifecycle, source);
@@ -137,7 +136,7 @@ impl CloudBackupSupervisor {
         }
 
         let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
+            self.begin_permitted_operation(&manager, CloudBackupExclusiveOperation::Verify, ticket)
         else {
             warn!("Cloud Backup admitted a verification its body has no place for");
             return;
@@ -147,56 +146,8 @@ impl CloudBackupSupervisor {
         self.start_verification_with_context(
             manager,
             claim,
-            DeepVerificationContinuation::Manual {
-                force_discoverable,
-                attempt: VerificationAttempt::Initial,
-            },
+            DeepVerificationContinuation::Manual { force_discoverable },
         );
-    }
-
-    /// Retries a verification that failed for lost connectivity, once the cloud is reachable
-    ///
-    /// The retry is its own Verify operation; while another operation holds the slot it waits
-    /// for the next reconnect, since the failure and its retry action stay on screen
-    pub async fn retry_verification_after_reconnect(
-        &mut self,
-        force_discoverable: bool,
-    ) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
-
-        if !self.begin_manual_verification(manager, force_discoverable) {
-            debug!(
-                "Cloud Backup reconnect verification retry deferred while another operation runs"
-            );
-        }
-
-        Produces::ok(())
-    }
-
-    /// Starts a verification operation from an entry point that admission doesn't decide
-    ///
-    /// Returns false when another operation holds the slot; that operation reports its own
-    /// result, and nothing was shown for this one
-    pub(crate) fn begin_manual_verification(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-        force_discoverable: bool,
-    ) -> bool {
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
-        else {
-            return false;
-        };
-
-        self.start_verification_with_context(
-            manager,
-            claim,
-            DeepVerificationContinuation::Manual {
-                force_discoverable,
-                attempt: VerificationAttempt::Initial,
-            },
-        );
-        true
     }
 
     pub(crate) fn start_verification_with_context(
@@ -218,10 +169,9 @@ impl CloudBackupSupervisor {
         self.schedule_verification(manager, claim, continuation);
     }
 
-    /// Runs one verification pass for the operation with `claim`
+    /// Runs the verification pass for the operation with `claim`
     ///
-    /// Every run reads the wallets afresh, a connectivity retry included, so each run takes the
-    /// wallet set as it is now as its basis
+    /// The run reads the wallets afresh, so it takes the wallet set as it is now as its basis
     fn schedule_verification(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
@@ -236,9 +186,15 @@ impl CloudBackupSupervisor {
         };
         let force_discoverable = continuation.force_discoverable();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let authority = self.runtime.authority(claim);
         self.addr.send_fut_with(move |addr| async move {
             let result = manager
-                .prepare_deep_verify_cloud_backup(writes, run.basis.config(), force_discoverable)
+                .prepare_deep_verify_cloud_backup(
+                    writes,
+                    run.basis.config(),
+                    force_discoverable,
+                    authority,
+                )
                 .await;
             send!(addr.complete_verification(run, result));
         });
@@ -489,8 +445,7 @@ impl CloudBackupSupervisor {
         self.finish_deep_verification_continuation(manager, run, result);
     }
 
-    /// Ends a verification run: one connectivity retry under the same operation, or the result
-    /// and the end of the operation
+    /// Ends a verification run with its result and the end of the operation
     fn finish_deep_verification_continuation(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
@@ -507,13 +462,6 @@ impl CloudBackupSupervisor {
                         | DeepVerificationResult::PasskeyConfirmed(_)
                         | DeepVerificationResult::PasskeyMissing(_)
                 );
-
-        // the retry keeps the operation, so nothing starts between the two runs
-        if verification_needs_connectivity_retry(&manager, run.continuation.attempt(), &result) {
-            self.record_verification_evidence(&manager, run.basis, &result);
-            self.schedule_verification(manager, run.claim, run.continuation.connectivity_retry());
-            return;
-        }
 
         self.settle_verification_evidence(&manager, run.basis, run.read_at, result);
 
@@ -589,9 +537,7 @@ impl CloudBackupSupervisor {
                 self.start_verification_with_context(
                     manager,
                     claim,
-                    DeepVerificationContinuation::RecreateManifest {
-                        attempt: VerificationAttempt::Initial,
-                    },
+                    DeepVerificationContinuation::RecreateManifest,
                 );
             }
             Err(error) => {

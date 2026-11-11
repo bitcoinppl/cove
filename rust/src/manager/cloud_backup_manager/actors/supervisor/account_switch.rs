@@ -175,10 +175,29 @@ pub(crate) struct UnsavedDriveAccountSwitchCompletion {
     end: DriveAccountSwitchReinitializationEnd,
 }
 
+/// Try Again's ticket for a switch whose reinitialize stopped with no run, held until the
+/// platform's next state report
+///
+/// Only that report can say whether the reinitialize runs again: a staged account restarts it, and
+/// any other state rolls back or finishes the switch. Try Again can't start the run's claim itself,
+/// because the report would then read the live claim as a run still in progress and skip the
+/// restart. So the switch holds the tap's ticket for that one report. The restart of this
+/// transition binds it to the new run, and the report drops it in every other outcome. A report
+/// with no Try Again before it, as at launch, finds none and restarts the run without a permit
+#[derive(Debug)]
+pub(crate) struct PendingDriveAccountSwitchRecovery {
+    transition_id: DriveAccountSwitchId,
+    ticket: Option<PermitTicket>,
+}
+
 impl CloudBackupSupervisor {
     /// Starts the switch dispatch admitted: claims the slot, records the switch, and asks
     /// Android for the account once the writes queued before it drained
-    pub(crate) fn start_drive_account_switch(&mut self, manager: &RustCloudBackupManager) {
+    pub(crate) fn start_drive_account_switch(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        ticket: Option<PermitTicket>,
+    ) {
         if Self::drive_account_switch().is_some() {
             self.drive_account_switch_did_not_start(
                 manager,
@@ -201,6 +220,9 @@ impl CloudBackupSupervisor {
             return;
         }
 
+        // the switch holds this claim through the account picker and its reinitialize, which
+        // registers the new backup's passkey under this tap's permit
+        self.runtime.grant(claim, ticket);
         manager.project_exclusive_operation_started(claim);
 
         let transition = PersistedDriveAccountSwitch {
@@ -304,17 +326,14 @@ impl CloudBackupSupervisor {
                 self.confirm_drive_account_switch_committed(manager, transition_id.into());
             }
             R::CommitFailed(_) => {
-                Self::report_drive_account_switch_recovery_required(
-                    &manager,
-                    COMMIT_FAILED_MESSAGE,
-                );
+                self.report_drive_account_switch_recovery_required(&manager, COMMIT_FAILED_MESSAGE);
             }
             R::Finalized(_) => {
                 Self::clear_drive_account_switch_recovery(&manager);
                 self.drive_account_switch_settled();
             }
             R::FinalizeFailed(_) => {
-                Self::report_drive_account_switch_recovery_required(
+                self.report_drive_account_switch_recovery_required(
                     &manager,
                     FINALIZE_FAILED_MESSAGE,
                 );
@@ -323,7 +342,7 @@ impl CloudBackupSupervisor {
                 self.confirm_drive_account_switch_rolled_back(&manager, transition_id.into());
             }
             R::RollbackFailed(_) => {
-                Self::report_drive_account_switch_recovery_required(
+                self.report_drive_account_switch_recovery_required(
                     &manager,
                     ROLLBACK_FAILED_MESSAGE,
                 );
@@ -335,15 +354,62 @@ impl CloudBackupSupervisor {
 
     /// Try Again on a switch that needs attention, which dispatch admitted
     ///
-    /// A reinitialize that failed runs again; any other step is decided again from the
-    /// platform's durable state, which Android reports next
-    pub(crate) fn retry_drive_account_switch(&mut self, manager: &RustCloudBackupManager) {
+    /// A reinitialize that failed runs again under the tap's ticket. Any other step is decided
+    /// again from the platform's durable state, which Android reports next; when that report can
+    /// continue into work that may ask for a passkey, the switch's run holds the tap's permit
+    /// before the platform is asked
+    pub(crate) fn retry_drive_account_switch(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        ticket: Option<PermitTicket>,
+    ) {
         Self::clear_drive_account_switch_recovery(manager);
-        if self.retry_drive_account_switch_reinitialization() {
-            return;
+        let ticket = match self.retry_drive_account_switch_reinitialization(ticket) {
+            Ok(()) => return,
+            Err(ticket) => ticket,
+        };
+
+        self.authorize_drive_account_switch_recovery(manager, ticket);
+        self.request_platform_step(manager, PlatformStep::ReportState);
+    }
+
+    /// Binds Try Again's ticket to the run of a switch whose platform report can continue into
+    /// work that may ask for a passkey
+    ///
+    /// A staged selection starts the reinitialize, which may register or find the passkey, and
+    /// a commit continues into the new backup's verification, which may authenticate it. A
+    /// reinitialize that stopped with no run restarts only once the report confirms the staged
+    /// account, so its ticket waits for that report. Other phases only roll back, finalize or
+    /// wait, and present nothing
+    fn authorize_drive_account_switch_recovery(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        ticket: Option<PermitTicket>,
+    ) {
+        use PersistedDriveAccountSwitchPhase as Phase;
+
+        let Some(transition) = Self::drive_account_switch() else { return };
+        match transition.phase {
+            Phase::AwaitingAccountSelection | Phase::AwaitingAccountCommitSucceeded => {}
+            Phase::Reinitializing => {
+                self.drive_account_switch_recovery_permit =
+                    Some(PendingDriveAccountSwitchRecovery {
+                        transition_id: transition.transition_id,
+                        ticket,
+                    });
+                return;
+            }
+            _ => return,
         }
 
-        self.request_platform_step(manager, PlatformStep::ReportState);
+        match self.restore_drive_account_switch_claim(transition.transition_id, manager) {
+            Ok(restored) => {
+                self.runtime.grant(restored.claim(), ticket);
+            }
+            Err(error) => warn!(
+                "Cloud Backup could not authorize the Google Drive account switch's Try Again: {error}"
+            ),
+        }
     }
 
     /// Cancel on a switch that needs attention, which dispatch admitted while the platform has
@@ -413,7 +479,7 @@ impl CloudBackupSupervisor {
             Ok(()) => self.request_platform_step(manager, PlatformStep::Rollback(transition_id)),
             Err(error) => {
                 warn!("Google Drive account switch could not roll back: {error}");
-                Self::report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
+                self.report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
             }
         }
     }
@@ -427,10 +493,7 @@ impl CloudBackupSupervisor {
             Ok(()) => self.request_platform_step(&manager, PlatformStep::Finalize(transition_id)),
             Err(error) => {
                 error!("Failed to confirm Google Drive account commit: {error}");
-                Self::report_drive_account_switch_recovery_required(
-                    &manager,
-                    FINISH_FAILED_MESSAGE,
-                );
+                self.report_drive_account_switch_recovery_required(&manager, FINISH_FAILED_MESSAGE);
             }
         }
     }
@@ -458,9 +521,22 @@ impl CloudBackupSupervisor {
         // ending the switch publishes the configured policy, and the write lane wakes uploads
         manager.refresh_sync_health();
 
-        // the switch record is gone, so finish_enable_operation would take this claim for a stale
-        // switch and leave it held with the recovery spinner up
-        self.finish_reinitialize_backup(manager, claim);
+        match self.runtime.authority(claim) {
+            // the switch record is gone, so finish_enable_operation would take this claim for a
+            // stale switch and leave it held with the recovery spinner up
+            PasskeyRequestAuthority::Interactive(_) => {
+                self.finish_reinitialize_backup(manager, claim);
+            }
+            // no tap stands behind this commit, as with the launch report's: verifying the new
+            // backup may ask for its passkey, so the switch ends here and the backup's reset
+            // verification offers the user's Verify instead
+            PasskeyRequestAuthority::Silent => {
+                manager.apply_recovery_state(RecoveryState::Idle);
+                self.runtime.finish(claim);
+                manager.project_exclusive_operation_finished(claim);
+            }
+        }
+
         Ok(())
     }
 
@@ -508,7 +584,7 @@ impl CloudBackupSupervisor {
             Ok(()) => self.drive_account_switch_settled(),
             Err(error) => {
                 error!("Failed to confirm Google Drive account rollback: {error}");
-                Self::report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
+                self.report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
             }
         }
     }
@@ -555,6 +631,10 @@ impl CloudBackupSupervisor {
         manager: &Arc<RustCloudBackupManager>,
         platform_state: DriveAccountSwitchPlatformState,
     ) {
+        // Try Again's held permit is for this report alone, so every way out of it drops the
+        // permit unless the restart below takes it
+        let recovery = self.drive_account_switch_recovery_permit.take();
+
         // a closed lifecycle can't move the switch; the next launch or Try Again reports again.
         // journal evidence that is unavailable closes it too: a promotion the recovery hasn't
         // decided yet would otherwise look like a reinitialize to start again
@@ -575,7 +655,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        match self.reconciled_drive_account_switch_step(manager, platform_state) {
+        match self.reconciled_drive_account_switch_step(manager, platform_state, recovery) {
             Some(step) => self.request_platform_step(manager, step),
             None => self.drive_account_switch_settled(),
         }
@@ -585,6 +665,7 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: &Arc<RustCloudBackupManager>,
         platform_state: DriveAccountSwitchPlatformState,
+        recovery: Option<PendingDriveAccountSwitchRecovery>,
     ) -> Option<PlatformStep> {
         use DriveAccountSwitchPlatformState as Platform;
         use PersistedDriveAccountSwitchPhase as Phase;
@@ -629,7 +710,15 @@ impl CloudBackupSupervisor {
                     // save its next phase gives it up and leaves that phase for this reconcile
                     // to save first
                     Ok(RestoredDriveAccountSwitchClaim::Live(_)) => {}
+                    // the restart runs under Try Again's permit when the user tapped for it, and
+                    // under none after a report alone
                     Ok(RestoredDriveAccountSwitchClaim::Recovered(claim)) => {
+                        if let Some(recovery) =
+                            recovery.filter(|recovery| recovery.transition_id == transition_id)
+                        {
+                            self.runtime.grant(claim, recovery.ticket);
+                        }
+
                         self.start_reinitialize_backup_operation_with_claim(manager.clone(), claim);
                     }
                     Err(error) => return self.drive_account_switch_needs_attention(manager, error),
@@ -667,7 +756,7 @@ impl CloudBackupSupervisor {
                 Phase::AwaitingReinitializationRetry,
                 Platform::Staged(platform_id) | Platform::Committed(platform_id),
             ) if matches_platform(platform_id) => {
-                Self::report_drive_account_switch_recovery_required(
+                self.report_drive_account_switch_recovery_required(
                     manager,
                     REINITIALIZE_FAILED_MESSAGE,
                 );
@@ -682,19 +771,19 @@ impl CloudBackupSupervisor {
                 Some(PlatformStep::Rollback(transition_id))
             }
             _ => {
-                Self::report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
+                self.report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
                 None
             }
         }
     }
 
     fn drive_account_switch_needs_attention(
-        &self,
+        &mut self,
         manager: &RustCloudBackupManager,
         error: CloudBackupDriveAccountSwitchError,
     ) -> Option<PlatformStep> {
         warn!("Google Drive account switch needs attention: {error}");
-        Self::report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
+        self.report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
         None
     }
 
@@ -735,7 +824,7 @@ impl CloudBackupSupervisor {
                 Some(UnsavedDriveAccountSwitchCompletion { transition_id, end });
             self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
-            Self::report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
+            self.report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
             return DriveAccountSwitchReinitializationCompletion::Handled;
         }
 
@@ -746,7 +835,7 @@ impl CloudBackupSupervisor {
             DriveAccountSwitchReinitializationEnd::Failed => {
                 self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
-                Self::report_drive_account_switch_recovery_required(
+                self.report_drive_account_switch_recovery_required(
                     manager,
                     REINITIALIZE_FAILED_MESSAGE,
                 );
@@ -780,7 +869,7 @@ impl CloudBackupSupervisor {
             // saved first by the switch's next step, as a run's own unsaved end is
             self.drive_account_switch_unsaved =
                 Some(UnsavedDriveAccountSwitchCompletion { transition_id, end });
-            Self::report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
+            self.report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
             return;
         }
 
@@ -807,7 +896,7 @@ impl CloudBackupSupervisor {
         };
         if let Err(error) = saved {
             error!("Failed to persist Google Drive account switch completion again: {error}");
-            Self::report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
+            self.report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
             return false;
         }
 
@@ -845,16 +934,17 @@ impl CloudBackupSupervisor {
 
         if let Err(error) = paused {
             error!("Failed to record the restored Google Drive account switch pause: {error}");
-            Self::report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
+            self.report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
         }
     }
 
     /// Takes the slot again for the switch `transition_id` whose reinitialize waits on its saved
-    /// passkey, as a new run of that switch
+    /// passkey, as a new run of that switch that holds the Confirm Saved Passkey tap's ticket
     pub(crate) fn resume_drive_account_switch_reinitialization(
         &mut self,
         manager: &RustCloudBackupManager,
         transition_id: DriveAccountSwitchId,
+        ticket: Option<PermitTicket>,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
         if !self.save_drive_account_switch_completion(manager) {
             return None;
@@ -887,22 +977,28 @@ impl CloudBackupSupervisor {
             return None;
         }
 
+        self.runtime.grant(claim, ticket);
         Some(claim)
     }
 
-    /// Runs a switch's failed reinitialize again; false when the switch has none
+    /// Retries the failed reinitialize of a switch under the Reinitialize tap's ticket
     ///
     /// A phase the last run could not save is saved first, so a failed run whose failure wasn't
-    /// saved runs again here too. True while that save still fails, with the recovery shown
-    pub(crate) fn retry_drive_account_switch_reinitialization(&mut self) -> bool {
-        let Some(manager) = self.manager() else { return false };
+    /// saved runs again here too. While that save still fails the recovery is shown and the tap
+    /// ends there. Hands the ticket back when no switch waits for a retry, so the tap starts a
+    /// plain reinitialize instead
+    pub(crate) fn retry_drive_account_switch_reinitialization(
+        &mut self,
+        ticket: Option<PermitTicket>,
+    ) -> Result<(), Option<PermitTicket>> {
+        let Some(manager) = self.manager() else { return Err(ticket) };
         if !self.save_drive_account_switch_completion(&manager) {
-            return true;
+            return Ok(());
         }
 
-        let Some(transition) = Self::drive_account_switch() else { return false };
+        let Some(transition) = Self::drive_account_switch() else { return Err(ticket) };
         if transition.phase != PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry {
-            return false;
+            return Err(ticket);
         }
 
         let claim =
@@ -910,7 +1006,7 @@ impl CloudBackupSupervisor {
                 Ok(restored) => restored.claim(),
                 Err(error) => {
                     error!("Failed to retry Google Drive account switch reinitialization: {error}");
-                    return true;
+                    return Ok(());
                 }
             };
         if let Err(error) = self.set_drive_account_switch_phase(
@@ -920,11 +1016,12 @@ impl CloudBackupSupervisor {
             error!("Failed to persist Google Drive account switch retry: {error}");
             self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
-            return true;
+            return Ok(());
         }
 
+        self.runtime.grant(claim, ticket);
         self.start_reinitialize_backup_operation_with_claim(manager, claim);
-        true
+        Ok(())
     }
 
     fn restore_drive_account_switch_claim(
@@ -994,8 +1091,13 @@ impl CloudBackupSupervisor {
             .runtime
             .commit(|lifecycle| lifecycle.clear_drive_account_switch(transition_id))
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
+        if !cleared {
+            return Err(CloudBackupDriveAccountSwitchError::InvalidTransition);
+        }
 
-        cleared.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
+        // a retired switch has no run for Try Again's held ticket to restart
+        self.drive_account_switch_recovery_permit = None;
+        Ok(())
     }
 
     /// Retires what this process still held of a switch once a local reset left Cloud Backup off
@@ -1048,10 +1150,21 @@ impl CloudBackupSupervisor {
         }
     }
 
+    /// The switch stopped where the user has to act, so it shows its recovery and Try Again
+    ///
+    /// A switch run that still holds the slot loses its permit here: the tap that started it is
+    /// spent, and only the next Try Again's permit may continue it
     fn report_drive_account_switch_recovery_required(
+        &mut self,
         manager: &RustCloudBackupManager,
         message: &str,
     ) {
+        if let Some(claim) =
+            self.runtime.claim().filter(|claim| claim.drive_account_switch_id().is_some())
+        {
+            self.runtime.revoke_grant(claim);
+        }
+
         manager.apply_sync_state(SyncState::Failed(message.into()));
         manager.apply_recovery_state(RecoveryState::Failed {
             action: RecoveryAction::ReinitializeBackup,

@@ -322,9 +322,12 @@ async fn cleanup_proven_before_a_reinitialize_never_deletes_the_namespace_it_pro
         // the reinitialize waits at its namespace listing while the old proof finishes and
         // asks to delete its source
         let listing = globals.cloud.gate_next_list_namespaces();
-        call!(manager.supervisor.start_recovery_operation(RecoveryAction::ReinitializeBackup))
-            .await
-            .expect("start reinitialize");
+        call!(manager.supervisor.start_recovery_operation(
+            RecoveryAction::ReinitializeBackup,
+            Some(tap(PermitIntent::Reinitialize))
+        ))
+        .await
+        .expect("start reinitialize");
         listing.wait_until_blocked().await;
         proof.release();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);

@@ -127,9 +127,16 @@ class CloudBackupSyncNowFullLaunchTest {
     @Test
     fun cancelledVerificationRetriesWithTheSamePasskey() {
         restoreFixtureAndOpenCloudBackupDetail()
-        waitUntil("restore should leave the backup verified") {
+
+        // a restore doesn't count as verification, so the user verifies the restored backup first
+        waitUntil("a restored backup should wait for Verify Now") {
+            CloudBackupManager.getInstance().verificationState == CloudBackupVerificationState.NotVerified
+        }
+        device.clickText("Verify Now")
+        waitUntil("Verify Now should verify the restored backup") {
             CloudBackupManager.getInstance().verificationState is CloudBackupVerificationState.Verified
         }
+
         val createsBefore = ScriptedPasskeyProvider.callCount(Invocation.CREATE)
         val assertionsBefore = passkeyAssertionCount()
         val authenticationsBefore = ScriptedPasskeyProvider.authenticatedCredentialIds().size

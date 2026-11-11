@@ -8,8 +8,8 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use crate::manager::cloud_backup_manager::wallets::{
-    PasskeyMaterialAcquirer, PlatformAuthorizationRetrier, WalletBackupLookup, WalletBackupReader,
-    map_wrapper_repair_passkey_error,
+    PasskeyMaterialAcquirer, PasskeyRequestAuthority, PlatformAuthorizationRetrier,
+    WalletBackupLookup, WalletBackupReader, map_wrapper_repair_passkey_error,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupError, master_key_wrapper_revision_hash};
 
@@ -234,6 +234,7 @@ struct SkippedProofRecords {
 pub(crate) struct WrapperRepairOperation {
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
+    authority: PasskeyRequestAuthority,
     namespace: String,
 }
 
@@ -241,9 +242,15 @@ impl WrapperRepairOperation {
     pub(crate) fn new(
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
+        authority: &PasskeyRequestAuthority,
         namespace: &str,
     ) -> Self {
-        Self { cloud: cloud.clone(), passkey: passkey.clone(), namespace: namespace.to_owned() }
+        Self {
+            cloud: cloud.clone(),
+            passkey: passkey.clone(),
+            authority: authority.clone(),
+            namespace: namespace.to_owned(),
+        }
     }
 
     /// Prepares a repaired wrapper after proving the local master key is valid
@@ -304,8 +311,9 @@ impl WrapperRepairOperation {
     ) -> Result<WrapperRepairCredentials, CloudBackupError> {
         match strategy {
             WrapperRepairStrategy::CreateNew => {
-                let new_prf =
-                    PasskeyMaterialAcquirer::new(&self.passkey).create_for_wrapper_repair().await?;
+                let new_prf = PasskeyMaterialAcquirer::new(&self.passkey, &self.authority)
+                    .create_for_wrapper_repair()
+                    .await?;
                 let provider_hint = new_prf.provider_hint.clone();
                 let (prf_key, prf_salt, credential_id) = new_prf.into_parts();
 
@@ -318,7 +326,7 @@ impl WrapperRepairOperation {
             }
 
             WrapperRepairStrategy::DiscoverOrCreate => {
-                let passkey = PasskeyMaterialAcquirer::new(&self.passkey)
+                let passkey = PasskeyMaterialAcquirer::new(&self.passkey, &self.authority)
                     .discover_or_create_for_wrapper_repair()
                     .await?;
                 info!("Using discovered-or-new passkey for wrapper repair");
@@ -335,10 +343,10 @@ impl WrapperRepairOperation {
 
             WrapperRepairStrategy::ReuseExisting(credential_id) => {
                 let prf_salt: [u8; 32] = rand::rng().random();
-                let retrier = PlatformAuthorizationRetrier::new();
+                let retrier = PlatformAuthorizationRetrier::new(self.authority.clone());
                 let prf_output = retrier
                     .authenticate(&self.passkey, &credential_id, prf_salt)
-                    .await
+                    .await?
                     .map_err(map_wrapper_repair_passkey_error)?;
 
                 let prf_key: [u8; 32] = prf_output

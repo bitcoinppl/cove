@@ -1,7 +1,7 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_recover_other_backups_operation(&mut self) {
+    pub(crate) fn begin_recover_other_backups_operation(&mut self, ticket: Option<PermitTicket>) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(claim) = Self::begin_other_backups_operation(
@@ -13,9 +13,10 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let authority = self.runtime.grant(claim, ticket);
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_recover_other_backups(&writes).await;
+            let result = manager.do_recover_other_backups(&writes, authority).await;
             send!(addr.complete_recover_other_backups(claim, result));
         });
     }

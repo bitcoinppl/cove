@@ -26,11 +26,13 @@ use crate::manager::cloud_backup_manager::actors::{
 };
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::ops::test_support::tap;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupInventoryControl, CloudBackupProgressSection, CloudBackupScreenBody,
     CloudBackupSection,
 };
+use crate::manager::cloud_backup_manager::wallets::PermitIntent;
 use crate::manager::cloud_backup_manager::{
     CloudBackupInventoryIncompleteReason, CloudBackupManagerAction, CloudBackupResetPermit,
     CloudBackupResetRecovery, CloudBackupRuntimeOwnership, CloudBackupStatus,
@@ -422,7 +424,8 @@ fn a_reinitialize_waits_for_a_running_cleanup_delete_before_it_reads_the_namespa
             let supervisor = app.manager().supervisor.clone();
             app.block_on("the reinitialize to start", async move {
                 call!(supervisor.start_recovery_operation(
-                    crate::manager::cloud_backup_manager::RecoveryAction::ReinitializeBackup
+                    crate::manager::cloud_backup_manager::RecoveryAction::ReinitializeBackup,
+                    Some(tap(PermitIntent::Reinitialize))
                 ))
                 .await
             })

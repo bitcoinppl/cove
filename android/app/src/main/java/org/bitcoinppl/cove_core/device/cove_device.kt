@@ -896,6 +896,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object(
     ): Short
+    external fun uniffi_cove_device_checksum_func_passkey_request_log_line(
+    ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup(
@@ -1039,6 +1041,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(`attestationObject`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_func_passkey_request_log_line(`domain`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1162,6 +1166,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 8413.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_func_passkey_request_log_line() != 36123.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202.toShort()) {
@@ -1569,6 +1576,29 @@ private class JavaLangRefCleanable(
     val cleanable: java.lang.ref.Cleaner.Cleanable
 ) : UniffiCleaner.Cleanable {
     override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
+    }
 }
 
 /**
@@ -3947,6 +3977,12 @@ public object FfiConverterTypePasskeyCredentialPresence: FfiConverterRustBuffer<
 
 
 
+/**
+ * A failed passkey request
+ *
+ * `Display` and `Debug` show only its [`PasskeyErrorDiagnostic`], so every log and error text
+ * that carries one is redacted by its type
+ */
 sealed class PasskeyException: kotlin.Exception() {
 
     class NotSupported(
@@ -4115,6 +4151,12 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
 
 
 
+/**
+ * Why a passkey request failed
+ *
+ * `Unknown` carries the platform's diagnostic to Rust for typing, but nothing formats it
+ * directly: `Display` and `Debug` show the reason's kind and its [`PasskeyUnderlyingError`]
+ */
 sealed class PasskeyFailureReason {
 
     object PlatformAuthorizationFailed : PasskeyFailureReason()
@@ -5397,6 +5439,38 @@ public object FfiConverterTypePasskeyProvider: FfiConverterCallbackInterface<Pas
 /**
  * @suppress
  */
+public object FfiConverterOptionalLong: FfiConverterRustBuffer<kotlin.Long?> {
+    override fun read(buf: ByteBuffer): kotlin.Long? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterLong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Long?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterLong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Long?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterLong.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -5532,6 +5606,24 @@ public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<Li
 
 
         FfiConverterByteArray.lower(`attestationObject`),_status)
+}
+    )
+    }
+
+
+        /**
+         * The only form in which a native log may show a platform error behind a passkey request
+         *
+         * iOS passes an `NSError`'s domain and code; Android passes a `CredentialException`'s `type`
+         * and no code. Only an allowlisted domain comes back with its code
+         */ fun `passkeyRequestLogLine`(`domain`: kotlin.String, `code`: kotlin.Long?): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_func_passkey_request_log_line(
+
+
+        FfiConverterString.lower(`domain`),
+        FfiConverterOptionalLong.lower(`code`),_status)
 }
     )
     }

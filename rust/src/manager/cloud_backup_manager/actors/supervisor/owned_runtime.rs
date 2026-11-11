@@ -25,6 +25,7 @@ use super::runtime::{
 use super::{AbandonedReset, KeyClearRefused, LocalResetOutcome, ResetEnd};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::error::DatabaseError;
+use crate::manager::cloud_backup_manager::actors::PermitTicket;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
@@ -43,6 +44,7 @@ use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, RetryWake,
     ReviewId, TurnOffCommit, TurnOffReview,
 };
+use crate::manager::cloud_backup_manager::wallets::{PasskeyRequestAuthority, PermitGrant};
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupStatus, InventoryScope, RustCloudBackupManager,
 };
@@ -166,6 +168,21 @@ impl OwnedRuntime {
             .ok()
             .and_then(RustCloudBackupManager::runtime_status_for)
             .unwrap_or_else(|| CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into()))
+    }
+
+    /// Binds an admitted tap's ticket to the operation it started, and returns its authority
+    ///
+    /// Work without a ticket, or a claim that is no longer the running one, gets `Silent`
+    pub(crate) fn grant(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        ticket: Option<PermitTicket>,
+    ) -> PasskeyRequestAuthority {
+        if let Some(ticket) = ticket {
+            self.mutate(|runtime| runtime.bind_grant(claim, PermitGrant::new(ticket)));
+        }
+
+        self.runtime.authority(claim)
     }
 
     /// The interrupted Enable this runtime holds, while the keychain still holds its evidence
@@ -384,6 +401,7 @@ impl OwnedRuntime {
         let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
         let facts = IdleFacts::of(&record, pending_enable_recovery);
+
         self.mutate(|runtime| runtime.hand_off(from, to, facts))
     }
 
@@ -473,6 +491,18 @@ impl OwnedRuntime {
     #[cfg(test)]
     pub(crate) fn when_effects_settle(&mut self, settled: oneshot::Sender<()>) {
         self.runtime.when_effects_settle(settled);
+    }
+
+    /// Revokes the permit of the running operation with `claim`, which keeps its claim
+    ///
+    /// A permit doesn't change the policy, so nothing is published
+    pub(crate) fn revoke_grant(&mut self, claim: CloudBackupExclusiveOperationClaim) {
+        self.runtime.revoke_grant(claim);
+    }
+
+    /// A cancel keeps the claim until the worker drains, so it doesn't change the policy
+    pub(crate) fn cancel_restore(&mut self, claim: CloudBackupExclusiveOperationClaim) -> bool {
+        self.runtime.cancel_restore(claim)
     }
 
     /// Restore All's run flags don't change the policy

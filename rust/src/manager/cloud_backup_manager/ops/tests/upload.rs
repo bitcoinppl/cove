@@ -208,7 +208,10 @@ async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace(
     );
     // the recovery check fails before any write reaches the lane, so no operation is begun
     let writes = CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim);
-    let error = manager.prepare_reupload_all_wallets(writes).await.unwrap_err();
+    let error = manager
+        .prepare_reupload_all_wallets(writes, permit(PermitIntent::RecreateManifest))
+        .await
+        .unwrap_err();
 
     assert!(matches!(
         error,

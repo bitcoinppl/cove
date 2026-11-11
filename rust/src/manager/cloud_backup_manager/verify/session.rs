@@ -38,7 +38,9 @@ use crate::manager::cloud_backup_manager::{
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
     is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
-    wallets::{RemoteWalletBackupSummary, WalletBackupLookup, WalletBackupReader},
+    wallets::{
+        PasskeyRequestAuthority, RemoteWalletBackupSummary, WalletBackupLookup, WalletBackupReader,
+    },
 };
 use crate::wallet::metadata::WalletMetadata;
 
@@ -271,6 +273,8 @@ pub(crate) struct VerificationSession {
     pub(crate) cloud_keychain: CloudBackupKeychain,
     pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
+    /// What may present the passkey requests this run makes
+    pub(crate) authority: PasskeyRequestAuthority,
     pub(crate) namespace: String,
     pub(crate) report: DeepVerificationReport,
     pub(crate) local_master_key: Option<MasterKey>,
@@ -393,6 +397,7 @@ impl VerificationSession {
         writes: CloudBackupWriteClient,
         config: ConfigGeneration,
         force_discoverable: bool,
+        authority: PasskeyRequestAuthority,
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
@@ -408,6 +413,7 @@ impl VerificationSession {
             cloud_keychain,
             cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
+            authority,
             namespace: manager.current_namespace_id()?,
             report: DeepVerificationReport {
                 master_key_wrapper_repaired: false,
@@ -721,7 +727,12 @@ impl VerificationSession {
         };
         let local_master_key = MasterKey::from_bytes(*local_master_key.as_bytes());
 
-        let repair = WrapperRepairOperation::new(&self.cloud, &self.passkey, &self.namespace);
+        let repair = WrapperRepairOperation::new(
+            &self.cloud,
+            &self.passkey,
+            &self.authority,
+            &self.namespace,
+        );
         let proves_passkey_missing = cause.proves_passkey_missing();
         let strategy = cause.strategy();
 

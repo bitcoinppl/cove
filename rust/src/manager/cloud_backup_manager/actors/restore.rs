@@ -19,8 +19,8 @@ use crate::manager::cloud_backup_manager::ops::{
 };
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
-    NamespacePasskeyMatcher, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    NamespacePasskeyMatcher, PasskeyRequestAuthority, WalletBackupLookup, WalletBackupReader,
+    WalletRestoreOutcome, WalletRestoreSession,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -201,6 +201,8 @@ pub(crate) struct RestoreOperation {
     supervisor: Addr<CloudBackupSupervisor>,
     event_sender: Option<flume::Sender<CloudBackupRestoreEvent>>,
     cancellation: Arc<AtomicBool>,
+    /// What may present the passkey requests that find the restorable backups
+    authority: PasskeyRequestAuthority,
 }
 
 impl RestoreOperation {
@@ -208,8 +210,9 @@ impl RestoreOperation {
         operation_claim: CloudBackupExclusiveOperationClaim,
         supervisor: Addr<CloudBackupSupervisor>,
         cancellation: Arc<AtomicBool>,
+        authority: PasskeyRequestAuthority,
     ) -> Self {
-        Self { operation_claim, supervisor, event_sender: None, cancellation }
+        Self { operation_claim, supervisor, event_sender: None, cancellation, authority }
     }
 
     pub(crate) fn new_with_events(
@@ -217,8 +220,15 @@ impl RestoreOperation {
         supervisor: Addr<CloudBackupSupervisor>,
         event_sender: flume::Sender<CloudBackupRestoreEvent>,
         cancellation: Arc<AtomicBool>,
+        authority: PasskeyRequestAuthority,
     ) -> Self {
-        Self { operation_claim, supervisor, event_sender: Some(event_sender), cancellation }
+        Self {
+            operation_claim,
+            supervisor,
+            event_sender: Some(event_sender),
+            cancellation,
+            authority,
+        }
     }
 
     pub(crate) async fn ensure_current(&self) -> Result<(), CloudBackupError> {
@@ -700,7 +710,7 @@ impl RestoreOperation {
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
     ) -> Result<Vec<NamespaceMatch>, CloudBackupError> {
-        let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
+        let matcher = NamespacePasskeyMatcher::new(cloud, passkey, &self.authority);
         let mut session = matcher.start_session_with_cancellation(self.cancellation.clone());
         let started_at = Instant::now();
         let mut first_match_at = None;

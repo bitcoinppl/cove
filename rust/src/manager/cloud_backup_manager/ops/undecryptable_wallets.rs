@@ -6,7 +6,9 @@ use zeroize::Zeroizing;
 
 use super::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
-use crate::manager::cloud_backup_manager::wallets::{WalletBackupLookup, WalletBackupReader};
+use crate::manager::cloud_backup_manager::wallets::{
+    PasskeyRequestAuthority, WalletBackupLookup, WalletBackupReader,
+};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupStateReducerEvent,
     CloudBackupStore, CloudBackupUndecryptableWalletDeletionState, RustCloudBackupManager,
@@ -44,6 +46,7 @@ impl RustCloudBackupManager {
         &self,
         writes: &CloudBackupWriteClient,
         record_ids: Vec<String>,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteUndecryptableWalletBackups)?;
 
@@ -66,6 +69,7 @@ impl RustCloudBackupManager {
                 writes,
                 &namespace,
                 DELETE_UNDECRYPTABLE_RECOVERY_MESSAGE,
+                authority,
             )
         })
         .await

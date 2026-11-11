@@ -471,6 +471,22 @@ private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
+    typealias FfiType = Int64
+    typealias SwiftType = Int64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int64, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -2168,6 +2184,12 @@ public func FfiConverterTypePasskeyCredentialPresence_lower(_ value: PasskeyCred
 
 
 
+/**
+ * A failed passkey request
+ *
+ * `Display` and `Debug` show only its [`PasskeyErrorDiagnostic`], so every log and error text
+ * that carries one is redacted by its type
+ */
 public
 enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -2301,6 +2323,12 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 }
 
 
+/**
+ * Why a passkey request failed
+ *
+ * `Unknown` carries the platform's diagnostic to Rust for typing, but nothing formats it
+ * directly: `Display` and `Debug` show the reason's kind and its [`PasskeyUnderlyingError`]
+ */
 
 public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
 
@@ -4156,6 +4184,30 @@ public func FfiConverterCallbackInterfacePasskeyProvider_lower(_ v: PasskeyProvi
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
+    typealias SwiftType = Int64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -4405,6 +4457,21 @@ public func passkeyAaguidFromAttestationObject(attestationObject: Data)throws  -
     )
 })
 }
+/**
+ * The only form in which a native log may show a platform error behind a passkey request
+ *
+ * iOS passes an `NSError`'s domain and code; Android passes a `CredentialException`'s `type`
+ * and no code. Only an allowlisted domain comes back with its code
+ */
+public func passkeyRequestLogLine(domain: String, code: Int64?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_device_fn_func_passkey_request_log_line(
+        FfiConverterString.lower(domain),
+        FfiConverterOptionInt64.lower(code),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -4425,6 +4492,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 8413) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_func_passkey_request_log_line() != 36123) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202) {

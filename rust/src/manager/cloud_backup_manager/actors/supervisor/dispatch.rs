@@ -9,6 +9,7 @@ use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, ReviewId,
 };
+use crate::manager::cloud_backup_manager::wallets::PermitIntent;
 use crate::manager::cloud_backup_manager::{
     CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupNoticeKind, CloudBackupStateReducer,
@@ -21,8 +22,9 @@ use tracing::debug;
 /// holds its operation and is consumed once to start it; every other intent starts its own work
 #[derive(Debug)]
 enum Admitted {
-    /// The work an intent starts by itself, or the work a review button names
-    Work(UserIntent),
+    /// The work an intent starts by itself, or the work a review button names, with the ticket
+    /// of that work
+    Work(UserIntent, Option<PermitTicket>),
     /// Consent to the review on screen, which took the review and allocated the Turn Off
     Confirmed(ConfirmedTurnOff),
     /// A finishing run of the committed Turn Off, allocated on the idle finishing body
@@ -36,6 +38,105 @@ enum Refused {
     Rejected(Rejection),
     /// Stop Using on This Device couldn't save its choice, so nothing started
     SaveFailed(CloudBackupError),
+}
+
+/// An admitted tap's right to one passkey permit
+///
+/// Its field is private to this module and only [`PermitTicket::for_admitted`] fills it, so a
+/// permit, which needs a ticket, can come from nowhere but an admission. The runtime owner turns
+/// the ticket into a permit bound to the operation the tap starts
+#[derive(Debug)]
+pub(crate) struct PermitTicket(PermitIntent);
+
+impl PermitTicket {
+    pub(crate) fn intent(&self) -> PermitIntent {
+        self.0
+    }
+
+    /// The ticket an admitted intent carries, for the taps whose work may present a passkey
+    ///
+    /// Exhaustive like the intent map, so a new intent is a compile error until it is decided
+    /// here. RecreateManifest and Reinitialize carry one too: both run a verification
+    /// or a registration that needs the passkey as part of the operation the tap started
+    #[deny(clippy::wildcard_enum_match_arm)]
+    fn for_admitted(intent: &UserIntent) -> Option<Self> {
+        use UserIntent as I;
+
+        let permit = match intent {
+            I::Enable(..) | I::AcceptEnablePrompt(_) => PermitIntent::Enable,
+            I::ConfirmSavedPasskey => PermitIntent::ConfirmSavedPasskey,
+            I::RestoreFromCloudBackup => PermitIntent::RestoreFromCloudBackup,
+            I::StartVerification { .. } => PermitIntent::Verify,
+            I::RepairPasskey { .. } => PermitIntent::RepairPasskey,
+            I::RecoverOtherBackups => PermitIntent::RecoverOtherBackups,
+            I::RestoreCloudWallet(_) => PermitIntent::RestoreCloudWallet,
+            I::StartRestoreAll | I::RetryRestoreAllRemaining => PermitIntent::RestoreAll,
+            I::RecreateManifest => PermitIntent::RecreateManifest,
+            I::ReinitializeBackup => PermitIntent::Reinitialize,
+            I::DeleteUndecryptableWalletBackups(_) => {
+                PermitIntent::DeleteUndecryptableWalletBackups
+            }
+            // Try Again on a switch that needs attention runs its failed reinitialize again
+            I::SwitchDriveAccount | I::RetryDriveAccountSwitchRecovery => {
+                PermitIntent::SwitchDriveAccount
+            }
+
+            // background-shaped work, prompts and cancels never present a passkey request
+            I::DiscardPendingEnable
+            | I::ConfirmPendingEnableCleanup
+            | I::DismissPasskeyChoicePrompt
+            | I::DismissMissingPasskeyReminder
+            | I::CancelRestore
+            | I::DismissVerificationPrompt
+            | I::SyncUnsynced
+            | I::CancelRestoreAll
+            | I::DeleteCloudWallet(_)
+            | I::DeleteOtherBackups
+            | I::TurnOff
+            | I::ConfirmDisable { .. }
+            | I::CancelDisable
+            | I::ResumeDisable
+            | I::StopUsingOnThisDevice
+            | I::DismissNotice(_)
+            | I::RefreshDetail
+            | I::EnterDetail
+            | I::LeaveDetail
+            | I::RetryLoad
+            | I::ResetOnThisDevice
+            | I::PromptEnablePasskeyChoice(_)
+            | I::CancelDriveAccountSwitch
+            | I::LocalReset => return None,
+
+            // a review button presents nothing itself; dispatch mints the ticket of the work it
+            // leaves for once the review names that work
+            I::LeaveReview { .. } => return None,
+
+            // Reconnect authorizes Google Drive: the tapped inventory refresh on a configured
+            // backup, or the committed Turn Off resumed with consent, and neither asks for the
+            // passkey, so checking the backup stays the separate Verify tap
+            I::ReconnectDrive => return None,
+        };
+
+        Some(Self(permit))
+    }
+}
+
+/// Tickets for tests that start work without going through dispatch
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{PermitIntent, PermitTicket};
+
+    pub(crate) fn ticket(intent: PermitIntent) -> PermitTicket {
+        PermitTicket(intent)
+    }
+}
+
+/// What admission decided, with the permit ticket an accepted tap carries
+#[must_use]
+#[derive(Debug)]
+pub(crate) enum TicketedAdmission {
+    Accepted(Option<PermitTicket>),
+    Refused(Admission),
 }
 
 /// What the last dispatched intent got, for diagnostics and tests
@@ -59,7 +160,9 @@ impl CloudBackupSupervisor {
         let started = match self.admit_start(&manager, &intent) {
             // a review button starts the work it names in this turn, attributed to that work's
             // own control, since the review it was drawn on ends with the start
-            Some(Admitted::Work(work)) => self.start_and_attribute(manager, work).await,
+            Some(Admitted::Work(work, ticket)) => {
+                self.start_and_attribute(manager, work, ticket).await
+            }
             Some(Admitted::Confirmed(confirmed)) => {
                 self.attribute(confirmed.claim, &intent);
                 self.confirm_disable(&manager, confirmed);
@@ -88,10 +191,15 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: &RustCloudBackupManager,
         intent: &UserIntent,
-    ) -> Admission {
+    ) -> TicketedAdmission {
         let admission = self.decide(manager, intent);
         self.record_admission(manager, intent, admission);
-        admission
+        match admission {
+            Admission::Accepted => TicketedAdmission::Accepted(PermitTicket::for_admitted(intent)),
+            Admission::Coalesced(_) | Admission::Rejected(_) => {
+                TicketedAdmission::Refused(admission)
+            }
+        }
     }
 
     /// Decides `intent`, and for an accepted one produces its start in the same step, then
@@ -176,7 +284,11 @@ impl CloudBackupSupervisor {
             I::LeaveReview { review_id, to } => self
                 .runtime
                 .leave_review(ReviewId::from(*review_id), *to)
-                .map(Admitted::Work)
+                // the ticket is the named work's, minted once the review names it
+                .map(|work| {
+                    let ticket = PermitTicket::for_admitted(&work);
+                    Admitted::Work(work, ticket)
+                })
                 .map_err(Refused::Rejected),
             I::ResumeDisable => self.start_finish(),
             // Reconnect on the committed Turn Off resumes it with the user's consent
@@ -189,7 +301,7 @@ impl CloudBackupSupervisor {
                 self.choose_local_only()?;
                 self.start_finish()
             }
-            intent => Ok(Admitted::Work(intent.clone())),
+            intent => Ok(Admitted::Work(intent.clone(), PermitTicket::for_admitted(intent))),
         }
     }
 
@@ -218,7 +330,7 @@ impl CloudBackupSupervisor {
             return Err(Refused::Rejected(Rejection::ReviewStale));
         }
 
-        Ok(Admitted::Work(intent.clone()))
+        Ok(Admitted::Work(intent.clone(), PermitTicket::for_admitted(intent)))
     }
 
     /// A finishing run the user tapped for, so the provider may ask for consent on the way
@@ -366,9 +478,10 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         intent: UserIntent,
+        ticket: Option<PermitTicket>,
     ) -> ActorResult<()> {
         let before = self.runtime.claim();
-        let started = self.start_admitted(manager.clone(), intent.clone()).await;
+        let started = self.start_admitted(manager.clone(), intent.clone(), ticket).await;
 
         if let Some(claim) = self.runtime.claim()
             && Some(claim) != before
@@ -390,21 +503,14 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         intent: UserIntent,
+        ticket: Option<PermitTicket>,
     ) -> ActorResult<()> {
         use UserIntent as I;
 
         match intent {
-            I::Enable(EnableIntent::Standard, context) => {
-                self.start_enable_operation(context).await?;
-            }
-            I::Enable(EnableIntent::ForceNew, context) => {
-                self.start_enable_force_new_operation(context).await?;
-            }
-            I::Enable(EnableIntent::NoDiscovery, context) => {
-                self.start_enable_no_discovery_operation(context).await?;
-            }
+            I::Enable(kind, context) => self.start_enable(kind, context, ticket),
             I::ConfirmSavedPasskey => {
-                self.confirm_saved_passkey().await?;
+                self.confirm_saved_passkey(ticket).await?;
             }
             I::DiscardPendingEnable => match self.discard_target(&manager) {
                 Ok(DiscardTarget::Prompt) => manager.clear_enable_prompt(),
@@ -426,38 +532,38 @@ impl CloudBackupSupervisor {
             I::DismissPasskeyChoicePrompt => manager.clear_passkey_choice_prompt(),
             I::DismissMissingPasskeyReminder => manager.dismiss_missing_passkey_prompt(),
             I::RestoreFromCloudBackup => {
-                self.start_restore_from_cloud_backup().await?;
+                self.start_restore_from_cloud_backup(ticket).await?;
             }
             I::CancelRestore => {
                 self.cancel_restore().await?;
             }
             I::StartVerification { source, discoverable } => {
-                self.start_verification_intent(manager, source, discoverable);
+                self.start_verification_intent(manager, source, discoverable, ticket);
             }
             I::DismissVerificationPrompt => {
                 self.runtime.commit(|lifecycle| manager.dismiss_verification_prompt(lifecycle));
             }
             I::RecreateManifest => {
-                self.start_recovery_operation(RecoveryAction::RecreateManifest).await?;
+                self.start_recovery_operation(RecoveryAction::RecreateManifest, ticket).await?;
             }
             I::ReinitializeBackup => {
-                self.start_recovery_operation(RecoveryAction::ReinitializeBackup).await?;
+                self.start_recovery_operation(RecoveryAction::ReinitializeBackup, ticket).await?;
             }
             I::RepairPasskey { no_discovery } => {
                 manager.clear_passkey_choice_prompt();
-                self.start_repair_passkey_operation(no_discovery).await?;
+                self.start_repair_passkey_operation(no_discovery, ticket).await?;
             }
             I::SyncUnsynced => {
                 self.start_sync_operation().await?;
             }
             I::RestoreCloudWallet(record_id) => {
-                self.start_restore_cloud_wallet_operation(record_id.into()).await?;
+                self.start_restore_cloud_wallet_operation(record_id.into(), ticket).await?;
             }
             I::StartRestoreAll => {
-                self.start_restore_all_operation(false).await?;
+                self.start_restore_all_operation(false, ticket).await?;
             }
             I::RetryRestoreAllRemaining => {
-                self.start_restore_all_operation(true).await?;
+                self.start_restore_all_operation(true, ticket).await?;
             }
             I::CancelRestoreAll => {
                 self.cancel_restore_all_operation().await?;
@@ -468,10 +574,10 @@ impl CloudBackupSupervisor {
             }
             I::DeleteUndecryptableWalletBackups(consent) => {
                 let record_ids = consent.record_ids().cloned().map(String::from).collect();
-                self.start_delete_undecryptable_wallet_backups_operation(record_ids).await?;
+                self.begin_delete_undecryptable_wallet_backups_operation(record_ids, ticket);
             }
             // started in this turn, so the operation is allocated with its admission
-            I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),
+            I::RecoverOtherBackups => self.begin_recover_other_backups_operation(ticket),
             I::DeleteOtherBackups => self.begin_delete_other_backups_operation(),
             I::TurnOff => self.begin_turn_off_review(manager),
             I::CancelDisable => self.cancel_disable(&manager),
@@ -500,23 +606,18 @@ impl CloudBackupSupervisor {
             I::PromptEnablePasskeyChoice(context) => manager.present_passkey_choice_prompt(
                 CloudBackupPasskeyChoiceIntent::Enable(context, None),
             ),
-            // admitted as the Enable it starts, so that Enable takes the slot in this same turn
-            // and nothing queued behind the answer can take it first
+            // admitted as the Enable it starts, so that Enable takes the slot in this same turn,
+            // under this admission's ticket, and nothing queued behind the answer can take it first
             I::AcceptEnablePrompt(choice) => {
                 if let Some(accepted) = manager.accept_enable_prompt(choice) {
-                    match enable_of(accepted) {
-                        (EnableIntent::Standard, context) => self.begin_enable_operation(context),
-                        (EnableIntent::ForceNew, context) => {
-                            self.begin_enable_force_new_operation(context);
-                        }
-                        (EnableIntent::NoDiscovery, context) => {
-                            self.begin_enable_no_discovery_operation(context);
-                        }
-                    }
+                    let (kind, context) = enable_of(accepted);
+                    self.start_enable(kind, context, ticket);
                 }
             }
-            I::SwitchDriveAccount => self.start_drive_account_switch(&manager),
-            I::RetryDriveAccountSwitchRecovery => self.retry_drive_account_switch(&manager),
+            I::SwitchDriveAccount => self.start_drive_account_switch(&manager, ticket),
+            I::RetryDriveAccountSwitchRecovery => {
+                self.retry_drive_account_switch(&manager, ticket);
+            }
             I::CancelDriveAccountSwitch => self.cancel_drive_account_switch(&manager),
             // the reset answers its caller, so its own handler admits it and replies
             I::LocalReset => {

@@ -761,30 +761,11 @@ impl RustCloudBackupManager {
         send!(self.supervisor.wake_pending_upload_verifier());
         send!(self.supervisor.provider_inventory_did_change());
         self.start_pending_upload_verification_loop();
+        // a verification that failed offline waits for the user's Verify tap, since retrying it
+        // here would present a passkey nobody asked for
         match cause {
-            CloudReachable::Connected => self.resume_failed_connectivity_verification(),
             CloudReachable::StorageChanged => self.refresh_sync_health(),
-            CloudReachable::PendingVerification => {}
-        }
-    }
-
-    fn resume_failed_connectivity_verification(&self) {
-        let retry_action = {
-            let state = self.state.read();
-            match state.verification() {
-                VerificationState::Failed(failure) => failure.connectivity_retry_action(),
-                _ => None,
-            }
-        };
-
-        match retry_action {
-            Some(CloudBackupRetryAction::Verify) => {
-                send!(self.supervisor.retry_verification_after_reconnect(false))
-            }
-            Some(CloudBackupRetryAction::VerifyDiscoverable) => {
-                send!(self.supervisor.retry_verification_after_reconnect(true));
-            }
-            None => {}
+            CloudReachable::Connected | CloudReachable::PendingVerification => {}
         }
     }
 

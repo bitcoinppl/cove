@@ -83,6 +83,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
 
         robot.openSettings()
         robot.openCloudBackupDetail()
+        robot.verifyRestoredBackup(control)
         control.waitForAppState("the copy should list as the only extra copy, with every wallet on this device", timeout: 60) {
             $0.inventoryLoaded && $0.verification == "verified" && $0.wallets.count == 3
                 && $0.rows.map(\.recordId) == [duplicate] && $0.rows.map(\.record) == ["extraCopy"]
@@ -363,8 +364,9 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
 
     // MARK: - Setup
 
-    /// Restores Fixture Wallet One and opens Cloud Backup once the inventory lists wallets two
-    /// and three as not on this device, or, without `listingOthers`, once it lists only wallet one
+    /// Restores Fixture Wallet One, opens Cloud Backup and verifies it with Verify Now, then waits
+    /// until the inventory lists wallets two and three as not on this device, or, without
+    /// `listingOthers`, until it lists only wallet one
     private func restoreWalletOneAndOpenDetail(listingOthers: Bool = true) throws -> CloudBackupHostControl {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [Self.walletOneRecordId])
@@ -378,6 +380,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         let notOnDevice = listingOthers ? Self.notOnDeviceRecordIds : []
         robot.openSettings()
         robot.openCloudBackupDetail()
+        robot.verifyRestoredBackup(control)
         control.waitForAppState("the inventory never listed the wallets only in the cloud", timeout: 60) {
             $0.inventoryLoaded && $0.verification == "verified"
                 && $0.notOnDeviceRecordIds == notOnDevice

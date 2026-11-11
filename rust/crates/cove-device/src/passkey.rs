@@ -7,30 +7,68 @@ use tracing::warn;
 static REF: OnceCell<PasskeyAccess> = OnceCell::new();
 const AUTH_DATA_FIELD: &str = "authData";
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+/// A failed passkey request
+///
+/// `Display` and `Debug` show only its [`PasskeyErrorDiagnostic`], so every log and error text
+/// that carries one is redacted by its type
+#[derive(Clone, Hash, Eq, PartialEq, uniffi::Error)]
 #[uniffi::export(Display)]
 pub enum PasskeyError {
-    #[error("not supported: {reason}")]
-    NotSupported { reason: PasskeyFailureReason },
+    NotSupported {
+        reason: PasskeyFailureReason,
+    },
 
-    #[error("passkey provider does not support PRF")]
     PrfUnsupportedProvider,
 
     /// The user-started request did not complete, such as a dismissed sheet; never a missing
     /// credential
-    #[error("passkey request not completed")]
     NotCompleted,
 
     /// No foreground window or activity can present the request yet
-    #[error("{operation} not ready to present")]
-    NotReady { operation: PasskeyOperation },
+    NotReady {
+        operation: PasskeyOperation,
+    },
 
-    #[error("{operation} failed: {reason}")]
-    RequestFailed { operation: PasskeyOperation, reason: PasskeyFailureReason },
+    RequestFailed {
+        operation: PasskeyOperation,
+        reason: PasskeyFailureReason,
+    },
 
-    #[error("no credential found")]
     NoCredentialFound,
 }
+
+impl PasskeyError {
+    /// The only form of this error that logs and error text may show
+    pub fn diagnostic(&self) -> PasskeyErrorDiagnostic {
+        let (operation, outcome, reason) = match self {
+            Self::NotSupported { reason } => (None, "not_supported", Some(reason)),
+            Self::PrfUnsupportedProvider => (None, "prf_unsupported", None),
+            Self::NotCompleted => (None, "not_completed", None),
+            Self::NotReady { operation } => (Some(*operation), "not_ready", None),
+            Self::RequestFailed { operation, reason } => {
+                (Some(*operation), reason.kind(), Some(reason))
+            }
+            Self::NoCredentialFound => (None, "no_credential", None),
+        };
+
+        let underlying = reason.and_then(PasskeyFailureReason::underlying);
+        PasskeyErrorDiagnostic { operation, outcome, underlying }
+    }
+}
+
+impl std::fmt::Display for PasskeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.diagnostic().fmt(f)
+    }
+}
+
+impl std::fmt::Debug for PasskeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PasskeyError({})", self.diagnostic())
+    }
+}
+
+impl std::error::Error for PasskeyError {}
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -45,47 +83,175 @@ pub enum PasskeyOperation {
     AuthenticateAssertion,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+/// Why a passkey request failed
+///
+/// `Unknown` carries the platform's diagnostic to Rust for typing, but nothing formats it
+/// directly: `Display` and `Debug` show the reason's kind and its [`PasskeyUnderlyingError`]
+#[derive(Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 #[uniffi::export(Display)]
 pub enum PasskeyFailureReason {
-    #[error("platform authorization failed")]
     PlatformAuthorizationFailed,
-
-    #[error("platform authorization failed after presentation")]
     PlatformAuthorizationFailedAfterPresentation,
-
-    #[error("invalid response")]
     InvalidResponse,
-
-    #[error("not handled")]
     NotHandled,
-
-    #[error("interrupted")]
     Interrupted,
-
-    #[error("provider configuration")]
     ProviderConfiguration,
-
-    #[error("no create option")]
     NoCreateOption,
-
-    #[error("device not configured")]
     DeviceNotConfigured,
-
-    #[error("unexpected credential type")]
     UnexpectedCredentialType,
-
-    #[error("missing credential id")]
     MissingCredentialId,
-
-    #[error("malformed response")]
     MalformedResponse,
-
-    #[error("timed out")]
     TimedOut,
-
-    #[error("unknown: {diagnostic_message}")]
     Unknown { diagnostic_message: String },
+}
+
+impl PasskeyFailureReason {
+    /// A stable name for the reason, safe for logs
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::PlatformAuthorizationFailed => "authorization_failed",
+            Self::PlatformAuthorizationFailedAfterPresentation => {
+                "authorization_failed_after_presentation"
+            }
+            Self::InvalidResponse => "invalid_response",
+            Self::NotHandled => "not_handled",
+            Self::Interrupted => "interrupted",
+            Self::ProviderConfiguration => "provider_configuration",
+            Self::NoCreateOption => "no_create_option",
+            Self::DeviceNotConfigured => "device_not_configured",
+            Self::UnexpectedCredentialType => "unexpected_credential_type",
+            Self::MissingCredentialId => "missing_credential_id",
+            Self::MalformedResponse => "malformed_response",
+            Self::TimedOut => "timed_out",
+            Self::Unknown { .. } => "unknown",
+        }
+    }
+
+    /// The platform error behind an `Unknown` reason, as logs may show it
+    pub fn underlying(&self) -> Option<PasskeyUnderlyingError> {
+        match self {
+            Self::Unknown { diagnostic_message } => {
+                PasskeyUnderlyingError::parse(diagnostic_message)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for PasskeyFailureReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.kind())?;
+        match self.underlying() {
+            Some(underlying) => write!(f, " {underlying}"),
+            None => Ok(()),
+        }
+    }
+}
+
+impl std::fmt::Debug for PasskeyFailureReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PasskeyFailureReason({self})")
+    }
+}
+
+impl std::error::Error for PasskeyFailureReason {}
+
+/// What a log may say about a passkey error
+///
+/// Built only from the error's type and [`PasskeyUnderlyingError`], so platform text never
+/// reaches it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PasskeyErrorDiagnostic {
+    pub operation: Option<PasskeyOperation>,
+    pub outcome: &'static str,
+    pub underlying: Option<PasskeyUnderlyingError>,
+}
+
+impl std::fmt::Display for PasskeyErrorDiagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "outcome={}", self.outcome)?;
+        if let Some(operation) = self.operation {
+            write!(f, " operation={operation:?}")?;
+        }
+
+        match self.underlying {
+            Some(underlying) => write!(f, " {underlying}"),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Platform error domains whose names and codes are safe and useful in logs
+///
+/// The one allowlist for passkey logs: Rust's diagnostics and every native log line, through
+/// [`passkey_request_log_line`], use it. Apple domains come from `NSError`; Android ones are the
+/// `type` of an androidx `CredentialException`
+const LOGGABLE_ERROR_DOMAINS: &[&str] = &[
+    "com.apple.AuthenticationServices.AuthorizationError",
+    "NSCocoaErrorDomain",
+    "NSOSStatusErrorDomain",
+    "android.credentials.GetCredentialException.TYPE_UNKNOWN",
+    "android.credentials.GetCredentialException.TYPE_INTERRUPTED",
+    "android.credentials.GetCredentialException.TYPE_USER_CANCELED",
+    "androidx.credentials.TYPE_GET_CREDENTIAL_PROVIDER_CONFIGURATION_EXCEPTION",
+    "androidx.credentials.TYPE_GET_CREDENTIAL_UNSUPPORTED_EXCEPTION",
+];
+
+/// A platform error behind a passkey failure, as logs may show it
+///
+/// An allowlisted domain keeps its name and code. Any other domain shows only that it was not
+/// listed, so neither its name nor its code nor any free text reaches a log
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasskeyUnderlyingError {
+    Listed { domain: &'static str, code: Option<i64> },
+    Unlisted,
+}
+
+impl PasskeyUnderlyingError {
+    /// Checks a platform domain and code against the allowlist
+    pub fn of(domain: &str, code: Option<i64>) -> Self {
+        match LOGGABLE_ERROR_DOMAINS.iter().copied().find(|known| *known == domain) {
+            Some(domain) => Self::Listed { domain, code },
+            None => Self::Unlisted,
+        }
+    }
+
+    /// Reads the `error_domain=<domain> error_code=<code>` form iOS sends in an `Unknown`
+    /// reason; a diagnostic without a domain has no underlying error
+    fn parse(diagnostic_message: &str) -> Option<Self> {
+        let mut domain = None;
+        let mut code = None;
+        for field in diagnostic_message.split_whitespace() {
+            if let Some(value) = field.strip_prefix("error_domain=") {
+                domain = Some(value);
+            } else if let Some(value) = field.strip_prefix("error_code=") {
+                code = value.parse::<i64>().ok();
+            }
+        }
+
+        Some(Self::of(domain?, code))
+    }
+}
+
+impl std::fmt::Display for PasskeyUnderlyingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Listed { domain, code: Some(code) } => {
+                write!(f, "error_domain={domain} error_code={code}")
+            }
+            Self::Listed { domain, code: None } => write!(f, "error_domain={domain}"),
+            Self::Unlisted => f.write_str("error_domain=unlisted"),
+        }
+    }
+}
+
+/// The only form in which a native log may show a platform error behind a passkey request
+///
+/// iOS passes an `NSError`'s domain and code; Android passes a `CredentialException`'s `type`
+/// and no code. Only an allowlisted domain comes back with its code
+#[uniffi::export]
+pub fn passkey_request_log_line(domain: String, code: Option<i64>) -> String {
+    PasskeyUnderlyingError::of(&domain, code).to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -366,6 +532,60 @@ fn format_aaguid(aaguid: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn passkey_errors_show_only_their_redacted_diagnostic() {
+        let unknown = |diagnostic_message: &str| PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: diagnostic_message.into() },
+        };
+        let listed = unknown("error_domain=NSCocoaErrorDomain error_code=4097");
+        let unlisted =
+            unknown("error_domain=com.example.passkey error_code=40442 user=alice@example.com");
+        let no_domain = unknown("passkey creation failed for alice@example.com");
+
+        assert_eq!(
+            listed.to_string(),
+            "outcome=unknown operation=AuthenticateAssertion error_domain=NSCocoaErrorDomain error_code=4097"
+        );
+        assert_eq!(
+            unlisted.to_string(),
+            "outcome=unknown operation=AuthenticateAssertion error_domain=unlisted"
+        );
+        assert_eq!(no_domain.to_string(), "outcome=unknown operation=AuthenticateAssertion");
+        assert_eq!(
+            PasskeyError::NotReady { operation: PasskeyOperation::Registration }.to_string(),
+            "outcome=not_ready operation=Registration"
+        );
+
+        for formatted in [format!("{unlisted:?}"), format!("{no_domain:?}")] {
+            for private in ["com.example.passkey", "40442", "alice@example.com"] {
+                assert!(!formatted.contains(private), "{formatted}");
+            }
+        }
+    }
+
+    #[test]
+    fn native_log_lines_use_the_same_allowlist() {
+        assert_eq!(
+            passkey_request_log_line(
+                "com.apple.AuthenticationServices.AuthorizationError".into(),
+                Some(1004)
+            ),
+            "error_domain=com.apple.AuthenticationServices.AuthorizationError error_code=1004"
+        );
+        assert_eq!(
+            passkey_request_log_line(
+                "android.credentials.GetCredentialException.TYPE_UNKNOWN".into(),
+                None
+            ),
+            "error_domain=android.credentials.GetCredentialException.TYPE_UNKNOWN"
+        );
+        assert_eq!(
+            passkey_request_log_line("com.example.passkey".into(), Some(40442)),
+            "error_domain=unlisted"
+        );
+    }
 
     fn attestation_object(auth_data: &[u8]) -> Vec<u8> {
         let mut cbor = Vec::new();

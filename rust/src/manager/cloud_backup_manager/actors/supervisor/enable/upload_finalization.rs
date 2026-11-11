@@ -57,9 +57,10 @@ impl CloudBackupSupervisor {
         // the journal this run writes is its work's, so its pause is that work's
         manager.pending_enable.adopt(ContinuationOwner::of(claim));
         let addr = self.addr();
+        let authority = self.runtime.authority(claim);
 
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_create_new_enable_passkey(context).await;
+            let result = manager.prepare_create_new_enable_passkey(context, authority).await;
             send!(addr.complete_create_new_enable_passkey(claim, result));
         });
     }
@@ -148,9 +149,11 @@ impl CloudBackupSupervisor {
 
         manager.pending_enable.adopt(ContinuationOwner::of(claim));
         let addr = self.addr();
+        let authority = self.runtime.authority(claim);
 
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_new_enable_passkey_for_confirmation(context, flow).await;
+            let result =
+                manager.prepare_new_enable_passkey_for_confirmation(context, flow, authority).await;
             send!(addr.complete_enable_passkey_registration(claim, result));
         });
     }

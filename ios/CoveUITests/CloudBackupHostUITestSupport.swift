@@ -252,6 +252,55 @@ struct CloudBackupHostRobot {
         }
     }
 
+    /// The detail's Verify control: Verify Now before the backup is verified, Verify Again after
+    var verifyControl: XCUIElement {
+        app.buttons.matching(identifier: CloudBackupUIIdentifier.action("verify")).firstMatch
+    }
+
+    /// Waits until a restored backup's detail has loaded its inventory and shows the backup as not
+    /// verified, with Verify Now on its card
+    ///
+    /// A restore doesn't count as verification, and the detail starts none on its own, so a
+    /// restored backup stays not verified until the user taps Verify Now
+    func assertRestoredBackupNotVerified(
+        _ control: CloudBackupHostControl,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        control.waitForAppState("a restored backup should wait for Verify Now", timeout: 60, file: file, line: line) {
+            $0.inventoryLoaded && $0.verification == "notVerified"
+        }
+        control.assertNextActions(
+            "a restored backup should offer Verify",
+            available: ["verify"],
+            file: file,
+            line: line
+        )
+
+        scrollToHittable(verifyControl)
+        XCTAssertTrue(
+            verifyControl.label.hasPrefix("Verify Now"),
+            "the restored backup's card offered \"\(verifyControl.label)\", not Verify Now",
+            file: file,
+            line: line
+        )
+    }
+
+    /// Verifies a restored backup the way a user does, with Verify Now on its card, which the
+    /// scripted provider answers with the passkey the restore found
+    func verifyRestoredBackup(
+        _ control: CloudBackupHostControl,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assertRestoredBackupNotVerified(control, file: file, line: line)
+        verifyControl.tap()
+
+        control.waitForAppState("Verify Now never verified the restored backup", timeout: 60, file: file, line: line) {
+            $0.inventoryLoaded && $0.verification == "verified" && !$0.awaitingUploadConfirmation
+        }
+    }
+
     /// Scrolls the current screen until `element` can be tapped
     func scrollToHittable(_ element: XCUIElement, initialWait: TimeInterval = 5, maxSwipes: Int = 20) {
         // lists only build rows near the screen, so a row further down doesn't exist until a

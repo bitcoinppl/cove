@@ -14,8 +14,8 @@ use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, DownloadedWalletBackup, WalletBackupLookup, WalletBackupReadError,
-    WalletBackupReader,
+    CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
+    WalletBackupReadError, WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
@@ -237,8 +237,9 @@ impl RustCloudBackupManager {
         &self,
         writes: &CloudBackupWriteClient,
         record_id: &str,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
-        let prepared = self.prepare_active_namespace_wallet_restore(writes).await?;
+        let prepared = self.prepare_active_namespace_wallet_restore(writes, authority).await?;
         let result = prepared.restore_record(record_id).await;
         self.handle_cloud_only_restore_committed(&result);
 
@@ -257,11 +258,13 @@ impl RustCloudBackupManager {
         }
     }
 
+    /// Uses `authority` only when the local master key is missing
     pub(crate) async fn prepare_restore_all_cloud_wallets(
         &self,
         writes: &CloudBackupWriteClient,
         frozen_wallets: Vec<CloudBackupWalletItem>,
         listing_generation: u64,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedRestoreAll, CloudBackupError> {
         let authoritative_fetch = self.do_fetch_cloud_only_wallets(listing_generation).await?;
         let eligible_record_ids: HashSet<_> = authoritative_fetch
@@ -281,15 +284,17 @@ impl RustCloudBackupManager {
         let wallet_restore = if ordered_queue.is_empty() {
             None
         } else {
-            Some(self.prepare_active_namespace_wallet_restore(writes).await?)
+            Some(self.prepare_active_namespace_wallet_restore(writes, authority).await?)
         };
 
         Ok(CloudBackupPreparedRestoreAll { authoritative_fetch, ordered_queue, wallet_restore })
     }
 
+    /// Uses `authority` only when the local master key is missing and must be recovered
     pub(crate) async fn prepare_active_namespace_wallet_restore(
         &self,
         writes: &CloudBackupWriteClient,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedWalletRestore, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RestoreCloudWallet)?;
 
@@ -301,6 +306,7 @@ impl RustCloudBackupManager {
                 writes,
                 &namespace,
                 CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE,
+                authority,
             )
         })
         .await
