@@ -6,11 +6,12 @@
 //! covers, the category the inventory put them in and the generations it read them under. The
 //! confirmation sends back the consent of the delete the user saw, unchanged
 //!
-//! Dispatch mints the same delete again from the facts at that moment, in the namespace in force,
-//! and starts it only when the two are equal. A delete confirmed on evidence that has since moved,
-//! such as an extra copy that is now the only copy, a new listing, a local wallet change, a new
-//! configuration or another namespace, is rejected as stale instead of running under a
-//! confirmation the user never gave
+//! Dispatch builds a row delete's authorization from its consent and checks it against the rows
+//! a delete in the namespace in force would see, the check the write lane makes again before the
+//! remote call. A batch is minted again from the facts at that moment and starts only when the two
+//! are equal. A delete confirmed on evidence that has since moved, such as an extra copy that is
+//! now the only copy, a new listing, a local wallet change, a new configuration or another
+//! namespace, is rejected as stale instead of running under a confirmation the user never gave
 //!
 //! A batch freezes its records when it is minted, so a record found after the confirmation is
 //! never added to it
@@ -18,6 +19,7 @@
 use super::RecordId;
 use super::actors::write::ConfigGeneration;
 use super::inventory::{InventoryView, ListedRecord};
+use super::owner::inventory::{InventoryReadAt, InventoryScope};
 use super::screen::{
     CloudBackupDeleteConfirmation, CloudBackupKeyTrust, CloudBackupListedRecord,
     CloudBackupUnreadableKind,
@@ -96,6 +98,36 @@ pub struct CloudBackupDeleteEvidence {
     local_wallets_generation: u64,
 }
 
+impl CloudBackupDeleteEvidence {
+    /// What the confirmed records were offered as
+    pub(crate) fn category(&self) -> CloudBackupDeleteCategory {
+        self.category
+    }
+
+    /// The namespace the confirmed records were listed in
+    pub(crate) fn namespace_id(&self) -> &str {
+        &self.namespace_id
+    }
+
+    /// The configuration in force when the delete was offered
+    pub(crate) fn configuration(&self) -> ConfigGeneration {
+        ConfigGeneration::from(self.configuration)
+    }
+
+    /// Where the inventory the delete was offered on was read
+    pub(crate) fn read_at(&self) -> InventoryReadAt {
+        InventoryReadAt::at(
+            InventoryScope::from(self.inventory_scope),
+            self.local_wallets_generation,
+        )
+    }
+
+    /// The cloud-only listing the confirmed records were classified under
+    pub(crate) fn listing_generation(&self) -> u64 {
+        self.listing_generation
+    }
+}
+
 /// Consent to delete one listed record, as its row's Delete offered it
 ///
 /// Opaque to the platform, which sends back the one its confirmation was opened with
@@ -115,6 +147,11 @@ impl CloudBackupRowDeleteConsent {
     pub(crate) fn confirmation(&self) -> CloudBackupDeleteConfirmation {
         self.evidence.category.confirmation()
     }
+
+    /// The inventory evidence the delete was offered on
+    pub(crate) fn evidence(&self) -> &CloudBackupDeleteEvidence {
+        &self.evidence
+    }
 }
 
 /// Consent to delete the backups the verified key couldn't decrypt, frozen to the records the
@@ -131,6 +168,11 @@ impl CloudBackupBatchDeleteConsent {
     /// The records the user confirmed deleting, in listing order; nothing outside them is deleted
     pub(crate) fn record_ids(&self) -> impl Iterator<Item = &RecordId> {
         self.record_ids.iter()
+    }
+
+    /// The inventory evidence the batch was offered on
+    pub(crate) fn evidence(&self) -> &CloudBackupDeleteEvidence {
+        &self.evidence
     }
 }
 
@@ -168,7 +210,7 @@ impl<'a> DeleteConsents<'a> {
         listed: &ListedRecord,
         copy_replaced: bool,
     ) -> Option<CloudBackupRowDeleteConsent> {
-        let category = CloudBackupDeleteCategory::of(&listed.record, copy_replaced)?;
+        let category = CloudBackupDeleteCategory::of(&self.trusted(listed), copy_replaced)?;
 
         Some(CloudBackupRowDeleteConsent {
             record_id: listed.record_id.clone(),
@@ -203,17 +245,6 @@ impl<'a> DeleteConsents<'a> {
         Some(CloudBackupBatchDeleteConsent { record_ids, evidence: self.evidence(category)? })
     }
 
-    /// Whether `consent` is the Delete its row offers now
-    pub(crate) fn admits_row(&self, consent: &CloudBackupRowDeleteConsent) -> bool {
-        let Some(rows) = &self.view.rows else { return false };
-
-        rows.listed
-            .iter()
-            .find(|listed| listed.record_id == consent.record_id)
-            .and_then(|listed| self.row(listed, rows.copy_has_current_backup(listed)))
-            .is_some_and(|current| current == *consent)
-    }
-
     /// Whether `consent` is the batch the inventory offers now
     pub(crate) fn admits_undecryptable_batch(
         &self,
@@ -222,7 +253,35 @@ impl<'a> DeleteConsents<'a> {
         self.undecryptable_batch().is_some_and(|current| current == *consent)
     }
 
+    /// The record as a delete sees it: a decrypt failure that the verified read of this
+    /// configuration holds is a failure of the verified key
+    fn trusted(&self, listed: &ListedRecord) -> CloudBackupListedRecord {
+        let verified = self.view.verified_unreadable.as_ref().is_some_and(|read| {
+            read.configuration == self.configuration
+                && read.record_ids.contains(listed.record_id.as_str())
+        });
+
+        match &listed.record {
+            CloudBackupListedRecord::Unreadable {
+                kind: CloudBackupUnreadableKind::Decrypt,
+                ..
+            } if verified => CloudBackupListedRecord::Unreadable {
+                kind: CloudBackupUnreadableKind::Decrypt,
+                trust: CloudBackupKeyTrust::VerifiedCurrentKey,
+            },
+            record => record.clone(),
+        }
+    }
+
+    /// The evidence a delete of `category` is offered on, or `None` when no delete can be
+    ///
+    /// Rows read under a listing since replaced or forgotten say nothing about the records now,
+    /// so they offer no delete until they are read again
     fn evidence(&self, category: CloudBackupDeleteCategory) -> Option<CloudBackupDeleteEvidence> {
+        if !self.view.rows_current {
+            return None;
+        }
+
         Some(CloudBackupDeleteEvidence {
             category,
             namespace_id: self.namespace?.to_owned(),
@@ -301,6 +360,7 @@ mod tests {
     use crate::manager::cloud_backup_manager::inventory::{
         CopyCover, InventoryListedClass, InventoryRows, InventoryView, ListedRecord,
     };
+    use crate::manager::cloud_backup_manager::owner::delete_authorization::test_support::delete_authority;
     use crate::manager::cloud_backup_manager::screen::{
         CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupOwnRow,
         CloudBackupUnreadableKind,
@@ -368,6 +428,8 @@ mod tests {
             classified: true,
             read_at: owner.read_at(),
             listing_generation: 1,
+            rows_current: true,
+            verified_unreadable: None,
             progress: None,
             rows: Some(InventoryRows {
                 up_to_date: vec![CloudBackupOwnRow { wallet: wallet(SPENDING), record: own }],
@@ -402,18 +464,19 @@ mod tests {
             .expect("an extra copy with a current replacement offers Delete");
         assert_eq!(consent.evidence.category, CloudBackupDeleteCategory::ExtraCopy);
 
-        // as dispatch checks it: minted again in the namespace in force
-        let admits_in = |view: &InventoryView, configuration, namespace| {
-            view.delete_consents(configuration).in_namespace(namespace).admits_row(&consent)
+        // as dispatch checks it: the authorization the consent gives, against the rows a delete
+        // in the namespace in force would see
+        let authorization = delete_authority().authorize_row(&consent);
+        let admits_in = |view: &InventoryView, configuration, namespace: &str| {
+            authorization.holds(&view.delete_view(configuration, namespace.to_owned())).is_ok()
         };
         let admits =
-            |view: &InventoryView, configuration| admits_in(view, configuration, Some(NAMESPACE));
+            |view: &InventoryView, configuration| admits_in(view, configuration, NAMESPACE);
         assert!(admits(&view(CloudBackupOwnRecord::Current, 0), n), "nothing moved");
 
         // a reinitialize replaced the namespace inside the same configuration generation
         let current = view(CloudBackupOwnRecord::Current, 0);
-        assert!(!admits_in(&current, n, Some("namespace-reinitialized")), "namespace moved");
-        assert!(!admits_in(&current, n, None), "namespace unreadable");
+        assert!(!admits_in(&current, n, "namespace-reinitialized"), "namespace moved");
 
         // the records were listed again in another namespace
         let mut relisted_elsewhere = view(CloudBackupOwnRecord::Current, 0);
@@ -421,9 +484,14 @@ mod tests {
             rows.listed_namespace = Some("namespace-reinitialized".into());
         }
         assert!(
-            !admits_in(&relisted_elsewhere, n, Some("namespace-reinitialized")),
+            !admits_in(&relisted_elsewhere, n, "namespace-reinitialized"),
             "listed in another namespace"
         );
+
+        // rows read under a listing since replaced say nothing about the records now
+        let mut unread = view(CloudBackupOwnRecord::Current, 0);
+        unread.rows_current = false;
+        assert!(!admits(&unread, n), "rows not read under the latest listing");
 
         // the replacement is no longer current, so the copy may be the only one
         assert!(!admits(&view(CloudBackupOwnRecord::Pending, 0), n), "category moved");

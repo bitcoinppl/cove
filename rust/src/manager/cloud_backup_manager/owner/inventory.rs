@@ -11,7 +11,7 @@ mod listing;
 use std::collections::{HashMap, HashSet};
 
 pub(crate) use self::listing::{
-    CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow,
+    CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow, UnreadableRead,
 };
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::DetailInventory;
@@ -125,6 +125,13 @@ impl InventoryScope {
     }
 }
 
+/// A scope this process entered, read back from the number a consent carried
+impl From<Option<u64>> for InventoryScope {
+    fn from(generation: Option<u64>) -> Self {
+        Self(generation.map(ConfigGeneration::from))
+    }
+}
+
 /// The configuration generation a scope belongs to, or `None` before the owner entered one
 impl From<InventoryScope> for Option<u64> {
     fn from(scope: InventoryScope) -> Self {
@@ -164,6 +171,9 @@ pub(crate) enum InventoryInput {
     CloudOnlyRestoreFailuresCleared(Vec<String>),
     /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
     CloudOnlyInventoryInvalidated,
+    /// A read with a verified key found records it could not decrypt, applied only if its
+    /// listing is still current
+    UnreadableRecordsVerified(UnreadableRead),
     /// The local wallet set changed, so the listing and any loaded rows may now count a record as
     /// cloud-only, restorable, or a duplicate when it no longer is, and the detail may list a
     /// wallet as local that is gone
@@ -261,6 +271,11 @@ pub(crate) struct InventoryReadAt {
 }
 
 impl InventoryReadAt {
+    /// Where evidence read under `scope`, after `local_wallets` local wallet changes, was read
+    pub(crate) fn at(scope: InventoryScope, local_wallets: u64) -> Self {
+        Self { scope, local_wallets: LocalWalletsEpoch(local_wallets) }
+    }
+
     /// The configuration the evidence was read under
     pub(crate) fn scope(self) -> InventoryScope {
         self.scope
@@ -423,6 +438,13 @@ impl InventoryOwner {
                 self.cloud_only_inventory.invalidate();
                 self.cloud_only_failures_awaiting_refetch.clear();
             }
+            InventoryInput::UnreadableRecordsVerified(read) => {
+                // a listing or local wallet change since the read moved the generation, so the
+                // read may name a record that is now a local wallet's own
+                if !self.cloud_only_inventory.record_unreadable(read) {
+                    debug!("Cloud Backup dropped an unreadable read made under an older listing");
+                }
+            }
             InventoryInput::LocalWalletsChanged { local_record_ids } => {
                 return self.apply_local_wallets_changed(local_record_ids.as_ref());
             }
@@ -579,6 +601,16 @@ impl InventoryOwner {
 
     pub(crate) fn cloud_only_listing_generation(&self) -> u64 {
         self.cloud_only_inventory.generation()
+    }
+
+    /// Whether the loaded cloud-only rows were read under the latest listing
+    pub(crate) fn loaded_rows_are_current(&self) -> bool {
+        self.cloud_only_inventory.loaded_rows_are_current()
+    }
+
+    /// The last verified read of undecryptable records, while its listing is current
+    pub(crate) fn verified_unreadable(&self) -> Option<&UnreadableRead> {
+        self.cloud_only_inventory.verified_unreadable()
     }
 
     /// Whether the provider confirmed the listing the detail was built from

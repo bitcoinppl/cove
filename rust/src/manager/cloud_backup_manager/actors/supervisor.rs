@@ -31,12 +31,16 @@ use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, ContinuationOwner, EnableIntent, PauseReason, Rejection, UserIntent,
 };
+use crate::manager::cloud_backup_manager::delete_consent::{
+    CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent,
+};
 use crate::manager::cloud_backup_manager::keychain::{
     CloudBackupKeychain, CloudBackupKeychainError, LocalStateOwner,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::owner::delete_authorization::RowDeleteAuthority;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::manager::cloud_backup_manager::screen::{
@@ -55,7 +59,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, PasskeyRequestAuthority, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
+    CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
     CloudBackupCloudOnlyOperationWarning, CloudBackupCloudOnlyWalletOutcome,
     CloudBackupDetailInventorySnapshot, CloudBackupDetailInventorySnapshotResult,
     CloudBackupDetailOutcome, CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
@@ -67,21 +71,20 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupInventoryIncompleteReason, CloudBackupNoDiscoveryEnablePreparation,
     CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
-    CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
-    CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
-    CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
-    CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
-    CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
-    CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
-    DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
-    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, InventoryReadAt,
-    InventoryScope, OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    PendingWork, RecoveryAction, RecoveryState, RustCloudBackupManager,
-    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
-    is_provider_wide_interruption,
+    CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
+    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
+    CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupReuploadedWallets,
+    CloudBackupSavedPasskeyConfirmation, CloudBackupStatus,
+    CloudBackupUndecryptableWalletDeletionState, CloudBackupUploadedEnableBackup,
+    CloudBackupVerificationPresentation, CloudBackupVerificationSource, CloudBackupWalletItem,
+    CloudOnlyOperation, CloudReachable, DeepVerificationReport, DeepVerificationResult,
+    DriveAccountSwitchPlatformState, EnablePasskeyRegistrationFlow,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, InventoryReadAt, InventoryScope, OtherBackupsOperation,
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, PendingWork, RecoveryAction,
+    RecoveryState, RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState,
+    VerificationState, WalletId, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -128,6 +131,8 @@ mod tests {
     #![cfg(test)]
 
     include!("supervisor/tests.rs");
+
+    mod row_delete;
 }
 
 /// Proof that the lifecycle owner is changing Cloud Backup's local keychain state
@@ -311,6 +316,8 @@ pub(crate) struct CloudBackupSupervisor {
     /// Try Again's permit for a stopped switch reinitialize, held for the platform's next state
     /// report to restart the run under
     drive_account_switch_recovery_permit: Option<PendingDriveAccountSwitchRecovery>,
+    /// The only minter of row delete authorizations; every row delete is decided here
+    delete_authority: RowDeleteAuthority,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
@@ -383,6 +390,7 @@ impl CloudBackupSupervisor {
         lifecycle: LifecycleWriter,
         load_error: Option<DatabaseError>,
     ) -> Self {
+        let delete_authority = RowDeleteAuthority::bootstrap(&lifecycle);
         let runtime =
             OwnedRuntime::at_load(load_error, lifecycle, cloud_writes.clone(), manager.clone());
 
@@ -398,6 +406,7 @@ impl CloudBackupSupervisor {
             drive_account_switch_unsaved: None,
             drive_account_switch_awaited: AwaitedDriveAccountSwitchStep::default(),
             drive_account_switch_recovery_permit: None,
+            delete_authority,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
@@ -442,34 +451,6 @@ impl CloudBackupSupervisor {
 
     fn addr(&self) -> Addr<Self> {
         self.addr.upgrade()
-    }
-
-    async fn delete_prepared_cloud_wallet_for_operation(
-        write: Addr<CloudBackupWriteSupervisor>,
-        prepared: CloudBackupPreparedCloudWalletDelete,
-        origin: CloudBackupExclusiveOperationClaim,
-    ) -> Result<(), CloudBackupError> {
-        let writes = CloudBackupWriteClient::for_operation(write, origin);
-        writes
-            .delete_active_wallet_backup(
-                prepared.cloud,
-                prepared.namespace,
-                prepared.record_id.clone(),
-            )
-            .await
-            .map_err(|error| {
-                let error = match error {
-                    CloudBackupError::CloudStorage(source) => {
-                        CloudBackupError::cloud_storage_context("delete wallet backup", source)
-                    }
-                    error => error,
-                };
-
-                blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
-            })?;
-
-        info!("Deleted cloud wallet");
-        Ok(())
     }
 
     async fn apply_cloud_backup_write_completion_for_operation(
@@ -815,9 +796,9 @@ impl CloudBackupSupervisor {
 
     pub async fn start_delete_cloud_wallet_operation(
         &mut self,
-        record_id: String,
+        consent: CloudBackupRowDeleteConsent,
     ) -> ActorResult<()> {
-        self.begin_delete_cloud_wallet_operation(record_id);
+        self.begin_delete_cloud_wallet_operation(consent);
         Produces::ok(())
     }
 
@@ -1782,12 +1763,18 @@ pub(crate) mod test_support {
     use super::verification::VerificationRun;
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
+    use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+        DeleteAuthorization, StaleTarget,
+    };
+    use crate::manager::cloud_backup_manager::screen::{
+        CloudBackupRowActionKind, CloudBackupScreenBody, CloudBackupSection,
+    };
     use crate::manager::cloud_backup_manager::turn_off::TurnOffReview;
     use crate::manager::cloud_backup_manager::wallets::PermitIntent;
     use crate::manager::{
         cloud_backup_manager::{
             CloudBackupPublishedScreen, CloudBackupReconcileMessage, CloudBackupScreenDelta,
-            screen::CloudBackupScreen,
+            RecordId, screen::CloudBackupScreen,
         },
         deferred_sender::SingleOrMany,
     };
@@ -1810,6 +1797,36 @@ pub(crate) mod test_support {
         ) -> CloudBackupScreen {
             manager.project_screen(&self.runtime, &self.screen_inputs(manager))
         }
+
+        /// The screen this supervisor would publish now, for tests that reach it through its
+        /// address
+        pub(crate) async fn projected_screen_for_test(&mut self) -> ActorResult<CloudBackupScreen> {
+            let manager = self.manager().expect("the supervisor's manager");
+            Produces::ok(self.projected_screen(&manager))
+        }
+    }
+
+    /// The consents the Delete controls of the rows on `screen` carry
+    fn offered_row_deletes(
+        screen: &CloudBackupScreen,
+    ) -> impl Iterator<Item = &CloudBackupRowDeleteConsent> + '_ {
+        let sections = match &screen.body {
+            CloudBackupScreenBody::Configured(configured) => configured.sections.as_slice(),
+            _ => &[],
+        };
+
+        sections
+            .iter()
+            .flat_map(|section| match section {
+                CloudBackupSection::NotOnDevice(section) => section.rows.as_slice(),
+                CloudBackupSection::ExtraCopies(section) => section.rows.as_slice(),
+                _ => &[],
+            })
+            .flat_map(|row| &row.actions)
+            .filter_map(|action| match &action.action {
+                CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+                _ => None,
+            })
     }
 
     /// What a test reset finds on one test's supervisor
@@ -1883,6 +1900,9 @@ pub(crate) mod test_support {
         /// The inventory rows the screen was drawn from, with the coverage the screen leaves out
         pub(crate) inventory:
             Option<crate::manager::cloud_backup_manager::inventory::InventoryRows>,
+        /// Each record whose row on the fresh screen offers Delete, with whether the consent it
+        /// carries holds against the inventory now, in the same turn as that projection
+        pub(crate) offered_deletes: Vec<(RecordId, Result<(), StaleTarget>)>,
     }
 
     impl CloudBackupSupervisor {
@@ -1987,13 +2007,22 @@ pub(crate) mod test_support {
             crate::manager::cloud_backup_manager::set_aside_reconcile_messages(others);
 
             let CloudBackupPublishedScreen { revision, screen: published } = manager.state();
+            let fresh = self.projected_screen(manager);
+            let offered_deletes = offered_row_deletes(&fresh)
+                .map(|consent| {
+                    let holds = self.row_delete_holds(manager, consent).map(|_| ());
+                    (consent.record_id().clone(), holds)
+                })
+                .collect();
+
             ScreenView {
                 snapshot,
                 published,
                 revision,
-                fresh: self.projected_screen(manager),
+                fresh,
                 sent,
                 inventory: manager.inventory_facts().view().rows,
+                offered_deletes,
             }
         }
 
@@ -2193,6 +2222,36 @@ pub(crate) mod test_support {
                 .expect("begin exclusive operation");
 
             Produces::ok((claim, CloudBackupWriteClient::for_operation(self.write.clone(), claim)))
+        }
+
+        /// Freezes the confirmed batch to what `read` found, the way a confirmed batch delete
+        /// does, for tests that run the batch's body directly
+        pub async fn freeze_unreadable_batch_for_test(
+            &mut self,
+            consent: CloudBackupBatchDeleteConsent,
+            read: crate::manager::cloud_backup_manager::owner::inventory::UnreadableRead,
+        ) -> ActorResult<Result<Arc<crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization>, String>>{
+            let manager = self.manager().expect("cloud backup manager exists");
+            Produces::ok(self.freeze_unreadable_batch(&manager, &consent, &read))
+        }
+
+        /// What a batch preparation started now reads under
+        pub async fn start_unreadable_read_for_test(
+            &mut self,
+        ) -> ActorResult<crate::manager::cloud_backup_manager::owner::inventory::UnreadableRead>
+        {
+            let manager = self.manager().expect("cloud backup manager exists");
+            Produces::ok(self.start_unreadable_read(&manager))
+        }
+
+        /// The authorization a row's consent gives, checked against the inventory as dispatch
+        /// checks it now
+        pub async fn row_delete_holds_for_test(
+            &mut self,
+            consent: CloudBackupRowDeleteConsent,
+        ) -> ActorResult<Result<Arc<DeleteAuthorization>, StaleTarget>> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            Produces::ok(self.row_delete_holds(&manager, &consent).map(Arc::new))
         }
 
         /// Ends the operation a previous test left running, once no off-actor effect is in flight

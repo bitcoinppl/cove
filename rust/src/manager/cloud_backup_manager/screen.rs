@@ -48,7 +48,7 @@ pub use self::types::{
 pub(crate) use self::types::{
     CloudBackupDriveAccountSwitchStage, CloudBackupInventoryControl, CloudBackupListedRow,
     CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRowActionKind,
-    CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
+    CloudBackupRowControl, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
     CloudBackupSavedPasskeyScreen, CloudBackupSection, CloudBackupVerificationControl,
 };
 use crate::database::cloud_backup::PersistedHealNotice;

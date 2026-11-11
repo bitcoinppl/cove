@@ -9,8 +9,9 @@ use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupDisableImpact, CloudBackupDisableNotStartedReason, CloudBackupInventoryAssessment,
-    CloudBackupOutcome,
+    CloudBackupListedRow, CloudBackupOutcome, CloudBackupRowActionKind, CloudBackupSection,
 };
+use crate::manager::cloud_backup_manager::delete_consent::CloudBackupRowDeleteConsent;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, Rejection, ReviewExit, TurnOffAdmission, UserIntent, evaluate_admission,
 };
@@ -44,7 +45,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
     configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
-    hold_wallet_upload_in_flight, listed_detail, permit, tap, wait_for_queued_lane_write,
+    hold_wallet_upload_in_flight, listed_detail, permit, persist_dirty_blob_state, tap,
+    wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
     staged_pending_enable_journal, supervisor_checkpoint, unowned_writes, current_config,
@@ -439,6 +441,50 @@ fn list_test_wallet_files(namespace: &str, record_ids: &[&str]) {
             .map(|record_id| cove_cspp::backup_data::wallet_filename_from_record_id(record_id))
             .collect(),
     );
+}
+
+/// Uploads the wallet's own backup the way a sync does, returning its record ID
+async fn upload_own_backup(manager: &RustCloudBackupManager, wallet: &WalletMetadata) -> String {
+    persist_dirty_blob_state(wallet.id.clone());
+    manager.do_upload_wallet_if_dirty(&wallet.id).await.unwrap();
+
+    cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref())
+}
+
+/// Reads the detail and the cloud-only rows from the provider listing `listed`, as Check Again
+/// does, so an own row is current only if the cloud holds the wallet's current revision
+async fn read_inventory(manager: &RustCloudBackupManager, namespace: &str, listed: &[&str]) {
+    list_test_wallet_files(namespace, listed);
+    let config = current_config(manager).await;
+    let refreshed = manager.refresh_cloud_backup_detail(config).await.expect("a detail refresh");
+    apply_refresh_detail_result(manager, manager.inventory_scope(), &refreshed);
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the rows should be read", || {
+        manager.inventory.read().loaded_rows_are_current()
+    })
+    .await;
+}
+
+/// Writes a sync row saying the wallet's own backup was confirmed once, which proves nothing
+/// about what the cloud holds now
+fn confirm_own_backup(namespace: &str, wallet: &WalletMetadata) {
+    use crate::database::cloud_backup::{
+        CloudBlobConfirmedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    };
+
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::wallet(
+            namespace.into(),
+            wallet.id.clone(),
+            cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()),
+            PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+                revision_hash: "confirmed".into(),
+                confirmed_at: 1,
+            }),
+        ))
+        .unwrap();
 }
 
 fn local_wallet_exists(wallet: &WalletMetadata) -> bool {
@@ -1715,14 +1761,6 @@ async fn supervisor_ignores_stale_recover_other_backups_completion() {
             .unwrap()
         }, async |supervisor, claim| {
             supervisor.complete_recover_other_backups(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-    })
-    .await;
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
-            supervisor.complete_delete_cloud_wallet_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
 }
@@ -4462,11 +4500,13 @@ async fn identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impa
 
     assert_eq!(turn_off_impact(&manager).await.extra_copies, 1);
 
-    call!(manager.supervisor.start_delete_cloud_wallet_operation(
-        fixture.duplicate_record_id.clone()
-    ))
-    .await
-    .unwrap();
+    // an extra copy is deletable once a read finds the local wallet's own backup current
+    let own_record_id = upload_own_backup(&manager, &fixture.local_wallet).await;
+    read_inventory(&manager, &fixture.namespace, &[own_record_id.as_str(), duplicate_record_id])
+        .await;
+    let consent =
+        row_delete_consent(&manager, duplicate_record_id).await.expect("the row offers Delete");
+    call!(manager.supervisor.start_delete_cloud_wallet_operation(consent)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the duplicate delete should finish", || {
         !globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id)
             && manager.projected_exclusive_operation().is_none()
@@ -4484,41 +4524,6 @@ async fn turn_off_impact(manager: &RustCloudBackupManager) -> CloudBackupDisable
     let evidence = manager.gather_disable_evidence().await.expect("Turn Off evidence");
     let facts = super::disable::impact_facts(manager);
     DisableImpact::assess(&evidence, &facts).screen()
-}
-
-/// A row delete is a lane command: it waits behind the upload in flight and runs after it
-#[tokio::test(flavor = "current_thread")]
-async fn row_delete_waits_for_the_write_in_flight() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = test_supervisor_manager();
-    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
-    let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(
-        manager.inventory_scope(),
-        CloudBackupDetailOutcome::refreshed(listed_detail(&[duplicate_record_id])),
-    );
-    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
-    wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
-
-    let (upload_gate, upload) =
-        hold_wallet_upload_in_flight(&manager, globals, fixture.local_wallet.id.clone()).await;
-    call!(manager.supervisor.start_delete_cloud_wallet_operation(
-        fixture.duplicate_record_id.clone()
-    ))
-    .await
-    .unwrap();
-    wait_for_queued_lane_write(&manager).await;
-
-    assert!(globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id));
-
-    upload_gate.release();
-    upload.await.unwrap().unwrap();
-    wait_for_test_condition(Duration::from_secs(5), "the row delete runs after the upload", || {
-        !globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id)
-            && manager.projected_exclusive_operation().is_none()
-    })
-    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -5614,4 +5619,36 @@ async fn write_lane_result_for_an_ended_operation_is_discarded() {
 
     current.unwrap();
     assert_eq!(wallet_count(), Some(9));
+}
+
+/// The listed rows the screen draws now
+async fn drawn_rows(manager: &RustCloudBackupManager) -> Vec<CloudBackupListedRow> {
+    let screen = call!(manager.supervisor.projected_screen_for_test()).await.unwrap();
+    let CloudBackupScreenBody::Configured(configured) = screen.body else { return Vec::new() };
+
+    configured
+        .sections
+        .into_iter()
+        .flat_map(|section| match section {
+            CloudBackupSection::NotOnDevice(section) => section.rows,
+            CloudBackupSection::ExtraCopies(section) => section.rows,
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+/// The consent the Delete on the row for `record_id` carries, or `None` when it offers none
+async fn row_delete_consent(
+    manager: &RustCloudBackupManager,
+    record_id: &str,
+) -> Option<CloudBackupRowDeleteConsent> {
+    drawn_rows(manager)
+        .await
+        .into_iter()
+        .filter(|row| row.record_id.as_str() == record_id)
+        .flat_map(|row| row.actions)
+        .find_map(|action| match action.action {
+            CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+            _ => None,
+        })
 }

@@ -5,6 +5,7 @@ mod catastrophic_recovery;
 mod cloud_inventory;
 mod cspp_exports;
 mod delete_consent;
+mod delete_view;
 mod detail;
 mod dto;
 mod error;
@@ -117,9 +118,8 @@ pub(crate) use self::ops::{
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
     CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
     CloudBackupEnableRecoveryPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
-    CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
-    CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
+    CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
+    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };

@@ -185,6 +185,12 @@ pub struct RecordId(String);
 
 uniffi::custom_newtype!(RecordId, String);
 
+impl RecordId {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Per-wallet cloud backup sync state shown in backup detail
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupWalletStatus {

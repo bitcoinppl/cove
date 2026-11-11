@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use super::admission::DetailInventory;
+use super::owner::inventory::UnreadableRead;
 use super::screen::{
     CloudBackupInventoryAssessment, CloudBackupListedRecord, CloudBackupOwnRecord,
     CloudBackupOwnRow,
@@ -26,6 +27,8 @@ pub(crate) struct InventoryFacts {
     classified: bool,
     read_at: InventoryReadAt,
     listing_generation: u64,
+    rows_current: bool,
+    verified_unreadable: Option<UnreadableRead>,
     detail: CloudBackupDetailState,
     restore_all: CloudBackupRestoreAllState,
     other_backups: CloudBackupOtherBackupsState,
@@ -42,6 +45,11 @@ pub(crate) struct InventoryView {
     pub(crate) read_at: InventoryReadAt,
     /// The cloud-only listing the rows were classified under
     pub(crate) listing_generation: u64,
+    /// The loaded rows were read under the latest listing, so a delete can rest on them
+    pub(crate) rows_current: bool,
+    /// The records a key the configuration verified failed to decrypt, read under the latest
+    /// listing
+    pub(crate) verified_unreadable: Option<UnreadableRead>,
     /// Shown while the inventory loads or after a load failed
     pub(crate) progress: Option<InventoryProgress>,
     /// The rows of the last finished load, kept through a refresh or a failure
@@ -225,6 +233,8 @@ impl InventoryFacts {
             classified: owner.classified().is_some(),
             read_at: owner.read_at(),
             listing_generation: owner.cloud_only_listing_generation(),
+            rows_current: owner.loaded_rows_are_current(),
+            verified_unreadable: owner.verified_unreadable().cloned(),
             detail: owner.detail_state().clone(),
             restore_all: owner
                 .restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some()),
@@ -265,6 +275,8 @@ impl InventoryFacts {
             classified: self.classified,
             read_at: self.read_at,
             listing_generation: self.listing_generation,
+            rows_current: self.rows_current,
+            verified_unreadable: self.verified_unreadable.clone(),
             progress,
             rows: loaded_detail(&self.detail).map(inventory_rows),
             restore_all: self.restore_all.clone(),

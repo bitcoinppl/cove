@@ -257,8 +257,12 @@ paths = [
 ]
 coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impact",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_extra_copy_left_by_an_added_seed_waits_for_the_wallet_backup",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_queued_row_delete_whose_wallet_came_back_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_extra_copy_whose_wallet_backup_went_missing_stays",
     "ios-ui:ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift::testCancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDeleteFromCloudFullLaunchTest.kt::cancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust tests check that a row whose wallet is on this device waits until a read finds that wallet's own backup current in the cloud, even when its sync row once said confirmed, and that a delete queued behind a write deletes nothing once its wallet is back on the device
 # ui tests on both apps open the second of two cloud-only rows, check that the action sheet and Delete Forever confirmation name it, cancel without deleting, then delete it and check that scripted cloud storage deleted only its record at exactly its current and legacy locations, and that once the inventory refresh after the delete is applied the row is gone while the other cloud-only row and the local wallet stay; the real iCloud and Google Drive providers' delete calls are not exercised

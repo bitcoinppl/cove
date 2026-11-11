@@ -1,16 +1,20 @@
+use std::sync::Arc;
+
 use act_zero::{Addr, call};
 use cove_device::cloud_storage::CloudStorageClient;
 
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
 
 use super::keychain::OwnedKeychainWrite;
 use super::policy::{CommandClass, ConfigGeneration};
-use super::supervisor::{CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor};
+use super::supervisor::{CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor, LaneOutput};
 use super::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,
 };
+use super::worker::RowDeleteReport;
 
 /// Who a producer writes for, which gives every command or local effect it sends its class
 ///
@@ -103,6 +107,17 @@ impl CloudBackupWriteClient {
         result.into_result()
     }
 
+    /// Waits for a command whose only answer is success or failure
+    async fn await_done<E>(
+        &self,
+        receiver: Result<CloudBackupWriteResultReceiver<LaneOutput>, E>,
+    ) -> Result<(), CloudBackupError>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        self.await_result(receiver).await.map(drop)
+    }
+
     pub(crate) async fn upload_wallet_backup(
         &self,
         cloud: CloudStorageClient,
@@ -115,7 +130,7 @@ impl CloudBackupWriteClient {
             self.supervisor.upload_wallet_backup(class, cloud, namespace, record_id, data, None)
         )
         .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn upload_wallet_backup_with_completion(
@@ -136,7 +151,7 @@ impl CloudBackupWriteClient {
             Some(completion)
         ))
         .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn upload_master_key_backup(
@@ -149,7 +164,7 @@ impl CloudBackupWriteClient {
         let receiver =
             call!(self.supervisor.upload_master_key_backup(class, cloud, namespace, data, None))
                 .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn upload_master_key_backup_with_completion(
@@ -168,7 +183,7 @@ impl CloudBackupWriteClient {
             Some(completion)
         ))
         .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn finalize_uploaded_wallets(
@@ -187,7 +202,7 @@ impl CloudBackupWriteClient {
             state_mode
         ))
         .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn complete_uploaded_wallet_batch(
@@ -206,7 +221,7 @@ impl CloudBackupWriteClient {
             count_refresh
         ))
         .await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     pub(crate) async fn apply_completion(
@@ -215,21 +230,28 @@ impl CloudBackupWriteClient {
     ) -> Result<(), CloudBackupError> {
         let class = CommandClass::Operation(self.operation("write completion")?);
         let receiver = call!(self.supervisor.apply_completion(class, completion)).await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
-    /// Row or batch delete of one wallet record in the active namespace
-    pub(crate) async fn delete_active_wallet_backup(
+    /// Deletes one wallet record a row delete's authorization names, if it still holds when the
+    /// lane reaches it
+    pub(crate) async fn delete_authorized_record(
         &self,
         cloud: CloudStorageClient,
-        namespace: String,
+        authorization: Arc<DeleteAuthorization>,
         record_id: String,
-    ) -> Result<(), CloudBackupError> {
-        let class = CommandClass::RowDelete(self.operation("active-wallet delete")?);
+    ) -> Result<RowDeleteReport, CloudBackupError> {
+        let claim = self.operation("row delete")?;
         let receiver =
-            call!(self.supervisor.delete_active_wallet_backup(class, cloud, namespace, record_id))
+            call!(self.supervisor.delete_wallet_record(claim, authorization, record_id, cloud))
                 .await;
-        self.await_result(receiver).await
+
+        match self.await_result(receiver).await? {
+            LaneOutput::RowDelete(report) => Ok(report),
+            LaneOutput::Done => Err(CloudBackupError::Internal(
+                "cloud backup write lane answered a row delete without its report".into(),
+            )),
+        }
     }
 
     /// Turn Off's delete of the namespace it committed to delete
@@ -285,7 +307,7 @@ impl CloudBackupWriteClient {
         namespace: String,
     ) -> Result<(), CloudBackupError> {
         let receiver = call!(self.supervisor.delete_namespace(class, cloud, namespace)).await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     /// Saves keys this client's owner proved for `namespace_id`
@@ -300,13 +322,13 @@ impl CloudBackupWriteClient {
     ) -> Result<(), CloudBackupError> {
         let class = self.owner.class();
         let receiver = call!(self.supervisor.save_keychain(class, namespace_id, writes)).await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 
     /// Waits until every write queued before this one finished, while the operation runs
     pub(crate) async fn drain(&self) -> Result<(), CloudBackupError> {
         let class = CommandClass::Operation(self.operation("write drain")?);
         let receiver = call!(self.supervisor.barrier(class)).await;
-        self.await_result(receiver).await
+        self.await_done(receiver).await
     }
 }

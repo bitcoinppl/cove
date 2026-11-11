@@ -236,6 +236,7 @@ struct MockCloudState {
     upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
     delete_namespace_error: Option<CloudStorageError>,
+    wallet_backup_delete_errors: HashMap<(String, String), CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     list_namespaces_attempts: usize,
     next_list_namespaces_gate: Option<Arc<MockCloudDownloadGate>>,
@@ -391,6 +392,11 @@ impl MockCloudStorage {
 
     pub(crate) fn set_wallet_backup(&self, namespace: String, record_id: String, backup: Vec<u8>) {
         self.state.lock().wallet_backups.insert((namespace, record_id), backup);
+    }
+
+    /// Removes a backup as another device deleting it would
+    pub(crate) fn remove_wallet_backup(&self, namespace: &str, record_id: &str) {
+        self.state.lock().wallet_backups.remove(&(namespace.to_owned(), record_id.to_owned()));
     }
 
     pub(crate) fn set_wallet_backup_download_override(
@@ -598,6 +604,16 @@ impl MockCloudStorage {
         let mut state = self.state.lock();
         state.next_upload_wallet_backup_error = None;
         state.upload_wallet_backup_error = None;
+    }
+
+    /// Fails every delete of one wallet record with `error`, leaving the record as it is
+    pub(crate) fn fail_wallet_backup_delete(
+        &self,
+        namespace: String,
+        record_id: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().wallet_backup_delete_errors.insert((namespace, record_id), error);
     }
 
     pub(crate) fn fail_delete_namespace(&self, message: &str) {
@@ -955,6 +971,12 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
+        if let Some(error) =
+            state.wallet_backup_delete_errors.get(&(namespace.clone(), record_id.clone()))
+        {
+            return Err(error.clone());
+        }
+
         if record_id == MASTER_KEY_RECORD_ID {
             state.master_key_backups.remove(&namespace);
             return Ok(());

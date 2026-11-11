@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
+
+use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 
 use crate::manager::cloud_backup_manager::inventory::{CopyCover, InventoryListedClass};
 use crate::manager::cloud_backup_manager::screen::{
@@ -172,6 +174,24 @@ pub(crate) struct CloudOnlyInventory {
     listed_record_ids: Option<HashSet<String>>,
     /// Listing generation the loaded rows completely read, unset when nothing complete is loaded
     complete_fetch_generation: Option<u64>,
+    /// Listing generation the loaded rows were read or kept under, complete or not, unset when
+    /// no rows are loaded
+    rows_generation: Option<u64>,
+    /// The records the last verified read could not decrypt, while its listing is current
+    verified_unreadable: Option<UnreadableRead>,
+}
+
+/// Records a key this configuration verified failed to decrypt, read under one listing
+///
+/// The reader takes the listing generation before it reads the local wallets, so a wallet
+/// change during the read moves the generation and the read is dropped instead of naming a
+/// record that became a local wallet's own
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnreadableRead {
+    pub(crate) listing_generation: u64,
+    /// The configuration whose verified key failed to decrypt the records
+    pub(crate) configuration: ConfigGeneration,
+    pub(crate) record_ids: BTreeSet<String>,
 }
 
 impl CloudOnlyInventory {
@@ -191,6 +211,7 @@ impl CloudOnlyInventory {
         self.generation += 1;
         self.listed_record_ids = None;
         self.complete_fetch_generation = None;
+        self.verified_unreadable = None;
     }
 
     /// Records a fetch applied under the current generation as the loaded proof, but only when
@@ -210,6 +231,7 @@ impl CloudOnlyInventory {
         let complete =
             fetch.read_every_record() && self.listed_record_ids.as_ref() == Some(&fetch_listing);
         self.complete_fetch_generation = complete.then_some(fetch.listing_generation);
+        self.rows_generation = Some(fetch.listing_generation);
     }
 
     /// Drops a record that stopped being cloud-only, because it was restored or deleted, so the
@@ -222,6 +244,7 @@ impl CloudOnlyInventory {
 
     pub(crate) fn clear_loaded(&mut self) {
         self.complete_fetch_generation = None;
+        self.rows_generation = None;
     }
 
     fn covers_listing(&self, loaded_ids: &HashSet<String>) -> bool {
@@ -236,7 +259,31 @@ impl CloudOnlyInventory {
 
         // the rows match the latest listing, so they are current for it
         self.complete_fetch_generation = Some(self.generation);
+        self.rows_generation = Some(self.generation);
         true
+    }
+
+    /// Whether the loaded rows were read under the latest listing, so a delete can rest on them
+    ///
+    /// Unlike completeness, a partial read counts: each row it holds still says what its record
+    /// is, but rows read under a listing since replaced or forgotten say nothing
+    pub(crate) fn loaded_rows_are_current(&self) -> bool {
+        self.rows_generation == Some(self.generation)
+    }
+
+    /// Keeps a verified read made under the current listing, returning whether it was kept
+    pub(crate) fn record_unreadable(&mut self, read: UnreadableRead) -> bool {
+        if read.listing_generation != self.generation {
+            return false;
+        }
+
+        self.verified_unreadable = Some(read);
+        true
+    }
+
+    /// The last verified read, while the listing it was made under is still current
+    pub(crate) fn verified_unreadable(&self) -> Option<&UnreadableRead> {
+        self.verified_unreadable.as_ref().filter(|read| read.listing_generation == self.generation)
     }
 
     /// Whether loaded rows are a complete read of exactly the latest listing

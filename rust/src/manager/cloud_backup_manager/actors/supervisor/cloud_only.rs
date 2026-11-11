@@ -1,6 +1,11 @@
 use cove_device::cloud_storage::CloudStorageClient;
 
 use super::*;
+use crate::manager::cloud_backup_manager::actors::{Relist, RowDeleteReport};
+use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+    DeleteAuthorization, StaleTarget,
+};
+use crate::manager::cloud_backup_manager::owner::inventory::InventoryInput;
 use crate::manager::cloud_backup_manager::{
     CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState, InventoryScope,
 };
@@ -85,7 +90,10 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn begin_delete_cloud_wallet_operation(&mut self, record_id: String) {
+    pub(crate) fn begin_delete_cloud_wallet_operation(
+        &mut self,
+        consent: CloudBackupRowDeleteConsent,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(claim) = self
@@ -94,13 +102,39 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let record_id = consent.record_id().as_str().to_owned();
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Started {
             record_id: record_id.clone(),
         });
+
+        // the lane checks the authorization against the inventory again before the remote call,
+        // so a delete the inventory moved under after dispatch deletes nothing
+        let authorization = Arc::new(self.delete_authority.authorize_row(&consent));
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_delete_cloud_wallet(&record_id).await;
-            send!(addr.complete_delete_cloud_wallet_preparation(claim, result));
+            let result = manager
+                .delete_authorized_cloud_wallet(writes, authorization, record_id.clone())
+                .await;
+            send!(addr.complete_delete_cloud_wallet(claim, record_id, result));
         });
+    }
+
+    /// The authorization `consent` gives, while it still holds against the inventory now
+    ///
+    /// A namespace that can't be read can't be the one the records were listed in
+    pub(crate) fn row_delete_holds(
+        &self,
+        manager: &RustCloudBackupManager,
+        consent: &CloudBackupRowDeleteConsent,
+    ) -> Result<DeleteAuthorization, StaleTarget> {
+        let view = manager.delete_view(self.runtime.generation()).map_err(|error| {
+            warn!("Read the inventory to check a row delete: {error}");
+            StaleTarget::InventoryUnavailable
+        })?;
+
+        let authorization = self.delete_authority.authorize_row(consent);
+        authorization.holds(&view)?;
+        Ok(authorization)
     }
 
     pub async fn complete_cloud_only_fetch_request(
@@ -143,70 +177,53 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn complete_delete_cloud_wallet_preparation(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        result: Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError>,
-    ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
-            return Produces::ok(());
-        };
-
-        match result {
-            Ok(prepared) => {
-                let record_id = prepared.record_id.clone();
-                let write = self.write.clone();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result =
-                        Self::delete_prepared_cloud_wallet_for_operation(write, prepared, claim)
-                            .await;
-                    send!(addr.complete_delete_cloud_wallet(claim, record_id, result));
-                });
-            }
-            Err(error) => {
-                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.logged_reader_message("Failed to prepare cloud wallet delete"),
-                ));
-                self.runtime.finish(claim);
-                manager.project_exclusive_operation_finished(claim);
-            }
-        }
-
-        Produces::ok(())
-    }
-
     pub async fn complete_delete_cloud_wallet(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         record_id: String,
-        result: Result<(), CloudBackupError>,
+        result: Result<RowDeleteReport, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
         match result {
-            Ok(()) => {
+            Ok(RowDeleteReport::Removed { relist, .. }) => {
+                if relist == Relist::Failed {
+                    warn!("Deleted cloud wallet, but the new backup count is unknown");
+                }
+
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Deleted { record_id },
                 );
                 manager.refresh_sync_health();
-                let detail_claim =
-                    self.detail_workflow.start_operation_result(manager.inventory_scope());
-                let config = self.runtime.generation();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail(config).await;
-                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-                });
             }
+
+            // nothing was deleted; the refresh below reads the rows as they are now
+            Ok(RowDeleteReport::StaleTarget(stale)) => {
+                info!("Cloud Backup row delete went stale before it ran: {stale:?}");
+                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
+                    STALE_ROW_DELETE_MESSAGE.into(),
+                ));
+                manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
+            }
+
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
                     error.logged_reader_message("Failed to delete cloud wallet"),
                 ));
                 self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
+                return Produces::ok(());
             }
         }
+
+        let detail_claim = self.detail_workflow.start_operation_result(manager.inventory_scope());
+        let config = self.runtime.generation();
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.refresh_cloud_backup_detail(config).await;
+            send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
+        });
 
         Produces::ok(())
     }
@@ -279,6 +296,10 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 }
+
+/// What a row says when its confirmed delete no longer matched the backup when it ran
+pub(crate) const STALE_ROW_DELETE_MESSAGE: &str =
+    "This backup changed since you checked, so nothing was deleted. Check again.";
 
 pub(crate) fn cloud_only_restore_warning(
     warning: crate::backup::import::LabelRestoreWarning,

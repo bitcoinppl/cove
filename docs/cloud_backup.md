@@ -750,7 +750,7 @@ The lane does not keep its own record of who may write. The supervisor derives a
 versioned policy to the lane each time the body changes. The policy is never
 stored. When the lane reaches a queued write, it decides that write against the
 latest policy, at that moment. Each write carries a command class, and the
-decision is one of three:
+decision is one of four:
 
 - `Run`: the write starts
 - `Paused(PauseReason)`: the write answers `CloudBackupError::WritesPaused`. A
@@ -759,6 +759,9 @@ decision is one of three:
   the pause too, even when recording the uploads it finished is paused as well.
 - `Stale`: the write belongs to an operation that ended, or to an older
   configuration. It is dropped with a debug log.
+- `StaleTarget(StaleTarget)`: a row delete the policy would run, but whose
+  authorization no longer matches the inventory. Nothing is deleted. See
+  [Row Deletes](#row-deletes).
 
 | Class | Sent by | Runs when | Paused when |
 |---|---|---|---|
@@ -766,7 +769,7 @@ decision is one of three:
 | `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
 | `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
-| `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running | never |
+| `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running and its authorization still matches the inventory | never |
 | `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
 | `EnableDiscard(claim)` | discarding the namespace of an interrupted Enable or a stopped reinitialize | that discard is running | never |
 
@@ -940,6 +943,92 @@ asks for consent instead.
      a failed Try Again keeps Stop Using offered after a relaunch, and Stop
      Using saves a local-only disposition before its cleanup starts, so no
      later resume, retry or relaunch deletes the remote backup.
+
+## Row Deletes
+
+A row delete removes one listed backup record: Delete Cloud Wallet removes one
+row, and Delete Undecryptable removes the records the configured key couldn't
+decrypt. Each delete runs under a `DeleteAuthorization`. Only the inventory's
+`DeleteAuthority` can create one, and the lane checks it again right before the
+delete runs.
+
+### What each row may delete
+
+Each listed record has a `RowEvidence`, and its `delete_rule` decides whether
+the row can be deleted. The screen draws each row's controls from the same rule
+the lane enforces:
+
+| Row | Rule |
+|---|---|
+| Extra copy, a local wallet holds everything it can recover, and the latest read found that wallet's current revision in the cloud | delete, standard confirmation |
+| Extra copy, but the latest read didn't find the covering wallet's current backup | refused: back up first |
+| Not on this device, including a seed backup that only a watch-only wallet matches | delete, may-be-the-only-copy confirmation |
+| Unsupported version | delete, may-be-the-only-copy confirmation |
+| Unreadable (decrypt or parse), with the key this configuration verified | delete, may-be-the-only-copy confirmation |
+| Unreadable (decrypt or parse), any other key trust | refused: verify first |
+| Unreadable (not downloadable or provider failure) | refused: check again |
+| Not checked yet | refused: verify first |
+
+A public-only wallet never covers a seed backup. Until a read finds the covering
+wallet's own backup current, deleting the copy could delete the only backup of
+the seed. For example, after Restore adds a seed to a watch-only wallet, its
+earlier backup holds only public keys. The covering wallets are matched by their
+own record IDs, and an own row counts as current only when the read found the
+wallet's current revision in the cloud. A sync row that says Confirmed is not
+enough, because another device may have removed or replaced that backup since.
+
+### Authorization
+
+The authority mints an authorization in the same supervisor turn that starts the
+delete operation, from a `DeleteView` that the inventory owner gives under
+one lock. The view holds:
+
+- the active namespace
+- the listing generation, which every new listing, invalidation, or local
+  wallet change bumps
+- where the inventory was read (`InventoryReadAt`): its configuration scope,
+  and the local wallets epoch, which every local wallet change bumps
+- the configuration generation
+- each row's evidence, from the rows the screen draws, but only while they were
+  read under the latest listing
+
+Every record must be deletable, and all of them must fall into one category. A
+refusal finishes the operation with the row's remedy as its message, and
+nothing reaches the lane. Rows that an invalidation left on screen authorize
+nothing until a fetch reads them again.
+
+The screen draws each row's Delete from the same view, read through the same
+rule, in the supervisor turn that projects it. A row offers Delete only where
+the authority would mint one. A row the view doesn't hold, such as one an
+invalidation left on screen, shows Check Again instead.
+
+### Execution check
+
+When a row delete reaches the head of the lane and the policy runs it, the lane
+reads the view again and checks the authorization against it. The namespace,
+the listing generation, where the inventory was read, and the configuration
+must be unchanged, and the record must still be deletable in the same category.
+Otherwise the command answers `StaleTarget` and deletes nothing. The row says
+the backup changed and asks to check again, and the inventory is invalidated,
+so it's read again.
+
+A record that's already gone counts as deleted. The relist that follows a
+delete is reported apart from the delete: when the relist fails, the record is
+still gone, the row is still removed, and only the backup count stays as it was.
+
+### Frozen batches
+
+Delete Undecryptable needs a verification report that found records the key
+couldn't decrypt. Before it reads anything, it takes the listing generation and
+the configuration. Then it reads the local wallets and the cloud records. The
+inventory owner keeps what it read only if the listing hasn't changed since, so
+a wallet imported during the read can't leave its own backup named as
+unreadable. The view trusts the read only under the configuration it was made
+under. The authority then mints one authorization for exactly those records. The batch deletes only those records, in record order, and
+reads each one again first, skipping a record that now decrypts. Each delete is
+checked at the lane like any row delete. The batch stops at the first stale
+target or failure and reports how many records it removed. Records it hadn't
+reached stay.
 
 ## Verification And Recovery
 

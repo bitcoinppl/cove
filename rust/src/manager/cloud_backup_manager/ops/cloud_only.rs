@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -11,7 +12,8 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
+use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
+use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
@@ -23,12 +25,6 @@ use crate::manager::cloud_backup_manager::{
     is_provider_wide_interruption,
 };
 use crate::wallet_identity::{LocalWalletIdentities, NamedWalletCoverage};
-
-pub(crate) struct CloudBackupPreparedCloudWalletDelete {
-    pub(crate) cloud: CloudStorageClient,
-    pub(crate) namespace: String,
-    pub(crate) record_id: String,
-}
 
 pub(crate) struct CloudBackupPreparedWalletRestore {
     reader: WalletBackupReader,
@@ -321,19 +317,41 @@ impl RustCloudBackupManager {
         Ok(CloudBackupPreparedWalletRestore { reader })
     }
 
-    pub(crate) async fn prepare_delete_cloud_wallet(
+    /// Deletes one listed record the user confirmed, through the write lane
+    ///
+    /// The lane checks the authorization again just before the remote call, so a row that
+    /// changed while this waited reports a stale target instead of deleting
+    pub(crate) async fn delete_authorized_cloud_wallet(
         &self,
-        record_id: &str,
-    ) -> Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError> {
+        writes: CloudBackupWriteClient,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+    ) -> Result<RowDeleteReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteCloudWallet)?;
-        let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global_explicit_client();
 
-        Ok(CloudBackupPreparedCloudWalletDelete {
-            cloud,
-            namespace,
-            record_id: record_id.to_string(),
-        })
+        let report = writes
+            .delete_authorized_record(
+                CloudStorage::global_explicit_client(),
+                authorization,
+                record_id,
+            )
+            .await
+            .map_err(|error| {
+                let error = match error {
+                    CloudBackupError::CloudStorage(source) => {
+                        CloudBackupError::cloud_storage_context("delete wallet backup", source)
+                    }
+                    error => error,
+                };
+
+                blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
+            })?;
+
+        if let RowDeleteReport::Removed { .. } = report {
+            info!("Deleted cloud wallet");
+        }
+
+        Ok(report)
     }
 }
 
