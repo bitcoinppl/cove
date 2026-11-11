@@ -1,7 +1,7 @@
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, DeepVerificationFailure, DeepVerificationReport,
-    PendingUploadVerificationState, RecoveryState, VerificationState,
+    LocalWalletsEpoch, PendingUploadVerificationState, RecoveryState, VerificationState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -10,8 +10,25 @@ pub(crate) struct CloudBackupVerificationEffect {
     pub(crate) verification: Option<VerificationState>,
     pub(crate) pending_upload_verification: Option<PendingUploadVerificationState>,
     pub(crate) recovery: Option<RecoveryState>,
-    pub(crate) detail: Option<CloudBackupDetail>,
+    pub(crate) detail: Option<VerificationDetail>,
     pub(crate) refresh_sync_health: bool,
+}
+
+/// Detail a verification built from the local wallets, with the owner's local-wallet epoch read
+/// before the verification read them, so the owner drops it after a wallet change
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VerificationDetail {
+    pub(crate) detail: CloudBackupDetail,
+    pub(crate) read_at: LocalWalletsEpoch,
+}
+
+impl VerificationDetail {
+    pub(crate) fn new(
+        detail: Option<CloudBackupDetail>,
+        read_at: LocalWalletsEpoch,
+    ) -> Option<Self> {
+        detail.map(|detail| Self { detail, read_at })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -90,12 +107,13 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn complete(
         source: CloudBackupVerificationSource,
         report: DeepVerificationReport,
+        read_at: LocalWalletsEpoch,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
             verification: Some(VerificationState::Verified(report.clone())),
             recovery: Some(RecoveryState::Idle),
-            detail: report.detail,
+            detail: VerificationDetail::new(report.detail, read_at),
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
         }
@@ -104,12 +122,13 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn needs_attention(
         source: CloudBackupVerificationSource,
         report: DeepVerificationReport,
+        read_at: LocalWalletsEpoch,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
             verification: Some(VerificationState::NeedsAttention(report.clone())),
             recovery: Some(RecoveryState::Idle),
-            detail: report.detail,
+            detail: VerificationDetail::new(report.detail, read_at),
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
         }
@@ -118,6 +137,7 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn fail(
         source: CloudBackupVerificationSource,
         failure: DeepVerificationFailure,
+        read_at: LocalWalletsEpoch,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Failed {
@@ -126,7 +146,7 @@ impl CloudBackupVerificationCoordinator {
             }),
             verification: Some(VerificationState::Failed(failure.clone())),
             recovery: Some(RecoveryState::Idle),
-            detail: failure.detail().cloned(),
+            detail: VerificationDetail::new(failure.detail().cloned(), read_at),
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
         }
@@ -220,6 +240,7 @@ mod tests {
         let effect = CloudBackupVerificationCoordinator::fail(
             CloudBackupVerificationSource::Settings,
             failure,
+            LocalWalletsEpoch::default(),
         );
 
         assert_eq!(

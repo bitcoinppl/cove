@@ -6,7 +6,7 @@ use crate::database::cloud_backup::PersistedCloudBackupState;
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::owner::inventory::{InventoryEffects, InventoryInput};
 use super::verify::coordinator::{
-    CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
+    CloudBackupVerificationCoordinator, CloudBackupVerificationEffect, VerificationDetail,
 };
 use super::{
     CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupHealNotice,
@@ -150,8 +150,11 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
-        if let Some(detail) = effect.detail {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(detail));
+        if let Some(VerificationDetail { detail, read_at }) = effect.detail {
+            self.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
+                detail,
+                read_at,
+            });
         }
 
         if let Some(pending_upload_verification) = effect.pending_upload_verification {

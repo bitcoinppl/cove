@@ -140,7 +140,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let read_at = self.inventory.read().local_wallets_epoch();
+        let read_at = self.local_wallets_epoch();
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,
@@ -222,7 +222,7 @@ impl RustCloudBackupManager {
                 }
             };
 
-        let read_at = self.inventory.read().local_wallets_epoch();
+        let read_at = self.local_wallets_epoch();
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,

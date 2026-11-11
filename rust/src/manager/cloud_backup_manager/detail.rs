@@ -185,9 +185,12 @@ pub(crate) enum CloudBackupDetailOutcome {
         listed: CloudBackupListedDetail,
         read_at: LocalWalletsEpoch,
     },
-    /// Detail from a path whose report carries no listing, so loaded cloud-only rows cannot be
-    /// matched to a listing and are reset
-    RefreshedWithoutListing(CloudBackupDetail),
+    /// Detail a verification built from the local wallets it read at `read_at`, whose report
+    /// carries no listing, so loaded cloud-only rows cannot be matched to a listing and are reset
+    VerifiedWithoutListing {
+        detail: CloudBackupDetail,
+        read_at: LocalWalletsEpoch,
+    },
     Failed {
         reason: CloudBackupInventoryIncompleteReason,
         error: String,
@@ -258,24 +261,39 @@ impl RustCloudBackupManager {
         ));
     }
 
-    pub(crate) fn handle_deep_verification_result(&self, result: DeepVerificationResult) {
-        self.apply_deep_verification_result(result);
+    /// Shows a deep verification's result; `read_at` is the owner's local-wallet epoch from before
+    /// the verification read the wallets, so a detail it built is dropped after a wallet change
+    pub(crate) fn handle_deep_verification_result(
+        &self,
+        result: DeepVerificationResult,
+        read_at: LocalWalletsEpoch,
+    ) {
+        self.apply_deep_verification_result(result, read_at);
     }
 
-    pub(crate) fn apply_deep_verification_result(&self, result: DeepVerificationResult) {
+    pub(crate) fn apply_deep_verification_result(
+        &self,
+        result: DeepVerificationResult,
+        read_at: LocalWalletsEpoch,
+    ) {
+        let apply_detail = |detail: Option<CloudBackupDetail>| {
+            if let Some(detail) = detail {
+                self.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
+                    detail,
+                    read_at,
+                });
+            }
+        };
+
         match result {
             DeepVerificationResult::Verified(report) => {
-                self.apply_verified_report(report);
+                self.apply_verified_report(report, read_at);
             }
             DeepVerificationResult::NeedsAttention(report) => {
-                self.apply_needs_attention_report(report);
+                self.apply_needs_attention_report(report, read_at);
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
-                if let Some(detail) = report.detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
-                        detail,
-                    ));
-                }
+                apply_detail(report.detail);
                 self.apply_verification_effect(
                     CloudBackupVerificationCoordinator::begin_background_confirmation(
                         self.current_verification_source(),
@@ -283,28 +301,16 @@ impl RustCloudBackupManager {
                 );
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {
-                if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
-                        detail,
-                    ));
-                }
+                apply_detail(detail);
                 self.apply_verification_state(VerificationState::PasskeyConfirmed);
             }
             DeepVerificationResult::PasskeyMissing(detail) => {
-                if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
-                        detail,
-                    ));
-                }
+                apply_detail(detail);
                 self.apply_verification_state(VerificationState::Idle);
                 self.apply_recovery_state(RecoveryState::Idle);
             }
             DeepVerificationResult::NotCompleted(detail) => {
-                if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
-                        detail,
-                    ));
-                }
+                apply_detail(detail);
                 self.apply_verification_state(VerificationState::Cancelled);
             }
             DeepVerificationResult::NotEnabled => {
@@ -312,7 +318,7 @@ impl RustCloudBackupManager {
                 self.apply_recovery_state(RecoveryState::Idle);
             }
             DeepVerificationResult::Failed(failure) => {
-                self.apply_failed_verification(failure);
+                self.apply_failed_verification(failure, read_at);
             }
         }
     }
@@ -362,12 +368,15 @@ impl RustCloudBackupManager {
                 CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
                 OwnSecretUpdate::Read(listed.own_secrets),
             ),
-            CloudBackupDetailOutcome::RefreshedWithoutListing(detail) => (
-                detail,
-                CloudBackupInventoryAuthority::ProviderConfirmed,
-                CloudOnlyListingUpdate::Unlisted,
-                OwnSecretUpdate::Unread,
-            ),
+            CloudBackupDetailOutcome::VerifiedWithoutListing { detail, read_at } => {
+                self.apply_inventory(InventoryInput::VerifiedDetailApplied {
+                    read_at,
+                    detail,
+                    cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+                    own_secrets: OwnSecretUpdate::Unread,
+                });
+                return;
+            }
         };
 
         // the owner decides whether loaded rows survive and asks for a refetch when they do not
@@ -408,7 +417,7 @@ impl RustCloudBackupManager {
             }
 
             CloudBackupDetailOutcome::Provisional(detail)
-            | CloudBackupDetailOutcome::RefreshedWithoutListing(detail) => {
+            | CloudBackupDetailOutcome::VerifiedWithoutListing { detail, .. } => {
                 detail.retain_local_wallets(&local_record_ids);
             }
 
@@ -427,6 +436,14 @@ impl RustCloudBackupManager {
                 error!("read local wallets to {purpose}: {error}");
             })
             .ok()
+    }
+
+    /// The inventory owner's local-wallet epoch, for evidence about to read the local wallets
+    ///
+    /// Returned by value with the inventory lock already released, so it can sit inside a call
+    /// that then applies an inventory input without deadlocking on its own read guard
+    pub(crate) fn local_wallets_epoch(&self) -> LocalWalletsEpoch {
+        self.inventory.read().local_wallets_epoch()
     }
 
     pub(crate) fn apply_local_wallets_changed(&self) {
@@ -762,9 +779,10 @@ mod tests {
         let wallet = cloud_backup_wallet_item("wallet-a");
 
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![wallet]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
-            listed_detail(&["wallet-a"]).detail,
-        ));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
+            detail: listed_detail(&["wallet-a"]).detail,
+            read_at: manager.local_wallets_epoch(),
+        });
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }

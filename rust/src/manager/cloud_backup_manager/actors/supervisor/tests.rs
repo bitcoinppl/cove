@@ -4,7 +4,7 @@ use crate::manager::cloud_backup_manager::owner::inventory::test_support::{
     CloudOnlyStateTestExt as _, listed_rows, row_wallet,
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
-use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow};
+use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow, LocalWalletsEpoch};
 use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
@@ -37,7 +37,9 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
-use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationEffect;
+use crate::manager::cloud_backup_manager::verify::coordinator::{
+    CloudBackupVerificationEffect, VerificationDetail,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey,
 };
@@ -1315,16 +1317,9 @@ async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
 async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor
-                .complete_verification(
-                    VerificationRun {
-                        claim,
-                        continuation: DeepVerificationContinuation::RecreateManifest {
-                            attempt: VerificationAttempt::Initial,
-                        },
-                        basis: supervisor.evidence_basis(),
-                    },
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                )
+                .complete_verification(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation: DeepVerificationContinuation::RecreateManifest {
+                        attempt: VerificationAttempt::Initial,
+                    } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
                 .await
                 .unwrap();
     })
@@ -1339,7 +1334,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.evidence_basis() }, Err(CloudBackupError::Internal("completion".into())))
+                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1354,9 +1349,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_resume(
-                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_wrapper_repair_resume(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1372,9 +1365,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_upload(
-                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
-                    Err(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_auto_sync_upload(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1390,9 +1381,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_finalization(
-                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
-                    Err(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_auto_sync_finalization(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1408,9 +1397,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_resume(
-                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
-                    CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                .complete_deep_verification_auto_sync_resume(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
                 )
@@ -1432,16 +1419,9 @@ async fn supervisor_ignores_stale_reinitialize_backup_completion() {
 async fn supervisor_ignores_stale_reinitialize_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
             supervisor
-                .complete_verification(
-                    VerificationRun {
-                        claim,
-                        continuation: DeepVerificationContinuation::ReinitializeBackup {
-                            attempt: VerificationAttempt::Initial,
-                        },
-                        basis: supervisor.evidence_basis(),
-                    },
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                )
+                .complete_verification(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation: DeepVerificationContinuation::ReinitializeBackup {
+                        attempt: VerificationAttempt::Initial,
+                    } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
                 .await
                 .unwrap();
     })
@@ -4283,6 +4263,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     local_restore.restore_record(&local_record_id).await.unwrap();
 
     // a refresh and a verification both read the wallet as local before it is deleted
+    let read_at = manager.local_wallets_epoch();
     let mut stale = listed_detail(&[]);
     stale.detail.up_to_date.push(CloudBackupWalletItem {
         sync_status: CloudBackupWalletStatus::Confirmed,
@@ -4327,10 +4308,54 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     );
 
     // the verification's detail finishes late too
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(stale.detail));
+    manager.handle_deep_verification_result(
+        DeepVerificationResult::PasskeyConfirmed(Some(stale.detail)),
+        read_at,
+    );
 
     let detail = public_detail(&manager).unwrap();
     assert!(detail.up_to_date.is_empty(), "the verification listed the deleted wallet as local");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    let restored_record_id = upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata());
+
+    // the verification reads the local wallets before the restore adds one
+    let read_at = manager.local_wallets_epoch();
+    let read_before_restore = listed_detail(&[]).detail;
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
+
+    let restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
+    restore.restore_record(&restored_record_id).await.unwrap();
+    manager.handle_local_wallets_changed();
+
+    let shows_restored = |manager: &RustCloudBackupManager| {
+        public_detail(manager).is_some_and(|detail| {
+            detail
+                .up_to_date
+                .iter()
+                .chain(&detail.needs_sync)
+                .any(|wallet| wallet.record_id == restored_record_id)
+        })
+    };
+    wait_for_test_condition(Duration::from_secs(5), "the restored wallet joins the local rows", || {
+        shows_restored(&manager)
+    })
+    .await;
+
+    // the restore is not a wallet-set change for the verification's own basis, so only the
+    // inventory's epoch tells this detail is older than the restored wallet
+    manager.handle_deep_verification_result(
+        DeepVerificationResult::PasskeyConfirmed(Some(read_before_restore)),
+        read_at,
+    );
+
+    assert!(shows_restored(&manager), "the verification's older detail hid the restored wallet");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4354,7 +4379,10 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
 
     // a background report carries no listing, so the loaded rows cannot be matched and reset
     manager.apply_verification_effect(CloudBackupVerificationEffect {
-        detail: Some(test_cloud_backup_detail()),
+        detail: Some(VerificationDetail {
+            detail: test_cloud_backup_detail(),
+            read_at: manager.local_wallets_epoch(),
+        }),
         ..Default::default()
     });
 
@@ -5034,16 +5062,9 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
 
     // a completion still carrying the reinitialize claim is stale
     supervisor
-        .complete_verification(
-            VerificationRun {
-                claim: reinitialize_claim,
-                continuation: DeepVerificationContinuation::ReinitializeBackup {
-                    attempt: VerificationAttempt::Initial,
-                },
-                basis: supervisor.evidence_basis(),
-            },
-            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-        )
+        .complete_verification(VerificationRun { claim: reinitialize_claim, basis: supervisor.wallet_set, read_at: manager.local_wallets_epoch(), continuation: DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
         .await
         .unwrap();
 
@@ -5052,16 +5073,9 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     // the verification's own result reports the new backup verified, and releases the slot and
     // the spinner
     supervisor
-        .complete_verification(
-            VerificationRun {
-                claim: verification_claim,
-                continuation: DeepVerificationContinuation::ReinitializeBackup {
-                    attempt: VerificationAttempt::Initial,
-                },
-                basis: supervisor.evidence_basis(),
-            },
-            step,
-        )
+        .complete_verification(VerificationRun { claim: verification_claim, basis: supervisor.wallet_set, read_at: manager.local_wallets_epoch(), continuation: DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            } }, step)
         .await
         .unwrap();
 
@@ -5109,6 +5123,28 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
         panic!("verification run was not produced");
     };
     supervisor.require_verification_after_wallet_change(20).await.unwrap();
+
+    // a second request while it runs starts no second run that could lend it a newer basis, and
+    // Turn Off waits for it
+    supervisor.dispatch(verify).await.unwrap();
+    assert!(matches!(
+        supervisor.last_outcome.as_ref().map(|outcome| &outcome.admission),
+        Some(Admission::Coalesced(_))
+    ));
+    supervisor.start_verification(false).await.unwrap();
+    assert_eq!(supervisor.runtime.claim(), Some(first));
+    supervisor.dispatch(UserIntent::TurnOff).await.unwrap();
+    assert!(matches!(
+        supervisor.last_outcome.as_ref().map(|outcome| &outcome.admission),
+        Some(Admission::Rejected(Rejection::OperationRunning(CloudBackupExclusiveOperation::Verify)))
+    ));
+
+    let run = VerificationRun {
+        claim: first,
+        basis,
+        read_at: manager.local_wallets_epoch(),
+        continuation: manual,
+    };
     supervisor.complete_verification(run, verified()).await.unwrap();
 
     assert!(
@@ -5131,9 +5167,15 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     );
 
     // a verification that starts after the change reads the new wallet set, so it counts
-    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
-    else {
-        panic!("verification run was not produced");
+    assert_eq!(supervisor.runtime.claim(), None);
+    let basis = supervisor.wallet_set;
+    supervisor.start_verification(false).await.unwrap();
+    let second = supervisor.runtime.claim().expect("the verification holds an operation");
+    let run = VerificationRun {
+        claim: second,
+        basis,
+        read_at: manager.local_wallets_epoch(),
+        continuation: manual,
     };
     supervisor.complete_verification(run, verified()).await.unwrap();
 

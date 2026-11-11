@@ -71,12 +71,12 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
     DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
     DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
-    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
-    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
-    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
-    is_provider_wide_interruption,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, LocalWalletsEpoch, OtherBackupsOperation,
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
+    blocking_cloud_error, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 

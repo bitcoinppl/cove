@@ -122,7 +122,7 @@ pub(crate) use self::ops::{
 pub(crate) use self::owner::inventory::{
     CloudBackupDetailState, CloudBackupInventoryAuthority, CloudOnlyFetch, CloudOnlyListingUpdate,
     CloudOnlyRow, CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
-    OwnSecretUpdate,
+    LocalWalletsEpoch, OwnSecretUpdate,
 };
 pub(crate) use self::owner::lifecycle::LifecycleCapability;
 use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};
