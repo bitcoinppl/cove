@@ -227,6 +227,10 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         let confirm = app.alerts.buttons["Turn Off and Delete Backups"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10), "coming back lost the review")
         control.waitForAppState("coming back should keep the review") { $0.screen.disable == "reviewing" }
+        control.assertNextActions(
+            "coming back should still offer the review's confirm and cancel",
+            available: ["confirmDisable", "cancelDisable"]
+        )
         XCTAssertEqual(control.state.count(.namespaceDelete), 0, "backgrounding deleted a backup")
 
         app.alerts.buttons["Cancel"].tap()

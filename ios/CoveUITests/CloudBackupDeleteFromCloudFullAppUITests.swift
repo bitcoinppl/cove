@@ -18,20 +18,22 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
-    private var deleteLogPath: String!
+    private var scenarioState: CloudBackupScenarioAppState!
+
+    private var deleteLogPath: String {
+        scenarioState.deleteLogPath
+    }
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         robot = CloudBackupHostRobot(app: app)
-        deleteLogPath = "/tmp/cove-ui-test-cloud-delete-\(UUID().uuidString).json"
-        app.launchEnvironment["COVE_CLOUD_BACKUP_UI_DELETE_LOG"] = deleteLogPath
+        scenarioState = CloudBackupScenarioAppState(app: app)
     }
 
     override func tearDown() {
-        try? FileManager.default.removeItem(atPath: deleteLogPath)
-        try? FileManager.default.removeItem(atPath: statePath)
+        scenarioState.remove()
         super.tearDown()
     }
 
@@ -51,6 +53,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         assertSettledInventory(cloudOnly: [keptRecordId, selectedRecordId], timeout: 30, "the inventory never settled")
         robot.scrollToHittable(walletRow(recordId: keptRecordId))
         robot.scrollToHittable(walletRow(recordId: selectedRecordId))
+        scenarioState.assertNextActions("a settled inventory should offer Restore All", available: ["startRestoreAll"])
 
         // the second cloud-only row, so a delete that took the first row's id would remove the wrong one
         let confirmation = openDeleteConfirmation()
@@ -91,19 +94,17 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         robot.scrollToHittable(walletRow(recordId: keptRecordId))
         robot.scrollToHittable(walletRow(recordId: localRecordId))
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
+        scenarioState.assertNextActions(
+            "the delete should leave the other cloud-only wallets to restore",
+            available: ["startRestoreAll", "turnOff"]
+        )
 
         assertLocalWalletStillOnDevice()
     }
 
-    private var statePath: String {
-        deleteLogPath + ".state"
-    }
-
     /// The Cloud Backup screen, which the host writes to `<delete log>.state`
     private func appState() -> CloudBackupUITestAppState? {
-        guard let data = FileManager.default.contents(atPath: statePath) else { return nil }
-
-        return try? JSONDecoder().decode(CloudBackupUITestAppState.self, from: data)
+        scenarioState.file.appState
     }
 
     /// Waits until the provider-confirmed inventory is complete, no cloud-only operation is running,
@@ -196,6 +197,6 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
     }
 
     private func walletRow(recordId: String) -> XCUIElement {
-        app.descendants(matching: .any)["cloudBackup.wallet.\(recordId)"]
+        app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(recordId)]
     }
 }

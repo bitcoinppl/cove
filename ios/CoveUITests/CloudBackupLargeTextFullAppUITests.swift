@@ -20,6 +20,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
     private var layout: LargeTextLayout!
+    /// The app state of a test launched into a named scenario, nil for one with a control
+    private var scenarioState: CloudBackupScenarioAppState?
 
     override func setUp() {
         super.setUp()
@@ -32,13 +34,14 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
 
     override func tearDown() {
         CloudBackupHostControl.tearDown(self, app: app)
+        scenarioState?.remove()
         super.tearDown()
     }
 
     func testSetupDescriptionAcknowledgementsAndEnableAreReachable() {
         // MAN-03 starts with an empty cloud, so onboarding offers to enable Cloud Backup; the
         // native passkey it wires up is only used after Enable, which this test never taps
-        robot.launch(scenario: "MAN-03", arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        let scenarioState = launchScenario("MAN-03")
 
         let getStarted = app.buttons["Get Started"]
         robot.scrollToHittable(getStarted)
@@ -69,12 +72,13 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         let enable = app.buttons["Enable Cloud Backup"]
         robot.scrollToHittable(enable)
         XCTAssertTrue(enable.isEnabled, "Enable Cloud Backup stayed disabled after every acknowledgement")
+        scenarioState.assertNextActions("onboarding should offer Enable", body: "disabled", available: ["enable"])
     }
 
     /// The inventory's header, its on-device and cloud-only rows, Restore All, and the verified
     /// result with its actions
     func testInventoryCloudOnlyRowsAndVerificationActionsAreReachable() {
-        openCloudBackupDetail(scenario: "SC-U02")
+        let scenarioState = openCloudBackupDetail(scenario: "SC-U02")
 
         layout.assertTextFits(layout.headerTitle, "inventory header title")
         // an on-device row only shows details, so it takes no taps
@@ -94,6 +98,10 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(layout.staticText(endingWith: "wallet(s) verified"), "verified summary")
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again")
         layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off")
+        scenarioState.assertNextActions(
+            "the verified inventory should offer what the screen draws",
+            available: ["verify", "startRestoreAll", "turnOff"]
+        )
     }
 
     func testRestoreAllProgressKeepsCancelReachable() throws {
@@ -111,6 +119,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         )
         screen.tapRestoreAll(count: 2)
         control.waitForHold("wallet-two")
+        control.assertNextActions("a running batch should offer Cancel", available: ["cancelRestoreAll"])
 
         screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
         layout.assertReportFits(
@@ -147,6 +156,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.waitForAppState("cancelling the passkey should leave verification not completed") {
             $0.verification == "notCompleted"
         }
+        control.assertNextActions(
+            "a cancelled verification should offer Verify, not a passkey repair",
+            available: ["verify", "turnOff"],
+            unavailable: ["repairPasskey"]
+        )
 
         layout.assertTextFits(app.staticTexts["Cloud Backup Not Verified"], "cancelled verification")
         let verifyNow = layout.assertActionFits(app.buttons["Verify Now"], "cancelled verification: Verify Now")
@@ -165,6 +179,10 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
             $0.createResults = Array(repeating: .success, count: createsBeforeVerify) + [.postPresentationFailure]
         }
         verifyNow.tap()
+        control.assertNextActions(
+            "a verification that failed on the passkey should offer its repair",
+            available: ["repairPasskey", "turnOff"]
+        )
         assertMissingPasskeyScreenFits("verification failed on the passkey")
 
         // the card's own repair registers once more, held so the running card can be checked
@@ -210,6 +228,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.waitForAppState("the unavailable master key backup should fail verification", timeout: 30) {
             $0.verification == "failed"
         }
+        control.assertNextActions("a failed verification should offer Verify again", available: ["verify", "turnOff"])
 
         layout.assertTextFits(robot.staticText(containing: "temporarily unavailable"), "failed verification: error")
         layout.assertActionFits(robot.button(startingWith: "Try Again"), "failed verification: Try Again")
@@ -233,9 +252,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
             XCTAssertGreaterThan(removed, 0, "the interrupted setup staged no master key")
         }
 
-        control.waitForAppState("the relaunch should hold the interrupted setup for recovery") {
-            $0.screen.body == "pendingEnableRecovery"
-        }
+        control.assertNextActions(
+            "the relaunch should hold the interrupted setup for recovery",
+            body: "pendingEnableRecovery",
+            available: ["confirmPendingEnableCleanup"]
+        )
         layout.assertTextFits(app.staticTexts["Cloud Backup Needs Recovery"], "recovery title", initialWait: 30)
         layout.assertTextFits(robot.staticText(containing: "setup was interrupted"), "recovery description")
         layout.assertTextFits(robot.staticText(containing: "incomplete local setup can be removed"), "recovery explanation")
@@ -266,8 +287,18 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(robot.staticText(containing: "If your passkey was deleted"), "\(screen): deleted passkey help")
     }
 
-    private func openCloudBackupDetail(scenario: String) {
+    /// Launches the host into `scenario` at the largest text size, with its app state read from
+    /// the file the scenario host writes
+    private func launchScenario(_ scenario: String) -> CloudBackupScenarioAppState {
+        let state = CloudBackupScenarioAppState(app: app)
+        scenarioState = state
         robot.launch(scenario: scenario, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+
+        return state
+    }
+
+    private func openCloudBackupDetail(scenario: String) -> CloudBackupScenarioAppState {
+        let state = launchScenario(scenario)
         robot.restoreFromCloudBackup()
         robot.openSettings()
 
@@ -275,6 +306,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.scrollToHittable(cloudBackup)
         cloudBackup.tap()
         XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
+
+        return state
     }
 }
 

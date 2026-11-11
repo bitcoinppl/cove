@@ -228,12 +228,17 @@ final class CloudBackupHostControl {
         ) { $0.reportedNetworkConnected == isConnected }
     }
 
+    /// The app's `app-state.json`, with the host's calls added to a failed wait's message
+    private var appStateFile: CloudBackupAppStateFile {
+        CloudBackupAppStateFile(
+            url: directory.appendingPathComponent(CloudBackupUITestControl.appStateFileName),
+            context: { [self] in "host state \(state)" }
+        )
+    }
+
     /// The cloud backup manager's state as the app last wrote it, nil before it first did
     var appState: CloudBackupUITestAppState? {
-        let url = directory.appendingPathComponent(CloudBackupUITestControl.appStateFileName)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-
-        return try? JSONDecoder().decode(CloudBackupUITestAppState.self, from: data)
+        appStateFile.appState
     }
 
     /// Waits until the app's cloud backup state satisfies `condition`
@@ -244,28 +249,10 @@ final class CloudBackupHostControl {
         line: UInt = #line,
         _ condition: (CloudBackupUITestAppState) -> Bool
     ) {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let appState, condition(appState) { return }
-
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-
-        let last = appState
-        XCTAssertTrue(
-            last.map(condition) ?? false,
-            "\(message); app state \(String(describing: last)); host state \(state)",
-            file: file,
-            line: line
-        )
+        appStateFile.waitForAppState(message, timeout: timeout, file: file, line: line, condition)
     }
 
-    /// Waits until the screen's body is `body`, every action in `available` is offered and none in
-    /// `unavailable` is, by case name such as `turnOff`
-    ///
-    /// Checks what the user may do next as Rust decided it, rather than what the lazily built form
-    /// happens to have on screen. Actions named in neither set aren't checked, so a test names
-    /// only the ones its scenario is about
+    /// See `CloudBackupAppStateFile.assertNextActions`
     func assertNextActions(
         _ message: String,
         body: String = "configured",
@@ -275,11 +262,15 @@ final class CloudBackupHostControl {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        waitForAppState(message, timeout: timeout, file: file, line: line) { state in
-            let offered = Set(state.screen.actions)
-            return state.screen.body == body && available.isSubset(of: offered)
-                && unavailable.isDisjoint(with: offered)
-        }
+        appStateFile.assertNextActions(
+            message,
+            body: body,
+            available: available,
+            unavailable: unavailable,
+            timeout: timeout,
+            file: file,
+            line: line
+        )
     }
 
     var state: CloudBackupUITestHostState {
@@ -358,5 +349,117 @@ final class CloudBackupHostControl {
             data,
             to: directory.appendingPathComponent(CloudBackupUITestControl.scriptFileName)
         )
+    }
+}
+
+/// A file the host writes the Cloud Backup screen to, and the waits a test makes on it
+///
+/// A test with a control directory reads its `app-state.json`; a test launched into a named
+/// scenario reads the file `CloudBackupScenarioAppState` sets up
+struct CloudBackupAppStateFile {
+    let url: URL
+    /// What a failed wait adds to its message, such as the host's call counts
+    var context: () -> String = { "" }
+
+    /// The cloud backup manager's state as the app last wrote it, nil before it first did
+    var appState: CloudBackupUITestAppState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+
+        return try? JSONDecoder().decode(CloudBackupUITestAppState.self, from: data)
+    }
+
+    /// Waits until the app's cloud backup state satisfies `condition`
+    func waitForAppState(
+        _ message: String,
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: (CloudBackupUITestAppState) -> Bool
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let appState, condition(appState) { return }
+
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+
+        let last = appState
+        XCTAssertTrue(
+            last.map(condition) ?? false,
+            "\(message); app state \(String(describing: last)); \(context())",
+            file: file,
+            line: line
+        )
+    }
+
+    /// Waits until the screen's body is `body`, every action in `available` is offered and none in
+    /// `unavailable` is, by case name such as `turnOff`
+    ///
+    /// Checks what the user may do next as Rust decided it, rather than what the lazily built form
+    /// happens to have on screen. Actions named in neither set aren't checked, so a test names
+    /// only the ones its scenario is about. `just qa-check` fails when a Cloud Backup UI test
+    /// method never calls this
+    func assertNextActions(
+        _ message: String,
+        body: String = "configured",
+        available: Set<String> = [],
+        unavailable: Set<String> = [],
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForAppState(message, timeout: timeout, file: file, line: line) { state in
+            let offered = Set(state.screen.actions)
+            return state.screen.body == body && available.isSubset(of: offered)
+                && unavailable.isDisjoint(with: offered)
+        }
+    }
+}
+
+/// The app state of a test launched into a named scenario, which has no control directory
+///
+/// The scenario host writes the screen next to the file `COVE_CLOUD_BACKUP_UI_DELETE_LOG` names,
+/// so this names one under `/tmp`, which the simulator shares, unless the test already did. A
+/// launch with a control must not use it, since the host then writes there instead of the
+/// control directory
+final class CloudBackupScenarioAppState {
+    private static let deleteLogKey = "COVE_CLOUD_BACKUP_UI_DELETE_LOG"
+
+    let deleteLogPath: String
+    let file: CloudBackupAppStateFile
+
+    /// Configures `app` before its launch
+    init(app: XCUIApplication) {
+        let path = app.launchEnvironment[Self.deleteLogKey]
+            ?? "/tmp/cove-ui-test-cloud-delete-\(UUID().uuidString).json"
+        app.launchEnvironment[Self.deleteLogKey] = path
+        deleteLogPath = path
+        file = CloudBackupAppStateFile(url: URL(fileURLWithPath: path + ".state"))
+    }
+
+    func assertNextActions(
+        _ message: String,
+        body: String = "configured",
+        available: Set<String> = [],
+        unavailable: Set<String> = [],
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        self.file.assertNextActions(
+            message,
+            body: body,
+            available: available,
+            unavailable: unavailable,
+            timeout: timeout,
+            file: file,
+            line: line
+        )
+    }
+
+    /// Removes the delete log and the state file
+    func remove() {
+        try? FileManager.default.removeItem(atPath: deleteLogPath)
+        try? FileManager.default.removeItem(at: file.url)
     }
 }

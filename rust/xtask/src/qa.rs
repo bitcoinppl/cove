@@ -21,6 +21,8 @@ use std::{
     str::FromStr,
 };
 
+mod next_action_assertions;
+
 const MANIFEST_DIR: &str = "qa/checklist";
 
 const GLOB_OPTIONS: MatchOptions = MatchOptions {
@@ -73,7 +75,8 @@ pub fn run(command: QaCommand) -> Result<()> {
 
         QaCommand::Check => {
             let tracked = tracked_files(&root)?;
-            let report = manifest.check(&root, &tracked);
+            let mut report = manifest.check(&root, &tracked);
+            report.errors.extend(next_action_assertions::check(&root, &tracked));
 
             for warning in &report.warnings {
                 println!("{} {warning}", "!".yellow());
@@ -84,7 +87,7 @@ pub fn run(command: QaCommand) -> Result<()> {
                     eprintln!("{} {error}", "✗".red());
                 }
 
-                bail!("{} qa manifest error(s)", report.errors.len());
+                bail!("{} qa check error(s)", report.errors.len());
             }
 
             println!("{} {} qa manifest rows are consistent", "✓".green(), manifest.rows.len());

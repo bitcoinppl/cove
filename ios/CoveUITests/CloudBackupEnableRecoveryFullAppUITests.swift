@@ -54,6 +54,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
 
         robot.openCloudBackupDetail()
         robot.scrollToHittable(app.staticTexts["Backup verified"], initialWait: 15)
+        control.assertNextActions("the verified backup should offer Verify and Turn Off", available: ["verify", "turnOff"])
         assertOnlyTheEnablesPasskeyCalls(control.state, "background confirmation asked for the passkey")
     }
 
@@ -90,6 +91,11 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         let confirm = app.buttons["Confirm Passkey"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 30), "relaunch did not offer the saved passkey")
         XCTAssertFalse(app.staticTexts["Cloud Backup enabled"].exists)
+        control.assertNextActions(
+            "the relaunch should wait for the saved passkey's confirmation",
+            body: "enabling",
+            available: ["confirmSavedPasskey"]
+        )
 
         // the new process shows the details step again, whose acknowledgements start unchecked
         if !confirm.isEnabled {
@@ -110,6 +116,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         control.releaseVisibility()
         robot.openSettings()
         XCTAssertTrue(app.staticTexts["Cloud Backup Enabled"].waitForExistence(timeout: 45))
+        control.assertNextActions("the recovered backup should offer Turn Off", available: ["turnOff"])
     }
 
     /// Killing the app while the passkey is still being registered leaves nothing a new process
@@ -134,7 +141,11 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         // the lifecycle reads disabled before restart recovery runs, so the journal's removal is
         // what shows the staged key was discarded
         try control.waitForKeychainItemRemoved(journal, "relaunch kept the interrupted enable's staged key")
-        control.waitForAppState("relaunch should discard the interrupted enable") { $0.screen.body == "disabled" }
+        control.assertNextActions(
+            "relaunch should discard the interrupted enable and offer a fresh one",
+            body: "disabled",
+            available: ["enable"]
+        )
 
         // with no passkey to confirm, onboarding resumes either on the Cloud Backup details or on
         // its choice of backup method; runs have landed on both
@@ -190,6 +201,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         robot.scrollToHittable(confirm)
         confirm.tap()
         robot.finishOnboardingAfterCloudBackupEnabled()
+        control.assertNextActions("the confirmed enable should offer Turn Off", available: ["turnOff"])
 
         let state = control.state
         let registeredCredential = Data(CloudBackupUITestControl.passkeyCredentialId.utf8)
@@ -230,7 +242,11 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         control.releaseVisibility()
         robot.killAndRelaunch()
 
-        control.waitForAppState("relaunch should finish the promoted enable") { $0.screen.body == "configured" }
+        control.assertNextActions(
+            "relaunch should finish the promoted enable without asking to confirm",
+            available: ["turnOff"],
+            unavailable: ["confirmSavedPasskey"]
+        )
         XCTAssertFalse(
             app.buttons["Confirm Passkey"].waitForExistence(timeout: 5),
             "relaunch asked to confirm a passkey the promotion already committed"
@@ -291,6 +307,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
 
         control.release("retry-wallet-upload")
         robot.finishOnboardingAfterCloudBackupEnabled()
+        control.assertNextActions("the retried enable should offer Turn Off", available: ["turnOff"])
 
         // repeated writes to the same records are fine, a second namespace or record is not
         let state = control.state

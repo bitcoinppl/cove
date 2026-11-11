@@ -34,6 +34,11 @@ final class CloudBackupOnboardingLateOfferFullAppUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Import your software wallet"].exists)
         XCTAssertTrue(robot.button(startingWith: "Enter recovery words").exists)
         XCTAssertTrue(robot.button(startingWith: "Scan QR code").exists)
+        control.assertNextActions(
+            "continuing setup should leave Cloud Backup off and ready to enable",
+            body: "disabled",
+            available: ["enable"]
+        )
     }
 
     func testLateDiscoveryOffersRestoreDuringHardwareImport() throws {
@@ -50,6 +55,11 @@ final class CloudBackupOnboardingLateOfferFullAppUITests: XCTestCase {
         offer.buttons["Restore from Cove backup"].tap()
         XCTAssertTrue(app.staticTexts["iCloud Backup Found"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["Restore with Passkey"].waitForExistence(timeout: 10))
+        control.assertNextActions(
+            "the offer should leave the restore to the person",
+            body: "disabled",
+            available: ["restoreFromCloudBackup"]
+        )
     }
 
     /// Launches with the startup namespace listing held, and checks the app is still waiting on it
