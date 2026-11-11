@@ -335,6 +335,10 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
+
+    // the cloud still reports the new master key as syncing, so the pending upload worker
+    // keeps Enable's upload confirmation pending instead of settling it mid-assertions
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
@@ -354,6 +358,12 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 
     assert_eq!(globals.passkey.discover_count(), discover_count);
     assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+
+    // once the cloud shows the upload, the worker settles the confirmation and its loop goes
+    // idle, so the test ends with no verifier still polling the shared database
+    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
+    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
+    assert!(manager.pending_verification_completion().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -374,13 +384,28 @@ async fn enable_create_new_recovers_from_corrupted_persisted_state() {
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
+
+    // the pending upload worker settles Enable's upload confirmation, and so verifies the new
+    // record, as soon as the cloud reports the master key uploaded; holding it as syncing keeps
+    // the record unverified while the test reads it
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
+    // a pass of the worker while the upload is still syncing leaves the record needing
+    // verification, whenever the background loop also runs
+    assert!(verify_pending_uploads_once_for_test_async(&manager).await);
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Unverified
-    );
+    let recovered = Database::global().cloud_backup_state.get().unwrap();
+    assert_eq!(recovered.status(), PersistedCloudBackupStatus::Unverified);
+    assert!(recovered.pending_verification_completion().is_some());
+
+    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
+    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
+
+    let verified = Database::global().cloud_backup_state.get().unwrap();
+    assert_eq!(verified.status(), PersistedCloudBackupStatus::Enabled);
+    assert!(verified.last_verified_at().is_some());
+    assert!(verified.pending_verification_completion().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
