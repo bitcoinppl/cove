@@ -1,6 +1,90 @@
 //! Splitting a UI test run across CI runners
 
-use std::cmp::Reverse;
+use color_eyre::{
+    eyre::{bail, Context},
+    Result,
+};
+use std::{cmp::Reverse, collections::BTreeMap, fs, path::Path};
+
+/// Seconds each unit a shard planner deals out took in CI, kept as a checked-in table of
+/// `<seconds>\t<name>` lines, where a line starting with `#` is a comment
+#[derive(Debug, Default, PartialEq)]
+pub struct SecondsTable(BTreeMap<String, u64>);
+
+impl SecondsTable {
+    /// Reads a table, keeping the last line of a name that appears more than once
+    pub fn parse(table: &str) -> Result<Self> {
+        Ok(Self(parse_seconds_lines(table)?.into_iter().collect()))
+    }
+
+    /// The table of each name's mean over its samples, rounded to whole seconds
+    pub fn from_samples(samples: impl IntoIterator<Item = (String, f64)>) -> Self {
+        let mut grouped: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+        for (name, secs) in samples {
+            grouped.entry(name).or_default().push(secs);
+        }
+
+        Self(
+            grouped
+                .into_iter()
+                .map(|(name, samples)| {
+                    let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+                    (name, mean.round() as u64)
+                })
+                .collect(),
+        )
+    }
+
+    /// The seconds recorded for `name`
+    pub fn get(&self, name: &str) -> Option<u64> {
+        self.0.get(name).copied()
+    }
+
+    /// How many names the table holds
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// The table as text, `header` first, with each of its lines written as a comment
+    pub fn to_table(&self, header: &str) -> String {
+        let mut table = header.lines().map(|line| format!("# {line}\n")).collect::<String>();
+        for (name, secs) in &self.0 {
+            table.push_str(&format!("{secs}\t{name}\n"));
+        }
+
+        table
+    }
+
+    /// Writes the table to `path`, `header` first, and says how many names it wrote
+    pub fn write(&self, path: &Path, header: &str) -> Result<()> {
+        fs::write(path, self.to_table(header))
+            .wrap_err_with(|| format!("Failed to write {}", path.display()))?;
+
+        println!("Wrote {} timings to {}", self.len(), path.display());
+        Ok(())
+    }
+}
+
+/// Each `<seconds>\t<name>` line of a table or a run's record, in order, skipping blank lines
+/// and `#` comments
+pub fn parse_seconds_lines(text: &str) -> Result<Vec<(String, u64)>> {
+    let mut lines = Vec::new();
+
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let Some((secs, name)) = line.split_once('\t') else {
+            bail!("Expected <seconds><tab><name>, got {line:?}");
+        };
+
+        let secs = secs.parse().wrap_err_with(|| format!("Invalid seconds in {line:?}"))?;
+        lines.push((name.trim().to_string(), secs));
+    }
+
+    Ok(lines)
+}
 
 /// One of `count` slices of a UI test run, so CI can split it across runners; `index` is 1-based
 /// to match how it is written, as in `2/3`

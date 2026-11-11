@@ -9,6 +9,7 @@ mod common;
 mod fake_node;
 mod github;
 mod ios;
+mod ios_ui_shard;
 mod mobile;
 mod mobile_artifact;
 mod qa;
@@ -284,8 +285,9 @@ enum Commands {
         #[arg(long, default_value = "CoveUITests/OnboardingFullLaunchUITests")]
         test: String,
 
-        /// Run only this shard's share of the expanded tests, as `<index>/<count>`, such as `2/3`;
-        /// a CoveCloudBackupUITests class stays whole on one shard
+        /// Run only this shard's share of the expanded tests, as `<index>/<count>`, such as `2/5`,
+        /// dealt out longest first by the checked-in run timings; a CoveCloudBackupUITests class
+        /// stays whole on one shard
         #[arg(long, default_value = "1/1")]
         shard: ui_test_shard::UiTestShard,
 
@@ -293,13 +295,22 @@ enum Commands {
         #[arg(long)]
         foreground: bool,
 
-        /// Keep each failed attempt's result bundle and app logs in this directory
+        /// Keep each failed attempt's result bundle and app logs in this directory, and record
+        /// each run's seconds in its `run-seconds.tsv`
         #[arg(long)]
         results_dir: Option<std::path::PathBuf>,
 
         /// Print the shard's tests, one per line, instead of running them
         #[arg(long)]
         list: bool,
+    },
+
+    /// Rewrite the iOS UI run timings `ios-ui --shard` weighs runs by, from the `run-seconds.tsv`
+    /// records `ios-ui --results-dir` writes, directories holding them, or an older table
+    #[command(name = "ios-ui-timings")]
+    IosUiTimings {
+        #[arg(required = true)]
+        records: Vec<std::path::PathBuf>,
     },
 
     /// Bump and upload to TestFlight, copy previous test notes, and add to me-only
@@ -512,6 +523,7 @@ fn run(cli: Cli) -> Result<()> {
         }
 
         Commands::AndroidUiTimings { reports } => android_ui_shard::refresh_timings(&reports),
+        Commands::IosUiTimings { records } => ios_ui_shard::refresh_timings(&records),
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
 

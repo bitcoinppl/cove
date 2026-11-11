@@ -6,6 +6,7 @@ use crate::common::{
 use crate::version::BuildNumberFile;
 use crate::{
     fake_node::AndroidPorts,
+    ios_ui_shard::{record_run_seconds, IosUiRunSeconds},
     shutdown::{self, Registration, Stop},
     ui_test_host::UiTestHost,
     ui_test_ports::{RunLock, UiTestPorts, PORT_BASE_ENV},
@@ -681,7 +682,8 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
     for run in runs {
-        if let Err(error) = run_ios_ui_run(
+        let started = Instant::now();
+        let result = run_ios_ui_run(
             &sh,
             &build,
             &mut simulators,
@@ -689,7 +691,14 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
             &run,
             results_dir.as_deref(),
             verbose,
-        ) {
+        );
+
+        // the shard planner weighs runs by these, passing or not, see ios_ui_shard.rs
+        if let Some(dir) = &results_dir {
+            record_run_seconds(dir, run.name(), started.elapsed());
+        }
+
+        if let Err(error) = result {
             print_error(&format!("{error:?}"));
             failures.push(run.name().to_string());
         }
@@ -1965,14 +1974,6 @@ impl IosUiSuite {
     }
 }
 
-/// Estimated seconds one `xcodebuild test-without-building` call spends outside test bodies on a
-/// hosted runner: cloning and booting the simulator, then installing and launching the runner,
-/// measured at about 3 minutes a call while coverage was still collected
-const IOS_UI_RUN_OVERHEAD_SECS: u64 = 180;
-
-/// Estimated seconds of one test body: the median test's 5.5 minutes less the overhead
-const IOS_UI_TEST_BODY_SECS: u64 = 150;
-
 /// The tests one `xcodebuild test-without-building` call runs on one fresh simulator: a single
 /// test, or for a suite that runs each class together, every listed test of one class
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2007,17 +2008,14 @@ impl IosUiRun {
     fn only_testing_args(&self) -> Vec<String> {
         self.tests.iter().map(|test| format!("-only-testing:{test}")).collect()
     }
-
-    fn estimated_secs(&self) -> u64 {
-        IOS_UI_RUN_OVERHEAD_SECS + IOS_UI_TEST_BODY_SECS * self.tests.len() as u64
-    }
 }
 
 /// Expands a comma-separated list of tests into the runs that cover them, then keeps the shard's
-/// share of the runs
+/// share of the runs, dealt out longest first by the seconds each took in CI
 ///
 /// A run's tests stay together on one shard, since they share one simulator
 fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<IosUiRun>> {
+    let seconds = IosUiRunSeconds::checked_in()?;
     let project = sh
         .read_file(IOS_PROJECT_FILE)
         .wrap_err_with(|| format!("Failed to read {IOS_PROJECT_FILE}"))?;
@@ -2052,7 +2050,7 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
     }
 
     Ok(shard.take(runs.into_iter().map(|run| {
-        let cost = run.estimated_secs();
+        let cost = seconds.of(run.name(), run.tests.len());
         (run, cost)
     })))
 }
@@ -2613,6 +2611,7 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 mod tests {
     mod ui_test_plan {
         use crate::ios::{ios_ui_shard_runs, IosUiSuite};
+        use crate::ios_ui_shard::IosUiRunSeconds;
         use crate::ui_test_shard::UiTestShard;
         use color_eyre::Result;
         use std::collections::HashSet;
@@ -2715,6 +2714,67 @@ mod tests {
             assert!(!tests.is_empty());
             assert!(tests.iter().all(|test| test.starts_with(&format!("{class}/test"))));
             assert!(tests.iter().all(|test| IosUiSuite::for_test(test) == IosUiSuite::CloudBackup));
+        }
+
+        /// The workflow's `IOS_UI_SUITES`, the tests a full nightly run covers
+        fn nightly_suites() -> String {
+            let workflow = include_str!("../../../.github/workflows/ui-tests.yml");
+            let (_, after) = workflow.split_once("IOS_UI_SUITES: >-\n").unwrap();
+
+            after.lines().map(str::trim).take_while(|line| line.starts_with("Cove")).collect()
+        }
+
+        /// The workflow's iOS shards, as its matrix lists them
+        fn nightly_shards() -> Vec<UiTestShard> {
+            let workflow = include_str!("../../../.github/workflows/ui-tests.yml");
+            let (_, ios) = workflow.split_once("\n  ios-ui:\n").unwrap();
+            let (_, matrix) = ios.split_once("shard: [").unwrap();
+            let (list, _) = matrix.split_once(']').unwrap();
+
+            list.split(',').map(|value| shard(value.trim().trim_matches('"'))).collect()
+        }
+
+        // the real suites, matrix and checked-in timings: the workflow's shards run every test
+        // once, keep each cloud backup class on one, and get close to the same estimated time,
+        // which its timeout is sized from
+        #[test]
+        fn the_nightly_shards_cover_every_test_once_and_stay_balanced() {
+            let sh = ios_shell();
+            let suites = nightly_suites();
+            let seconds = IosUiRunSeconds::checked_in().unwrap();
+            assert!(suites.split(',').count() > 20, "read the suites: {suites}");
+
+            let all = ios_ui_shard_runs(&sh, &suites, shard("1/1")).unwrap();
+            let shards = nightly_shards();
+            assert_eq!(shards.len(), 5);
+
+            let slices = shards
+                .iter()
+                .map(|&value| ios_ui_shard_runs(&sh, &suites, value).unwrap())
+                .collect::<Vec<_>>();
+
+            let mut covered = HashSet::new();
+            for run in slices.iter().flatten() {
+                for test in &run.tests {
+                    assert!(covered.insert(test.clone()), "{test} is on two shards");
+                }
+            }
+            let every_test = all.iter().flat_map(|run| run.tests.iter().cloned());
+            assert_eq!(covered, every_test.collect::<HashSet<_>>());
+
+            for cloud in all.iter().filter(|run| run.suite == IosUiSuite::CloudBackup) {
+                let holding = slices.iter().filter(|runs| runs.contains(cloud)).count();
+                assert_eq!(holding, 1, "{} is not whole on one shard", cloud.name());
+            }
+
+            let loads = slices
+                .iter()
+                .map(|runs| {
+                    runs.iter().map(|run| seconds.of(run.name(), run.tests.len())).sum::<u64>()
+                })
+                .collect::<Vec<_>>();
+            let (lightest, heaviest) = (loads.iter().min().unwrap(), loads.iter().max().unwrap());
+            assert!(heaviest - lightest <= 600, "shards are unbalanced: {loads:?}");
         }
 
         // a cloud backup class shares one simulator, so it can't be split, while each main test

@@ -10,7 +10,7 @@
 //! so a test class that discovery misses, say one whose `@Test` shares a line with another
 //! annotation, still runs there instead of silently dropping out of CI
 
-use crate::ui_test_shard::UiTestShard;
+use crate::ui_test_shard::{SecondsTable, UiTestShard};
 use color_eyre::{
     eyre::{bail, eyre, Context},
     Result,
@@ -26,6 +26,13 @@ const CLASS_SECONDS: &str = include_str!("android_ui_shard/class_seconds.tsv");
 
 /// Where the class timings live, relative to the xtask crate
 const CLASS_SECONDS_PATH: &str = "src/android_ui_shard/class_seconds.tsv";
+
+/// The comment atop the class timings, saying where they come from
+const CLASS_SECONDS_HEADER: &str = "\
+Seconds each Android instrumented test class took in CI's UiTest job, including about
+2 seconds a test of orchestrator time; the shard planner deals classes out by these.
+Rewrite it with `cargo xtask android-ui-timings <report-dir>...` from the
+android-instrumented-reports-UiTest-* artifacts of a UI tests run";
 
 /// Seconds a class missing from the table is taken to need, about what a full-launch class with
 /// two tests takes
@@ -85,13 +92,7 @@ pub fn print_plan(flavour: &str, shard: UiTestShard, tests: &str) -> Result<()> 
 /// back to the default weight
 pub fn refresh_timings(reports: &[PathBuf]) -> Result<()> {
     let table = Path::new(env!("CARGO_MANIFEST_DIR")).join(CLASS_SECONDS_PATH);
-    let timings = ClassSeconds::from_reports(reports)?;
-
-    fs::write(&table, timings.to_table())
-        .wrap_err_with(|| format!("Failed to write {}", table.display()))?;
-
-    println!("Wrote {} class timings to {}", timings.0.len(), table.display());
-    Ok(())
+    ClassSeconds::from_reports(reports)?.0.write(&table, CLASS_SECONDS_HEADER)
 }
 
 fn android_sources() -> PathBuf {
@@ -258,7 +259,7 @@ fn plan_shard(
 
 /// Seconds each instrumented test class takes in CI, including the orchestrator's time per test
 #[derive(Debug, Default, PartialEq)]
-struct ClassSeconds(BTreeMap<String, u64>);
+struct ClassSeconds(SecondsTable);
 
 impl ClassSeconds {
     fn checked_in() -> Result<Self> {
@@ -266,26 +267,11 @@ impl ClassSeconds {
     }
 
     fn parse(table: &str) -> Result<Self> {
-        let mut seconds = BTreeMap::new();
-
-        for line in table.lines().map(str::trim) {
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            let Some((secs, class)) = line.split_once('\t') else {
-                bail!("Expected <seconds><tab><class>, got {line:?}");
-            };
-
-            let secs = secs.parse().wrap_err_with(|| format!("Invalid seconds in {line:?}"))?;
-            seconds.insert(class.trim().to_string(), secs);
-        }
-
-        Ok(Self(seconds))
+        SecondsTable::parse(table).map(Self)
     }
 
     fn of(&self, class: &str) -> u64 {
-        self.0.get(class).copied().unwrap_or(DEFAULT_CLASS_SECS)
+        self.0.get(class).unwrap_or(DEFAULT_CLASS_SECS)
     }
 
     fn from_reports(reports: &[PathBuf]) -> Result<Self> {
@@ -302,44 +288,19 @@ impl ClassSeconds {
         }
 
         // each report's total for a class, then the mean of those totals
-        let mut totals: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+        let mut totals = Vec::new();
         for file in &files {
             let xml = fs::read_to_string(file)
                 .wrap_err_with(|| format!("Failed to read {}", file.display()))?;
 
-            for (class, secs) in junit_class_seconds(&xml)? {
-                totals.entry(class).or_default().push(secs);
-            }
+            totals.extend(junit_class_seconds(&xml)?);
         }
 
         if totals.is_empty() {
             bail!("No JUnit test cases found in {} report file(s)", files.len());
         }
 
-        Ok(Self(
-            totals
-                .into_iter()
-                .map(|(class, runs)| {
-                    let mean = runs.iter().sum::<f64>() / runs.len() as f64;
-                    (class, mean.round() as u64)
-                })
-                .collect(),
-        ))
-    }
-
-    fn to_table(&self) -> String {
-        let mut table = String::from(
-            "# Seconds each Android instrumented test class took in CI's UiTest job, including about\n\
-             # 2 seconds a test of orchestrator time; the shard planner deals classes out by these.\n\
-             # Rewrite it with `cargo xtask android-ui-timings <report-dir>...` from the\n\
-             # android-instrumented-reports-UiTest-* artifacts of a UI tests run\n",
-        );
-
-        for (class, secs) in &self.0 {
-            table.push_str(&format!("{secs}\t{class}\n"));
-        }
-
-        table
+        Ok(Self(SecondsTable::from_samples(totals)))
     }
 }
 
@@ -376,7 +337,8 @@ fn xml_attribute<'a>(attributes: &'a str, name: &str) -> Option<&'a str> {
 mod tests {
     use super::{
         android_sources, class_declaration, flavour_classes, junit_class_seconds, plan_shard,
-        AndroidUiShardPlan, ClassDeclaration, ClassSeconds, DEFAULT_CLASS_SECS,
+        AndroidUiShardPlan, ClassDeclaration, ClassSeconds, CLASS_SECONDS_HEADER,
+        DEFAULT_CLASS_SECS,
     };
     use crate::ui_test_shard::UiTestShard;
     use std::collections::HashSet;
@@ -512,7 +474,7 @@ mod tests {
     fn the_table_reads_back_what_it_writes_and_defaults_missing_classes() {
         let table = ClassSeconds::parse("# comment\n\n42\ta.One\n7\ta.Two\n").unwrap();
 
-        assert_eq!(ClassSeconds::parse(&table.to_table()).unwrap(), table);
+        assert_eq!(ClassSeconds::parse(&table.0.to_table(CLASS_SECONDS_HEADER)).unwrap(), table);
         assert_eq!(table.of("a.One"), 42);
         assert_eq!(table.of("a.Missing"), DEFAULT_CLASS_SECS);
         assert!(ClassSeconds::parse("12 a.NoTab\n").is_err());
