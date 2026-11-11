@@ -34,8 +34,8 @@ use crate::manager::cloud_backup_manager::screen::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupNoticeKind,
-    CloudBackupPasskeyState, CloudBackupSettingsRowStatus, CloudBackupVerificationSource,
-    CloudBackupVerificationState, DeepVerificationFailure,
+    CloudBackupPasskeyState, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 
@@ -979,12 +979,13 @@ fn a_cancelled_verification_never_offers_a_passkey_repair() {
         assert_eq!(verification_state(&app), Some(CloudBackupVerificationState::NotCompleted));
         assert_eq!(passkey_card(&app), None);
         assert_eq!(control(&app, CloudBackupScreenAction::RepairPasskey), None);
+        assert_eq!(app.manager().published_screen().root_prompt, CloudBackupRootPrompt::None);
         assert_eq!(persisted().status(), status);
     });
 }
 
-/// A verification that fails reading the cloud says nothing about the passkey, so it offers
-/// Verify again and no repair
+/// A verification that fails reading the cloud, or on a passkey that answered moments before,
+/// never showed the passkey missing, so it offers Verify again and no repair
 #[test]
 fn a_verification_that_fails_off_the_passkey_offers_no_repair() {
     let test =
@@ -1000,6 +1001,43 @@ fn a_verification_that_fails_off_the_passkey_offers_no_repair() {
         assert!(matches!(verification_state(&app), Some(CloudBackupVerificationState::Failed(_))));
         assert_eq!(passkey_card(&app), None);
         assert_eq!(control(&app, CloudBackupScreenAction::RepairPasskey), None);
+
+        // the passkey answers with a key the wrapper no longer opens, then fails the rebuild
+        let mock = &app.passkey.inner;
+        mock.set_authenticate_result(Err(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::InvalidResponse,
+        }));
+        mock.push_authenticate_result(Ok(vec![8; 32]));
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert!(matches!(verification_state(&app), Some(CloudBackupVerificationState::Failed(_))));
+        assert_eq!(passkey_card(&app), None);
+        assert_eq!(control(&app, CloudBackupScreenAction::RepairPasskey), None);
+        assert_eq!(app.manager().published_screen().root_prompt, CloudBackupRootPrompt::None);
+    });
+}
+
+/// A replacement that can't be presented yet, as in a background verification, says nothing
+/// about the passkey: no repair card, no missing-passkey reminder and no stored change
+#[test]
+fn a_passkey_request_that_cannot_present_yet_changes_nothing() {
+    let test =
+        concat!(module_path!(), "::a_passkey_request_that_cannot_present_yet_changes_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app);
+        let status = persisted().status();
+
+        script_missing_passkey(
+            &app,
+            PasskeyError::NotReady { operation: PasskeyOperation::Registration },
+        );
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert_eq!(passkey_card(&app), None);
+        assert_eq!(control(&app, CloudBackupScreenAction::RepairPasskey), None);
+        assert_eq!(app.manager().published_screen().root_prompt, CloudBackupRootPrompt::None);
+        assert_eq!(persisted().status(), status);
     });
 }
 

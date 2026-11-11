@@ -652,24 +652,27 @@ generation it read, including across a retry after lost connectivity, so its
 evidence is judged against its own read, never another run's or another
 configuration's.
 
-When no stored passkey opens the wrapper, or the wrapper is missing,
-verification asks for a replacement from the local master key. How that request ends decides what the screen
-offers next:
+Verification rebuilds the cloud wrapper from the local master key in three
+cases: the wrapper is missing, neither the stored credential nor discovery
+finds a passkey, or the passkey answers but no longer opens the wrapper. It
+asks for a new passkey in the first two and reuses the one that answered in
+the third. How that request ends decides what the screen offers next:
 
-- If the request ends without a passkey for any reason but the user's,
-  including a provider that can't present it yet, the verification ends
-  `PasskeyMissing`. The stored passkey is marked missing, and the passkey card
-  shows in its needs-repair state with Add New Passkey and Verify.
-- If the user dismisses the passkey sheet, during sign-in or the replacement,
-  the verification ends `NotCompleted`. The passkey is never marked missing,
-  and the outcome shows beside Verify with no repair offered.
-- Any other failure, such as being offline or a provider error reading the
-  cloud, ends as a failed verification with Verify available and no passkey
-  card.
+- If the user dismisses the sheet, or no window can present it yet (as in a
+  background verification), the verification ends `NotCompleted`. Neither says
+  anything about the passkey, so it is never marked missing, no repair card or
+  missing-passkey reminder shows, and the outcome shows beside Verify.
+- If the provider can't create or use a passkey and no passkey was found, the
+  verification ends `PasskeyMissing`. Only that failure of the stored passkey
+  proves it missing. The passkey is marked missing, and the passkey card shows
+  in its needs-repair state with Add New Passkey and Verify.
+- Any other failure, including a failed rebuild when the wrapper was missing
+  or the passkey had just answered, ends as a failed verification with Verify
+  available and no passkey card.
 
-`CloudBackupError::passkey_request_failure` sorts a passkey error into
-dismissed or failed, so this decision rests on the typed error, never on its
-message.
+`CloudBackupError::passkey_request_failure` sorts a passkey error into not
+completed or failed, and the verification's typed repair cause says whether
+the stored passkey was found, so the decision never rests on an error message.
 
 ## Related Notes
 
