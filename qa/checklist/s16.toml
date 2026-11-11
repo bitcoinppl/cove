@@ -190,7 +190,7 @@ coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testRestoreAllProgressKeepsCancelReachable",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ios runs the scriptable host at the largest text size: the missing-passkey screen comes from a failed passkey repair, and the incomplete-setup screen from an enable killed after its master key upload
+# ios runs the scriptable host at the largest text size: the missing-passkey screen comes from a failed passkey repair, and the incomplete-setup screen from an enable killed after its master key upload, with the staged master key then removed from the keychain so the setup can't resume
 
 [[row]]
 id = "s16-tapsigner-setup-signing-and-retry-layout"
@@ -438,3 +438,33 @@ coverage = [
 # s16-keyteleport-request-and-code-layout-at-largest and s16-keyteleport-sender-code-and-password-layout-at,
 # which the mirror can't set, and puts it back after; no app code involved. delete this row once those
 # rows run on simulators
+
+[[row]]
+id = "s16-cloud-backup-turn-off-and-notices-at-max-font"
+section = "16"
+title = "Turn Off dialogs and notices at the largest text size"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailPresentation.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailContent.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewDialogs.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopy.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/DisableCloudBackupSection.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreenCopy.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testTurnOffDialogsKeepTheirActionsReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testHealNoticeKeepsTurnOffAndDismissReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testTurnOffIncompleteRowAndPanelKeepTryAgainReachable",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::turnOffReviewKeepsContinueAndCancelReachable",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::finishingDisableKeepsTryAgainAndStopUsingReachable",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::healNoticeKeepsDismissAndTurnOffReachable",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupAccessibilityTest.kt::finishingDisableFailureIsAPoliteLiveRegion",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupAccessibilityTest.kt::turnOffReviewIsADialogNamedByItsTitle",
+]
+# the turn off review, the heal notice and turn off incomplete keep every action reachable. android doesn't cover the first
+# dialog's restore them first, verify first or check again, the offline dialog or the settings rows at max font
