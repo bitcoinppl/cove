@@ -140,6 +140,7 @@ impl RustCloudBackupManager {
             }
         };
 
+        let read_at = self.inventory.read().local_wallets_epoch();
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,
@@ -154,7 +155,10 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(inventory.build_detail()));
+        self.apply_detail_outcome(CloudBackupDetailOutcome::Verified {
+            listed: inventory.build_detail(),
+            read_at,
+        });
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -218,6 +222,7 @@ impl RustCloudBackupManager {
                 }
             };
 
+        let read_at = self.inventory.read().local_wallets_epoch();
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
             remote_wallet_truth,
@@ -231,7 +236,10 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(inventory.build_detail()));
+        self.apply_detail_outcome(CloudBackupDetailOutcome::Verified {
+            listed: inventory.build_detail(),
+            read_at,
+        });
     }
 
     fn finish_backup_integrity_check(

@@ -5,7 +5,7 @@ use act_zero::send;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use super::owner::inventory::{InventoryInput, RestoreAllBatch};
+use super::owner::inventory::{InventoryInput, LocalWalletsEpoch, RestoreAllBatch};
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CloudBackupDetail, CloudBackupExclusiveOperationClaim, CloudBackupInventoryAuthority,
@@ -176,10 +176,14 @@ pub(crate) enum CloudBackupDetailOutcome {
     Cleared,
     Checking,
     Provisional(CloudBackupDetail),
-    Refreshed(CloudBackupListedDetail),
     RefreshedWithAuthority {
         listed: CloudBackupListedDetail,
         authority: CloudBackupInventoryAuthority,
+    },
+    /// Detail a verification built from the local wallets it read at `read_at`
+    Verified {
+        listed: CloudBackupListedDetail,
+        read_at: LocalWalletsEpoch,
     },
     /// Detail from a path whose report carries no listing, so loaded cloud-only rows cannot be
     /// matched to a listing and are reset
@@ -341,11 +345,16 @@ impl RustCloudBackupManager {
                 self.apply_inventory(InventoryInput::DetailCleared);
                 return;
             }
-            CloudBackupDetailOutcome::Refreshed(listed) => (
-                listed.detail,
-                CloudBackupInventoryAuthority::ProviderConfirmed,
-                CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
-            ),
+            CloudBackupDetailOutcome::Verified { listed, read_at } => {
+                self.apply_inventory(InventoryInput::VerifiedDetailApplied {
+                    read_at,
+                    detail: listed.detail,
+                    cloud_only_listing: CloudOnlyListingUpdate::Listed(
+                        listed.cloud_only_record_ids,
+                    ),
+                });
+                return;
+            }
             CloudBackupDetailOutcome::RefreshedWithAuthority { listed, authority } => (
                 listed.detail,
                 authority,
@@ -389,8 +398,8 @@ impl RustCloudBackupManager {
         };
 
         match &mut outcome {
-            CloudBackupDetailOutcome::Refreshed(listed)
-            | CloudBackupDetailOutcome::RefreshedWithAuthority { listed, .. } => {
+            CloudBackupDetailOutcome::RefreshedWithAuthority { listed, .. }
+            | CloudBackupDetailOutcome::Verified { listed, .. } => {
                 listed.retain_local_wallets(&local_record_ids);
             }
 
@@ -588,6 +597,21 @@ impl RustCloudBackupManager {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::{CloudBackupDetailOutcome, CloudBackupInventoryAuthority, CloudBackupListedDetail};
+
+    impl CloudBackupDetailOutcome {
+        /// A provider-confirmed refresh, as the detail workflow applies one
+        pub(crate) fn refreshed(listed: CloudBackupListedDetail) -> Self {
+            Self::RefreshedWithAuthority {
+                listed,
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::super::ops::test_support::{
         complete_loaded_outcome, ensure_cloud_backup_test_tokio_runtime, listed_detail,
@@ -631,7 +655,7 @@ mod tests {
         let manager = init_manager();
 
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-1",
         ])));
 
@@ -647,7 +671,7 @@ mod tests {
             &manager,
             vec![cloud_backup_wallet_item("wallet-1")],
         ));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -659,7 +683,7 @@ mod tests {
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-a", "wallet-b",
         ])));
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
@@ -669,7 +693,7 @@ mod tests {
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Deleted {
             record_id: wallet_a.record_id,
         });
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-b",
         ])));
 
@@ -685,7 +709,7 @@ mod tests {
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-a");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-a",
         ])));
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
@@ -696,7 +720,7 @@ mod tests {
             record_id: wallet.record_id,
             warning: None,
         });
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
@@ -711,7 +735,7 @@ mod tests {
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-a", "wallet-b",
         ])));
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
@@ -720,7 +744,7 @@ mod tests {
         ));
 
         // same count and same local rows, so only the listing's identity shows the replacement
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-b", "wallet-c",
         ])));
 
@@ -750,7 +774,7 @@ mod tests {
         listed.detail.up_to_date.push(wallet.clone());
 
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![wallet]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed));
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -760,7 +784,7 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-1");
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "wallet-1",
         ])));
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(

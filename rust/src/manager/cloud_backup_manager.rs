@@ -1860,7 +1860,7 @@ mod tests {
         let authenticate_count = globals.passkey.authenticate_count();
 
         manager.sync_persisted_state();
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
             "remaining-record",
         ])));
         manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(

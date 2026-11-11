@@ -21,6 +21,7 @@ use crate::manager::cloud_backup_manager::{
     CloudOnlyOperation, OtherBackupsOperation,
 };
 use crate::wallet_identity::CoveringWallets;
+use tracing::debug;
 
 /// The loaded inventory of the active namespace
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +99,13 @@ pub(crate) enum InventoryInput {
         authority: CloudBackupInventoryAuthority,
         cloud_only_listing: CloudOnlyListingUpdate,
     },
+    /// A detail a verification built from the local wallets it read at `read_at`; applied like a
+    /// refresh only if no local wallet change landed since
+    VerifiedDetailApplied {
+        read_at: LocalWalletsEpoch,
+        detail: CloudBackupDetail,
+        cloud_only_listing: CloudOnlyListingUpdate,
+    },
     DetailRefreshFailed {
         reason: CloudBackupInventoryIncompleteReason,
         error: String,
@@ -147,6 +155,11 @@ pub(crate) struct InventoryEffects {
     pub(crate) refetch_needed: bool,
 }
 
+/// How many local wallet changes the owner has applied, so evidence built from an earlier read of
+/// the local wallets can be told apart
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct LocalWalletsEpoch(u64);
+
 /// Identity of one inventory state; it changes with every input that changes the inventory
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct InventoryGeneration(u64);
@@ -162,6 +175,7 @@ enum DetailRefreshActivity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InventoryOwner {
     generation: InventoryGeneration,
+    local_wallets_epoch: LocalWalletsEpoch,
     detail: CloudBackupDetailState,
     detail_refresh: DetailRefreshActivity,
     cloud_only_inventory: CloudOnlyInventory,
@@ -175,6 +189,7 @@ impl Default for InventoryOwner {
     fn default() -> Self {
         Self {
             generation: InventoryGeneration::default(),
+            local_wallets_epoch: LocalWalletsEpoch::default(),
             detail: CloudBackupDetailState::NotLoaded,
             detail_refresh: DetailRefreshActivity::Idle,
             cloud_only_inventory: CloudOnlyInventory::default(),
@@ -205,6 +220,17 @@ impl InventoryOwner {
                 self.apply_detail_refresh_provisional(detail);
             }
             InventoryInput::DetailRefreshApplied { detail, authority, cloud_only_listing } => {
+                return self.apply_detail_refresh(detail, authority, cloud_only_listing);
+            }
+            InventoryInput::VerifiedDetailApplied { read_at, detail, cloud_only_listing } => {
+                // the detail lacks or still lists a wallet the change added or removed, and the
+                // change already asked for the refresh that replaces it
+                if read_at != self.local_wallets_epoch {
+                    debug!("Cloud Backup dropped a verified detail read before a wallet change");
+                    return false;
+                }
+
+                let authority = CloudBackupInventoryAuthority::ProviderConfirmed;
                 return self.apply_detail_refresh(detail, authority, cloud_only_listing);
             }
             InventoryInput::DetailCleared => self.apply_detail_cleared(),
@@ -302,6 +328,10 @@ impl InventoryOwner {
         self.loaded_detail()
             .map(|state| state.other_backups_operation.clone())
             .unwrap_or(OtherBackupsOperation::Idle)
+    }
+
+    pub(crate) fn local_wallets_epoch(&self) -> LocalWalletsEpoch {
+        self.local_wallets_epoch
     }
 
     pub(crate) fn cloud_only_listing_generation(&self) -> u64 {
@@ -631,6 +661,8 @@ impl InventoryOwner {
     /// rows are read again. Waiting for the throttled detail refresh, or for one that fails, left
     /// it listed as local as well
     fn apply_local_wallets_changed(&mut self, local_record_ids: Option<&HashSet<String>>) -> bool {
+        self.local_wallets_epoch.0 += 1;
+
         if let Some(local_record_ids) = local_record_ids
             && let Some(state) = self.loaded_detail_mut()
         {
@@ -1636,5 +1668,45 @@ mod tests {
 
         assert_eq!(covered_by, "Test Wallet++");
         assert!(rows.copy_has_current_backup(old_copy));
+    }
+
+    #[test]
+    fn verification_evidence_read_before_a_wallet_change_is_discarded() {
+        let (_, kept) = own_wallet("wallet-a", "Kept", CloudBackupWalletStatus::Confirmed);
+        let (_, added) = own_wallet("wallet-b", "Added", CloudBackupWalletStatus::Dirty);
+        let verified =
+            |wallets: Vec<CloudBackupWalletItem>, read_at| InventoryInput::VerifiedDetailApplied {
+                read_at,
+                detail: CloudBackupDetail {
+                    last_sync: None,
+                    up_to_date: wallets,
+                    needs_sync: Vec::new(),
+                },
+                cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+            };
+
+        let mut owner = InventoryOwner::default();
+        let read_before_change = owner.local_wallets_epoch();
+
+        // a wallet is added while the verification reads the cloud, and its refresh lands first
+        owner.apply(InventoryInput::LocalWalletsChanged { local_record_ids: None });
+        owner.apply(InventoryInput::DetailRefreshApplied {
+            detail: CloudBackupDetail {
+                last_sync: None,
+                up_to_date: vec![kept.clone()],
+                needs_sync: vec![added.clone()],
+            },
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+        });
+
+        let effects = owner.apply(verified(vec![kept.clone()], read_before_change));
+        assert!(!effects.changed, "evidence from before the change must not replace the refresh");
+        assert_eq!(owner.detail().map(|detail| detail.needs_sync), Some(vec![added]));
+
+        // evidence read after the change still applies
+        let effects = owner.apply(verified(vec![kept.clone()], owner.local_wallets_epoch()));
+        assert!(effects.changed);
+        assert_eq!(owner.detail().map(|detail| detail.up_to_date), Some(vec![kept]));
     }
 }

@@ -564,7 +564,7 @@ fn prepare_restore_all_queue_fixture(
             .map(|record_id| cove_cspp::backup_data::wallet_filename_from_record_id(record_id))
             .collect(),
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(
         &record_ids.iter().map(String::as_str).collect::<Vec<_>>(),
     )));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(manager, items.clone()));
@@ -1956,7 +1956,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
     supervisor.detail_workflow.start_operation_result();
     let newer = listed_detail(&["only"]);
     let newer_detail = newer.detail.clone();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(newer));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(newer));
 
     supervisor
         .complete_confirm_refresh_detail(
@@ -3190,7 +3190,7 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
     supervisor.active_cloud_only_fetch_request = Some(7);
 
     supervisor.complete_cloud_only_fetch_request(7, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
@@ -3270,7 +3270,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         "a", "b",
     ])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
@@ -3320,7 +3320,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         test_cloud_only_wallet(a),
         test_cloud_only_wallet(b),
@@ -3357,7 +3357,7 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [first, second, third] = upload_distinct_test_wallet_backups(&manager);
     let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         first, second,
     ])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
@@ -3398,7 +3398,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
@@ -3845,7 +3845,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3859,7 +3859,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
 
     // provider confirmation replaces wallet a with c at the same count while the fetch runs
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[b, c])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[b, c])));
     supervisor.complete_cloud_only_fetch_request(5, Ok(stale_fetch)).await.unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
@@ -3888,7 +3888,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
         namespace,
         vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         record_id.as_str(),
     ])));
     let mut supervisor = test_supervisor(
@@ -3987,7 +3987,7 @@ async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_aga
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
     let record_id = record_id.as_str();
     list_test_wallet_files(&namespace, &[record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[record_id])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[record_id])));
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let unreadable =
@@ -4041,7 +4041,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
         namespace,
         vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         record_id.as_str(),
     ])));
     let generation = manager.inventory.read().cloud_only_listing_generation();
@@ -4070,7 +4070,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
     crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
     manager.sync_persisted_state();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         duplicate_record_id,
     ])));
 
@@ -4116,7 +4116,7 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         duplicate_record_id,
     ])));
 
@@ -4162,7 +4162,7 @@ async fn row_delete_waits_for_the_write_in_flight() {
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         duplicate_record_id,
     ])));
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
@@ -4194,7 +4194,7 @@ async fn deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         duplicate_record_id,
     ])));
 
@@ -4245,7 +4245,7 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
         sync_status: CloudBackupWalletStatus::Confirmed,
         ..test_cloud_only_wallet(&local_record_id)
     });
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed));
 
     // from here every listing fails, so no detail refresh can correct the rows
     test_globals().cloud.fail_list_wallet_files("provider unavailable");
@@ -4288,7 +4288,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
         sync_status: CloudBackupWalletStatus::Confirmed,
         ..test_cloud_only_wallet(&local_record_id)
     });
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(stale.clone()));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(stale.clone()));
 
     Database::global()
         .wallets
@@ -4311,7 +4311,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     ]));
 
     // the refresh finishes late, with the listing it read while the wallet was local
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(stale.clone()));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(stale.clone()));
 
     let detail = public_detail(&manager).unwrap();
     assert!(detail.up_to_date.is_empty(), "the deleted wallet is listed as local again");
@@ -4340,7 +4340,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         test_cloud_only_wallet(a),
         test_cloud_only_wallet(b),
@@ -4390,7 +4390,7 @@ async fn seed_backup_matching_only_a_watch_only_wallet_restores_into_that_wallet
     assert!(!seed_wallet.verified);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         seed_record_id,
     ])));
 
@@ -4447,7 +4447,7 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let (_, copy_record_id) = upload_test_seed_backup(&namespace, &secret);
     let copy_record_id = copy_record_id.as_str();
     list_test_wallet_files(&namespace, &[copy_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         copy_record_id,
     ])));
 
@@ -4514,7 +4514,7 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     manager.sync_persisted_state();
 
     // the detail lists a record that another device deletes before the fetch lists again
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         "deleted-elsewhere",
     ])));
     list_test_wallet_files(&namespace, &[]);
@@ -4557,7 +4557,7 @@ async fn restoring_one_of_three_copies_leaves_the_others_already_on_device() {
         .map(|()| upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata()));
     let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
     list_test_wallet_files(&namespace, &[first, second, third]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         first, second, third,
     ])));
 
@@ -4675,7 +4675,7 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     let (_, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         seed_record_id,
     ])));
 
@@ -4737,7 +4737,7 @@ async fn unreadable_hot_wallet_does_not_cover_other_public_backups_with_its_fing
     let public_record_id = upload_test_wallet_backup(&namespace, &public_wallet);
     let public_record_id = public_record_id.as_str();
     list_test_wallet_files(&namespace, &[public_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
         public_record_id,
     ])));
 
