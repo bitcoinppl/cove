@@ -225,7 +225,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             onEnable: {},
             onCancel: {},
             message: nil,
-            isBusy: false
+            isBusy: false,
+            primaryAvailability: .available
         )
         .frame(width: size.width, height: size.height)
         let image = renderAfterScrollingToBottom(view: view, size: size)
