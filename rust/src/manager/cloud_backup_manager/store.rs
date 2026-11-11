@@ -299,6 +299,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync: Some(10), wallet_count: Some(2) },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 

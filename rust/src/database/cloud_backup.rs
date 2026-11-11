@@ -20,9 +20,10 @@ pub use state::{
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker, PersistedVerificationRequirement, PersistedWalletVerificationIssues,
+    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedHealNotice,
+    PersistedPasskeyState, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
+    PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -256,6 +257,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 

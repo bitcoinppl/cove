@@ -234,6 +234,7 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -250,6 +251,7 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -527,6 +529,20 @@ pub struct PersistedConfiguredCloudBackup {
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_restore_all: Option<PersistedRestoreAllMarker>,
+    /// Set when load normalization healed a legacy Disabling record back to this configuration
+    ///
+    /// Older builds ignore the field, and a rewrite by an older build only drops the notice
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heal_notice: Option<PersistedHealNotice>,
+}
+
+/// Durable notice that Cloud Backup was healed from a disable that never deleted anything
+///
+/// It lives inside the configured record, so a notice while Cloud Backup is off cannot exist
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedHealNotice {
+    /// When load normalization healed the record
+    pub healed_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

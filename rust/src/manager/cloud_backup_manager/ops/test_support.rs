@@ -1605,6 +1605,7 @@ pub(crate) fn persisted_enabled_cloud_backup_state(
         sync: PersistedBackupSyncState { last_sync: None, wallet_count },
         pending_verification_completion: None,
         pending_restore_all: None,
+        heal_notice: None,
     })
 }
 
@@ -1620,6 +1621,7 @@ pub(crate) fn persisted_passkey_missing_cloud_backup_state(
         sync: PersistedBackupSyncState { last_sync: None, wallet_count },
         pending_verification_completion: None,
         pending_restore_all: None,
+        heal_notice: None,
     })
 }
 

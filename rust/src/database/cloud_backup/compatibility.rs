@@ -97,6 +97,7 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
             },
             pending_verification_completion: state.pending_verification_completion,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 }
@@ -290,6 +291,8 @@ struct PersistedConfiguredCloudBackupV2 {
     pending_restore_all: Option<super::PersistedRestoreAllMarker>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     drive_account_switch: Option<PersistedDriveAccountSwitch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    heal_notice: Option<super::PersistedHealNotice>,
 }
 
 impl From<&PersistedConfiguredCloudBackup> for PersistedConfiguredCloudBackupV2 {
@@ -301,6 +304,7 @@ impl From<&PersistedConfiguredCloudBackup> for PersistedConfiguredCloudBackupV2 
             pending_verification_completion: configured.pending_verification_completion.clone(),
             pending_restore_all: configured.pending_restore_all.clone(),
             drive_account_switch: None,
+            heal_notice: configured.heal_notice,
         }
     }
 }
@@ -313,6 +317,7 @@ impl PersistedConfiguredCloudBackupV2 {
             sync: self.sync,
             pending_verification_completion: self.pending_verification_completion,
             pending_restore_all: self.pending_restore_all,
+            heal_notice: self.heal_notice,
         };
 
         match self.drive_account_switch {
@@ -497,6 +502,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -1094,5 +1100,100 @@ mod tests {
                 expected_revision: "rev-1".into()
             }
         );
+    }
+    /// Every stored shape a heal or a committed disable can meet at load: flat JSON, v1 to v3,
+    /// the commit marker missing, null or set, a nested Restore All marker, and the heal notice
+    /// absent, null or set
+    #[test]
+    fn cloud_backup_state_reads_heal_notice_and_commit_marker_fixtures() {
+        use serde_json::{Value, json};
+
+        use super::super::{PersistedHealNotice, PersistedRestoreAllMarker};
+
+        let configured_data = |heal_notice: Option<Value>| {
+            let mut data = json!({
+                "passkey": "Available",
+                "verification": { "state": "NotVerified", "data": {} },
+                "sync": { "last_sync": 10, "wallet_count": 2 },
+                "pending_restore_all": { "namespace_id": "namespace-1" }
+            });
+            if let Some(heal_notice) = heal_notice {
+                data["heal_notice"] = heal_notice;
+            }
+            data
+        };
+        let notices = [
+            (None, None),
+            (Some(Value::Null), None),
+            (Some(json!({ "healed_at": 40 })), Some(PersistedHealNotice { healed_at: 40 })),
+        ];
+        let restore_all = Some(PersistedRestoreAllMarker { namespace_id: "namespace-1".into() });
+
+        for version in [2, 3] {
+            for (heal_notice, expected_notice) in notices.clone() {
+                let state: PersistedCloudBackupState = serde_json::from_value(json!({
+                    "version": version,
+                    "backup": { "state": "Configured", "data": configured_data(heal_notice.clone()) }
+                }))
+                .unwrap();
+                let PersistedCloudBackupState::Configured(configured) = &state else {
+                    panic!("v{version} configured fixture loaded as {state:?}");
+                };
+                assert_eq!(configured.heal_notice, expected_notice, "v{version} {heal_notice:?}");
+                assert_eq!(configured.pending_restore_all, restore_all);
+                let reloaded: PersistedCloudBackupState =
+                    serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+                assert_eq!(reloaded, state, "second launch reads what the first one wrote");
+
+                for commit_marker in [None, Some(Value::Null), Some(json!(31))] {
+                    let mut data = json!({
+                        "previous_configured": configured_data(heal_notice.clone()),
+                        "namespace_id": "namespace-1",
+                        "disable_generation": 99,
+                        "started_at": 30
+                    });
+                    if let Some(commit_marker) = commit_marker.clone() {
+                        data["delete_started_at"] = commit_marker;
+                    }
+                    let state: PersistedCloudBackupState = serde_json::from_value(json!({
+                        "version": version,
+                        "backup": { "state": "Disabling", "data": data }
+                    }))
+                    .unwrap();
+                    let disabling = state.disabling().expect("disabling fixture");
+                    let expected_commit = commit_marker.and_then(|marker| marker.as_u64());
+                    assert_eq!(disabling.delete_started_at, expected_commit);
+                    assert_eq!(disabling.previous_configured.heal_notice, expected_notice);
+                    assert_eq!(disabling.previous_configured.pending_restore_all, restore_all);
+                    let reloaded: PersistedCloudBackupState =
+                        serde_json::from_value(serde_json::to_value(&state).unwrap()).unwrap();
+                    assert_eq!(reloaded, state);
+                }
+            }
+        }
+
+        // v1 and the flat legacy JSON predate the notice, so they always load without one
+        let v1: PersistedCloudBackupState = serde_json::from_value(json!({
+            "version": 1,
+            "backup": { "state": "Configured", "data": configured_data(None) }
+        }))
+        .unwrap();
+        let flat: PersistedCloudBackupState = serde_json::from_value(json!({
+            "status": "Enabled",
+            "last_sync": 10,
+            "wallet_count": 2
+        }))
+        .unwrap();
+        for state in [v1, flat] {
+            let PersistedCloudBackupState::Configured(configured) = &state else {
+                panic!("legacy fixture loaded as {state:?}");
+            };
+            assert_eq!(configured.heal_notice, None);
+            assert!(
+                serde_json::to_value(&state).unwrap()["backup"]["data"]
+                    .get("heal_notice")
+                    .is_none()
+            );
+        }
     }
 }
