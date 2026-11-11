@@ -376,13 +376,17 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         init_import_test_state();
 
-        let password = "correcthorsebatterystaplebackuppassword";
+        let manager = BackupManager::new();
+        let password = manager.generate_password();
+
+        // verify and import strip whitespace from the password before deriving the key
+        let encryption_password = crypto::clean_password(&password).unwrap();
         let secret_network = "private-user-text-network";
         let secret_created_at = "private-user-text-created-at";
 
         let encrypt = |payload: &serde_json::Value| {
             let json = serde_json::to_vec(payload).unwrap();
-            crypto::encrypt(&crypto::compress(&json), password).unwrap()
+            crypto::encrypt(&crypto::compress(&json), &encryption_password).unwrap()
         };
 
         let metadata = crate::test_support::hot_wallet_metadata("Restored");
@@ -404,29 +408,38 @@ mod tests {
         payload["created_at"] = serde_json::Value::from(secret_created_at);
         let bad_payload_backup = encrypt(&payload);
 
-        let manager = BackupManager::new();
         let capture = LogCapture::start();
         let errors = [
-            manager.verify(bad_wallet_backup.clone(), password.into()).await.unwrap_err(),
-            manager.prepare_import(bad_wallet_backup, password.into()).await.unwrap_err(),
-            manager.verify(bad_payload_backup.clone(), password.into()).await.unwrap_err(),
-            manager.prepare_import(bad_payload_backup, password.into()).await.unwrap_err(),
+            manager.verify(bad_wallet_backup.clone(), password.clone()).await.unwrap_err(),
+            manager.prepare_import(bad_wallet_backup, password.clone()).await.unwrap_err(),
+            manager.verify(bad_payload_backup.clone(), password.clone()).await.unwrap_err(),
+            manager.prepare_import(bad_payload_backup, password).await.unwrap_err(),
         ];
         let logs = capture.text();
 
+        // failure messages name what was missing or leaked, never the captured text, since it
+        // would carry the very values this test keeps out of logs
         for error in &errors {
-            assert!(matches!(error, BackupError::Deserialization(_)), "{error:?}");
+            let kind = error.kind();
+            assert!(matches!(error, BackupError::Deserialization(_)), "unexpected {kind} error");
         }
 
-        assert!(logs.contains("backup verify failed"), "{logs}");
-        assert!(logs.contains("backup prepare import failed"), "{logs}");
-        assert!(logs.contains("wallet metadata: data error"), "{logs}");
-        assert!(logs.contains("payload: data error at line 1 column"), "{logs}");
+        assert!(logs.contains("backup verify failed"), "verify failure was not logged");
+        assert!(logs.contains("backup prepare import failed"), "import failure was not logged");
+        assert!(logs.contains("wallet metadata: data error"), "wallet error position missing");
+        assert!(
+            logs.contains("payload: data error at line 1 column"),
+            "payload error position missing"
+        );
 
         for secret in [secret_network, secret_created_at] {
-            assert!(!logs.contains(secret), "logs leak {secret}: {logs}");
+            assert!(!logs.contains(secret), "logs quote a decrypted backup value");
             for error in &errors {
-                assert!(!error.to_string().contains(secret), "error leaks {secret}: {error}");
+                let kind = error.kind();
+                assert!(
+                    !error.to_string().contains(secret),
+                    "{kind} error quotes a decrypted backup value"
+                );
             }
         }
     }
@@ -443,9 +456,12 @@ mod tests {
         BackupError::Keychain(format!("xpub for {wallet_name}: xpub6Cbad")).logged("import");
         let logs = capture.text();
 
-        assert!(logs.contains("backup import failed kind=\"restore\""), "{logs}");
-        assert!(logs.contains("backup import failed kind=\"keychain\""), "{logs}");
-        assert!(!logs.contains(wallet_name), "{logs}");
-        assert!(!logs.contains("xpub6Cbad"), "{logs}");
+        assert!(logs.contains("backup import failed kind=\"restore\""), "restore kind not logged");
+        assert!(
+            logs.contains("backup import failed kind=\"keychain\""),
+            "keychain kind not logged"
+        );
+        assert!(!logs.contains(wallet_name), "logs quote the wallet name");
+        assert!(!logs.contains("xpub6Cbad"), "logs quote the xpub");
     }
 }
