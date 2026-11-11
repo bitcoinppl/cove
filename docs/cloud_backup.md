@@ -32,6 +32,13 @@ transition id, which platform callbacks match across a relaunch, but resuming
 the switch starts a run with a new `OperationId`. A completion from a run that a
 reset revoked therefore never matches the run that resumed the switch.
 
+Work that waits on the provider runs off the supervisor's mailbox, so the
+supervisor keeps answering admission and resets meanwhile. A recovered Enable
+with nothing left to upload settles its upload confirmation inside the
+supervisor's handler, because that read stays local while the Enable runs: the
+confirmation has no uploads to check, and its detail refresh skips the provider
+until the lifecycle leaves Enabling.
+
 The supervisor is also the only writer of the durable lifecycle record: it holds
 the one `LifecycleWriter`, which bootstrap moves into it. Work that runs off the
 actor, such as the write lane, upload confirmation, wallet changes and the

@@ -1,5 +1,6 @@
 use super::*;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedBackupVerificationState};
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
@@ -827,6 +828,54 @@ async fn terminally_failed_pending_upload_finishes_verification_without_waiting_
         }
         other => panic!("expected terminal upload verification failure, got {other:?}"),
     }
+}
+
+/// A recovered Enable with nothing to upload settles its confirmation inside the supervisor's
+/// handler. That handler never waits on the provider only because the read stays local while the
+/// Enable runs: the confirmation has no uploads to check, and its detail refresh skips the
+/// provider until the lifecycle leaves Enabling
+#[tokio::test(flavor = "current_thread")]
+async fn empty_confirmation_reads_no_provider_while_an_enable_runs() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+    let enable = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Enable,
+        OperationId::next(),
+    );
+    manager.project_exclusive_operation_started(enable);
+    let basis = call!(manager.supervisor.wallet_set_basis()).await.unwrap();
+    let listings = globals.cloud.list_wallet_files_attempt_count();
+
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    assert!(matches!(settlement.result, DeepVerificationResult::Verified(_)));
+    assert_eq!(
+        globals.cloud.list_wallet_files_attempt_count(),
+        listings,
+        "the read listed the provider while the Enable ran"
+    );
 }
 
 /// An upload confirmation read before a wallet change no longer covers the wallet set, so the

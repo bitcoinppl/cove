@@ -189,7 +189,10 @@ impl CloudBackupSupervisor {
         self.pending_enable_session = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
-        // this handler runs on the lifecycle owner, so it settles in place rather than messaging
+
+        // settling here can't hold this mailbox on the provider: the completion has no uploads to
+        // confirm, and its detail refresh skips the provider while the lifecycle shows this Enable
+        // running, so the read is local state only
         if should_finalize_now
             && let Some(settlement) =
                 manager.ready_pending_verification_settlement(self.wallet_set).await
