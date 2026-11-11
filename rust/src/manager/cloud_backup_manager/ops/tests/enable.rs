@@ -395,7 +395,7 @@ async fn check_again_joins_a_detail_load_the_inventory_already_shows() {
     let manager = init_manager();
 
     configure_enabled_cloud_backup(&manager, globals, 0);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+    manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
 
     dispatch_and_wait(&manager, CloudBackupManagerAction::RefreshDetail).await;
 

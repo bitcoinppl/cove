@@ -8,33 +8,6 @@ pub(crate) enum DeepVerificationContinuation {
     ReinitializeBackup { attempt: VerificationAttempt },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeepVerificationTerminalPolicy {
-    ClearActiveOperationBeforeTerminalHandling,
-    ClearActiveOperationAfterTerminalHandling,
-}
-
-/// One verification attempt: the operation it runs under and the wallets it read
-///
-/// Every continuation carries it, so an attempt's evidence is checked against the wallets that
-/// attempt read, and a completion from an ended operation is refused by its claim
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct VerificationRun {
-    pub(crate) claim: CloudBackupExclusiveOperationClaim,
-    pub(crate) basis: WalletSetGeneration,
-    /// The inventory owner's local-wallet epoch before the attempt read the wallets, so the detail
-    /// it builds is dropped after any local wallet change, a restore's included
-    pub(crate) read_at: LocalWalletsEpoch,
-    pub(crate) continuation: DeepVerificationContinuation,
-}
-
-impl VerificationRun {
-    /// The next attempt reads the wallets afresh
-    fn connectivity_retry(self, basis: WalletSetGeneration, read_at: LocalWalletsEpoch) -> Self {
-        Self { basis, read_at, continuation: self.continuation.connectivity_retry(), ..self }
-    }
-}
-
 impl DeepVerificationContinuation {
     fn attempt(self) -> VerificationAttempt {
         match self {
@@ -75,6 +48,9 @@ pub(crate) struct VerificationRun {
     pub(crate) continuation: DeepVerificationContinuation,
     /// The configuration and local wallet set when this run started reading the wallets
     pub(crate) basis: EvidenceBasis,
+    /// The inventory owner's local-wallet epoch before the run read the wallets, so the detail
+    /// it builds is dropped after any local wallet change, a restore's included
+    pub(crate) read_at: InventoryReadAt,
 }
 
 impl CloudBackupSupervisor {
@@ -239,13 +215,7 @@ impl CloudBackupSupervisor {
                 CloudBackupVerificationSource::Settings,
             ));
         }
-        let run = VerificationRun {
-            claim,
-            basis: self.wallet_set,
-            read_at: manager.local_wallets_epoch(),
-            continuation,
-        };
-        self.schedule_verification(manager, run);
+        self.schedule_verification(manager, claim, continuation);
     }
 
     /// Runs one verification pass for the operation with `claim`
@@ -258,7 +228,12 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        let run = VerificationRun { claim, continuation, basis: self.evidence_basis() };
+        let run = VerificationRun {
+            claim,
+            continuation,
+            basis: self.evidence_basis(),
+            read_at: manager.inventory_read_at(),
+        };
         let force_discoverable = continuation.force_discoverable();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
@@ -536,14 +511,8 @@ impl CloudBackupSupervisor {
         // the retry keeps the operation, so nothing starts between the two runs
         if verification_needs_connectivity_retry(&manager, run.continuation.attempt(), &result) {
             self.record_verification_evidence(&manager, run.basis, &result);
-            let read_at = manager.local_wallets_epoch();
-            self.schedule_verification(manager, run.connectivity_retry(self.wallet_set, read_at));
+            self.schedule_verification(manager, run.claim, run.continuation.connectivity_retry());
             return;
-        }
-
-        let policy = continuation.terminal_policy();
-        if policy == DeepVerificationTerminalPolicy::ClearActiveOperationBeforeTerminalHandling {
-            self.finish_deep_verification_operation(&manager, run.claim);
         }
 
         self.settle_verification_evidence(&manager, run.basis, run.read_at, result);
@@ -768,7 +737,8 @@ impl CloudBackupSupervisor {
             })
         }) {
             Ok(()) => {
-                let detail_claim = self.detail_workflow.start_operation_result();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
@@ -801,7 +771,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
         }
 
         manager.refresh_sync_health();

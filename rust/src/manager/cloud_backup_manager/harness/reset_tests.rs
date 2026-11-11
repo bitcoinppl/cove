@@ -821,3 +821,54 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         assert_eq!(app.manager().model_state().lifecycle, CloudBackupLifecycle::Disabled);
     });
 }
+
+/// A Google Drive account switch starts a new configuration, so a detail refresh that read the
+/// old account's inventory can't land in the new one: the held result, released after the switch,
+/// is dropped, and only a load the new configuration starts fills its inventory
+#[test]
+fn a_detail_refresh_from_before_an_account_switch_is_dropped() {
+    let test =
+        concat!(module_path!(), "::a_detail_refresh_from_before_an_account_switch_is_dropped");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 1).seed_records(&app);
+        let old_scope = app.manager().inventory_scope();
+
+        // the detail refresh lists the old account, then reads its records, where it is held
+        let held_read = Hold::default();
+        app.cloud.script_next(CloudCall::DownloadWallet, CloudFault::Hold(held_read.clone()));
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
+        app.block_on("the old account's detail read to start", held_read.entered());
+
+        let manager = app.manager().clone();
+        let transition_id = app
+            .block_on("the switch to drain the lane", manager.begin_drive_account_switch())
+            .expect("the switch starts");
+        app.event("the platform staged the selected account", |app| {
+            let manager = app.manager().clone();
+            app.block_on(
+                "the switch to continue",
+                manager.continue_drive_account_switch(transition_id),
+            )
+            .expect("continue the switch");
+        })
+        .then_cannot(&[N::Enable]);
+        assert_ne!(
+            app.manager().inventory_scope(),
+            old_scope,
+            "the switch's reinitialize ended without starting a new configuration\n{}",
+            app.describe()
+        );
+        assert!(app.manager().inventory.read().loaded_detail().is_none());
+
+        app.event("release the old account's detail read", |_| held_read.release())
+            .then_cannot(&[N::Enable]);
+        app.block_on("the old account's detail read to return", held_read.finished());
+        app.settle();
+        assert!(
+            app.manager().inventory.read().loaded_detail().is_none(),
+            "the old account's detail landed in the new configuration\n{}",
+            app.describe()
+        );
+    });
+}

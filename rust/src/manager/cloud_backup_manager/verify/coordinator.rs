@@ -1,7 +1,7 @@
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, DeepVerificationFailure, DeepVerificationReport,
-    LocalWalletsEpoch, PendingUploadVerificationState, RecoveryState, VerificationState,
+    InventoryReadAt, PendingUploadVerificationState, RecoveryState, VerificationState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -19,14 +19,11 @@ pub(crate) struct CloudBackupVerificationEffect {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct VerificationDetail {
     pub(crate) detail: CloudBackupDetail,
-    pub(crate) read_at: LocalWalletsEpoch,
+    pub(crate) read_at: InventoryReadAt,
 }
 
 impl VerificationDetail {
-    pub(crate) fn new(
-        detail: Option<CloudBackupDetail>,
-        read_at: LocalWalletsEpoch,
-    ) -> Option<Self> {
+    pub(crate) fn new(detail: Option<CloudBackupDetail>, read_at: InventoryReadAt) -> Option<Self> {
         detail.map(|detail| Self { detail, read_at })
     }
 }
@@ -107,7 +104,7 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn complete(
         source: CloudBackupVerificationSource,
         report: DeepVerificationReport,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
@@ -122,7 +119,7 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn needs_attention(
         source: CloudBackupVerificationSource,
         report: DeepVerificationReport,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
@@ -137,7 +134,7 @@ impl CloudBackupVerificationCoordinator {
     pub(crate) fn fail(
         source: CloudBackupVerificationSource,
         failure: DeepVerificationFailure,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Failed {
@@ -240,7 +237,7 @@ mod tests {
         let effect = CloudBackupVerificationCoordinator::fail(
             CloudBackupVerificationSource::Settings,
             failure,
-            LocalWalletsEpoch::default(),
+            InventoryReadAt::default(),
         );
 
         assert_eq!(

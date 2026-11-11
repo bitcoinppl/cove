@@ -108,7 +108,8 @@ impl CloudBackupSupervisor {
             Ok(()) => {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Deleted);
                 manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
@@ -139,7 +140,8 @@ impl CloudBackupSupervisor {
         match result {
             Ok(()) => {
                 manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
@@ -171,7 +173,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
         }
 
         manager.apply_sync_state(SyncState::Idle);

@@ -121,8 +121,8 @@ pub(crate) use self::ops::{
 };
 pub(crate) use self::owner::inventory::{
     CloudBackupDetailState, CloudBackupInventoryAuthority, CloudOnlyFetch, CloudOnlyListingUpdate,
-    CloudOnlyRow, CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
-    LocalWalletsEpoch, OwnSecretUpdate,
+    CloudOnlyRow, CloudOnlyState, InventoryInput, InventoryOwner, InventoryReadAt, InventoryResult,
+    InventoryScope, LoadedCloudBackupDetail, OwnSecretUpdate,
 };
 pub(crate) use self::owner::lifecycle::LifecycleCapability;
 use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};
@@ -526,11 +526,14 @@ impl RustCloudBackupManager {
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         self.observe_sync_health(CloudSyncHealth::Unknown);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
+
+        // clearing is right in whatever configuration is current
+        let scope = self.inventory_scope();
+        self.apply_detail_outcome(scope, CloudBackupDetailOutcome::Cleared);
         self.apply_verification_state(VerificationState::Idle);
         self.apply_sync_state(SyncState::Idle);
         self.apply_recovery_state(RecoveryState::Idle);
-        self.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Reset);
+        self.apply_cloud_only_fetch_outcome(scope, CloudBackupCloudOnlyFetchOutcome::Reset);
         self.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Idle);
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
     }
@@ -1107,11 +1110,14 @@ mod manager_test_support {
             self.refresh_persisted_flags();
             self.apply_enable_state(CloudBackupEnableState::Idle);
             self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-            self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
+            self.apply_detail_outcome(self.inventory_scope(), CloudBackupDetailOutcome::Cleared);
             self.apply_verification_state(VerificationState::Idle);
             self.apply_sync_state(SyncState::Idle);
             self.apply_recovery_state(RecoveryState::Idle);
-            self.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Reset);
+            self.apply_cloud_only_fetch_outcome(
+                self.inventory_scope(),
+                CloudBackupCloudOnlyFetchOutcome::Reset,
+            );
             self.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Idle);
             self.reconcile_runtime_status(CloudBackupStatus::Disabled);
             self.refresh_sync_health();
@@ -1890,24 +1896,28 @@ mod tests {
         let authenticate_count = globals.passkey.authenticate_count();
 
         manager.sync_persisted_state();
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "remaining-record",
-        ])));
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![CloudBackupWalletItem {
-                name: "Remaining wallet".into(),
-                network: None,
-                wallet_mode: None,
-                wallet_type: None,
-                fingerprint: None,
-                label_count: None,
-                backup_updated_at: None,
-                sync_status: CloudBackupWalletStatus::DeletedFromDevice,
-                record_id: "remaining-record".into(),
-                restore_failure: None,
-            }],
-        ));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["remaining-record"])),
+        );
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(
+                &manager,
+                vec![CloudBackupWalletItem {
+                    name: "Remaining wallet".into(),
+                    network: None,
+                    wallet_mode: None,
+                    wallet_type: None,
+                    fingerprint: None,
+                    label_count: None,
+                    backup_updated_at: None,
+                    sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+                    record_id: "remaining-record".into(),
+                    restore_failure: None,
+                }],
+            ),
+        );
 
         let configured = manager.test_inventory();
 

@@ -81,6 +81,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
+        let scope = batch.scope();
         let (frozen_wallets, listing_generation) = batch.into_parts();
         manager.clear_cloud_only_restore_failures(
             &frozen_wallets.iter().map(|wallet| wallet.record_id.clone()).collect::<Vec<_>>(),
@@ -93,7 +94,7 @@ impl CloudBackupSupervisor {
             let result = manager
                 .prepare_restore_all_cloud_wallets(&writes, frozen_wallets, listing_generation)
                 .await;
-            send!(addr.complete_restore_all_preparation(claim, result));
+            send!(addr.complete_restore_all_preparation(claim, scope, result));
         });
     }
 
@@ -128,6 +129,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_restore_all_preparation(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        scope: InventoryScope,
         result: Result<CloudBackupPreparedRestoreAll, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(cancellation) =
@@ -151,9 +153,10 @@ impl CloudBackupSupervisor {
                 return Produces::ok(());
             }
         };
-        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-            prepared.authoritative_fetch().clone(),
-        ));
+        manager.apply_cloud_only_fetch_outcome(
+            scope,
+            CloudBackupCloudOnlyFetchOutcome::Loaded(prepared.authoritative_fetch().clone()),
+        );
 
         // listed wallets whose downloads failed leave the queue empty without restoring anything,
         // so an empty queue goes through the same proof as a finished one
@@ -282,7 +285,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
             if let CloudBackupDetailResult::AccessError(error) = result
                 && restore_all_must_stop(&error)
             {
@@ -478,7 +481,9 @@ async fn run_restore_all_queue(
         };
 
         if restored {
-            let Ok(detail_claim) = call!(addr.start_detail_result_claim()).await else {
+            let Ok(detail_claim) =
+                call!(addr.start_detail_result_claim(manager.inventory_scope())).await
+            else {
                 return;
             };
             let result = manager.refresh_cloud_backup_detail(config).await;

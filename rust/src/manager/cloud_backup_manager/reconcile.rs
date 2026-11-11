@@ -101,8 +101,9 @@ impl RustCloudBackupManager {
             self.request_screen_publish();
         }
 
-        // the supervisor owns fetches, so it decides from fresh state whether one can start
-        if effects.refetch_needed {
+        // the supervisor owns fetches, so it decides from fresh state whether one can start; a
+        // fetch dropped as belonging to an earlier configuration is replaced the same way
+        if effects.refetch_needed || effects.dropped {
             send!(self.supervisor.ensure_cloud_only_fetch());
         }
 
@@ -143,10 +144,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
         if let Some(VerificationDetail { detail, read_at }) = effect.detail {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
-                detail,
-                read_at,
-            });
+            self.apply_detail_outcome(
+                read_at.scope(),
+                CloudBackupDetailOutcome::VerifiedWithoutListing { detail, read_at },
+            );
         }
 
         if let Some(pending_upload_verification) = effect.pending_upload_verification {

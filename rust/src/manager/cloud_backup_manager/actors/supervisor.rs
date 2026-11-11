@@ -74,7 +74,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
     DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
     DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, LocalWalletsEpoch, OtherBackupsOperation,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, InventoryReadAt, InventoryScope, OtherBackupsOperation,
     PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
     PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
     PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
@@ -179,22 +179,28 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
     matches!(status, ConnectivityStatus::Unknown | ConnectivityStatus::Connected)
 }
 
-fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
-    match result {
+fn apply_refresh_detail_result(
+    manager: &RustCloudBackupManager,
+    scope: InventoryScope,
+    result: &CloudBackupDetailResult,
+) {
+    let outcome = match result {
         CloudBackupDetailResult::SuccessWithAuthority { listed, authority } => {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
+            CloudBackupDetailOutcome::RefreshedWithAuthority {
                 listed: listed.clone(),
                 authority: *authority,
-            });
+            }
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
+            CloudBackupDetailOutcome::Failed {
                 reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
                 error: error.reader_message(),
-            });
+            }
         }
-    }
+    };
+
+    manager.apply_detail_outcome(scope, outcome);
 }
 
 fn refresh_detail_needs_connectivity_retry(
@@ -827,8 +833,8 @@ impl CloudBackupSupervisor {
         match outcome {
             SyncRequestOutcome::Synced => {
                 manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
-                let config = self.runtime.generation();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_sync_request_refresh_detail(
@@ -873,7 +879,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
         }
 
         manager.apply_sync_state(SyncState::Idle);
@@ -941,8 +947,11 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn start_detail_result_claim(&mut self) -> ActorResult<DetailResultClaim> {
-        Produces::ok(self.detail_workflow.start_operation_result())
+    pub async fn start_detail_result_claim(
+        &mut self,
+        scope: InventoryScope,
+    ) -> ActorResult<DetailResultClaim> {
+        Produces::ok(self.detail_workflow.start_operation_result(scope))
     }
 
     fn schedule_refresh_detail(
@@ -950,11 +959,12 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) {
         manager.refresh_sync_health();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.load_cloud_backup_detail_inventory_snapshot().await;
-            send!(addr.complete_refresh_detail_snapshot(result, attempt, claim));
+            send!(addr.complete_refresh_detail_snapshot(result, attempt, claim, scope));
         });
     }
 
@@ -964,12 +974,13 @@ impl CloudBackupSupervisor {
         snapshot: CloudBackupDetailInventorySnapshot,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
             let completion =
-                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot, config).await;
-            send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim));
+                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+            send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim, scope));
         });
     }
 
@@ -979,12 +990,18 @@ impl CloudBackupSupervisor {
         confirmation: CloudBackupDetailProviderConfirmation,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.confirm_cloud_backup_detail_inventory(confirmation.clone(), config).await;
-            send!(addr.complete_confirm_refresh_detail(confirmation, result, attempt, claim));
+            let result = manager.confirm_cloud_backup_detail_inventory(confirmation.clone()).await;
+            send!(addr.complete_confirm_refresh_detail(
+                confirmation,
+                result,
+                attempt,
+                claim,
+                scope
+            ));
         });
     }
 
@@ -995,8 +1012,11 @@ impl CloudBackupSupervisor {
     ) {
         match plan {
             DetailRefreshPlan::Start(claim) => {
-                manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
-                self.schedule_refresh_detail(manager, DetailRefreshAttempt::Initial, claim);
+                // the refresh and every result it produces belong to the configuration it
+                // started under
+                let scope = manager.inventory_scope();
+                manager.apply_detail_outcome(scope, CloudBackupDetailOutcome::Checking);
+                self.schedule_refresh_detail(manager, DetailRefreshAttempt::Initial, claim, scope);
             }
             DetailRefreshPlan::Wait { owner, delay } => {
                 self.addr.send_fut_with(move |addr| async move {
@@ -1022,6 +1042,7 @@ impl CloudBackupSupervisor {
         result: Option<CloudBackupDetailResult>,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
@@ -1034,6 +1055,7 @@ impl CloudBackupSupervisor {
                 manager,
                 DetailRefreshAttempt::AutomaticConnectivityRetry,
                 claim,
+                scope,
             );
             return Produces::ok(());
         }
@@ -1042,7 +1064,7 @@ impl CloudBackupSupervisor {
         if completion.apply
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, scope, &result);
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
@@ -1057,6 +1079,7 @@ impl CloudBackupSupervisor {
         completion: Option<CloudBackupDetailSnapshotCompletion>,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
@@ -1065,13 +1088,14 @@ impl CloudBackupSupervisor {
         }
 
         match completion {
-            None => self.complete_refresh_detail(None, attempt, claim).await,
+            None => self.complete_refresh_detail(None, attempt, claim, scope).await,
             Some(CloudBackupDetailSnapshotCompletion::Final(result)) => {
-                self.complete_refresh_detail(Some(result), attempt, claim).await
+                self.complete_refresh_detail(Some(result), attempt, claim, scope).await
             }
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) => {
                 if self.detail_workflow.is_latest_refresh(claim) {
                     manager.apply_detail_outcome(
+                        scope,
                         CloudBackupDetailOutcome::RefreshedWithAuthority {
                             listed,
                             authority:
@@ -1081,7 +1105,7 @@ impl CloudBackupSupervisor {
                 }
 
                 self.ensure_supplemental_inventory_discovery(manager.clone());
-                self.schedule_confirm_refresh_detail(manager, confirmation, attempt, claim);
+                self.schedule_confirm_refresh_detail(manager, confirmation, attempt, claim, scope);
 
                 Produces::ok(())
             }
@@ -1094,6 +1118,7 @@ impl CloudBackupSupervisor {
         result: Option<CloudBackupDetailResult>,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
@@ -1107,6 +1132,7 @@ impl CloudBackupSupervisor {
                 confirmation,
                 DetailRefreshAttempt::AutomaticConnectivityRetry,
                 claim,
+                scope,
             );
             return Produces::ok(());
         }
@@ -1117,7 +1143,7 @@ impl CloudBackupSupervisor {
         {
             // the local rows stay retained, but an unconfirmed inventory is incomplete so the user
             // sees why restore and destructive actions are unavailable and can check again
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, scope, &result);
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
@@ -1131,6 +1157,7 @@ impl CloudBackupSupervisor {
         result: Option<CloudBackupDetailInventorySnapshotResult>,
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
+        scope: InventoryScope,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
@@ -1150,12 +1177,13 @@ impl CloudBackupSupervisor {
                 if self.detail_workflow.is_latest_refresh(claim)
                     && let Some(provisional_detail) = snapshot.provisional_detail.clone()
                 {
-                    manager.apply_detail_outcome(CloudBackupDetailOutcome::Provisional(
-                        provisional_detail,
-                    ));
+                    manager.apply_detail_outcome(
+                        scope,
+                        CloudBackupDetailOutcome::Provisional(provisional_detail),
+                    );
                 }
 
-                self.schedule_complete_refresh_detail(manager, snapshot, attempt, claim);
+                self.schedule_complete_refresh_detail(manager, snapshot, attempt, claim, scope);
             }
             CloudBackupDetailInventorySnapshotResult::AccessError(error) => {
                 let result = Some(CloudBackupDetailResult::AccessError(error));
@@ -1164,6 +1192,7 @@ impl CloudBackupSupervisor {
                         manager,
                         DetailRefreshAttempt::AutomaticConnectivityRetry,
                         claim,
+                        scope,
                     );
                     return Produces::ok(());
                 }
@@ -1172,7 +1201,7 @@ impl CloudBackupSupervisor {
                 if completion.apply
                     && let Some(result) = result
                 {
-                    apply_refresh_detail_result(&manager, &result);
+                    apply_refresh_detail_result(&manager, scope, &result);
                 }
                 self.ensure_supplemental_inventory_discovery(manager.clone());
                 self.handle_detail_refresh_plan(manager, completion.next);
@@ -1195,7 +1224,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
         }
 
         self.runtime.finish(claim);
@@ -1240,26 +1269,49 @@ impl CloudBackupSupervisor {
         let claim = OtherBackupsScanClaim(self.next_request_id());
         self.active_other_backups_scan = Some(claim);
 
-        manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
+        let scope = manager.inventory_scope();
+        manager.apply_other_backups_state(scope, CloudBackupOtherBackupsState::Checking);
         let scan_manager = manager;
         addr.send_fut_with(move |addr| async move {
             let cloud = CloudStorage::global_silent_client();
             let state = scan_manager.other_backup_state(&cloud).await;
-            send!(addr.complete_other_backups_scan(claim, state));
+            send!(addr.complete_other_backups_scan(claim, scope, state));
         });
     }
 
     async fn complete_other_backups_scan(
         &mut self,
         claim: OtherBackupsScanClaim,
+        scope: InventoryScope,
         state: CloudBackupOtherBackupsState,
     ) -> ActorResult<()> {
-        if self.active_other_backups_scan == Some(claim)
-            && let Some(manager) = self.manager()
-        {
-            self.active_other_backups_scan = None;
-            manager.apply_other_backups_state(state);
+        if self.active_other_backups_scan != Some(claim) {
+            return Produces::ok(());
         }
+
+        self.active_other_backups_scan = None;
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        // a scan of an earlier configuration counted that one's other backups, so the current
+        // configuration scans again
+        if manager.apply_other_backups_state(scope, state) {
+            self.ensure_supplemental_inventory_discovery(manager);
+        }
+
+        Produces::ok(())
+    }
+
+    /// Loads the inventory again after a configuration change dropped the old one's, when the
+    /// detail is open
+    pub async fn reload_inventory_for_new_scope(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        if !self.detail_workflow.is_open() {
+            return Produces::ok(());
+        }
+
+        self.ensure_supplemental_inventory_discovery(manager.clone());
+        let plan = self.detail_workflow.request_refresh();
+        self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
     }

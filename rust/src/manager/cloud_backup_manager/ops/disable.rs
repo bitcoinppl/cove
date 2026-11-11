@@ -139,10 +139,14 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_disable_local_cleanup(&self) {
+        // clearing is right in whatever configuration is current
+        let scope = self.inventory_scope();
         self.apply_detail_outcome(
+            scope,
             crate::manager::cloud_backup_manager::CloudBackupDetailOutcome::Cleared,
         );
         self.apply_cloud_only_fetch_outcome(
+            scope,
             crate::manager::cloud_backup_manager::CloudBackupCloudOnlyFetchOutcome::Reset,
         );
         self.apply_other_backups_outcome(

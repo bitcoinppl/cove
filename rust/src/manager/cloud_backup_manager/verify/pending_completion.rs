@@ -17,7 +17,7 @@ use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::actors::supervisor::EvidenceBasis;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, LocalWalletsEpoch, PendingEnableJournalPhase, PendingVerificationUpload,
+    CloudBackupDetail, InventoryReadAt, PendingEnableJournalPhase, PendingVerificationUpload,
     master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
@@ -49,10 +49,10 @@ const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
 /// verification, a newer marker or a wallet change superseded is dropped without effects
 #[derive(Debug)]
 pub(crate) struct PendingVerificationSettlement {
-    pub(crate) basis: WalletSetGeneration,
+    pub(crate) basis: EvidenceBasis,
     /// The inventory owner's local-wallet epoch from before this evidence was read, so a detail
     /// it carries is dropped after a wallet change the wallet set hasn't seen yet
-    pub(crate) read_at: LocalWalletsEpoch,
+    pub(crate) read_at: InventoryReadAt,
     pub(crate) completion: PendingVerificationCompletion,
     pub(crate) result: DeepVerificationResult,
 }
@@ -69,7 +69,7 @@ impl RustCloudBackupManager {
             return None;
         }
 
-        let read_at = self.local_wallets_epoch();
+        let read_at = self.inventory_read_at();
         let completion = self.pending_verification_completion()?;
 
         if completion.is_expired(
@@ -122,8 +122,8 @@ impl RustCloudBackupManager {
     }
 
     fn expired_pending_verification_settlement(
-        basis: WalletSetGeneration,
-        read_at: LocalWalletsEpoch,
+        basis: EvidenceBasis,
+        read_at: InventoryReadAt,
         completion: PendingVerificationCompletion,
     ) -> PendingVerificationSettlement {
         warn!(
@@ -424,7 +424,7 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_verified_report(
         &self,
         report: DeepVerificationReport,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::complete(
@@ -435,7 +435,7 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_needs_attention_report(
         &self,
         report: DeepVerificationReport,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::needs_attention(
@@ -447,7 +447,7 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_settled_verification_result(
         &self,
         result: DeepVerificationResult,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         self.apply_verification_result_effect(result, read_at);
         self.refresh_pending_upload_verification_state();
@@ -456,7 +456,7 @@ impl RustCloudBackupManager {
     fn apply_verification_result_effect(
         &self,
         result: DeepVerificationResult,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         let source = self.current_verification_source();
         let effect = match result {
@@ -481,7 +481,7 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_failed_verification(
         &self,
         failure: DeepVerificationFailure,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(

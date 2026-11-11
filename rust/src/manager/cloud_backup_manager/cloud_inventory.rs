@@ -717,9 +717,10 @@ mod tests {
         wallets: &[(&str, BackupSecret, Option<BackupSecret>)],
     ) -> crate::manager::cloud_backup_manager::inventory::InventoryImpactInputs {
         use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
+        use crate::manager::cloud_backup_manager::owner::inventory::test_support::InventoryOwnerTestExt as _;
         use crate::manager::cloud_backup_manager::{
             CloudBackupInventoryAuthority, CloudBackupStateReducer, CloudOnlyListingUpdate,
-            CloudOnlyState, InventoryInput, InventoryOwner, OwnSecretUpdate,
+            CloudOnlyState, InventoryOwner, InventoryResult, OwnSecretUpdate,
         };
 
         let mut remote_wallet_truth = RemoteWalletTruth::default();
@@ -770,13 +771,13 @@ mod tests {
 
         let listed = inventory.build_detail();
         let mut owner = InventoryOwner::default();
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: listed.detail,
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
             own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
         });
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loaded {
             rows: Vec::new(),
             incomplete: false,
         }));

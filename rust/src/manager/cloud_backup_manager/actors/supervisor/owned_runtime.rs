@@ -25,7 +25,6 @@ use super::runtime::{
 use super::{AbandonedReset, KeyClearRefused, LocalResetOutcome, ResetEnd};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::error::DatabaseError;
-use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
@@ -33,6 +32,7 @@ use crate::manager::cloud_backup_manager::admission::{Rejection, ReviewExit, Use
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
+use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommittedDisable, LifecycleLoad, LifecycleWriter,
 };
@@ -40,6 +40,9 @@ use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, RetryWake,
     ReviewId, TurnOffReview,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupStatus, InventoryScope, RustCloudBackupManager,
 };
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
@@ -122,8 +125,8 @@ impl OwnedRuntime {
         result
     }
 
-    /// Rebases an idle body on the record, then publishes the policy if it changed and asks for
-    /// the screen to be projected again
+    /// Rebases an idle body on the owner's record, then publishes the policy if it changed and
+    /// asks for the screen to be projected again
     ///
     /// The screen reads the runtime, so a runtime change is a screen change as much as a reducer
     /// change is; the request queues behind the handler making this change
@@ -209,10 +212,15 @@ impl OwnedRuntime {
         let replaced = self.replacing.is_some() && replacing != self.replacing;
         self.replacing = replacing;
 
-        // a new body kind, or a reinitialize that ended, starts a new configuration
+        // a new body kind, or a reinitialize that ended, starts a new configuration, and the
+        // inventory of the old one is dropped with every result still in flight for it
         if self.published.version > 0 && (body_changed || replaced) {
             self.generation = ConfigGeneration::next();
             policy.generation = self.generation;
+
+            if let Some(manager) = self.manager.upgrade() {
+                manager.enter_inventory_scope(InventoryScope::of(self.generation));
+            }
         }
 
         if self.published.version > 0 && policy == self.published.policy {
@@ -257,16 +265,28 @@ impl OwnedRuntime {
             return Err(error);
         }
 
-        let record = RustCloudBackupManager::load_persisted_state();
-        self.mutate(|runtime| {
-            runtime.loaded(IdleFacts { record: &record, pending_enable_recovery: None });
-        });
+        let record = self.lifecycle.record();
+        self.mutate(|runtime| runtime.loaded(IdleFacts::of(&record, None)));
 
         Ok(())
     }
 
-    pub(crate) fn clear(&mut self) {
-        self.mutate(Runtime::clear);
+    /// Ends the operation `claim` names; the one place an operation finishes
+    ///
+    /// Finishing an operation that no longer runs changes nothing, and the harness ledger
+    /// records the attempt, so a second finish of one operation is visible to invariant 5
+    pub(crate) fn finish(&mut self, claim: CloudBackupExclusiveOperationClaim) -> Finish {
+        let finish = self.mutate(|runtime| runtime.finish(claim));
+        if let Finish::NotCurrent { running } = finish {
+            warn!(
+                "Cloud Backup refused to finish {claim:?}, which no longer runs; running {running:?}"
+            );
+        }
+
+        #[cfg(test)]
+        self.transitions.push(OpTransition::FinishAttempt { claim, finish });
+
+        finish
     }
 
     pub(crate) fn start_standard(

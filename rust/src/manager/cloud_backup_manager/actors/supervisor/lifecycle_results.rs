@@ -12,70 +12,6 @@ use crate::manager::cloud_backup_manager::verify::{
 };
 
 impl CloudBackupSupervisor {
-    /// Applies keychain writes a worker prepared for `owner`, while `owner` still holds the
-    /// configuration the keys belong to
-    ///
-    /// A write whose operation ended, or whose configuration was turned off, reset or replaced
-    /// since the worker read it, is refused as `Cancelled` and the worker stops, so a late worker
-    /// can't put an older configuration's keys over the current one's
-    pub async fn apply_keychain_writes(
-        &mut self,
-        owner: WriteOwner,
-        writes: Vec<OwnedKeychainWrite>,
-    ) -> ActorResult<Result<(), CloudBackupError>> {
-        if self.manager().is_none() {
-            return Produces::ok(Err(CloudBackupError::Cancelled));
-        }
-
-        if !self.owns_configuration_keys(owner) {
-            debug!("Cloud Backup refused keychain writes {writes:?} from {owner:?}");
-            return Produces::ok(Err(CloudBackupError::Cancelled));
-        }
-
-        let keychain = Keychain::global();
-        for write in writes {
-            let result = match write {
-                OwnedKeychainWrite::Passkey { credential_id, prf_salt } => {
-                    CloudBackupKeychain::new(keychain.clone())
-                        .save_passkey(&credential_id, prf_salt)
-                        .map_err(|source| {
-                            CloudBackupError::internal_context("save cloud backup passkey", source)
-                        })
-                }
-                OwnedKeychainWrite::MasterKey(master_key) => cove_cspp::Cspp::new(keychain.clone())
-                    .save_master_key(&master_key)
-                    .map_err(|source| {
-                        CloudBackupError::internal_context("save local master key", source)
-                    }),
-            };
-            if let Err(error) = result {
-                return Produces::ok(Err(error));
-            }
-        }
-
-        Produces::ok(Ok(()))
-    }
-
-    fn owns_configuration_keys(&self, owner: WriteOwner) -> bool {
-        match owner {
-            // an operation's writes are its own while it runs on a configured backup
-            WriteOwner::Operation(claim) => {
-                self.runtime.is_current(claim)
-                    && matches!(
-                        *self.runtime,
-                        Runtime::Configured(_) | Runtime::DriveAccountSwitch { .. }
-                    )
-            }
-            // background work read one configuration; a reinitialize replacing it owns the keys
-            // until it ends, when the generation moves on
-            WriteOwner::Background(generation) => {
-                generation == self.runtime.generation()
-                    && matches!(*self.runtime, Runtime::Configured(_))
-                    && self.runtime.replacing_configuration().is_none()
-            }
-        }
-    }
-
     /// The cloud lists `wallet_count` wallet backups for the active namespace
     pub async fn record_cloud_wallet_count(&mut self, wallet_count: u32) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
@@ -221,8 +157,8 @@ impl CloudBackupSupervisor {
         settlement: PendingVerificationSettlement,
     ) {
         let PendingVerificationSettlement { basis, read_at, completion, result } = settlement;
-        if basis != self.wallet_set {
-            debug!("Dropped an upload confirmation read before a wallet change");
+        if basis != self.evidence_basis() {
+            debug!("Dropped an upload confirmation read before a wallet or configuration change");
             return;
         }
 
@@ -309,8 +245,8 @@ impl CloudBackupSupervisor {
     pub(crate) fn settle_verification_evidence(
         &mut self,
         manager: &RustCloudBackupManager,
-        basis: WalletSetGeneration,
-        read_at: LocalWalletsEpoch,
+        basis: EvidenceBasis,
+        read_at: InventoryReadAt,
         result: DeepVerificationResult,
     ) {
         if basis != self.evidence_basis() {

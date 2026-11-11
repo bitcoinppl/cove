@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use crate::manager::cloud_backup_manager::owner::inventory::InventoryScope;
+
 pub(crate) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8,8 +10,19 @@ pub(crate) struct DetailRefreshClaim {
     generation: u64,
 }
 
+/// One operation's claim to apply the detail it reads, carrying the inventory scope its read
+/// started in so the inventory owner can drop it after a configuration change
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DetailResultClaim(u64);
+pub(crate) struct DetailResultClaim {
+    generation: u64,
+    scope: InventoryScope,
+}
+
+impl DetailResultClaim {
+    pub(crate) fn scope(self) -> InventoryScope {
+        self.scope
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DetailRefreshPlan {
@@ -176,7 +189,7 @@ impl DetailWorkflow {
         claim: DetailRefreshClaim,
     ) -> DetailRefreshCompletion {
         let mut completion = self.refresh.complete(claim, self.now());
-        completion.apply &= self.is_latest_result(DetailResultClaim(claim.generation));
+        completion.apply &= self.is_latest_generation(claim.generation);
         completion.next = self.admit_refresh_plan(completion.next);
         completion
     }
@@ -186,18 +199,26 @@ impl DetailWorkflow {
     }
 
     pub(crate) fn is_latest_refresh(&self, claim: DetailRefreshClaim) -> bool {
-        self.is_latest_result(DetailResultClaim(claim.generation))
+        self.is_latest_generation(claim.generation)
     }
 
-    pub(crate) fn start_operation_result(&mut self) -> DetailResultClaim {
-        let claim = DetailResultClaim(self.next_result_generation);
-        self.next_result_generation = self.next_result_generation.wrapping_add(1);
-        self.newest_result_generation = Some(claim.0);
-        claim
+    pub(crate) fn start_operation_result(&mut self, scope: InventoryScope) -> DetailResultClaim {
+        DetailResultClaim { generation: self.start_result_generation(), scope }
     }
 
     pub(crate) fn is_latest_result(&self, claim: DetailResultClaim) -> bool {
-        self.newest_result_generation == Some(claim.0)
+        self.is_latest_generation(claim.generation)
+    }
+
+    fn start_result_generation(&mut self) -> u64 {
+        let generation = self.next_result_generation;
+        self.next_result_generation = self.next_result_generation.wrapping_add(1);
+        self.newest_result_generation = Some(generation);
+        generation
+    }
+
+    fn is_latest_generation(&self, generation: u64) -> bool {
+        self.newest_result_generation == Some(generation)
     }
 
     fn now(&self) -> Duration {
@@ -207,8 +228,8 @@ impl DetailWorkflow {
     fn admit_refresh_plan(&mut self, plan: DetailRefreshPlan) -> DetailRefreshPlan {
         let DetailRefreshPlan::Start(claim) = plan else { return plan };
 
-        let result_claim = self.start_operation_result();
-        let claim = DetailRefreshClaim { owner: claim.owner, generation: result_claim.0 };
+        let generation = self.start_result_generation();
+        let claim = DetailRefreshClaim { owner: claim.owner, generation };
         self.refresh.replace_in_flight_claim(claim);
 
         DetailRefreshPlan::Start(claim)
@@ -249,8 +270,8 @@ mod tests {
     #[test]
     fn newest_started_detail_result_wins() {
         let mut workflow = DetailWorkflow::default();
-        let older = workflow.start_operation_result();
-        let newer = workflow.start_operation_result();
+        let older = workflow.start_operation_result(InventoryScope::default());
+        let newer = workflow.start_operation_result(InventoryScope::default());
 
         assert!(!workflow.is_latest_result(older));
         assert!(workflow.is_latest_result(newer));
@@ -265,7 +286,7 @@ mod tests {
         };
         assert_eq!(workflow.request_refresh(), DetailRefreshPlan::Queued);
 
-        workflow.start_operation_result();
+        workflow.start_operation_result(InventoryScope::default());
         let completion = workflow.complete_refresh(refresh);
 
         assert!(!completion.apply);

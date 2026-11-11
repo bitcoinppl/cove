@@ -5,7 +5,9 @@ use act_zero::send;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use super::owner::inventory::{InventoryInput, LocalWalletsEpoch, RestoreAllBatch};
+use super::owner::inventory::{
+    InventoryInput, InventoryReadAt, InventoryResult, InventoryScope, RestoreAllBatch,
+};
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CloudBackupDetail, CloudBackupExclusiveOperationClaim, CloudBackupInventoryAuthority,
@@ -183,13 +185,13 @@ pub(crate) enum CloudBackupDetailOutcome {
     /// Detail a verification built from the local wallets it read at `read_at`
     Verified {
         listed: CloudBackupListedDetail,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     },
     /// Detail a verification built from the local wallets it read at `read_at`, whose report
     /// carries no listing, so loaded cloud-only rows cannot be matched to a listing and are reset
     VerifiedWithoutListing {
         detail: CloudBackupDetail,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     },
     Failed {
         reason: CloudBackupInventoryIncompleteReason,
@@ -266,7 +268,7 @@ impl RustCloudBackupManager {
     pub(crate) fn handle_deep_verification_result(
         &self,
         result: DeepVerificationResult,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         self.apply_deep_verification_result(result, read_at);
     }
@@ -274,14 +276,14 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_deep_verification_result(
         &self,
         result: DeepVerificationResult,
-        read_at: LocalWalletsEpoch,
+        read_at: InventoryReadAt,
     ) {
         let apply_detail = |detail: Option<CloudBackupDetail>| {
             if let Some(detail) = detail {
-                self.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
-                    detail,
-                    read_at,
-                });
+                self.apply_detail_outcome(
+                    read_at.scope(),
+                    CloudBackupDetailOutcome::VerifiedWithoutListing { detail, read_at },
+                );
             }
         };
 
@@ -331,65 +333,77 @@ impl RustCloudBackupManager {
     /// A detail read the local wallets when it was built, so one that finishes after a wallet was
     /// deleted would list that wallet as local again. Its rows are checked against the wallets on
     /// this device now before it is applied
-    pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
+    ///
+    /// `scope` is the configuration the producer read when its request started, so a detail from
+    /// before a configuration change is dropped
+    pub(crate) fn apply_detail_outcome(
+        &self,
+        scope: InventoryScope,
+        outcome: CloudBackupDetailOutcome,
+    ) {
         let outcome = Self::retain_local_wallets(outcome);
 
-        let (detail, authority, cloud_only_listing, own_secrets) = match outcome {
-            CloudBackupDetailOutcome::Checking => {
-                self.apply_inventory(InventoryInput::DetailRefreshStarted);
-                return;
-            }
+        // the owner decides whether loaded rows survive and asks for a refetch when they do not
+        let result = match outcome {
+            CloudBackupDetailOutcome::Checking => InventoryResult::DetailRefreshStarted,
             CloudBackupDetailOutcome::Provisional(detail) => {
-                self.apply_inventory(InventoryInput::DetailRefreshProvisional(detail));
-                return;
+                InventoryResult::DetailRefreshProvisional(detail)
             }
             CloudBackupDetailOutcome::Failed { reason, error } => {
-                self.apply_inventory(InventoryInput::DetailRefreshFailed { reason, error });
-                return;
+                InventoryResult::DetailRefreshFailed { reason, error }
             }
-            CloudBackupDetailOutcome::Cleared => {
-                self.apply_inventory(InventoryInput::DetailCleared);
-                return;
-            }
+            CloudBackupDetailOutcome::Cleared => InventoryResult::DetailCleared,
             CloudBackupDetailOutcome::Verified { listed, read_at } => {
-                self.apply_inventory(InventoryInput::VerifiedDetailApplied {
+                InventoryResult::VerifiedDetailApplied {
                     read_at,
                     detail: listed.detail,
                     cloud_only_listing: CloudOnlyListingUpdate::Listed(
                         listed.cloud_only_record_ids,
                     ),
                     own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
-                });
-                return;
+                }
             }
-            CloudBackupDetailOutcome::RefreshedWithAuthority { listed, authority } => (
-                listed.detail,
-                authority,
-                CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
-                OwnSecretUpdate::Read(listed.own_secrets),
-            ),
+            CloudBackupDetailOutcome::RefreshedWithAuthority { listed, authority } => {
+                InventoryResult::DetailRefreshApplied {
+                    detail: listed.detail,
+                    authority,
+                    cloud_only_listing: CloudOnlyListingUpdate::Listed(
+                        listed.cloud_only_record_ids,
+                    ),
+                    own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
+                }
+            }
             CloudBackupDetailOutcome::VerifiedWithoutListing { detail, read_at } => {
-                self.apply_inventory(InventoryInput::VerifiedDetailApplied {
+                InventoryResult::VerifiedDetailApplied {
                     read_at,
                     detail,
                     cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
                     own_secrets: OwnSecretUpdate::Unread,
-                });
-                return;
+                }
             }
         };
 
-        // the owner decides whether loaded rows survive and asks for a refetch when they do not
-        self.apply_inventory(InventoryInput::DetailRefreshApplied {
-            detail,
-            authority,
-            cloud_only_listing,
-            own_secrets,
-        });
+        self.apply_inventory(InventoryInput::Result { scope, result });
     }
 
-    fn apply_cloud_only_state(&self, cloud_only: CloudOnlyState) {
-        self.apply_inventory(InventoryInput::CloudOnlyStateResolved(cloud_only));
+    fn apply_cloud_only_state(&self, scope: InventoryScope, cloud_only: CloudOnlyState) {
+        let result = InventoryResult::CloudOnlyStateResolved(cloud_only);
+        self.apply_inventory(InventoryInput::Result { scope, result });
+    }
+
+    /// The configuration the inventory describes, read by a producer when its request starts
+    pub(crate) fn inventory_scope(&self) -> InventoryScope {
+        self.inventory.read().scope()
+    }
+
+    /// Moves the inventory to a new configuration, dropping what it knew of the old one, and asks
+    /// the supervisor to load the new one's
+    pub(crate) fn enter_inventory_scope(&self, scope: InventoryScope) {
+        let effects = self.apply_inventory(InventoryInput::ScopeEntered(scope));
+
+        if effects.changed {
+            send!(self.supervisor.reload_inventory_for_new_scope());
+        }
     }
 
     /// Drops the outcome's local rows for wallets no longer on this device, leaving it as it is
@@ -438,12 +452,12 @@ impl RustCloudBackupManager {
             .ok()
     }
 
-    /// The inventory owner's local-wallet epoch, for evidence about to read the local wallets
+    /// What evidence about to read the cloud and the local wallets is read under
     ///
     /// Returned by value with the inventory lock already released, so it can sit inside a call
     /// that then applies an inventory input without deadlocking on its own read guard
-    pub(crate) fn local_wallets_epoch(&self) -> LocalWalletsEpoch {
-        self.inventory.read().local_wallets_epoch()
+    pub(crate) fn inventory_read_at(&self) -> InventoryReadAt {
+        self.inventory.read().read_at()
     }
 
     pub(crate) fn apply_local_wallets_changed(&self) {
@@ -453,31 +467,35 @@ impl RustCloudBackupManager {
     }
 
     /// Applies a fetch outcome, reporting whether a `Loaded` result was dropped as stale
+    ///
+    /// `scope` is the configuration the fetch was requested under
     pub(crate) fn apply_cloud_only_fetch_outcome(
         &self,
+        scope: InventoryScope,
         outcome: CloudBackupCloudOnlyFetchOutcome,
     ) -> CloudOnlyFetchApplication {
         match outcome {
             CloudBackupCloudOnlyFetchOutcome::Reset => {
                 self.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
-                self.apply_cloud_only_state(CloudOnlyState::NotFetched);
+                self.apply_cloud_only_state(scope, CloudOnlyState::NotFetched);
                 self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
             }
             CloudBackupCloudOnlyFetchOutcome::Started => {
-                self.apply_cloud_only_state(CloudOnlyState::Loading);
+                self.apply_cloud_only_state(scope, CloudOnlyState::Loading);
                 self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
             }
             CloudBackupCloudOnlyFetchOutcome::Loaded(fetch) => {
-                let effects = self.apply_inventory(InventoryInput::CloudOnlyFetchLoaded(fetch));
+                let result = InventoryResult::CloudOnlyFetchLoaded(fetch);
+                let effects = self.apply_inventory(InventoryInput::Result { scope, result });
 
-                return if effects.refetch_needed {
+                return if effects.refetch_needed || effects.dropped {
                     CloudOnlyFetchApplication::Discarded
                 } else {
                     CloudOnlyFetchApplication::Applied
                 };
             }
             CloudBackupCloudOnlyFetchOutcome::Failed(error) => {
-                self.apply_cloud_only_state(CloudOnlyState::Failed { error });
+                self.apply_cloud_only_state(scope, CloudOnlyState::Failed { error });
             }
         }
 
@@ -675,10 +693,14 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
 
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-1",
-        ])));
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, Vec::new()),
+        );
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-1"])),
+        );
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -688,11 +710,14 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
 
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![cloud_backup_wallet_item("wallet-1")],
-        ));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![cloud_backup_wallet_item("wallet-1")]),
+        );
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
+        );
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -704,19 +729,21 @@ mod tests {
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-a", "wallet-b",
-        ])));
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![wallet_a.clone(), wallet_b.clone()],
-        ));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-a", "wallet-b"])),
+        );
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet_a.clone(), wallet_b.clone()]),
+        );
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Deleted {
             record_id: wallet_a.record_id,
         });
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-b",
-        ])));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-b"])),
+        );
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
@@ -730,18 +757,22 @@ mod tests {
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-a");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-a",
-        ])));
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![wallet.clone()],
-        ));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-a"])),
+        );
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet.clone()]),
+        );
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Restored {
             record_id: wallet.record_id,
             warning: None,
         });
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
+        );
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
@@ -756,18 +787,20 @@ mod tests {
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-a", "wallet-b",
-        ])));
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![wallet_a, wallet_b],
-        ));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-a", "wallet-b"])),
+        );
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet_a, wallet_b]),
+        );
 
         // same count and same local rows, so only the listing's identity shows the replacement
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-b", "wallet-c",
-        ])));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-b", "wallet-c"])),
+        );
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -778,11 +811,17 @@ mod tests {
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-a");
 
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![wallet]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::VerifiedWithoutListing {
-            detail: listed_detail(&["wallet-a"]).detail,
-            read_at: manager.local_wallets_epoch(),
-        });
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet]),
+        );
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::VerifiedWithoutListing {
+                detail: listed_detail(&["wallet-a"]).detail,
+                read_at: manager.inventory_read_at(),
+            },
+        );
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -795,8 +834,14 @@ mod tests {
         let mut listed = listed_detail(&[]);
         listed.detail.up_to_date.push(wallet.clone());
 
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![wallet]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed));
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet]),
+        );
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed),
+        );
 
         assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -806,22 +851,23 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-1");
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-            "wallet-1",
-        ])));
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![wallet.clone()],
-        ));
+        manager.apply_detail_outcome(
+            manager.inventory_scope(),
+            CloudBackupDetailOutcome::refreshed(listed_detail(&["wallet-1"])),
+        );
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet.clone()]),
+        );
 
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::RestoreFailed {
             record_id: wallet.record_id.clone(),
             error: "wallet data could not be restored".into(),
         });
-        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
-            &manager,
-            vec![wallet.clone()],
-        ));
+        manager.apply_cloud_only_fetch_outcome(
+            manager.inventory_scope(),
+            complete_loaded_outcome(&manager, vec![wallet.clone()]),
+        );
 
         let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
             panic!("expected loaded cloud-only rows");

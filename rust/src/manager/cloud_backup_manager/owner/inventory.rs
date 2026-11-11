@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 pub(crate) use self::listing::{
     CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow,
 };
+use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::DetailInventory;
 use crate::manager::cloud_backup_manager::model::CloudBackupRestoreAllRuntimeState;
 use crate::manager::cloud_backup_manager::{
@@ -98,33 +99,34 @@ impl CloudOnlyState {
     }
 }
 
-/// A typed input to the inventory, from the producer that observed it
+/// Which configuration an inventory request was made under
+///
+/// Every producer reads it when its request starts and hands it back with the result, so a result
+/// from before a configuration change (a reinitialize, a Drive account switch, a reset or a Turn
+/// Off) is dropped instead of describing the configuration that replaced it. `None` is the scope
+/// before the first configuration is published
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub(crate) struct InventoryScope(Option<ConfigGeneration>);
+
+impl InventoryScope {
+    pub(crate) fn of(generation: ConfigGeneration) -> Self {
+        Self(Some(generation))
+    }
+}
+
+/// A typed input to the inventory
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum InventoryInput {
-    DetailRefreshStarted,
-    DetailRefreshProvisional(CloudBackupDetail),
-    DetailCleared,
-    DetailRefreshApplied {
-        detail: CloudBackupDetail,
-        authority: CloudBackupInventoryAuthority,
-        cloud_only_listing: CloudOnlyListingUpdate,
-        own_secrets: OwnSecretUpdate,
+    /// The configuration changed, so everything the owner knows belongs to the old one
+    ScopeEntered(InventoryScope),
+    /// A producer's result, for the request it started under `scope`
+    Result {
+        scope: InventoryScope,
+        result: InventoryResult,
     },
-    /// A detail a verification built from the local wallets it read at `read_at`; applied like a
-    /// refresh only if no local wallet change landed since
-    VerifiedDetailApplied {
-        read_at: LocalWalletsEpoch,
-        detail: CloudBackupDetail,
-        cloud_only_listing: CloudOnlyListingUpdate,
-        own_secrets: OwnSecretUpdate,
-    },
-    DetailRefreshFailed {
-        reason: CloudBackupInventoryIncompleteReason,
-        error: String,
-    },
-    CloudOnlyStateResolved(CloudOnlyState),
-    /// A cloud-only fetch finished, applied only if its listing generation is still current
-    CloudOnlyFetchLoaded(CloudOnlyFetch),
+
+    // the inputs below come from a running row operation, whose claim keeps the configuration it
+    // read until it ends, or from this device's own wallets, so they carry no scope
     /// A listed record was restored or deleted, so it is no longer cloud-only
     CloudOnlyRowRemoved(String),
     /// A restore found the local wallets `covered_by` holding everything the record can
@@ -155,6 +157,36 @@ pub(crate) enum InventoryInput {
     },
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
+}
+
+/// What a producer observed, applied only in the scope it was requested under
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum InventoryResult {
+    DetailRefreshStarted,
+    DetailRefreshProvisional(CloudBackupDetail),
+    DetailCleared,
+    DetailRefreshApplied {
+        detail: CloudBackupDetail,
+        authority: CloudBackupInventoryAuthority,
+        cloud_only_listing: CloudOnlyListingUpdate,
+        own_secrets: OwnSecretUpdate,
+    },
+    /// A detail a verification built from the local wallets it read at `read_at`; applied like a
+    /// refresh only if no local wallet change landed since
+    VerifiedDetailApplied {
+        read_at: InventoryReadAt,
+        detail: CloudBackupDetail,
+        cloud_only_listing: CloudOnlyListingUpdate,
+        own_secrets: OwnSecretUpdate,
+    },
+    DetailRefreshFailed {
+        reason: CloudBackupInventoryIncompleteReason,
+        error: String,
+    },
+    CloudOnlyStateResolved(CloudOnlyState),
+    /// A cloud-only fetch finished, applied only if its listing generation is still current
+    CloudOnlyFetchLoaded(CloudOnlyFetch),
+    /// The other-backups scan, a supplemental read of the other namespaces
     OtherBackupsStateResolved(CloudBackupOtherBackupsState),
 }
 
@@ -165,12 +197,31 @@ pub(crate) struct InventoryEffects {
     pub(crate) changed: bool,
     /// Cloud-only rows were invalidated or a fetch was stale, so a fetch has to repopulate them
     pub(crate) refetch_needed: bool,
+    /// The result was requested under an earlier configuration and dropped, so its producer
+    /// asks again under the current one
+    pub(crate) dropped: bool,
 }
 
-/// How many local wallet changes the owner has applied, so evidence built from an earlier read of
-/// the local wallets can be told apart
+/// How many local wallet changes the owner has applied
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct LocalWalletsEpoch(u64);
+struct LocalWalletsEpoch(u64);
+
+/// What evidence about to read the cloud and the local wallets was read under: the configuration,
+/// and how many local wallet changes the owner had applied
+///
+/// Evidence built under an older one is told apart from the inventory that replaced it
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct InventoryReadAt {
+    scope: InventoryScope,
+    local_wallets: LocalWalletsEpoch,
+}
+
+impl InventoryReadAt {
+    /// The configuration the evidence was read under
+    pub(crate) fn scope(self) -> InventoryScope {
+        self.scope
+    }
+}
 
 /// Identity of one inventory state; it changes with every input that changes the inventory
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -186,6 +237,7 @@ enum DetailRefreshActivity {
 /// The single writer of the Cloud Backup inventory
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InventoryOwner {
+    scope: InventoryScope,
     generation: InventoryGeneration,
     local_wallets_epoch: LocalWalletsEpoch,
     detail: CloudBackupDetailState,
@@ -200,6 +252,7 @@ pub(crate) struct InventoryOwner {
 impl Default for InventoryOwner {
     fn default() -> Self {
         Self {
+            scope: InventoryScope::default(),
             generation: InventoryGeneration::default(),
             local_wallets_epoch: LocalWalletsEpoch::default(),
             detail: CloudBackupDetailState::NotLoaded,
@@ -215,66 +268,26 @@ impl InventoryOwner {
     /// Applies one input; the only way the inventory changes
     pub(crate) fn apply(&mut self, input: InventoryInput) -> InventoryEffects {
         let before = self.clone();
-        let refetch_needed = self.apply_input(input);
+        let (refetch_needed, dropped) = match input {
+            InventoryInput::Result { scope, .. } if scope != self.scope => {
+                debug!("Cloud Backup dropped an inventory result from an earlier configuration");
+                (false, true)
+            }
+            input => (self.apply_input(input), false),
+        };
 
         let changed = *self != before;
         if changed {
             self.generation.0 += 1;
         }
 
-        InventoryEffects { changed, refetch_needed }
+        InventoryEffects { changed, refetch_needed, dropped }
     }
 
     fn apply_input(&mut self, input: InventoryInput) -> bool {
         match input {
-            InventoryInput::DetailRefreshStarted => self.apply_detail_refresh_started(),
-            InventoryInput::DetailRefreshProvisional(detail) => {
-                self.apply_detail_refresh_provisional(detail);
-            }
-            InventoryInput::DetailRefreshApplied {
-                detail,
-                authority,
-                cloud_only_listing,
-                own_secrets,
-            } => {
-                return self.apply_detail_refresh(
-                    detail,
-                    authority,
-                    cloud_only_listing,
-                    own_secrets,
-                );
-            }
-            InventoryInput::VerifiedDetailApplied {
-                read_at,
-                detail,
-                cloud_only_listing,
-                own_secrets,
-            } => {
-                // the detail lacks or still lists a wallet the change added or removed, and the
-                // change already asked for the refresh that replaces it
-                if read_at != self.local_wallets_epoch {
-                    debug!("Cloud Backup dropped a verified detail read before a wallet change");
-                    return false;
-                }
-
-                let authority = CloudBackupInventoryAuthority::ProviderConfirmed;
-                return self.apply_detail_refresh(
-                    detail,
-                    authority,
-                    cloud_only_listing,
-                    own_secrets,
-                );
-            }
-            InventoryInput::DetailCleared => self.apply_detail_cleared(),
-            InventoryInput::DetailRefreshFailed { reason, error } => {
-                self.apply_detail_refresh_failure(reason, error);
-            }
-            InventoryInput::CloudOnlyStateResolved(cloud_only) => {
-                self.resolve_cloud_only_state(cloud_only);
-            }
-            InventoryInput::CloudOnlyFetchLoaded(fetch) => {
-                return !self.apply_cloud_only_fetch_loaded(fetch);
-            }
+            InventoryInput::ScopeEntered(scope) => self.enter_scope(scope),
+            InventoryInput::Result { scope: _, result } => return self.apply_result(result),
             InventoryInput::CloudOnlyRowRemoved(record_id) => {
                 self.remove_cloud_only_row(&record_id);
             }
@@ -310,12 +323,95 @@ impl InventoryOwner {
             InventoryInput::OtherBackupsOperationResolved(other_backups_operation) => {
                 self.resolve_other_backups_operation(other_backups_operation);
             }
-            InventoryInput::OtherBackupsStateResolved(other_backups) => {
+        }
+
+        false
+    }
+
+    /// Applies a result of the current scope, returning whether the cloud-only rows need a fetch
+    fn apply_result(&mut self, result: InventoryResult) -> bool {
+        match result {
+            InventoryResult::DetailRefreshStarted => self.apply_detail_refresh_started(),
+            InventoryResult::DetailRefreshProvisional(detail) => {
+                self.apply_detail_refresh_provisional(detail);
+            }
+            InventoryResult::DetailRefreshApplied {
+                detail,
+                authority,
+                cloud_only_listing,
+                own_secrets,
+            } => {
+                return self.apply_detail_refresh(
+                    detail,
+                    authority,
+                    cloud_only_listing,
+                    own_secrets,
+                );
+            }
+            InventoryResult::VerifiedDetailApplied {
+                read_at,
+                detail,
+                cloud_only_listing,
+                own_secrets,
+            } => {
+                // the detail lacks or still lists a wallet the change added or removed, and the
+                // change already asked for the refresh that replaces it
+                if read_at.local_wallets != self.local_wallets_epoch {
+                    debug!("Cloud Backup dropped a verified detail read before a wallet change");
+                    return false;
+                }
+
+                let authority = CloudBackupInventoryAuthority::ProviderConfirmed;
+                return self.apply_detail_refresh(
+                    detail,
+                    authority,
+                    cloud_only_listing,
+                    own_secrets,
+                );
+            }
+            InventoryResult::DetailCleared => self.apply_detail_cleared(),
+            InventoryResult::DetailRefreshFailed { reason, error } => {
+                self.apply_detail_refresh_failure(reason, error);
+            }
+            InventoryResult::CloudOnlyStateResolved(cloud_only) => {
+                self.resolve_cloud_only_state(cloud_only);
+            }
+            InventoryResult::CloudOnlyFetchLoaded(fetch) => {
+                return !self.apply_cloud_only_fetch_loaded(fetch);
+            }
+            InventoryResult::OtherBackupsStateResolved(other_backups) => {
                 self.other_backups = other_backups;
             }
         }
 
         false
+    }
+
+    /// Starts the inventory of a new configuration from nothing
+    ///
+    /// The local-wallet epoch and the inventory generation carry on, and the cloud-only listing
+    /// is invalidated rather than replaced, so its generation keeps rising past every fetch the
+    /// old configuration started
+    fn enter_scope(&mut self, scope: InventoryScope) {
+        if scope == self.scope {
+            return;
+        }
+
+        let mut cloud_only_inventory = std::mem::take(&mut self.cloud_only_inventory);
+        cloud_only_inventory.invalidate();
+
+        *self = Self {
+            scope,
+            generation: self.generation,
+            local_wallets_epoch: self.local_wallets_epoch,
+            cloud_only_inventory,
+            ..Self::default()
+        };
+    }
+
+    /// The configuration the inventory describes, which a producer reads when its request starts
+    pub(crate) fn scope(&self) -> InventoryScope {
+        self.scope
     }
 
     pub(crate) fn detail_state(&self) -> &CloudBackupDetailState {
@@ -362,8 +458,9 @@ impl InventoryOwner {
             .unwrap_or(OtherBackupsOperation::Idle)
     }
 
-    pub(crate) fn local_wallets_epoch(&self) -> LocalWalletsEpoch {
-        self.local_wallets_epoch
+    /// What evidence about to read the cloud and the local wallets is read under
+    pub(crate) fn read_at(&self) -> InventoryReadAt {
+        InventoryReadAt { scope: self.scope, local_wallets: self.local_wallets_epoch }
     }
 
     pub(crate) fn cloud_only_listing_generation(&self) -> u64 {
@@ -396,7 +493,7 @@ impl InventoryOwner {
         let classified = self.cloud_only_inventory.loaded_is_complete_and_current(&row_ids(rows));
         let listing_generation = self.cloud_only_inventory.generation();
 
-        classified.then_some(ClassifiedInventory { rows, listing_generation })
+        classified.then_some(ClassifiedInventory { scope: self.scope, rows, listing_generation })
     }
 
     /// Whether the inventory is trusted enough for a row's own action
@@ -809,9 +906,10 @@ impl InventoryOwner {
 ///
 /// Only [`InventoryOwner::classified`] builds one, so an action that needs every listed record
 /// can only run on an inventory whose listing the provider confirmed and whose every record was
-/// read
+/// read, all within the configuration it names
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ClassifiedInventory<'a> {
+    scope: InventoryScope,
     rows: &'a [CloudOnlyRow],
     listing_generation: u64,
 }
@@ -822,13 +920,14 @@ impl ClassifiedInventory<'_> {
         let wallets =
             self.rows.iter().filter_map(CloudOnlyRow::restorable_wallet).cloned().collect();
 
-        RestoreAllBatch { wallets, listing_generation: self.listing_generation }
+        RestoreAllBatch { scope: self.scope, wallets, listing_generation: self.listing_generation }
     }
 }
 
 /// The wallets of one Restore All run, taken from a [`ClassifiedInventory`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RestoreAllBatch {
+    scope: InventoryScope,
     wallets: Vec<CloudBackupWalletItem>,
     listing_generation: u64,
 }
@@ -836,6 +935,11 @@ pub(crate) struct RestoreAllBatch {
 impl RestoreAllBatch {
     pub(crate) fn wallets(&self) -> &[CloudBackupWalletItem] {
         &self.wallets
+    }
+
+    /// The configuration the batch was classified under, which the run's own fetch reports to
+    pub(crate) fn scope(&self) -> InventoryScope {
+        self.scope
     }
 
     /// The wallets, and the listing generation the run's fetch is checked against
@@ -851,10 +955,24 @@ fn row_ids(rows: &[CloudOnlyRow]) -> HashSet<String> {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::listing::CloudOnlyRecord;
-    use super::{CloudOnlyRow, CloudOnlyState};
+    use super::{
+        CloudOnlyRow, CloudOnlyState, InventoryEffects, InventoryInput, InventoryOwner,
+        InventoryResult,
+    };
     use crate::manager::cloud_backup_manager::{CloudBackupWalletItem, CloudBackupWalletStatus};
     use crate::wallet::metadata::WalletId;
     use crate::wallet_identity::{CoveringWallet, CoveringWallets};
+
+    pub(crate) trait InventoryOwnerTestExt {
+        /// Applies a result requested under the owner's current configuration
+        fn apply_current(&mut self, result: InventoryResult) -> InventoryEffects;
+    }
+
+    impl InventoryOwnerTestExt for InventoryOwner {
+        fn apply_current(&mut self, result: InventoryResult) -> InventoryEffects {
+            self.apply(InventoryInput::Result { scope: self.scope(), result })
+        }
+    }
 
     /// The local wallet tests use to cover an extra copy
     pub(crate) fn test_covering_wallets() -> CoveringWallets {
@@ -910,7 +1028,9 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::{CloudOnlyStateTestExt as _, listed_rows, test_covering_wallets};
+    use super::test_support::{
+        CloudOnlyStateTestExt as _, InventoryOwnerTestExt as _, listed_rows, test_covering_wallets,
+    };
     use super::*;
     use crate::manager::cloud_backup_manager::inventory::{InventoryFacts, InventoryRows};
     use crate::manager::cloud_backup_manager::screen::{
@@ -977,13 +1097,13 @@ mod tests {
         detail: &CloudBackupDetail,
         rows: Vec<CloudOnlyRow>,
     ) {
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(row_ids(&rows)),
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows,
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1027,6 +1147,55 @@ mod tests {
     }
 
     #[test]
+    fn a_new_configuration_drops_every_result_its_predecessor_started() {
+        let wallets = vec![
+            cloud_only_wallet("a", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("b", CloudBackupWalletStatus::DeletedFromDevice),
+        ];
+        let mut owner = owner_with_cloud_only(wallets.clone());
+        let old_scope = owner.scope();
+        assert!(owner.restore_all_batch().is_some());
+
+        let entered =
+            owner.apply(InventoryInput::ScopeEntered(InventoryScope::of(ConfigGeneration::next())));
+
+        // the proof names its configuration, so the old inventory proves nothing in the new one
+        assert!(entered.changed);
+        assert!(owner.classified().is_none());
+        assert_eq!(owner.detail_state(), &CloudBackupDetailState::NotLoaded);
+
+        // results the old configuration started, provisional and supplemental ones included
+        let entered_state = owner.clone();
+        let stale_results = [
+            InventoryResult::DetailRefreshProvisional(test_detail()),
+            InventoryResult::DetailRefreshApplied {
+                detail: test_detail(),
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
+                own_secrets: OwnSecretUpdate::Unread,
+            },
+            InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
+                rows: listed_rows(&wallets),
+                listing_generation: owner.cloud_only_listing_generation(),
+            }),
+            InventoryResult::OtherBackupsStateResolved(CloudBackupOtherBackupsState::Checking),
+        ];
+        for result in stale_results {
+            let effects = owner.apply(InventoryInput::Result { scope: old_scope, result });
+
+            assert!(effects.dropped);
+            assert!(!effects.changed);
+            assert_eq!(owner, entered_state);
+        }
+
+        // the new configuration's own load is applied
+        load_listed_cloud_only(&mut owner, &test_detail(), &wallets);
+        let batch = owner.restore_all_batch().expect("the new configuration's inventory");
+        assert_eq!(batch.scope(), owner.scope());
+        assert_eq!(batch.wallets(), wallets.as_slice());
+    }
+
+    #[test]
     fn deleted_wallet_is_listed_once_when_the_detail_refresh_fails() {
         let deleted = cloud_only_wallet("deleted", CloudBackupWalletStatus::Confirmed);
         let kept = cloud_only_wallet("kept", CloudBackupWalletStatus::Dirty);
@@ -1051,7 +1220,7 @@ mod tests {
         );
 
         // the throttled detail refresh fails, which keeps the retained detail as it now is
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
             error: "provider unavailable".into(),
         });
@@ -1062,7 +1231,7 @@ mod tests {
         );
 
         // the refetch lists the deleted wallet under Not on This Device, and only there
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&[cloud_only_wallet(
                 "deleted",
                 CloudBackupWalletStatus::DeletedFromDevice,
@@ -1108,7 +1277,7 @@ mod tests {
 
         // the matching local wallet is deleted and the refetch lands before the restore result
         owner.apply(InventoryInput::LocalWalletsChanged { local_record_ids: None });
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(std::slice::from_ref(&wallet)),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1203,13 +1372,13 @@ mod tests {
             owner.restore_all(&CloudBackupRestoreAllRuntimeState::RetryRemaining, false)
         };
         let mut owner = InventoryOwner::default();
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: test_detail(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: Vec::new(),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1231,14 +1400,14 @@ mod tests {
         ];
         let mut checking = owner_with_cloud_only(wallets.clone());
 
-        checking.apply(InventoryInput::DetailRefreshStarted);
+        checking.apply_current(InventoryResult::DetailRefreshStarted);
         assert_eq!(
             restore_all_state(&checking),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
 
         let mut failed = owner_with_cloud_only(wallets);
-        failed.apply(InventoryInput::DetailRefreshFailed {
+        failed.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
             error: "provider unavailable".into(),
         });
@@ -1256,8 +1425,8 @@ mod tests {
         ];
         let mut owner = owner_with_cloud_only(loaded_wallets.clone());
 
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loading));
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loading));
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&loaded_wallets),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1283,9 +1452,9 @@ mod tests {
         ];
         let mut owner = owner_with_cloud_only(loaded_wallets.clone());
 
-        owner.apply(InventoryInput::DetailRefreshStarted);
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loading));
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::DetailRefreshStarted);
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loading));
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&loaded_wallets),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1307,8 +1476,8 @@ mod tests {
     fn supplemental_cloud_only_failure_does_not_fail_primary_inventory() {
         let mut owner = owner_with_cloud_only(Vec::new());
 
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loading));
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Failed {
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loading));
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Failed {
             error: "provider is still syncing".into(),
         }));
         let CloudBackupDetailState::Complete { state } = owner.detail_state().clone() else {
@@ -1337,7 +1506,7 @@ mod tests {
         owner.apply(InventoryInput::OtherBackupsOperationResolved(
             OtherBackupsOperation::Recovering,
         ));
-        owner.apply(InventoryInput::DetailRefreshStarted);
+        owner.apply_current(InventoryResult::DetailRefreshStarted);
         owner.apply(InventoryInput::CloudOnlyOperationResolved(cloud_only_failure.clone()));
         owner.apply(InventoryInput::OtherBackupsOperationResolved(other_backups_failure.clone()));
         let CloudBackupDetailState::Complete { state: retained } = owner.detail_state().clone()
@@ -1347,7 +1516,7 @@ mod tests {
         assert_eq!(retained.cloud_only_operation, cloud_only_failure);
         assert_eq!(retained.other_backups_operation, other_backups_failure);
 
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::Offline,
             error: "provider offline".into(),
         });
@@ -1365,7 +1534,7 @@ mod tests {
     #[test]
     fn deleted_other_backups_invalidates_loaded_inventory() {
         let mut owner = owner_with_cloud_only(Vec::new());
-        owner.apply(InventoryInput::OtherBackupsStateResolved(
+        owner.apply_current(InventoryResult::OtherBackupsStateResolved(
             CloudBackupOtherBackupsState::Loaded {
                 summary: CloudBackupOtherBackupsSummary {
                     namespace_count: 1,
@@ -1410,13 +1579,13 @@ mod tests {
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
         );
 
-        owner.apply(InventoryInput::DetailRefreshStarted);
+        owner.apply_current(InventoryResult::DetailRefreshStarted);
         assert_eq!(
             retry_state(&owner),
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
         );
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail,
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
@@ -1433,13 +1602,13 @@ mod tests {
         let mut owner = InventoryOwner::default();
         let detail = test_detail();
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
             error: "iCloud unavailable".into(),
         });
@@ -1460,7 +1629,7 @@ mod tests {
         let mut owner = InventoryOwner::default();
         let detail = test_detail();
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
@@ -1468,7 +1637,7 @@ mod tests {
         });
         assert!(owner.listing_is_provider_confirmed());
 
-        owner.apply(InventoryInput::DetailRefreshStarted);
+        owner.apply_current(InventoryResult::DetailRefreshStarted);
         let CloudBackupDetailState::Complete { state: retained } = owner.detail_state().clone()
         else {
             panic!("expected complete detail with retained rows");
@@ -1485,7 +1654,7 @@ mod tests {
         let mut owner = InventoryOwner::default();
         let provisional = test_detail();
 
-        owner.apply(InventoryInput::DetailRefreshProvisional(provisional.clone()));
+        owner.apply_current(InventoryResult::DetailRefreshProvisional(provisional.clone()));
         let CloudBackupDetailState::Checking { retained: Some(retained) } =
             owner.detail_state().clone()
         else {
@@ -1502,13 +1671,13 @@ mod tests {
         let mut owner = InventoryOwner::default();
         let detail = test_detail();
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::Offline,
             error: "This device is offline".into(),
         });
@@ -1518,7 +1687,7 @@ mod tests {
         assert!(!owner.detail_inventory_is_ready());
 
         // a provider failure that isn't the network keeps the confirmed rows actionable
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
             error: "iCloud unavailable".into(),
         });
@@ -1531,7 +1700,7 @@ mod tests {
     fn trusted_local_snapshot_allows_individual_wallet_actions() {
         let mut owner = InventoryOwner::default();
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: test_detail(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
@@ -1551,13 +1720,13 @@ mod tests {
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ];
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&wallets),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
@@ -1567,7 +1736,7 @@ mod tests {
             CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
         );
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail,
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
@@ -1592,13 +1761,13 @@ mod tests {
         let mut owner = InventoryOwner::default();
         let retained = test_detail();
 
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: retained.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
             own_secrets: OwnSecretUpdate::Unread,
         });
-        owner.apply(InventoryInput::DetailRefreshProvisional(test_detail()));
+        owner.apply_current(InventoryResult::DetailRefreshProvisional(test_detail()));
 
         assert_eq!(owner.detail(), Some(retained));
         assert!(!owner.listing_is_provider_confirmed());
@@ -1608,7 +1777,7 @@ mod tests {
     fn initial_detail_refresh_failure_never_projects_confirmed_zero() {
         let mut owner = InventoryOwner::default();
 
-        owner.apply(InventoryInput::DetailRefreshFailed {
+        owner.apply_current(InventoryResult::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::Offline,
             error: "Drive unavailable".into(),
         });
@@ -1650,7 +1819,7 @@ mod tests {
             .partition(|wallet| wallet.sync_status == CloudBackupWalletStatus::Confirmed);
 
         let mut owner = InventoryOwner::default();
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: CloudBackupDetail { last_sync: None, up_to_date, needs_sync },
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
@@ -1662,7 +1831,7 @@ mod tests {
             .map(|(copy, covering)| CloudOnlyRow::extra_copy(copy, CoveringWallets::one(covering)))
             .collect();
 
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
+        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loaded {
             rows,
             incomplete: false,
         }));
@@ -1729,7 +1898,7 @@ mod tests {
         let (_, kept) = own_wallet("wallet-a", "Kept", CloudBackupWalletStatus::Confirmed);
         let (_, added) = own_wallet("wallet-b", "Added", CloudBackupWalletStatus::Dirty);
         let verified =
-            |wallets: Vec<CloudBackupWalletItem>, read_at| InventoryInput::VerifiedDetailApplied {
+            |wallets: Vec<CloudBackupWalletItem>, read_at| InventoryResult::VerifiedDetailApplied {
                 read_at,
                 detail: CloudBackupDetail {
                     last_sync: None,
@@ -1741,11 +1910,11 @@ mod tests {
             };
 
         let mut owner = InventoryOwner::default();
-        let read_before_change = owner.local_wallets_epoch();
+        let read_before_change = owner.read_at();
 
         // a wallet is added while the verification reads the cloud, and its refresh lands first
         owner.apply(InventoryInput::LocalWalletsChanged { local_record_ids: None });
-        owner.apply(InventoryInput::DetailRefreshApplied {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
             detail: CloudBackupDetail {
                 last_sync: None,
                 up_to_date: vec![kept.clone()],
@@ -1756,12 +1925,12 @@ mod tests {
             own_secrets: OwnSecretUpdate::Unread,
         });
 
-        let effects = owner.apply(verified(vec![kept.clone()], read_before_change));
+        let effects = owner.apply_current(verified(vec![kept.clone()], read_before_change));
         assert!(!effects.changed, "evidence from before the change must not replace the refresh");
         assert_eq!(owner.detail().map(|detail| detail.needs_sync), Some(vec![added]));
 
         // evidence read after the change still applies
-        let effects = owner.apply(verified(vec![kept.clone()], owner.local_wallets_epoch()));
+        let effects = owner.apply_current(verified(vec![kept.clone()], owner.read_at()));
         assert!(effects.changed);
         assert_eq!(owner.detail().map(|detail| detail.up_to_date), Some(vec![kept]));
     }

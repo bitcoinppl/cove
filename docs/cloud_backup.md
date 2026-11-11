@@ -355,6 +355,26 @@ verification's or an upload confirmation's, carries the count from before it
 read the local wallets: one read before a wallet was added, restored or deleted
 is dropped, since the change already asked for the refresh that replaces it.
 
+The inventory also belongs to one configuration. The owner's `InventoryScope`
+names the configuration generation the write policy publishes, and it advances
+whenever that generation does: when the body changes kind, as Turn Off and a
+reset do, and when a reinitialize ends, as an account switch's does. Advancing
+it clears the inventory and asks for a fresh load. Every inventory result
+carries the scope its request started in: a detail refresh, a provisional local
+snapshot, an operation's refresh, a verification's detail, the cloud-only fetch
+and the other-backups scan. The owner drops a result from any other scope, so a
+read of the old account can't land in the new one. `InventoryReadAt` pairs the
+scope with the local wallet count for the results that check both.
+
+The launch integrity check binds one read context before any remote work: its
+write client, then its `InventoryReadAt`, then the namespace from the keychain,
+in that order, so neither the uploads' generation nor the read point is newer
+than the namespace. The first listing, the uploads, the follow-up listing after
+them and that listing's fallback all run under this one context, so a listing
+of the old namespace is never handed to the owner under the scope of the
+configuration that replaced it. A new configuration's read is its own request,
+started by its new scope.
+
 An own row whose wallet holds no secret on this device is marked Secret Missing
 Locally only when its cloud backup holds one, such as a seed for a wallet now
 watch-only here. The record header doesn't say which kind of secret a backup
@@ -462,19 +482,20 @@ sequentially.
 Rust derives eligibility from active-namespace rows whose status is
 `DeletedFromDevice`, and only from a classified inventory: the inventory owner
 builds a `ClassifiedInventory` proof only when the provider confirmed the
-listing and every listed record was read. Being confirmed by the provider and
-having every record read are separate facts, and the proof needs both. Restore
-All's start, its Retry Remaining, and the marker clear all take the run's
-wallets from the proof's `RestoreAllBatch`, so none of them can act on a
-partial inventory. Initial Restore All is shown for at least two eligible
-wallets, and is disabled until the inventory is classified. While the marker
-stays, Retry Remaining shows once the cloud-only rows have loaded, and stays
-disabled until the inventory is classified, even when no row is eligible yet.
-Once a classified inventory has no eligible wallet left, the marker clears and
-the retry goes away. Availability also requires no conflicting exclusive
-operation. At start, Rust freezes the visible order, refetches authoritative
-active-namespace inventory, and intersects the two sets. Newly appeared, stale,
-unsupported, or already-local rows are not added to the run.
+listing, every listed record was read, and both happened in the current
+configuration. Being confirmed by the provider and having every record read are
+separate facts, and the proof needs both. Restore All's start, its Retry
+Remaining, and the marker clear all take the run's wallets from the proof's
+`RestoreAllBatch`, so none of them can act on a partial inventory. Initial
+Restore All is shown for at least two eligible wallets, and is disabled until
+the inventory is classified. While the marker stays, Retry Remaining shows once
+the cloud-only rows have loaded, and stays disabled until the inventory is
+classified, even when no row is eligible yet. Once a classified inventory has
+no eligible wallet left, the marker clears and the retry goes away.
+Availability also requires no conflicting exclusive operation. At start, Rust
+freezes the visible order, refetches authoritative active-namespace inventory,
+and intersects the two sets. Newly appeared, stale, unsupported, or
+already-local rows are not added to the run.
 
 The supervisor represents a live batch as one typed Restore All run containing
 its exclusive claim and cancellation token. Claim-tagged reducer events own

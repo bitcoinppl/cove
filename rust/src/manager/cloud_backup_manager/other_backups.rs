@@ -11,8 +11,15 @@ use super::{
 use crate::database::cloud_backup::CloudStorageIssue;
 
 impl RustCloudBackupManager {
-    pub(crate) fn apply_other_backups_state(&self, state: CloudBackupOtherBackupsState) {
-        self.apply_inventory(super::InventoryInput::OtherBackupsStateResolved(state));
+    /// Applies the other-backups scan's state, for the scan started under `scope`, returning
+    /// whether it was dropped as belonging to an earlier configuration
+    pub(crate) fn apply_other_backups_state(
+        &self,
+        scope: super::InventoryScope,
+        state: CloudBackupOtherBackupsState,
+    ) -> bool {
+        let result = super::InventoryResult::OtherBackupsStateResolved(state);
+        self.apply_inventory(super::InventoryInput::Result { scope, result }).dropped
     }
 
     pub(crate) async fn other_backup_state(

@@ -4,7 +4,7 @@ use crate::manager::cloud_backup_manager::owner::inventory::test_support::{
     CloudOnlyStateTestExt as _, listed_rows, row_wallet,
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
-use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow, LocalWalletsEpoch};
+use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow, InventoryReadAt};
 use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use crate::manager::cloud_backup_manager::screen::{
@@ -476,7 +476,7 @@ fn begin_test_detail_refresh(
     let DetailRefreshPlan::Start(claim) = supervisor.detail_workflow.request_refresh() else {
         panic!("expected detail refresh to start");
     };
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+    manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
 
     claim
 }
@@ -501,6 +501,7 @@ async fn start_trusted_local_refresh(
             }),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -553,10 +554,16 @@ fn prepare_restore_all_queue_fixture(
             .map(|record_id| cove_cspp::backup_data::wallet_filename_from_record_id(record_id))
             .collect(),
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(
-        &record_ids.iter().map(String::as_str).collect::<Vec<_>>(),
-    )));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(manager, items.clone()));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(
+            &record_ids.iter().map(String::as_str).collect::<Vec<_>>(),
+        )),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(manager, items.clone()),
+    );
     assert!(matches!(
         manager.projected_restore_all_state(),
         CloudBackupRestoreAllState::StartAvailable { .. }
@@ -1369,9 +1376,17 @@ async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
 async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor
-                .complete_verification(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation: DeepVerificationContinuation::RecreateManifest {
-                        attempt: VerificationAttempt::Initial,
-                    } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
+                .complete_verification(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation: DeepVerificationContinuation::RecreateManifest {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                    },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+                )
                 .await
                 .unwrap();
     })
@@ -1386,7 +1401,15 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(CloudBackupError::Internal("completion".into())))
+                .complete_deep_verification_wrapper_repair_upload(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation,
+                    },
+                    Err(CloudBackupError::Internal("completion".into())),
+                )
                 .await
                 .unwrap();
     })
@@ -1401,7 +1424,14 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_resume(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_wrapper_repair_resume(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation,
+                    },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1417,7 +1447,14 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_upload(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_auto_sync_upload(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation,
+                    },
+                    Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1433,7 +1470,14 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_finalization(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, Err(DeepVerificationResult::NotEnabled),
+                .complete_deep_verification_auto_sync_finalization(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation,
+                    },
+                    Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1449,7 +1493,14 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_auto_sync_resume(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation }, CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                .complete_deep_verification_auto_sync_resume(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation,
+                    },
+                    CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
                 )
@@ -1471,9 +1522,17 @@ async fn supervisor_ignores_stale_reinitialize_backup_completion() {
 async fn supervisor_ignores_stale_reinitialize_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
             supervisor
-                .complete_verification(VerificationRun { claim, basis: supervisor.wallet_set, read_at: LocalWalletsEpoch::default(), continuation: DeepVerificationContinuation::ReinitializeBackup {
-                        attempt: VerificationAttempt::Initial,
-                    } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
+                .complete_verification(
+                    VerificationRun {
+                        claim,
+                        basis: supervisor.wallet_set,
+                        read_at: InventoryReadAt::default(),
+                        continuation: DeepVerificationContinuation::ReinitializeBackup {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                    },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+                )
                 .await
                 .unwrap();
     })
@@ -1728,7 +1787,7 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         operation_id(u64::MAX),
     );
 
-    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    let detail_claim = supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
     supervisor
         .complete_repair_passkey_refresh_detail(stale, detail_claim, None)
         .await
@@ -1762,12 +1821,13 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
     else {
         panic!("expected detail refresh to start");
     };
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+    manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
 
     let operation_claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
         .unwrap();
-    let repair_detail_claim = supervisor.detail_workflow.start_operation_result();
+    let repair_detail_claim =
+        supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
     supervisor
         .complete_repair_passkey_refresh_detail(
             operation_claim,
@@ -1796,6 +1856,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
             }),
             DetailRefreshAttempt::Initial,
             superseded_refresh,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1820,9 +1881,10 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     assert!(supervisor.detail_workflow.is_refresh_active(claim));
 
     let wallets = vec![test_cloud_only_wallet("first"), test_cloud_only_wallet("second")];
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, 
-        wallets.clone(),
-    ));
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(&manager, wallets.clone()),
+    );
     assert_eq!(
         manager.projected_restore_all_state(),
         CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
@@ -1837,6 +1899,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
             }),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1876,6 +1939,7 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
             ))),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1913,6 +1977,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
             ))),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1927,6 +1992,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
             ))),
             DetailRefreshAttempt::AutomaticConnectivityRetry,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1967,6 +2033,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
             }),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -1987,10 +2054,13 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
     let (claim, confirmation) =
         start_trusted_local_refresh(&mut supervisor, &manager, listed_detail(&[])).await;
 
-    supervisor.detail_workflow.start_operation_result();
+    supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
     let newer = listed_detail(&["only"]);
     let newer_detail = newer.detail.clone();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(newer));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(newer),
+    );
 
     supervisor
         .complete_confirm_refresh_detail(
@@ -2001,6 +2071,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
             }),
             DetailRefreshAttempt::Initial,
             claim,
+            manager.inventory_scope(),
         )
         .await
         .unwrap();
@@ -2051,7 +2122,7 @@ async fn supervisor_ignores_stale_sync_refresh_completion() {
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     supervisor.active_sync_request = Some(7);
-    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    let detail_claim = supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
 
     supervisor
         .complete_sync_request_refresh_detail(6, detail_claim, None)
@@ -2078,11 +2149,25 @@ async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
     );
     supervisor.active_cloud_only_fetch_request = Some(7);
 
-    supervisor.complete_cloud_only_fetch_request(6, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
+    supervisor
+        .complete_cloud_only_fetch_request(
+            6,
+            manager.inventory_scope(),
+            Ok(complete_cloud_only_fetch(&manager, Vec::new())),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, Some(7));
 
-    supervisor.complete_cloud_only_fetch_request(7, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
+    supervisor
+        .complete_cloud_only_fetch_request(
+            7,
+            manager.inventory_scope(),
+            Ok(complete_cloud_only_fetch(&manager, Vec::new())),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
 }
@@ -3339,10 +3424,20 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
+    );
     supervisor.active_cloud_only_fetch_request = Some(7);
 
-    supervisor.complete_cloud_only_fetch_request(7, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
+    supervisor
+        .complete_cloud_only_fetch_request(
+            7,
+            manager.inventory_scope(),
+            Ok(complete_cloud_only_fetch(&manager, Vec::new())),
+        )
+        .await
+        .unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 }
@@ -3360,7 +3455,14 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
     manager.apply_restore_all_started(claim, 2);
     supervisor.active_cloud_only_fetch_request = Some(10);
 
-    supervisor.complete_cloud_only_fetch_request(10, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
+    supervisor
+        .complete_cloud_only_fetch_request(
+            10,
+            manager.inventory_scope(),
+            Ok(complete_cloud_only_fetch(&manager, Vec::new())),
+        )
+        .await
+        .unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
     assert!(matches!(
@@ -3384,6 +3486,7 @@ async fn cloud_only_refetch_retains_restore_all_marker_when_wallets_remain() {
     supervisor
         .complete_cloud_only_fetch_request(
             8,
+            manager.inventory_scope(),
             Ok(complete_cloud_only_fetch(&manager, vec![test_cloud_only_wallet("remaining")])),
         )
         .await
@@ -3406,6 +3509,7 @@ async fn cloud_only_refetch_failure_retains_restore_all_marker() {
     supervisor
         .complete_cloud_only_fetch_request(
             9,
+            manager.inventory_scope(),
             Err(CloudBackupError::Offline("offline".into())),
         )
         .await
@@ -3419,19 +3523,23 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        "a", "b",
-    ])));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet("a"),
-        test_cloud_only_wallet("b"),
-    ]));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&["a", "b"])),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(
+            &manager,
+            vec![test_cloud_only_wallet("a"), test_cloud_only_wallet("b")],
+        ),
+    );
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
-    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    let detail_claim = supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
 
     // the listing replaced wallet a with c at the same count
     supervisor
@@ -3469,11 +3577,17 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet(a),
-        test_cloud_only_wallet(b),
-    ]));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(
+            &manager,
+            vec![test_cloud_only_wallet(a), test_cloud_only_wallet(b)],
+        ),
+    );
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
@@ -3482,7 +3596,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
         .unwrap();
-    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    let detail_claim = supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
 
     supervisor
         .complete_operation_refresh_detail(
@@ -3506,13 +3620,17 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [first, second, third] = upload_distinct_test_wallet_backups(&manager);
     let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        first, second,
-    ])));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet(first),
-        test_cloud_only_wallet(second),
-    ]));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[first, second])),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(
+            &manager,
+            vec![test_cloud_only_wallet(first), test_cloud_only_wallet(second)],
+        ),
+    );
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[second, third]);
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
@@ -3528,13 +3646,16 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
     };
 
     // same count and local rows, so only the carried record IDs show the replacement
+    let snapshot = Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
+        listed: listed_detail(&[second, third]),
+        confirmation,
+    });
+    let scope = manager.inventory_scope();
     call!(supervisor.complete_refresh_detail_from_snapshot(
-        Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-            listed: listed_detail(&[second, third]),
-            confirmation,
-        }),
+        snapshot,
         DetailRefreshAttempt::Initial,
-        claim
+        claim,
+        scope
     ))
     .await
     .unwrap();
@@ -3547,8 +3668,14 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(&manager, Vec::new()),
+    );
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3613,7 +3740,7 @@ async fn completed_other_backups_scan_remains_cached() {
     let loaded = CloudBackupOtherBackupsState::Loaded {
         summary: CloudBackupOtherBackupsSummary::default(),
     };
-    manager.apply_other_backups_state(loaded.clone());
+    manager.apply_other_backups_state(manager.inventory_scope(), loaded.clone());
 
     supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
@@ -3883,6 +4010,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
     supervisor
         .complete_restore_all_preparation(
             claim,
+            manager.inventory_scope(),
             Err(CloudBackupError::Offline("offline".into())),
         )
         .await
@@ -3930,7 +4058,7 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
-    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    let detail_claim = supervisor.detail_workflow.start_operation_result(manager.inventory_scope());
 
     let should_continue = supervisor
         .complete_restore_all_record_refresh(
@@ -3960,9 +4088,10 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
         .unwrap();
     manager.sync_persisted_state();
     let wallet = test_cloud_only_wallet("ordinary-failure");
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        wallet.clone(),
-    ]));
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(&manager, vec![wallet.clone()]),
+    );
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3994,7 +4123,10 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])),
+    );
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -4004,12 +4136,21 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
         &manager,
         vec![test_cloud_only_wallet(a), test_cloud_only_wallet(b)],
     );
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        CloudBackupCloudOnlyFetchOutcome::Started,
+    );
 
     // provider confirmation replaces wallet a with c at the same count while the fetch runs
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[b, c])));
-    supervisor.complete_cloud_only_fetch_request(5, Ok(stale_fetch)).await.unwrap();
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[b, c])),
+    );
+    supervisor
+        .complete_cloud_only_fetch_request(5, manager.inventory_scope(), Ok(stale_fetch))
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
     assert!(!manager
@@ -4037,9 +4178,10 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
         namespace,
         vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        record_id.as_str(),
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[record_id.as_str()])),
+    );
     let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -4054,7 +4196,10 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
         CloudOnlyRow::unreadable(record_id, CloudBackupUnreadableKind::NotDownloadable);
     assert_eq!(fetch.rows, vec![unreadable.clone()]);
 
-    supervisor.complete_cloud_only_fetch_request(3, Ok(fetch)).await.unwrap();
+    supervisor
+        .complete_cloud_only_fetch_request(3, manager.inventory_scope(), Ok(fetch))
+        .await
+        .unwrap();
 
     // the unread record keeps the list incomplete, so the retry stays shown with no restorable
     // row, but disabled, since nothing proves what it would restore
@@ -4088,10 +4233,10 @@ async fn restore_all_of_a_mixed_fetch_starts_only_once_every_listed_record_is_re
     let unread = cove_cspp::backup_data::wallet_record_id("listed-but-unreadable");
     let unread = unread.as_str();
     list_test_wallet_files(&namespace, &[a, b, unread]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
-        listed: listed_detail(&[a, b, unread]),
-        authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-    });
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b, unread])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the mixed fetch should load", || {
@@ -4136,7 +4281,10 @@ async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_aga
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
     let record_id = record_id.as_str();
     list_test_wallet_files(&namespace, &[record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[record_id])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let unreadable =
@@ -4190,9 +4338,10 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
         namespace,
         vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        record_id.as_str(),
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[record_id.as_str()])),
+    );
     let generation = manager.inventory.read().cloud_only_listing_generation();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
@@ -4205,7 +4354,10 @@ vec![test_cloud_only_wallet(&record_id)], generation)
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
-    supervisor.complete_restore_all_preparation(claim, prepared).await.unwrap();
+    supervisor
+        .complete_restore_all_preparation(claim, manager.inventory_scope(), prepared)
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
@@ -4219,9 +4371,10 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
     crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
     manager.sync_persisted_state();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        duplicate_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[duplicate_record_id])),
+    );
 
     let generation = manager.inventory.read().cloud_only_listing_generation();
     let prepared = manager
@@ -4245,7 +4398,10 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
-    supervisor.complete_restore_all_preparation(claim, Ok(prepared)).await.unwrap();
+    supervisor
+        .complete_restore_all_preparation(claim, manager.inventory_scope(), Ok(prepared))
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
@@ -4265,9 +4421,10 @@ async fn identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impa
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        duplicate_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[duplicate_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let rows = wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
@@ -4313,9 +4470,10 @@ async fn row_delete_waits_for_the_write_in_flight() {
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        duplicate_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[duplicate_record_id])),
+    );
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
 
@@ -4345,9 +4503,10 @@ async fn deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        duplicate_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[duplicate_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let rows = wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
@@ -4396,7 +4555,10 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
         sync_status: CloudBackupWalletStatus::Confirmed,
         ..test_cloud_only_wallet(&local_record_id)
     });
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed),
+    );
 
     // from here every listing fails, so no detail refresh can correct the rows
     test_globals().cloud.fail_list_wallet_files("provider unavailable");
@@ -4434,13 +4596,16 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     local_restore.restore_record(&local_record_id).await.unwrap();
 
     // a refresh and a verification both read the wallet as local before it is deleted
-    let read_at = manager.local_wallets_epoch();
+    let read_at = manager.inventory_read_at();
     let mut stale = listed_detail(&[]);
     stale.detail.up_to_date.push(CloudBackupWalletItem {
         sync_status: CloudBackupWalletStatus::Confirmed,
         ..test_cloud_only_wallet(&local_record_id)
     });
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(stale.clone()));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(stale.clone()),
+    );
 
     Database::global()
         .wallets
@@ -4458,12 +4623,16 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     .await;
 
     // the cloud-only rows read after the deletion list its backup as not on this device
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet(&local_record_id),
-    ]));
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(&manager, vec![test_cloud_only_wallet(&local_record_id)]),
+    );
 
     // the refresh finishes late, with the listing it read while the wallet was local
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(stale.clone()));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(stale.clone()),
+    );
 
     let detail = public_detail(&manager).unwrap();
     assert!(detail.up_to_date.is_empty(), "the deleted wallet is listed as local again");
@@ -4497,19 +4666,22 @@ async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wa
     let restored_record_id = upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata());
 
     // the verification reads the local wallets before the restore adds one
-    let read_at = manager.local_wallets_epoch();
+    let read_at = manager.inventory_read_at();
     let read_before_restore = listed_detail(&[]).detail;
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
+    );
 
     let restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     restore.restore_record(&restored_record_id).await.unwrap();
     manager.handle_local_wallets_changed();
     supervisor_checkpoint(&manager).await;
-    assert_ne!(manager.local_wallets_epoch(), read_at, "the restore should move the epoch");
+    assert_ne!(manager.inventory_read_at(), read_at, "the restore should move the epoch");
 
     // the refresh the change asked for lists the restored wallet as local
     let refreshed = manager.refresh_cloud_backup_detail().await.expect("a detail refresh");
-    super::apply_refresh_detail_result(&manager, &refreshed);
+    super::apply_refresh_detail_result(&manager, manager.inventory_scope(), &refreshed);
 
     let shows_restored = |manager: &RustCloudBackupManager| {
         public_detail(manager).is_some_and(|detail| {
@@ -4539,11 +4711,17 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])));
-    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet(a),
-        test_cloud_only_wallet(b),
-    ]));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[a, b])),
+    );
+    manager.apply_cloud_only_fetch_outcome(
+        manager.inventory_scope(),
+        complete_loaded_outcome(
+            &manager,
+            vec![test_cloud_only_wallet(a), test_cloud_only_wallet(b)],
+        ),
+    );
     let namespace = manager.current_namespace_id().unwrap();
     list_test_wallet_files(&namespace, &[b, c]);
 
@@ -4555,7 +4733,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     manager.apply_verification_effect(CloudBackupVerificationEffect {
         detail: Some(VerificationDetail {
             detail: test_cloud_backup_detail(),
-            read_at: manager.local_wallets_epoch(),
+            read_at: manager.inventory_read_at(),
         }),
         ..Default::default()
     });
@@ -4592,9 +4770,10 @@ async fn seed_backup_matching_only_a_watch_only_wallet_restores_into_that_wallet
     assert!(!seed_wallet.verified);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        seed_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[seed_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let rows = wait_for_cloud_only_rows(&manager, &[seed_record_id], &[]).await;
@@ -4649,9 +4828,10 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let (_, copy_record_id) = upload_test_seed_backup(&namespace, &secret);
     let copy_record_id = copy_record_id.as_str();
     list_test_wallet_files(&namespace, &[copy_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        copy_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[copy_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     let rows = wait_for_cloud_only_rows(&manager, &[copy_record_id], &[]).await;
@@ -4716,9 +4896,10 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     manager.sync_persisted_state();
 
     // the detail lists a record that another device deletes before the fetch lists again
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        "deleted-elsewhere",
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&["deleted-elsewhere"])),
+    );
     list_test_wallet_files(&namespace, &[]);
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
@@ -4759,9 +4940,10 @@ async fn restoring_one_of_three_copies_leaves_the_others_already_on_device() {
         .map(|()| upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata()));
     let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
     list_test_wallet_files(&namespace, &[first, second, third]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        first, second, third,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[first, second, third])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     wait_for_cloud_only_statuses(&manager, &[
@@ -4877,9 +5059,10 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     let (_, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        seed_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[seed_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     wait_for_cloud_only_statuses(&manager, &[(
@@ -4939,9 +5122,10 @@ async fn unreadable_hot_wallet_does_not_cover_other_public_backups_with_its_fing
     let public_record_id = upload_test_wallet_backup(&namespace, &public_wallet);
     let public_record_id = public_record_id.as_str();
     list_test_wallet_files(&namespace, &[public_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::refreshed(listed_detail(&[
-        public_record_id,
-    ])));
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[public_record_id])),
+    );
 
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
 
@@ -5236,9 +5420,17 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
 
     // a completion still carrying the reinitialize claim is stale
     supervisor
-        .complete_verification(VerificationRun { claim: reinitialize_claim, basis: supervisor.wallet_set, read_at: manager.local_wallets_epoch(), continuation: DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
-            } }, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled))
+        .complete_verification(
+            VerificationRun {
+                claim: reinitialize_claim,
+                basis: supervisor.wallet_set,
+                read_at: manager.inventory_read_at(),
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+            },
+            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+        )
         .await
         .unwrap();
 
@@ -5247,9 +5439,17 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     // the verification's own result reports the new backup verified, and releases the slot and
     // the spinner
     supervisor
-        .complete_verification(VerificationRun { claim: verification_claim, basis: supervisor.wallet_set, read_at: manager.local_wallets_epoch(), continuation: DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
-            } }, step)
+        .complete_verification(
+            VerificationRun {
+                claim: verification_claim,
+                basis: supervisor.wallet_set,
+                read_at: manager.inventory_read_at(),
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+            },
+            step,
+        )
         .await
         .unwrap();
 
@@ -5316,7 +5516,7 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     let run = VerificationRun {
         claim: first,
         basis,
-        read_at: manager.local_wallets_epoch(),
+        read_at: manager.inventory_read_at(),
         continuation: manual,
     };
     supervisor.complete_verification(run, verified()).await.unwrap();
@@ -5348,7 +5548,7 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     let run = VerificationRun {
         claim: second,
         basis,
-        read_at: manager.local_wallets_epoch(),
+        read_at: manager.inventory_read_at(),
         continuation: manual,
     };
     supervisor.complete_verification(run, verified()).await.unwrap();

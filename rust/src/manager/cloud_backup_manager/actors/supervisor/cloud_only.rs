@@ -2,7 +2,7 @@ use cove_device::cloud_storage::CloudStorageClient;
 
 use super::*;
 use crate::manager::cloud_backup_manager::{
-    CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState,
+    CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState, InventoryScope,
 };
 
 impl CloudBackupSupervisor {
@@ -40,14 +40,19 @@ impl CloudBackupSupervisor {
     ) {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
-        // read before the fetch is spawned so a listing applied while it runs makes it stale
-        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
-        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
+
+        // read before the fetch is spawned so a listing or configuration change while it runs
+        // makes it stale
+        let (scope, listing_generation) = {
+            let inventory = manager.inventory.read();
+            (inventory.scope(), inventory.cloud_only_listing_generation())
+        };
+        manager.apply_cloud_only_fetch_outcome(scope, CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
             let result =
                 manager.do_fetch_cloud_only_wallets_with_client(cloud, listing_generation).await;
-            send!(addr.complete_cloud_only_fetch_request(request_id, result));
+            send!(addr.complete_cloud_only_fetch_request(request_id, scope, result));
         });
     }
 
@@ -66,6 +71,7 @@ impl CloudBackupSupervisor {
 
         // read before the restore reads the local wallets, so a later change can discard its result
         let listing_generation = manager.inventory.read().cloud_only_listing_generation();
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
             let result = manager.do_restore_cloud_wallet(&writes, &record_id).await;
             send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));
@@ -93,6 +99,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_cloud_only_fetch_request(
         &mut self,
         request_id: u64,
+        scope: InventoryScope,
         result: Result<CloudOnlyFetch, CloudBackupError>,
     ) -> ActorResult<()> {
         if self.active_cloud_only_fetch_request != Some(request_id) {
@@ -107,6 +114,7 @@ impl CloudBackupSupervisor {
             Ok(fetch) => {
                 // a discarded fetch already asked for its replacement, and its rows prove nothing
                 let application = manager.apply_cloud_only_fetch_outcome(
+                    scope,
                     CloudBackupCloudOnlyFetchOutcome::Loaded(fetch),
                 );
                 if application == CloudOnlyFetchApplication::Applied {
@@ -115,9 +123,10 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");
-                manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Failed(
-                    error.reader_message(),
-                ));
+                manager.apply_cloud_only_fetch_outcome(
+                    scope,
+                    CloudBackupCloudOnlyFetchOutcome::Failed(error.reader_message()),
+                );
             }
         }
 
@@ -173,7 +182,8 @@ impl CloudBackupSupervisor {
                     CloudBackupCloudOnlyWalletOutcome::Deleted { record_id },
                 );
                 manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
@@ -250,7 +260,7 @@ impl CloudBackupSupervisor {
         }
 
         manager.refresh_sync_health();
-        let detail_claim = self.detail_workflow.start_operation_result();
+        let detail_claim = self.detail_workflow.start_operation_result(manager.inventory_scope());
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.refresh_cloud_backup_detail(config).await;
