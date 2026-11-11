@@ -218,18 +218,12 @@ impl<T: DebugSend> Drop for DeferredSender<T> {
 mod tests {
     use super::SingleOrMany;
 
-    #[derive(Debug)]
-    struct WalletRenamed(String);
-
     #[test]
     fn log_summary_names_the_type_and_count_without_payloads() {
-        let single = SingleOrMany::Single(WalletRenamed("abandon ability able".to_string()));
-        let many = SingleOrMany::Many(vec![
-            WalletRenamed("abandon".to_string()),
-            WalletRenamed("ability".to_string()),
-        ]);
+        let single = SingleOrMany::Single("abandon ability able".to_string());
+        let many = SingleOrMany::Many(vec!["abandon".to_string(), "ability".to_string()]);
 
-        assert_eq!(single.log_summary(), "WalletRenamed");
-        assert_eq!(many.log_summary(), "2 x WalletRenamed");
+        assert_eq!(single.log_summary(), "String");
+        assert_eq!(many.log_summary(), "2 x String");
     }
 }

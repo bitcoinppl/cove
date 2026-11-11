@@ -168,7 +168,8 @@ impl RustSendFlowManager {
 
     /// When amount is changed, we will need to update the entering and fiat amounts
     pub(crate) fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
-        debug!("handle_amount_changed: {amount:?}");
+        // the amount can be a pasted PIN parsed as sats, so it stays out of the log
+        debug!("handle_amount_changed");
 
         let mut sender = self.reconciler.deferred_sender();
         let amount_changed = apply_amount(&mut self.state.lock(), amount, &mut sender);
