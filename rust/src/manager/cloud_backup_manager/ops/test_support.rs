@@ -151,6 +151,7 @@ struct MockCloudState {
     wallet_backup_download_failures_after_successes:
         HashMap<(String, String), (usize, CloudStorageError)>,
     wallet_backup_download_gates: HashMap<(String, String), (usize, Arc<MockCloudDownloadGate>)>,
+    silent_wallet_backup_download_gates: HashMap<(String, String), Arc<MockCloudDownloadGate>>,
     next_list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_namespace_errors: HashMap<String, CloudStorageError>,
@@ -378,6 +379,23 @@ impl MockCloudStorage {
             .lock()
             .wallet_backup_download_gates
             .insert((namespace, record_id), (success_count, gate.clone()));
+        gate
+    }
+
+    /// Holds the next read of this wallet backup made under [`CloudAccessPolicy::Silent`]
+    ///
+    /// Background readers such as the pending-upload verifier read silently, while user-started
+    /// flows such as deep verification may prompt, so this parks only a silent reader's read
+    pub(crate) fn gate_next_silent_wallet_backup_download(
+        &self,
+        namespace: String,
+        record_id: String,
+    ) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state
+            .lock()
+            .silent_wallet_backup_download_gates
+            .insert((namespace, record_id), gate.clone());
         gate
     }
 
@@ -777,7 +795,7 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         record_id: String,
         locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
-        _policy: CloudAccessPolicy,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let override_key = (namespace.clone(), record_id.clone());
         let (dirty_wallet, deferred_error, gate) = {
@@ -812,7 +830,12 @@ impl CloudStorageAccess for MockCloudStorage {
             let gate = should_gate
                 .then(|| state.wallet_backup_download_gates.remove(&override_key))
                 .flatten()
-                .map(|(_, gate)| gate);
+                .map(|(_, gate)| gate)
+                .or_else(|| {
+                    (policy == CloudAccessPolicy::Silent)
+                        .then(|| state.silent_wallet_backup_download_gates.remove(&override_key))
+                        .flatten()
+                });
 
             (state.dirty_wallet_on_next_backup_check.take(), deferred_error, gate)
         };

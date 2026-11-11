@@ -1,6 +1,8 @@
 use super::*;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedBackupVerificationState};
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::test_support::loaded_host_wait;
+use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
@@ -585,6 +587,10 @@ async fn pending_upload_verification_survives_restart() {
     assert!(!restarted_manager.has_pending_cloud_upload_verification());
 }
 
+// the upload starts the verifier loop, which is the only thing that runs passes in the app. The
+// loop reads silently and deep verification doesn't, so holding the next silent read parks the
+// loop's pass; the test answers each read and checks the state between passes without running a
+// pass itself
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_retries_until_expected_revision_is_readable() {
     let _guard = async_test_lock().lock().await;
@@ -606,28 +612,34 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
     .revision_hash;
 
     hold_wallet_upload_confirmation(globals, &metadata).await;
+    let first_check =
+        globals.cloud.gate_next_silent_wallet_backup_download(namespace.clone(), record_id.clone());
+
+    // deep verification finishing while the silent read is held proves it isn't the reader the
+    // hold parks
     let result = deep_verify_for_test(&manager, true).await;
 
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
-    globals.cloud.set_wallet_backup_download_override(
-        namespace.clone(),
-        record_id.clone(),
-        encrypted_wallet_backup_bytes(&metadata, &master_key, "stale-revision", 1).await,
-    );
+    let uploads_after_deep_verify = globals.cloud.wallet_backup_upload_attempt_count();
+    wait_until_read_parks(&first_check, "the loop's first pass reads the uploaded wallet").await;
 
-    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
+    // the first check reads a stale revision; the loop's next pass parks on its read once the
+    // first has persisted
+    let second_check =
+        globals.cloud.gate_next_silent_wallet_backup_download(namespace.clone(), record_id.clone());
+    first_check.release();
+    manager.wake_pending_upload_verifier();
+    wait_until_read_parks(&second_check, "the loop runs a second pass after a stale read").await;
 
-    assert!(has_more_pending);
     assert!(manager.pending_verification_completion().is_some());
     assert!(manager.has_pending_cloud_upload_verification());
-    assert!(matches!(
-        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+    match Database::global().cloud_blob_sync_states.get(&record_id).unwrap() {
         Some(PersistedCloudBlobSyncState {
-            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                | PersistedCloudBlobState::Confirmed(_),
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(pending),
             ..
-        })
-    ));
+        }) => assert_eq!(pending.attempt_count, 1, "one stale check, below the re-upload limit"),
+        other => panic!("expected the upload still pending confirmation, got {other:?}"),
+    }
     assert!(!matches!(
         manager.model_snapshot().verification,
         VerificationState::Verified(_) | VerificationState::Failed(_)
@@ -635,13 +647,18 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
 
     globals.cloud.set_wallet_backup_download_override(
         namespace,
-        record_id,
+        record_id.clone(),
         encrypted_wallet_backup_bytes(&metadata, &master_key, &current_revision, 1).await,
     );
+    second_check.release();
+    wait_for_background_refreshes(&manager).await;
 
-    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
-
-    assert!(!has_more_pending);
+    // the second check confirmed it, so the limit of 3 checks never sent the wallet up again
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+    ));
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), uploads_after_deep_verify);
     assert!(manager.pending_verification_completion().is_none());
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
@@ -651,6 +668,14 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
         other => panic!("expected verified result after retry, got {other:?}"),
     }
     assert!(!manager.has_pending_cloud_upload_verification());
+}
+
+/// Waits for a pass to park on the held provider read
+async fn wait_until_read_parks(read: &MockCloudDownloadGate, what: &str) {
+    read.wait_until_blocked()
+        .with_timeout(loaded_host_wait(Duration::from_secs(5)))
+        .await
+        .unwrap_or_else(|_| panic!("{what}"));
 }
 
 #[tokio::test(flavor = "current_thread")]
