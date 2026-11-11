@@ -243,6 +243,34 @@ pub(crate) enum RestoreAllAdmission {
     Running,
 }
 
+/// Where Turn Off stands outside a running operation
+///
+/// The review holds no operation, so it is its own fact; a committed Turn Off whose Try Again
+/// failed is the only state that offers Stop Using on This Device
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TurnOffAdmission {
+    None,
+    /// The silent listing behind the review is running
+    Preparing,
+    /// The provider couldn't be reached; Try Again taps Turn Off again
+    Offline,
+    Reviewing {
+        review_id: u64,
+    },
+    /// A committed Turn Off whose Try Again failed
+    TryAgainFailed,
+}
+
+impl TurnOffAdmission {
+    /// The review a Confirm would consent to, when one is shown
+    pub(crate) fn review_id(self) -> Option<u64> {
+        match self {
+            Self::Reviewing { review_id } => Some(review_id),
+            Self::None | Self::Preparing | Self::Offline | Self::TryAgainFailed => None,
+        }
+    }
+}
+
 /// Everything admission reads, taken in one place at one time
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AdmissionSnapshot {
@@ -258,6 +286,8 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) continuation: Option<PausedContinuation>,
     /// What each answer to the Enable prompt on screen starts
     pub(crate) enable_prompt: EnablePromptAnswers,
+    /// What a Turn Off intent can act on: the held review and the running Turn Off's stage
+    pub(crate) turn_off: TurnOffAdmission,
 }
 
 /// The Enable each answer to the Enable prompt on screen starts; both are `None` with no prompt
@@ -462,21 +492,50 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             _ => Rejected(Rejection::NothingToCancel),
         },
 
+        // the review holds no operation, so Turn Off is admitted beside a review, and a tap
+        // while the review is preparing joins it
         I::TurnOff => match (snapshot.body, snapshot.running) {
-            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, None) => Accepted,
-            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
+            (AdmissionBody::Configured, None)
+                if snapshot.turn_off == TurnOffAdmission::Preparing =>
+            {
                 Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
             }
-            (AdmissionBody::Configured | AdmissionBody::FinishingDisable, Some(running)) => {
+            (AdmissionBody::Configured, None) => Accepted,
+            (AdmissionBody::Configured, Some(Op::Disable)) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
+            }
+            (AdmissionBody::Configured, Some(running)) => {
                 Rejected(Rejection::OperationRunning(running))
             }
             (body, _) => Rejected(not_configured(body)),
         },
 
-        // Turn Off has no review step yet, so no confirmation answers a current review and
-        // nothing is under review or draining to cancel
-        I::ConfirmDisable { .. } => Rejected(Rejection::ReviewStale),
-        I::CancelDisable => Rejected(Rejection::NothingToCancel),
+        // consent answers exactly the review on screen; any change since ended that review
+        I::ConfirmDisable { review_id } => match (snapshot.body, snapshot.running) {
+            (AdmissionBody::Configured, Some(Op::Disable)) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
+            }
+            (AdmissionBody::Configured, None)
+                if snapshot.turn_off == TurnOffAdmission::Reviewing { review_id: *review_id } =>
+            {
+                Accepted
+            }
+            (AdmissionBody::Configured, _) => Rejected(Rejection::ReviewStale),
+            (body, _) => Rejected(not_configured(body)),
+        },
+        // Cancel reaches Turn Off until it commits: the review, and the drain before the commit
+        I::CancelDisable => match (snapshot.body, snapshot.running, snapshot.turn_off) {
+            (AdmissionBody::Configured, Some(Op::Disable), _) => Accepted,
+            (
+                AdmissionBody::Configured,
+                None,
+                TurnOffAdmission::Preparing
+                | TurnOffAdmission::Offline
+                | TurnOffAdmission::Reviewing { .. },
+            ) => Accepted,
+            (AdmissionBody::FinishingDisable, _, _) => Rejected(Rejection::TurnOffCommitted),
+            _ => Rejected(Rejection::NothingToCancel),
+        },
         I::ResumeDisable => match (snapshot.body, snapshot.running) {
             (AdmissionBody::FinishingDisable, None) => Accepted,
             (AdmissionBody::FinishingDisable, Some(Op::Disable)) => {
@@ -487,8 +546,12 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             }
             _ => Rejected(Rejection::NothingToContinue),
         },
-        I::StopUsingOnThisDevice => match snapshot.body {
-            AdmissionBody::FinishingDisable => Rejected(Rejection::TryAgainFirst),
+        I::StopUsingOnThisDevice => match (snapshot.body, snapshot.running, snapshot.turn_off) {
+            (AdmissionBody::FinishingDisable, Some(running), _) => {
+                Rejected(Rejection::OperationRunning(running))
+            }
+            (AdmissionBody::FinishingDisable, None, TurnOffAdmission::TryAgainFailed) => Accepted,
+            (AdmissionBody::FinishingDisable, None, _) => Rejected(Rejection::TryAgainFirst),
             _ => Rejected(Rejection::NothingToContinue),
         },
         // a relaunch runs the load again until Try Again can rebuild the runtime in place

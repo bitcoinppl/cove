@@ -11,7 +11,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use super::notices::Notices;
 use super::types::{
     CloudBackupActionAvailability, CloudBackupActionEntry, CloudBackupActions,
-    CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation,
+    CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation, CloudBackupDisableScreen,
     CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
     CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen, CloudBackupHealNotice,
     CloudBackupListedRecord, CloudBackupListedRow, CloudBackupNotOnDeviceSection,
@@ -53,14 +53,15 @@ pub(crate) fn project(
     let state = reducer.public_state();
     let inventory = inventory.view();
     let heal_notice = notices.heal;
-    let snapshot = admission_snapshot(reducer, &state.lifecycle, &inventory);
+    let snapshot = admission_snapshot(runtime, reducer, &state.lifecycle, &inventory);
 
     let root_prompt = match &state.lifecycle {
         CloudBackupLifecycle::Configured(configured) => configured.root_prompt.clone(),
         _ => CloudBackupRootPrompt::None,
     };
 
-    let actions = global_actions(&state.lifecycle, heal_notice, &snapshot, reducer, &inventory);
+    let actions =
+        global_actions(runtime, &state.lifecycle, heal_notice, &snapshot, reducer, &inventory);
     let body = body(runtime, reducer, state.lifecycle, inventory, &snapshot);
     let settings_row = settings_row(&body, heal_notice, state.settings_row_status);
 
@@ -74,11 +75,13 @@ pub(crate) fn project(
     }
 }
 
-/// What admission reads, rebuilt from the reducer
+/// What admission reads, rebuilt from the reducer and the runtime
 ///
 /// The supervisor's runtime is the authority dispatch uses; the reducer mirrors its body and
-/// running operation, which is what a control's availability needs
+/// running operation, which is what a control's availability needs. A finishing Turn Off and the
+/// Turn Off review are the runtime's own
 fn admission_snapshot(
+    runtime: &Runtime,
     reducer: &CloudBackupStateReducer,
     lifecycle: &CloudBackupLifecycle,
     inventory: &InventoryView,
@@ -91,7 +94,7 @@ fn admission_snapshot(
         }
         CloudBackupLifecycle::Enabling(_) => AdmissionBody::Enabling,
         CloudBackupLifecycle::Restoring(_) => AdmissionBody::Restoring,
-        CloudBackupLifecycle::Configured(configured) if finishing_disable(configured) => {
+        CloudBackupLifecycle::Configured(_) if finishing_disable(runtime) => {
             AdmissionBody::FinishingDisable
         }
         CloudBackupLifecycle::Configured(_) => AdmissionBody::Configured,
@@ -125,6 +128,7 @@ fn admission_snapshot(
         restore_all,
         continuation: paused_continuation(lifecycle, reducer),
         enable_prompt: enable_prompt_answers(reducer),
+        turn_off: runtime.turn_off_admission(),
     }
 }
 
@@ -179,12 +183,11 @@ fn restore_all_admission(restore_all: &CloudBackupRestoreAllState) -> RestoreAll
     }
 }
 
-/// A Turn Off that failed after it committed, so it can only go forward
-fn finishing_disable(configured: &CloudBackupConfiguredState) -> bool {
-    matches!(
-        configured.destructive_operation,
-        CloudBackupDestructiveOperationState::DisableFailed { can_keep_enabled: false, .. }
-    )
+/// A committed Turn Off, which can only go forward
+///
+/// The reducer still shows the record's Configured lifecycle for it, so the runtime decides
+fn finishing_disable(runtime: &Runtime) -> bool {
+    matches!(runtime, Runtime::FinishingDisable { .. })
 }
 
 fn body(
@@ -211,7 +214,7 @@ fn body(
             CloudBackupScreenBody::Corrupted
         }
         CloudBackupLifecycle::Failed(_) => CloudBackupScreenBody::LoadFailed,
-        CloudBackupLifecycle::Configured(configured) if finishing_disable(&configured) => {
+        CloudBackupLifecycle::Configured(_) if finishing_disable(runtime) => {
             CloudBackupScreenBody::FinishingDisable(CloudBackupFinishingDisableScreen {
                 stage: runtime.finishing_disable_stage(),
             })
@@ -306,10 +309,7 @@ fn recovery_operation(
             CloudBackupRecoveryOperation::ReinitializingBackup
         }
         CloudBackupDestructiveOperationState::Idle
-        | CloudBackupDestructiveOperationState::Disabling
-        | CloudBackupDestructiveOperationState::DisableFailed { .. } => {
-            CloudBackupRecoveryOperation::Idle
-        }
+        | CloudBackupDestructiveOperationState::Disabling => CloudBackupRecoveryOperation::Idle,
     }
 }
 
@@ -384,6 +384,7 @@ fn row_action(
 
 /// The global actions drawn for this lifecycle, each with what admission decides for it
 fn global_actions(
+    runtime: &Runtime,
     lifecycle: &CloudBackupLifecycle,
     heal_notice: Option<CloudBackupHealNotice>,
     snapshot: &AdmissionSnapshot,
@@ -395,7 +396,7 @@ fn global_actions(
     let mut drawn = if reducer.drive_account_switch_recovery().is_some() {
         vec![A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
     } else {
-        lifecycle_actions(lifecycle, inventory)
+        lifecycle_actions(runtime, lifecycle, inventory)
     };
 
     if heal_notice.is_some() {
@@ -406,7 +407,7 @@ fn global_actions(
         .into_iter()
         .map(|action| CloudBackupActionEntry {
             action,
-            availability: availability(&intent_for(action), snapshot),
+            availability: availability(&intent_for(action, snapshot), snapshot),
         })
         .collect();
 
@@ -414,6 +415,7 @@ fn global_actions(
 }
 
 fn lifecycle_actions(
+    runtime: &Runtime,
     lifecycle: &CloudBackupLifecycle,
     inventory: &InventoryView,
 ) -> Vec<CloudBackupScreenAction> {
@@ -444,14 +446,17 @@ fn lifecycle_actions(
             vec![A::ResetOnThisDevice]
         }
         CloudBackupLifecycle::Failed(_) => vec![A::RetryLoad],
-        CloudBackupLifecycle::Configured(configured) if finishing_disable(configured) => {
+        CloudBackupLifecycle::Configured(_) if finishing_disable(runtime) => {
             vec![A::ResumeDisable, A::StopUsingOnThisDevice]
         }
-        CloudBackupLifecycle::Configured(configured) => configured_actions(configured, inventory),
+        CloudBackupLifecycle::Configured(configured) => {
+            configured_actions(runtime, configured, inventory)
+        }
     }
 }
 
 fn configured_actions(
+    runtime: &Runtime,
     configured: &CloudBackupConfiguredState,
     inventory: &InventoryView,
 ) -> Vec<CloudBackupScreenAction> {
@@ -497,14 +502,26 @@ fn configured_actions(
         actions.push(A::ReconnectDrive);
     }
 
+    match runtime.disable_screen() {
+        CloudBackupDisableScreen::Idle => {}
+        CloudBackupDisableScreen::Reviewing(_) => {
+            actions.push(A::ConfirmDisable);
+            actions.push(A::CancelDisable);
+        }
+        CloudBackupDisableScreen::Preparing
+        | CloudBackupDisableScreen::Offline
+        | CloudBackupDisableScreen::Draining => actions.push(A::CancelDisable),
+    }
+
     actions
 }
 
 /// The intent a control dispatches, as admission sees it
 ///
-/// Payloads that don't change admission take a fixed value: a review id, a prompt choice and a
-/// verification source decide what the started work does, not whether it may start
-fn intent_for(action: CloudBackupScreenAction) -> UserIntent {
+/// Payloads that don't change admission take a fixed value: a prompt choice and a verification
+/// source decide what the started work does, not whether it may start. A review id does decide,
+/// so Confirm carries the one under review
+fn intent_for(action: CloudBackupScreenAction, snapshot: &AdmissionSnapshot) -> UserIntent {
     use CloudBackupScreenAction as A;
     use UserIntent as I;
 
@@ -532,7 +549,9 @@ fn intent_for(action: CloudBackupScreenAction) -> UserIntent {
         A::RecoverOtherBackups => I::RecoverOtherBackups,
         A::DeleteOtherBackups => I::DeleteOtherBackups,
         A::TurnOff => I::TurnOff,
-        A::ConfirmDisable => I::ConfirmDisable { review_id: 0 },
+        A::ConfirmDisable => {
+            I::ConfirmDisable { review_id: snapshot.turn_off.review_id().unwrap_or_default() }
+        }
         A::CancelDisable => I::CancelDisable,
         A::ResumeDisable => I::ResumeDisable,
         A::StopUsingOnThisDevice => I::StopUsingOnThisDevice,

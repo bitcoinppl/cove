@@ -1,33 +1,23 @@
-use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use backon::{BackoffBuilder as _, FibonacciBuilder};
-use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use tracing::warn;
 
 use super::blocking_cloud_error;
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupTransition};
+use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::keychain::LocalStateOwner;
-use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommitDisable, CommittedDisable, DisableCommitReview, DisablingRecord, LifecycleWriter,
+    CommittedDisable, DisablingRecord, LifecycleWriter,
 };
+use crate::manager::cloud_backup_manager::turn_off::{DisableEvidence, EvidenceUnavailable};
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupError, CloudBackupKeychain,
-    CloudBackupOtherBackupsState, CloudBackupStatus, CloudOnlyOperation, OtherBackupsOperation,
+    BlockingCloudStep, CloudBackupError, CloudBackupKeychain, CloudBackupStatus,
     RustCloudBackupManager,
 };
-
-const DISABLE_BLOCKING_MESSAGE: &str =
-    "cloud backup is waiting for another cloud backup operation to finish";
-
-const CLOUD_ONLY_BLOCKER_MESSAGE: &str =
-    "restore or delete cloud-only wallets before disabling cloud backup";
-
-const OTHER_NAMESPACES_BLOCKER_MESSAGE: &str =
-    "recover or delete other cloud backups before disabling cloud backup";
 
 static NEXT_DISABLE_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -37,196 +27,62 @@ pub(crate) const CLOUD_BACKUP_LOAD_FAILED_MESSAGE: &str = concat!(
     "Restart Cove to try again."
 );
 
-#[derive(Debug)]
-pub(crate) enum CloudBackupDisablePreparation {
-    AlreadyDisabled,
-    Ready(Box<DisableAttempt>),
-}
-
-/// One Turn Off attempt, before or after it commits
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum DisableAttempt {
-    /// Nothing is persisted; the attempt commits when it starts deleting
-    Uncommitted { review: DisableCommitReview, attempt_id: u64 },
-    /// The attempt committed, so it only goes forward
-    Committed(CommittedDisable),
-}
-
 impl RustCloudBackupManager {
-    pub(crate) async fn prepare_disable_cloud_backup(
+    /// Fresh evidence for Turn Off's impact: the namespace's listing and this device's wallets
+    ///
+    /// Silent: it lists and never decrypts a record or asks for a passkey. A listing that fails
+    /// for any reason but the connection still returns evidence, whose impact is then unknown,
+    /// so Turn Off never blocks on what the backup holds
+    pub(crate) async fn gather_disable_evidence(
         &self,
-    ) -> Result<CloudBackupDisablePreparation, CloudBackupError> {
-        self.ensure_cloud_connectivity(BlockingCloudStep::Disable)?;
-        self.ensure_disable_can_start()?;
+    ) -> Result<DisableEvidence, EvidenceUnavailable> {
+        if self.ensure_cloud_connectivity(BlockingCloudStep::Disable).is_err() {
+            return Err(EvidenceUnavailable::Offline);
+        }
 
-        let attempt = match Self::load_persisted_state() {
-            // nothing is persisted until the attempt commits at its first delete
-            PersistedCloudBackupState::Configured(_) => DisableAttempt::Uncommitted {
-                review: DisableCommitReview { namespace_id: self.current_namespace_id()? },
-                attempt_id: next_disable_generation(),
-            },
-            PersistedCloudBackupState::ExclusiveTransition(
-                PersistedCloudBackupTransition::Disabling(disabling),
-            ) => match CommittedDisable::from_record(&disabling) {
-                DisablingRecord::Committed(committed) => DisableAttempt::Committed(committed),
-                DisablingRecord::Unnormalized => {
-                    return Err(CloudBackupError::Internal(
-                        CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into(),
-                    ));
-                }
-            },
-            PersistedCloudBackupState::ExclusiveTransition(
-                PersistedCloudBackupTransition::DriveAccountSwitch(_),
-            ) => {
-                return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-            }
-            PersistedCloudBackupState::Disabled => {
-                self.reconcile_runtime_status(CloudBackupStatus::Disabled);
-                return Ok(CloudBackupDisablePreparation::AlreadyDisabled);
-            }
-            PersistedCloudBackupState::Corrupted { .. } => {
-                self.reconcile_runtime_status(CloudBackupStatus::Error(
-                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
-                ));
-                return Err(CloudBackupError::Internal(
-                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
-                ));
-            }
-        };
+        let namespace_id = self.current_namespace_id().map_err(|error| {
+            EvidenceUnavailable::Local(error.logged_reader_message("Turn Off read the namespace"))
+        })?;
 
-        Ok(CloudBackupDisablePreparation::Ready(Box::new(attempt)))
+        let cloud = CloudStorage::global_explicit_client();
+        let listing = list_active_wallets_for_disable(&cloud, &namespace_id)
+            .await
+            .map_err(|error| CloudStorageIssue::from(&error));
+        if listing == Err(CloudStorageIssue::Offline) {
+            return Err(EvidenceUnavailable::Offline);
+        }
+
+        let local = self
+            .expected_wallet_record_ids()
+            .await
+            .inspect_err(|error| warn!("Turn Off could not read this device's wallets: {error}"))
+            .ok();
+
+        // the other-passkey line in the dialog is information, so failing to count leaves it out
+        let other_backups = self
+            .other_backup_namespaces(&cloud, &namespace_id, BlockingCloudStep::Disable)
+            .await
+            .inspect_err(|error| warn!("Turn Off could not count other backups: {error}"))
+            .map_or(0, |namespaces| u32::try_from(namespaces.len()).unwrap_or(u32::MAX));
+
+        Ok(DisableEvidence { namespace_id, listing, local, other_backups })
     }
 
-    pub(crate) async fn check_disable_blockers(
+    /// The committed Turn Off as the durable record now holds it, or `None` when the record
+    /// moved on to another attempt or out of Disabling
+    pub(crate) fn committed_disable_if_current(
         &self,
-        cloud: &CloudStorageClient,
-        namespace_id: &str,
-    ) -> Result<(), CloudBackupError> {
-        let active_record_ids = list_active_wallets_for_disable(cloud, namespace_id).await?;
-        let local_record_ids = self.expected_wallet_record_ids().await?;
-        let cloud_only_count = active_record_ids
-            .iter()
-            .filter(|record_id| !local_record_ids.contains(*record_id))
-            .count();
-
-        if cloud_only_count > 0 {
-            return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
-        }
-
-        let other_namespaces =
-            self.other_backup_namespaces(cloud, namespace_id, BlockingCloudStep::Disable).await?;
-
-        if !other_namespaces.is_empty() {
-            return Err(CloudBackupError::RecoveryRequired(
-                OTHER_NAMESPACES_BLOCKER_MESSAGE.into(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// The attempt as the durable record now sees it, or `None` when the record moved on
-    pub(crate) fn disable_attempt_if_current(
-        &self,
-        attempt: &DisableAttempt,
-    ) -> Option<DisableAttempt> {
-        let persisted = Self::load_persisted_state();
-        match attempt {
-            DisableAttempt::Uncommitted { .. } => {
-                matches!(persisted, PersistedCloudBackupState::Configured(_))
-                    .then(|| attempt.clone())
+        committed: &CommittedDisable,
+    ) -> Option<CommittedDisable> {
+        match DisablingRecord::of(&Self::load_persisted_state()) {
+            Some(DisablingRecord::Committed(current))
+                if current.attempt_id == committed.attempt_id
+                    && current.namespace_id == committed.namespace_id =>
+            {
+                Some(current)
             }
-            DisableAttempt::Committed(committed) => match DisablingRecord::of(&persisted) {
-                Some(DisablingRecord::Committed(current))
-                    if current.attempt_id == committed.attempt_id
-                        && current.namespace_id == committed.namespace_id =>
-                {
-                    Some(DisableAttempt::Committed(current))
-                }
-                _ => None,
-            },
+            _ => None,
         }
-    }
-
-    /// Commits the reviewed attempt against the namespace this device uses now
-    pub(crate) fn commit_disable_attempt(
-        &self,
-        lifecycle: &LifecycleWriter,
-        review: &DisableCommitReview,
-        attempt_id: u64,
-    ) -> Result<CommitDisable, CloudBackupError> {
-        lifecycle.commit_disable(review, attempt_id)
-    }
-
-    fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
-        let state = self.state.read();
-        let inventory = self.inventory.read();
-        if let Some(operation) =
-            state.active_operation().map(CloudBackupExclusiveOperationClaim::operation)
-            && operation != CloudBackupExclusiveOperation::Disable
-        {
-            return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-        }
-
-        match state.status() {
-            CloudBackupStatus::Restoring | CloudBackupStatus::Enabling => {
-                return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-            }
-            CloudBackupStatus::Disabled => {
-                return Err(CloudBackupError::RecoveryRequired(
-                    "cloud backup is already disabled".into(),
-                ));
-            }
-            CloudBackupStatus::Disabling
-            | CloudBackupStatus::Enabled
-            | CloudBackupStatus::PasskeyMissing
-            | CloudBackupStatus::UnsupportedPasskeyProvider
-            | CloudBackupStatus::Error(_) => {}
-        }
-
-        if !matches!(
-            inventory.cloud_only(),
-            crate::manager::cloud_backup_manager::CloudOnlyState::NotFetched
-                | crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { .. }
-                | crate::manager::cloud_backup_manager::CloudOnlyState::Failed { .. }
-        ) {
-            return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-        }
-
-        if !matches!(
-            inventory.other_backups_operation(),
-            OtherBackupsOperation::Idle
-                | OtherBackupsOperation::Recovered { .. }
-                | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
-        ) {
-            return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-        }
-
-        if let CloudBackupOtherBackupsState::Loaded { summary } = inventory.other_backups_state()
-            && summary.namespace_count > 0
-        {
-            return Err(CloudBackupError::RecoveryRequired(
-                OTHER_NAMESPACES_BLOCKER_MESSAGE.into(),
-            ));
-        }
-
-        // an unreadable or unchecked record may be the only copy of a wallet, so it blocks like
-        // one Cove could read
-        if inventory.cloud_only().loaded_rows().is_some_and(|rows| !rows.is_empty()) {
-            return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
-        }
-
-        if !matches!(
-            inventory.cloud_only_operation(),
-            CloudOnlyOperation::Idle
-                | CloudOnlyOperation::Warning { .. }
-                | CloudOnlyOperation::Failed { .. }
-        ) {
-            return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
-        }
-
-        Ok(())
     }
 
     pub(crate) fn persist_disabling_failure(
@@ -329,6 +185,7 @@ async fn list_active_wallets_for_disable(
     }
 }
 
-fn next_disable_generation() -> u64 {
+/// A fresh id for one committed Turn Off attempt
+pub(crate) fn next_disable_generation() -> u64 {
     NEXT_DISABLE_GENERATION.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
 }

@@ -25,6 +25,7 @@ mod screen;
 mod store;
 mod sync_health;
 mod timing;
+mod turn_off;
 mod verify;
 mod wallet_changes;
 mod wallets;
@@ -95,10 +96,9 @@ pub(crate) use self::model::test_support;
 pub(crate) use self::model::{
     CloudBackupAcceptedEnablePrompt, CloudBackupDetailInventorySnapshot,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
-    CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
-    CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
-    CloudBackupListedDetail, CloudBackupStateReducer, CloudBackupStateReducerEvent,
-    CloudBackupStatus, OwnSecretFacts,
+    CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupEnableState,
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupListedDetail,
+    CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus, OwnSecretFacts,
 };
 pub use self::model::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupEnableFlow,
@@ -110,12 +110,12 @@ pub use self::model::{
 #[cfg(test)]
 pub(crate) use self::ops::test_support::rebase_owners_after_test_write;
 pub(crate) use self::ops::{
-    CloudBackupDisablePreparation, CloudBackupEnablePasskeyPreparation,
-    CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
-    CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
-    CloudBackupNoDiscoveryEnablePreparation, CloudBackupPreparedCloudWalletDelete,
-    CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
-    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
+    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
+    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
+    CloudBackupEnableRecoveryPreparation, CloudBackupNoDiscoveryEnablePreparation,
+    CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
+    CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
+    CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
@@ -138,13 +138,14 @@ use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
 pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
-use self::screen::PublishedScreen;
 pub use self::screen::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
     CloudBackupScreen, CloudBackupScreenDelta,
 };
+use self::screen::{CloudBackupLastOutcome, PublishedScreen};
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
+use self::turn_off::AutomaticResume;
 pub(crate) use self::wallet_changes::{LIVE_UPLOAD_DEBOUNCE, live_upload_retry_delay_for_attempt};
 #[cfg(test)]
 pub(crate) use self::wallets::UnpersistedPrfKey;
@@ -848,8 +849,13 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::RecoveryStateResolved(recovery));
     }
 
-    pub(crate) fn apply_disable_outcome(&self, outcome: CloudBackupDisableOutcome) {
-        self.apply_model_event(CloudBackupStateReducerEvent::DisableStateResolved(outcome));
+    /// Shows the last control that didn't do what it was asked, replacing any earlier one
+    pub(crate) fn record_last_outcome(&self, outcome: CloudBackupLastOutcome) {
+        self.apply_model_event(CloudBackupStateReducerEvent::LastOutcomeRecorded(Some(outcome)));
+    }
+
+    pub(crate) fn dismiss_last_outcome(&self) {
+        self.apply_model_event(CloudBackupStateReducerEvent::LastOutcomeRecorded(None));
     }
 
     pub(crate) async fn prepare_local_reset(
@@ -1304,16 +1310,9 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllReset);
     }
 
-    pub(crate) fn disable_cloud_backup(&self) {
-        send!(self.supervisor.start_disable_operation());
-    }
-
-    /// Only a committed disable resumes on its own; it goes forward until Disabled
+    /// Only a committed Turn Off resumes on its own; it goes forward until Disabled
     fn resume_persisted_disable_if_needed(&self) {
-        let state = Self::load_persisted_state();
-        if let Some(DisablingRecord::Committed(_)) = DisablingRecord::of(&state) {
-            self.disable_cloud_backup();
-        }
+        send!(self.supervisor.resume_disable_automatically(AutomaticResume::Launch));
     }
 
     pub(crate) fn restore_from_cloud_backup_with_events(

@@ -1,28 +1,31 @@
 use super::*;
-use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
-use crate::manager::cloud_backup_manager::ops::{CloudBackupDisablePreparation, DisableAttempt};
-use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
+use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupInventoryAssessment,
+    CloudBackupScreenAction,
+};
 
-/// A Turn Off stopped before its commit point leaves the backup configured, with nothing to
-/// keep enabled, and returns the failure message
-fn assert_blocked_disable_left_backup_configured(manager: &RustCloudBackupManager) -> String {
+/// Turn Off ended before its commit point: the record is still configured and nothing was
+/// deleted from `namespace`
+fn assert_nothing_turned_off(globals: &TestGlobals, namespace: &str) {
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Enabled
     );
     assert!(current_disable_generation().is_none());
+    assert!(globals.cloud.has_namespace(namespace));
+}
 
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-        panic!("expected configured cloud backup lifecycle");
-    };
-    let CloudBackupDestructiveOperationState::DisableFailed { message, can_keep_enabled } =
-        configured.destructive_operation
-    else {
-        panic!("expected disable failure");
-    };
+/// Backs up one local wallet in `namespace` and returns it with its record id
+fn backed_up_local_wallet(globals: &TestGlobals, namespace: &str) -> (WalletMetadata, String) {
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    globals
+        .cloud
+        .set_wallet_files(namespace.to_owned(), vec![wallet_filename_from_record_id(&record_id)]);
 
-    assert!(!can_keep_enabled);
-    message
+    (metadata, record_id)
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -42,7 +45,14 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
         ))
         .unwrap();
 
-    run_disable_cloud_backup(&manager).await;
+    // the inventory never loaded, so even an empty backup asks twice
+    let review = review_turn_off(&manager).await;
+    assert!(matches!(review.impact.assessment, CloudBackupInventoryAssessment::Unknown { .. }));
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0, "a review deletes nothing");
+
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
 
     assert!(!globals.cloud.has_namespace(&namespace));
     assert_eq!(
@@ -67,17 +77,16 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.keychain.fail_delete_at(1);
 
-    run_disable_cloud_backup(&manager).await;
-    let error = disable_failure_message(&manager);
+    run_turn_off(&manager).await;
 
-    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+    assert_eq!(turn_off_failure(&manager), CloudBackupTurnOffFailure::Other);
     assert!(!globals.cloud.has_namespace(&namespace));
     let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert!(disabling.last_error.as_deref() == Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 
-    run_disable_cloud_backup(&manager).await;
+    try_again_turn_off(&manager).await;
 
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
@@ -110,7 +119,7 @@ async fn turn_off_cleanup_finishes_from_every_partial_local_state() {
             globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
 
             globals.keychain.fail_delete_at(failing_delete);
-            run_disable_cloud_backup(&manager).await;
+            run_turn_off(&manager).await;
             globals.keychain.fail_delete_at(usize::MAX);
 
             // past the cleanup's last delete, nothing fails and Turn Off finishes at once
@@ -134,7 +143,7 @@ async fn turn_off_cleanup_finishes_from_every_partial_local_state() {
                 keychain.delete_master_key().unwrap();
             }
 
-            run_disable_cloud_backup(&manager).await;
+            try_again_turn_off(&manager).await;
             let case = format!("delete {failing_delete} failed, missing set {missing:03b}");
             assert_eq!(
                 Database::global().cloud_backup_state.get().unwrap().status(),
@@ -156,8 +165,10 @@ async fn turn_off_cleanup_finishes_from_every_partial_local_state() {
     assert_eq!(failed_deletes, 3 * 8);
 }
 
+/// A backup the inventory hasn't checked might be a wallet that isn't on this device, so the
+/// review asks twice; nothing is deleted until the user confirms, and then everything is
 #[tokio::test(flavor = "current_thread")]
-async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespace() {
+async fn turn_off_asks_twice_for_backups_it_could_not_check_and_deletes_only_after_consent() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -169,32 +180,16 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
         .cloud
         .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
 
-    run_disable_cloud_backup(&manager).await;
-    let error = assert_blocked_disable_left_backup_configured(&manager);
+    let review = review_turn_off(&manager).await;
 
-    assert!(error.contains("cloud-only wallets"), "{error}");
-    assert!(globals.cloud.has_namespace(&namespace));
-}
+    assert_eq!(review.impact.unchecked, 1);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    // the inventory never loaded, so nothing classifies the record
+    assert!(matches!(review.impact.assessment, CloudBackupInventoryAssessment::Unknown { .. }));
+    assert_nothing_turned_off(globals, &namespace);
 
-#[tokio::test(flavor = "current_thread")]
-async fn blocked_disable_can_be_retried_once_the_blocker_is_gone() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    globals
-        .cloud
-        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
-
-    run_disable_cloud_backup(&manager).await;
-    assert_blocked_disable_left_backup_configured(&manager);
-
-    // the blocked attempt released its claim and write fence, so a retry runs to the end
-    globals.cloud.set_wallet_files(namespace.clone(), Vec::new());
-    run_disable_cloud_backup(&manager).await;
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
 
     assert!(!globals.cloud.has_namespace(&namespace));
     assert_eq!(
@@ -203,8 +198,10 @@ async fn blocked_disable_can_be_retried_once_the_blocker_is_gone() {
     );
 }
 
+/// Backups made with another passkey are a line in the dialog, not a blocker, and Turn Off
+/// leaves them in the cloud, where they can still be restored
 #[tokio::test(flavor = "current_thread")]
-async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
+async fn turn_off_leaves_backups_made_with_another_passkey() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -214,19 +211,26 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
     let other_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.set_master_key_backup(other_namespace.clone(), vec![4, 5, 6]);
-    let delete_attempt_count = globals.cloud.delete_namespace_attempt_count();
 
-    run_disable_cloud_backup(&manager).await;
-    let error = assert_blocked_disable_left_backup_configured(&manager);
+    let review = review_turn_off(&manager).await;
 
-    assert!(error.contains("other cloud backups"), "{error}");
-    assert!(globals.cloud.has_namespace(&namespace));
+    assert_eq!((review.impact.other_backups, review.impact.unchecked), (1, 0));
+
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    assert!(!globals.cloud.has_namespace(&namespace));
     assert!(globals.cloud.has_namespace(&other_namespace));
-    assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempt_count);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
 }
 
+/// Each review gets its own id and persists nothing, so a confirmation of an earlier one, such as
+/// a tap that raced Check Again, is rejected and deletes nothing
 #[tokio::test(flavor = "current_thread")]
-async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisting_disabling() {
+async fn a_confirmation_of_an_earlier_review_is_rejected() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -234,53 +238,194 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
 
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    let claim = CloudBackupExclusiveOperationClaim::new(
-        CloudBackupExclusiveOperation::RecreateManifest,
-        operation_id(1),
-    );
-    manager.project_exclusive_operation_started(claim);
 
-    let error = manager.prepare_disable_cloud_backup().await.unwrap_err();
+    let first = review_turn_off(&manager).await;
+    let second = review_turn_off(&manager).await;
+    assert_ne!(first.review_id, second.review_id);
 
-    assert!(error.to_string().contains("another cloud backup operation"), "{error}");
-    assert!(globals.cloud.has_namespace(&namespace));
+    let review_id = first.review_id;
+    dispatch_and_publish(&manager, CloudBackupManagerAction::ConfirmDisable { review_id }).await;
+
+    let outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap();
     assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
+        outcome.map(|outcome| outcome.admission),
+        Some(Admission::Rejected(Rejection::ReviewStale))
     );
-    assert_eq!(
-        manager.projected_exclusive_operation().map(CloudBackupExclusiveOperationClaim::operation),
-        Some(CloudBackupExclusiveOperation::RecreateManifest)
-    );
-    manager.project_exclusive_operation_finished(claim);
+    assert_eq!(turn_off_screen(&manager), CloudBackupDisableScreen::Reviewing(second));
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_nothing_turned_off(globals, &namespace);
 }
 
-/// Each Turn Off attempt gets its own id, so a result from an earlier attempt can never pass as
-/// the current one
+/// A wallet deleted from this device after the review leaves its backup as the only copy, so the
+/// recheck shows a new review instead of deleting it
 #[tokio::test(flavor = "current_thread")]
-async fn each_turn_off_attempt_gets_its_own_id_and_persists_nothing() {
+async fn a_wallet_deleted_between_review_and_confirm_asks_again_and_deletes_nothing() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let mut attempt_ids = Vec::new();
-    for _ in 0..2 {
-        let preparation = manager.prepare_disable_cloud_backup().await.unwrap();
-        let CloudBackupDisablePreparation::Ready(attempt) = preparation else {
-            panic!("expected a Turn Off attempt, got {preparation:?}");
-        };
-        let DisableAttempt::Uncommitted { attempt_id, .. } = *attempt else {
-            panic!("expected an uncommitted attempt, got {attempt:?}");
-        };
-        attempt_ids.push(attempt_id);
-    }
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let (metadata, _) = backed_up_local_wallet(globals, &namespace);
 
-    assert_ne!(attempt_ids[0], attempt_ids[1]);
+    let review = review_turn_off(&manager).await;
+    assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 0));
+
+    Database::global()
+        .wallets()
+        .save_all_wallets(metadata.network, metadata.wallet_mode, Vec::new())
+        .unwrap();
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    let CloudBackupDisableScreen::Reviewing(again) = turn_off_screen(&manager) else {
+        panic!("expected a new review, got {:?}", turn_off_screen(&manager));
+    };
+    assert!(again.changed_since_confirmation);
+    assert_ne!(again.review_id, review.review_id);
+    assert_eq!((again.impact.own_backups, again.impact.unchecked), (0, 1));
+    assert_eq!(again.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// A backup that appears in the cloud after the review is something the user never saw, so the
+/// recheck asks again
+#[tokio::test(flavor = "current_thread")]
+async fn a_backup_listed_after_the_review_asks_again_and_deletes_nothing() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!(review.impact.unchecked, 0);
+
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("arrived")]);
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    let CloudBackupDisableScreen::Reviewing(again) = turn_off_screen(&manager) else {
+        panic!("expected a new review, got {:?}", turn_off_screen(&manager));
+    };
+    assert!(again.changed_since_confirmation);
+    assert_eq!(again.impact.unchecked, 1);
+    assert_nothing_turned_off(globals, &namespace);
+
+    // consent to the new review goes through
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    assert!(!globals.cloud.has_namespace(&namespace));
+}
+
+/// Building the review is silent: it lists and counts, and never asks for a passkey
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_review_never_asks_for_a_passkey() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    backed_up_local_wallet(globals, &namespace);
+    let passkey_calls = || {
+        (
+            globals.passkey.create_count(),
+            globals.passkey.authenticate_count(),
+            globals.passkey.discover_count(),
+        )
+    };
+    let before = passkey_calls();
+
+    review_turn_off(&manager).await;
+
+    assert_eq!(passkey_calls(), before);
+}
+
+/// Cancel while the confirmed Turn Off waits on the write in flight ends it before the commit:
+/// the upload finishes, ordinary writes run again and nothing is deleted
+#[tokio::test(flavor = "current_thread")]
+async fn cancel_during_the_drain_keeps_backup_on() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let (upload_gate, upload) =
+        hold_wallet_upload_in_flight(&manager, globals, metadata.id.clone()).await;
+
+    review_turn_off(&manager).await;
+    confirm_turn_off(&manager).await;
+    wait_for_queued_lane_write(&manager).await;
+    assert_eq!(turn_off_screen(&manager), CloudBackupDisableScreen::Draining);
+
+    dispatch_and_publish(&manager, CloudBackupManagerAction::CancelDisable).await;
+
+    assert_eq!(turn_off_screen(&manager), CloudBackupDisableScreen::Idle);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+
+    upload_gate.release();
+    upload.await.unwrap().unwrap();
+    supervisor_checkpoint(&manager).await;
+
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// The escape from a committed Turn Off that can't reach the provider: Try Again first, and once
+/// that fails, Stop Using on This Device finishes here and leaves the remote backup
+#[tokio::test(flavor = "current_thread")]
+async fn stop_using_on_this_device_is_offered_after_a_failed_try_again() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace("delete failed");
+    let stop_using = |manager: &RustCloudBackupManager| {
+        manager
+            .published_screen()
+            .actions
+            .entries
+            .into_iter()
+            .find(|entry| entry.action == CloudBackupScreenAction::StopUsingOnThisDevice)
+            .map(|entry| entry.availability)
+    };
+
+    run_turn_off(&manager).await;
+
+    assert!(
+        matches!(stop_using(&manager), Some(CloudBackupActionAvailability::Unavailable { .. })),
+        "Stop Using waits for a failed Try Again"
+    );
+
+    try_again_turn_off(&manager).await;
+
+    assert_eq!(stop_using(&manager), Some(CloudBackupActionAvailability::Available));
+
+    dispatch_and_publish(&manager, CloudBackupManagerAction::StopUsingOnThisDevice).await;
+    wait_for_turn_off_run(&manager).await;
+
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
+        PersistedCloudBackupStatus::Disabled
     );
+    assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
+    assert!(globals.cloud.has_namespace(&namespace), "the remote backup stays");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -299,12 +444,10 @@ async fn disable_corrupted_persisted_state_fails_closed() {
     globals.cloud.fail_list_wallet_files("disable should not inspect cloud wallets");
     let list_wallet_files_attempt_count = globals.cloud.list_wallet_files_attempt_count();
 
-    let error = manager.prepare_disable_cloud_backup().await.unwrap_err();
+    dispatch_and_publish(&manager, CloudBackupManagerAction::DisableCloudBackup).await;
+    supervisor_checkpoint(&manager).await;
 
-    assert!(matches!(
-        error,
-        CloudBackupError::Internal(message) if message == CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE
-    ));
+    assert_eq!(turn_off_screen(&manager), CloudBackupDisableScreen::Idle);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Corrupted
@@ -327,10 +470,9 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_delete_namespace("delete failed");
 
-    run_disable_cloud_backup(&manager).await;
-    let error = disable_failure_message(&manager);
+    run_turn_off(&manager).await;
 
-    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+    assert_eq!(turn_off_failure(&manager), CloudBackupTurnOffFailure::Other);
     let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert_eq!(disabling.last_error.as_deref(), Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
@@ -357,16 +499,16 @@ async fn turn_off_whose_failure_cannot_be_saved_finishes_on_try_again() {
         state.disabling().is_some_and(|disabling| disabling.last_error.is_some())
     });
 
-    run_disable_cloud_backup(&manager).await;
+    run_turn_off(&manager).await;
 
-    assert_eq!(disable_failure_message(&manager), GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+    assert_eq!(turn_off_failure(&manager), CloudBackupTurnOffFailure::Other);
     let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert_eq!(disabling.last_error, None, "the failure was saved after all");
     assert!(globals.cloud.has_namespace(&namespace));
 
     globals.cloud.clear_delete_namespace_failure();
-    run_disable_cloud_backup(&manager).await;
+    try_again_turn_off(&manager).await;
 
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
@@ -375,8 +517,10 @@ async fn turn_off_whose_failure_cannot_be_saved_finishes_on_try_again() {
     assert!(!globals.cloud.has_namespace(&namespace));
 }
 
+/// A listing that keeps failing never blocks Turn Off: Cove couldn't check what the backup
+/// holds, so the review asks twice, and nothing is deleted before that consent
 #[tokio::test(flavor = "current_thread")]
-async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
+async fn a_failed_listing_asks_twice_and_deletes_nothing_until_confirmed() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -389,19 +533,22 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
         CloudStorageError::NotFound("missing".into()),
     );
 
-    run_disable_cloud_backup(&manager).await;
-    let error = assert_blocked_disable_left_backup_configured(&manager);
+    let review = review_turn_off(&manager).await;
 
-    assert_eq!(
-        error,
-        CloudBackupError::from(CloudStorageError::NotFound(String::new())).reader_message()
-    );
+    assert!(matches!(review.impact.assessment, CloudBackupInventoryAssessment::Unknown { .. }));
+    assert_eq!(review.impact.own_backups, 0);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 4);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
-    assert!(globals.cloud.has_namespace(&namespace));
+    assert_nothing_turned_off(globals, &namespace);
+
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    assert!(!globals.cloud.has_namespace(&namespace));
     assert_eq!(
-        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
-        Some(namespace.as_str())
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
     );
 }
 
@@ -416,7 +563,7 @@ async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_delete_namespace_not_found("already deleted");
 
-    run_disable_cloud_backup(&manager).await;
+    run_turn_off(&manager).await;
 
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
@@ -488,7 +635,8 @@ async fn turn_off_waits_for_the_write_in_flight_before_it_commits_and_deletes() 
     let (upload_gate, upload) =
         hold_wallet_upload_in_flight(&manager, globals, metadata.id.clone()).await;
 
-    call!(manager.supervisor.start_disable_operation()).await.unwrap();
+    review_turn_off(&manager).await;
+    confirm_turn_off(&manager).await;
     wait_for_queued_lane_write(&manager).await;
 
     assert!(matches!(

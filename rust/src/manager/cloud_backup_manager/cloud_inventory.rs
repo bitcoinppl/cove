@@ -804,10 +804,6 @@ mod tests {
         assert_eq!(checked.secret_missing_locally, names(&["Downgraded"]));
         assert_eq!(checked.secret_unchecked, BTreeMap::new());
         assert_eq!(checked.assessment, CloudBackupInventoryAssessment::Complete);
-        assert_eq!(
-            checked.own,
-            ["Downgraded", "Hot", "Imported Xpub"].map(|name| format!("record-{name}")).into()
-        );
 
         // a watch-only wallet whose backup couldn't be read might have its seed only there
         let unread = impact_inputs_for(&[
@@ -823,5 +819,37 @@ mod tests {
                 reason: CloudBackupInventoryIncompleteReason::Unknown
             }
         );
+    }
+
+    #[test]
+    fn an_unreadable_watch_only_backup_makes_turn_off_ask_twice() {
+        use crate::manager::cloud_backup_manager::screen::{
+            CloudBackupDisableConfirmation, CloudBackupInventoryAssessment,
+        };
+        use crate::manager::cloud_backup_manager::turn_off::{
+            DisableEvidence, DisableImpact, ImpactFacts,
+        };
+
+        let wallets = [
+            ("Unread", BackupSecret::WatchOnly, None),
+            ("Hot", BackupSecret::Held, Some(BackupSecret::Held)),
+        ];
+        let record_ids: HashSet<String> =
+            wallets.iter().map(|(name, ..)| format!("record-{name}")).collect();
+        let evidence = DisableEvidence {
+            namespace_id: "ns".into(),
+            listing: Ok(record_ids.clone()),
+            local: Some(record_ids),
+            other_backups: 0,
+        };
+
+        // every listed record is this device's own, so only the unread secret check is at risk
+        let facts = ImpactFacts::from(impact_inputs_for(&wallets));
+        let screen = DisableImpact::assess(&evidence, &facts).screen();
+
+        assert_eq!(screen.own_backups, 2);
+        assert_eq!(screen.unchecked, 1);
+        assert!(matches!(screen.assessment, CloudBackupInventoryAssessment::Partial { .. }));
+        assert_eq!(screen.confirmation, CloudBackupDisableConfirmation::Two);
     }
 }

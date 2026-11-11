@@ -12,8 +12,8 @@ pub(crate) struct Notices {
 }
 
 impl Notices {
-    /// The notices as the reducer holds them today, which records no last outcome yet
+    /// The notices as the reducer holds them until their owner projects them
     pub(crate) fn from_reducer(reducer: &CloudBackupStateReducer) -> Self {
-        Self { heal: reducer.heal_notice(), last_outcome: None }
+        Self { heal: reducer.heal_notice(), last_outcome: reducer.last_outcome().cloned() }
     }
 }

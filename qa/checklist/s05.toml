@@ -256,7 +256,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impact",
     "ios-ui:ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift::testCancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDeleteFromCloudFullLaunchTest.kt::cancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
 ]

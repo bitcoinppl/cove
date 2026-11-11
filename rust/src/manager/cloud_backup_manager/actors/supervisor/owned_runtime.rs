@@ -33,7 +33,10 @@ use crate::manager::cloud_backup_manager::model::{
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, LifecycleWriter};
-use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
+use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
+use crate::manager::cloud_backup_manager::turn_off::{
+    DisableReview, FinishStart, ReviewId, TurnOffReview,
+};
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
 #[derive(Debug)]
@@ -115,13 +118,20 @@ impl OwnedRuntime {
         result
     }
 
-    /// Rebases an idle body on the owner's record, then publishes the policy if it changed
+    /// Rebases an idle body on the record, then publishes the policy if it changed
+    ///
+    /// The screen reads the runtime too, so it is asked to publish after every change; an
+    /// unchanged screen sends nothing
     fn publish(&mut self) {
         let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
         self.runtime.rebase_idle(IdleFacts::of(&record, pending_enable_recovery));
         self.publish_policy();
         self.project_pending_enable_recovery(&record);
+
+        if let Some(manager) = self.manager.upgrade() {
+            manager.request_screen_publish();
+        }
     }
 
     /// The status the owner's body and record give
@@ -275,6 +285,32 @@ impl OwnedRuntime {
         committed: CommittedDisable,
     ) {
         self.mutate(|runtime| runtime.commit_turn_off(claim, committed));
+    }
+
+    /// Replaces the Turn Off review; false when the body holds none, as an operation runs
+    pub(crate) fn set_turn_off_review(&mut self, review: Option<TurnOffReview>) -> bool {
+        self.mutate(|runtime| runtime.set_turn_off_review(review))
+    }
+
+    /// Takes the review the user confirmed, if it is still the one on screen
+    pub(crate) fn take_reviewed(&mut self, review_id: ReviewId) -> Option<DisableReview> {
+        self.mutate(|runtime| runtime.take_reviewed(review_id))
+    }
+
+    pub(crate) fn start_finish(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        start: FinishStart,
+    ) -> Result<(), Unstartable> {
+        self.mutate(|runtime| runtime.start_finish(claim, start))
+    }
+
+    pub(crate) fn fail_finish(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        reason: CloudBackupTurnOffFailure,
+    ) {
+        self.mutate(|runtime| runtime.fail_finish(claim, reason));
     }
 
     pub(crate) fn hand_off(

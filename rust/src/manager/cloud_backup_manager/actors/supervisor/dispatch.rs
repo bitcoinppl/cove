@@ -4,6 +4,7 @@ use crate::manager::cloud_backup_manager::admission::{
     EnablePromptAnswers, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
     evaluate_admission,
 };
+use crate::manager::cloud_backup_manager::turn_off::FinishStart;
 use crate::manager::cloud_backup_manager::{
     CloudBackupAcceptedEnablePrompt, CloudBackupDetailState, CloudBackupEnableContext,
     CloudBackupEnablePromptChoice, CloudBackupNoticeKind, CloudBackupStateReducer,
@@ -111,6 +112,7 @@ impl CloudBackupSupervisor {
             restore_all,
             continuation: self.paused_continuation(manager),
             enable_prompt: enable_prompt_answers(&manager.state.read()),
+            turn_off: self.runtime.turn_off_admission(),
         }
     }
 
@@ -225,14 +227,15 @@ impl CloudBackupSupervisor {
             // started in this turn, so the operation is allocated with its admission
             I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),
             I::DeleteOtherBackups => self.begin_delete_other_backups_operation(),
-            I::TurnOff | I::ResumeDisable => {
-                self.start_disable_operation().await?;
-            }
+            I::TurnOff => self.begin_turn_off_review(manager),
+            I::ConfirmDisable { review_id } => self.confirm_disable(&manager, review_id),
+            I::CancelDisable => self.cancel_disable(&manager),
+            I::ResumeDisable => self.begin_finish(&manager, FinishStart::TryAgain),
+            I::StopUsingOnThisDevice => self.begin_finish(&manager, FinishStart::LocalOnly),
             I::DismissNotice(CloudBackupNoticeKind::Heal) => {
                 self.runtime.commit(|lifecycle| manager.dismiss_heal_notice(lifecycle));
             }
-            // no last outcome is published on the screen yet, so there is nothing to dismiss
-            I::DismissNotice(CloudBackupNoticeKind::LastOutcome) => {}
+            I::DismissNotice(CloudBackupNoticeKind::LastOutcome) => manager.dismiss_last_outcome(),
             // Google Drive authorization runs through the detail verification, as it did before
             // it had its own intent
             I::ReconnectDrive => {
@@ -242,8 +245,8 @@ impl CloudBackupSupervisor {
                     false,
                 );
             }
-            // no Turn Off review is held yet, so leaving the detail screen changes nothing
-            I::LeaveDetail => {}
+            // the backstop for every dismissal path the platform might miss
+            I::LeaveDetail => self.leave_turn_off_review(),
             I::RefreshDetail => {
                 self.start_refresh_detail().await?;
             }
@@ -276,11 +279,7 @@ impl CloudBackupSupervisor {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
             }
             // admission rejects these until their flows exist
-            I::ConfirmDisable { .. }
-            | I::CancelDisable
-            | I::StopUsingOnThisDevice
-            | I::RetryLoad
-            | I::ResetOnThisDevice => {
+            I::RetryLoad | I::ResetOnThisDevice => {
                 warn!("Cloud Backup admitted {intent:?}, which has no flow yet");
             }
         }

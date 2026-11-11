@@ -7,9 +7,21 @@ use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow, LocalWalletsEpoch};
 use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
-use crate::manager::cloud_backup_manager::ops::DisableAttempt;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableImpact, CloudBackupDisableNotStartedReason, CloudBackupInventoryAssessment,
+    CloudBackupOutcome,
+};
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, Rejection, TurnOffAdmission, UserIntent, evaluate_admission,
+};
+use crate::manager::cloud_backup_manager::turn_off::{
+    DisableImpact, EvidenceUnavailable, FinishStart, TurnOffReview,
+};
+use crate::manager::cloud_backup_manager::turn_off::test_support::{
+    empty_evidence, empty_review, empty_review_assessed,
+};
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommittedDisable, DisableCommitReview, DisablingRecord,
+    CommittedDisable, DisablingRecord,
 };
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
@@ -103,13 +115,6 @@ fn test_committed_disable() -> CommittedDisable {
     match CommittedDisable::from_record(&test_disabling_state()) {
         DisablingRecord::Committed(committed) => committed,
         DisablingRecord::Unnormalized => panic!("the test record is committed"),
-    }
-}
-
-fn test_uncommitted_attempt() -> DisableAttempt {
-    DisableAttempt::Uncommitted {
-        review: DisableCommitReview { namespace_id: VALID_NAMESPACE_ID.into() },
-        attempt_id: 7,
     }
 }
 
@@ -459,26 +464,6 @@ async fn seed_local_wallet_with_cloud_duplicate(
     list_test_wallet_files(&namespace, &[duplicate_record_id.as_str()]);
 
     LocalWalletDuplicateFixture { namespace, local_wallet, local_record_id, duplicate_record_id }
-}
-
-fn disabling_for_current_namespace(
-    manager: &RustCloudBackupManager,
-) -> PersistedDisablingCloudBackup {
-    let PersistedCloudBackupState::Configured(previous_configured) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected configured cloud backup state");
-    };
-
-    PersistedDisablingCloudBackup {
-        previous_configured,
-        namespace_id: manager.current_namespace_id().unwrap(),
-        disable_generation: 1,
-        started_at: 1,
-        delete_started_at: None,
-        last_error: None,
-        retry_after: None,
-    }
 }
 
 fn begin_test_detail_refresh(
@@ -1210,6 +1195,22 @@ fn begin_configured(
     }
 }
 
+/// Starts a Try Again run of a committed Turn Off, which only a Disabling record has a place for
+fn begin_finishing()
+-> impl FnOnce(&mut CloudBackupSupervisor, &Arc<RustCloudBackupManager>) -> CloudBackupExclusiveOperationClaim
+{
+    |supervisor, manager| {
+        let disabling = test_disabling_state();
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::disabling_transition(disabling))
+            .unwrap();
+        supervisor.rebase_on_seeded_record();
+        supervisor.begin_finish(manager, FinishStart::TryAgain);
+        supervisor.runtime.claim().expect("the Try Again run started")
+    }
+}
+
 /// Replays one completion handler with a stale claim and then the live claim, so a handler that
 /// skips the claim check clears the operation on the stale call and fails here
 async fn assert_completion_ignores_stale_claim(
@@ -1568,18 +1569,20 @@ async fn supervisor_ignores_stale_enable_upload_finalization_completion() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_stale_disable_preparation_completion() {
+async fn supervisor_ignores_stale_turn_off_drain_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
-            supervisor.complete_disable_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
+            let review = empty_review(VALID_NAMESPACE_ID);
+            supervisor.complete_turn_off_drain(claim, review, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_stale_disable_blocker_completion() {
+async fn supervisor_ignores_stale_turn_off_recheck_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+            let review = empty_review(VALID_NAMESPACE_ID);
             supervisor
-                .complete_disable_blocker_check(claim, test_uncommitted_attempt(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_turn_off_recheck(claim, review, Err(EvidenceUnavailable::Offline))
                 .await
                 .unwrap();
     })
@@ -1588,7 +1591,7 @@ async fn supervisor_ignores_stale_disable_blocker_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_delete_completion() {
-    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_finishing(), async |supervisor, claim| {
             supervisor
                 .complete_disable_namespace_delete(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
@@ -1599,7 +1602,7 @@ async fn supervisor_ignores_stale_disable_delete_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
-    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_finishing(), async |supervisor, claim| {
             supervisor
                 .complete_disable_local_cleanup(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
@@ -3047,7 +3050,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
 
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on() {
+async fn turn_off_recheck_after_the_record_moved_on_deletes_nothing() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
@@ -3063,7 +3066,16 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
     test_disabling_state();
     Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
 
-    supervisor.complete_disable_blocker_check(claim, test_uncommitted_attempt(), Ok(())).await.unwrap();
+    // the inventory never loaded, as in the review, so the recheck finds nothing new and reaches
+    // the commit, where the record has moved on
+    let unknown = CloudBackupInventoryAssessment::Unknown {
+        reason: CloudBackupInventoryIncompleteReason::Unknown,
+    };
+    let review = empty_review_assessed(VALID_NAMESPACE_ID, unknown);
+    supervisor
+        .complete_turn_off_recheck(claim, review, Ok(empty_evidence(VALID_NAMESPACE_ID)))
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
@@ -3127,8 +3139,75 @@ async fn stale_completion_is_discarded_without_touching_the_running_operation() 
 }
 
 
+/// A configuration replaced while the Turn Off review is on screen makes the review stale:
+/// Confirm is rejected, so consent never carries over to a backup the user didn't review
 #[tokio::test(flavor = "current_thread")]
-async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() {
+async fn a_configuration_change_makes_the_turn_off_review_stale() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    persist_enabled_under(&mut supervisor);
+    let generation = supervisor.runtime.generation();
+    let review = empty_review(VALID_NAMESPACE_ID);
+    let review_id = review.review_id.get();
+    assert!(supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review))));
+    let confirm = UserIntent::ConfirmDisable { review_id };
+    assert_eq!(
+        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager)),
+        Admission::Accepted
+    );
+
+    // a reinitialize replaces the configuration once it ends
+    let claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::ReinitializeBackup)
+        .unwrap();
+    supervisor.complete_exclusive_operation(claim).await.unwrap();
+
+    assert_ne!(supervisor.runtime.generation(), generation);
+    assert_eq!(supervisor.runtime.turn_off_review(), None);
+    assert_eq!(
+        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager)),
+        Admission::Rejected(Rejection::ReviewStale)
+    );
+}
+
+/// Restore or Verify First from the review starts its own operation, which ends the review, so
+/// the next Turn Off tap prepares a fresh one from what that operation left
+#[tokio::test(flavor = "current_thread")]
+async fn an_operation_started_from_the_review_ends_it() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    persist_enabled_under(&mut supervisor);
+    let review = empty_review(VALID_NAMESPACE_ID);
+    assert!(supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review))));
+
+    let claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
+        .unwrap();
+
+    assert_eq!(supervisor.runtime.turn_off_review(), None);
+    assert_eq!(supervisor.runtime.turn_off_admission(), TurnOffAdmission::None);
+
+    supervisor.complete_exclusive_operation(claim).await.unwrap();
+
+    assert_eq!(supervisor.runtime.turn_off_review(), None);
+    assert_eq!(
+        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager)),
+        Admission::Accepted
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_drain_failure_before_commit_leaves_backup_configured() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = test_supervisor(
@@ -3140,25 +3219,26 @@ async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() 
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    test_disabling_state();
-    let attempt = test_uncommitted_attempt();
+    let review = empty_review(VALID_NAMESPACE_ID);
 
     supervisor
-        .complete_disable_write_drain(
-            claim,
-            attempt,
-            Err(CloudBackupError::Internal("write lane stopped".into())),
-        )
+        .complete_turn_off_drain(claim, review, Err(CloudBackupError::Internal("drain".into())))
         .await
         .unwrap();
 
-    // nothing was committed, so the record is still configured and nothing can be kept
+    // nothing was committed, so the record is still configured and the user is told why
     assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert!(matches!(
         Database::global().cloud_backup_state.get().unwrap(),
         PersistedCloudBackupState::Configured(_)
     ));
+    assert_eq!(
+        manager.state.read().last_outcome().map(|last| last.outcome.clone()),
+        Some(CloudBackupOutcome::DisableNotStarted {
+            reason: CloudBackupDisableNotStartedReason::WritesDidNotDrain,
+        })
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4090,7 +4170,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable() {
+async fn identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impact() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
@@ -4110,12 +4190,7 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     );
     assert_eq!(restore_all_batch_size(&manager), Some(0));
 
-    let cloud = CloudStorage::global_silent_client();
-    let disabling = disabling_for_current_namespace(&manager);
-    assert!(matches!(
-        manager.check_disable_blockers(&cloud, &disabling.namespace_id).await,
-        Err(CloudBackupError::RecoveryRequired(_))
-    ));
+    assert_eq!(turn_off_impact(&manager).await.extra_copies, 1);
 
     call!(manager.supervisor.start_delete_cloud_wallet_operation(
         fixture.duplicate_record_id.clone()
@@ -4131,7 +4206,14 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     // only the cloud record went away, the local wallet and its own backup stay
     assert!(local_wallet_exists(&fixture.local_wallet));
     assert!(globals.cloud.has_wallet_backup(&fixture.namespace, &fixture.local_record_id));
-    assert!(manager.check_disable_blockers(&cloud, &disabling.namespace_id).await.is_ok());
+    assert_eq!(turn_off_impact(&manager).await.extra_copies, 0);
+}
+
+/// The impact a Turn Off review would show now
+async fn turn_off_impact(manager: &RustCloudBackupManager) -> CloudBackupDisableImpact {
+    let evidence = manager.gather_disable_evidence().await.expect("Turn Off evidence");
+    let facts = super::disable::impact_facts(manager);
+    DisableImpact::assess(&evidence, &facts).screen()
 }
 
 /// A row delete is a lane command: it waits behind the upload in flight and runs after it

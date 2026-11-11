@@ -37,6 +37,7 @@ use crate::manager::cloud_backup_manager::model::{
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::manager::cloud_backup_manager::turn_off::AutomaticResume;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::verify::{
     CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationStep,
@@ -53,14 +54,13 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyOperationWarning, CloudBackupCloudOnlyWalletOutcome,
     CloudBackupDetailInventorySnapshot, CloudBackupDetailInventorySnapshotResult,
     CloudBackupDetailOutcome, CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
-    CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupDisablePreparation,
-    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext,
-    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
-    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
-    CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
-    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
-    CloudBackupNoDiscoveryEnablePreparation, CloudBackupOtherBackupsOutcome,
-    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
+    CloudBackupDetailSnapshotCompletion, CloudBackupDriveAccountSwitchError,
+    CloudBackupEnableContext, CloudBackupEnablePasskeyPreparation,
+    CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
+    CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
+    CloudBackupEnableState, CloudBackupError, CloudBackupInventoryAuthority,
+    CloudBackupInventoryIncompleteReason, CloudBackupNoDiscoveryEnablePreparation,
+    CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
     CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
@@ -554,9 +554,6 @@ impl CloudBackupSupervisor {
         if let Some(status) = exported.status {
             manager.reconcile_runtime_status(status);
         }
-        if let Some(disable) = exported.disable {
-            manager.apply_disable_outcome(disable);
-        }
 
         Produces::ok(())
     }
@@ -751,11 +748,6 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.start_sync_request(manager);
-        Produces::ok(())
-    }
-
-    pub async fn start_disable_operation(&mut self) -> ActorResult<()> {
-        self.begin_disable_operation();
         Produces::ok(())
     }
 
@@ -1285,7 +1277,7 @@ impl CloudBackupSupervisor {
 
         if matches!(*self.runtime, Runtime::FinishingDisable { op: None, .. }) {
             if cause != CloudReachable::PendingVerification {
-                manager.resume_persisted_disable_if_needed();
+                self.resume_disable_automatically(AutomaticResume::CloudReachable).await?;
             }
             return Produces::ok(());
         }

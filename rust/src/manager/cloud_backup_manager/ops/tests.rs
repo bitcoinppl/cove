@@ -35,6 +35,10 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
 };
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
+    CloudBackupScreenBody, CloudBackupTurnOffFailure,
+};
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
@@ -287,9 +291,49 @@ async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
     .await;
 }
 
-async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.start_disable_operation()).await.expect("start disable operation");
-    wait_for_test_condition(Duration::from_secs(2), "disable operation finishes", || {
+/// The Turn Off flow as the published screen shows it
+fn turn_off_screen(manager: &RustCloudBackupManager) -> CloudBackupDisableScreen {
+    match manager.published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.disable,
+        _ => CloudBackupDisableScreen::Idle,
+    }
+}
+
+/// Dispatches like the platform and waits until the screen it publishes is out
+///
+/// The handler's publish request queues behind the first checkpoint, so a second one waits it out
+async fn dispatch_and_publish(manager: &RustCloudBackupManager, action: CloudBackupManagerAction) {
+    dispatch_and_wait(manager, action).await;
+    supervisor_checkpoint(manager).await;
+}
+
+/// Taps Turn Off and returns the review the dialogs show
+async fn review_turn_off(manager: &RustCloudBackupManager) -> CloudBackupDisableReview {
+    dispatch_and_publish(manager, CloudBackupManagerAction::DisableCloudBackup).await;
+    wait_for_test_condition(Duration::from_secs(2), "the Turn Off review is ready", || {
+        !matches!(turn_off_screen(manager), CloudBackupDisableScreen::Preparing)
+    })
+    .await;
+
+    match turn_off_screen(manager) {
+        CloudBackupDisableScreen::Reviewing(review) => review,
+        screen => panic!("expected a Turn Off review, got {screen:?}"),
+    }
+}
+
+/// Confirms the review on screen and returns once the confirmed Turn Off has started
+async fn confirm_turn_off(manager: &RustCloudBackupManager) {
+    let CloudBackupDisableScreen::Reviewing(review) = turn_off_screen(manager) else {
+        panic!("expected a Turn Off review to confirm");
+    };
+
+    let review_id = review.review_id;
+    dispatch_and_publish(manager, CloudBackupManagerAction::ConfirmDisable { review_id }).await;
+}
+
+/// Waits for the running Turn Off, before or after its commit, to end and publish
+async fn wait_for_turn_off_run(manager: &RustCloudBackupManager) {
+    wait_for_test_condition(Duration::from_secs(5), "the Turn Off run ends", || {
         !matches!(
             manager
                 .projected_exclusive_operation()
@@ -298,6 +342,32 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
         )
     })
     .await;
+    supervisor_checkpoint(manager).await;
+}
+
+/// Turns off with consent to whatever the review shows, and waits for the run to end
+async fn run_turn_off(manager: &RustCloudBackupManager) {
+    review_turn_off(manager).await;
+    confirm_turn_off(manager).await;
+    wait_for_turn_off_run(manager).await;
+}
+
+/// Taps Try Again on a committed Turn Off and waits for the run to end
+async fn try_again_turn_off(manager: &RustCloudBackupManager) {
+    dispatch_and_publish(manager, CloudBackupManagerAction::ResumeDisable).await;
+    wait_for_turn_off_run(manager).await;
+}
+
+/// Why the committed Turn Off on screen failed
+fn turn_off_failure(manager: &RustCloudBackupManager) -> CloudBackupTurnOffFailure {
+    let body = manager.published_screen().body;
+    if let CloudBackupScreenBody::FinishingDisable(finishing) = &body
+        && let CloudBackupFinishingDisableStage::Failed { reason } = finishing.stage
+    {
+        return reason;
+    }
+
+    panic!("expected a failed committed Turn Off, got {body:?}")
 }
 
 async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
@@ -348,19 +418,6 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
     }
 
     panic!("saved passkey confirmation finishes");
-}
-
-fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-        panic!("expected configured cloud backup lifecycle");
-    };
-    let CloudBackupDestructiveOperationState::DisableFailed { message, .. } =
-        configured.destructive_operation
-    else {
-        panic!("expected disable failure");
-    };
-
-    message
 }
 
 fn init_manager() -> Arc<RustCloudBackupManager> {

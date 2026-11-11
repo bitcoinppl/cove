@@ -26,7 +26,9 @@ use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
-use crate::manager::cloud_backup_manager::screen::CloudBackupScreenAction;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableConfirmation, CloudBackupScreenAction,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupSettingsRowStatus,
     CloudBackupVerificationSource,
@@ -143,9 +145,8 @@ fn a_hold_released_before_its_call_starts_lets_the_call_through() {
         app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::Hold(hold.clone()));
         hold.release();
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         app.block_on("the released call to return", hold.finished());
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 1);
@@ -163,11 +164,8 @@ fn held_namespace_delete_reports_entered_and_finished() {
             app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::Hold(hold.clone()));
         load_detail(&mut app);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[
-            N::TurnOff,
-            N::Verify,
-            N::Enable,
-        ]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_cannot(&[N::TurnOff, N::Verify, N::Enable]);
         app.block_on("the held delete to start", hold.entered());
         assert!(app.cloud.calls().iter().any(|(id, _)| *id == delete));
         assert!(app.cloud.inner.has_namespace(&namespace));
@@ -193,13 +191,17 @@ fn scripted_namespace_delete_failure_then_retry_disables() {
         );
         load_detail(&mut app);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::TurnOff])
-            .then_cannot(&[N::Enable, N::Verify]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::ResumeDisable]).then_cannot(&[
+            N::TurnOff,
+            N::Enable,
+            N::Verify,
+            N::StopUsingOnThisDevice,
+        ]);
         assert!(app.cloud.inner.has_namespace(&namespace));
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Disabling);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+        app.dispatch(CloudBackupManagerAction::ResumeDisable)
             .then_can(&[N::Enable])
             .then_cannot(&[N::TurnOff]);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 2);
@@ -211,9 +213,11 @@ fn scripted_namespace_delete_failure_then_retry_disables() {
 /// A Turn Off refused by a backup that is not on this device persisted nothing, so the actions
 /// its refusal asks for stay open, and Turn Off finishes once the user has taken them
 #[test]
-fn refused_turn_off_leaves_the_actions_that_clear_its_blocker() {
-    let test =
-        concat!(module_path!(), "::refused_turn_off_leaves_the_actions_that_clear_its_blocker");
+fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_risk() {
+    let test = concat!(
+        module_path!(),
+        "::turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_risk"
+    );
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
         let account = FakeAccount::new(1, 1).seed_records(&app);
@@ -224,20 +228,28 @@ fn refused_turn_off_leaves_the_actions_that_clear_its_blocker() {
         load_detail(&mut app);
 
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::TurnOff, N::Verify, N::SyncUnsynced])
+            .then_can(&[N::ConfirmDisable, N::CancelDisable])
             .then_cannot(&[N::Enable]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+        assert_eq!(review.impact.not_on_device.names.len(), 1, "{review:?}");
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
+        app.dispatch(CloudBackupManagerAction::CancelDisable)
+            .then_can(&[N::TurnOff, N::Verify, N::SyncUnsynced])
+            .then_cannot(&[N::ConfirmDisable, N::Enable]);
         let delete = UserIntent::DeleteCloudWallet(elsewhere.clone().into());
         assert_eq!(app.admission_of(delete), Admission::Accepted, "{}", app.describe());
         app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(elsewhere.clone().into()))
             .then_can(&[N::TurnOff]);
         assert!(!app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        // with the wallet gone nothing else is at risk, so the review asks once
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        let review = app.turn_off_review().expect("the second Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
         assert!(!app.cloud.inner.has_namespace(&account.namespace));
         assert!(app.passkey.interactive_calls().is_empty());
@@ -260,7 +272,9 @@ fn killed_after_namespace_delete_resumes_to_disabled_on_next_launch() {
             );
             load_detail(&mut app);
 
-            let _killed = app.dispatch(CloudBackupManagerAction::DisableCloudBackup);
+            app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+                .then_can(&[N::ConfirmDisable]);
+            let _killed = app.confirm_turn_off();
             unreachable!("the parent kills this process at the namespace-deleted checkpoint");
         }
 
@@ -541,7 +555,8 @@ fn a_hold_that_never_starts_fails_at_its_deadline() {
 }
 
 /// Turn Off is admitted from the lifecycle alone: the detail inventory is not one of its inputs,
-/// so a tap before the inventory loads turns Cloud Backup off instead of being dropped
+/// so a tap before the inventory loads reviews the backup, and consent turns it off, instead of
+/// being dropped
 #[test]
 fn turn_off_is_admitted_before_the_detail_inventory_loads() {
     let test = concat!(module_path!(), "::turn_off_is_admitted_before_the_detail_inventory_loads");
@@ -551,13 +566,13 @@ fn turn_off_is_admitted_before_the_detail_inventory_loads() {
         assert!(!app.manager().listing_is_provider_confirmed(), "{}", app.describe());
 
         app.current().then_can(&[N::TurnOff]);
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
-        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
-        assert!(!app.cloud.inner.has_namespace(&namespace));
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
         let outcome = app.last_outcome().expect("dispatch recorded an outcome");
         assert_eq!((outcome.intent, outcome.admission), (UserIntent::TurnOff, Admission::Accepted));
+
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
     });
 }
 
@@ -573,10 +588,11 @@ fn dispatch_runs_on_the_manager_it_is_called_on() {
 
         app.relaunch().then_can(&[N::TurnOff]);
         assert!(!Arc::ptr_eq(&first, app.manager()));
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::Enable]);
-
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
         let outcome = app.last_outcome().expect("the new manager admitted the intent");
         assert_eq!(outcome.admission, Admission::Accepted);
+
+        app.confirm_turn_off().then_can(&[N::Enable]);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
         assert!(!app.cloud.inner.has_namespace(&namespace));
     });
@@ -596,7 +612,8 @@ fn an_action_dispatched_after_the_state_moved_on_is_rejected_with_a_reason() {
         app.current().then_can(&[N::TurnOff, N::Verify]);
 
         // the screen still offers Verify when Turn Off finishes underneath it
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[N::Verify]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_cannot(&[N::Verify]);
         let disabled = persisted();
         let deletes = app.cloud.count(CloudCall::DeleteNamespace);
 

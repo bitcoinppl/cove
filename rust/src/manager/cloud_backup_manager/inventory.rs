@@ -3,7 +3,7 @@
 //! The screen projection reads the inventory only through [`InventoryFacts`], built from the
 //! inventory owner and, for Restore All's progress, the reducer
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use super::admission::DetailInventory;
 use super::screen::{
@@ -76,18 +76,9 @@ impl InventoryRows {
 ///
 /// Built from the view alone, so the impact reads the same rows the screen draws
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "only the Turn Off impact reads these, and only tests until it does"
-    )
-)]
 pub(crate) struct InventoryImpactInputs {
     /// How complete the inventory behind these classes is
     pub(crate) assessment: CloudBackupInventoryAssessment,
-    /// Own record IDs of this device's wallets the loaded rows show
-    pub(crate) own: BTreeSet<String>,
     /// Own records whose cloud copy holds a secret this device doesn't, by record ID, with names
     pub(crate) secret_missing_locally: BTreeMap<String, String>,
     /// Own records whose cloud copy couldn't be read to tell, by record ID, with names
@@ -98,13 +89,6 @@ pub(crate) struct InventoryImpactInputs {
 
 /// What a listed record that isn't a local wallet's own backup is
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "only the Turn Off impact reads these, and only tests until it does"
-    )
-)]
 pub(crate) enum InventoryListedClass {
     NotOnDevice { name: String },
     ExtraCopy,
@@ -132,13 +116,6 @@ impl InventoryView {
     ///
     /// Complete only when every listed record was read and every own record's secret was
     /// checked. With no loaded rows the inventory knows nothing, so it's unknown
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "only the Turn Off impact reads these, and only tests until it does"
-        )
-    )]
     pub(crate) fn impact_inputs(&self) -> InventoryImpactInputs {
         let reason = match self.progress {
             Some(CloudBackupProgressSection::InventoryIncomplete { reason }) => reason,
@@ -148,19 +125,16 @@ impl InventoryView {
         let Some(rows) = &self.rows else {
             return InventoryImpactInputs {
                 assessment: CloudBackupInventoryAssessment::Unknown { reason },
-                own: BTreeSet::new(),
                 secret_missing_locally: BTreeMap::new(),
                 secret_unchecked: BTreeMap::new(),
                 listed: BTreeMap::new(),
             };
         };
 
-        let mut own = BTreeSet::new();
         let mut secret_missing_locally = BTreeMap::new();
         let mut secret_unchecked = BTreeMap::new();
         for row in rows.up_to_date.iter().chain(&rows.needs_sync) {
             let wallet = &row.wallet;
-            own.insert(wallet.record_id.clone());
 
             if row.record == CloudBackupOwnRecord::SecretMissingLocally {
                 secret_missing_locally.insert(wallet.record_id.clone(), wallet.name.clone());
@@ -188,7 +162,7 @@ impl InventoryView {
             }
         };
 
-        InventoryImpactInputs { assessment, own, secret_missing_locally, secret_unchecked, listed }
+        InventoryImpactInputs { assessment, secret_missing_locally, secret_unchecked, listed }
     }
 }
 

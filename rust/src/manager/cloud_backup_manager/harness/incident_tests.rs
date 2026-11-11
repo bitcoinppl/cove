@@ -12,7 +12,9 @@ use super::{
 };
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::CloudBackupManagerAction;
-use crate::manager::cloud_backup_manager::screen::{CloudBackupScreenBody, CloudBackupSection};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableConfirmation, CloudBackupScreenBody, CloudBackupSection,
+};
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
 /// What the platform sends when the app comes back to the foreground with a connection
@@ -92,15 +94,25 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         };
         assert!(configured.heal_notice.is_some(), "the heal notice is persisted");
 
-        // Turn Off now runs instead of hanging: it refuses with a reason while records that are
-        // not on this device remain, deletes nothing, and stays available to try again. The
-        // refusal is a result, so it holds nothing else
+        // Turn Off now runs instead of hanging: it shows what would be lost while records that are
+        // not on this device remain, asks twice, and deletes nothing without consent. The review
+        // is presentation, so it holds nothing else, and Cancel leaves every way out
         load_detail(&mut app);
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::TurnOff, N::Verify])
+            .then_can(&[N::ConfirmDisable, N::CancelDisable, N::Verify])
             .then_cannot(&[N::Enable]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+        assert!(
+            review.impact.not_on_device.names.len() + review.impact.unchecked as usize > 0,
+            "the review hides the records not on this device: {review:?}"
+        );
+
+        app.dispatch(CloudBackupManagerAction::CancelDisable)
+            .then_can(&[N::TurnOff, N::Verify])
+            .then_cannot(&[N::ConfirmDisable, N::Enable]);
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
-        assert!(app.cloud.inner.has_namespace(&namespace), "a refused Turn Off deleted the backup");
+        assert!(app.cloud.inner.has_namespace(&namespace), "a review deleted the backup");
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
         // and coming back to the app keeps every way out, still without a passkey prompt

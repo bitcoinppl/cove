@@ -51,9 +51,8 @@ fn old_background_upload_after_turn_off_and_a_later_enable_never_runs() {
         let old_client =
             CloudBackupWriteClient::background(app.manager().cloud_writes.clone(), old.generation);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
 
         // the fixture enables the way a finished Enable ends for the lane: the record becomes
         // configured and the owner publishes a policy of a new body kind

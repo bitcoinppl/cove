@@ -248,9 +248,10 @@ The detail inventory is explicitly progressive:
 - `Failed` carries a typed incomplete reason and may retain the last known rows
 
 A timeout, authorization failure, offline result, or provider failure is
-incomplete, not a confirmed empty inventory. Restore and destructive actions
-that depend on absence or a complete set stay disabled until the state is
-`Complete`.
+incomplete, not a confirmed empty inventory. Restore All and the actions that
+depend on a record's absence stay disabled until the inventory is complete.
+Turn Off doesn't wait for it: an incomplete inventory makes its review warn and
+ask for a second confirmation, as described under Turn Off.
 
 The inventory loads silently. Entering the detail screen only requests a
 refresh; it never asks for the passkey. The cloud-only fetch reads records
@@ -495,19 +496,56 @@ upload and waits for that answer before it marks the wallets uploaded. It
 re-decides the class before it applies the completion, so a write whose
 operation ended meanwhile is reported cancelled.
 
-A reinitialize owns the namespaces from its start, the same way. Its policy
-pauses ordinary writes and source cleanup, so a cleanup whose proof was read
-before the reinitialize began never deletes a source it may recover. It then
-drains the lane before it lists the namespaces, so a cleanup delete that was
-already running finishes before the reinitialize reads what exists. When it
-ends, the new generation makes anything left from before stale.
+A confirmed Turn Off pauses ordinary writes through the policy, then queues a
+drain barrier of its own. The barrier comes back only after the write in flight
+and those queued ahead of it have finished. Only then does Turn Off commit and
+delete the namespace, so an upload that already started can't recreate remote
+data after the delete. A Google Drive account switch drains the same way. A
+local reset publishes a closed policy first, then waits for the lane to go idle.
 
-Turn Off pauses ordinary writes through the policy, then queues a drain barrier
-of its own. The barrier comes back only after the write in flight and those
-queued ahead of it have finished. Only then does Turn Off commit and delete the
-namespace, so an upload that already started can't recreate remote data after
-the delete. A Google Drive account switch drains the same way. A local reset
-publishes a closed policy first, then waits for the lane to go idle.
+## Turn Off
+
+Turn Off never blocks on what the backup holds. It shows what would be lost and
+asks for consent instead.
+
+1. **Review.** `DisableCloudBackup` builds a review without running an
+   operation or pausing writes. The configured body holds it, so any operation
+   start, body change, Cancel or `LeaveDetail` ends it. The review lists the
+   namespace and counts other backup namespaces silently, and never asks for a
+   passkey. The listing proves which records are this device's own backups,
+   and the detail inventory says whether an own backup holds a secret this
+   device lacks. An own backup whose secret the inventory couldn't check counts
+   as unchecked. The review's assessment is always the detail inventory's, so
+   an inventory that isn't complete asks twice even when every listed record is
+   this device's own. Other records are classified by the detail
+   inventory as not on this device, extra copies, unreadable, unsupported or
+   unchecked. A record the inventory hasn't classified counts as unchecked. The
+   screen shows `Preparing`, then
+   `Reviewing` with a `CloudBackupDisableImpact`, or `Offline` when the
+   provider can't be reached. Tapping Turn Off again is the dialogs' Check
+   Again.
+2. **Confirmation.** The impact asks once when only this device's backups and
+   extra copies would be deleted. It asks twice when anything is not on this
+   device, a local wallet's secret is missing, anything is unchecked, unreadable
+   or unsupported, or the assessment isn't complete; a failed listing makes it
+   unknown. Names are capped at three with a count of the rest. Backups made
+   with another passkey are a line in the dialog and are left in place.
+3. **Consent.** `ConfirmDisable { review_id }` is admitted only for the review
+   on screen. It starts the Turn Off operation, which drains as above, then
+   lists again. If the fresh impact puts any new record in a risk category, or
+   its assessment is worse, the operation ends and a new review replaces the
+   old one with `changed_since_confirmation`. Otherwise Turn Off commits.
+4. **Before the commit** nothing is persisted. `CancelDisable` ends the review
+   or the drain. A failure ends it with a `DisableNotStarted` last outcome and
+   leaves backup on.
+5. **After the commit** the body is `FinishingDisable` and only goes forward: it
+   deletes the namespace (already gone counts as deleted), clears this device's
+   Cloud Backup keychain items and sync rows, and writes `Disabled`. A failed
+   run shows `Failed { reason }` and persists `retry_after`. `ResumeDisable` is
+   Try Again. A launch resumes it at once, and a reconnect or cloud change
+   resumes it after `retry_after`. Once a Try Again has failed,
+   `StopUsingOnThisDevice` finishes on this device alone and leaves the remote
+   backup.
 
 ## Verification And Recovery
 

@@ -11,7 +11,7 @@ use super::{
     CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationReason, DeepVerificationReport,
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
-    is_connectivity_related_issue,
+    is_connectivity_related_issue, screen::CloudBackupLastOutcome,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
@@ -62,13 +62,6 @@ pub(crate) enum CloudBackupEnableState {
     AwaitingSavedPasskeyConfirmation(super::SavedPasskeyConfirmationMode),
     ConfirmingSavedPasskey,
     UploadingBackup,
-}
-
-/// Result of a disable attempt after the supervisor resolves remote and local work
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupDisableOutcome {
-    Started,
-    Failed { message: String, can_keep_enabled: bool },
 }
 
 /// Detail built from a provider listing, paired with the listing's cloud-only identity
@@ -200,6 +193,8 @@ struct CloudBackupReducerState {
     verification_presentation: CloudBackupVerificationPresentation,
     /// The persisted heal notice, mirrored for the screen until the owner projects it
     heal_notice: Option<CloudBackupHealNotice>,
+    /// The last control that didn't do what it was asked, until it is dismissed or replaced
+    last_outcome: Option<CloudBackupLastOutcome>,
     /// A Google Drive account switch Rust and the platform disagree on, until it is retried
     drive_account_switch_recovery: Option<CloudBackupDriveAccountSwitchRecovery>,
 }
@@ -245,6 +240,7 @@ impl Default for CloudBackupReducerState {
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
             heal_notice: None,
+            last_outcome: None,
             drive_account_switch_recovery: None,
         }
     }
@@ -683,9 +679,8 @@ impl CloudBackupReducerState {
             CloudBackupExclusiveOperation::Restore => {
                 self.apply_status(CloudBackupStatus::Restoring);
             }
-            CloudBackupExclusiveOperation::Disable => {
-                self.resolve_disable(CloudBackupDisableOutcome::Started);
-            }
+            // the running Turn Off gives the status, and the record shows Disabling once it commits
+            CloudBackupExclusiveOperation::Disable => {}
             CloudBackupExclusiveOperation::RecreateManifest => {
                 self.resolve_recovery(RecoveryState::Recovering(RecoveryAction::RecreateManifest));
             }
@@ -804,6 +799,8 @@ impl CloudBackupReducerState {
                 self.configured.destructive_operation =
                     CloudBackupDestructiveOperationState::Disabling;
                 self.configured.prompt = CloudBackupConfiguredPrompt::None;
+                self.configured.sync = CloudBackupSyncState::Idle;
+                self.configured.pending_upload_verification = PendingUploadVerificationState::Idle;
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::Enabling => {
@@ -1083,28 +1080,6 @@ impl CloudBackupReducerState {
         }
     }
 
-    // reconciles database disable progress with the UI-facing destructive operation state
-    fn resolve_disable(&mut self, outcome: CloudBackupDisableOutcome) {
-        match outcome {
-            CloudBackupDisableOutcome::Started => {
-                self.configured.destructive_operation =
-                    CloudBackupDestructiveOperationState::Disabling;
-                self.configured.prompt = CloudBackupConfiguredPrompt::None;
-                self.configured.sync = CloudBackupSyncState::Idle;
-                self.configured.pending_upload_verification = PendingUploadVerificationState::Idle;
-                self.phase = CloudBackupLifecyclePhase::Configured;
-            }
-            CloudBackupDisableOutcome::Failed { message, can_keep_enabled } => {
-                self.configured.destructive_operation =
-                    CloudBackupDestructiveOperationState::DisableFailed {
-                        message,
-                        can_keep_enabled,
-                    };
-                self.phase = CloudBackupLifecyclePhase::Configured;
-            }
-        }
-    }
-
     fn clear_prompt_state(&mut self) {
         self.configured.prompt = CloudBackupConfiguredPrompt::None;
         self.missing_passkey_dismissed = false;
@@ -1212,6 +1187,10 @@ impl CloudBackupStateReducer {
 
     pub(crate) fn heal_notice(&self) -> Option<CloudBackupHealNotice> {
         self.state.heal_notice
+    }
+
+    pub(crate) fn last_outcome(&self) -> Option<&CloudBackupLastOutcome> {
+        self.state.last_outcome.as_ref()
     }
 
     pub(crate) fn drive_account_switch_recovery(
@@ -1422,8 +1401,8 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::RecoveryStateResolved(recovery) => {
                 self.state.resolve_recovery(recovery);
             }
-            CloudBackupStateReducerEvent::DisableStateResolved(outcome) => {
-                self.state.resolve_disable(outcome);
+            CloudBackupStateReducerEvent::LastOutcomeRecorded(outcome) => {
+                self.state.last_outcome = outcome;
             }
             CloudBackupStateReducerEvent::HealNoticeReconciled(notice) => {
                 self.state.heal_notice = notice;
@@ -1968,6 +1947,7 @@ mod tests {
     #[test]
     fn runtime_disabled_reconcile_finishes_disabling_lifecycle_view() {
         let mut model = CloudBackupStateReducer::default();
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(operation_event(CloudBackupExclusiveOperation::Disable, 1));
 
         let effects = model.apply_event(runtime_status_event(CloudBackupStatus::Disabled));
@@ -2072,44 +2052,21 @@ mod tests {
     }
 
     #[test]
-    fn runtime_enabled_preserves_disable_failed_signal() {
-        let mut model = CloudBackupStateReducer::default();
-        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
-        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-            CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
-        ));
-
-        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
-
-        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
-            panic!("enabled backup should project configured lifecycle");
-        };
-        assert_eq!(
-            state.destructive_operation,
-            CloudBackupDestructiveOperationState::DisableFailed {
-                message: "blocked".into(),
-                can_keep_enabled: true,
-            }
-        );
-    }
-
-    #[test]
-    fn disable_started_clears_configured_prompt() {
+    fn committed_turn_off_clears_configured_prompt() {
         let mut model = CloudBackupStateReducer::default();
         model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
             CloudBackupPasskeyChoiceIntent::RepairPasskey,
         ));
 
-        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-            CloudBackupDisableOutcome::Started,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Disabling));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
-            panic!("enabled backup should project configured lifecycle");
+            panic!("a committed Turn Off should project configured lifecycle");
         };
         assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
         assert_eq!(state.destructive_operation, CloudBackupDestructiveOperationState::Disabling);
+        assert_eq!(model.status(), CloudBackupStatus::Disabling);
     }
 
     #[test]

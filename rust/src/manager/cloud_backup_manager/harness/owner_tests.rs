@@ -55,8 +55,8 @@ fn held_turn_off(app: &mut TestApp) -> (Hold, CloudBackupExclusiveOperationClaim
     let hold = Hold::default();
     app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::Hold(hold.clone()));
 
-    app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-        .then_cannot(&[N::TurnOff, N::Enable]);
+    app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+    app.confirm_turn_off().then_cannot(&[N::TurnOff, N::Enable]);
     app.block_on("the held delete to start", hold.entered());
 
     let claim = running_claim(app).expect("Turn Off runs");
@@ -195,7 +195,7 @@ fn abandon(
         let ended = app.block_on("the reset to end", permit.resume_after_failed_reset());
         recovery = Some(ended.expect("abandon the reset"));
     })
-    .then_cannot(&[N::KeepEnabled]);
+    .then_cannot(&[N::ResumeDisable]);
     recovery.expect("the reset ended")
 }
 

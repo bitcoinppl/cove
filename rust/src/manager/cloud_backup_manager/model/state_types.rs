@@ -60,7 +60,6 @@ pub enum CloudBackupDestructiveOperationState {
     RecreatingManifest,
     ReinitializingBackup,
     Disabling,
-    DisableFailed { message: String, can_keep_enabled: bool },
 }
 
 /// Status of a request to remove cloud-only backups that the active key cannot decrypt

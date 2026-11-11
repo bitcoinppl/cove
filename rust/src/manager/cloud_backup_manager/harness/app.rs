@@ -25,6 +25,9 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     TestGlobals, install_test_globals, register_test_supervisor,
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupScreenBody,
+};
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
     CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRuntimeOwnership,
@@ -40,18 +43,31 @@ pub(crate) enum NextAction {
     Enable,
     RestoreFromCloudBackup,
     TurnOff,
+    /// Confirms the Turn Off review on screen
+    ConfirmDisable,
+    CancelDisable,
+    /// Try Again on a committed Turn Off
+    ResumeDisable,
+    StopUsingOnThisDevice,
     Verify,
     SyncUnsynced,
 }
 
 impl NextAction {
-    /// The intent a tap on this action dispatches
-    pub(crate) fn intent(self) -> UserIntent {
+    /// The intent a tap on this action dispatches, on a screen whose Turn Off review is `review_id`
+    pub(crate) fn intent(self, review_id: Option<u64>) -> UserIntent {
         let context = CloudBackupEnableContext::settings_manual();
         match self {
             Self::Enable => UserIntent::Enable(EnableIntent::Standard, context),
             Self::RestoreFromCloudBackup => UserIntent::RestoreFromCloudBackup,
             Self::TurnOff => UserIntent::TurnOff,
+            // with no review on screen there is no Confirm to tap, so any id is stale
+            Self::ConfirmDisable => {
+                UserIntent::ConfirmDisable { review_id: review_id.unwrap_or_default() }
+            }
+            Self::CancelDisable => UserIntent::CancelDisable,
+            Self::ResumeDisable => UserIntent::ResumeDisable,
+            Self::StopUsingOnThisDevice => UserIntent::StopUsingOnThisDevice,
             Self::Verify => UserIntent::StartVerification {
                 source: CloudBackupVerificationSource::CloudBackupDetail,
                 discoverable: false,
@@ -188,6 +204,16 @@ impl TestApp {
     pub(crate) fn current(&mut self) -> Step<'_> {
         self.begin_event("current state".into());
         Step(self)
+    }
+
+    /// Taps Confirm on the Turn Off review the screen shows
+    pub(crate) fn confirm_turn_off(&mut self) -> Step<'_> {
+        let review = self.turn_off_review();
+        let review_id = review.map(|review| review.review_id).unwrap_or_else(|| {
+            panic!("after {}: no Turn Off review to confirm\n{}", self.last_event, self.describe())
+        });
+
+        self.dispatch(CloudBackupManagerAction::ConfirmDisable { review_id })
     }
 
     /// A user tap or platform call
@@ -420,9 +446,26 @@ impl TestApp {
     /// What dispatch would do with `action` now, from the same `evaluate_admission` it calls
     pub(crate) fn admission(&self, action: NextAction) -> Admission {
         let supervisor = self.manager.supervisor.clone();
+        let intent = action.intent(self.turn_off_review().map(|review| review.review_id));
         self.block_on("the supervisor's admission answer", async move {
-            call!(supervisor.harness_admission(action.intent())).await.expect("admission")
+            call!(supervisor.harness_admission(intent)).await.expect("admission")
         })
+    }
+
+    /// The Turn Off review the published screen shows
+    pub(crate) fn turn_off_review(&self) -> Option<CloudBackupDisableReview> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        match configured.disable {
+            CloudBackupDisableScreen::Reviewing(review) => Some(review),
+            CloudBackupDisableScreen::Idle
+            | CloudBackupDisableScreen::Preparing
+            | CloudBackupDisableScreen::Offline
+            | CloudBackupDisableScreen::Draining => None,
+        }
     }
 
     /// What admission says now for an intent no [`NextAction`] names, such as a platform call

@@ -17,18 +17,23 @@ use parking_lot::Mutex;
 use tracing::error;
 
 use self::notices::Notices;
+#[cfg(test)]
+pub(crate) use self::types::CloudBackupActionAvailability;
 use self::types::CloudBackupActions;
+#[cfg(test)]
+pub(crate) use self::types::CloudBackupSection;
 pub(crate) use self::types::{
-    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupInventoryAssessment,
-    CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupOwnRow,
-    CloudBackupProgressSection, CloudBackupTurnOffFailure, CloudBackupUnreadableKind,
+    CloudBackupDisableConfirmation, CloudBackupDisableImpact, CloudBackupDisableNotStartedReason,
+    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
+    CloudBackupInventoryAssessment, CloudBackupKeyTrust, CloudBackupLastOutcome,
+    CloudBackupListedRecord, CloudBackupNamedCount, CloudBackupOutcome, CloudBackupOutcomeTarget,
+    CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupRejection,
+    CloudBackupScreenAction, CloudBackupTurnOffFailure, CloudBackupUnreadableKind,
 };
 pub use self::types::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
     CloudBackupScreen, CloudBackupScreenBody, CloudBackupScreenDelta,
 };
-#[cfg(test)]
-pub(crate) use self::types::{CloudBackupScreenAction, CloudBackupSection};
 use crate::database::cloud_backup::PersistedHealNotice;
 
 use super::actors::supervisor::Runtime;
