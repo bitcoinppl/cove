@@ -1,29 +1,18 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.bitcoinppl.cove.ui.theme.CoveTheme
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
-import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
-import org.bitcoinppl.cove_core.CloudBackupDetailState
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupState
-import org.bitcoinppl.cove_core.CloudBackupSyncState
-import org.bitcoinppl.cove_core.CloudBackupUndecryptableWalletDeletionState
-import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudBackupWalletVerificationIssues
 import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.DeepVerificationReport
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,102 +26,73 @@ class CloudBackupVerificationSectionTest {
         val error =
             "cloud storage error: failed to download master key backup: " +
                 "authorization required: google drive authorization was cancelled"
-        val manager = failedVerificationManager(error)
+        val screen =
+            cloudBackupFixture("configured-passkey-missing").withVerification(
+                CloudBackupVerificationState.Failed(
+                    DeepVerificationFailure.Retry(
+                        message = error,
+                        detail = null,
+                        retryAction = null,
+                    ),
+                ),
+            )
 
-        compose.setContent {
-            CoveTheme(darkTheme = false) {
-                VerificationSection(
-                    manager = manager,
-                    onRecreate = {},
-                    onReinitialize = {},
-                )
-            }
-        }
+        compose.setVerificationSection(screen)
 
         val errorBottom = compose.onNodeWithText(error).getUnclippedBoundsInRoot().bottom
         val retryTop = compose.onNodeWithText("Try Again").getUnclippedBoundsInRoot().top
-        val createPasskeyTop = compose.onNodeWithText("Create New Passkey").getUnclippedBoundsInRoot().top
 
         assertTrue("retry action should appear below the error", retryTop >= errorBottom)
-        assertTrue("create-passkey action should appear below retry", createPasskeyTop > retryTop)
+
+        // a failure off the passkey never offers a passkey repair; only the passkey card does
+        compose.onAllNodesWithText("Create New Passkey").assertCountEquals(0)
     }
 
     @Test
     fun undecryptableIssueRequiresDeletionConfirmation() {
-        val issue = "3 wallet backup(s) could not be decrypted with this backup key"
-        val manager =
-            configuredManager(
-                CloudBackupVerificationState.NeedsAttention(
-                    report =
-                        DeepVerificationReport(
-                            masterKeyWrapperRepaired = false,
-                            localMasterKeyRepaired = false,
-                            credentialRecovered = false,
-                            walletsVerified = 2u,
-                            walletIssues =
-                                CloudBackupWalletVerificationIssues(
-                                    missing = 0u,
-                                    downloadFailed = 0u,
-                                    invalid = 0u,
-                                    decryptionFailed = 3u,
-                                    unsupported = 0u,
-                                    unreadable = 0u,
-                                ),
-                            detail = null,
-                        ),
-                    checkedAt = 1UL,
-                ),
-            )
+        val issue = "2 wallet backup(s) could not be decrypted with this backup key"
+        val screen = cloudBackupFixture("configured-needs-attention-undecryptable")
 
-        compose.setContent {
+        compose.setVerificationSection(screen)
+
+        compose.onNodeWithText(issue).performClick()
+
+        compose.onNodeWithText("Delete 2 Inaccessible Wallet Backups?").assertIsDisplayed()
+        compose.onNodeWithText("Delete Backups").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").assertIsDisplayed()
+    }
+
+    @Test
+    fun notCompletedRequestIsANeutralResultWithoutPasskeyRepair() {
+        // Rust offers the repair here, since the passkey is missing, but a cancelled request
+        // shows nothing about the passkey, so the repair stays on the passkey card
+        val screen =
+            cloudBackupFixture("configured-passkey-missing")
+                .withAvailable(CloudBackupScreenAction.REPAIR_PASSKEY)
+                .withVerification(CloudBackupVerificationState.NotCompleted)
+
+        compose.setVerificationSection(screen)
+
+        compose.onNodeWithText("Cloud Backup Not Verified").assertIsDisplayed()
+        compose
+            .onNodeWithText("Verification didn't finish. Verify again to confirm your cloud backup can be restored.")
+            .assertIsDisplayed()
+        compose.onNodeWithText("Verify Now").assertIsDisplayed()
+        compose.onAllNodesWithText("Add New Passkey").assertCountEquals(0)
+        compose.onAllNodesWithText("If your passkey was deleted", substring = true).assertCountEquals(0)
+    }
+
+    private fun ComposeContentTestRule.setVerificationSection(screen: CloudBackupScreen) {
+        setContent {
             CoveTheme(darkTheme = false) {
                 VerificationSection(
-                    manager = manager,
+                    manager = CloudBackupManager(screen),
+                    screen = screen,
+                    section = screen.requireVerificationSection(),
                     onRecreate = {},
                     onReinitialize = {},
                 )
             }
         }
-
-        compose.onNodeWithText(issue).performClick()
-
-        compose.onNodeWithText("Delete 3 Inaccessible Wallet Backups?").assertIsDisplayed()
-        compose.onNodeWithText("Delete Backups").assertIsDisplayed()
-        compose.onNodeWithText("Cancel").assertIsDisplayed()
     }
-
-    private fun failedVerificationManager(error: String): CloudBackupManager =
-        configuredManager(
-            CloudBackupVerificationState.Failed(
-                DeepVerificationFailure.Retry(
-                    message = error,
-                    detail = null,
-                    retryAction = null,
-                ),
-            ),
-        )
-
-    private fun configuredManager(verification: CloudBackupVerificationState): CloudBackupManager =
-        CloudBackupManager(
-            CloudBackupState(
-                lifecycle =
-                    CloudBackupLifecycle.Configured(
-                        CloudBackupConfiguredState(
-                            passkey = CloudBackupPasskeyState.Available,
-                            verification = verification,
-                            sync = CloudBackupSyncState.Idle,
-                            destructiveOperation = CloudBackupDestructiveOperationState.Idle,
-                            undecryptableWalletDeletion =
-                                CloudBackupUndecryptableWalletDeletionState.Idle,
-                            detail = CloudBackupDetailState.NotLoaded,
-                            otherBackups = CloudBackupOtherBackupsState.NotChecked,
-                            restoreAll = CloudBackupRestoreAllState.NotShown,
-                            rootPrompt = CloudBackupRootPrompt.None,
-                            syncHealth = CloudSyncHealth.Unknown,
-                            verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
-                        ),
-                    ),
-                settingsRowStatus = CloudBackupSettingsRowStatus.CheckingSync,
-            ),
-        )
 }

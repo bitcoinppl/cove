@@ -7,6 +7,7 @@
 19	org.bitcoinppl.cove.cloudbackup.CloudBackupAccessibilityTest
 17	org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingScreenTest
 35	org.bitcoinppl.cove.cloudbackup.CloudBackupLargeFontLayoutTest
+30	org.bitcoinppl.cove.cloudbackup.CloudBackupScreenContractTest
 10	org.bitcoinppl.cove.cloudbackup.CloudBackupVerificationSectionTest
 75	org.bitcoinppl.cove.flows.AndroidCompactLayoutAuditTest
 111	org.bitcoinppl.cove.flows.CoinControlFlow.UtxoLockFullLaunchTest

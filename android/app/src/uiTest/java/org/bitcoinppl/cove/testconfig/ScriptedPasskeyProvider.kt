@@ -52,7 +52,7 @@ object ScriptedPasskeyProvider : PasskeyProvider {
         SUCCESS,
         PRE_PRESENTATION_FAILURE,
         POST_PRESENTATION_FAILURE,
-        USER_CANCELLED,
+        NOT_COMPLETED,
         NO_CREDENTIAL,
     }
 
@@ -188,7 +188,7 @@ object ScriptedPasskeyProvider : PasskeyProvider {
                         operation,
                         PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation,
                     )
-                Result.USER_CANCELLED -> PasskeyException.UserCancelled()
+                Result.NOT_COMPLETED -> PasskeyException.NotCompleted()
                 Result.NO_CREDENTIAL -> PasskeyException.NoCredentialFound()
             }
 

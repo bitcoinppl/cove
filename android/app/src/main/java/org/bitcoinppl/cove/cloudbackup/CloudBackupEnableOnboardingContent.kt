@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -53,9 +54,18 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
+import org.bitcoinppl.cove_core.CloudBackupActionAvailability
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupProgress
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 internal enum class CloudBackupEnableOnboardingContext {
     STANDARD,
@@ -67,11 +77,14 @@ internal fun CloudBackupEnableOnboardingView(
     onEnable: () -> Unit,
     onCancel: () -> Unit,
     message: String?,
-    isBusy: Boolean,
+    primaryAvailability: CloudBackupActionAvailability?,
     context: CloudBackupEnableOnboardingContext,
     primaryButtonTitle: String,
+    primaryTestTag: String,
     cancelButtonTitle: String = "Cancel",
     cancelButtonLeading: Boolean = false,
+    cancelEnabled: Boolean = true,
+    footer: @Composable () -> Unit = {},
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
 
@@ -99,7 +112,7 @@ internal fun CloudBackupEnableOnboardingView(
                         Modifier
                             .testTag("onboarding.cloudBackup.cancel")
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable(enabled = !isBusy, onClick = onCancel)
+                            .clickable(enabled = cancelEnabled, onClick = onCancel)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
@@ -207,12 +220,19 @@ internal fun CloudBackupEnableOnboardingView(
                     )
                 }
 
+                // the acknowledgements are this screen's own; whether enable can run is Rust's
                 OnboardingPrimaryButton(
                     text = primaryButtonTitle,
                     onClick = onEnable,
-                    modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
-                    enabled = allChecked && !isBusy,
+                    modifier = Modifier.testTag(primaryTestTag),
+                    enabled = allChecked && primaryAvailability?.isAvailable == true,
                 )
+
+                primaryAvailability?.caption?.let {
+                    Text(text = it, color = OnboardingTextSecondary, style = MaterialTheme.typography.caption)
+                }
+
+                footer()
 
                 Spacer(modifier = Modifier.size(16.dp))
             }
@@ -401,3 +421,100 @@ private fun OnboardingToggleCard(
         )
     }
 }
+
+@Composable
+internal fun CloudBackupSettingsEnableOnboarding(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    onCancel: () -> Unit,
+) {
+    val enableFlow = (screen.body as? CloudBackupScreenBody.Enabling)?.v1
+    val savedPasskeyConfirmationMode =
+        (enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
+    val needsManualPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
+
+    // Confirm Passkey continues a paused enable; otherwise the primary button starts one
+    val primaryAction =
+        if (needsManualPasskeyConfirmation) {
+            CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY
+        } else {
+            CloudBackupScreenAction.ENABLE
+        }
+    val primary = screen.actions.lookup(primaryAction)
+
+    // the root prompt answers an enable that asks for a passkey choice, so no overlay covers it
+    val awaitsPrompt = screen.actions.draws(CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING)
+    val showsBusyOverlay = enableFlow != null && primary == null && !awaitsPrompt
+    val primaryButtonTitle =
+        if (needsManualPasskeyConfirmation) {
+            "Confirm Passkey"
+        } else {
+            "Enable Cloud Backup"
+        }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        CloudBackupEnableOnboardingView(
+            onEnable = {
+                if (needsManualPasskeyConfirmation) {
+                    manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                } else {
+                    manager.dispatch(settingsEnableCloudBackupPrompt())
+                }
+            },
+            onCancel = {
+                if (screen.actions.lookup(CloudBackupScreenAction.DISCARD_PENDING_ENABLE)?.isAvailable == true) {
+                    manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+                }
+
+                onCancel()
+            },
+            message = null,
+            primaryAvailability = primary,
+            context = CloudBackupEnableOnboardingContext.STANDARD,
+            primaryButtonTitle = primaryButtonTitle,
+            primaryTestTag = CloudBackupTags.action(primaryAction),
+            // Enable has no cancel action, so Cancel waits while it runs or a prompt answers it
+            cancelEnabled = !showsBusyOverlay && !awaitsPrompt,
+            footer = { CloudBackupSettingsEnableFooter(manager, screen, primaryAction) },
+        )
+
+        if (showsBusyOverlay) {
+            CloudBackupEnableBusyOverlay(
+                enableFlow,
+                screen.verification?.presentation
+                    ?: CloudBackupVerificationPresentation.Hidden(null),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CloudBackupSettingsEnableFooter(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    primaryAction: CloudBackupScreenAction,
+) {
+    CloudBackupLastOutcomeNote(
+        outcome = screen.lastOutcome,
+        target = CloudBackupOutcomeTarget.Action(primaryAction),
+        onDispatch = manager::dispatch,
+    )
+    CloudBackupActionButton(
+        screen = screen,
+        action = CloudBackupScreenAction.RESTORE_FROM_CLOUD_BACKUP,
+        title = "Restore from Cloud Backup",
+        style = CloudBackupActionStyle.TEXT,
+        onDispatch = manager::dispatch,
+        onClick = { manager.dispatch(CloudBackupManagerAction.RestoreFromCloudBackup) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+internal fun settingsEnableCloudBackupPrompt(): CloudBackupManagerAction =
+    CloudBackupManagerAction.PromptEnablePasskeyChoice(
+        CloudBackupEnableContext(
+            SavedPasskeyConfirmationMode.MANUAL,
+            CloudBackupVerificationSource.SETTINGS,
+        ),
+    )

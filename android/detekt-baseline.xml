@@ -45,6 +45,7 @@
     <ID>CyclomaticComplexMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingCloudBackupDetailsStepView</ID>
     <ID>CyclomaticComplexMethod:OnboardingContainer.kt:@Composable internal fun OnboardingContainer</ID>
     <ID>CyclomaticComplexMethod:OtherBackupsSection.kt:@Composable internal fun OtherBackupsSection</ID>
+    <ID>CyclomaticComplexMethod:OtherBackupsSection.kt:@Composable private fun OtherBackupsLoadedSection</ID>
     <ID>CyclomaticComplexMethod:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
     <ID>CyclomaticComplexMethod:QrExportView.kt:@Composable fun QrExportView</ID>
     <ID>CyclomaticComplexMethod:SelectedWalletContainer.kt:@Composable fun SelectedWalletContainer</ID>
@@ -537,10 +538,12 @@
     <ID>LongMethod:CloudBackupDetailContent.kt:@Composable internal fun CloudBackupDetailContent</ID>
     <ID>LongMethod:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableOnboardingView</ID>
     <ID>LongMethod:CloudBackupPresentationHost.kt:@Composable fun CloudBackupPresentationHost</ID>
+    <ID>LongMethod:CloudBackupPreviewData.kt:private fun cloudBackupPreviewScreen: CloudBackupScreen</ID>
     <ID>LongMethod:CloudBackupPreviewData.kt:private fun cloudBackupPreviewState: CloudBackupState</ID>
     <ID>LongMethod:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CloudBackupScreen</ID>
     <ID>LongMethod:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun CloudBackupScreenFrame</ID>
     <ID>LongMethod:CloudBackupWalletRows.kt:@Composable internal fun CloudBackupHeaderSection</ID>
+    <ID>LongMethod:CloudBackupWalletRows.kt:@Composable internal fun WalletItemRow</ID>
     <ID>LongMethod:CloudBackupWalletRows.kt:@Composable private fun WalletItemRow</ID>
     <ID>LongMethod:CloudOnlySection.kt:@Composable internal fun CloudOnlySection</ID>
     <ID>LongMethod:CloudOnlySection.kt:@Composable private fun CloudOnlyWalletActionSheetContent</ID>
@@ -605,6 +608,7 @@
     <ID>LongMethod:OnboardingTermsViews.kt:@Composable private fun OnboardingTermsAgreementCard</ID>
     <ID>LongMethod:OnboardingTheme.kt:@Composable internal fun OnboardingPromptScreen</ID>
     <ID>LongMethod:OtherBackupsSection.kt:@Composable internal fun OtherBackupsSection</ID>
+    <ID>LongMethod:OtherBackupsSection.kt:@Composable private fun OtherBackupsLoadedSection</ID>
     <ID>LongMethod:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun QrCodeImportScreen</ID>
     <ID>LongMethod:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun HelpSheet</ID>
     <ID>LongMethod:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
@@ -681,8 +685,15 @@
     <ID>LongParameterList:AutoSizeText.kt:private fun calculateOptimalFontSize: TextUnit</ID>
     <ID>LongParameterList:AutoSizeText.kt:private fun calculateOptimalFontSizeAndWidth: Pair&lt;TextUnit, Float&gt;</ID>
     <ID>LongParameterList:ChoiceDialog.kt:@Composable internal fun ChoiceAlertDialog</ID>
+    <ID>LongParameterList:CloudBackupDetailContent.kt:@Composable private fun CloudBackupSectionContent</ID>
+    <ID>LongParameterList:CloudBackupDialog.kt:@Composable internal fun CloudBackupConfirmationDialog</ID>
     <ID>LongParameterList:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableOnboardingView</ID>
+    <ID>LongParameterList:CloudBackupPendingEnableRecoveryContent.kt:@Composable private fun RecoveryScreen</ID>
     <ID>LongParameterList:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptDialog</ID>
+    <ID>LongParameterList:CloudBackupRowActionSheet.kt:@Composable private fun CloudBackupRowActionSheetContent</ID>
+    <ID>LongParameterList:CloudBackupScreenContract.kt:@Composable internal fun CloudBackupActionButton</ID>
+    <ID>LongParameterList:CloudBackupScreenContract.kt:@Composable internal fun CloudBackupActionCard</ID>
+    <ID>LongParameterList:CloudBackupTurnOffReviewDialogs.kt:@Composable private fun TurnOffFirstReviewDialog</ID>
     <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconBubble</ID>
     <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconText</ID>
     <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupTitledContentSection</ID>
@@ -715,6 +726,7 @@
     <ID>LongParameterList:OnboardingPromptViews.kt:@Composable private fun OnboardingCloudRestoreChoiceSection</ID>
     <ID>LongParameterList:OnboardingTheme.kt:@Composable internal fun OnboardingPromptScreen</ID>
     <ID>LongParameterList:OnboardingTheme.kt:@Composable internal fun OnboardingStatusCard</ID>
+    <ID>LongParameterList:OtherBackupsSection.kt:@Composable private fun OtherBackupsLoadedSection</ID>
     <ID>LongParameterList:QrCodeScanView.kt:private fun handleQrCode</ID>
     <ID>LongParameterList:QrExportView.kt:@Composable fun QrExportView</ID>
     <ID>LongParameterList:ReceiveAddressSheet.kt:@Composable internal fun ReceiveAddressSheetContent</ID>
@@ -748,6 +760,8 @@
     <ID>LongParameterList:TransactionsRows.kt:@OptIn(ExperimentalFoundationApi::class) @Composable internal fun UnsignedTransactionWidget</ID>
     <ID>LongParameterList:TransactionsRows.kt:private fun formatAmountFor: String</ID>
     <ID>LongParameterList:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun UtxoListScreenContent</ID>
+    <ID>LongParameterList:VerificationSection.kt:@Composable private fun VerificationActionItem</ID>
+    <ID>LongParameterList:VerificationSection.kt:@Composable private fun VerificationFailureContent</ID>
     <ID>LongParameterList:VerifyWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun VerifyWordsScreen</ID>
     <ID>LongParameterList:WalletBalanceHeaderView.kt:@Composable fun WalletBalanceHeaderView</ID>
     <ID>LongParameterList:WalletBalanceHeaderView.kt:@Composable internal fun BalanceWidget</ID>
@@ -1299,6 +1313,7 @@
     <ID>TooManyFunctions:SendFlowManager.kt:SendFlowManager : SendFlowManagerReconcilerCloseable</ID>
     <ID>TooManyFunctions:WalletManager.kt:WalletManager : WalletManagerReconcilerCloseable</ID>
     <ID>UnnecessaryNotNullOperator:TapSignerScanningOverlay.kt:errorMessage!!</ID>
+    <ID>UnreachableCode:AndroidCloudStorageSupport.kt:mapDriveListError(error).message ?: "google drive account selection failed"</ID>
     <ID>UnreachableCode:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$return runBlocking { try { val activity = ForegroundUiBridge.requireActivity() val response = credentialManager.createCredential( activity, CreatePublicKeyCredentialRequest( requestJson = buildCreateRequestJson(rpId, challenge, user), ), ) val registration = response as? CreatePublicKeyCredentialResponse ?: throw passkeyRequestFailed( PasskeyOperation.REGISTRATION, PasskeyFailureReason.UnexpectedCredentialType, ) validatePasskeyRegistrationPrf(registration.registrationResponseJson) PasskeyRegistrationResult( credentialId = extractCreatedCredentialId(registration.registrationResponseJson), providerAaguid = extractCreatedProviderAaguid(registration.registrationResponseJson), registeredPlatform = PasskeyRegistrationPlatform.ANDROID, ) } catch (error: Exception) { if (error is CancellationException) throw error val mapped = mapPasskeyCreateError(error) logPasskeyFailure("registration", error, mapped) throw mapped } }</ID>
     <ID>UnreachableCode:AppManager.kt:AppManager$router = RouterManager(it.router)</ID>
     <ID>UnreachableCode:AuthManager.kt:AuthManager$Instant.ofEpochSecond(it.toLong())</ID>

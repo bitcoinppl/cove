@@ -162,7 +162,7 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
             ScriptedCloudStorageAccess.awaitWalletListCount(walletListsBeforeRefresh + 2),
         )
         waitUntil("detail refresh should settle after the trailing provider-signal refresh") {
-            !CloudBackupManager.getInstance().isDetailInventoryChecking
+            !CloudBackupManager.getInstance().isInventoryChecking
         }
         assertEquals(
             "provider signal should coalesce to exactly one trailing refresh",

@@ -20,8 +20,8 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.FixtureWalletDownloadResult
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.junit.Assert.assertEquals
@@ -78,9 +78,7 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
         waitUntil("mixed Restore All should retain only the failed wallet") {
             val manager = CloudBackupManager.getInstance()
             val failedWallet =
-                (manager.cloudOnly as? CloudOnlyState.Loaded)
-                    ?.wallets
-                    ?.singleOrNull()
+                (manager.notOnDeviceRows.singleOrNull()?.record as? CloudBackupListedRecord.NotOnDevice)?.wallet
 
             manager.restoreAllState is CloudBackupRestoreAllState.RetryAvailable &&
                 failedWallet?.recordId == ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID &&
@@ -178,7 +176,7 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
         device.openSettings()
         device.openCloudBackup()
         waitUntil("expected two fixture wallets and Restore All to become available") {
-            CloudBackupManager.getInstance().isDetailInventoryComplete &&
+            CloudBackupManager.getInstance().isInventoryComplete &&
                 CloudBackupManager.getInstance().restoreAllState is CloudBackupRestoreAllState.StartAvailable &&
                 cloudOnlyRecordIds() ==
                 listOf(
@@ -189,9 +187,7 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
     }
 
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     private fun localWalletNames(): Set<String> =
         AppManager.getInstance().wallets.mapTo(mutableSetOf()) { wallet -> wallet.name }
@@ -287,7 +283,7 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-                "state=${manager.state}, cloudOnly=${cloudOnlyRecordIds()}, " +
+            "screen=${manager.describeScreen()}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "enabled=${manager.isCloudBackupEnabled}, localWallets=${AppManager.getInstance().wallets}, " +
                 "walletLists=${ScriptedCloudStorageAccess.walletListNamespaces()}, " +
                 "walletDownloads=${ScriptedCloudStorageAccess.walletDownloadRecordIds()}"

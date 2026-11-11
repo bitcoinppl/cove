@@ -72,9 +72,13 @@ class CloudBackupAccessibilityTest {
 
     @Test
     fun restoreAllProgressIsDeterminateAndAnnouncedPolitely() {
+        val screen = cloudBackupFixture("configured")
+
         compose.setContent {
             CoveTheme(dynamicColor = false) {
                 CloudBackupRestoreAllControl(
+                    manager = CloudBackupManager(screen),
+                    screen = screen,
                     state =
                         CloudBackupRestoreAllState.Running(
                             completed = 2u,
@@ -82,8 +86,6 @@ class CloudBackupAccessibilityTest {
                             currentWalletName = "Vacation Fund",
                             cancellationRequested = false,
                         ),
-                    onAction = {},
-                    onCancel = {},
                 )
             }
         }

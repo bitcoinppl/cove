@@ -310,12 +310,10 @@ class AndroidPasskeyProvider(
 internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
     when (error) {
         is PasskeyException -> error
-        is ForegroundAuthorizationTimeoutException ->
-            passkeyRequestFailed(
-                PasskeyOperation.REGISTRATION,
-                PasskeyFailureReason.TimedOut,
-            )
-        is CreateCredentialCancellationException -> PasskeyException.UserCancelled()
+        // no resumed activity could present the request, which Rust treats as not ready rather
+        // than a failed request
+        is ForegroundAuthorizationTimeoutException -> PasskeyException.NotReady(PasskeyOperation.REGISTRATION)
+        is CreateCredentialCancellationException -> PasskeyException.NotCompleted()
         is CreateCredentialInterruptedException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
@@ -356,13 +354,9 @@ internal fun mapPasskeyGetError(
 ): PasskeyException =
     when (error) {
         is PasskeyException -> error
-        is ForegroundAuthorizationTimeoutException ->
-            passkeyRequestFailed(
-                operation,
-                PasskeyFailureReason.TimedOut,
-            )
+        is ForegroundAuthorizationTimeoutException -> PasskeyException.NotReady(operation)
         is NoCredentialException -> PasskeyException.NoCredentialFound()
-        is GetCredentialCancellationException -> PasskeyException.UserCancelled()
+        is GetCredentialCancellationException -> PasskeyException.NotCompleted()
         is GetCredentialInterruptedException ->
             passkeyRequestFailed(
                 operation,

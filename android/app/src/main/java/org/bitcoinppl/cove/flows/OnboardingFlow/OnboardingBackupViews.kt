@@ -1,44 +1,19 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,44 +22,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.delay
-import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.Log
-import org.bitcoinppl.cove.OnboardingManager
-import org.bitcoinppl.cove.QrCodeGenerator
-import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
-import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
-import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPendingEnableRecoveryContent
-import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.caption
-import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
-import org.bitcoinppl.cove_core.CloudBackupEnableFlow
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
-import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupVerificationSource
-import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
-import org.bitcoinppl.cove_core.OnboardingRestoreState
-import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 @Composable
 internal fun OnboardingCreatingWalletView(
@@ -207,7 +153,7 @@ internal fun ReportOnboardingCloudBackupEnabled(
 ) {
     var didReportEnabled by remember { mutableStateOf(false) }
 
-    LaunchedEffect(backupManager.enableCompletion?.id, backupManager.lifecycle) {
+    LaunchedEffect(backupManager.enableCompletion?.id, backupManager.screen.body) {
         if (didReportEnabled) return@LaunchedEffect
 
         val completion = backupManager.enableCompletion
@@ -241,6 +187,7 @@ internal fun OnboardingCloudBackupPresentationContent(
         is OnboardingCloudBackupStepPresentation.PendingEnableRecovery -> {
             CloudBackupPendingEnableRecoveryContent(
                 recovery = presentation.recovery,
+                cleanup = presentation.cleanup,
                 onConfirmCleanup = {
                     routeOnboardingCloudBackupRecoveryIntent(
                         OnboardingCloudBackupRecoveryIntent.REMOVE_INCOMPLETE_SETUP,

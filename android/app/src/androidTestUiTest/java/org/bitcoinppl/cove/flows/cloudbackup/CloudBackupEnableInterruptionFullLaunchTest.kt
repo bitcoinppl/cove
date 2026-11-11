@@ -17,7 +17,6 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.UploadKind
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -75,7 +74,7 @@ class CloudBackupEnableInterruptionFullLaunchTest {
         // what shows the staged key was discarded
         waitUntil("relaunch should discard the interrupted enable") {
             !HoldableKeychainAccess.hasPendingEnableJournal() &&
-                CloudBackupManager.getInstance().lifecycle is CloudBackupLifecycle.Disabled
+                CloudBackupManager.getInstance().isDisabled
         }
         assertEquals("the interrupted enable wrote to the cloud", emptyList<String>(), ScriptedCloudStorageAccess.freshEnableNamespaces())
 
@@ -170,7 +169,7 @@ class CloudBackupEnableInterruptionFullLaunchTest {
         relaunchSecondProcess()
 
         waitUntil("relaunch should finish the promoted enable") {
-            CloudBackupManager.getInstance().lifecycle is CloudBackupLifecycle.Configured
+            CloudBackupManager.getInstance().isConfigured
         }
         assertNull(
             "relaunch asked to confirm a passkey the promotion already committed",
@@ -252,6 +251,6 @@ class CloudBackupEnableInterruptionFullLaunchTest {
         }
 
         val manager = CloudBackupManager.getInstance()
-        assertTrue("$message; lifecycle=${manager.lifecycle}, row=${manager.settingsRowStatus}", condition())
+        assertTrue("$message; ${manager.describeScreen()}", condition())
     }
 }

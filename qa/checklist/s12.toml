@@ -293,7 +293,7 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPresentationHost.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -324,7 +324,7 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPresentationHost.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -362,7 +362,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -396,7 +396,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -428,7 +428,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -455,7 +455,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [

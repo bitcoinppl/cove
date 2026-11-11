@@ -16,41 +16,23 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove_core.CloudBackupDetail
-import org.bitcoinppl.cove_core.CloudBackupDetailState
-import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
+import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
-import org.bitcoinppl.cove_core.CloudBackupEnableFlow
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
-import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
-import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
-import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
-import org.bitcoinppl.cove_core.CloudBackupState
-import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
-import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudBackupUndecryptableWalletDeletionState
-import org.bitcoinppl.cove_core.CloudBackupSyncState
-import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
 import org.bitcoinppl.cove_core.DriveAccountSwitchReconcileAction
-import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
-import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.RustCloudBackupManager
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
-internal data class DriveAccountSwitchRecovery(
+/**
+ * A failure in Android's half of a Google Drive account switch, such as saving the staged
+ * account; Rust can't observe these, so the manager holds them until a retry succeeds
+ */
+internal data class DriveAccountSwitchPlatformFailure(
     val transitionId: ULong,
     val message: String,
 )
@@ -58,7 +40,7 @@ internal data class DriveAccountSwitchRecovery(
 @Stable
 class CloudBackupManager private constructor(
     private val rust: RustCloudBackupManager?,
-    initialState: CloudBackupState,
+    initialScreen: CloudBackupScreen,
     startLiveUpdates: Boolean,
 ) : CloudBackupManagerReconciler, Closeable {
     private val mainScope =
@@ -83,7 +65,8 @@ class CloudBackupManager private constructor(
             Log.w(TAG, it)
         }
 
-    var state by mutableStateOf(initialState)
+    /** Everything the Cloud Backup UI draws; views read nothing else from this manager */
+    var screen by mutableStateOf(initialScreen)
         private set
 
     var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
@@ -92,7 +75,7 @@ class CloudBackupManager private constructor(
     var enableCompletion by mutableStateOf<TaggedItem<CloudBackupEnableContext>?>(null)
         private set
 
-    internal var driveAccountSwitchRecovery by mutableStateOf<DriveAccountSwitchRecovery?>(null)
+    internal var driveAccountSwitchPlatformFailure by mutableStateOf<DriveAccountSwitchPlatformFailure?>(null)
         private set
 
     private var hasReconciledDisabledState = false
@@ -150,243 +133,7 @@ class CloudBackupManager private constructor(
         return rustGuard.withHandleSuspend(rust, block)
     }
 
-    internal constructor(initialState: CloudBackupState) : this(null, initialState, false)
-
-    val lifecycle: CloudBackupLifecycle
-        get() = state.lifecycle
-
-    val settingsRowStatus: CloudBackupSettingsRowStatus
-        get() = state.settingsRowStatus
-
-    val configuredState
-        get() = (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1
-
-    val enableFlow: CloudBackupEnableFlow?
-        get() = (state.lifecycle as? CloudBackupLifecycle.Enabling)?.v1
-
-    val passkeyState: CloudBackupPasskeyState?
-        get() = configuredState?.passkey
-
-    val passkeyRepairState: CloudBackupPasskeyRepairState?
-        get() = (passkeyState as? CloudBackupPasskeyState.NeedsRepair)?.state
-
-    val verificationState: CloudBackupVerificationState?
-        get() = configuredState?.verification
-
-    val syncState: CloudBackupSyncState?
-        get() = configuredState?.sync
-
-    val restoreAllState: CloudBackupRestoreAllState
-        get() = configuredState?.restoreAll ?: CloudBackupRestoreAllState.NotShown
-
-    val isRestoreAllRunning: Boolean
-        get() = restoreAllState is CloudBackupRestoreAllState.Running
-
-    val lifecycleFailureMessage: String?
-        get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message
-
-    val pendingEnableRecovery: CloudBackupPendingEnableRecovery?
-        get() = (state.lifecycle as? CloudBackupLifecycle.PendingEnableRecovery)?.v1
-
-    val isLifecycleDisabled: Boolean
-        get() = state.lifecycle is CloudBackupLifecycle.Disabled
-
-    val isLifecycleEnabling: Boolean
-        get() = state.lifecycle is CloudBackupLifecycle.Enabling
-
-    val isLifecycleRestoring: Boolean
-        get() = state.lifecycle is CloudBackupLifecycle.Restoring
-
-    val isCloudBackupAvailable: Boolean
-        get() = passkeyState is CloudBackupPasskeyState.Available
-
-    val isPasskeyMissing: Boolean
-        get() =
-            passkeyState is CloudBackupPasskeyState.Missing ||
-                passkeyState is CloudBackupPasskeyState.NeedsRepair
-
-    val isUnsupportedPasskeyProvider: Boolean
-        get() = passkeyState is CloudBackupPasskeyState.UnsupportedProvider
-
-    val rootPrompt: CloudBackupRootPrompt
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Enabling ->
-                    when (val flow = lifecycle.v1) {
-                        is CloudBackupEnableFlow.AwaitingForceNewConfirmation ->
-                            CloudBackupRootPrompt.ExistingBackupFound(flow.v1, flow.v2)
-                        is CloudBackupEnableFlow.AwaitingPasskeyChoice ->
-                            CloudBackupRootPrompt.PasskeyChoice(flow.v1)
-                        else -> CloudBackupRootPrompt.None
-                    }
-                is CloudBackupLifecycle.Configured -> lifecycle.v1.rootPrompt
-                else -> CloudBackupRootPrompt.None
-            }
-
-    val syncHealth: CloudSyncHealth
-        get() = configuredState?.syncHealth ?: CloudSyncHealth.Unknown
-
-    val progress: CloudBackupProgress?
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Enabling ->
-                    when (val flow = lifecycle.v1) {
-                        is CloudBackupEnableFlow.UploadingInitialBackup -> flow.progress
-                        is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial -> flow.progress
-                        else -> null
-                    }
-                else -> null
-            }
-
-    val detail: CloudBackupDetail?
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Configured ->
-                    when (val detail = lifecycle.v1.detail) {
-                        is CloudBackupDetailState.Complete -> detail.state.detail
-                        is CloudBackupDetailState.Checking -> detail.retained?.detail
-                        is CloudBackupDetailState.Failed -> detail.retained?.detail
-                        else -> null
-                    }
-                else -> null
-            }
-
-    val detailError: String?
-        get() =
-            when ((configuredState?.detail as? CloudBackupDetailState.Failed)?.reason) {
-                CloudBackupInventoryIncompleteReason.PROVIDER_SYNC_PENDING ->
-                    "Google Drive is still loading Cove backup files. Keep Cove open, then check again."
-                CloudBackupInventoryIncompleteReason.OFFLINE ->
-                    "This device is offline. Connect to the internet, then check Google Drive again."
-                CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
-                    "Cove cannot access Google Drive. Reconnect Google Drive, then check again."
-                CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
-                    "Google Drive is not available now. Try again later."
-                CloudBackupInventoryIncompleteReason.UNKNOWN ->
-                    "Cove could not load Cloud Backup details. Try again."
-                null -> null
-            }
-
-    val isDetailInventoryChecking: Boolean
-        get() = configuredState?.detail is CloudBackupDetailState.Checking
-
-    val isDetailInventoryComplete: Boolean
-        get() =
-            (configuredState?.detail as? CloudBackupDetailState.Complete)
-                ?.state
-                ?.inventoryAuthority == CloudBackupInventoryAuthority.PROVIDER_CONFIRMED
-
-    val isDetailInventoryReady: Boolean
-        get() =
-            when (val detail = configuredState?.detail) {
-                is CloudBackupDetailState.Complete -> detail.state
-                // mirrors Rust's detail_inventory_is_ready: offline, the known rows stay listed
-                // while their actions wait for a check that succeeds
-                is CloudBackupDetailState.Failed ->
-                    detail.retained.takeUnless {
-                        detail.reason == CloudBackupInventoryIncompleteReason.OFFLINE
-                    }
-                else -> null
-            }?.inventoryAuthority in
-                setOf(
-                    CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
-                    CloudBackupInventoryAuthority.LOCAL_SNAPSHOT_MATCHES_KNOWN_COUNT,
-                )
-
-    val verificationPresentation: CloudBackupVerificationPresentation
-        get() = configuredState?.verificationPresentation ?: CloudBackupVerificationPresentation.Hidden(null)
-
-    val cloudOnly: CloudOnlyState
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Configured ->
-                    when (val detail = lifecycle.v1.detail) {
-                        is CloudBackupDetailState.NotLoaded -> CloudOnlyState.NotFetched
-                        is CloudBackupDetailState.Checking -> detail.retained?.cloudOnly ?: CloudOnlyState.Loading
-                        is CloudBackupDetailState.Complete -> detail.state.cloudOnly
-                        is CloudBackupDetailState.Failed ->
-                            detail.retained?.cloudOnly
-                                ?: CloudOnlyState.Failed(
-                                    detailError ?: "Cove could not load Cloud Backup details.",
-                                )
-                    }
-                else -> CloudOnlyState.NotFetched
-            }
-
-    val cloudOnlyOperation: CloudOnlyOperation
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Configured ->
-                    loadedDetailState(lifecycle.v1.detail)
-                        ?.cloudOnlyOperation ?: CloudOnlyOperation.Idle
-                else -> CloudOnlyOperation.Idle
-            }
-
-    val otherBackupsOperation: OtherBackupsOperation
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Configured ->
-                    loadedDetailState(lifecycle.v1.detail)
-                        ?.otherBackupsOperation ?: OtherBackupsOperation.Idle
-                else -> OtherBackupsOperation.Idle
-            }
-
-    val otherBackupsState: CloudBackupOtherBackupsState
-        get() = configuredState?.otherBackups ?: CloudBackupOtherBackupsState.NotChecked
-
-    val isOtherBackupsInventoryReady: Boolean
-        get() = otherBackupsState is CloudBackupOtherBackupsState.Loaded
-
-    private fun loadedDetailState(detail: CloudBackupDetailState): LoadedCloudBackupDetail? =
-        when (detail) {
-            is CloudBackupDetailState.Complete -> detail.state
-            is CloudBackupDetailState.Checking -> detail.retained
-            is CloudBackupDetailState.Failed -> detail.retained
-            else -> null
-        }
-
-    val destructiveOperationState: CloudBackupDestructiveOperationState
-        get() = configuredState?.destructiveOperation ?: CloudBackupDestructiveOperationState.Idle
-
-    val undecryptableWalletDeletionState: CloudBackupUndecryptableWalletDeletionState
-        get() =
-            configuredState?.undecryptableWalletDeletion
-                ?: CloudBackupUndecryptableWalletDeletionState.Idle
-
-    val isDeletingUndecryptableWalletBackups: Boolean
-        get() =
-            undecryptableWalletDeletionState is
-                CloudBackupUndecryptableWalletDeletionState.Deleting
-
-    val isDisablingCloudBackup: Boolean
-        get() = destructiveOperationState is CloudBackupDestructiveOperationState.Disabling
-
-    val disableFailure: CloudBackupDestructiveOperationState.DisableFailed?
-        get() = destructiveOperationState as? CloudBackupDestructiveOperationState.DisableFailed
-
-    val isPerformingDestructiveAction: Boolean
-        get() =
-            destructiveOperationState !is CloudBackupDestructiveOperationState.Idle ||
-                isDeletingUndecryptableWalletBackups
-
-    val hasPendingUploadVerification: Boolean
-        get() = verificationState is CloudBackupVerificationState.AwaitingUploadConfirmation
-
-    val shouldPromptVerification: Boolean
-        get() =
-            !hasPendingUploadVerification &&
-                verificationState is CloudBackupVerificationState.Required
-
-    val isUnverified: Boolean
-        get() =
-            !hasPendingUploadVerification &&
-                (
-                    verificationState is CloudBackupVerificationState.Required ||
-                        verificationState is CloudBackupVerificationState.Cancelled
-                )
-
-    val isConfigured: Boolean
-        get() = state.lifecycle is CloudBackupLifecycle.Configured
+    internal constructor(initialScreen: CloudBackupScreen) : this(null, initialScreen, false)
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
@@ -542,13 +289,15 @@ class CloudBackupManager private constructor(
     }
 
     private fun apply(message: CloudBackupReconcileMessage) {
-        val wasDisablingCloudBackup = isDisablingCloudBackup
+        val wasTurningOff = screen.isTurningOff
         when (message) {
-            is CloudBackupReconcileMessage.Lifecycle -> {
-                // a completion from an enable that has since been turned off, such as by a full wipe, is stale
-                if (message.v1 is CloudBackupLifecycle.Disabled) enableCompletion = null
+            is CloudBackupReconcileMessage.Screen -> {
+                val next = screen.applying(message.v1)
 
-                state = state.copy(lifecycle = message.v1, settingsRowStatus = message.v2)
+                // a completion from an enable that has since been turned off, such as by a full wipe, is stale
+                if (next.body is CloudBackupScreenBody.Disabled) enableCompletion = null
+
+                screen = next
             }
 
             is CloudBackupReconcileMessage.EnableCompleted ->
@@ -571,22 +320,23 @@ class CloudBackupManager private constructor(
                     finalizeDriveAccountSwitch(transitionId)
                 }
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchRecoveryRequired ->
-                driveAccountSwitchRecovery =
-                    DriveAccountSwitchRecovery(message.transitionId, message.message)
         }.let {}
 
-        refreshPersistedEnabledState(forceDisabledNotification = wasDisablingCloudBackup)
+        refreshPersistedEnabledState(forceDisabledNotification = wasTurningOff)
     }
 
-    internal fun retryDriveAccountSwitchRecovery() {
-        val recovery = driveAccountSwitchRecovery ?: return
-
+    /**
+     * Retries a Google Drive account switch that Rust or Android reported as stuck
+     *
+     * Rust's recovery comes with the `DriveAccountSwitch` body; Android's own failures come from
+     * [driveAccountSwitchPlatformFailure]. Either way the retry reconciles both halves again
+     */
+    internal fun retryDriveAccountSwitchRecovery(transitionId: ULong, message: String) {
         rustScope.launch {
             val callbacks = driveAccountSwitchCallbacks
             if (callbacks == null) {
-                reportDriveAccountSwitchRecovery(
-                    recovery.transitionId,
+                reportDriveAccountSwitchPlatformFailure(
+                    transitionId,
                     "Google Drive account recovery is unavailable",
                 )
                 return@launch
@@ -599,7 +349,19 @@ class CloudBackupManager private constructor(
                 reconcileDriveAccountSwitchAction(action)
             }.onFailure { error ->
                 Log.e(TAG, "failed to retry drive account recovery", error)
-                reportDriveAccountSwitchRecovery(recovery.transitionId, recovery.message)
+                reportDriveAccountSwitchPlatformFailure(transitionId, message)
+            }
+        }
+    }
+
+    /** Cancels a recorded Google Drive account switch and restores the previous account */
+    internal fun cancelDriveAccountSwitch(transitionId: ULong) {
+        rustScope.launch {
+            if (!rollbackDriveAccountSwitch(transitionId)) {
+                reportDriveAccountSwitchPlatformFailure(
+                    transitionId,
+                    "Cove couldn't restore the previous Google Drive account; try again",
+                )
             }
         }
     }
@@ -618,7 +380,7 @@ class CloudBackupManager private constructor(
     private suspend fun commitDriveAccountSwitch(transitionId: ULong): Boolean {
         val receipt = driveAccountSwitchCallbacks?.commit?.invoke(transitionId)
         if (receipt?.confirmsCommitted(transitionId) != true) {
-            reportDriveAccountSwitchRecovery(
+            reportDriveAccountSwitchPlatformFailure(
                 transitionId,
                 "Cove couldn't save the selected Google Drive account; try again",
             )
@@ -633,7 +395,7 @@ class CloudBackupManager private constructor(
         return if (confirmed) {
             finalizeDriveAccountSwitch(transitionId)
         } else {
-            reportDriveAccountSwitchRecovery(
+            reportDriveAccountSwitchPlatformFailure(
                 transitionId,
                 "Cove couldn't finish changing Google Drive accounts; try again",
             )
@@ -646,14 +408,14 @@ class CloudBackupManager private constructor(
             driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId)
                 ?.confirmsNoTransition() != true
         ) {
-            reportDriveAccountSwitchRecovery(
+            reportDriveAccountSwitchPlatformFailure(
                 transitionId,
                 "Cove couldn't finish saving the selected Google Drive account; try again",
             )
             return false
         }
 
-        clearDriveAccountSwitchRecovery(transitionId)
+        clearDriveAccountSwitchPlatformFailure(transitionId)
         return true
     }
 
@@ -662,7 +424,7 @@ class CloudBackupManager private constructor(
             driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
                 ?.confirmsNoTransition() != true
         ) {
-            reportDriveAccountSwitchRecovery(
+            reportDriveAccountSwitchPlatformFailure(
                 transitionId,
                 "Cove couldn't restore the previous Google Drive account; try again",
             )
@@ -672,30 +434,30 @@ class CloudBackupManager private constructor(
         return runCatching {
             withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) }
         }.onSuccess {
-            clearDriveAccountSwitchRecovery(transitionId)
+            clearDriveAccountSwitchPlatformFailure(transitionId)
         }.onFailure { error ->
             Log.e(TAG, "failed to confirm drive account rollback", error)
-            reportDriveAccountSwitchRecovery(
+            reportDriveAccountSwitchPlatformFailure(
                 transitionId,
                 "Cove couldn't finish restoring the previous Google Drive account; try again",
             )
         }.isSuccess
     }
 
-    private fun reportDriveAccountSwitchRecovery(
+    private fun reportDriveAccountSwitchPlatformFailure(
         transitionId: ULong,
         message: String,
     ) {
         Log.e(TAG, message)
         mainScope.launch {
-            driveAccountSwitchRecovery = DriveAccountSwitchRecovery(transitionId, message)
+            driveAccountSwitchPlatformFailure = DriveAccountSwitchPlatformFailure(transitionId, message)
         }
     }
 
-    private fun clearDriveAccountSwitchRecovery(transitionId: ULong) {
+    private fun clearDriveAccountSwitchPlatformFailure(transitionId: ULong) {
         mainScope.launch {
-            if (driveAccountSwitchRecovery?.transitionId == transitionId) {
-                driveAccountSwitchRecovery = null
+            if (driveAccountSwitchPlatformFailure?.transitionId == transitionId) {
+                driveAccountSwitchPlatformFailure = null
             }
         }
     }
@@ -714,7 +476,7 @@ class CloudBackupManager private constructor(
     private fun reconcileDisabledState(forceNotification: Boolean = false) {
         if (rust == null) return
 
-        if (state.lifecycle !is CloudBackupLifecycle.Disabled) {
+        if (screen.body !is CloudBackupScreenBody.Disabled) {
             hasReconciledDisabledState = false
             return
         }
@@ -749,6 +511,17 @@ class CloudBackupManager private constructor(
 
     companion object {
         private const val TAG = "CloudBackupManager"
+
+        // a Turn Off that drained or committed: reaching Disabled from here always notifies, even
+        // when the persisted flag was already off
+        private val CloudBackupScreen.isTurningOff: Boolean
+            get() =
+                when (val body = body) {
+                    is CloudBackupScreenBody.FinishingDisable -> true
+                    is CloudBackupScreenBody.Configured ->
+                        body.v1.disable is CloudBackupDisableScreen.Draining
+                    else -> false
+                }
 
         @Volatile
         private var instance: CloudBackupManager? = null

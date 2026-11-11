@@ -3649,6 +3649,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupactions_is_available(`ptr`: RustBuffer.ByValue,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_cloudbackupdrawncontrol_is_android_only(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_cloudbackupscreen_drawn_controls(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupscreen_applying(`ptr`: RustBuffer.ByValue,`delta`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -32903,6 +32907,10 @@ public object FfiConverterTypeCloudBackupActionEntry: FfiConverterRustBuffer<Clo
 
 /**
  * The screen's global actions; a missing action has no control on this screen
+ *
+ * Derived from the controls the body and its sections name
+ * ([`CloudBackupScreen::drawn_controls`]), one entry for each action however many surfaces draw
+ * it; a platform reads an action's availability here and draws it where the shape names it
  */
 data class CloudBackupActions (
     var `entries`: List<CloudBackupActionEntry>
@@ -32975,6 +32983,12 @@ data class CloudBackupConfiguredScreen (
      */
     var `sections`: List<CloudBackupSection>
     ,
+    /**
+     * Android's top-bar menu, in the order it lists them; iOS has no menu, and every entry is an
+     * Android-only action
+     */
+    var `menu`: List<CloudBackupMenuControl>
+    ,
     var `lastSync`: kotlin.ULong?
     ,
     var `syncHealth`: CloudSyncHealth
@@ -33000,6 +33014,7 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
     override fun read(buf: ByteBuffer): CloudBackupConfiguredScreen {
         return CloudBackupConfiguredScreen(
             FfiConverterSequenceTypeCloudBackupSection.read(buf),
+            FfiConverterSequenceTypeCloudBackupMenuControl.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
             FfiConverterTypeCloudBackupDisableScreen.read(buf),
@@ -33008,6 +33023,7 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
 
     override fun allocationSize(value: CloudBackupConfiguredScreen) = (
             FfiConverterSequenceTypeCloudBackupSection.allocationSize(value.`sections`) +
+            FfiConverterSequenceTypeCloudBackupMenuControl.allocationSize(value.`menu`) +
             FfiConverterOptionalULong.allocationSize(value.`lastSync`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
             FfiConverterTypeCloudBackupDisableScreen.allocationSize(value.`disable`)
@@ -33015,6 +33031,7 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
 
     override fun write(value: CloudBackupConfiguredScreen, buf: ByteBuffer) {
             FfiConverterSequenceTypeCloudBackupSection.write(value.`sections`, buf)
+            FfiConverterSequenceTypeCloudBackupMenuControl.write(value.`menu`, buf)
             FfiConverterOptionalULong.write(value.`lastSync`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupDisableScreen.write(value.`disable`, buf)
@@ -33206,6 +33223,60 @@ public object FfiConverterTypeCloudBackupDisableReview: FfiConverterRustBuffer<C
             FfiConverterULong.write(value.`reviewId`, buf)
             FfiConverterTypeCloudBackupDisableImpact.write(value.`impact`, buf)
             FfiConverterBoolean.write(value.`changedSinceConfirmation`, buf)
+    }
+}
+
+
+
+/**
+ * One control the screen's shape draws, and where
+ */
+data class CloudBackupDrawnControl (
+    var `action`: CloudBackupScreenAction
+    ,
+    var `surface`: CloudBackupControlSurface
+
+){
+
+    /**
+     * Whether only Android draws this control; iOS draws nothing for it
+     */ fun `isAndroidOnly`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupdrawncontrol_is_android_only(FfiConverterTypeCloudBackupDrawnControl.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDrawnControl: FfiConverterRustBuffer<CloudBackupDrawnControl> {
+    override fun read(buf: ByteBuffer): CloudBackupDrawnControl {
+        return CloudBackupDrawnControl(
+            FfiConverterTypeCloudBackupScreenAction.read(buf),
+            FfiConverterTypeCloudBackupControlSurface.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupDrawnControl) = (
+            FfiConverterTypeCloudBackupScreenAction.allocationSize(value.`action`) +
+            FfiConverterTypeCloudBackupControlSurface.allocationSize(value.`surface`)
+    )
+
+    override fun write(value: CloudBackupDrawnControl, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupScreenAction.write(value.`action`, buf)
+            FfiConverterTypeCloudBackupControlSurface.write(value.`surface`, buf)
     }
 }
 
@@ -33666,6 +33737,11 @@ data class CloudBackupOtherBackupsSection (
     var `state`: CloudBackupOtherBackupsState
     ,
     var `operation`: OtherBackupsOperation
+    ,
+    /**
+     * In the order they are drawn
+     */
+    var `controls`: List<CloudBackupOtherBackupsControl>
 
 ){
 
@@ -33684,17 +33760,20 @@ public object FfiConverterTypeCloudBackupOtherBackupsSection: FfiConverterRustBu
         return CloudBackupOtherBackupsSection(
             FfiConverterTypeCloudBackupOtherBackupsState.read(buf),
             FfiConverterTypeOtherBackupsOperation.read(buf),
+            FfiConverterSequenceTypeCloudBackupOtherBackupsControl.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupOtherBackupsSection) = (
             FfiConverterTypeCloudBackupOtherBackupsState.allocationSize(value.`state`) +
-            FfiConverterTypeOtherBackupsOperation.allocationSize(value.`operation`)
+            FfiConverterTypeOtherBackupsOperation.allocationSize(value.`operation`) +
+            FfiConverterSequenceTypeCloudBackupOtherBackupsControl.allocationSize(value.`controls`)
     )
 
     override fun write(value: CloudBackupOtherBackupsSection, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupOtherBackupsState.write(value.`state`, buf)
             FfiConverterTypeOtherBackupsOperation.write(value.`operation`, buf)
+            FfiConverterSequenceTypeCloudBackupOtherBackupsControl.write(value.`controls`, buf)
     }
 }
 
@@ -34043,6 +34122,22 @@ data class CloudBackupScreen (
 ){
 
     /**
+     * Every control this screen draws and the surface that draws it, in drawing order
+     *
+     * `actions` has one entry for each action named here and no other; an action drawn on more
+     * than one surface is named once for each
+     */ fun `drawnControls`(): List<CloudBackupDrawnControl> {
+            return FfiConverterSequenceTypeCloudBackupDrawnControl.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupscreen_drawn_controls(FfiConverterTypeCloudBackupScreen.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+    /**
      * This screen with `delta` applied
      *
      * The only way a platform updates its screen, so both apps and the Rust test reconciler
@@ -34202,6 +34297,51 @@ public object FfiConverterTypeCloudBackupScreenFixture: FfiConverterRustBuffer<C
     override fun write(value: CloudBackupScreenFixture, buf: ByteBuffer) {
             FfiConverterString.write(value.`name`, buf)
             FfiConverterTypeCloudBackupScreen.write(value.`screen`, buf)
+    }
+}
+
+
+
+/**
+ * The verification section: the verification Rust reports and the controls drawn with it
+ */
+data class CloudBackupVerificationSection (
+    var `view`: CloudBackupVerificationView
+    ,
+    /**
+     * In the order they are drawn; empty while verification runs, while an upload waits to be
+     * confirmed with nothing to act on, and for a backup only a newer Cove can read
+     */
+    var `controls`: List<CloudBackupVerificationControl>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationSection: FfiConverterRustBuffer<CloudBackupVerificationSection> {
+    override fun read(buf: ByteBuffer): CloudBackupVerificationSection {
+        return CloudBackupVerificationSection(
+            FfiConverterTypeCloudBackupVerificationView.read(buf),
+            FfiConverterSequenceTypeCloudBackupVerificationControl.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationSection) = (
+            FfiConverterTypeCloudBackupVerificationView.allocationSize(value.`view`) +
+            FfiConverterSequenceTypeCloudBackupVerificationControl.allocationSize(value.`controls`)
+    )
+
+    override fun write(value: CloudBackupVerificationSection, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupVerificationView.write(value.`view`, buf)
+            FfiConverterSequenceTypeCloudBackupVerificationControl.write(value.`controls`, buf)
     }
 }
 
@@ -34443,6 +34583,11 @@ data class CloudBackupWalletsSection (
     var `needsSync`: List<CloudBackupOwnRow>
     ,
     var `sync`: CloudBackupSyncState
+    ,
+    /**
+     * In the order they are drawn
+     */
+    var `controls`: List<CloudBackupWalletsControl>
 
 ){
 
@@ -34462,19 +34607,22 @@ public object FfiConverterTypeCloudBackupWalletsSection: FfiConverterRustBuffer<
             FfiConverterSequenceTypeCloudBackupOwnRow.read(buf),
             FfiConverterSequenceTypeCloudBackupOwnRow.read(buf),
             FfiConverterTypeCloudBackupSyncState.read(buf),
+            FfiConverterSequenceTypeCloudBackupWalletsControl.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupWalletsSection) = (
             FfiConverterSequenceTypeCloudBackupOwnRow.allocationSize(value.`upToDate`) +
             FfiConverterSequenceTypeCloudBackupOwnRow.allocationSize(value.`needsSync`) +
-            FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`)
+            FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`) +
+            FfiConverterSequenceTypeCloudBackupWalletsControl.allocationSize(value.`controls`)
     )
 
     override fun write(value: CloudBackupWalletsSection, buf: ByteBuffer) {
             FfiConverterSequenceTypeCloudBackupOwnRow.write(value.`upToDate`, buf)
             FfiConverterSequenceTypeCloudBackupOwnRow.write(value.`needsSync`, buf)
             FfiConverterTypeCloudBackupSyncState.write(value.`sync`, buf)
+            FfiConverterSequenceTypeCloudBackupWalletsControl.write(value.`controls`, buf)
     }
 }
 
@@ -41812,6 +41960,61 @@ public object FfiConverterTypeCloudBackupActionAvailability : FfiConverterRustBu
 
 
 /**
+ * Where on screen a control is drawn
+ */
+
+enum class CloudBackupControlSurface {
+
+    /**
+     * The content of a body other than a configured backup, whose exits it draws
+     */
+    BODY,
+    HEAL_NOTICE,
+    PASSKEY_CARD,
+    INVENTORY_INCOMPLETE,
+    VERIFICATION,
+    WALLETS,
+    NOT_ON_DEVICE,
+    OTHER_BACKUPS,
+    TURN_OFF,
+    /**
+     * The Turn Off dialogs, while a review or the work before it is open
+     */
+    TURN_OFF_DIALOGS,
+    /**
+     * Android's top-bar menu
+     */
+    MENU;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupControlSurface: FfiConverterRustBuffer<CloudBackupControlSurface> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupControlSurface.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupControlSurface) = 4UL
+
+    override fun write(value: CloudBackupControlSurface, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * What the platform confirms before a row delete
  */
 
@@ -42698,6 +42901,49 @@ public object FfiConverterTypeCloudBackupInventoryAssessment : FfiConverterRustB
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * A control the incomplete-inventory section draws
+ */
+
+enum class CloudBackupInventoryControl {
+
+    /**
+     * Check Again: a silent inventory refresh
+     */
+    CHECK_AGAIN,
+    /**
+     * Android only: Google Drive needs authorizing before the inventory can load
+     */
+    RECONNECT_DRIVE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupInventoryControl: FfiConverterRustBuffer<CloudBackupInventoryControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupInventoryControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupInventoryControl) = 4UL
+
+    override fun write(value: CloudBackupInventoryControl, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -43673,6 +43919,45 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
 
 
 /**
+ * An entry in Android's top-bar menu
+ *
+ * The rebuilds are not here: a rebuild is offered only as the recovery a failed verification
+ * names, on both platforms
+ */
+
+enum class CloudBackupMenuControl {
+
+    SWITCH_DRIVE_ACCOUNT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupMenuControl: FfiConverterRustBuffer<CloudBackupMenuControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupMenuControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupMenuControl) = 4UL
+
+    override fun write(value: CloudBackupMenuControl, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * Which notice a `DismissNotice` intent dismisses
  */
 
@@ -43789,6 +44074,47 @@ public object FfiConverterTypeCloudBackupOperationKind: FfiConverterRustBuffer<C
     override fun allocationSize(value: CloudBackupOperationKind) = 4UL
 
     override fun write(value: CloudBackupOperationKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * A control the other-backups section draws
+ */
+
+enum class CloudBackupOtherBackupsControl {
+
+    RECOVER,
+    DELETE,
+    /**
+     * Checks for other backups again after a check that failed
+     */
+    CHECK_AGAIN;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupOtherBackupsControl: FfiConverterRustBuffer<CloudBackupOtherBackupsControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupOtherBackupsControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupOtherBackupsControl) = 4UL
+
+    override fun write(value: CloudBackupOtherBackupsControl, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -44526,10 +44852,14 @@ sealed class CloudBackupProgressSection {
 
 
     /**
-     * The inventory could not be confirmed complete; Check Again retries
+     * The inventory could not be confirmed complete
      */
     data class InventoryIncomplete(
-        val `reason`: org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason) : CloudBackupProgressSection()
+        val `reason`: org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason,
+        /**
+         * In the order they are drawn
+         */
+        val `controls`: List<org.bitcoinppl.cove_core.CloudBackupInventoryControl>) : CloudBackupProgressSection()
 
     {
 
@@ -44537,6 +44867,9 @@ sealed class CloudBackupProgressSection {
         companion object
     }
 
+    /**
+     * A running verification in place of the rows; it draws no control
+     */
     data class VerificationCard(
         val v1: org.bitcoinppl.cove_core.CloudBackupVerificationView) : CloudBackupProgressSection()
 
@@ -44546,6 +44879,9 @@ sealed class CloudBackupProgressSection {
         companion object
     }
 
+    /**
+     * A running verification above the rows it will update; it draws no control
+     */
     data class VerificationInline(
         val v1: org.bitcoinppl.cove_core.CloudBackupVerificationView) : CloudBackupProgressSection()
 
@@ -44574,6 +44910,7 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
             1 -> CloudBackupProgressSection.InventoryChecking
             2 -> CloudBackupProgressSection.InventoryIncomplete(
                 FfiConverterTypeCloudBackupInventoryIncompleteReason.read(buf),
+                FfiConverterSequenceTypeCloudBackupInventoryControl.read(buf),
                 )
             3 -> CloudBackupProgressSection.VerificationCard(
                 FfiConverterTypeCloudBackupVerificationView.read(buf),
@@ -44597,6 +44934,7 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
             (
                 4UL
                 + FfiConverterTypeCloudBackupInventoryIncompleteReason.allocationSize(value.`reason`)
+                + FfiConverterSequenceTypeCloudBackupInventoryControl.allocationSize(value.`controls`)
             )
         }
         is CloudBackupProgressSection.VerificationCard -> {
@@ -44624,6 +44962,7 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
             is CloudBackupProgressSection.InventoryIncomplete -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupInventoryIncompleteReason.write(value.`reason`, buf)
+                FfiConverterSequenceTypeCloudBackupInventoryControl.write(value.`controls`, buf)
                 Unit
             }
             is CloudBackupProgressSection.VerificationCard -> {
@@ -44807,6 +45146,49 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Which rebuild recovers a backup that verification can't use
+ */
+
+enum class CloudBackupRecoveryKind {
+
+    /**
+     * The index is missing and the master key is intact: rebuild the index from this device
+     */
+    RECREATE_MANIFEST,
+    /**
+     * No verified master key is left: replace the backup with this device's wallets
+     */
+    REINITIALIZE_BACKUP;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRecoveryKind: FfiConverterRustBuffer<CloudBackupRecoveryKind> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRecoveryKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRecoveryKind) = 4UL
+
+    override fun write(value: CloudBackupRecoveryKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -46017,11 +46399,15 @@ public object FfiConverterTypeCloudBackupScreenBody : FfiConverterRustBuffer<Clo
 
 /**
  * One section of the configured screen
+ *
+ * Each section names the controls it draws: a section with a fixed control draws it by its kind,
+ * and every other section carries the list of its controls, so a platform draws exactly what the
+ * section names
  */
 sealed class CloudBackupSection {
 
     /**
-     * Missing, unsupported or needs-repair passkey card, above the list
+     * Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
      */
     data class PasskeyCard(
         val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyState) : CloudBackupSection()
@@ -46042,7 +46428,7 @@ sealed class CloudBackupSection {
     }
 
     data class Verification(
-        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationView) : CloudBackupSection()
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSection) : CloudBackupSection()
 
     {
 
@@ -46086,6 +46472,9 @@ sealed class CloudBackupSection {
         companion object
     }
 
+    /**
+     * Draws Turn Off
+     */
     object TurnOff : CloudBackupSection()
 
 
@@ -46112,7 +46501,7 @@ public object FfiConverterTypeCloudBackupSection : FfiConverterRustBuffer<CloudB
                 FfiConverterTypeCloudBackupProgressSection.read(buf),
                 )
             3 -> CloudBackupSection.Verification(
-                FfiConverterTypeCloudBackupVerificationView.read(buf),
+                FfiConverterTypeCloudBackupVerificationSection.read(buf),
                 )
             4 -> CloudBackupSection.Wallets(
                 FfiConverterTypeCloudBackupWalletsSection.read(buf),
@@ -46150,7 +46539,7 @@ public object FfiConverterTypeCloudBackupSection : FfiConverterRustBuffer<CloudB
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupVerificationView.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupVerificationSection.allocationSize(value.v1)
             )
         }
         is CloudBackupSection.Wallets -> {
@@ -46203,7 +46592,7 @@ public object FfiConverterTypeCloudBackupSection : FfiConverterRustBuffer<CloudB
             }
             is CloudBackupSection.Verification -> {
                 buf.putInt(3)
-                FfiConverterTypeCloudBackupVerificationView.write(value.v1, buf)
+                FfiConverterTypeCloudBackupVerificationSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.Wallets -> {
@@ -46756,6 +47145,140 @@ public object FfiConverterTypeCloudBackupUnreadableKind: FfiConverterRustBuffer<
 
     override fun write(value: CloudBackupUnreadableKind, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * A control the verification section draws
+ */
+sealed class CloudBackupVerificationControl {
+
+    /**
+     * Verify Now, Verify Again, or Try Again after a failure another verification can fix
+     */
+    object Verify : CloudBackupVerificationControl()
+
+
+    /**
+     * The rebuild a failed verification names as the only way to recover the backup
+     */
+    data class Recover(
+        val `kind`: org.bitcoinppl.cove_core.CloudBackupRecoveryKind) : CloudBackupVerificationControl()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
+     * counts them
+     */
+    object DeleteUnreadableBackups : CloudBackupVerificationControl()
+
+
+    /**
+     * Try Again on a latest upload Cove couldn't confirm
+     */
+    object RetryUpload : CloudBackupVerificationControl()
+
+
+    /**
+     * Android only: the latest upload waits on Google Drive access
+     */
+    object ReconnectDrive : CloudBackupVerificationControl()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustBuffer<CloudBackupVerificationControl>{
+    override fun read(buf: ByteBuffer): CloudBackupVerificationControl {
+        return when(buf.getInt()) {
+            1 -> CloudBackupVerificationControl.Verify
+            2 -> CloudBackupVerificationControl.Recover(
+                FfiConverterTypeCloudBackupRecoveryKind.read(buf),
+                )
+            3 -> CloudBackupVerificationControl.DeleteUnreadableBackups
+            4 -> CloudBackupVerificationControl.RetryUpload
+            5 -> CloudBackupVerificationControl.ReconnectDrive
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationControl): ULong = when(value) {
+        is CloudBackupVerificationControl.Verify -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationControl.Recover -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRecoveryKind.allocationSize(value.`kind`)
+            )
+        }
+        is CloudBackupVerificationControl.DeleteUnreadableBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationControl.RetryUpload -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationControl.ReconnectDrive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupVerificationControl, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupVerificationControl.Verify -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupVerificationControl.Recover -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupRecoveryKind.write(value.`kind`, buf)
+                Unit
+            }
+            is CloudBackupVerificationControl.DeleteUnreadableBackups -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupVerificationControl.RetryUpload -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudBackupVerificationControl.ReconnectDrive -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -47422,6 +47945,45 @@ public object FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer<Cl
     override fun allocationSize(value: CloudBackupWalletStatus) = 4UL
 
     override fun write(value: CloudBackupWalletStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * A control the wallets section draws
+ */
+
+enum class CloudBackupWalletsControl {
+
+    /**
+     * Uploads the wallets that need sync, under the list of them
+     */
+    SYNC_NOW;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupWalletsControl: FfiConverterRustBuffer<CloudBackupWalletsControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupWalletsControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupWalletsControl) = 4UL
+
+    override fun write(value: CloudBackupWalletsControl, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -71642,6 +72204,34 @@ public object FfiConverterSequenceTypeCloudBackupActionEntry: FfiConverterRustBu
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeCloudBackupDrawnControl: FfiConverterRustBuffer<List<CloudBackupDrawnControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupDrawnControl> {
+        val len = buf.getInt()
+        return List<CloudBackupDrawnControl>(len) {
+            FfiConverterTypeCloudBackupDrawnControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupDrawnControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupDrawnControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupDrawnControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupDrawnControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeCloudBackupListedRow: FfiConverterRustBuffer<List<CloudBackupListedRow>> {
     override fun read(buf: ByteBuffer): List<CloudBackupListedRow> {
         val len = buf.getInt()
@@ -72034,6 +72624,90 @@ public object FfiConverterSequenceTypeBlockExplorerOption: FfiConverterRustBuffe
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeCloudBackupInventoryControl: FfiConverterRustBuffer<List<CloudBackupInventoryControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupInventoryControl> {
+        val len = buf.getInt()
+        return List<CloudBackupInventoryControl>(len) {
+            FfiConverterTypeCloudBackupInventoryControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupInventoryControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupInventoryControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupInventoryControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupInventoryControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupMenuControl: FfiConverterRustBuffer<List<CloudBackupMenuControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupMenuControl> {
+        val len = buf.getInt()
+        return List<CloudBackupMenuControl>(len) {
+            FfiConverterTypeCloudBackupMenuControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupMenuControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupMenuControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupMenuControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupMenuControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupOtherBackupsControl: FfiConverterRustBuffer<List<CloudBackupOtherBackupsControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupOtherBackupsControl> {
+        val len = buf.getInt()
+        return List<CloudBackupOtherBackupsControl>(len) {
+            FfiConverterTypeCloudBackupOtherBackupsControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupOtherBackupsControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupOtherBackupsControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupOtherBackupsControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupOtherBackupsControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustBuffer<List<CloudBackupSection>> {
     override fun read(buf: ByteBuffer): List<CloudBackupSection> {
         val len = buf.getInt()
@@ -72052,6 +72726,62 @@ public object FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustBuffer
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeCloudBackupSection.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupVerificationControl: FfiConverterRustBuffer<List<CloudBackupVerificationControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupVerificationControl> {
+        val len = buf.getInt()
+        return List<CloudBackupVerificationControl>(len) {
+            FfiConverterTypeCloudBackupVerificationControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupVerificationControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupVerificationControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupVerificationControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupVerificationControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupWalletsControl: FfiConverterRustBuffer<List<CloudBackupWalletsControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupWalletsControl> {
+        val len = buf.getInt()
+        return List<CloudBackupWalletsControl>(len) {
+            FfiConverterTypeCloudBackupWalletsControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupWalletsControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupWalletsControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupWalletsControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupWalletsControl.write(it, buf)
         }
     }
 }

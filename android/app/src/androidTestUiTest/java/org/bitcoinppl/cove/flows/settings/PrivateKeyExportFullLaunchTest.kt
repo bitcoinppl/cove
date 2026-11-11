@@ -532,10 +532,10 @@ class PrivateKeyExportFullLaunchTest {
         while (SystemClock.uptimeMillis() - quietSince < PROMPT_QUIET_MS) {
             check(SystemClock.uptimeMillis() < deadline) { "the cloud backup verification prompt kept coming back" }
 
-            if (onMainValue { CloudBackupManager.getInstance().rootPrompt } is CloudBackupRootPrompt.Verification) {
+            if (onMainValue { CloudBackupManager.getInstance().screen.rootPrompt } is CloudBackupRootPrompt.Verification) {
                 device.clickText("Not Now")
                 waitUntil("Not Now should dismiss the verification prompt") {
-                    CloudBackupManager.getInstance().rootPrompt !is CloudBackupRootPrompt.Verification
+                    CloudBackupManager.getInstance().screen.rootPrompt !is CloudBackupRootPrompt.Verification
                 }
 
                 quietSince = SystemClock.uptimeMillis()

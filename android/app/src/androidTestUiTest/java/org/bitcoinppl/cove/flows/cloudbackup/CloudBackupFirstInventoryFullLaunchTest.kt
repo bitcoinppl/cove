@@ -23,7 +23,6 @@ import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
@@ -100,7 +99,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
         waitUntil("the provider should confirm both cloud-only rows before the relaunch") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
+            manager.isInventoryComplete &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
         }
@@ -146,9 +145,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
         waitUntil("the provider's answer should confirm both cloud-only rows") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
-                manager.isDetailInventoryReady &&
-                !manager.isDetailInventoryChecking &&
+            manager.isInventoryComplete &&
+                !manager.isInventoryChecking &&
                 manager.verificationState is CloudBackupVerificationState.Verified &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
@@ -165,7 +163,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     private fun assertNothingCanRestoreOrDeleteWhileHeld() {
         val manager = CloudBackupManager.getInstance()
         waitUntil("the held first listing should leave the inventory checking") {
-            manager.isDetailInventoryChecking
+            manager.isInventoryChecking
         }
 
         assertInventoryStillWaits("before the provider answers")
@@ -206,8 +204,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     private fun assertInventoryStillWaits(phase: String) {
         val manager = CloudBackupManager.getInstance()
 
-        assertFalse("the inventory must not be ready $phase", manager.isDetailInventoryReady)
-        assertFalse("the inventory must not be complete $phase", manager.isDetailInventoryComplete)
+        assertFalse("the inventory must not be complete $phase", manager.isInventoryComplete)
         assertFalse(
             "Restore All must not be available $phase",
             manager.restoreAllState is CloudBackupRestoreAllState.StartAvailable ||
@@ -256,9 +253,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     }
 
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     private fun UiDevice.waitForText(
         value: String,
@@ -310,8 +305,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "lifecycle=${manager.state.lifecycle}, ready=${manager.isDetailInventoryReady}, " +
-                "complete=${manager.isDetailInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
+            "screen=${manager.describeScreen()}, " +
+                "complete=${manager.isInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "restoreAll=${manager.restoreAllState}, verification=${manager.verificationState}, " +
                 "walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
 

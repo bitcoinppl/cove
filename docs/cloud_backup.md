@@ -47,28 +47,6 @@ Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
 body and the main configured states, which the platform contract tests render.
 Release builds return none.
 
-Both platforms give the controls the same accessibility identifiers, so UI tests
-on either can find a control by the action it sends:
-
-| Control | Identifier |
-|---|---|
-| A global action | `cloudBackup.action.<action>`, such as `cloudBackup.action.turnOff` |
-| An unavailable action's reason | `cloudBackup.action.<action>.unavailable` |
-| A row action | `cloudBackup.row.<recordId>.<rowAction>`, such as `cloudBackup.row.<id>.restore` |
-| The reason every row in a section shares | `cloudBackup.rows.unavailable` |
-| The last outcome and its dismiss | `cloudBackup.lastOutcome`, `cloudBackup.lastOutcome.dismiss` |
-| The heal notice and its Turn Off | `cloudBackup.healNotice`, `cloudBackup.healNotice.turnOff` |
-| Turn Off dialog buttons | `cloudBackup.turnOff.confirm`, `.continue`, `.cancel`, `.restoreFirst`, `.verifyFirst`, `.checkAgain`, `.offline.tryAgain` |
-| Turn Off progress | `cloudBackup.turnOff.progress` |
-| Body panels | `cloudBackup.finishingDisable`, `cloudBackup.loadFailed`, `cloudBackup.corrupted` |
-| Inventory progress | `cloudBackup.inventory.checking`, `cloudBackup.inventory.incomplete` |
-| Other backups' Check Again | `cloudBackup.otherBackups.checkAgain` |
-
-`<action>` is the action's case name in lower camel case, such as `turnOff`, on
-both platforms, and `<rowAction>` is one of `restore`, `delete`, `backUpFirst`,
-`checkAgain` or `verify`. A dialog button may not carry its identifier on every
-OS version, so UI tests match dialog buttons by label too.
-
 `PendingEnableCoordinator` owns the local keychain transaction for fresh and
 recovered enables. It keeps CSPP staging and promotion ordered with the durable
 pending-enable journal while the manager and supervisor retain cloud writes,
@@ -149,6 +127,72 @@ The child actors under `cloud_backup_manager::actors` own narrower work:
 - `CloudBackupSyncHealthWorker` owns background sync health refreshes
 - `cleanup` owns namespace cleanup after merge or recovery flows
 - `write` owns serialized cloud writes and post-write local completion
+
+### Accessibility Identifiers
+
+Both apps give each control and surface below the same identifier, so a UI test
+on either platform finds a control by the action it sends. Rust owns the
+mapping: `CloudBackupUiElement.accessibilityIdentifier()` returns it, iOS calls
+it, and Android keeps a copy in `CloudBackupTags` because its previews run
+without the Rust library. `CloudBackupScreenContractTest` (Android) checks that
+copy, and an iOS unit test checks the iOS UI test helper, against every element
+`cloud_backup_ui_elements()` lists; a Rust test checks this table. `<action>` is
+the `CloudBackupScreenAction` case name in lower camel case, such as `turnOff`
+or `acceptEnablePromptCreateNew`, and `<rowControl>` is the
+`CloudBackupRowControl` case name: `restore`, `delete`, `backUpFirst`,
+`checkAgain` or `verify`. Provider names stay in visible text and never appear
+in an identifier.
+
+| Element | Identifier |
+|---|---|
+| A global action's control, wherever it is drawn, including Turn Off's Confirm and Cancel and a prompt's choices | `cloudBackup.action.<action>` |
+| The reason under a disabled action's control | `cloudBackup.action.<action>.unavailable` |
+| The confirm button of the dialog an action opens | `cloudBackup.action.<action>.confirm` |
+| A row control | `cloudBackup.row.<recordId>.<rowControl>` |
+| The confirm button of the dialog a row control opens | `cloudBackup.row.<recordId>.<rowControl>.confirm` |
+| A wallet's row in any list; on Android a listed row opens its action sheet | `cloudBackup.wallet.<recordId>` |
+| The reason every row in a section shares | `cloudBackup.rows.unavailable` |
+| The last outcome and its dismiss | `cloudBackup.lastOutcome`, `cloudBackup.lastOutcome.dismiss` |
+| The heal notice and its Turn Off | `cloudBackup.healNotice`, `cloudBackup.healNotice.turnOff` |
+| Turn Off progress | `cloudBackup.turnOff.preparing`, `cloudBackup.turnOff.draining` |
+| Turn Off offline dialog and its Try Again | `cloudBackup.turnOff.offline`, `cloudBackup.turnOff.offline.tryAgain` |
+| Turn Off review, its Continue and Check Again, and the final dialog | `cloudBackup.turnOff.review`, `cloudBackup.turnOff.continue`, `cloudBackup.turnOff.checkAgain`, `cloudBackup.turnOff.final` |
+| Body panels | `cloudBackup.finishingDisable`, `cloudBackup.loadFailed`, `cloudBackup.corrupted`, `cloudBackup.driveAccountSwitch` (Android only) |
+| Inventory progress | `cloudBackup.inventory.checking`, `cloudBackup.inventory.incomplete` |
+| The support code an incomplete setup shows | `cloudBackup.recovery.supportCode` |
+| The top-bar menu (Android only) | `cloudBackup.menu` |
+| Root prompts | `cloudBackup.prompt.existingBackupFound`, `cloudBackup.prompt.passkeyChoice`, `cloudBackup.prompt.missingPasskeyReminder`, `cloudBackup.prompt.verification` |
+| The repair prompt's Create New Passkey, which sends `repairPasskey` like its Use Existing Passkey | `cloudBackup.prompt.passkeyChoice.createNewPasskey` |
+
+A system alert or confirmation dialog can't carry an identifier on its container
+on iOS, and a dialog button may not carry its identifier on every OS version,
+so UI tests match dialog buttons by label too.
+
+### Dialogs and Prompts Follow the Screen
+
+An open dialog, sheet or prompt keeps only which Rust target it is for: the
+record and row control (`CloudBackupRowTarget`) for a row's sheet or delete
+confirmation, and the root prompt for a prompt. Each frame reads that target's
+current entry from the latest screen, through `CloudBackupScreen.listedRow` and
+`rowAction`, so a dialog never shows an availability or a warning Rust
+has replaced. A row Rust stops listing, or a control it stops offering, closes
+the dialog bound to it, and a changed delete confirmation replaces the dialog
+instead of changing the warning under a confirm button the user may already be
+reaching for. Both apps present a row's dialogs over the whole detail screen,
+so a row that moves to another section, such as an extra copy that becomes the
+only copy, keeps its confirmation, which then warns with the new confirmation.
+
+A prompt's choices are global actions like any other: the existing-backup and
+passkey-choice prompts draw `acceptEnablePromptUseExisting` and
+`acceptEnablePromptCreateNew` (or `repairPasskey` for both repair choices), and
+the verification prompt draws `verify`. Each choice is drawn only when Rust
+sends its entry, is disabled with Rust's reason when it can't run, and carries
+its last outcome. A choice dispatches without closing the prompt: the prompt
+closes when Rust stops projecting it, so a rejected choice leaves the prompt up
+with the rejection in it. An iOS alert closes on any tap, so iOS presents the
+prompt again while Rust still projects it, with the rejection in its message.
+Cancel and Not Now are the prompts' escapes, which
+Rust always admits, so they have no entry.
 
 ### Who Writes What
 

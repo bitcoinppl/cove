@@ -4,14 +4,11 @@ import org.bitcoinppl.cove.flows.SettingsFlow.CloudBackupSettingsSeverity
 import org.bitcoinppl.cove.flows.SettingsFlow.cloudBackupSettingsSeverity
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletRestoreFailure
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CloudBackupPlatformPolishHelpersTest {
@@ -27,31 +24,6 @@ class CloudBackupPlatformPolishHelpersTest {
         )
         assertNull(cloudBackupProgressFraction(CloudBackupProgress(completed = 0u, total = 0u)))
         assertNull(cloudBackupProgressFraction(null))
-    }
-
-    @Test
-    fun blockedPendingConfirmationAndFailedSyncExposeRecoveryActions() {
-        assertEquals("Reconnect Google Drive", pendingUploadConfirmationActionTitle(true))
-        assertNull(pendingUploadConfirmationActionTitle(false))
-
-        assertTrue(
-            shouldShowCloudBackupSyncAction(
-                hasNeedsSync = false,
-                syncState = CloudBackupSyncState.Failed("upload failed"),
-            ),
-        )
-        assertTrue(
-            shouldShowCloudBackupSyncAction(
-                hasNeedsSync = true,
-                syncState = CloudBackupSyncState.Idle,
-            ),
-        )
-        assertFalse(
-            shouldShowCloudBackupSyncAction(
-                hasNeedsSync = false,
-                syncState = CloudBackupSyncState.Idle,
-            ),
-        )
     }
 
     @Test
@@ -79,6 +51,14 @@ class CloudBackupPlatformPolishHelpersTest {
         assertEquals(
             CloudBackupSettingsSeverity.ERROR,
             cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.Error("upload failed")),
+        )
+        assertEquals(
+            CloudBackupSettingsSeverity.WARNING,
+            cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.TurnOffIncomplete),
+        )
+        assertEquals(
+            CloudBackupSettingsSeverity.INFO,
+            cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.TurnedOnAgain),
         )
     }
 
@@ -119,7 +99,5 @@ class CloudBackupPlatformPolishHelpersTest {
                 item.copy(syncStatus = CloudBackupWalletStatus.ALREADY_ON_DEVICE),
             ),
         )
-        assertEquals("Restore to this device", cloudBackupWalletRestoreActionTitle(false))
-        assertEquals("Retry restore", cloudBackupWalletRestoreActionTitle(true))
     }
 }

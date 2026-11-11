@@ -34,16 +34,28 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
+import org.bitcoinppl.cove.cloudbackup.CloudBackupLastOutcomeNote
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.configured
+import org.bitcoinppl.cove.cloudbackup.draws
+import org.bitcoinppl.cove.cloudbackup.isAvailable
+import org.bitcoinppl.cove.cloudbackup.lookup
+import org.bitcoinppl.cove.cloudbackup.section
+import org.bitcoinppl.cove.cloudbackup.verification
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
-import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
+import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
+import org.bitcoinppl.cove_core.CloudBackupSection
+import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.OnboardingBranch
@@ -61,6 +73,7 @@ internal sealed interface OnboardingCloudBackupStepPresentation {
 
     data class PendingEnableRecovery(
         val recovery: CloudBackupPendingEnableRecovery,
+        val cleanup: CloudBackupActionAvailability?,
     ) : OnboardingCloudBackupStepPresentation
 }
 
@@ -77,11 +90,14 @@ internal data class OnboardingCloudBackupStepActions(
 )
 
 internal fun onboardingCloudBackupStepPresentation(
-    lifecycle: CloudBackupLifecycle,
+    screen: CloudBackupScreen,
 ): OnboardingCloudBackupStepPresentation =
-    when (lifecycle) {
-        is CloudBackupLifecycle.PendingEnableRecovery ->
-            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(lifecycle.v1)
+    when (val body = screen.body) {
+        is CloudBackupScreenBody.PendingEnableRecovery ->
+            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(
+                recovery = body.v1,
+                cleanup = screen.actions.lookup(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP),
+            )
         else -> OnboardingCloudBackupStepPresentation.Enable
     }
 
@@ -131,7 +147,7 @@ internal fun OnboardingCloudBackupStepContent(
     )
 
     OnboardingCloudBackupPresentationContent(
-        presentation = onboardingCloudBackupStepPresentation(backupManager.lifecycle),
+        presentation = onboardingCloudBackupStepPresentation(backupManager.screen),
         branch = branch,
         actions = actions,
     )
@@ -302,98 +318,102 @@ private fun OnboardingCloudBackupDetailsStepView(
     context: CloudBackupEnableOnboardingContext,
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
-
-    val lifecycleMsg = backupManager.lifecycleFailureMessage
+    val screen = backupManager.screen
+    val verification = screen.verification
+    val verificationState = verification?.state
+    val verificationFailed = verificationState is CloudBackupVerificationState.Failed
+    val passkey = screen.configured?.section<CloudBackupSection.PasskeyCard>()?.v1
     val onboardingMessage =
         when {
-            backupManager.isUnsupportedPasskeyProvider ->
+            passkey is CloudBackupPasskeyState.UnsupportedProvider ->
                 "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
-            lifecycleMsg != null -> lifecycleMsg
-            else -> (backupManager.verificationState as? CloudBackupVerificationState.Failed)?.v1?.message()
-        }
-    val isVerifying = backupManager.verificationState is CloudBackupVerificationState.Running
-    val verificationFailed = backupManager.verificationState is CloudBackupVerificationState.Failed
-    val isConfirmingUpload = backupManager.hasPendingUploadVerification
-    val savedPasskeyConfirmationMode =
-        (backupManager.enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
-    val needsManualPasskeyConfirmation =
-        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
-    val isEnabling = backupManager.isLifecycleEnabling && !needsManualPasskeyConfirmation
-    val isBusy =
-        isVerifying ||
-            isConfirmingUpload ||
-            backupManager.enableFlow == CloudBackupEnableFlow.ConfirmingSavedPasskey ||
-            isEnabling
-    val primaryButtonTitle =
-        when {
-            verificationFailed -> "Try Again"
-            needsManualPasskeyConfirmation -> "Confirm Passkey"
+            screen.body is CloudBackupScreenBody.LoadFailed -> "Cove couldn't load Cloud Backup."
+            verificationState is CloudBackupVerificationState.Failed -> verificationState.v1.message()
             else -> null
         }
-            ?: "Enable Cloud Backup"
-    val rootPrompt = backupManager.rootPrompt
-    val isPromptingForEnableChoice =
-        rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
+    val enableFlow = (screen.body as? CloudBackupScreenBody.Enabling)?.v1
+    val savedPasskeyConfirmationMode =
+        (enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
+    val needsManualPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
+
+    // Try Again verifies, Confirm Passkey continues a paused enable, otherwise the button enables
+    val primaryAction =
+        when {
+            verificationFailed -> CloudBackupScreenAction.VERIFY
+            needsManualPasskeyConfirmation -> CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY
+            else -> CloudBackupScreenAction.ENABLE
+        }
+    val primary = screen.actions.lookup(primaryAction)
+    val primaryButtonTitle =
+        when (primaryAction) {
+            CloudBackupScreenAction.VERIFY -> "Try Again"
+            CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY -> "Confirm Passkey"
+            else -> "Enable Cloud Backup"
+        }
+
+    // the root prompt is answering the enable, so nothing covers it
+    val isPromptingForEnableChoice = screen.actions.draws(CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING)
+    val showsBusyOverlay =
+        !isPromptingForEnableChoice &&
             (
-                rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
-                    (
-                        rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable ||
-                            rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly
-                    )
+                (enableFlow != null && !needsManualPasskeyConfirmation) ||
+                    verificationState is CloudBackupVerificationState.Running ||
+                    verificationState is CloudBackupVerificationState.AwaitingUploadConfirmation
             )
 
     fun cancelCloudBackupDetails() {
-        if (needsManualPasskeyConfirmation) {
+        if (screen.actions.lookup(CloudBackupScreenAction.DISCARD_PENDING_ENABLE)?.isAvailable == true) {
             backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
         }
 
         onSkip()
     }
 
-    BackHandler {
-        if (isBusy || isPromptingForEnableChoice) {
-            return@BackHandler
-        }
-
+    // back stays on this step while a modal step covers it, the same as the hidden Back button
+    BackHandler(enabled = showsBusyOverlay || isPromptingForEnableChoice) {}
+    BackHandler(enabled = !showsBusyOverlay && !isPromptingForEnableChoice) {
         cancelCloudBackupDetails()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         CloudBackupEnableOnboardingView(
             onEnable = {
-                if (isBusy || isPromptingForEnableChoice) {
-                    return@CloudBackupEnableOnboardingView
+                when (primaryAction) {
+                    CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY ->
+                        backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                    CloudBackupScreenAction.VERIFY ->
+                        backupManager.dispatch(
+                            CloudBackupManagerAction.StartVerification(
+                                CloudBackupVerificationSource.ONBOARDING,
+                            ),
+                        )
+                    else -> onEnable()
                 }
-
-                if (needsManualPasskeyConfirmation) {
-                    backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
-                    return@CloudBackupEnableOnboardingView
-                }
-
-                if (verificationFailed) {
-                    backupManager.dispatch(
-                        CloudBackupManagerAction.StartVerification(
-                            CloudBackupVerificationSource.ONBOARDING,
-                        ),
-                    )
-                    return@CloudBackupEnableOnboardingView
-                }
-
-                onEnable()
             },
             onCancel = { cancelCloudBackupDetails() },
             message = onboardingMessage,
-            isBusy = isBusy || isPromptingForEnableChoice,
+            primaryAvailability = primary,
             context = context,
             primaryButtonTitle = primaryButtonTitle,
+            // onboarding's own identifier, which its flow tests share with the screens before this one
+            primaryTestTag = "onboarding.cloudBackup.enable",
             cancelButtonTitle = "Back",
             cancelButtonLeading = true,
+            cancelEnabled = !showsBusyOverlay && !isPromptingForEnableChoice,
+            footer = {
+                CloudBackupLastOutcomeNote(
+                    outcome = screen.lastOutcome,
+                    target = CloudBackupOutcomeTarget.Action(primaryAction),
+                    onDispatch = backupManager::dispatch,
+                )
+            },
         )
 
-        if (isBusy) {
+        if (showsBusyOverlay) {
             CloudBackupEnableBusyOverlay(
-                backupManager.enableFlow,
-                backupManager.verificationPresentation,
+                enableFlow,
+                verification?.presentation ?: CloudBackupVerificationPresentation.Hidden(null),
             )
         }
     }

@@ -22,9 +22,9 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
+import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
@@ -113,10 +113,10 @@ class CloudBackupLocalDeleteFullLaunchTest {
         // never confirms and its backup can stay in needsSync; the provider still holds the record
         waitUntil("the provider should hold the wallet's backup and nothing should be cloud-only") {
             val manager = CloudBackupManager.getInstance()
-            val detail = manager.detail
-            recordId = detail?.let { it.upToDate + it.needsSync }?.singleOrNull()?.recordId
+            val wallets = manager.walletsSection
+            recordId = wallets?.let { it.upToDate + it.needsSync }?.singleOrNull()?.wallet?.recordId
 
-            manager.isDetailInventoryComplete &&
+            manager.isInventoryComplete &&
                 recordId != null &&
                 (expectedRecordId == null || recordId == expectedRecordId) &&
                 cloudOnlyWallets().isEmpty()
@@ -144,7 +144,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         waitUntil("the provider should still list the deleted wallet's backup as restorable") {
             val restorable = cloudOnlyWallets().singleOrNull()
 
-            CloudBackupManager.getInstance().isDetailInventoryComplete &&
+            CloudBackupManager.getInstance().isInventoryComplete &&
                 restorable?.recordId == recordId &&
                 restorable?.syncStatus == CloudBackupWalletStatus.DELETED_FROM_DEVICE &&
                 restorable?.restoreFailure == null
@@ -280,7 +280,9 @@ class CloudBackupLocalDeleteFullLaunchTest {
     }
 
     private fun cloudOnlyWallets(): List<CloudBackupWalletItem> =
-        (CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets.orEmpty()
+        CloudBackupManager.getInstance().notOnDeviceRows.mapNotNull { row ->
+            (row.record as? CloudBackupListedRecord.NotOnDevice)?.wallet
+        }
 
     private fun openCloudBackup() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
@@ -407,7 +409,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "detail=${manager.state.lifecycle}, cloudOnly=${cloudOnlyWallets()}, " +
+            "screen=${manager.describeScreen()}, cloudOnly=${cloudOnlyWallets()}, " +
                 "localWallets=${AppManager.getInstance().wallets.map { it.name }}, " +
                 "walletLists=${ScriptedCloudStorageAccess.walletListCount()}, " +
                 "walletDownloads=${ScriptedCloudStorageAccess.walletDownloadRecordIds()}"

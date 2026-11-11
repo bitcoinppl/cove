@@ -243,10 +243,26 @@ fn every_element(record_id: &RecordId) -> Vec<CloudBackupUiElement> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::{BTreeSet, HashSet};
 
     use super::{CloudBackupUiElement, every_element};
     use crate::manager::cloud_backup_manager::RecordId;
+
+    const DOCS: &str = include_str!("../../../../../docs/cloud_backup.md");
+    const TABLE_HEADING: &str = "### Accessibility Identifiers";
+
+    fn documented_identifiers() -> BTreeSet<String> {
+        let section = DOCS.split(TABLE_HEADING).nth(1).expect("the docs have the identifier table");
+        let table = section.split("\n#").next().unwrap_or(section);
+
+        table
+            .lines()
+            .filter(|line| line.starts_with('|'))
+            .flat_map(|line| line.split('`').skip(1).step_by(2))
+            .filter(|code| code.starts_with("cloudBackup."))
+            .map(str::to_owned)
+            .collect()
+    }
 
     #[test]
     fn every_element_has_its_own_identifier() {
@@ -276,5 +292,15 @@ mod tests {
             .accessibility_identifier(),
             "cloudBackup.row.abc.backUpFirst.confirm"
         );
+    }
+
+    /// The docs table lists every identifier form, and nothing the apps no longer use
+    #[test]
+    fn the_docs_table_lists_exactly_the_identifiers() {
+        let elements = every_element(&RecordId::from("record-1".to_owned()));
+        let templates: BTreeSet<String> =
+            elements.iter().map(|element| element.template().to_owned()).collect();
+
+        assert_eq!(documented_identifiers(), templates);
     }
 }

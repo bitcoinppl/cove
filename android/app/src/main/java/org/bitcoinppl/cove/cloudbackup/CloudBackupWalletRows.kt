@@ -64,7 +64,6 @@ private fun WalletRowsSection(
     onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
     showChevron: Boolean = onWalletClick != null,
     operatingRecordId: String? = null,
-    rowsEnabled: Boolean = true,
 ) {
     CloudBackupTitledContentSection(
         title = title,
@@ -78,7 +77,6 @@ private fun WalletRowsSection(
             onWalletClick = onWalletClick,
             showChevron = showChevron,
             operatingRecordId = operatingRecordId,
-            rowsEnabled = rowsEnabled,
         )
     }
 }
@@ -89,7 +87,6 @@ internal fun WalletRowsCard(
     onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
     showChevron: Boolean = onWalletClick != null,
     operatingRecordId: String? = null,
-    rowsEnabled: Boolean = true,
 ) {
     val colors = cloudBackupVisualColors()
 
@@ -108,7 +105,6 @@ internal fun WalletRowsCard(
                     onClick = onWalletClick?.let { onClick -> { onClick(item) } },
                     showChevron = showChevron,
                     isOperating = isOperating,
-                    enabled = rowsEnabled,
                 )
                 if (index != wallets.lastIndex) {
                     HorizontalDivider(
@@ -287,7 +283,7 @@ internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): Strin
     }
 
 @Composable
-private fun WalletItemRow(
+internal fun WalletItemRow(
     item: CloudBackupWalletItem,
     onClick: (() -> Unit)? = null,
     showChevron: Boolean = false,
@@ -327,7 +323,7 @@ private fun WalletItemRow(
                 )
                 // matches the row identifier iOS UI tests read, so tests can tell rows apart by record
                 // even when two backups share a wallet name
-                .testTag("cloudBackup.wallet.${item.recordId}")
+                .testTag(CloudBackupTags.walletRow(item.recordId))
                 .semantics(mergeDescendants = true) {
                     when {
                         isOperating -> stateDescription = "Restore in progress"

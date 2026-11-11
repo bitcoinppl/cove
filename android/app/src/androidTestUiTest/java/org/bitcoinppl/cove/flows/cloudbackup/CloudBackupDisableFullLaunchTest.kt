@@ -9,6 +9,7 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.FullLaunchTestRule
@@ -22,14 +23,14 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.UploadKind
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -37,7 +38,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Disables Cloud Backup through the detail's production Disable action while the provider holds
+ * Turns off Cloud Backup through the detail's production Turn Off action while the provider holds
  * a wallet upload mid-write
  *
  * The fresh-enable provider stores a held upload only once it is released, so a disable that
@@ -91,17 +92,17 @@ class CloudBackupDisableFullLaunchTest {
 
         openCloudBackup()
         val manager = CloudBackupManager.getInstance()
-        waitUntil("the detail never confirmed its inventory, which Disable needs") { manager.isDetailInventoryComplete }
-        disableThroughBothConfirmations()
+        waitUntil("the detail never confirmed its inventory, which Turn Off needs") { manager.isInventoryComplete }
+        turnOffThroughReview()
 
         // a disable that didn't wait for the write would already be gone, with the backup deleted
-        waitUntil("the disable should be waiting on the held write") { manager.isDisablingCloudBackup }
+        waitUntil("the disable should be waiting on the held write") { manager.isTurningOff }
         assertBackupKeptWhileWriteIsHeld(namespace)
 
         ScriptedCloudStorageAccess.releaseBlockedWalletUpload()
 
         waitUntil("the disable should finish once the held write drains", timeoutMs = 60_000L) {
-            manager.lifecycle is CloudBackupLifecycle.Disabled
+            manager.isDisabled
         }
         assertEquals("the disable should delete the backup once", 1, ScriptedCloudStorageAccess.namespaceDeleteCount())
         assertEquals(
@@ -121,12 +122,21 @@ class CloudBackupDisableFullLaunchTest {
         )
     }
 
-    private fun disableThroughBothConfirmations() {
-        device.clickText(DISABLE_CLOUD_BACKUP, scroll = true)
-        device.waitForText("Disable Cloud Backup?")
-        device.clickText("Continue")
-        device.waitForText("Delete Cloud Backups?")
-        device.clickText("Delete Cloud Backups and Disable")
+    // Rust decides whether the review has a first step before its final one; the dialogs are
+    // separate windows without resource ids, so they are found by their text
+    private fun turnOffThroughReview() {
+        device.clickTagged(CloudBackupTags.action(CloudBackupScreenAction.TURN_OFF), scroll = true)
+
+        val deadline = System.currentTimeMillis() + 20_000L
+
+        while (System.currentTimeMillis() < deadline) {
+            device.findObject(By.text(TURN_OFF_CONFIRM))?.let { return clickClickableAncestor(it) }
+            if (device.hasObject(By.text(TURN_OFF_FIRST_TITLE))) device.clickText("Continue")
+
+            Thread.sleep(200)
+        }
+
+        error("Turn Off never reached \"$TURN_OFF_CONFIRM\"; ${CloudBackupManager.getInstance().describeScreen()}")
     }
 
     /** The disable keeps waiting on the held write for a while, deleting nothing */
@@ -144,10 +154,9 @@ class CloudBackupDisableFullLaunchTest {
                 listOf(namespace),
                 ScriptedCloudStorageAccess.freshEnableNamespaces(),
             )
-            assertNotEquals(
-                "the disable finished before the write drained",
-                CloudBackupLifecycle.Disabled,
-                CloudBackupManager.getInstance().lifecycle,
+            assertFalse(
+                "the disable finished before the write drained; ${CloudBackupManager.getInstance().describeScreen()}",
+                CloudBackupManager.getInstance().isDisabled,
             )
 
             Thread.sleep(200)
@@ -241,6 +250,31 @@ class CloudBackupDisableFullLaunchTest {
         error("Timed out clicking text \"$value\"")
     }
 
+    private fun UiDevice.clickTagged(
+        tag: String,
+        scroll: Boolean = false,
+        timeoutMs: Long = 20_000L,
+    ) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+
+        while (System.currentTimeMillis() < deadline) {
+            val node = wait(Until.findObject(By.res(tag)), if (scroll) 1_000L else timeoutMs)
+            if (node != null) {
+                clickClickableAncestor(node)
+                return
+            }
+
+            if (scroll) {
+                swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
+
+                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
+                waitForIdle()
+            }
+        }
+
+        error("Timed out clicking tag \"$tag\"")
+    }
+
     private fun clickClickableAncestor(node: UiObject2) {
         var clickable: UiObject2? = node
 
@@ -266,7 +300,7 @@ class CloudBackupDisableFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "lifecycle=${manager.lifecycle}, row=${manager.settingsRowStatus}, " +
+            "screen=${manager.describeScreen()}, " +
                 "namespaces=${ScriptedCloudStorageAccess.freshEnableNamespaces()}, " +
                 "namespaceDeletes=${ScriptedCloudStorageAccess.namespaceDeleteCount()}, " +
                 "uploads=${ScriptedCloudStorageAccess.uploads()}"
@@ -275,7 +309,8 @@ class CloudBackupDisableFullLaunchTest {
     }
 
     private companion object {
-        const val DISABLE_CLOUD_BACKUP = "Disable Cloud Backup"
+        const val TURN_OFF_FIRST_TITLE = "Before You Turn Off Cloud Backup"
+        const val TURN_OFF_CONFIRM = "Turn Off and Delete Backups"
         const val HELD_WRITE_OBSERVATION_MS = 3_000L
 
         // a published BIP39 test vector, never used for funds
