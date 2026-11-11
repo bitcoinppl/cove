@@ -30,9 +30,14 @@ impl CloudBackupSupervisor {
 
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
+            // with no session this only cancels an Enable prompt, such as an existing backup
+            // found; the status is the record's, so a Discard that arrives after Enable finished
+            // can't show a configured backup as off
             if let Some(manager) = self.manager() {
                 manager.apply_enable_state(CloudBackupEnableState::Idle);
-                manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
+                manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
+                    &RustCloudBackupManager::load_persisted_state(),
+                ));
             }
             return Produces::ok(());
         };
