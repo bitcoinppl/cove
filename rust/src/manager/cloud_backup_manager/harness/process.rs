@@ -24,6 +24,9 @@ pub(crate) const WAIT_LIMIT_MS_ENV: &str = "COVE_HARNESS_WAIT_LIMIT_MS";
 const TIMEOUT_PROOF_WAIT_LIMIT_MS: &str = "200";
 const CHECKPOINT_PREFIX: &str = "COVE_HARNESS_CHECKPOINT ";
 pub(crate) const DEADLINE_PREFIX: &str = "COVE_HARNESS_DEADLINE ";
+/// A child prints this when it starts its phase body; libtest reports a test it filtered out
+/// or ignored as run, so only this line shows the body ran
+const PHASE_START_PREFIX: &str = "COVE_HARNESS_PHASE_START ";
 
 /// The longest a whole phase may run, a backstop for a hang outside any armed [`Deadline`]
 const PHASE_LIMIT: Duration = Duration::from_secs(30);
@@ -132,6 +135,7 @@ impl Drop for PhaseChild {
 pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(usize)) {
     if let Some(phase) = std::env::var_os(PHASE_ENV) {
         let phase = phase.to_str().and_then(|phase| phase.parse().ok()).expect("phase index");
+        println!("\n{PHASE_START_PREFIX}{phase}");
         body(phase);
         return;
     }
@@ -145,7 +149,8 @@ pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(u
         let label = format!("harness phase {index} of {test_name}");
         let mut command = Command::new(&exe);
         command
-            .args([test_name, "--exact", "--nocapture", "--test-threads=1"])
+            // an ignored case runs its phases when the parent was asked to run it
+            .args([test_name, "--exact", "--include-ignored", "--nocapture", "--test-threads=1"])
             .env(PHASE_ENV, index.to_string())
             .env(BORROWED_TEST_ROOT_ENV, &root)
             .env_remove(KILL_AT_ENV)
@@ -168,6 +173,7 @@ pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(u
         let mut child = PhaseChild(Some(child));
         let output = forward_lines(stdout);
         let due = Instant::now() + PHASE_LIMIT;
+        let mut ran = false;
         let mut reached = None;
         let mut expired = None;
         let waiting_on = match end {
@@ -187,6 +193,7 @@ pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(u
             };
 
             println!("[phase {index}] {line}");
+            ran |= line.starts_with(PHASE_START_PREFIX);
 
             if let Some((_, what)) = line.split_once(DEADLINE_PREFIX) {
                 expired = Some(what.to_string());
@@ -202,6 +209,10 @@ pub(crate) fn run_case(test_path: &str, phases: &[PhaseEnd], body: impl FnOnce(u
         }
 
         let status = child.wait(&label);
+
+        // a child that filtered or ignored its test exits successfully having run nothing
+        assert!(ran, "{label} never started its phase body ({status})");
+
         if let PhaseEnd::TimesOutOn(expected) = end {
             let expired = expired.unwrap_or_else(|| panic!("{label} ended without a deadline"));
             assert!(expired.contains(expected), "{label} timed out on {expired}, not {expected}");
