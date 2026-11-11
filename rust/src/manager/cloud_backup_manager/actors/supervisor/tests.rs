@@ -3197,6 +3197,12 @@ async fn an_operation_started_from_the_review_ends_it() {
     assert_eq!(supervisor.runtime.turn_off_review(), None);
     assert_eq!(supervisor.runtime.turn_off_admission(), TurnOffAdmission::None);
 
+    // while that operation runs, Turn Off waits for it instead of reviewing beside it
+    assert!(matches!(
+        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager)),
+        Admission::Rejected(Rejection::OperationRunning(_))
+    ));
+
     supervisor.complete_exclusive_operation(claim).await.unwrap();
 
     assert_eq!(supervisor.runtime.turn_off_review(), None);
