@@ -87,7 +87,6 @@ impl From<crate::manager::cloud_backup_manager::admission::Rejection>
             R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
             // a committed Turn Off is still finishing, so the platform retries later
             R::TurnOffCommitted
-            | R::TurnOffFailed
             | R::OperationRunning(_)
             | R::DetailInventoryNotLoaded
             | R::OtherBackupsNotLoaded

@@ -45,6 +45,11 @@ impl FakeAccount {
 
     /// Configure Cloud Backup on this account and return its namespace
     pub(crate) fn seed(&self, app: &TestApp) -> String {
+        self.seed_records(app).namespace
+    }
+
+    /// Configure Cloud Backup on this account and return its namespace and records
+    pub(crate) fn seed_records(&self, app: &TestApp) -> SeededAccount {
         let wallet_count = u32::try_from(self.local_wallets).expect("wallet count fits u32");
         enable_cloud_backup_without_reset(app.manager(), wallet_count);
         let namespace = CloudBackupKeychain::global()
@@ -65,7 +70,9 @@ impl FakeAccount {
             wallet
         };
         let local: Vec<_> = (0..self.local_wallets).map(|_| wallet()).collect();
-        let elsewhere = (0..self.not_on_device).map(|_| wallet());
+        let elsewhere: Vec<_> = (0..self.not_on_device).map(|_| wallet()).collect();
+        let not_on_device =
+            elsewhere.iter().map(|wallet| wallet_record_id(wallet.id.as_ref())).collect();
         Database::global()
             .wallets()
             .save_all_wallets(target.network, target.mode, local.clone())
@@ -85,8 +92,16 @@ impl FakeAccount {
         app.cloud.persist();
         app.settle();
 
-        namespace
+        SeededAccount { namespace, not_on_device }
     }
+}
+
+/// What [`FakeAccount::seed_records`] put in the cloud
+#[derive(Debug, Clone)]
+pub(crate) struct SeededAccount {
+    pub(crate) namespace: String,
+    /// Record ids of the backups for wallets that are not on this device
+    pub(crate) not_on_device: Vec<String>,
 }
 
 /// Persist the reporter's stuck record: a disable that never deleted anything

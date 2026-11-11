@@ -178,6 +178,42 @@ fn scripted_namespace_delete_failure_then_retry_disables() {
     });
 }
 
+/// A Turn Off refused by a backup that is not on this device persisted nothing, so the actions
+/// its refusal asks for stay open, and Turn Off finishes once the user has taken them
+#[test]
+fn refused_turn_off_leaves_the_actions_that_clear_its_blocker() {
+    let test =
+        concat!(module_path!(), "::refused_turn_off_leaves_the_actions_that_clear_its_blocker");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let account = FakeAccount::new(1, 1).seed_records(&app);
+        let [elsewhere] = account.not_on_device.as_slice() else {
+            // nothing read from the account: a panic message reaches the test log
+            panic!("expected exactly one record not on this device");
+        };
+        load_detail(&mut app);
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::TurnOff, N::Verify, N::SyncUnsynced])
+            .then_cannot(&[N::Enable, N::KeepEnabled]);
+        assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
+
+        let delete = UserIntent::DeleteCloudWallet(elsewhere.clone().into());
+        assert_eq!(app.admission_of(delete), Admission::Accepted, "{}", app.describe());
+        app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(elsewhere.clone().into()))
+            .then_can(&[N::TurnOff]);
+        assert!(!app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&account.namespace));
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
 #[test]
 fn killed_after_namespace_delete_resumes_to_disabled_on_next_launch() {
     let test = concat!(

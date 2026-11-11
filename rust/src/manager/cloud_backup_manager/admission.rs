@@ -147,8 +147,6 @@ pub(crate) enum Rejection {
     LoadFailed,
     /// Turn Off already deleted remote data, so it only goes forward
     TurnOffCommitted,
-    /// The last Turn Off failed and its result is waiting for the user
-    TurnOffFailed,
     OperationRunning(CloudBackupExclusiveOperation),
     DetailInventoryNotLoaded,
     OtherBackupsNotLoaded,
@@ -200,7 +198,7 @@ pub(crate) enum AdmissionBody {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConfiguredAdmission {
     Ready,
-    /// The last Turn Off failed before it deleted anything; Keep Enabled is offered when allowed
+    /// The last Turn Off failed before it deleted anything; only Keep Enabled reads this
     TurnOffFailed {
         can_keep_enabled: bool,
     },
@@ -401,10 +399,9 @@ fn configured_and_idle(
         (AdmissionBody::Configured(_), Some(running)) => {
             Admission::Rejected(Rejection::OperationRunning(running))
         }
-        (AdmissionBody::Configured(ConfiguredAdmission::Ready), None) => Admission::Accepted,
-        (AdmissionBody::Configured(ConfiguredAdmission::TurnOffFailed { .. }), None) => {
-            Admission::Rejected(Rejection::TurnOffFailed)
-        }
+        // a Turn Off refused before its commit persisted nothing and holds no work; its refusal
+        // asks the user to restore or delete what blocked it, which needs these actions
+        (AdmissionBody::Configured(_), None) => Admission::Accepted,
         (body, _) => Admission::Rejected(not_configured(body)),
     }
 }

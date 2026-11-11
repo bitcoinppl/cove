@@ -79,12 +79,12 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         assert!(configured.heal_notice.is_some(), "the heal notice is persisted");
 
         // Turn Off now runs instead of hanging: it refuses with a reason while records that are
-        // not on this device remain, deletes nothing, and stays available to try again. Until
-        // Turn Off gets its review step, the refusal holds the other operations until then
+        // not on this device remain, deletes nothing, and stays available to try again. The
+        // refusal holds no other work
         load_detail(&mut app);
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::TurnOff])
-            .then_cannot(&[N::Enable, N::KeepEnabled, N::Verify]);
+            .then_can(&[N::TurnOff, N::Verify])
+            .then_cannot(&[N::Enable, N::KeepEnabled]);
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
         assert!(app.cloud.inner.has_namespace(&namespace), "a refused Turn Off deleted the backup");
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
