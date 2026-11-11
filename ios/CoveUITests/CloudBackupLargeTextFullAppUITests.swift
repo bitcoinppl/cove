@@ -280,6 +280,108 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         XCTAssertTrue(confirmRemoval.isHittable, "the removal confirmation is not reachable")
     }
 
+    /// The Turn Off review that asks twice, its confirmation and the offline dialog keep their
+    /// text and every button reachable; iOS draws them as system alerts, which scroll their
+    /// content at this size and which the truncation probe can't reach
+    func testTurnOffDialogsKeepTheirActionsReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: true)
+
+        let turnOff = layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off")
+        turnOff.tap()
+        let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "Fixture Wallet Two", "review")
+        control.assertNextActions("the review should be confirmable", available: ["confirmDisable", "cancelDisable"])
+        layout.assertAlertActionReachable(review.buttons["Restore Them First"], in: review, "review: Restore Them First")
+        layout.assertAlertActionReachable(review.buttons["Cancel"], in: review, "review: Cancel")
+        layout.assertAlertActionReachable(review.buttons["Continue"], in: review, "review: Continue").tap()
+
+        let confirmation = layout.assertAlertFits(
+            app.alerts["Delete these backups and turn off Cloud Backup?"],
+            containing: "can't be undone",
+            "confirmation"
+        )
+        layout.assertAlertActionReachable(confirmation.buttons["Delete and Turn Off"], in: confirmation, "confirmation: Delete and Turn Off")
+        layout.assertAlertActionReachable(confirmation.buttons["Cancel"], in: confirmation, "confirmation: Cancel").tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 10))
+
+        try control.setNetworkConnected(false)
+        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off offline").tap()
+        let offline = layout.assertAlertFits(app.alerts["Can't Reach iCloud"], containing: "needs a connection", "offline")
+        layout.assertAlertActionReachable(offline.buttons["Try Again"], in: offline, "offline: Try Again")
+        layout.assertAlertActionReachable(offline.buttons["Cancel"], in: offline, "offline: Cancel").tap()
+        XCTAssertEqual(control.state.count(.namespaceDelete), 0, "checking the dialogs deleted a backup")
+    }
+
+    /// The notice a healed legacy Turn Off leaves keeps its text whole and Turn Off and Dismiss
+    /// reachable
+    func testHealNoticeKeepsTurnOffAndDismissReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
+
+        try control.requestLegacyStuckRecordOnNextLaunch()
+        robot.killAndRelaunch()
+        control.waitForLegacyStuckRecordSeeded()
+        robot.openSettings()
+        control.assertNextActions("the healed backup should offer Turn Off and Dismiss", available: ["turnOff", "dismissHealNotice"])
+
+        layout.assertTextFits(app.staticTexts["Cloud Backup Turned On Again"], "Settings row: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "backing up your wallets again"), "Settings row: message")
+        robot.openCloudBackupDetailFromSettingsRow()
+
+        // the title carries the notice's identifier, so it is found by its label
+        layout.assertTextFits(robot.staticText(containing: "Cloud Backup is on again"), "heal notice: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "An earlier Turn Off didn't finish"), "heal notice: description")
+        layout.assertActionFits(app.buttons["cloudBackup.healNotice.turnOff"], "heal notice: Turn Off")
+        layout.assertActionFits(app.buttons["cloudBackup.action.dismissHealNotice"], "heal notice: Dismiss")
+    }
+
+    /// A Turn Off whose delete failed after the confirmation keeps the Settings row's status and
+    /// the panel's text whole, with Try Again reachable
+    func testTurnOffIncompleteRowAndPanelKeepTryAgainReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
+        try control.failNamespaceDelete(attempt: 1)
+
+        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off").tap()
+        let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "This deletes the backups", "review")
+        layout.assertAlertActionReachable(review.buttons["Turn Off and Delete Backups"], in: review, "review: Turn Off and Delete Backups").tap()
+        control.assertNextActions(
+            "the failed delete should leave Turn Off unfinished",
+            body: "finishingDisable",
+            available: ["resumeDisable"],
+            timeout: 60
+        )
+
+        layout.assertTextFits(robot.staticText(containing: "Cloud Backup is being turned off"), "panel: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "couldn't finish deleting your backups"), "panel: description")
+        layout.assertActionFits(app.buttons["cloudBackup.action.resumeDisable"], "panel: Try Again")
+
+        robot.goBack()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
+        layout.assertTextFits(app.staticTexts["Cloud Backup Is Being Turned Off"], "Settings row: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "Open to finish turning off"), "Settings row: message")
+    }
+
+    /// Restores Fixture Wallet One at the largest text size and opens Cloud Backup once it is
+    /// verified, with wallets two and three listed only in the cloud when `listingOthers`
+    private func restoreWalletOneAndOpenDetail(listingOthers: Bool) throws -> CloudBackupHostControl {
+        let control = try CloudBackupHostControl(
+            script: .init(cloud: .fixture, listedWalletRecordIds: [firstRecordId])
+        )
+        robot.launch(control: control, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        robot.restoreFromCloudBackup()
+        if listingOthers {
+            try control.update { $0.listedWalletRecordIds = nil }
+        }
+
+        let notOnDevice = listingOthers ? [secondRecordId, thirdRecordId] : []
+        robot.openSettings()
+        robot.openCloudBackupDetail()
+        control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
+            $0.inventoryLoaded && $0.verification == "verified" && !$0.awaitingUploadConfirmation
+                && $0.notOnDeviceRecordIds == notOnDevice
+        }
+
+        return control
+    }
+
     private func assertMissingPasskeyScreenFits(_ screen: String) {
         layout.assertTextFits(app.staticTexts["Cloud Backup Passkey Missing"], "\(screen): title", initialWait: 15)
         layout.assertTextFits(robot.staticText(containing: "is not accessible until you use an existing passkey"), "\(screen): description")
@@ -383,6 +485,37 @@ private struct LargeTextLayout {
     func assertReportFits(_ element: XCUIElement, report: String, _ name: String) {
         scrollWhollyIntoView(element, name, needsHit: false, initialWait: 10)
         assertProbeFits(app.descendants(matching: .any)[report], name)
+    }
+
+    /// Waits for a system alert and fails unless one of its texts contains `fragment`
+    ///
+    /// A system alert's text is drawn by iOS, which scrolls it rather than truncating it, so the
+    /// text only has to be there
+    @discardableResult
+    func assertAlertFits(_ alert: XCUIElement, containing fragment: String, _ name: String) -> XCUIElement {
+        XCTAssertTrue(alert.waitForExistence(timeout: 20), "\(name) never showed")
+        let text = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", fragment)).firstMatch
+        XCTAssertTrue(text.exists, "\(name) doesn't say '\(fragment)'")
+
+        return alert
+    }
+
+    /// Scrolls a system alert's content until `button` takes a tap, and fails if it never does
+    @discardableResult
+    func assertAlertActionReachable(_ button: XCUIElement, in alert: XCUIElement, _ name: String) -> XCUIElement {
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "\(name) is missing")
+        for _ in 0 ..< 6 where !button.isHittable {
+            alert.swipeUp(velocity: .slow)
+        }
+        for _ in 0 ..< 6 where !button.isHittable {
+            alert.swipeDown(velocity: .slow)
+        }
+
+        if !button.isHittable { robot.attachScreen(named: "\(name) unreachable") }
+        XCTAssertTrue(button.isHittable, "\(name) takes no tap in its alert")
+        XCTAssertTrue(button.isEnabled, "\(name) is disabled")
+
+        return button
     }
 
     /// Fails when the action is no taller than at the default text size, so a launch that ignored

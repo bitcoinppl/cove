@@ -6,8 +6,8 @@ import XCTest
 /// A fresh enable backs up only this device's wallets, so its Turn Off asks once; restoring
 /// Fixture Wallet One leaves wallets two and three only in the cloud, so its Turn Off asks twice
 final class CloudBackupTurnOffFullAppUITests: XCTestCase {
-    private static let walletOneRecordId = "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d"
-    private static let notOnDeviceRecordIds = [
+    static let walletOneRecordId = "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d"
+    static let notOnDeviceRecordIds = [
         CloudBackupRestoreAllFullAppUITests.walletTwoRecordId,
         CloudBackupRestoreAllFullAppUITests.walletThreeRecordId,
     ]
@@ -67,6 +67,127 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         tapTurnOff(control)
         confirmOnce()
         waitForTurnedOff(control)
+    }
+
+    /// Backups of this device's wallets and an extra copy of one of them ask once, say the copy
+    /// is deleted too, and Turn Off completes
+    func testExtraCopiesOnlyAskOnceAndTurnOffCompletes() throws {
+        let duplicate = CloudBackupUITestScript.duplicateWalletRecordId
+        let control = try CloudBackupHostControl(script: .init(
+            cloud: .fixture,
+            listedWalletRecordIds: [Self.walletOneRecordId] + Self.notOnDeviceRecordIds
+        ))
+        robot.launch(control: control)
+        robot.restoreFromCloudBackup()
+        try control.update { $0.listedWalletRecordIds = [Self.walletOneRecordId] + Self.notOnDeviceRecordIds + [duplicate] }
+
+        robot.openSettings()
+        robot.openCloudBackupDetail()
+        control.waitForAppState("the copy should list as the only extra copy, with every wallet on this device", timeout: 60) {
+            $0.inventoryLoaded && $0.verification == "verified" && $0.wallets.count == 3
+                && $0.rows.map(\.recordId) == [duplicate] && $0.rows.map(\.record) == ["extraCopy"]
+        }
+        control.assertNextActions("extra copies alone shouldn't hold Turn Off back", available: ["turnOff"])
+
+        tapTurnOff(control)
+        let review = reviewAlert()
+        XCTAssertTrue(
+            review.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "extra copy")).firstMatch.exists,
+            "the review should say the extra copy is deleted too"
+        )
+        XCTAssertFalse(review.buttons["Restore Them First"].exists, "extra copies alone offered Restore Them First")
+        confirmOnce()
+        waitForTurnedOff(control)
+    }
+
+    /// Backups Cove can't check without the passkey ask twice; Verify First leaves the review and
+    /// a passkey prompt the user doesn't finish says so neutrally, and Turn Off still completes
+    /// through both dialogs
+    func testUncheckedBackupsAskTwiceAndStillTurnOffAfterVerifyFirstIsNotCompleted() throws {
+        let control = try restoreWalletOneAndOpenDetail()
+        let namespaces = control.cloudNamespaces
+
+        // without the local master key the records can only be checked with the passkey, which
+        // the user never finishes
+        try robot.killAndRelaunch {
+            let removed = try control.removeKeychainItems(containing: "cspp::v1::master_key")
+            XCTAssertGreaterThan(removed, 0, "the restore saved no master key")
+            try control.answerNextPasskeyAssertions([.userCancelled])
+        }
+        robot.openSettings()
+        robot.openCloudBackupDetailFromSettingsRow()
+        control.waitForAppState("without the key the other backups should be unchecked", timeout: 60) {
+            $0.rows.contains { $0.record == "unchecked" }
+        }
+        control.assertNextActions("unchecked backups shouldn't hold Turn Off back", available: ["turnOff"])
+
+        tapTurnOff(control)
+        let review = reviewAlert()
+        XCTAssertTrue(
+            review.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "without your passkey")).firstMatch.exists,
+            "the review should say what Cove couldn't check"
+        )
+        XCTAssertTrue(review.buttons["Continue"].exists, "unchecked backups asked once")
+        XCTAssertFalse(review.buttons["Turn Off and Delete Backups"].exists, "unchecked backups asked once")
+
+        review.buttons["Verify First"].tap()
+        control.waitForAppState("the unfinished prompt should leave verification not completed") {
+            $0.verification == "notCompleted" && $0.screen.disable == "idle"
+        }
+        control.assertNextActions("Verify First should leave Turn Off and Verify offered", available: ["turnOff", "verify"])
+        let notVerified = app.staticTexts["Cloud Backup Not Verified"]
+        robot.scrollToHittable(notVerified)
+        XCTAssertFalse(app.buttons["Add New Passkey"].exists, "an unfinished prompt offered a passkey repair")
+        XCTAssertFalse(
+            robot.staticText(containing: "If your passkey was deleted").exists,
+            "an unfinished prompt said the passkey may be deleted"
+        )
+        XCTAssertEqual(control.state.count(.namespaceDelete), 0, "Verify First deleted a backup")
+        XCTAssertEqual(control.cloudNamespaces, namespaces)
+
+        tapTurnOff(control)
+        reviewAlert().buttons["Continue"].tap()
+        let confirmation = app.alerts["Delete these backups and turn off Cloud Backup?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Continue never asked to confirm")
+        confirmation.buttons["Delete and Turn Off"].tap()
+        waitForTurnedOff(control)
+    }
+
+    /// A wallet that shows up only in the cloud between the review and the delete brings the
+    /// review back, now asking twice and saying Cloud Backup changed, with nothing deleted
+    func testImpactThatGrowsBeforeTheDeleteBringsTheReviewBack() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
+        let namespaces = control.cloudNamespaces
+
+        tapTurnOff(control)
+        let review = reviewAlert()
+        XCTAssertFalse(review.buttons["Continue"].exists, "a backup of this device's wallet asked twice")
+
+        // the recheck after the drain lists the cloud again and finds the two wallets
+        try control.update { $0.listedWalletRecordIds = nil }
+        review.buttons["Turn Off and Delete Backups"].tap()
+
+        let changed = app.alerts.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Cloud Backup changed since you checked")
+        ).firstMatch
+        XCTAssertTrue(changed.waitForExistence(timeout: 30), "the grown impact never brought the review back")
+        let renewed = reviewAlert()
+        // the recheck lists the cloud without reading the new records, so it counts the two
+        // wallets only in the cloud as unchecked rather than naming them
+        XCTAssertTrue(
+            renewed.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Cove can't check 2 backups")).firstMatch.exists,
+            "the renewed review should count the wallets only in the cloud as unchecked"
+        )
+        XCTAssertTrue(renewed.buttons["Continue"].exists, "the renewed review should ask twice")
+        control.assertNextActions(
+            "the renewed review should be confirmable again",
+            available: ["confirmDisable", "cancelDisable"]
+        )
+        XCTAssertEqual(control.state.count(.namespaceDelete), 0, "the grown impact was deleted anyway")
+        XCTAssertEqual(control.cloudNamespaces, namespaces)
+
+        renewed.buttons["Cancel"].tap()
+        assertTurnOffIdle(control, namespaces: namespaces, after: "cancelling the renewed review")
     }
 
     /// Turn Off with no connection says so and deletes nothing; once reconnected, Try Again
@@ -240,20 +361,23 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
     // MARK: - Setup
 
     /// Restores Fixture Wallet One and opens Cloud Backup once the inventory lists wallets two
-    /// and three as not on this device
-    private func restoreWalletOneAndOpenDetail() throws -> CloudBackupHostControl {
+    /// and three as not on this device, or, without `listingOthers`, once it lists only wallet one
+    private func restoreWalletOneAndOpenDetail(listingOthers: Bool = true) throws -> CloudBackupHostControl {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [Self.walletOneRecordId])
         )
         robot.launch(control: control)
         robot.restoreFromCloudBackup()
-        try control.update { $0.listedWalletRecordIds = nil }
+        if listingOthers {
+            try control.update { $0.listedWalletRecordIds = nil }
+        }
 
+        let notOnDevice = listingOthers ? Self.notOnDeviceRecordIds : []
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the inventory never listed the wallets only in the cloud", timeout: 60) {
             $0.inventoryLoaded && $0.verification == "verified"
-                && $0.notOnDeviceRecordIds == Self.notOnDeviceRecordIds
+                && $0.notOnDeviceRecordIds == notOnDevice
         }
         control.assertNextActions("a settled backup should offer Turn Off", available: ["turnOff"])
 

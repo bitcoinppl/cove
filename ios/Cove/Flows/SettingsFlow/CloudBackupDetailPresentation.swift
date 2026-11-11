@@ -491,6 +491,8 @@ private struct CloudBackupTurnOffLeaveActions: View {
             .accessibilityIdentifier("cloudBackup.turnOff.restoreFirst")
         }
 
+        // placeholder until Rust exports a VerifyFirst action: then draw Verify First only when
+        // Rust offers it, and dispatch that action alone, gated on its own availability
         if impact.unchecked > 0 {
             Button("Verify First") {
                 leaveTurnOff(then: .startVerification(.cloudBackupDetail))

@@ -141,6 +141,15 @@ struct CloudBackupHostRobot {
         XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
     }
 
+    /// Opens Cloud Backup detail from its Settings row whatever status the row shows, for a test
+    /// whose scenario leaves the status to Rust
+    func openCloudBackupDetailFromSettingsRow() {
+        let row = app.buttons["settings.cloudBackup"]
+        scrollToHittable(row, initialWait: 15)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
+    }
+
     /// Goes back one screen with the navigation bar's back button
     func goBack() {
         let back = app.navigationBars.buttons.element(boundBy: 0)
@@ -291,6 +300,6 @@ struct CloudBackupHostRobot {
     /// A listed row's action button, by the identifier both platforms share, such as `restore` or
     /// `delete` (`docs/cloud_backup.md`)
     func rowAction(_ recordId: String, _ action: String) -> XCUIElement {
-        app.buttons["cloudBackup.row.\(recordId).\(action)"]
+        app.buttons[CloudBackupUIIdentifier.row(recordId, action)]
     }
 }

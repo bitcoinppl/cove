@@ -134,6 +134,8 @@ struct MainSettingsCloudBackupEnabledRow: View {
         .buttonStyle(.plain)
         .frame(minHeight: 44)
         .accessibilityHint("Opens Cloud Backup details")
+        // the title follows Rust's status, so a test that can't know it opens the row by this
+        .accessibilityIdentifier("settings.cloudBackup")
     }
 
     private var settingsChevron: some View {
@@ -157,10 +159,12 @@ struct MainSettingsCloudBackupEnabledStatus: View {
 
         VStack(alignment: .leading, spacing: 2) {
             Text(presentation.title)
+                .uiTestTruncationProbe()
 
             if let message = presentation.message {
                 Text(message)
                     .font(.caption2)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(presentation.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
