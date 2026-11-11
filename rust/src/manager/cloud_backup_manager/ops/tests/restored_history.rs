@@ -229,8 +229,8 @@ struct OriginalWallet {
 
 impl OriginalWallet {
     /// Creates the wallet the way importing recovery words does, gives it confirmed and pending
-    /// receives, a confirmed send with change and a label, and waits for its backup to carry the
-    /// label
+    /// receives, a confirmed send with change and a label, and waits for its backup to carry
+    /// every label its history shows
     async fn create_and_use(
         node: &FakeNode,
         globals: &TestGlobals,
@@ -299,8 +299,6 @@ impl OriginalWallet {
             .insert_or_update_labels_for_txn(far_details, FAR_RECEIVE_LABEL.into(), None)
             .expect("the label saves");
 
-        wait_for_backup_with_label(globals, &record_id).await;
-
         let history = WalletHistory::read(&manager).await;
         let txids = history
             .transactions
@@ -328,6 +326,8 @@ impl OriginalWallet {
                 .any(|label| label.label() == Some(FAR_RECEIVE_LABEL)),
             "the original wallet's list must show the far receive's label"
         );
+
+        wait_for_backup_with_labels(globals, &record_id, &history).await;
 
         Self { id, record_id, far_receive, history }
     }
@@ -389,8 +389,16 @@ impl OriginalWallet {
     }
 }
 
-/// Waits until the wallet's uploaded backup carries the far receive's label
-async fn wait_for_backup_with_label(globals: &TestGlobals, record_id: &str) {
+/// Waits until the wallet's uploaded backup carries every label the history shows
+///
+/// Labeling a transaction saves the transaction label and its output labels in separate writes,
+/// so an upload already running can carry the first without the rest; waiting for the whole
+/// history keeps the restore from comparing against a backup that a later upload completes
+async fn wait_for_backup_with_labels(
+    globals: &TestGlobals,
+    record_id: &str,
+    history: &WalletHistory,
+) {
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
@@ -405,11 +413,23 @@ async fn wait_for_backup_with_label(globals: &TestGlobals, record_id: &str) {
         )
         .ok()?;
 
-        decode_cloud_labels_jsonl(&uploaded).ok().flatten()
+        let jsonl = decode_cloud_labels_jsonl(&uploaded).ok().flatten()?;
+        bip329::Labels::try_from_str(&jsonl).ok()
     };
 
-    wait_for_test_condition(Duration::from_secs(10), "the backup carries the label", || {
-        uploaded_labels().is_some_and(|labels| labels.contains(FAR_RECEIVE_LABEL))
+    let wanted = history
+        .transactions
+        .iter()
+        .flat_map(|entry| match entry {
+            HistoryEntry::Confirmed { labels, .. } | HistoryEntry::Pending { labels, .. } => {
+                labels.iter()
+            }
+        })
+        .collect::<Vec<_>>();
+
+    wait_for_test_condition(Duration::from_secs(10), "the backup carries every label", || {
+        uploaded_labels()
+            .is_some_and(|uploaded| wanted.iter().all(|label| uploaded.contains(label)))
     })
     .await;
 }
