@@ -911,9 +911,15 @@ mod tests {
         use crate::network::Network;
         use crate::wallet::metadata::{WalletMetadata, WalletMode};
 
+        let _global_guard = crate::test_support::global_state_test_lock().blocking_lock();
         let _guard = TEST_LOCK.lock();
         reset_test_state();
-        crate::database::test_support::init_test_database();
+
+        // an earlier test in this process may have unlinked the main database file while the
+        // global handle stayed open on the deleted inode, so start clean and reopen the global
+        // to make the open handle match the file the report reads from disk
+        crate::database::test_support::delete_database();
+        Database::try_reinit()?;
         let database = Database::global();
 
         let main_wallet = WalletMetadata::preview_new();
