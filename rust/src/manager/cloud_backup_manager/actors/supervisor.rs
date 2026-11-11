@@ -1813,6 +1813,29 @@ pub(crate) mod test_support {
             Produces::ok(())
         }
 
+        /// Whether this supervisor's upload verifier is stopped and its sync-health worker has no
+        /// refresh in flight or queued
+        ///
+        /// Answers at once instead of waiting, so a refresh the verifier requests from this
+        /// supervisor while a test polls is never held behind the poll in the mailbox
+        pub(crate) async fn background_refreshes_idle_for_test(&mut self) -> ActorResult<bool> {
+            let uploads = self.uploads.addr_for_test();
+            if !call!(uploads.pending_upload_verifier_stopped_for_test()).await? {
+                return Produces::ok(false);
+            }
+
+            let sync_health = self.sync_health.addr_for_test();
+            let idle = call!(sync_health.sync_health_refresh_idle_for_test()).await?;
+            Produces::ok(idle)
+        }
+
+        /// The claim of the operation that holds the runtime now
+        pub(crate) async fn operation_claim_for_test(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupExclusiveOperationClaim>> {
+            Produces::ok(self.runtime.claim())
+        }
+
         pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {
             let cleanup = self.cleanup.addr_for_test();
             let idle = call!(cleanup.is_idle_for_test()).await?;

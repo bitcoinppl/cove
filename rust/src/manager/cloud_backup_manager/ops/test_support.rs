@@ -2067,6 +2067,40 @@ pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
         .expect("the upload worker resumed its uploads");
 }
 
+/// Waits until the supervisor's background sync-health refreshes have landed in the manager's
+/// state
+///
+/// The test-state reset and the pending-upload verifier each request a refresh that computes
+/// off the actor and lands later, so a test that compares two state snapshots waits for them
+/// first instead of racing them. Each poll goes through the supervisor's mailbox, behind any
+/// request sent before it
+///
+/// The verifier sends its refresh request before it reports stopped, so a poll that sees it
+/// stopped can still have that request queued behind it in the supervisor's mailbox. A second
+/// poll queues behind the request, so two idle answers in a row mean every refresh has landed
+pub(crate) async fn wait_for_background_refreshes(manager: &RustCloudBackupManager) {
+    async {
+        let mut idle_polls = 0;
+        loop {
+            let idle = call!(manager.supervisor.background_refreshes_idle_for_test())
+                .await
+                .expect("background refresh state");
+
+            idle_polls = if idle { idle_polls + 1 } else { 0 };
+            if idle_polls == 2 {
+                break;
+            }
+
+            if !idle {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+    }
+    .with_timeout(loaded_host_wait(Duration::from_secs(5)))
+    .await
+    .expect("the requested sync health refreshes land");
+}
+
 /// Lifecycle results reach the supervisor as messages; its mailbox barrier proves every message
 /// sent before it was handled
 pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {

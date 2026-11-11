@@ -22,13 +22,13 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
-    background_owner,
+    background_owner, begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
     configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
     hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
-    staged_pending_enable_journal, wait_for_test_condition, wallet_entry_with_labels,
+    staged_pending_enable_journal, wait_for_background_refreshes, wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
@@ -3072,43 +3072,54 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
 async fn stale_completion_is_discarded_without_touching_the_running_operation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = test_supervisor(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
+    persist_enabled_for_supervisor_test();
+    call!(manager.supervisor.rebase_after_test_write()).await.unwrap();
 
-    persist_enabled_under(&mut supervisor);
-    let finished = supervisor
-        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
-        .unwrap();
-    supervisor.complete_exclusive_operation(finished).await.unwrap();
-    let running = supervisor
-        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
-        .unwrap();
+    let (finished, _) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::RecreateManifest)
+            .await;
+    finish_operation_for_test(&manager, finished).await;
+    let (running, _) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+            .await;
 
-    // the seed and the first completion each ask this supervisor's worker for a sync-health refresh
-    // that lands later; the snapshot waits for it, so only the stale completions below can change
-    // the state
-    supervisor.sync_health.wait_for_refresh_for_test().await;
+    // the reset and the upload verifier each request a sync-health refresh that lands later
+    wait_for_background_refreshes(&manager).await;
 
-    // the state snapshot has no PartialEq, so its debug form stands in for it
-    let before = format!("{:?}", manager.state());
+    // background refreshes drive sync health and completions never do, and a refresh requested
+    // before the snapshot can still land after it, so the comparison leaves sync health out;
+    // the state has no PartialEq, so its debug form stands in for it
+    let operation_state = || {
+        let mut state = manager.state();
+        if let CloudBackupLifecycle::Configured(configured) = &mut state.lifecycle {
+            configured.sync_health = cove_device::cloud_storage::CloudSyncHealth::Unknown;
+        }
+
+        format!("{state:?}")
+    };
+    let before = operation_state();
 
     // the finished operation's late failure and success both arrive while the next one runs
-    supervisor
-        .fail_exclusive_operation(finished, CloudBackupError::Internal("late failure".into()))
-        .await
-        .unwrap();
-    supervisor.complete_exclusive_operation(finished).await.unwrap();
+    call!(
+        manager
+            .supervisor
+            .fail_exclusive_operation(finished, CloudBackupError::Internal("late failure".into()))
+    )
+    .await
+    .unwrap();
+    call!(manager.supervisor.complete_exclusive_operation(finished)).await.unwrap();
 
-    assert_eq!(supervisor.runtime, Some(running));
+    let claim = call!(manager.supervisor.operation_claim_for_test()).await.unwrap();
+    let last_outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap();
+    assert_eq!(claim, Some(running));
     assert_eq!(manager.projected_exclusive_operation(), Some(running));
-    assert_eq!(format!("{:?}", manager.state()), before);
-    assert_eq!(supervisor.last_outcome, None, "a stale completion is never a rejection");
+    assert_eq!(operation_state(), before);
+    assert_eq!(last_outcome, None, "a stale completion is never a rejection");
 
-    supervisor.complete_exclusive_operation(running).await.unwrap();
+    call!(manager.supervisor.complete_exclusive_operation(running)).await.unwrap();
 
-    assert_eq!(supervisor.runtime, None);
+    let claim = call!(manager.supervisor.operation_claim_for_test()).await.unwrap();
+    assert_eq!(claim, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 

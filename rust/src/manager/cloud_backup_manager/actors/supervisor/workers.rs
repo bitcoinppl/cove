@@ -85,16 +85,12 @@ impl CleanupWorker {
 pub(crate) mod test_support {
     #![cfg(test)]
 
-    use std::time::Duration;
-
-    use act_zero::{Addr, call};
-    use cove_tokio::FutureTimeoutExt as _;
+    use act_zero::Addr;
 
     use super::{CleanupWorker, SyncHealthWorker, UploadWorker};
     use crate::manager::cloud_backup_manager::actors::cleanup::CloudBackupCleanupWorker;
     use crate::manager::cloud_backup_manager::actors::sync_health_worker::CloudBackupSyncHealthWorker;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
-    use crate::test_support::loaded_host_wait;
 
     impl UploadWorker {
         /// The worker's address, for tests that wait on it directly
@@ -107,30 +103,6 @@ pub(crate) mod test_support {
         /// The worker's address, for tests that wait on it directly
         pub(crate) fn addr_for_test(&self) -> &Addr<CloudBackupSyncHealthWorker> {
             &self.0
-        }
-
-        /// Waits until every refresh this worker was asked for so far has landed in the
-        /// manager's state
-        ///
-        /// Setup and lifecycle commits request a refresh that computes off the actor and lands
-        /// later, so a test that compares two state snapshots waits for it first instead of racing
-        /// it. A request sent before this call reaches the worker before the first poll does
-        pub(crate) async fn wait_for_refresh_for_test(&self) {
-            async {
-                loop {
-                    let idle = call!(self.0.sync_health_refresh_idle_for_test())
-                        .await
-                        .expect("sync health refresh state");
-                    if idle {
-                        break;
-                    }
-
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                }
-            }
-            .with_timeout(loaded_host_wait(Duration::from_secs(5)))
-            .await
-            .expect("the requested sync health refresh lands");
         }
     }
 

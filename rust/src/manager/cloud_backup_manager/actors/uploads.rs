@@ -552,6 +552,13 @@ mod tests {
             Produces::ok(())
         }
 
+        /// Whether the pending-upload verifier is stopped, with no run in flight
+        pub(crate) async fn pending_upload_verifier_stopped_for_test(
+            &mut self,
+        ) -> ActorResult<bool> {
+            Produces::ok(self.pending_upload_verifier == Verifier::Stopped)
+        }
+
         /// Runs one upload of the wallet and records its outcome before answering
         ///
         /// Answers false, without coalescing into it, while another upload of the wallet runs,
