@@ -403,7 +403,8 @@ fn verify_without_its_operation(record: &DispatchRecord) -> Option<String> {
 }
 
 /// Whether `policy` owns `class` enough to run it: background work only in its own
-/// configuration while ordinary writes run, and operation work only for its running operation
+/// configuration while ordinary writes run, never beside a Turn Off or a reinitialize replacing
+/// the configuration, and operation work only for its running operation
 ///
 /// Deliberately coarser than `WritePolicy::decide`, so a bug in the table is caught here
 /// instead of being restated
@@ -412,9 +413,11 @@ fn owns(policy: &WritePolicy, class: &CommandClass) -> bool {
 
     match class {
         C::Ordinary { generation } | C::SourceCleanup { generation } => {
-            let turning_off = |writes: ConfiguredWrites| writes.kind == ConfiguredWriter::TurnOff;
+            let exclusive = |writes: ConfiguredWrites| {
+                matches!(writes.kind, ConfiguredWriter::TurnOff | ConfiguredWriter::Reinitialize)
+            };
             *generation == policy.generation
-                && matches!(&policy.body, PolicyBody::Configured { op } if !op.is_some_and(turning_off))
+                && matches!(&policy.body, PolicyBody::Configured { op } if !op.is_some_and(exclusive))
         }
         C::Operation(claim)
         | C::TurnOffDelete { claim, .. }

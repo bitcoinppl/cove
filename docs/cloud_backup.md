@@ -289,7 +289,7 @@ decision is one of three:
 
 | Class | Sent by | Runs when | Paused when |
 |---|---|---|---|
-| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off running | Turn Off, backup off, account switch, reset |
+| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset |
 | `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
 | `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
@@ -306,6 +306,7 @@ The same rules by runtime body:
 |---|---|---|---|
 | `Configured`, no operation | `Configured` | `Ordinary` and `SourceCleanup` of the current generation | stale |
 | `Configured`, Turn Off before its commit | `Configured` (Turn Off writer) | Turn Off's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`TurnOff`), the rest stale |
+| `Configured`, a reinitialize | `Configured` (reinitialize writer) | the reinitialize's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`Reinitialize`), the rest stale |
 | `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` | stale |
 | `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` | stale |
 | `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` | stale |
@@ -341,6 +342,13 @@ confirmation. It asks the supervisor to persist the enabled state after a final
 upload and waits for that answer before it marks the wallets uploaded. It
 re-decides the class before it applies the completion, so a write whose
 operation ended meanwhile is reported cancelled.
+
+A reinitialize owns the namespaces from its start, the same way. Its policy
+pauses ordinary writes and source cleanup, so a cleanup whose proof was read
+before the reinitialize began never deletes a source it may recover. It then
+drains the lane before it lists the namespaces, so a cleanup delete that was
+already running finishes before the reinitialize reads what exists. When it
+ends, the new generation makes anything left from before stale.
 
 Turn Off pauses ordinary writes through the policy, then queues a drain barrier
 of its own. The barrier comes back only after the write in flight and those

@@ -114,6 +114,9 @@ pub(crate) struct ConfiguredWrites {
 pub(crate) enum ConfiguredWriter {
     /// Turn Off before its commit: background writes pause until it commits or ends
     TurnOff,
+    /// A reinitialize replacing the configuration: background writes and source cleanup pause
+    /// until it ends, and it drains the lane before it reads the namespaces it may promote
+    Reinitialize,
     RowDelete,
     OtherBackups,
     /// Discarding a stopped reinitialize deletes the namespace it wrote, never the active one
@@ -171,6 +174,9 @@ impl WritePolicy {
                     B::Configured {
                         op: Some(ConfiguredWrites { kind: ConfiguredWriter::TurnOff, .. }),
                     } => Decision::Paused(PauseReason::TurnOff),
+                    B::Configured {
+                        op: Some(ConfiguredWrites { kind: ConfiguredWriter::Reinitialize, .. }),
+                    } => Decision::Paused(PauseReason::Reinitialize),
                     B::Configured { .. } => Decision::Run,
                     B::Off { .. } => Decision::Paused(PauseReason::BackupOff),
                     B::FinishingDisable { .. } => Decision::Paused(PauseReason::TurnOff),

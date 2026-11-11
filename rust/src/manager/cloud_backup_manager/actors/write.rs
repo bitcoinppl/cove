@@ -20,9 +20,9 @@ pub(crate) use self::policy::{
     ConfigGeneration, ConfiguredWriter, ConfiguredWrites, Decision, OffWrites, PolicyBody,
     VersionedPolicy, WritePolicy,
 };
-#[cfg(test)]
-pub(crate) use self::supervisor::LaneDecision;
 pub(crate) use self::supervisor::{CloudBackupWriteSupervisor, WriteTicket};
+#[cfg(test)]
+pub(crate) use self::supervisor::{LaneDecision, LaneQueue};
 pub(crate) use self::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,

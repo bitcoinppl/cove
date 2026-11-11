@@ -1034,12 +1034,12 @@ impl ConfiguredOp {
             Self::RecoverOtherBackups(_) | Self::DeleteOtherBackups(_) => {
                 ConfiguredWriter::OtherBackups
             }
+            Self::Reinitialize(_) => ConfiguredWriter::Reinitialize,
             Self::DiscardReinitialize(_) => ConfiguredWriter::Discard,
             Self::Verify(_)
             | Self::RepairPasskey(_)
             | Self::RestoreCloudWallet(_)
             | Self::RestoreAll(_)
-            | Self::Reinitialize(_)
             | Self::RecreateManifest(_) => ConfiguredWriter::Other,
         }
     }

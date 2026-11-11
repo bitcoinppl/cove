@@ -9,11 +9,11 @@ use std::time::Duration;
 use cove_cspp::MasterKeyPromotionStatus;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_device::keychain::Keychain;
-use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd,
     TestApp, change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
+    seed_verifiable_master_key,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -55,32 +55,6 @@ fn master_key_bytes() -> Option<Vec<u8>> {
 
 fn credential_id() -> Option<Vec<u8>> {
     CloudBackupKeychain::global().load_credential_id().expect("read credential")
-}
-
-/// Replace the seeded placeholder wrapper with one the scripted passkey opens, and keep the
-/// passkey's credential, so verification can recover a missing local master key
-fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
-    let prf_key = [7u8; 32];
-    let prf_salt = [9u8; 32];
-    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
-        .load_master_key_from_store()
-        .expect("read local master key")
-        .expect("seeded master key");
-    let encrypted =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &prf_salt)
-            .expect("encrypt master key");
-
-    app.cloud.inner.set_master_key_backup(
-        namespace.to_string(),
-        serde_json::to_vec(&encrypted).expect("encode master key wrapper"),
-    );
-    app.cloud.persist();
-    CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).expect("save passkey");
-    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
-        prf_output: prf_key.to_vec(),
-        credential_id: vec![1, 2, 3],
-    }));
-    app.passkey.inner.set_authenticate_result(Ok(prf_key.to_vec()));
 }
 
 /// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset

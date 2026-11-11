@@ -5,6 +5,7 @@ use std::time::Duration;
 use cove_cspp::Cspp;
 use cove_cspp::backup_data::{wallet_filename_from_record_id, wallet_record_id};
 use cove_device::keychain::Keychain;
+use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::app::{NextAction, TestApp};
 use crate::database::Database;
@@ -79,9 +80,17 @@ impl FakeAccount {
             .expect("save local wallets");
 
         let mut files = Vec::with_capacity(self.record_count());
-        for wallet in local.iter().cloned().chain(elsewhere) {
+        let mut local_records = Vec::with_capacity(local.len());
+        for (index, wallet) in local.iter().cloned().chain(elsewhere).enumerate() {
             let record_id = wallet_record_id(wallet.id.as_ref());
             let entry = wallet_entry_with_labels(&wallet, None);
+            if index < self.local_wallets {
+                local_records.push(SeededRecord {
+                    record_id: record_id.clone(),
+                    revision: entry.content_revision_hash.clone(),
+                });
+            }
+
             let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1);
             app.cloud.inner.set_wallet_backup(namespace.clone(), record_id.clone(), backup);
             files.push(wallet_filename_from_record_id(&record_id));
@@ -92,7 +101,7 @@ impl FakeAccount {
         app.cloud.persist();
         app.settle();
 
-        SeededAccount { namespace, not_on_device }
+        SeededAccount { namespace, local: local_records, not_on_device }
     }
 }
 
@@ -100,8 +109,53 @@ impl FakeAccount {
 #[derive(Debug, Clone)]
 pub(crate) struct SeededAccount {
     pub(crate) namespace: String,
+    /// The backups of the wallets on this device
+    pub(crate) local: Vec<SeededRecord>,
     /// Record ids of the backups for wallets that are not on this device
     pub(crate) not_on_device: Vec<String>,
+}
+
+/// One seeded wallet backup and the content revision it was written at
+#[derive(Debug, Clone)]
+pub(crate) struct SeededRecord {
+    pub(crate) record_id: String,
+    pub(crate) revision: String,
+}
+
+/// The passkey every verifiable wrapper opens
+pub(crate) const VERIFIABLE_PRF_KEY: [u8; 32] = [7; 32];
+const VERIFIABLE_PRF_SALT: [u8; 32] = [9; 32];
+
+/// The wrapper bytes the scripted passkey opens for `master_key`
+pub(crate) fn verifiable_wrapper(master_key: &cove_cspp::master_key::MasterKey) -> Vec<u8> {
+    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
+        master_key,
+        &VERIFIABLE_PRF_KEY,
+        &VERIFIABLE_PRF_SALT,
+    )
+    .expect("encrypt master key");
+
+    serde_json::to_vec(&encrypted).expect("encode master key wrapper")
+}
+
+/// Replace the seeded placeholder wrapper with one the scripted passkey opens, and keep the
+/// passkey's credential, so verification can recover a missing local master key
+pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
+    let master_key = Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read local master key")
+        .expect("seeded master key");
+
+    app.cloud.inner.set_master_key_backup(namespace.to_string(), verifiable_wrapper(&master_key));
+    app.cloud.persist();
+    CloudBackupKeychain::global()
+        .save_passkey(&[1, 2, 3], VERIFIABLE_PRF_SALT)
+        .expect("save passkey");
+    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: VERIFIABLE_PRF_KEY.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
 }
 
 /// Persist the reporter's stuck record: a disable that never deleted anything

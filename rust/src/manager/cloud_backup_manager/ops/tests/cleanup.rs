@@ -104,6 +104,30 @@ async fn enqueue_cleanup_in_generation_for_test(
     }
 }
 
+/// Drives a reinitialize that is already running to its end, confirming its saved passkey
+async fn finish_running_reinitialize(manager: &RustCloudBackupManager) {
+    let deadline = LoadedHostDeadline::after(Duration::from_secs(2));
+    while !deadline.has_passed() {
+        let Some(claim) = manager.projected_exclusive_operation() else { break };
+
+        if has_awaiting_saved_passkey_confirmation_for_test(manager).await {
+            call!(
+                manager.supervisor.complete_enable_saved_passkey_wait(
+                    claim,
+                    SavedPasskeyConfirmationMode::Manual
+                )
+            )
+            .await
+            .expect("complete the saved-passkey wait");
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::task::yield_now().await;
+    }
+
+    assert!(manager.projected_exclusive_operation().is_none(), "the reinitialize finishes");
+}
+
 /// A merge cleanup carries the configuration it was proven in; after Turn Off and a later
 /// Enable the lane drops it, so the old proof never deletes a source namespace
 #[tokio::test(flavor = "current_thread")]
@@ -226,6 +250,100 @@ async fn cleanup_held_in_its_proof_across_turn_off_and_enable_never_deletes_its_
 
     assert!(globals.cloud.has_namespace(&source_namespace), "the late proof deleted its source");
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+}
+
+/// A merge cleanup proven before a reinitialize never deletes the namespace that reinitialize
+/// promotes: the old proof's delete arrives while the reinitialize is recovering its source, and
+/// the running reinitialize pauses source cleanup
+///
+/// `cleanup_deletes_source_namespace_after_active_record_proof` is the control: the same proof
+/// with no reinitialize deletes the source
+#[tokio::test(flavor = "current_thread")]
+async fn cleanup_proven_before_a_reinitialize_never_deletes_the_namespace_it_promotes() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    // the merge's source holds a wrapper the user's passkey opens, so a reinitialize with no
+    // local master key recovers it as the new active namespace
+    let prf_key = [7u8; 32];
+    let source_namespace = seed_master_key_wrapper(globals, &prf_key, &[9; 32], 1);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_namespace = active_master_key.namespace_id();
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        active_namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&wallet, &active_master_key, "matching-revision", 1).await,
+    );
+    globals.cloud.set_wallet_files(
+        active_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+    globals.cloud.set_wallet_files(
+        source_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+    CloudBackupKeychain::global().delete_master_key().unwrap();
+
+    // the proof's last read, the active record, waits until the reinitialize is running
+    let proof = globals.cloud.gate_wallet_backup_download_after_successes(
+        active_namespace.clone(),
+        record_id.clone(),
+        0,
+    );
+    let generation = manager.write_ticket().await.expect("write ticket").generation;
+    let enqueue = enqueue_cleanup_in_generation_for_test(
+        &manager,
+        globals,
+        &active_namespace,
+        &active_master_key,
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
+            record_id,
+            revision_hash: Some("matching-revision".into()),
+        },
+        generation,
+        CleanupWait::Idle,
+    );
+    let reinitialize = async {
+        proof.wait_until_blocked().await;
+
+        // the reinitialize waits at its namespace listing while the old proof finishes and
+        // asks to delete its source
+        let listing = globals.cloud.gate_next_list_namespaces();
+        call!(manager.supervisor.start_recovery_operation(RecoveryAction::ReinitializeBackup))
+            .await
+            .expect("start reinitialize");
+        listing.wait_until_blocked().await;
+        proof.release();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !call!(manager.supervisor.cleanup_idle_for_test()).await.expect("cleanup idle") {
+            assert!(tokio::time::Instant::now() < deadline, "the old cleanup should finish");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        listing.release();
+    };
+    tokio::join!(enqueue, reinitialize);
+    finish_running_reinitialize(&manager).await;
+
+    assert!(globals.cloud.has_namespace(&source_namespace), "the old proof deleted its source");
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap(),
+        Some(source_namespace),
+        "the reinitialize did not promote the cleanup's source"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

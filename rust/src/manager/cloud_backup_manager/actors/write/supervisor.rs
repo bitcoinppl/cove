@@ -197,6 +197,14 @@ pub(crate) struct LaneView {
     pub(crate) decisions: Vec<LaneDecision>,
 }
 
+/// The lane's commands at one moment, oldest first
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct LaneQueue {
+    pub(crate) in_flight: Option<CommandClass>,
+    pub(crate) pending: Vec<CommandClass>,
+}
+
 impl Default for CloudBackupWriteSupervisor {
     fn default() -> Self {
         Self::new(Weak::new())
@@ -261,6 +269,15 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(LaneView {
             applied: self.policy.clone(),
             decisions: std::mem::take(&mut self.decisions),
+        })
+    }
+
+    /// The command running and those queued behind it, for harness tests
+    #[cfg(test)]
+    pub(crate) async fn harness_queue(&mut self) -> ActorResult<LaneQueue> {
+        Produces::ok(LaneQueue {
+            in_flight: self.in_flight_write.as_ref().map(|write| write.class.clone()),
+            pending: self.pending_writes.iter().map(|write| write.class.clone()).collect(),
         })
     }
 
@@ -763,6 +780,7 @@ mod tests {
         let earlier_run =
             CloudBackupExclusiveOperationClaim::drive_account_switch(7.into(), operation_id(9));
         let verify = claim(Op::Verify, 6);
+        let reinitialize = claim(Op::ReinitializeBackup, 10);
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
         let policy = |body| WritePolicy { generation, body };
@@ -798,6 +816,23 @@ mod tests {
                 policy(configured(writes(verify, ConfiguredWriter::Other))),
                 CommandClass::RowDelete(verify),
                 Decision::Stale,
+            ),
+            // a reinitialize replacing the configuration pauses background work and source
+            // cleanup, and writes and drains through its claim
+            (
+                policy(configured(writes(reinitialize, ConfiguredWriter::Reinitialize))),
+                ordinary.clone(),
+                Decision::Paused(PauseReason::Reinitialize),
+            ),
+            (
+                policy(configured(writes(reinitialize, ConfiguredWriter::Reinitialize))),
+                cleanup.clone(),
+                Decision::Paused(PauseReason::Reinitialize),
+            ),
+            (
+                policy(configured(writes(reinitialize, ConfiguredWriter::Reinitialize))),
+                CommandClass::Operation(reinitialize),
+                Decision::Run,
             ),
             // Turn Off before its commit pauses background work and drains through its claim
             (

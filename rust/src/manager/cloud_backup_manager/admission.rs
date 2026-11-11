@@ -189,6 +189,8 @@ pub(crate) enum PauseReason {
     LoadFailed,
     /// The command was read under an older configuration; its work is redone under the new one
     ConfigurationChanged,
+    /// A reinitialize is replacing the configuration; background work runs again under the new one
+    Reinitialize,
 }
 
 /// The lifecycle body admission decides on

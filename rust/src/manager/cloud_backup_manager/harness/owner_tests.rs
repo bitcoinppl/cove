@@ -11,12 +11,18 @@ use act_zero::call;
 use super::invariants::Invariant;
 use super::process::checkpoint;
 use super::{CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyMode, PhaseEnd};
-use super::{TestApp, change_a_wallet, keychain_namespace, load_detail, open_durable_state};
-use super::{persisted, run_case};
+use super::{
+    SeededRecord, TestApp, change_a_wallet, keychain_namespace, load_detail, open_durable_state,
+    persisted, run_case, seed_verifiable_master_key, verifiable_wrapper,
+};
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::manager::cloud_backup_manager::actors::cleanup::CloudBackupCleanupJob;
 use crate::manager::cloud_backup_manager::actors::supervisor::Finish;
-use crate::manager::cloud_backup_manager::actors::write::Decision;
+use crate::manager::cloud_backup_manager::actors::write::{CommandClass, Decision, LaneQueue};
+use crate::manager::cloud_backup_manager::actors::{
+    CleanupExpectedWalletRecord, CleanupSourceNamespace,
+};
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
@@ -306,5 +312,143 @@ fn a_reset_killed_after_its_key_clear_relaunches_with_backup_off() {
         app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::Verify, N::SyncUnsynced]);
         assert_ne!(ordinary_decision(&app), Decision::Run);
         assert_eq!(app.manager().current_status(), CloudBackupStatus::Disabled);
+    });
+}
+
+/// A namespace a merge left behind: its wrapper opens with the same passkey and it holds the
+/// same wallet as the active namespace, so a cleanup proves it redundant and a reinitialize
+/// with no local master key would recover it
+fn seed_merged_source(app: &TestApp, record: &SeededRecord) -> String {
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    app.cloud.inner.set_master_key_backup(namespace.clone(), verifiable_wrapper(&master_key));
+    app.cloud.inner.set_wallet_files(
+        namespace.clone(),
+        vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record.record_id)],
+    );
+    app.cloud.persist();
+    namespace
+}
+
+/// Queues the cleanup a merge into `active` schedules for `source`, under the current
+/// configuration
+fn schedule_merge_cleanup(app: &TestApp, active: &str, source: &str, record: &SeededRecord) {
+    let master_key = cove_cspp::Cspp::new(cove_device::keychain::Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read local master key")
+        .expect("active master key");
+    let writes = app.writes();
+    let ticket =
+        app.block_on("the write lane's ticket", async move { call!(writes.ticket()).await });
+    let job = CloudBackupCleanupJob {
+        generation: ticket.expect("the write lane answers").generation,
+        cloud: cove_device::cloud_storage::CloudStorage::global_explicit_client(),
+        active_namespace_id: active.to_owned(),
+        active_critical_key: master_key.critical_data_key(),
+        sources: vec![CleanupSourceNamespace {
+            namespace_id: source.to_owned(),
+            expected_wallets: vec![CleanupExpectedWalletRecord {
+                record_id: record.record_id.clone(),
+                content_revision_hash: Some(record.revision.clone()),
+            }],
+        }],
+    };
+
+    let supervisor = app.manager().supervisor.clone();
+    app.block_on("the cleanup to queue", async move {
+        call!(supervisor.enqueue_cleanup_for_test(job)).await
+    })
+    .expect("queue the cleanup");
+}
+
+fn lane_queue(app: &TestApp) -> LaneQueue {
+    let writes = app.writes();
+    app.block_on("the write lane's queue", async move { call!(writes.harness_queue()).await })
+        .expect("the write lane answers")
+}
+
+fn master_key_reads_of(app: &TestApp, namespace: &str) -> usize {
+    app.cloud
+        .calls()
+        .iter()
+        .filter(|(id, target)| {
+            id.kind == CloudCall::DownloadMasterKey && target.as_deref() == Some(namespace)
+        })
+        .count()
+}
+
+/// A Reinitialize owns the namespaces from its start: a cleanup delete already running when it
+/// starts finishes before the reinitialize reads what exists, so the reinitialize never recovers
+/// the namespace that delete removes
+///
+/// Settling, not a timer, shows the reinitialize has gone as far as it can while the delete is
+/// held: without the drain it lists both namespaces and reads the source's wrapper here
+#[test]
+fn a_reinitialize_waits_for_a_running_cleanup_delete_before_it_reads_the_namespaces() {
+    let test = concat!(
+        module_path!(),
+        "::a_reinitialize_waits_for_a_running_cleanup_delete_before_it_reads_the_namespaces"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let seeded = FakeAccount::new(1, 0).seed_records(&app);
+        let active = seeded.namespace.clone();
+        let record = seeded.local[0].clone();
+        seed_verifiable_master_key(&app, &active);
+        let source = seed_merged_source(&app, &record);
+        load_detail(&mut app);
+
+        let delete = Hold::default();
+        app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::Hold(delete.clone()));
+        app.event("a merge cleanup proves its source and starts deleting it", |app| {
+            schedule_merge_cleanup(app, &active, &source, &record);
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::Enable]);
+        app.block_on("the source delete to start", delete.entered());
+
+        // with no local master key the reinitialize lists the namespaces and recovers one
+        crate::manager::cloud_backup_manager::CloudBackupKeychain::global()
+            .delete_master_key()
+            .expect("delete the local master key");
+        let source_reads = master_key_reads_of(&app, &source);
+        app.event("Reinitialize starts while the delete runs", |app| {
+            let supervisor = app.manager().supervisor.clone();
+            app.block_on("the reinitialize to start", async move {
+                call!(supervisor.start_recovery_operation(
+                    crate::manager::cloud_backup_manager::RecoveryAction::ReinitializeBackup
+                ))
+                .await
+            })
+            .expect("start the reinitialize");
+        })
+        .then_cannot(&[N::Enable, N::TurnOff]);
+
+        assert_eq!(
+            master_key_reads_of(&app, &source),
+            source_reads,
+            "the reinitialize read a namespace the cleanup is deleting"
+        );
+        let claim = running_claim(&app).expect("the reinitialize runs");
+        let lane = lane_queue(&app);
+        assert!(
+            matches!(lane.in_flight, Some(CommandClass::SourceCleanup { .. })),
+            "the held delete runs: {lane:?}"
+        );
+        assert_eq!(
+            lane.pending,
+            vec![CommandClass::Operation(claim)],
+            "the reinitialize waits behind the delete"
+        );
+
+        app.event("the source delete finishes", |_| delete.release()).then_cannot(&[N::Enable]);
+        assert!(!app.cloud.inner.has_namespace(&source), "the cleanup deleted its source");
+        assert_eq!(master_key_reads_of(&app, &source), source_reads);
+        assert!(!app.runs_operation(), "the reinitialize finished");
+        assert_eq!(
+            keychain_namespace(),
+            Some(active),
+            "the reinitialize recovered the active backup"
+        );
     });
 }
