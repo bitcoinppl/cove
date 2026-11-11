@@ -99,6 +99,30 @@ pub enum Error {
     ElectrumGetTransaction(electrum_client::Error),
 }
 
+impl Error {
+    /// A stable name for the failure, safe to log
+    ///
+    /// The underlying client errors can quote the node URL the user entered, including any
+    /// credentials in it
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::CreateEsploraClient(_) => "create_esplora_client",
+            Self::CreateElectrumClient(_) => "create_electrum_client",
+            Self::EsploraConnect(_) => "esplora_connect",
+            Self::ElectrumConnect(_) => "electrum_connect",
+            Self::ElectrumScan(_) => "electrum_scan",
+            Self::EsploraScan(_) => "esplora_scan",
+            Self::ProgressiveScan(_) => "progressive_scan",
+            Self::EsploraAddress(_) => "esplora_address",
+            Self::ElectrumAddress(_) => "electrum_address",
+            Self::EsploraBroadcast(_) => "esplora_broadcast",
+            Self::ElectrumBroadcast(_) => "electrum_broadcast",
+            Self::EsploraGetTransaction(_) => "esplora_get_transaction",
+            Self::ElectrumGetTransaction(_) => "electrum_get_transaction",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeClientOptions {
     pub batch_size: usize,
