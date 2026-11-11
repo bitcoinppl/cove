@@ -515,9 +515,17 @@ impl CloudBackupError {
         }
     }
 
-    /// The user didn't finish a passkey request; nothing changed and nothing is wrong
+    /// The user didn't finish a passkey request, or its sheet couldn't show; nothing changed and
+    /// nothing is wrong
     pub(crate) fn is_passkey_not_completed(&self) -> bool {
-        matches!(self, Self::Passkey(error) if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)))
+        matches!(
+            self,
+            Self::Passkey(error)
+                if matches!(
+                    error.passkey_error(),
+                    Some(PasskeyError::NotCompleted | PasskeyError::NotReady { .. })
+                )
+        )
     }
 
     /// What this error says about a passkey request, or `None` when it isn't a passkey error
@@ -556,7 +564,9 @@ impl CloudBackupError {
                     operation: PasskeyOperation::Registration,
                     reason: PasskeyFailureReason::DeviceNotConfigured,
                 }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
-                Some(PasskeyError::NotCompleted) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+                Some(PasskeyError::NotCompleted | PasskeyError::NotReady { .. }) => {
+                    PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into()
+                }
                 Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
                 Some(PasskeyError::PrfUnsupportedProvider) => {
                     UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
@@ -764,6 +774,13 @@ mod tests {
             CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();
 
         assert_eq!(cancellation, PASSKEY_REQUEST_INCOMPLETE_MESSAGE);
+        assert_eq!(
+            CloudBackupError::from(PasskeyError::NotReady {
+                operation: PasskeyOperation::DiscoverAssertion
+            })
+            .reader_message(),
+            PASSKEY_REQUEST_INCOMPLETE_MESSAGE
+        );
         assert_eq!(
             CloudBackupError::PasskeyDiscoveryCancelled.reader_message(),
             PASSKEY_REQUEST_INCOMPLETE_MESSAGE

@@ -218,6 +218,17 @@ async fn passkey_match_treats_missing_credential_as_no_match() {
 async fn passkey_match_treats_user_cancel_as_user_declined() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
+
+    // a sheet that never showed ends the match the same way as one the user left
+    for error in [
+        PasskeyError::NotCompleted,
+        PasskeyError::NotReady { operation: PasskeyOperation::DiscoverAssertion },
+    ] {
+        assert_discovery_stop_is_user_declined(globals, error).await;
+    }
+}
+
+async fn assert_discovery_stop_is_user_declined(globals: &TestGlobals, error: PasskeyError) {
     globals.reset();
 
     let master_key = cove_cspp::master_key::MasterKey::generate();
@@ -227,7 +238,7 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
     globals
         .cloud
         .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
-    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
+    globals.passkey.set_discover_result(Err(error));
 
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
@@ -619,6 +630,17 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
 async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
+
+    // a sheet that never showed keeps earlier matches the same way as one the user left
+    for error in [
+        PasskeyError::NotCompleted,
+        PasskeyError::NotReady { operation: PasskeyOperation::AuthenticateAssertion },
+    ] {
+        assert_targeted_stop_keeps_earlier_match(globals, error).await;
+    }
+}
+
+async fn assert_targeted_stop_keeps_earlier_match(globals: &TestGlobals, error: PasskeyError) {
     globals.reset();
 
     let prf_key = [7u8; 32];
@@ -649,7 +671,7 @@ async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
     }));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
+    globals.passkey.set_authenticate_result(Err(error));
 
     let outcome = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),

@@ -175,7 +175,10 @@ impl VerificationSession {
 
 fn map_authentication_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudBackupError> {
     match error {
-        PasskeyError::NotCompleted => Ok(PasskeyAuthOutcome::UserCancelled),
+        // a sheet that never showed ends the request the same way as one the user left
+        PasskeyError::NotCompleted | PasskeyError::NotReady { .. } => {
+            Ok(PasskeyAuthOutcome::UserCancelled)
+        }
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
         PasskeyError::PrfUnsupportedProvider => Err(CloudBackupError::UnsupportedPasskeyProvider),
         other => Err(CloudBackupError::passkey(other)),

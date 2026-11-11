@@ -330,7 +330,8 @@ impl NamespacePasskeyMatchSession {
 
                     let prf_output = match auth {
                         Ok(prf_output) => prf_output,
-                        Err(PasskeyError::NotCompleted) => {
+                        // a sheet that never showed says nothing about this candidate
+                        Err(PasskeyError::NotCompleted | PasskeyError::NotReady { .. }) => {
                             return Ok(if matches.is_empty() {
                                 NamespaceMatchSnapshotOutcome::UserDeclined
                             } else {
@@ -373,7 +374,7 @@ impl NamespacePasskeyMatchSession {
 
                     let discovered = match discovery {
                         Ok(discovered) => discovered,
-                        Err(PasskeyError::NotCompleted) => {
+                        Err(PasskeyError::NotCompleted | PasskeyError::NotReady { .. }) => {
                             // the platform reports a cancellation and an authenticator failure
                             // the same way, so record what the attempt looked like
                             info!(
