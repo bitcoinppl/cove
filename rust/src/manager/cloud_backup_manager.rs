@@ -49,7 +49,7 @@ use crate::manager::reconcile_channel::ReconcileChannel;
 use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode};
 
 pub(crate) use self::actors::CloudBackupRestoreEvent;
-use self::actors::supervisor::LocalResetOutcome;
+use self::actors::supervisor::{AbandonedReset, LocalResetOutcome, ResetEnd};
 use self::actors::{
     CloudBackupSupervisor, CloudBackupWriteClient, CloudBackupWriteSupervisor, WriteTicket,
 };
@@ -325,7 +325,6 @@ pub(crate) enum CloudReachable {
 pub(crate) struct CloudBackupResetPermit {
     manager: Arc<RustCloudBackupManager>,
     previous_status: CloudBackupStatus,
-    resume_allowed: bool,
     completed: bool,
 }
 
@@ -337,10 +336,6 @@ pub(crate) enum CloudBackupResetRecovery {
 }
 
 impl CloudBackupResetPermit {
-    pub(crate) fn prevent_resume(&mut self) {
-        self.resume_allowed = false;
-    }
-
     /// Clears Cloud Backup's local keychain state through its owner, the supervisor
     pub(crate) async fn clear_local_state(&self) -> Result<(), CloudBackupError> {
         call!(self.manager.supervisor.clear_local_state_for_reset())
@@ -361,26 +356,21 @@ impl CloudBackupResetPermit {
         Ok(())
     }
 
+    /// Ends a reset whose wipe failed before its database reset
+    ///
+    /// The owner decides what the reset left: the backup as it was when the local keys were
+    /// kept, or off once their clear began, since that can't be taken back
     pub(crate) async fn resume_after_failed_reset(
         mut self,
     ) -> Result<CloudBackupResetRecovery, CloudBackupError> {
-        // ending the reset publishes the stored record's policy, and the write lane wakes
+        // ending the reset publishes the policy of the body it left, and the write lane wakes
         // uploads if it runs them
-        call!(self.manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
+        let end = call!(self.manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
             .await
             .map_err(CloudBackupError::internal)?;
-        if !self.resume_allowed {
-            self.manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
-            self.manager.local_reset_in_progress.store(false, Ordering::Release);
-            self.completed = true;
 
-            return Ok(CloudBackupResetRecovery::SafelyDisabled);
-        }
-
-        self.manager.reconcile_runtime_status(self.previous_status.clone());
-        self.manager.local_reset_in_progress.store(false, Ordering::Release);
         self.completed = true;
-        Ok(CloudBackupResetRecovery::PreviousStatusResumed)
+        Ok(self.manager.project_abandoned_reset(end, self.previous_status.clone()))
     }
 }
 
@@ -392,33 +382,52 @@ impl Drop for CloudBackupResetPermit {
 
         let manager = self.manager.clone();
         let status = self.previous_status.clone();
-        let resume_allowed = self.resume_allowed;
         cove_tokio::task::spawn(async move {
-            let resumed =
-                call!(manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
-                    .await
-                    .is_ok()
-                    && resume_allowed;
-            manager.reconcile_runtime_status(if resumed {
-                status
-            } else {
-                CloudBackupStatus::Disabled
-            });
-            manager.local_reset_in_progress.store(false, Ordering::Release);
+            manager.abandon_local_reset(status).await;
         });
     }
 }
 
 impl RustCloudBackupManager {
     async fn recover_failed_local_reset_preparation(&self, previous_status: CloudBackupStatus) {
-        let finished =
-            call!(self.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await.is_ok();
-        self.reconcile_runtime_status(if finished {
-            previous_status
-        } else {
-            CloudBackupStatus::Disabled
-        });
+        self.abandon_local_reset(previous_status).await;
+    }
+
+    /// Ends a local reset that won't reach its database reset, showing what the owner left
+    async fn abandon_local_reset(&self, previous_status: CloudBackupStatus) {
+        match call!(self.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await {
+            Ok(end) => {
+                self.project_abandoned_reset(end, previous_status);
+            }
+            Err(error) => {
+                error!("Cloud Backup could not end an abandoned reset: {error}");
+                self.reconcile_runtime_status(CloudBackupStatus::Disabled);
+                self.local_reset_in_progress.store(false, Ordering::Release);
+            }
+        }
+    }
+
+    /// Shows what an abandoned reset left, and lets the manager's callers in again
+    fn project_abandoned_reset(
+        &self,
+        end: Option<ResetEnd>,
+        previous_status: CloudBackupStatus,
+    ) -> CloudBackupResetRecovery {
+        let recovery = match end {
+            Some(ResetEnd::Abandoned(AbandonedReset::Disabled)) => {
+                self.reconcile_runtime_status(CloudBackupStatus::Disabled);
+                CloudBackupResetRecovery::SafelyDisabled
+            }
+            // the backup is as it was; an abandon never ends in a wipe, and `None` means no reset
+            // was left to end, so nothing changed underneath the previous status either
+            Some(ResetEnd::Abandoned(AbandonedReset::Resumed) | ResetEnd::Wiped) | None => {
+                self.reconcile_runtime_status(previous_status);
+                CloudBackupResetRecovery::PreviousStatusResumed
+            }
+        };
+
         self.local_reset_in_progress.store(false, Ordering::Release);
+        recovery
     }
 
     pub(crate) fn load_persisted_state() -> PersistedCloudBackupState {
@@ -867,12 +876,7 @@ impl RustCloudBackupManager {
             ));
         }
 
-        Ok(CloudBackupResetPermit {
-            manager: self.clone(),
-            previous_status,
-            resume_allowed: true,
-            completed: false,
-        })
+        Ok(CloudBackupResetPermit { manager: self.clone(), previous_status, completed: false })
     }
 
     /// Hands keychain writes a worker prepared to the owner, which applies them in its handler

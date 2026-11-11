@@ -1548,10 +1548,10 @@ impl CloudBackupSupervisor {
     pub async fn clear_local_state_for_reset(
         &mut self,
     ) -> ActorResult<Result<(), CloudBackupError>> {
-        if !matches!(*self.runtime, Runtime::Resetting { held: None, .. }) {
-            return Produces::ok(Err(CloudBackupError::Internal(
-                "cloud backup local state can only be cleared by a ready reset".into(),
-            )));
+        // the owner turns Cloud Backup off and records the clear before it starts, since even a
+        // partial clear is final
+        if let Err(refused) = self.runtime.clear_keys_in_reset() {
+            return Produces::ok(Err(refused.into()));
         }
 
         let owner = OwnerToken::mint();
@@ -1567,19 +1567,18 @@ impl CloudBackupSupervisor {
         Produces::ok(result)
     }
 
-    /// Ends a local reset with the body it left, and reopens admission
+    /// Ends a local reset with the body it left, and reopens admission; `None` when no reset ran
     ///
     /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
     /// here so an idle body never waits for the next admission to catch up with the wipe
-    pub async fn finish_local_reset(&mut self, outcome: LocalResetOutcome) -> ActorResult<()> {
-        if !matches!(*self.runtime, Runtime::Resetting { .. }) {
-            return Produces::ok(());
-        }
+    pub async fn finish_local_reset(
+        &mut self,
+        outcome: LocalResetOutcome,
+    ) -> ActorResult<Option<ResetEnd>> {
+        let end = self.runtime.finish_reset(outcome);
+        debug!("Cloud Backup local reset finished: {outcome:?}, {end:?}");
 
-        self.runtime.finish_reset(outcome);
-        debug!("Cloud Backup local reset finished: {outcome:?}");
-
-        Produces::ok(())
+        Produces::ok(end)
     }
 }
 
@@ -1590,6 +1589,39 @@ pub(crate) enum LocalResetOutcome {
     Wiped,
     /// The wipe failed before its commit, so the stored record still holds
     Abandoned,
+}
+
+/// What the owner left when a local reset ended
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResetEnd {
+    /// The database reset committed, so Cloud Backup is off
+    Wiped,
+    Abandoned(AbandonedReset),
+}
+
+/// What an abandoned local reset left
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AbandonedReset {
+    /// The local keys were kept, so the backup is as it was before the reset
+    Resumed,
+    /// The owner committed Cloud Backup off and the local keys were cleared
+    Disabled,
+}
+
+/// Why the owner didn't let a reset clear the local keys
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum KeyClearRefused {
+    #[error("cloud backup local state can only be cleared by a ready reset")]
+    NoReadyReset,
+    /// The keys stay because the record could not say Cloud Backup is off before they went
+    #[error("turn cloud backup off before clearing its local keys: {0}")]
+    NotTurnedOff(#[from] DatabaseError),
+}
+
+impl From<KeyClearRefused> for CloudBackupError {
+    fn from(refused: KeyClearRefused) -> Self {
+        Self::internal_context("clear cloud backup local state for a reset", refused)
+    }
 }
 
 pub(crate) mod test_support {

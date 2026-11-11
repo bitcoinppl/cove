@@ -718,7 +718,7 @@ async fn wipe_all_data_with_tier(
         AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
     })?;
 
-    let mut prepared = PreparedFullWipe::new(lifecycle, cloud_reset);
+    let prepared = PreparedFullWipe::new(lifecycle, cloud_reset);
     let wipe_result = async {
         let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
 
@@ -751,7 +751,6 @@ async fn wipe_all_data_with_tier(
             .await
             .map_err(|source| local_reset_error(LocalDataResetStage::CloudBackup, source))?;
 
-        prepared.prevent_cloud_resume();
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
 
         crate::backup::recovery::remove_all_restore_recovery_state()

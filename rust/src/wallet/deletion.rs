@@ -95,10 +95,6 @@ impl PreparedFullWipe {
         self.cloud_reset.clear_local_state().await
     }
 
-    pub(crate) fn prevent_cloud_resume(&mut self) {
-        self.cloud_reset.prevent_resume();
-    }
-
     pub(crate) fn delete_all_wallet_items(&self) -> Result<(), String> {
         self.recovery_cleanup.delete_all_wallet_items()
     }

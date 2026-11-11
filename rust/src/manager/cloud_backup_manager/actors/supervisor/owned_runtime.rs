@@ -6,6 +6,11 @@
 //! record write therefore ends in the same publish, which rebases an idle body on the owner's
 //! record and pushes the derived [`WritePolicy`] to the write supervisor when it changed. The
 //! compiler, not each call site, guarantees the write lane sees every change of either
+//!
+//! One record write skips that publish: [`OwnedRuntime::clear_keys_in_reset`] commits Cloud
+//! Backup off straight through the writer before a ready reset clears the keys. The resetting
+//! body's policy is already `Closed(LocalReset)` and that write can't change it, and
+//! [`OwnedRuntime::finish_reset`] publishes the policy the reset ends with
 
 use std::ops::Deref;
 use std::sync::Weak;
@@ -14,8 +19,10 @@ use act_zero::{Addr, send};
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
-use super::LocalResetOutcome;
-use super::runtime::{Effect, Finish, IdleFacts, ResetStart, RestoreRun, Runtime, Unstartable};
+use super::runtime::{
+    Effect, Finish, IdleFacts, ResetKeys, ResetStart, RestoreRun, Runtime, Unstartable,
+};
+use super::{AbandonedReset, KeyClearRefused, LocalResetOutcome, ResetEnd};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::actors::write::{
@@ -309,30 +316,58 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.begin_reset(ready))
     }
 
-    /// Ends a local reset with the body it left
+    /// Commits Cloud Backup off, then records that the ready reset is clearing the local keys
+    ///
+    /// The off record comes first because the clear is final even when partial: once it starts,
+    /// the record must already say what a later load may give. A failed commit refuses the clear,
+    /// so the keys stay with the configuration that needs them
+    pub(crate) fn clear_keys_in_reset(&mut self) -> Result<(), KeyClearRefused> {
+        let Some(keys) = self.runtime.ready_reset_keys() else {
+            return Err(KeyClearRefused::NoReadyReset);
+        };
+
+        // the only record write outside `commit`: the resetting body's policy stays
+        // `Closed(LocalReset)` whatever the record says, and `finish_reset` publishes the ending one
+        self.lifecycle.disable_before_local_key_clear()?;
+        *keys = ResetKeys::Cleared;
+        Ok(())
+    }
+
+    /// Ends a local reset with the body it left; `None` when no reset runs
     ///
     /// After a wipe Cloud Backup is off whatever the record said, and the writer's copy of the
-    /// record is the default one; an abandoned reset goes back to the owner's record
-    pub(crate) fn finish_reset(&mut self, outcome: LocalResetOutcome) {
-        let after = match outcome {
-            LocalResetOutcome::Wiped => {
+    /// record is the default one. An abandoned reset that kept the local keys goes back to the
+    /// owner's record. One that began clearing them committed Cloud Backup off before the clear,
+    /// so it ends off
+    pub(crate) fn finish_reset(&mut self, outcome: LocalResetOutcome) -> Option<ResetEnd> {
+        let keys = self.runtime.reset_keys()?;
+        let (after, end) = match (outcome, keys) {
+            (LocalResetOutcome::Wiped, _) => {
                 self.lifecycle.forget_wiped_record();
-                Runtime::off()
+                (Runtime::off(), ResetEnd::Wiped)
             }
+
             // the wipe never ran, so a recovery the reset set aside goes on while its evidence
             // remains; evidence the abandoned wipe did clear ends it
-            LocalResetOutcome::Abandoned => {
+            (LocalResetOutcome::Abandoned, ResetKeys::Kept) => {
                 let pending_enable_recovery = self
                     .runtime
                     .recovery_held_by_reset()
                     .cloned()
                     .filter(|_| RustCloudBackupManager::pending_enable_evidence_remains());
 
-                Runtime::idle(IdleFacts::of(&self.lifecycle.record(), pending_enable_recovery))
+                let after =
+                    Runtime::idle(IdleFacts::of(&self.lifecycle.record(), pending_enable_recovery));
+                (after, ResetEnd::Abandoned(AbandonedReset::Resumed))
+            }
+
+            (LocalResetOutcome::Abandoned, ResetKeys::Cleared) => {
+                (Runtime::off(), ResetEnd::Abandoned(AbandonedReset::Disabled))
             }
         };
 
         self.mutate(|runtime| runtime.finish_reset(after));
+        Some(end)
     }
 
     /// Effects don't change the policy, so waiting on them publishes nothing

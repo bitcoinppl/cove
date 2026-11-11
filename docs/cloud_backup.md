@@ -70,7 +70,13 @@ cleanup or a passkey registration, puts its operation in an `Effecting` stage,
 and the operation keeps the slot until the effect reports. A local reset, which
 a full wipe uses, closes admission, cancels running operations, waits for any
 in-flight effect to report, and then has the supervisor clear the Cloud Backup
-keychain namespace. Catastrophic recovery clears the namespace only while no
+keychain namespace. Before that clear starts, the supervisor commits Cloud Backup
+off and records the clear, because even a partial clear can't be taken back. So
+every later load of the record, whether after a failed wipe, a relaunch or a
+crash mid-wipe, finds Cloud Backup off once its keys may be gone. If that commit
+fails, the supervisor refuses the clear and the keys stay. A wipe that fails
+before the clear leaves the backup as it was.
+Catastrophic recovery clears the namespace only while no
 Cloud Backup manager exists, so the namespace has one owner at a time.
 
 A finished reinitialize, including one at the end of a Google Drive account
@@ -99,7 +105,7 @@ writes the fact itself.
 
 | Fact | Single writer | Typed inputs from producers |
 |---|---|---|
-| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it only through `commit`, which publishes the write policy after every write | Verification results, upload confirmations (carrying the configuration and wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
+| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it through `commit`, which publishes the write policy after every write. One write skips that publish: a ready reset's `clear_keys_in_reset` commits Cloud Backup off before the key clear while the policy is already `Closed(LocalReset)`, which that write can't change, and `finish_reset` publishes the policy the reset ends with | Verification results, upload confirmations (carrying the configuration and wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
 | Runtime operation (the body and the operation nested in it) | The supervisor's `OwnedRuntime` | Worker completions carrying the operation's claim |
 | Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
 | Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |

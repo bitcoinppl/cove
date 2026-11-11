@@ -10,7 +10,8 @@
 //! - while idle: the supervisor rebases the body on its own committed record when it starts work
 //! - while an operation runs, the operation holds its body until it ends or hands off
 //! - a local reset replaces the body with `Resetting`, which nothing can start in, and the owner
-//!   sets the body the wipe left when it finishes
+//!   sets the body the wipe left when it finishes. `Resetting` records whether the reset cleared
+//!   the local keys, which can't be taken back, so an abandoned reset that did ends with backup off
 //!
 //! Every stage of an operation ends by itself or can be cancelled:
 //! - `Stage::Running` work is cancellable: a reset revokes the claim, so every later completion
@@ -79,7 +80,19 @@ pub(crate) enum Runtime {
         /// The interrupted-Enable recovery the body held when the reset began; a reset that is
         /// abandoned before its wipe returns to it while the keychain still holds its evidence
         recovery: Option<CloudBackupPendingEnableRecovery>,
+        /// Whether the reset began clearing the local keys
+        keys: ResetKeys,
     },
+}
+
+/// What a local reset did to Cloud Backup's local keys
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResetKeys {
+    /// Nothing was cleared, so an abandoned reset leaves the backup as it was
+    Kept,
+    /// The owner committed Cloud Backup off and the clear began; a partial clear can't be taken
+    /// back either, so an abandoned reset can't write with the configuration it had
+    Cleared,
 }
 
 /// Where a running operation stands
@@ -786,12 +799,27 @@ impl Runtime {
             },
         };
 
-        *self = Self::Resetting { held, recovery };
+        *self = Self::Resetting { held, recovery, keys: ResetKeys::Kept };
         self.when_effects_settle(ready);
         start
     }
 
-    /// The body a finished reset leaves: off after a wipe, or the committed record otherwise
+    /// The key state of a ready reset; `None` when no ready reset holds the body, so nothing may
+    /// clear the local keys
+    pub(crate) fn ready_reset_keys(&mut self) -> Option<&mut ResetKeys> {
+        let Self::Resetting { held: None, keys, .. } = self else { return None };
+        Some(keys)
+    }
+
+    /// What the running reset did to the local keys; `None` when no reset runs
+    pub(crate) fn reset_keys(&self) -> Option<ResetKeys> {
+        match self {
+            Self::Resetting { keys, .. } => Some(*keys),
+            _ => None,
+        }
+    }
+
+    /// Replaces a finished reset with the body it left
     pub(crate) fn finish_reset(&mut self, after: Self) {
         if let Self::Resetting { held: Some(run), .. } = self {
             // the reset only continues once its held effect reported, so this is a bug

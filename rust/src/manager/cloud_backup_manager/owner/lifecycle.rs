@@ -450,6 +450,16 @@ impl LifecycleWriter {
         .map_err(|source| CloudBackupError::internal_context("clear Restore All marker", source))
     }
 
+    /// A local reset is about to clear the local keys, which can't be taken back
+    ///
+    /// The record says off before any key goes, so no later load of it, whether a relaunch, a
+    /// retried load or the process dying mid-wipe, can give the write lane a configuration this
+    /// device no longer has the keys for
+    pub(crate) fn disable_before_local_key_clear(&self) -> Result<Committed<()>, DatabaseError> {
+        info!("Cloud Backup is off before a local reset clears its local keys");
+        self.mutate(|state| *state = PersistedCloudBackupState::Disabled)
+    }
+
     /// A restore from Cloud Backup finished without a namespace to activate
     pub(crate) fn record_restore_without_backup(&self) -> Result<Committed<()>, DatabaseError> {
         self.mutate(|state| *state = PersistedCloudBackupState::Disabled)
