@@ -12,6 +12,7 @@ use super::{
 };
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::CloudBackupManagerAction;
+use crate::manager::cloud_backup_manager::screen::{CloudBackupScreenBody, CloudBackupSection};
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
 /// What the platform sends when the app comes back to the foreground with a connection
@@ -22,11 +23,24 @@ fn foreground(app: &TestApp) {
     manager.resume_pending_cloud_upload_verification();
 }
 
+/// How many rows the published detail lists as own backups, not on this device, and extra copies
+fn listed_counts(app: &TestApp) -> (usize, usize, usize) {
+    let CloudBackupScreenBody::Configured(configured) = app.manager().published_screen().body
+    else {
+        panic!("the detail is not configured:\n{}", app.describe());
+    };
+
+    configured.sections.iter().fold((0, 0, 0), |(own, elsewhere, extra), section| match section {
+        CloudBackupSection::Wallets(wallets) => {
+            (own + wallets.up_to_date.len() + wallets.needs_sync.len(), elsewhere, extra)
+        }
+        CloudBackupSection::NotOnDevice(section) => (own, elsewhere + section.rows.len(), extra),
+        CloudBackupSection::ExtraCopies(section) => (own, elsewhere, extra + section.rows.len()),
+        _ => (own, elsewhere, extra),
+    })
+}
+
 #[test]
-#[ignore = "the first detail refresh opens every local wallet's label database synchronously on \
-            the runtime, about 5s for this account in a debug build, which trips the 10s wait \
-            limit on a loaded machine; remove this ignore once detail refresh does its wallet I/O \
-            off the runtime"]
 fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
     let test =
         concat!(module_path!(), "::incident_replay_on_the_lived_in_account_always_has_a_way_out");
@@ -55,9 +69,11 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         }
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "a resume deleted the backup");
 
-        // the detail screen loads its inventory silently and offers Turn Off
+        // the detail screen loads its inventory silently and offers Turn Off, listing each local
+        // wallet's own backup and each backup of a wallet not on this device
         load_detail(&mut app);
         app.current().then_can(&[N::TurnOff, N::Verify]).then_cannot(&[N::Enable]);
+        assert_eq!(listed_counts(&app), (31, 4, 0), "own, not on this device, extra copies");
 
         // a wallet edited meanwhile uploads again, since nothing holds writes any more
         let uploads = app.cloud.count(CloudCall::UploadWallet);

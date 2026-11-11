@@ -1,6 +1,9 @@
 //! Small per-case accounts, plus the lived-in account for the incident replay
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use bdk_wallet::bitcoin::bip32::Xpub;
 
 use cove_cspp::Cspp;
 use cove_cspp::backup_data::{wallet_filename_from_record_id, wallet_record_id};
@@ -18,7 +21,11 @@ use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_s
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, CloudBackupManagerAction, CloudBackupStore,
 };
+use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
+use crate::network::Network;
+use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::WalletId;
+use crate::wallet::metadata::WalletMetadata;
 
 /// The records an account has in its active namespace
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,34 +71,33 @@ impl FakeAccount {
             .expect("read master key")
             .expect("seeded master key");
 
-        // real encrypted backups, so the detail inventory loads as it does for a user
+        // real encrypted backups of distinct wallets, so the detail inventory loads and sorts
+        // them as it does for a user: each local wallet backs up its own record, and each record
+        // not on this device matches no local wallet
         let target = Database::global().global_config.wallet_target();
-        let wallet = || {
-            let mut wallet = xpub_only_wallet_metadata();
-            wallet.network = target.network;
-            wallet
-        };
-        let local: Vec<_> = (0..self.local_wallets).map(|_| wallet()).collect();
-        let elsewhere: Vec<_> = (0..self.not_on_device).map(|_| wallet()).collect();
+        let local: Vec<_> =
+            (0..self.local_wallets).map(|_| DistinctWallet::new(target.network)).collect();
+        let elsewhere: Vec<_> =
+            (0..self.not_on_device).map(|_| DistinctWallet::new(target.network)).collect();
         let not_on_device =
-            elsewhere.iter().map(|wallet| wallet_record_id(wallet.id.as_ref())).collect();
+            elsewhere.iter().map(|wallet| wallet_record_id(wallet.metadata.id.as_ref())).collect();
+        for wallet in &local {
+            Keychain::global()
+                .save_wallet_xpub(&wallet.metadata.id, wallet.xpub)
+                .expect("save local wallet xpub");
+        }
+
+        let local_metadata = local.iter().map(|wallet| wallet.metadata.clone()).collect();
         Database::global()
             .wallets()
-            .save_all_wallets(target.network, target.mode, local.clone())
+            .save_all_wallets(target.network, target.mode, local_metadata)
             .expect("save local wallets");
 
         let mut files = Vec::with_capacity(self.record_count());
-        let mut local_records = Vec::with_capacity(local.len());
-        for (index, wallet) in local.iter().cloned().chain(elsewhere).enumerate() {
-            let record_id = wallet_record_id(wallet.id.as_ref());
-            let entry = wallet_entry_with_labels(&wallet, None);
-            if index < self.local_wallets {
-                local_records.push(SeededRecord {
-                    record_id: record_id.clone(),
-                    revision: entry.content_revision_hash.clone(),
-                });
-            }
-
+        for wallet in local.into_iter().chain(elsewhere) {
+            let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+            let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+            entry.xpub = Some(wallet.xpub.to_string());
             let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1);
             app.cloud.inner.set_wallet_backup(namespace.clone(), record_id.clone(), backup);
             files.push(wallet_filename_from_record_id(&record_id));
@@ -116,47 +122,21 @@ pub(crate) struct SeededAccount {
     pub(crate) not_on_device: Vec<String>,
 }
 
-/// One seeded wallet backup and the content revision it was written at
-#[derive(Debug, Clone)]
-pub(crate) struct SeededRecord {
-    pub(crate) record_id: String,
-    pub(crate) revision: String,
+/// A watch-only wallet with its own key, so no two seeded wallets share an identity
+struct DistinctWallet {
+    metadata: WalletMetadata,
+    xpub: Xpub,
 }
 
-/// The passkey every verifiable wrapper opens
-pub(crate) const VERIFIABLE_PRF_KEY: [u8; 32] = [7; 32];
-const VERIFIABLE_PRF_SALT: [u8; 32] = [9; 32];
+impl DistinctWallet {
+    fn new(network: Network) -> Self {
+        let xpub = NumberOfBip39Words::Twelve.generate_mnemonic().xpub(network.into());
+        let mut metadata = xpub_only_wallet_metadata();
+        metadata.network = network;
+        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(xpub.fingerprint())));
 
-/// The wrapper bytes the scripted passkey opens for `master_key`
-pub(crate) fn verifiable_wrapper(master_key: &cove_cspp::master_key::MasterKey) -> Vec<u8> {
-    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
-        master_key,
-        &VERIFIABLE_PRF_KEY,
-        &VERIFIABLE_PRF_SALT,
-    )
-    .expect("encrypt master key");
-
-    serde_json::to_vec(&encrypted).expect("encode master key wrapper")
-}
-
-/// Replace the seeded placeholder wrapper with one the scripted passkey opens, and keep the
-/// passkey's credential, so verification can recover a missing local master key
-pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
-    let master_key = Cspp::new(Keychain::global().clone())
-        .load_master_key_from_store()
-        .expect("read local master key")
-        .expect("seeded master key");
-
-    app.cloud.inner.set_master_key_backup(namespace.to_string(), verifiable_wrapper(&master_key));
-    app.cloud.persist();
-    CloudBackupKeychain::global()
-        .save_passkey(&[1, 2, 3], VERIFIABLE_PRF_SALT)
-        .expect("save passkey");
-    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
-        prf_output: VERIFIABLE_PRF_KEY.to_vec(),
-        credential_id: vec![1, 2, 3],
-    }));
-    app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
+        Self { metadata, xpub }
+    }
 }
 
 /// Persist the reporter's stuck record: a disable that never deleted anything

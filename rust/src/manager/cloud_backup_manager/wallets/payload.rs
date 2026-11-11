@@ -404,7 +404,12 @@ where
 async fn export_wallet_labels_jsonl(
     wallet_id: &crate::wallet::metadata::WalletId,
 ) -> Result<String, CloudBackupError> {
-    let manager = LabelManager::try_new(wallet_id.clone())
+    // opening a label database can create and commit it, which takes long enough on a device
+    // with many wallets to stall every task on the runtime, so it opens on the blocking pool
+    let wallet_id = wallet_id.clone();
+    let manager = cove_tokio::task::spawn_blocking(move || LabelManager::try_new(wallet_id))
+        .await
+        .map_err(|error| CloudBackupError::internal_context("open labels db", error))?
         .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}").into()))?;
 
     manager.export().await.map_err(CloudBackupError::internal)

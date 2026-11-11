@@ -18,8 +18,6 @@ use tracing::error;
 
 use self::notices::Notices;
 use self::types::CloudBackupActions;
-#[cfg(test)]
-pub(crate) use self::types::CloudBackupScreenAction;
 pub(crate) use self::types::{
     CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupListedRecord,
     CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupTurnOffFailure,
@@ -28,6 +26,8 @@ pub use self::types::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
     CloudBackupScreen, CloudBackupScreenBody, CloudBackupScreenDelta,
 };
+#[cfg(test)]
+pub(crate) use self::types::{CloudBackupScreenAction, CloudBackupSection};
 use crate::database::cloud_backup::PersistedHealNotice;
 
 use super::actors::supervisor::Runtime;
