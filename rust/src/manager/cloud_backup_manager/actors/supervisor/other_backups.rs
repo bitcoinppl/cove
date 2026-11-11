@@ -87,7 +87,7 @@ impl CloudBackupSupervisor {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
                     error.logged_reader_message("Failed to recover other cloud backups"),
                 ));
-                self.runtime.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -119,7 +119,7 @@ impl CloudBackupSupervisor {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
                     error.logged_reader_message("Failed to delete other cloud backups"),
                 ));
-                self.runtime.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -150,7 +150,7 @@ impl CloudBackupSupervisor {
                 manager.apply_sync_state(SyncState::Failed(
                     error.logged_reader_message("Cloud backup sync failed"),
                 ));
-                self.runtime.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -175,7 +175,7 @@ impl CloudBackupSupervisor {
         }
 
         manager.apply_sync_state(SyncState::Idle);
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }

@@ -19,7 +19,7 @@ use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::actors::UploadFinish;
 use crate::manager::cloud_backup_manager::actors::supervisor::test_support::DispatchRecord;
-use crate::manager::cloud_backup_manager::actors::supervisor::{OpTransition, OwnerView};
+use crate::manager::cloud_backup_manager::actors::supervisor::{Finish, OpTransition, OwnerView};
 use crate::manager::cloud_backup_manager::actors::write::{
     CommandClass, ConfiguredWriter, ConfiguredWrites, Decision, LaneDecision, OffWrites,
     PolicyBody, VersionedPolicy, WritePolicy,
@@ -55,6 +55,8 @@ pub(crate) struct Invariants {
     running: Option<CloudBackupExclusiveOperationClaim>,
     /// Operations with a process-local id that already started; such an id never starts again
     started: Vec<CloudBackupExclusiveOperationClaim>,
+    /// The operation the ledger saw end last, which the finish that ended it must name
+    last_ended: Option<CloudBackupExclusiveOperationClaim>,
     /// Intents the test dispatched that the supervisor has not reported yet
     dispatched: Vec<UserIntent>,
     /// Wallets whose last upload the lane paused
@@ -241,7 +243,8 @@ impl Invariants {
     }
 
     /// 5, operations: one runs at a time, each run's claim starts once and ends at most once,
-    /// the ledger agrees with the runtime, and the screen shows no operation that ended
+    /// each finish ends the operation it names, the ledger agrees with the runtime, and the
+    /// screen shows no operation that ended
     fn check_operations(
         &mut self,
         transitions: &[OpTransition],
@@ -274,7 +277,24 @@ impl Invariants {
                     }
 
                     self.running = None;
+                    self.last_ended = Some(ended);
                 }
+                // every finish names its operation, and ends exactly that one: a finish of an
+                // operation that already ended, or that never ran, is a second finish
+                OpTransition::FinishAttempt { claim, finish } => match finish {
+                    Finish::Ended if self.last_ended == Some(claim) => {}
+                    Finish::Ended => {
+                        return violation(format!(
+                            "a finish of {claim:?} ended {:?}",
+                            self.last_ended
+                        ));
+                    }
+                    Finish::NotCurrent { running } => {
+                        return violation(format!(
+                            "{claim:?} finished again, or without running, while {running:?} runs"
+                        ));
+                    }
+                },
             }
         }
 

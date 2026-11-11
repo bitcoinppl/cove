@@ -93,7 +93,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::Idle);
         manager
             .reconcile_runtime_status(RustCloudBackupManager::status_for_operation_error(&error));
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -131,7 +131,7 @@ impl CloudBackupSupervisor {
             | DriveAccountSwitchReinitializationCompletion::Handled => return,
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -151,7 +151,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -190,7 +190,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 }

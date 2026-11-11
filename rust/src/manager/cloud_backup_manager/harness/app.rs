@@ -14,7 +14,7 @@ use tokio::runtime::Handle;
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
 use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
-use super::invariants::Invariants;
+use super::invariants::{Invariants, Violation};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
@@ -299,6 +299,18 @@ impl TestApp {
                 self.describe()
             );
         }
+    }
+
+    /// Settles and checks the invariants, returning a violation instead of failing the test
+    ///
+    /// For tests that show an invariant catches a state the owner must refuse; the step that
+    /// follows must not rely on the ledger the failed check left
+    pub(crate) fn settled_violation(&mut self) -> Option<Violation> {
+        self.settle();
+        let mut invariants = std::mem::take(&mut self.invariants);
+        let checked = invariants.check(self);
+        self.invariants = invariants;
+        checked.err()
     }
 
     /// The write lane, for the invariants' view of it

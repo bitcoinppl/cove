@@ -12,9 +12,9 @@ use std::sync::Weak;
 
 use act_zero::{Addr, send};
 use tokio::sync::oneshot;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use super::runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime, Unstartable};
+use super::runtime::{Effect, Finish, IdleFacts, ResetStart, RestoreRun, Runtime, Unstartable};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::actors::write::{
@@ -193,8 +193,22 @@ impl OwnedRuntime {
         self.publish();
     }
 
-    pub(crate) fn clear(&mut self) {
-        self.mutate(Runtime::clear);
+    /// Ends the operation `claim` names; the one place an operation finishes
+    ///
+    /// Finishing an operation that no longer runs changes nothing, and the harness ledger
+    /// records the attempt, so a second finish of one operation is visible to invariant 5
+    pub(crate) fn finish(&mut self, claim: CloudBackupExclusiveOperationClaim) -> Finish {
+        let finish = self.mutate(|runtime| runtime.finish(claim));
+        if let Finish::NotCurrent { running } = finish {
+            warn!(
+                "Cloud Backup refused to finish {claim:?}, which no longer runs; running {running:?}"
+            );
+        }
+
+        #[cfg(test)]
+        self.transitions.push(OpTransition::FinishAttempt { claim, finish });
+
+        finish
     }
 
     pub(crate) fn start_standard(
@@ -289,6 +303,11 @@ impl OwnedRuntime {
 pub(crate) enum OpTransition {
     Started(CloudBackupExclusiveOperationClaim),
     Ended(CloudBackupExclusiveOperationClaim),
+    /// A finish named this operation, with what it did; it follows the `Ended` it caused
+    FinishAttempt {
+        claim: CloudBackupExclusiveOperationClaim,
+        finish: Finish,
+    },
 }
 
 /// What the harness invariants read from the owner at a settled boundary

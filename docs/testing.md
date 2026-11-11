@@ -202,7 +202,7 @@ Rust sequence tests for Cloud Backup run the real manager through `rust/src/mana
   |---|---|
   | 1 | The runtime holds a committed disable exactly when the record holds a Disabling with a commit time, for the same namespace and attempt |
   | 2 | The published write policy equals the policy derived from the runtime; an idle runtime's policy equals the one its record derives; versions only grow; the lane decides under non-decreasing versions and runs a command only when the policy it applied owns that command's class and generation. A policy published but not yet applied is pending, and must be applied by the next check |
-  | 5 | An operation starts and finishes once and never starts again, the screen shows only the running operation, every dispatched intent gets exactly one admission, in order, and an accepted Verify starts a Verify operation in its own turn unless it joins a pending upload confirmation |
+  | 5 | An operation starts and finishes once and never starts again, every finish names the operation it ends and a finish of one that no longer runs is reported, the screen shows only the running operation, every dispatched intent gets exactly one admission, in order, and an accepted Verify starts a Verify operation in its own turn unless it joins a pending upload confirmation |
   | 7 | A paused upload never arms a retry timer and never leaves a Failed blob row |
 
   Invariants 3, 4, 6 and 8 (screen deltas, quiescent exits, passkey permits and inventory) are not checked yet. A change to an invariant is listed at the top of its pull request.

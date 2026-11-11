@@ -19,7 +19,7 @@ impl CloudBackupSupervisor {
 
         let pending = continuation.into_session();
         if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
         }
 
@@ -108,7 +108,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 

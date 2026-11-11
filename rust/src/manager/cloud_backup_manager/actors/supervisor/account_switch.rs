@@ -61,7 +61,7 @@ impl CloudBackupSupervisor {
             phase: PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
         };
         if let Err(error) = self.persist_drive_account_switch(transition) {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
             return Produces::ok(Err(error));
         }
@@ -111,7 +111,7 @@ impl CloudBackupSupervisor {
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
         }
-        self.runtime.clear();
+        self.runtime.finish(claim);
         let _ = ready_sender.send(Err(CloudBackupDriveAccountSwitchError::Internal(
             "cloud backup write lane stopped before draining".into(),
         )));
@@ -256,7 +256,7 @@ impl CloudBackupSupervisor {
 
         // ending the switch publishes the configured policy, and the write lane wakes uploads
         manager.refresh_sync_health();
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.apply_recovery_state(RecoveryState::Idle);
         manager.project_exclusive_operation_finished(claim);
         manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
@@ -428,7 +428,7 @@ impl CloudBackupSupervisor {
                 transition.transition_id.value(),
             ));
         } else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
         }
         DriveAccountSwitchReinitializationCompletion::Handled
@@ -453,7 +453,7 @@ impl CloudBackupSupervisor {
             PersistedDriveAccountSwitchPhase::Reinitializing,
         ) {
             error!("Failed to persist Google Drive account switch retry: {error}");
-            self.runtime.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
             return true;
         }

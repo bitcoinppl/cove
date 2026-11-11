@@ -355,7 +355,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 

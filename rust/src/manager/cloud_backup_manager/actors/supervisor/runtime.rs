@@ -222,6 +222,15 @@ pub(crate) enum ResetStart {
     AwaitingEffect(CloudBackupExclusiveOperationClaim),
 }
 
+/// What a finish did with the operation it named
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Finish {
+    /// The named operation was running, and it ended
+    Ended,
+    /// The named operation no longer runs, so nothing changed
+    NotCurrent { running: Option<CloudBackupExclusiveOperationClaim> },
+}
+
 /// The running operation, taken out of its body
 enum TakenOp {
     Standard(OpRun),
@@ -818,8 +827,22 @@ impl Runtime {
         }
     }
 
-    /// Ends the running operation; the body stays until the next start rebases it
-    pub(crate) fn clear(&mut self) {
+    /// Ends the operation `claim` names, if it is the one running; the body stays until the next
+    /// start rebases it
+    ///
+    /// A finish for an operation that no longer runs changes nothing, so a late or repeated
+    /// finish can never end the operation that replaced it
+    pub(crate) fn finish(&mut self, claim: CloudBackupExclusiveOperationClaim) -> Finish {
+        if !self.is_current(claim) {
+            return Finish::NotCurrent { running: self.claim() };
+        }
+
+        self.clear();
+        Finish::Ended
+    }
+
+    /// Ends the running operation, whichever it is
+    fn clear(&mut self) {
         match self {
             Self::Disabled { op } | Self::Corrupted { op, .. } => *op = None,
             Self::Configured { op } => *op = None,

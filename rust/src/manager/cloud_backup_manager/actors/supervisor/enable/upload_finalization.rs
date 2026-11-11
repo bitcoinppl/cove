@@ -128,7 +128,7 @@ impl CloudBackupSupervisor {
             }) => {
                 manager.present_existing_backup_found_prompt(context, passkey_hint);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.runtime.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -178,7 +178,7 @@ impl CloudBackupSupervisor {
                     context, None,
                 ));
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.runtime.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {

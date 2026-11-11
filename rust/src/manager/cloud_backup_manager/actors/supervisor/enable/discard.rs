@@ -127,7 +127,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         match result {

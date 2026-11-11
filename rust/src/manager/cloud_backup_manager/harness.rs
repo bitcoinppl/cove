@@ -14,6 +14,7 @@ mod fixtures;
 mod incident_tests;
 mod invariants;
 mod model_tests;
+mod owner_tests;
 mod process;
 mod reset_tests;
 mod runtime;

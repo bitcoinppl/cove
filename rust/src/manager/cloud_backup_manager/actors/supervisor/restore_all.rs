@@ -119,7 +119,7 @@ impl CloudBackupSupervisor {
             error: error.reader_message(),
         });
         manager.reset_restore_all();
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -134,7 +134,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(());
         };
         if cancellation.load(Ordering::Acquire) {
@@ -191,7 +191,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(false);
         };
 
@@ -212,7 +212,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(false);
         };
 
@@ -271,7 +271,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(false);
         };
 
@@ -300,7 +300,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(());
         };
 
@@ -317,7 +317,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(());
         };
 
@@ -333,7 +333,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             return Produces::ok(());
         };
 
@@ -413,7 +413,7 @@ impl CloudBackupSupervisor {
         let committed_local_wallet =
             self.runtime.restore_all(claim).is_some_and(|run| run.committed_local_wallet);
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.finish_restore_all_run(claim, retry_remaining);
 
         // a restored wallet can turn other listed records into copies of it, which matching record

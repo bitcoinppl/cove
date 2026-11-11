@@ -96,6 +96,8 @@ mod runtime;
 use owned_runtime::OwnedRuntime;
 #[cfg(test)]
 pub(crate) use owned_runtime::{OpTransition, OwnerView};
+#[cfg(test)]
+pub(crate) use runtime::Finish;
 use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
 use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
@@ -439,7 +441,7 @@ impl CloudBackupSupervisor {
 
         let manager = self.manager();
         if manager.is_none() {
-            self.runtime.clear();
+            self.runtime.finish(claim);
         }
 
         manager
@@ -588,7 +590,7 @@ impl CloudBackupSupervisor {
 
         // a finished restore configures the backup, and the write lane wakes uploads when the
         // published policy lets them run
-        self.runtime.clear();
+        self.runtime.finish(claim);
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
         }
@@ -605,7 +607,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -1199,7 +1201,7 @@ impl CloudBackupSupervisor {
             apply_refresh_detail_result(&manager, &result);
         }
 
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
@@ -1790,6 +1792,21 @@ pub(crate) mod test_support {
             &mut self,
         ) -> ActorResult<Option<CloudBackupPendingEnableRecovery>> {
             Produces::ok(self.runtime.pending_enable_recovery().cloned())
+        }
+
+        /// The running operation's claim, which carries its `OperationId`
+        pub(crate) async fn harness_running_claim(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupExclusiveOperationClaim>> {
+            Produces::ok(self.runtime.claim())
+        }
+
+        /// Finishes `claim` at the owner's finish boundary, as a duplicate completion would
+        pub(crate) async fn harness_finish(
+            &mut self,
+            claim: CloudBackupExclusiveOperationClaim,
+        ) -> ActorResult<Finish> {
+            Produces::ok(self.runtime.finish(claim))
         }
 
         pub async fn run_wallet_upload_inline_for_test(

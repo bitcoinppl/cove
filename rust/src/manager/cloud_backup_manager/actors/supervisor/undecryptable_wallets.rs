@@ -70,7 +70,7 @@ impl CloudBackupSupervisor {
             claim,
             CloudBackupExclusiveOperation::Verify,
         ) else {
-            self.runtime.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
             return Produces::ok(());
         };
@@ -102,7 +102,7 @@ impl CloudBackupSupervisor {
                 error.logged_reader_message("Failed to delete undecryptable wallet backups"),
             ),
         );
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 }
