@@ -277,26 +277,11 @@ impl CloudBackupSupervisor {
             provider_hint: passkey.provider_hint.clone(),
         };
 
-        // the journal does not say which run registered the passkey, but the lifecycle does:
-        // Enable starts only while backup is off, so a configured backup's pending passkey
-        // belongs to a Reinitialize
-        let run = match &*self.runtime {
-            Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. } => {
-                PendingEnableRun::Reinitialize
-            }
-            Runtime::Disabled { .. }
-            | Runtime::Corrupted { .. }
-            | Runtime::FinishingDisable { .. }
-            | Runtime::PendingEnableRecovery { .. }
-            | Runtime::LoadFailed { .. }
-            | Runtime::Resetting { .. } => PendingEnableRun::Enable,
-        };
         self.pending_enable_session =
             Some(PendingEnableSession::awaiting_saved_passkey_confirmation(
                 Zeroizing::new(master_key),
                 Zeroizing::new(passkey),
                 journal.context(),
-                run,
             ));
         manager.project_enable_context_started(journal.context());
         manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(

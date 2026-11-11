@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use super::wallets::{StagedPrfKey, UnpersistedPrfKey};
-use super::{CloudBackupEnableContext, CloudBackupError, CloudBackupExclusiveOperation};
+use super::{CloudBackupEnableContext, CloudBackupError};
 
 mod coordinator;
 
@@ -195,57 +195,6 @@ pub(crate) struct PendingSavedPasskeySessionMaterial {
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
     passkey: Zeroizing<StagedPrfKey>,
     context: CloudBackupEnableContext,
-    run: PendingEnableRun,
-}
-
-/// The run a saved-passkey confirmation continues once the user confirms
-///
-/// Enable and Reinitialize share the passkey pipeline but live in different lifecycles: Enable
-/// starts only while backup is off, and Reinitialize only on a configured backup. The session
-/// keeps which one paused, so its confirmation resumes that run and not whichever the current
-/// body happens to admit
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PendingEnableRun {
-    Enable,
-    Reinitialize,
-}
-
-impl PendingEnableRun {
-    /// The run that registered a passkey under `operation`
-    pub(crate) fn of(operation: CloudBackupExclusiveOperation) -> Self {
-        use CloudBackupExclusiveOperation as Op;
-
-        match operation {
-            Op::ReinitializeBackup => Self::Reinitialize,
-
-            // only the Enable runs and Reinitialize register an enable passkey; a confirmation
-            // continues as a standard Enable whichever Enable variant registered it
-            Op::Enable
-            | Op::EnableForceNew
-            | Op::EnableNoDiscovery
-            | Op::Restore
-            | Op::Disable
-            | Op::RecreateManifest
-            | Op::VerifyReinitializedBackup
-            | Op::RepairPasskey
-            | Op::Verify
-            | Op::RecoverOtherBackups
-            | Op::DeleteOtherBackups
-            | Op::RestoreCloudWallet
-            | Op::RestoreAllCloudWallets
-            | Op::DeleteCloudWallet
-            | Op::DeleteUndecryptableWalletBackups
-            | Op::DiscardPendingEnable => Self::Enable,
-        }
-    }
-
-    /// The operation a confirmation starts to continue this run
-    pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
-        match self {
-            Self::Enable => CloudBackupExclusiveOperation::Enable,
-            Self::Reinitialize => CloudBackupExclusiveOperation::ReinitializeBackup,
-        }
-    }
 }
 
 /// Tracks passkey material created during enable before the flow fully completes
@@ -291,9 +240,8 @@ impl PendingSavedPasskeySessionMaterial {
         master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
         passkey: Zeroizing<StagedPrfKey>,
         context: CloudBackupEnableContext,
-        run: PendingEnableRun,
     ) -> Self {
-        Self { master_key, passkey, context, run }
+        Self { master_key, passkey, context }
     }
 
     pub(crate) fn into_parts(
@@ -334,19 +282,14 @@ impl PendingEnableSession {
         }
     }
 
-    /// The staged material of a paused confirmation, with the run it continues
-    pub(crate) fn into_staged_confirmation(
+    pub(crate) fn into_staged_parts(
         self,
     ) -> Result<
-        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>, PendingEnableRun),
+        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>),
         CloudBackupError,
     > {
         match self {
-            Self::AwaitingSavedPasskeyConfirmation(material) => {
-                let run = material.run;
-                let (master_key, passkey) = material.into_parts();
-                Ok((master_key, passkey, run))
-            }
+            Self::AwaitingSavedPasskeyConfirmation(material) => Ok(material.into_parts()),
             Self::RetryUpload(_) => Err(CloudBackupError::Internal(
                 "pending enable session did not contain staged passkey material".into(),
             )),
@@ -379,25 +322,9 @@ impl PendingEnableSession {
         master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
         passkey: Zeroizing<StagedPrfKey>,
         context: CloudBackupEnableContext,
-        run: PendingEnableRun,
     ) -> Self {
         Self::AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
-            master_key, passkey, context, run,
+            master_key, passkey, context,
         ))
-    }
-
-    /// The run a saved-passkey confirmation continues, or `None` when nothing awaits one
-    pub(crate) fn awaiting_run(&self) -> Option<PendingEnableRun> {
-        match self {
-            Self::AwaitingSavedPasskeyConfirmation(material) => Some(material.run),
-            Self::RetryUpload(_) => None,
-        }
-    }
-
-    /// A run that adopts this paused confirmation becomes the run it continues
-    pub(crate) fn adopted_by(&mut self, run: PendingEnableRun) {
-        if let Self::AwaitingSavedPasskeyConfirmation(material) = self {
-            material.run = run;
-        }
     }
 }
