@@ -25,12 +25,12 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitchPhase,
 };
 use crate::label_manager::LabelManager;
+use crate::manager::cloud_backup_manager::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
     write::ConfigGeneration,
 };
-use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,

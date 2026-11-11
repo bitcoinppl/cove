@@ -19,7 +19,7 @@ use crate::database::cloud_backup::{
     PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
-use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
+use crate::manager::cloud_backup_manager::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
@@ -186,7 +186,7 @@ async fn wait_for_cloud_only_rows(
     present: &[&str],
     absent: &[&str],
 ) -> Vec<CloudBackupWalletItem> {
-    let loaded_rows = || match manager.state.read().cloud_only() {
+    let loaded_rows = || match manager.inventory.read().cloud_only() {
         CloudOnlyState::Loaded { wallets, .. } => Some(wallets),
         CloudOnlyState::NotFetched | CloudOnlyState::Loading | CloudOnlyState::Failed { .. } => {
             None
@@ -225,11 +225,7 @@ fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBa
 
 /// The detail the frontends read, including one retained while a refresh runs or after it failed
 fn public_detail(manager: &RustCloudBackupManager) -> Option<CloudBackupDetail> {
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-        panic!("expected configured cloud backup lifecycle");
-    };
-
-    match configured.detail {
+    match manager.test_inventory().detail {
         CloudBackupDetailState::Complete { state } => Some(state.detail),
         CloudBackupDetailState::Checking { retained }
         | CloudBackupDetailState::Failed { retained, .. } => retained.map(|state| state.detail),
@@ -239,11 +235,11 @@ fn public_detail(manager: &RustCloudBackupManager) -> Option<CloudBackupDetail> 
 
 /// The cloud-only state the frontends read, which only exists once the detail has loaded
 fn public_cloud_only(manager: &RustCloudBackupManager) -> Option<CloudOnlyState> {
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
+    if !matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)) {
         return None;
-    };
+    }
 
-    match configured.detail {
+    match manager.test_inventory().detail {
         CloudBackupDetailState::Complete { state } => Some(state.cloud_only),
         CloudBackupDetailState::Checking { retained }
         | CloudBackupDetailState::Failed { retained, .. } => {
@@ -369,7 +365,7 @@ async fn wait_for_cloud_only_statuses(
     expected.sort_by(|left, right| left.0.cmp(&right.0));
 
     wait_for_test_condition(Duration::from_secs(5), "cloud-only statuses should settle", || {
-        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
             return false;
         };
 
@@ -1730,10 +1726,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
         .await
         .unwrap();
 
-    let CloudBackupLifecycle::Configured(configured) = manager.state.read().public_state().lifecycle
-    else {
-        panic!("expected configured cloud backup");
-    };
+    let configured = manager.test_inventory();
     assert!(matches!(
         configured.detail,
         CloudBackupDetailState::Failed {
@@ -1754,10 +1747,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
         .await
         .unwrap();
 
-    let CloudBackupLifecycle::Configured(configured) = manager.state.read().public_state().lifecycle
-    else {
-        panic!("expected configured cloud backup");
-    };
+    let configured = manager.test_inventory();
     assert!(matches!(configured.detail, CloudBackupDetailState::Failed { .. }));
 }
 
@@ -1804,9 +1794,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
         CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
     );
 
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-        panic!("expected configured cloud backup");
-    };
+    let configured = manager.test_inventory();
     let CloudBackupDetailState::Complete { state } = configured.detail else {
         panic!("expected complete cloud backup detail");
     };
@@ -1841,8 +1829,8 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
     assert!(matches!(
-        manager.model_state().lifecycle,
-        CloudBackupLifecycle::Configured(ref configured)
+        manager.test_inventory(),
+        ref configured
             if matches!(
                 configured.detail,
                 CloudBackupDetailState::Failed { retained: Some(ref state), .. }
@@ -1892,8 +1880,8 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
     assert!(matches!(
-        manager.model_state().lifecycle,
-        CloudBackupLifecycle::Configured(ref configured)
+        manager.test_inventory(),
+        ref configured
             if matches!(
                 configured.detail,
                 CloudBackupDetailState::Failed { retained: Some(ref state), .. }
@@ -3310,7 +3298,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
 
     // the reset asks for a replacement fetch, which may already be running
     assert!(!matches!(
-        manager.state.read().cloud_only(),
+        manager.inventory.read().cloud_only(),
         CloudOnlyState::Loaded { wallets, .. } if wallets.iter().any(|wallet| wallet.record_id == "a")
     ));
 
@@ -3475,7 +3463,7 @@ async fn completed_other_backups_scan_remains_cached() {
 
     supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
-    assert_eq!(manager.state.read().other_backups_state(), loaded);
+    assert_eq!(manager.inventory.read().other_backups_state(), loaded);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3827,7 +3815,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
 
-    let listing_generation = manager.state.read().cloud_only_listing_generation();
+    let listing_generation = manager.inventory.read().cloud_only_listing_generation();
     let should_continue = supervisor
         .complete_restore_all_record(
             claim,
@@ -3871,7 +3859,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
     assert!(!matches!(
-        manager.state.read().cloud_only(),
+        manager.inventory.read().cloud_only(),
         CloudOnlyState::Loaded { wallets, .. } if wallets.iter().any(|wallet| wallet.record_id == a)
     ));
     wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
@@ -3901,7 +3889,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     supervisor.active_cloud_only_fetch_request = Some(3);
-    let generation = manager.state.read().cloud_only_listing_generation();
+    let generation = manager.inventory.read().cloud_only_listing_generation();
     let fetch = manager
         .do_fetch_cloud_only_wallets_with_client(
             &CloudBackupWriteClient::background(
@@ -3990,7 +3978,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
         record_id.as_str(),
     ])));
-    let generation = manager.state.read().cloud_only_listing_generation();
+    let generation = manager.inventory.read().cloud_only_listing_generation();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
 &unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
@@ -4020,7 +4008,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
         duplicate_record_id,
     ])));
 
-    let generation = manager.state.read().cloud_only_listing_generation();
+    let generation = manager.inventory.read().cloud_only_listing_generation();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
             &unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
@@ -4046,7 +4034,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
 
     assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
-    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+    let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
         panic!("expected the duplicate row to stay loaded");
     };
     assert_eq!(
@@ -4165,7 +4153,7 @@ async fn deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable
     // the loaded row still says already on this device until a fetch reads it again
     wait_for_test_condition(Duration::from_secs(5), "the duplicate should become restorable", || {
         matches!(
-            manager.state.read().cloud_only(),
+            manager.inventory.read().cloud_only(),
             CloudOnlyState::Loaded { wallets, .. }
                 if cloud_only_row_statuses(&wallets)
                     == vec![(duplicate_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
@@ -4308,7 +4296,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
 
     // the reset is synchronous, but the supervisor may already have started the fetch it asked for
     assert!(matches!(
-        manager.state.read().cloud_only(),
+        manager.inventory.read().cloud_only(),
         CloudOnlyState::NotFetched | CloudOnlyState::Loading
     ));
 
@@ -4316,7 +4304,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
         .with_timeout(loaded_host_wait(Duration::from_secs(5)))
         .await
         .expect("the reset should start a fetch that reads the new listing");
-    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
+    assert_eq!(manager.inventory.read().cloud_only(), CloudOnlyState::Loading);
 
     gate.release();
     wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
@@ -4642,7 +4630,7 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     .await;
 
     // the restore fails without touching the unreadable seed, and the backup is not a copy
-    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+    let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
         panic!("expected the seed row to stay loaded");
     };
     assert_eq!(

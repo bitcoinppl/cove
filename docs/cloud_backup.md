@@ -220,8 +220,7 @@ writes the fact itself.
 | Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
 | Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
 | Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
-| Detail inventory | The reducer | Detail refresh results |
-| Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
+| Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, the other-backups scan |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
 
 Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
@@ -262,7 +261,7 @@ operation refresh cannot overwrite a newer one. Closing the detail screen
 invalidates its refresh owner without cancelling manager-owned operations.
 
 A local wallet change doesn't wait for that refresh to correct the local rows.
-The reducer drops rows for wallets that are no longer on this device at once,
+The inventory owner drops rows for wallets that are no longer on this device at once,
 and counts a deleted wallet's confirmed backup as cloud-only, so a deleted
 wallet shows only under Not on This Device once the cloud-only rows are read
 again, even when the refresh fails. Everything else waits for the refresh.
@@ -273,7 +272,7 @@ it lands, so it can't list the wallet as local again.
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.
-The platform result feeds the same Rust reducer on both platforms.
+The platform result feeds the same Rust inventory owner on both platforms.
 
 Rust projects the progress section from verification and inventory state.
 Verification progress takes priority over inventory progress: a standalone card

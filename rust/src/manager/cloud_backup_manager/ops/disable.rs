@@ -160,6 +160,7 @@ impl RustCloudBackupManager {
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
         let state = self.state.read();
+        let inventory = self.inventory.read();
         if let Some(operation) =
             state.active_operation().map(CloudBackupExclusiveOperationClaim::operation)
             && operation != CloudBackupExclusiveOperation::Disable
@@ -184,7 +185,7 @@ impl RustCloudBackupManager {
         }
 
         if !matches!(
-            state.cloud_only(),
+            inventory.cloud_only(),
             crate::manager::cloud_backup_manager::CloudOnlyState::NotFetched
                 | crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { .. }
                 | crate::manager::cloud_backup_manager::CloudOnlyState::Failed { .. }
@@ -193,7 +194,7 @@ impl RustCloudBackupManager {
         }
 
         if !matches!(
-            state.other_backups_operation(),
+            inventory.other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
@@ -202,7 +203,7 @@ impl RustCloudBackupManager {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
         }
 
-        if let CloudBackupOtherBackupsState::Loaded { summary } = state.other_backups_state()
+        if let CloudBackupOtherBackupsState::Loaded { summary } = inventory.other_backups_state()
             && summary.namespace_count > 0
         {
             return Err(CloudBackupError::RecoveryRequired(
@@ -211,14 +212,14 @@ impl RustCloudBackupManager {
         }
 
         if matches!(
-            state.cloud_only(),
+            inventory.cloud_only(),
             crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { wallets, .. } if !wallets.is_empty()
         ) {
             return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
         }
 
         if !matches!(
-            state.cloud_only_operation(),
+            inventory.cloud_only_operation(),
             CloudOnlyOperation::Idle
                 | CloudOnlyOperation::Warning { .. }
                 | CloudOnlyOperation::Failed { .. }

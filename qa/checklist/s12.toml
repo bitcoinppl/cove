@@ -434,7 +434,7 @@ paths = [
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_provider_failure_stops_before_scheduling_the_next_wallet",
-  "rust:rust/src/manager/cloud_backup_manager/model.rs::restore_all_retry_allows_one_remaining_wallet_only_when_complete",
+  "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::restore_all_retry_allows_one_remaining_wallet_only_when_complete",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::retryAvailabilityNeverRetainsAStartAction",
 ]
 # 1.4.0: ios HUMAN, android HUMAN

@@ -1247,7 +1247,7 @@ impl CloudBackupSupervisor {
 
         if self.active_other_backups_scan.is_none()
             && matches!(
-                manager.state.read().other_backups_state(),
+                manager.inventory.read().other_backups_state(),
                 CloudBackupOtherBackupsState::NotChecked
                     | CloudBackupOtherBackupsState::LoadFailed { .. }
             )

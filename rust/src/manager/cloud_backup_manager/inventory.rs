@@ -1,16 +1,16 @@
 //! What Cloud Backup knows about this device's wallets and the records in the cloud
 //!
-//! The screen projection reads the inventory only through [`InventoryFacts`]. Until the inventory
-//! owner holds these facts itself, they are read from the reducer's detail state, which is where
-//! today's screen gets them
+//! The screen projection reads the inventory only through [`InventoryFacts`], built from the
+//! inventory owner and, for Restore All's progress, the reducer
 
 use super::admission::DetailInventory;
 use super::screen::{
     CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection,
 };
 use super::{
-    CloudBackupDetailState, CloudBackupStateReducer, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudOnlyState, LoadedCloudBackupDetail, RecordId,
+    CloudBackupDetailState, CloudBackupOtherBackupsState, CloudBackupRestoreAllState,
+    CloudBackupStateReducer, CloudBackupWalletItem, CloudBackupWalletStatus, CloudOnlyOperation,
+    CloudOnlyState, InventoryOwner, LoadedCloudBackupDetail, OtherBackupsOperation, RecordId,
 };
 
 /// The inventory facts the screen projection reads
@@ -18,6 +18,10 @@ use super::{
 pub(crate) struct InventoryFacts {
     readiness: DetailInventory,
     detail: CloudBackupDetailState,
+    restore_all: CloudBackupRestoreAllState,
+    other_backups: CloudBackupOtherBackupsState,
+    cloud_only_operation: CloudOnlyOperation,
+    other_backups_operation: OtherBackupsOperation,
 }
 
 /// The inventory as the screen draws it
@@ -28,6 +32,11 @@ pub(crate) struct InventoryView {
     pub(crate) progress: Option<CloudBackupProgressSection>,
     /// The rows of the last finished load, kept through a refresh or a failure
     pub(crate) rows: Option<InventoryRows>,
+    pub(crate) restore_all: CloudBackupRestoreAllState,
+    pub(crate) other_backups: CloudBackupOtherBackupsState,
+    /// The restore or delete running on a listed record
+    pub(crate) cloud_only_operation: CloudOnlyOperation,
+    pub(crate) other_backups_operation: OtherBackupsOperation,
 }
 
 /// The rows of a loaded inventory
@@ -48,21 +57,17 @@ pub(crate) struct ListedRecord {
 }
 
 impl InventoryFacts {
-    /// The facts as the reducer holds them today
-    pub(crate) fn from_reducer(reducer: &CloudBackupStateReducer) -> Self {
-        let readiness = if reducer.detail_inventory_is_complete() {
-            DetailInventory::Complete
-        } else if reducer.detail_inventory_is_ready() {
-            DetailInventory::Ready
-        } else {
-            DetailInventory::NotLoaded
-        };
-
-        let detail = reducer
-            .configured_state()
-            .map_or(CloudBackupDetailState::NotLoaded, |configured| configured.detail);
-
-        Self { readiness, detail }
+    /// The facts as the owner holds them, with Restore All's run read from the reducer
+    pub(crate) fn new(owner: &InventoryOwner, reducer: &CloudBackupStateReducer) -> Self {
+        Self {
+            readiness: owner.readiness(),
+            detail: owner.detail_state().clone(),
+            restore_all: owner
+                .restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some()),
+            other_backups: owner.other_backups_state(),
+            cloud_only_operation: owner.cloud_only_operation(),
+            other_backups_operation: owner.other_backups_operation(),
+        }
     }
 
     pub(crate) fn view(&self) -> InventoryView {
@@ -80,6 +85,10 @@ impl InventoryFacts {
             readiness: self.readiness,
             progress,
             rows: loaded_detail(&self.detail).map(inventory_rows),
+            restore_all: self.restore_all.clone(),
+            other_backups: self.other_backups.clone(),
+            cloud_only_operation: self.cloud_only_operation.clone(),
+            other_backups_operation: self.other_backups_operation.clone(),
         }
     }
 }

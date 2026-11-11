@@ -59,8 +59,8 @@ async fn trusted_local_snapshot_is_confirmed_by_provider_in_background() {
 
     wait_for_test_condition(Duration::from_secs(2), "expected provider-confirmed detail", || {
         matches!(
-            manager.model_state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
+            manager.test_inventory(),
+            ref configured
                 if matches!(
                     configured.detail,
                     CloudBackupDetailState::Complete { ref state }
@@ -95,8 +95,8 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
         || {
             globals.cloud.list_wallet_files_attempt_count() > initial_list_attempts
                 && matches!(
-                    manager.model_state().lifecycle,
-                    CloudBackupLifecycle::Configured(ref configured)
+                    manager.test_inventory(),
+                    ref configured
                         if matches!(
                             configured.detail,
                             CloudBackupDetailState::Failed { retained: Some(ref state), .. }
@@ -117,8 +117,8 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
         "provider confirmation failure should stay incomplete with the local rows",
         || {
             matches!(
-                manager.model_state().lifecycle,
-                CloudBackupLifecycle::Configured(ref configured)
+                manager.test_inventory(),
+                ref configured
                     if matches!(
                         configured.detail,
                         CloudBackupDetailState::Failed { retained: Some(_), .. }
@@ -146,8 +146,8 @@ async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey()
 
     wait_for_test_condition(Duration::from_secs(2), "expected offline detail to fail", || {
         matches!(
-            manager.model_state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
+            manager.test_inventory(),
+            ref configured
                 if matches!(
                     configured.detail,
                     CloudBackupDetailState::Failed { retained: Some(_), .. }
@@ -166,8 +166,8 @@ async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey()
         "expected reconnect to complete detail",
         || {
             matches!(
-                manager.model_state().lifecycle,
-                CloudBackupLifecycle::Configured(ref configured)
+                manager.test_inventory(),
+                ref configured
                     if matches!(
                         configured.detail,
                         CloudBackupDetailState::Complete { ref state }
@@ -185,7 +185,7 @@ async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey()
 
     // every cloud wallet is listed exactly once
     wait_for_test_condition(Duration::from_secs(5), "expected loaded cloud-only rows", || {
-        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
             return false;
         };
 
@@ -308,8 +308,8 @@ async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
     call!(manager.supervisor.start_refresh_detail()).await.unwrap();
     wait_for_test_condition(Duration::from_secs(1), "expected incomplete detail inventory", || {
         matches!(
-            manager.model_state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
+            manager.test_inventory(),
+            ref configured
                 if matches!(&configured.detail, CloudBackupDetailState::Failed { .. })
         )
     })
@@ -338,8 +338,8 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     call!(manager.supervisor.start_refresh_detail()).await.unwrap();
     wait_for_test_condition(Duration::from_secs(1), "expected complete detail inventory", || {
         matches!(
-            manager.model_state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
+            manager.test_inventory(),
+            ref configured
                 if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
         )
     })
@@ -351,8 +351,8 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     assert!(matches!(
-        manager.model_state().lifecycle,
-        CloudBackupLifecycle::Configured(ref configured)
+        manager.test_inventory(),
+        ref configured
             if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
     ));
     assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), active_snapshot_attempts);
@@ -373,8 +373,8 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     .await;
 
     assert!(matches!(
-        manager.model_state().lifecycle,
-        CloudBackupLifecycle::Configured(ref configured)
+        manager.test_inventory(),
+        ref configured
             if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
     ));
     assert!(globals.cloud.list_wallet_files_snapshot_attempt_count() > snapshot_attempts);

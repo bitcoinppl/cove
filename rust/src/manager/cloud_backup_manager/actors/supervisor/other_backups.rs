@@ -46,7 +46,7 @@ impl CloudBackupSupervisor {
         outcome: CloudBackupOtherBackupsOutcome,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
         if !matches!(
-            manager.state.read().other_backups_operation(),
+            manager.inventory.read().other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted

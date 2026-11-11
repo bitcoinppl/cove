@@ -80,8 +80,9 @@ impl RustCloudBackupManager {
     pub(crate) fn publish_screen(&self, runtime: &Runtime) {
         let mut published = self.published_screen.0.lock();
         let next = {
+            // the reducer's lock is taken first, as every reader holding both does
             let reducer = self.state.read();
-            let inventory = InventoryFacts::from_reducer(&reducer);
+            let inventory = InventoryFacts::new(&self.inventory.read(), &reducer);
             let notices = Notices::from_reducer(&reducer);
             project::project(runtime, &reducer, &inventory, &notices)
         };

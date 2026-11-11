@@ -688,8 +688,8 @@ async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
 
     wait_for_test_condition(Duration::from_secs(1), "expected failed retained inventory", || {
         matches!(
-            manager.model_state().lifecycle,
-            CloudBackupLifecycle::Configured(ref configured)
+            manager.test_inventory(),
+            ref configured
                 if matches!(configured.detail, CloudBackupDetailState::Failed {
                     retained: Some(_),
                     ..
@@ -698,9 +698,7 @@ async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
     })
     .await;
 
-    let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-        panic!("expected configured cloud backup");
-    };
+    let configured = manager.test_inventory();
 
     let CloudBackupDetailState::Failed { retained: Some(retained), .. } = configured.detail else {
         panic!("expected failed inventory with provisional rows");

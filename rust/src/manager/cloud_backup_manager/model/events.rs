@@ -1,21 +1,17 @@
-use std::collections::HashSet;
-
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::DriveAccountSwitchId;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupDriveAccountSwitchRecovery,
-    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupHealNotice,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
-    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
-    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation, CloudOnlyOperation,
-    CloudOnlyState, OtherBackupsOperation, PendingUploadVerificationState, RecoveryState,
-    SyncState, VerificationState,
+    CloudBackupDisableOutcome, CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext,
+    CloudBackupEnableState, CloudBackupHealNotice, CloudBackupPasskeyChoiceIntent,
+    CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupSettingsRowStatus, CloudBackupStatus,
+    CloudBackupUndecryptableWalletDeletionState, CloudBackupVerificationMetadata,
+    CloudBackupVerificationPresentation, PendingUploadVerificationState, RecoveryState, SyncState,
+    VerificationState,
 };
 
-use super::cloud_only_inventory::{CloudOnlyFetch, CloudOnlyListingUpdate};
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,42 +178,6 @@ pub(crate) enum CloudBackupStateReducerEvent {
     /// Rust and the platform disagree about a Google Drive account switch; `None` clears it
     DriveAccountSwitchRecoveryReported(Option<CloudBackupDriveAccountSwitchRecovery>),
     UndecryptableWalletDeletionStateResolved(CloudBackupUndecryptableWalletDeletionState),
-    DetailRefreshStarted,
-    DetailRefreshProvisional(CloudBackupDetail),
-    DetailCleared,
-    DetailRefreshApplied {
-        detail: (CloudBackupDetail, super::CloudBackupInventoryAuthority),
-        cloud_only_listing: CloudOnlyListingUpdate,
-    },
-    DetailRefreshFailed {
-        reason: super::CloudBackupInventoryIncompleteReason,
-        error: String,
-    },
-    CloudOnlyStateResolved(CloudOnlyState),
-    /// A cloud-only fetch finished, applied only if its listing generation is still current
-    CloudOnlyFetchLoaded(CloudOnlyFetch),
-    /// A listed record was restored or deleted, so it is no longer cloud-only
-    CloudOnlyRowRemoved(String),
-    /// A restore found a local wallet holding everything the record can recover, applied only if
-    /// no local wallet or listing change happened since the restore read the local wallets
-    CloudOnlyRowAlreadyOnDevice {
-        record_id: String,
-        listing_generation: u64,
-    },
-    /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
-    CloudOnlyInventoryInvalidated,
-    /// The local wallet set changed, so the listing and any loaded rows may now count a record as
-    /// cloud-only, restorable, or a duplicate when it no longer is, and the detail may list a
-    /// wallet as local that is gone
-    ///
-    /// `local_record_ids` holds the wallets on this device now, or `None` when they could not be
-    /// read, in which case the detail's local rows wait for the next refresh
-    LocalWalletsChanged {
-        local_record_ids: Option<HashSet<String>>,
-    },
-    CloudOnlyOperationResolved(CloudOnlyOperation),
-    OtherBackupsOperationResolved(OtherBackupsOperation),
-    OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),
 }
 
 /// Side effects the manager should emit after applying a reducer event
@@ -228,8 +188,6 @@ pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) status_changed: bool,
     pub(crate) verification_presentation_changed: bool,
     pub(crate) verification_decision_pending: bool,
-    /// Applying the event invalidated cloud-only rows that a fetch has to repopulate
-    pub(crate) cloud_only_refetch_needed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,6 +4,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
+use super::owner::inventory::{InventoryEffects, InventoryInput};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
@@ -97,11 +98,23 @@ impl RustCloudBackupManager {
         if let Some(context) = effects.enable_completed {
             self.send(Message::EnableCompleted(context));
         }
+    }
+
+    /// Applies one input to the inventory owner, then publishes the screen and asks for a
+    /// cloud-only fetch when the input invalidated the rows
+    pub(crate) fn apply_inventory(&self, input: InventoryInput) -> InventoryEffects {
+        let effects = self.inventory.write().apply(input);
+
+        if effects.changed {
+            self.request_screen_publish();
+        }
 
         // the supervisor owns fetches, so it decides from fresh state whether one can start
-        if effects.cloud_only_refetch_needed {
+        if effects.refetch_needed {
             send!(self.supervisor.ensure_cloud_only_fetch());
         }
+
+        effects
     }
 
     pub(crate) fn reconcile_runtime_status(&self, status: CloudBackupStatus) {

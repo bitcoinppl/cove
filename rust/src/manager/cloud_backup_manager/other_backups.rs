@@ -12,9 +12,7 @@ use crate::database::cloud_backup::CloudStorageIssue;
 
 impl RustCloudBackupManager {
     pub(crate) fn apply_other_backups_state(&self, state: CloudBackupOtherBackupsState) {
-        self.apply_model_event(super::CloudBackupStateReducerEvent::OtherBackupsStateResolved(
-            state,
-        ));
+        self.apply_inventory(super::InventoryInput::OtherBackupsStateResolved(state));
     }
 
     pub(crate) async fn other_backup_state(
@@ -185,7 +183,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_model_event(super::CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+        self.apply_inventory(super::InventoryInput::OtherBackupsOperationResolved(
             other_backups_operation,
         ));
     }

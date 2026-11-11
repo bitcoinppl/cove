@@ -2,11 +2,9 @@ use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupEnableContext, CloudBackupOtherBackupsState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
-    CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudOnlyOperation, CloudOnlyState,
-    DeepVerificationFailure, DeepVerificationReport, OtherBackupsOperation,
-    SavedPasskeyConfirmationMode,
+    CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
+    CloudBackupProgress, CloudBackupRootPrompt, CloudBackupVerificationPresentation,
+    DeepVerificationFailure, DeepVerificationReport, SavedPasskeyConfirmationMode,
 };
 
 /// Public passkey health state for the configured backup
@@ -73,28 +71,6 @@ pub enum CloudBackupUndecryptableWalletDeletionState {
     Failed(String),
 }
 
-/// Detail payload shown after remote backup detail has loaded
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoadedCloudBackupDetail {
-    pub detail: CloudBackupDetail,
-    /// Evidence used to accept the active namespace inventory
-    pub inventory_authority: CloudBackupInventoryAuthority,
-    pub cloud_only: CloudOnlyState,
-    pub cloud_only_operation: CloudOnlyOperation,
-    pub other_backups_operation: OtherBackupsOperation,
-}
-
-/// Evidence used to accept wallet inventory for the active backup namespace
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum CloudBackupInventoryAuthority {
-    /// The provider returned an authoritative inventory
-    ProviderConfirmed,
-    /// The local provider snapshot contains the last known wallet count
-    LocalSnapshotMatchesKnownCount,
-    /// Rows are useful for display but cannot authorize wallet actions
-    Provisional,
-}
-
 /// Typed reason why provider inventory could not be confirmed complete
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupInventoryIncompleteReason {
@@ -117,23 +93,6 @@ impl From<CloudStorageIssue> for CloudBackupInventoryIncompleteReason {
             | CloudStorageIssue::Other => Self::Unknown,
         }
     }
-}
-
-/// Public loading state for the cloud backup detail screen
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CloudBackupDetailState {
-    NotLoaded,
-    Checking {
-        retained: Option<LoadedCloudBackupDetail>,
-    },
-    Complete {
-        state: LoadedCloudBackupDetail,
-    },
-    Failed {
-        reason: CloudBackupInventoryIncompleteReason,
-        error: String,
-        retained: Option<LoadedCloudBackupDetail>,
-    },
 }
 
 /// Rust-owned Restore All availability and in-process progress
@@ -168,9 +127,6 @@ pub struct CloudBackupConfiguredState {
     pub sync: CloudBackupSyncState,
     pub destructive_operation: CloudBackupDestructiveOperationState,
     pub undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState,
-    pub detail: CloudBackupDetailState,
-    pub other_backups: CloudBackupOtherBackupsState,
-    pub restore_all: CloudBackupRestoreAllState,
     pub root_prompt: CloudBackupRootPrompt,
     pub sync_health: CloudSyncHealth,
     pub verification_presentation: CloudBackupVerificationPresentation,

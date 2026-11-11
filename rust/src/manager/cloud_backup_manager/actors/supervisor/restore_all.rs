@@ -46,7 +46,7 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(frozen_wallets) = manager.restore_all_eligible_wallets() else { return };
-        let listing_generation = manager.state.read().cloud_only_listing_generation();
+        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
         let frozen_count = frozen_wallets.len() as u32;
         let projected_state = manager.projected_restore_all_state();
         let can_start = match (retry, projected_state) {
@@ -446,7 +446,7 @@ async fn run_restore_all_queue(
         };
 
         // read before the restore reads the local wallets, so a later change can discard its result
-        let listing_generation = manager.state.read().cloud_only_listing_generation();
+        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
         let result = prepared.restore_record(&wallet.record_id).await;
         manager.handle_cloud_only_restore_committed(&result);
         completed = completed.saturating_add(1);

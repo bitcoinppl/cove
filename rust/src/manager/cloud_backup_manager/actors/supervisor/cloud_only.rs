@@ -22,7 +22,7 @@ impl CloudBackupSupervisor {
         if self.active_cloud_only_fetch_request.is_some()
             || !manager.detail_inventory_is_ready()
             || !matches!(
-                manager.state.read().cloud_only(),
+                manager.inventory.read().cloud_only(),
                 CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
             )
         {
@@ -41,11 +41,7 @@ impl CloudBackupSupervisor {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
         // read before the fetch is spawned so a listing applied while it runs makes it stale
-        let listing_generation = manager.state.read().cloud_only_listing_generation();
-        // and the configuration before it reads the namespace, so a key it recovers for a
-        // configuration that has since changed is refused
-        let writes =
-            CloudBackupWriteClient::background(self.write.clone(), self.runtime.generation());
+        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
@@ -70,8 +66,7 @@ impl CloudBackupSupervisor {
         });
 
         // read before the restore reads the local wallets, so a later change can discard its result
-        let listing_generation = manager.state.read().cloud_only_listing_generation();
-        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
         addr.send_fut_with(move |addr| async move {
             let result = manager.do_restore_cloud_wallet(&writes, &record_id).await;
             send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));

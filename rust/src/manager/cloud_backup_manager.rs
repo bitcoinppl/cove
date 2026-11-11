@@ -63,7 +63,7 @@ pub(crate) use self::detail::{
 };
 pub use self::detail::{
     CloudBackupVerificationPresentation, CloudBackupVerificationReason,
-    CloudBackupVerificationSource, CloudOnlyOperation, CloudOnlyState,
+    CloudBackupVerificationSource, CloudOnlyOperation,
 };
 pub(crate) use self::detail::{
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
@@ -98,15 +98,14 @@ pub(crate) use self::model::{
     CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
     CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupListedDetail, CloudBackupStateReducer, CloudBackupStateReducerEvent,
-    CloudBackupStatus, CloudOnlyFetch, CloudOnlyListingUpdate,
+    CloudBackupStatus,
 };
 pub use self::model::{
-    CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
-    CloudBackupEnableFlow, CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
-    CloudBackupLifecycle, CloudBackupPasskeyState, CloudBackupPendingEnableCleanupState,
-    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
-    CloudBackupSyncState, CloudBackupUndecryptableWalletDeletionState,
-    CloudBackupVerificationState, LoadedCloudBackupDetail,
+    CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupEnableFlow,
+    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle, CloudBackupPasskeyState,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
+    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupSyncState,
+    CloudBackupUndecryptableWalletDeletionState, CloudBackupVerificationState,
 };
 #[cfg(test)]
 pub(crate) use self::ops::test_support::rebase_owners_after_test_write;
@@ -119,6 +118,10 @@ pub(crate) use self::ops::{
     CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupReuploadedWallets,
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
+};
+pub(crate) use self::owner::inventory::{
+    CloudBackupDetailState, CloudBackupInventoryAuthority, CloudOnlyFetch, CloudOnlyListingUpdate,
+    CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
 };
 pub(crate) use self::owner::lifecycle::LifecycleCapability;
 use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};
@@ -318,6 +321,11 @@ impl DeepVerificationFailure {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustCloudBackupManager {
     pub(crate) state: Arc<RwLock<CloudBackupStateReducer>>,
+    /// The inventory's only writer, changed through `apply_inventory`
+    ///
+    /// Taken after `state` when both are held, never before, so a reader holding the reducer
+    /// can't deadlock against one holding the inventory
+    pub(crate) inventory: Arc<RwLock<InventoryOwner>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
     published_screen: Arc<PublishedScreen>,
     pub(crate) pending_enable: PendingEnableCoordinator,
@@ -662,6 +670,7 @@ impl RustCloudBackupManager {
             let cloud_writes = spawn_actor(CloudBackupWriteSupervisor::new(manager.clone()));
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
+                inventory: Arc::new(RwLock::new(InventoryOwner::default())),
                 reconciler: ReconcileChannel::new(1000),
                 published_screen: Arc::new(PublishedScreen::default()),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
@@ -1023,6 +1032,13 @@ impl RustCloudBackupManager {
 
 #[cfg(test)]
 mod manager_test_support {
+    /// What the inventory owner holds, read in one place for test assertions
+    #[derive(Debug, Clone)]
+    pub(crate) struct TestInventory {
+        pub(crate) detail: CloudBackupDetailState,
+        pub(crate) restore_all: CloudBackupRestoreAllState,
+    }
+
     use super::*;
 
     impl RustCloudBackupManager {
@@ -1040,8 +1056,20 @@ mod manager_test_support {
             Ok(())
         }
 
+        /// The inventory as the screen reads it, for tests that assert on detail or Restore All
+        pub(crate) fn test_inventory(&self) -> TestInventory {
+            // the detail's read guard ends here, before the projection takes the lock again: a
+            // writer waiting between two reads of one lock deadlocks them
+            let detail = self.inventory.read().detail_state().clone();
+            TestInventory { detail, restore_all: self.projected_restore_all_state() }
+        }
+
         pub(crate) fn model_snapshot(&self) -> test_support::CloudBackupModelSnapshot {
-            self.state.read().snapshot()
+            let mut snapshot = self.state.read().snapshot();
+            snapshot.detail =
+                self.inventory.read().loaded_detail().map(|loaded| loaded.detail.clone());
+
+            snapshot
         }
 
         pub(crate) fn debug_reset_cloud_backup_state(&self) {
@@ -1867,9 +1895,7 @@ mod tests {
             }],
         ));
 
-        let CloudBackupLifecycle::Configured(configured) = manager.model_state().lifecycle else {
-            panic!("expected configured state");
-        };
+        let configured = manager.test_inventory();
 
         assert_eq!(
             configured.restore_all,

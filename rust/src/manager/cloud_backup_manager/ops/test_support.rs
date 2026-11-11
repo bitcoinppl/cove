@@ -124,7 +124,7 @@ pub(crate) fn complete_cloud_only_fetch(
     CloudOnlyFetch {
         wallets,
         unresolved_record_ids: Vec::new(),
-        listing_generation: manager.state.read().cloud_only_listing_generation(),
+        listing_generation: manager.inventory.read().cloud_only_listing_generation(),
     }
 }
 

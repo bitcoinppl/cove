@@ -23,8 +23,8 @@ use super::types::{
 use crate::manager::cloud_backup_manager::actors::supervisor::{Runtime, enable_prompt_answers};
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
-    ContinuationStage, DetailInventory, EnableIntent, PausedContinuation, Rejection,
-    RestoreAllAdmission, UserIntent, evaluate_admission,
+    ContinuationStage, EnableIntent, PausedContinuation, Rejection, RestoreAllAdmission,
+    UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::{
     InventoryFacts, InventoryView, ListedRecord,
@@ -52,14 +52,14 @@ pub(crate) fn project(
     let state = reducer.public_state();
     let inventory = inventory.view();
     let heal_notice = notices.heal;
-    let snapshot = admission_snapshot(reducer, &state.lifecycle, inventory.readiness);
+    let snapshot = admission_snapshot(reducer, &state.lifecycle, &inventory);
 
     let root_prompt = match &state.lifecycle {
         CloudBackupLifecycle::Configured(configured) => configured.root_prompt.clone(),
         _ => CloudBackupRootPrompt::None,
     };
 
-    let actions = global_actions(&state.lifecycle, heal_notice, &snapshot, reducer);
+    let actions = global_actions(&state.lifecycle, heal_notice, &snapshot, reducer, &inventory);
     let body = body(runtime, reducer, state.lifecycle, inventory, &snapshot);
     let settings_row = settings_row(&body, heal_notice, state.settings_row_status);
 
@@ -80,7 +80,7 @@ pub(crate) fn project(
 fn admission_snapshot(
     reducer: &CloudBackupStateReducer,
     lifecycle: &CloudBackupLifecycle,
-    detail_inventory: DetailInventory,
+    inventory: &InventoryView,
 ) -> AdmissionSnapshot {
     let body = match lifecycle {
         CloudBackupLifecycle::Disabled => AdmissionBody::Disabled,
@@ -106,7 +106,7 @@ fn admission_snapshot(
     let (sync_running, restore_all) = match lifecycle {
         CloudBackupLifecycle::Configured(configured) => (
             configured.sync == CloudBackupSyncState::Syncing,
-            restore_all_admission(&configured.restore_all),
+            restore_all_admission(&inventory.restore_all),
         ),
         _ => (false, RestoreAllAdmission::Unavailable),
     };
@@ -115,9 +115,9 @@ fn admission_snapshot(
         body,
         running: reducer.active_operation().map(CloudBackupExclusiveOperationClaim::operation),
         sync_running,
-        detail_inventory,
+        detail_inventory: inventory.readiness,
         other_backups_loaded: matches!(
-            reducer.other_backups_state(),
+            inventory.other_backups,
             CloudBackupOtherBackupsState::Loaded { .. }
         ),
         restore_all,
@@ -215,7 +215,7 @@ fn body(
             })
         }
         CloudBackupLifecycle::Configured(configured) => CloudBackupScreenBody::Configured(
-            configured_screen(runtime, reducer, configured, inventory, snapshot),
+            configured_screen(runtime, configured, inventory, snapshot),
         ),
     }
 }
@@ -230,7 +230,6 @@ fn drive_account_switch_body(
 
 fn configured_screen(
     runtime: &Runtime,
-    reducer: &CloudBackupStateReducer,
     configured: CloudBackupConfiguredState,
     inventory: InventoryView,
     snapshot: &AdmissionSnapshot,
@@ -261,12 +260,12 @@ fn configured_screen(
 
         let (not_on_device, extra_copies) = listed_rows(rows.listed, snapshot);
         if !not_on_device.is_empty()
-            || configured.restore_all != CloudBackupRestoreAllState::NotShown
+            || inventory.restore_all != CloudBackupRestoreAllState::NotShown
         {
             sections.push(CloudBackupSection::NotOnDevice(CloudBackupNotOnDeviceSection {
                 rows: not_on_device,
-                restore_all: configured.restore_all.clone(),
-                operation: reducer.cloud_only_operation(),
+                restore_all: inventory.restore_all.clone(),
+                operation: inventory.cloud_only_operation.clone(),
             }));
         }
 
@@ -277,10 +276,10 @@ fn configured_screen(
         }
     }
 
-    if configured.other_backups != CloudBackupOtherBackupsState::NotChecked {
+    if inventory.other_backups != CloudBackupOtherBackupsState::NotChecked {
         sections.push(CloudBackupSection::OtherBackups(CloudBackupOtherBackupsSection {
-            state: configured.other_backups.clone(),
-            operation: reducer.other_backups_operation(),
+            state: inventory.other_backups.clone(),
+            operation: inventory.other_backups_operation.clone(),
         }));
     }
 
@@ -373,13 +372,14 @@ fn global_actions(
     heal_notice: Option<CloudBackupHealNotice>,
     snapshot: &AdmissionSnapshot,
     reducer: &CloudBackupStateReducer,
+    inventory: &InventoryView,
 ) -> CloudBackupActions {
     use CloudBackupScreenAction as A;
 
     let mut drawn = if reducer.drive_account_switch_recovery().is_some() {
         vec![A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
     } else {
-        lifecycle_actions(lifecycle)
+        lifecycle_actions(lifecycle, inventory)
     };
 
     if heal_notice.is_some() {
@@ -397,7 +397,10 @@ fn global_actions(
     CloudBackupActions { entries }
 }
 
-fn lifecycle_actions(lifecycle: &CloudBackupLifecycle) -> Vec<CloudBackupScreenAction> {
+fn lifecycle_actions(
+    lifecycle: &CloudBackupLifecycle,
+    inventory: &InventoryView,
+) -> Vec<CloudBackupScreenAction> {
     use CloudBackupScreenAction as A;
 
     match lifecycle {
@@ -428,11 +431,14 @@ fn lifecycle_actions(lifecycle: &CloudBackupLifecycle) -> Vec<CloudBackupScreenA
         CloudBackupLifecycle::Configured(configured) if finishing_disable(configured) => {
             vec![A::ResumeDisable, A::StopUsingOnThisDevice]
         }
-        CloudBackupLifecycle::Configured(configured) => configured_actions(configured),
+        CloudBackupLifecycle::Configured(configured) => configured_actions(configured, inventory),
     }
 }
 
-fn configured_actions(configured: &CloudBackupConfiguredState) -> Vec<CloudBackupScreenAction> {
+fn configured_actions(
+    configured: &CloudBackupConfiguredState,
+    inventory: &InventoryView,
+) -> Vec<CloudBackupScreenAction> {
     use CloudBackupScreenAction as A;
 
     let mut actions = vec![
@@ -449,7 +455,7 @@ fn configured_actions(configured: &CloudBackupConfiguredState) -> Vec<CloudBacku
         actions.push(A::RepairPasskey);
     }
 
-    match configured.restore_all {
+    match inventory.restore_all {
         CloudBackupRestoreAllState::NotShown => {}
         CloudBackupRestoreAllState::StartDisabled { .. }
         | CloudBackupRestoreAllState::StartAvailable { .. } => actions.push(A::StartRestoreAll),
@@ -464,7 +470,7 @@ fn configured_actions(configured: &CloudBackupConfiguredState) -> Vec<CloudBacku
         actions.push(A::DeleteUnreadableBackups);
     }
 
-    if let CloudBackupOtherBackupsState::Loaded { summary } = &configured.other_backups
+    if let CloudBackupOtherBackupsState::Loaded { summary } = &inventory.other_backups
         && summary.namespace_count > 0
     {
         actions.push(A::RecoverOtherBackups);
