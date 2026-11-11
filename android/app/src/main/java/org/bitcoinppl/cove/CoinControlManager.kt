@@ -227,7 +227,8 @@ class CoinControlManager internal constructor(
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         if (isClosed.get()) return
 
-        logDebug("reconcile: $message")
+        // only the kind: messages carry UTXO labels and typed search text
+        logDebug("reconcile: ${message::class.simpleName}")
         mainScope.launch { apply(message) }
     }
 

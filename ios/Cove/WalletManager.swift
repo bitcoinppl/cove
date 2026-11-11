@@ -747,12 +747,13 @@ enum WalletManagerPreview {
         notifyInitialScanLifecycleChanged()
     }
 
+    /// Logs only the case name and count, since messages carry the user-entered wallet name
     func logReconcile(message: Message) {
-        logger.debug("reconcile \(message)")
+        logger.debug("reconcile \(String(describing: message).prefix { $0 != "(" })")
     }
 
     func logReconcileMany(messages: [Message]) {
-        logger.debug("reconcile_messages: \(messages)")
+        logger.debug("reconcile_messages: \(messages.count) messages")
     }
 
     func dispatch(action: Action) {

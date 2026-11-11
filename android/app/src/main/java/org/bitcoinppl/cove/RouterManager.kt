@@ -122,7 +122,8 @@ class RouterManager internal constructor(
     }
 
     internal fun pushRouteWithoutNavigationGeneration(route: Route): Boolean {
-        Log.d(tag, "pushRoute: $route")
+        // only the kind: routes can carry UTXO labels, TAPSIGNER PINs and signed transactions
+        Log.d(tag, "pushRoute: ${route::class.simpleName}")
         isSidebarVisible = false
         var didPush = false
 

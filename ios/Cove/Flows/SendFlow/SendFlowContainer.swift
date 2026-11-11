@@ -124,7 +124,8 @@ private struct SendFlowLoadedView: View {
             )
             app.popRoute()
         case WalletManagerError.WalletDoesNotExist:
-            Log.error("Wallet does not exist for send route \(sendRoute)")
+            // the wallet id, not the route: send routes carry UTXO labels and transaction details
+            Log.error("Wallet does not exist for send route, wallet id=\(sendRoute.id())")
             app.alertState = .init(.general(
                 title: "Wallet Not Found",
                 message: "This wallet is no longer available."

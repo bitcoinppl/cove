@@ -709,7 +709,9 @@ struct CorruptedWalletDeletionRetry: Equatable {
     func reconcile(message: AppStateReconcileMessage) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            logger.debug("Update: \(message)")
+            // only the case name: route messages can carry UTXO labels, TAPSIGNER PINs and signed
+            // transactions
+            logger.debug("Update: \(String(describing: message).prefix { $0 != "(" })")
 
             apply(message)
         }

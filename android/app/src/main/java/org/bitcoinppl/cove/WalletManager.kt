@@ -968,7 +968,8 @@ class WalletManager :
 
     override fun reconcile(message: WalletManagerReconcileMessage) {
         mainScope.launch {
-            logDebug("reconcile: $message")
+            // only the kind: metadata messages carry the user-entered wallet name
+            logDebug("reconcile: ${message::class.simpleName}")
             apply(message)
         }
     }
@@ -987,14 +988,17 @@ class WalletManager :
             else -> Unit
         }
 
-        logDebug("dispatch: $action")
+        // only the kind: actions like UpdateName carry user-entered text
+        val actionKind = action::class.simpleName
+        logDebug("dispatch: $actionKind")
+
         mainScope.launch(Dispatchers.IO) {
             try {
                 withRustOr(Unit) {
                     dispatch(action)
                 }
             } catch (e: WalletManagerException) {
-                logError("Unable to dispatch wallet action $action", e)
+                logError("Unable to dispatch wallet action $actionKind", e)
             }
         }
     }
