@@ -666,3 +666,59 @@ fn a_phase_stops_its_sqlcipher_work_before_openssl_cleanup() {
         on_started.recv().expect("the churn task started");
     });
 }
+
+/// The inventory loads on every silent path without a passkey call, and with no local master key
+/// it lists the records it could not check instead of asking for one
+#[test]
+fn silent_inventory_paths_never_prompt() {
+    use act_zero::send;
+
+    use crate::manager::cloud_backup_manager::screen::CloudBackupListedRecord;
+    use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudOnlyRow};
+    use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
+
+    let test = concat!(module_path!(), "::silent_inventory_paths_never_prompt");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        FakeAccount::new(2, 2).seed(&app);
+
+        // detail entry and Check Again
+        app.dispatch(CloudBackupManagerAction::EnterDetail).then_cannot(&[N::Enable]);
+        load_detail(&mut app);
+
+        // a refresh that fails offline, then the connection comes back and the user checks again
+        app.cloud.inner.fail_next_list_wallet_files_offline("offline");
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
+        app.event("reconnect", |_| CONNECTIVITY_MANAGER.set_connection_state(true))
+            .then_cannot(&[N::Enable]);
+        load_detail(&mut app);
+
+        // the provider reports a cloud change
+        app.event("cloud change", |app| {
+            send!(app.manager().supervisor.provider_inventory_did_change());
+        })
+        .then_cannot(&[N::Enable]);
+
+        // a relaunch, then a relaunch with no local master key
+        app.relaunch().then_cannot(&[N::Enable]);
+        app.dispatch(CloudBackupManagerAction::EnterDetail).then_cannot(&[N::Enable]);
+        CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
+        app.relaunch().then_cannot(&[N::Enable]);
+        app.dispatch(CloudBackupManagerAction::EnterDetail).then_cannot(&[N::Enable]);
+        load_detail(&mut app);
+
+        let rows = app
+            .manager()
+            .inventory
+            .read()
+            .cloud_only()
+            .loaded_rows()
+            .map(|rows| rows.iter().map(CloudOnlyRow::listed_record).collect::<Vec<_>>());
+        assert_eq!(rows, Some(vec![CloudBackupListedRecord::Unchecked; 2]), "{}", app.describe());
+        assert!(
+            app.passkey.interactive_calls().is_empty(),
+            "{:?}",
+            app.passkey.interactive_calls()
+        );
+    });
+}
