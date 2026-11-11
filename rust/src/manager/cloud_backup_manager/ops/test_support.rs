@@ -2101,13 +2101,27 @@ pub(crate) async fn verify_pending_uploads_once_for_test_async(
     !matches!(manager.verify_pending_uploads_once().await, PendingUploadVerificationState::Idle)
 }
 
+/// Runs one upload of the wallet and returns once its outcome is recorded
+///
+/// A retry the scheduler armed after an earlier failure can be uploading the wallet already;
+/// its outcome isn't recorded until it finishes, so this waits for it and then runs its own
 pub(crate) async fn run_wallet_upload_for_test_async(
     manager: &RustCloudBackupManager,
     wallet_id: WalletId,
 ) {
-    call!(manager.supervisor.run_wallet_upload_inline_for_test(wallet_id))
-        .await
-        .expect("run wallet upload");
+    let deadline = LoadedHostDeadline::after(Duration::from_secs(10));
+    loop {
+        let ran = call!(manager.supervisor.run_wallet_upload_inline_for_test(wallet_id.clone()))
+            .await
+            .expect("run wallet upload");
+
+        if ran {
+            return;
+        }
+
+        assert!(!deadline.has_passed(), "another upload of wallet {wallet_id} never finished");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 
 pub(crate) async fn new_restore_operation_for_test(

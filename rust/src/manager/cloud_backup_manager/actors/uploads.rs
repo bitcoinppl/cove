@@ -552,23 +552,28 @@ mod tests {
             Produces::ok(())
         }
 
+        /// Runs one upload of the wallet and records its outcome before answering
+        ///
+        /// Answers false, without coalescing into it, while another upload of the wallet runs,
+        /// such as a retry the scheduler armed; that upload's outcome isn't recorded yet
         pub(crate) async fn run_wallet_upload_inline_for_test(
             &mut self,
             wallet_id: WalletId,
-        ) -> ActorResult<()> {
-            if !self.begin_wallet_upload(&wallet_id) {
-                return Produces::ok(());
+        ) -> ActorResult<bool> {
+            if self.active_wallet_uploads.contains_key(&wallet_id) {
+                return Produces::ok(false);
             }
 
+            self.begin_wallet_upload(&wallet_id);
             let Some(manager) = self.manager() else {
                 self.active_wallet_uploads.remove(&wallet_id);
-                return Produces::ok(());
+                return Produces::ok(true);
             };
 
             let outcome =
                 WalletUploadOutcome::from(manager.do_upload_wallet_if_dirty(&wallet_id).await);
             self.finish_wallet_upload(&manager, wallet_id, outcome);
-            Produces::ok(())
+            Produces::ok(true)
         }
 
         /// Reads the finished uploads for the harness invariants, taking them

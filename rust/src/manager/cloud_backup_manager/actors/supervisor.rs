@@ -1686,10 +1686,10 @@ pub(crate) mod test_support {
         pub async fn run_wallet_upload_inline_for_test(
             &mut self,
             wallet_id: WalletId,
-        ) -> ActorResult<()> {
+        ) -> ActorResult<bool> {
             let uploads = self.uploads.addr_for_test();
-            call!(uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
-            Produces::ok(())
+            let ran = call!(uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
+            Produces::ok(ran)
         }
 
         pub async fn wallet_upload_retry_count_for_test(
