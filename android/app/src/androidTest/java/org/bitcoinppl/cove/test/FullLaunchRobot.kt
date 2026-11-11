@@ -390,7 +390,8 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    private fun acceptCloudBackupAcknowledgements() {
+    /** Checks the three Cloud Backup setup acknowledgements, which Enable waits on */
+    fun acceptCloudBackupAcknowledgements() {
         listOf(
             "my passkey is required",
             "access to my Google account",

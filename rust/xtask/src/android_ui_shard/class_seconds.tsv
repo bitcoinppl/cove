@@ -39,6 +39,8 @@
 65	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRestoreAllFullLaunchTest
 22	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRetryInterruptedSetupFullLaunchTest
 107	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupSyncNowFullLaunchTest
+400	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffFullLaunchTest
+2	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffRelaunchFullLaunchTest
 32	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportAppScannerFullLaunchTest
 48	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportBackgroundLockTest
 16	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportMnemonicReviewTest

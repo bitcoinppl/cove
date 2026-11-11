@@ -60,6 +60,8 @@ const ENABLE_INTERRUPTION_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupEnableInterruptionFullLaunchTest";
 const FIRST_INVENTORY_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupFirstInventoryFullLaunchTest";
+const TURN_OFF_RELAUNCH_TEST_CLASS: &str =
+    "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffRelaunchFullLaunchTest";
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -968,7 +970,8 @@ pub fn run_manual_ui_tests() -> Result<()> {
     durable_relaunch_ui_test()?;
     restore_all_relaunch_ui_test()?;
     enable_interruption_ui_test(None)?;
-    first_inventory_ui_test()
+    first_inventory_ui_test()?;
+    turn_off_relaunch_ui_test(None)
 }
 
 /// Points every plain `adb` and Gradle call this process makes at the UI test emulator, so the
@@ -1051,6 +1054,74 @@ fn first_inventory_ui_test() -> Result<()> {
             "stage2RelaunchKeepsActionsDisabledUntilTheFirstListingAnswers",
         ],
     )
+}
+
+pub fn run_turn_off_relaunch_ui_test(only: Option<TurnOffRelaunch>) -> Result<()> {
+    let _emulator = lock_ui_test_emulator()?;
+    turn_off_relaunch_ui_test(only)
+}
+
+/// The Turn Off scenarios that span a relaunch: a backup left unchecked without its local key, a
+/// delete that failed after the confirmation, a passkey prompt that wasn't completed, and the
+/// legacy stuck record healing on load
+fn turn_off_relaunch_ui_test(only: Option<TurnOffRelaunch>) -> Result<()> {
+    let scenarios = [
+        (
+            TurnOffRelaunch::Unchecked,
+            "Turn Off unchecked backups",
+            [
+                "uncheckedStage1RestoreThenDropTheLocalMasterKey",
+                "uncheckedStage2VerifyFirstFailsNeutrallyAndTurnOffStillAsksTwice",
+            ],
+        ),
+        (
+            TurnOffRelaunch::FailedDelete,
+            "Turn Off failed delete relaunch",
+            [
+                "failedDeleteStage1ConfirmTurnOffWhoseDeleteFails",
+                "failedDeleteStage2RelaunchShowsTurnOffIncompleteAndTryAgainFinishes",
+            ],
+        ),
+        (
+            TurnOffRelaunch::PasskeyNotCompleted,
+            "Turn Off passkey not completed relaunch",
+            [
+                "passkeyNotCompletedStage1DismissThePasskeyPrompt",
+                "passkeyNotCompletedStage2RelaunchKeepsTurnOffWithoutPrompting",
+            ],
+        ),
+        (
+            TurnOffRelaunch::Heal,
+            "Turn Off heal relaunch",
+            [
+                "healStage1RequestTheLegacyStuckRecord",
+                "healStage2NoticeShowsWithoutAPasskeyAndTurnsOffFromIt",
+            ],
+        ),
+    ];
+
+    for (kind, scenario, methods) in scenarios {
+        if only.is_some_and(|only| only != kind) {
+            continue;
+        }
+
+        run_staged_process_ui_test(scenario, TURN_OFF_RELAUNCH_TEST_CLASS, &methods)?;
+    }
+
+    Ok(())
+}
+
+/// Which staged Turn Off relaunch scenario to run
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum TurnOffRelaunch {
+    /// Backups left unchecked once the local master key is gone
+    Unchecked,
+    /// A delete that failed after the confirmation
+    FailedDelete,
+    /// A passkey prompt that wasn't completed
+    PasskeyNotCompleted,
+    /// The legacy stuck record healing on load
+    Heal,
 }
 
 /// Where a staged enable-interruption scenario kills the app

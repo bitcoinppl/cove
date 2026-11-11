@@ -109,6 +109,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var namespaceDeleteHold: AttemptHold? = null
 
+    private val walletDeletes = AtomicInteger(0)
+
+    @Volatile
+    private var walletDeleteHold: AttemptHold? = null
+
     // the fixture's namespace is built in, so deleting it leaves this mark until a master key
     // upload recreates it, as the iOS host's deleted-namespace marker does
     private val fixtureNamespaceDeleted = AtomicBoolean(false)
@@ -328,6 +333,19 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespaceDeleteFailures += NamespaceDeleteFailure(attempt, error)
     }
 
+    /** Fails every namespace delete numbered in [attempts], as [failNamespaceDelete] does for one */
+    fun failNamespaceDeletes(
+        attempts: IntRange,
+        error: NamespaceDeleteError = NamespaceDeleteError.NOT_AVAILABLE,
+    ) {
+        attempts.forEach { failNamespaceDelete(it, error) }
+    }
+
+    /** Lets every later namespace delete through, such as the one a test's Try Again makes */
+    fun stopFailingNamespaceDeletes() {
+        namespaceDeleteFailures.clear()
+    }
+
     /**
      * Holds the next namespace delete before the cloud deletes anything, until
      * [releaseHeldNamespaceDelete], so a test can check what the app allows while it is in flight
@@ -342,6 +360,22 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     fun releaseHeldNamespaceDelete() {
         namespaceDeleteHold?.release?.complete(Unit)
+    }
+
+    /**
+     * Holds the next wallet backup delete before the cloud deletes anything, until
+     * [releaseHeldWalletDelete], so a test can check what the app allows while a row delete runs
+     */
+    fun holdNextWalletDelete() {
+        walletDeleteHold?.release?.complete(Unit)
+        walletDeleteHold = AttemptHold(attempt = walletDeletes.get() + 1)
+    }
+
+    fun awaitHeldWalletDelete(timeoutMs: Long = 20_000): Boolean =
+        walletDeleteHold?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseHeldWalletDelete() {
+        walletDeleteHold?.release?.complete(Unit)
     }
 
     fun walletListCount(): Int = walletLists.get()
@@ -860,6 +894,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespaceDeleteFailures.clear()
         namespaceDeleteHold?.release?.complete(Unit)
         namespaceDeleteHold = null
+        walletDeletes.set(0)
+        walletDeleteHold?.release?.complete(Unit)
+        walletDeleteHold = null
     }
 
     /** Records the upload, and throws the scripted failure when one fails this attempt */
@@ -969,6 +1006,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy,
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
+        walletDeleteHold?.enterIfClaimedBy(walletDeletes.incrementAndGet())
+
         val scenario = freshEnableScenario
         if (scenario != null) {
             scenario.deleteWalletBackup(namespace, recordId)
