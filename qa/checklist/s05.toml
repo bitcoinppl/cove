@@ -237,6 +237,7 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_waits_for_the_write_in_flight_before_it_commits_and_deletes",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::persisted_disabling_on_restart_resumes_to_disabled",
     "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::paused_background_write_answers_paused_at_the_queue_head_and_the_drain_runs",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::turn_off_mid_batch_pauses_the_rest_of_the_batch",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # ui tests on both platforms hold a new wallet's upload in the scripted cloud, then disable through the detail's Disable action and both confirmations: the backup stays in the cloud and the app stays disabling while the write is held, and once it is released the disable deletes the whole backup once, leaving no master key or wallet record behind
