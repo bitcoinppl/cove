@@ -316,7 +316,6 @@ mod tests {
     #[ignore] // requires external network connection to fiat price api
     async fn run_all_tests() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         test_get_prices().await;
         test_get_price_for().await;
         test_get_value_in_usd().await;

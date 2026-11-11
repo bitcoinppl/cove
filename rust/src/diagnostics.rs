@@ -758,7 +758,6 @@ mod tests {
     async fn submit_persists_successful_report_history() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");
@@ -788,7 +787,6 @@ mod tests {
     async fn submit_persists_redacted_history_description() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");
@@ -821,7 +819,6 @@ mod tests {
     async fn failed_then_retried_submissions_keep_one_redacted_record_each() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");
@@ -892,7 +889,6 @@ mod tests {
     async fn failed_upload_does_not_persist_history_and_returns_safe_message() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");
@@ -926,7 +922,6 @@ mod tests {
     async fn upload_success_with_history_save_failure_returns_warning() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");

@@ -213,7 +213,11 @@ fn attempt_bdk_migration(pre_recovery_bdk_count: u32) -> eyre::Result<()> {
     crate::database::migration::BdkMigration::new(migration).run()
 }
 
-fn ensure_rustls_provider_installed() {
+/// Installs ring as the process-wide rustls provider unless one is already installed
+///
+/// The `ring` feature alone does not select a process default, and any TLS client built
+/// without one panics
+pub(crate) fn ensure_rustls_provider_installed() {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }

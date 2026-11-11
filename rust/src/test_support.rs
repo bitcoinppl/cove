@@ -55,6 +55,16 @@ impl LoadedHostDeadline {
     }
 }
 
+/// Install the rustls provider the app installs at bootstrap, for every test process
+///
+/// Tests don't run bootstrap, and a TLS client built with no process provider panics. Under
+/// `cargo test` the first test that installed one covered the whole process, but nextest runs
+/// each test in a process of its own
+#[ctor::ctor(unsafe)]
+fn install_process_rustls_provider() {
+    crate::bootstrap::ensure_rustls_provider_installed();
+}
+
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
 

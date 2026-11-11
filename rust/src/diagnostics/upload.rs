@@ -526,7 +526,6 @@ mod tests {
 
     async fn upload_server(responses: Vec<TestResponse>) -> (String, Arc<AtomicUsize>) {
         crate::test_support::ensure_tokio_runtime();
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
         let request_count = Arc::new(AtomicUsize::new(0));
@@ -580,7 +579,6 @@ mod tests {
     async fn capturing_upload_server()
     -> (String, tokio::sync::oneshot::Receiver<(Vec<u8>, Vec<u8>)>) {
         crate::test_support::ensure_tokio_runtime();
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
         let (captured_sender, captured) = tokio::sync::oneshot::channel();
@@ -646,7 +644,6 @@ mod tests {
         location: &str,
     ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
         crate::test_support::ensure_tokio_runtime();
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
         let request_count = Arc::new(AtomicUsize::new(0));
@@ -779,7 +776,6 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn connection_establishment_failures_are_retryable() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let addr = {
             let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
 
@@ -796,7 +792,6 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn timeout_after_connection_is_not_retryable() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
         let server = tokio::spawn(async move {
