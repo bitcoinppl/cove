@@ -43,6 +43,17 @@ class RuleTests(unittest.TestCase):
     def test_android_only_runs_the_android_jobs(self) -> None:
         self.assertEqual(classify(["android/app/build.gradle.kts"]), ANDROID)
 
+    def test_android_test_sources_alone_run_the_android_jobs(self) -> None:
+        self.assertEqual(
+            classify(
+                [
+                    "android/app/src/androidTest/java/org/bitcoinppl/cove/AppTest.kt",
+                    "android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/FlowTest.kt",
+                ]
+            ),
+            ANDROID,
+        )
+
     def test_ios_only_runs_the_ios_jobs_and_the_rust_tests(self) -> None:
         self.assertEqual(classify(["ios/Cove/CoveApp.swift"]), IOS)
 
