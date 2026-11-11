@@ -169,10 +169,7 @@ impl RustCloudBackupManager {
         review: &DisableCommitReview,
         attempt_id: u64,
     ) -> Result<CommitDisable, CloudBackupError> {
-        let namespace_id = self.current_namespace_id()?;
-        self.lifecycle().commit_disable(review, namespace_id, attempt_id).map_err(|source| {
-            CloudBackupError::internal_context("commit cloud backup disable", source)
-        })
+        self.lifecycle().commit_disable(review, attempt_id)
     }
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {

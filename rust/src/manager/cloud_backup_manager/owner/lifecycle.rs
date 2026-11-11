@@ -17,8 +17,8 @@ use crate::database::cloud_backup::{
     PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
 };
 
-use super::super::CloudBackupRuntimeOwnership;
 use super::super::verify::{IntegrityDowngrade, apply_persisted_verification_result};
+use super::super::{CloudBackupKeychain, CloudBackupRuntimeOwnership};
 use crate::manager::cloud_backup_manager::{CloudBackupError, DeepVerificationResult};
 
 /// Proof that the holder is the Cloud Backup lifecycle owner
@@ -427,47 +427,59 @@ impl LifecycleWriter {
     /// This is the only constructor of a stored Disabling record, and it always sets the commit
     /// time. Before this point nothing is persisted, so a crash or failure leaves Cloud Backup
     /// configured with nothing deleted
+    ///
+    /// The review is checked against the stored configuration inside the commit transaction,
+    /// not against a value the caller read, so a review taken against an older configuration
+    /// cannot commit
     pub(crate) fn commit_disable(
         &self,
         review: &DisableCommitReview,
-        namespace_id: String,
         attempt_id: u64,
-    ) -> Result<CommitDisable, DatabaseError> {
-        if review.namespace_id != namespace_id {
-            return Ok(CommitDisable::StaleReview);
-        }
-
+    ) -> Result<CommitDisable, CloudBackupError> {
         let committed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let committed = CommittedDisable {
-            namespace_id,
+            namespace_id: review.namespace_id.clone(),
             attempt_id,
             committed_at,
             last_error: None,
             retry_after: None,
         };
-        let mutation = self.mutate(|state| {
-            let PersistedCloudBackupState::Configured(configured) = state else {
-                return false;
-            };
 
-            *state =
-                PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
-                    previous_configured: configured.clone(),
-                    namespace_id: committed.namespace_id.clone(),
-                    disable_generation: committed.attempt_id,
-                    started_at: committed.committed_at,
-                    delete_started_at: Some(committed.committed_at),
-                    last_error: None,
-                    retry_after: None,
-                });
-            true
-        })?;
+        let mutation = self
+            .mutate(|state| {
+                let PersistedCloudBackupState::Configured(configured) = state else {
+                    return Ok(CommitDisable::NotConfigured);
+                };
 
-        if !mutation.outcome {
-            return Ok(CommitDisable::NotConfigured);
-        }
+                // the namespace this configuration uses lives in the keychain; it is read while
+                // the commit transaction holds the record, so the review is compared with what is
+                // stored now
+                let stored_namespace =
+                    CloudBackupKeychain::global().namespace_id().map_err(|error| {
+                        CloudBackupError::internal_context("read namespace_id for disable", error)
+                    })?;
+                if stored_namespace.as_deref() != Some(review.namespace_id.as_str()) {
+                    return Ok(CommitDisable::StaleReview);
+                }
 
-        Ok(CommitDisable::Committed(committed))
+                *state = PersistedCloudBackupState::disabling_transition(
+                    PersistedDisablingCloudBackup {
+                        previous_configured: configured.clone(),
+                        namespace_id: committed.namespace_id.clone(),
+                        disable_generation: committed.attempt_id,
+                        started_at: committed.committed_at,
+                        delete_started_at: Some(committed.committed_at),
+                        last_error: None,
+                        retry_after: None,
+                    },
+                );
+                Ok(CommitDisable::Committed(committed.clone()))
+            })
+            .map_err(|source| {
+                CloudBackupError::internal_context("commit cloud backup disable", source)
+            })?;
+
+        mutation.outcome
     }
 
     /// A committed disable failed with `message`; Try Again is allowed after `retry_after`
