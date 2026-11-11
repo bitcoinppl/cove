@@ -1,5 +1,5 @@
 use super::*;
-use crate::manager::cloud_backup_manager::CloudOnlyState;
+use crate::manager::cloud_backup_manager::owner::inventory::test_support::CloudOnlyStateTestExt as _;
 
 async fn configure_trusted_local_snapshot_with_two_cloud_only_wallets(
     manager: &RustCloudBackupManager,
@@ -185,7 +185,7 @@ async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey()
 
     // every cloud wallet is listed exactly once
     wait_for_test_condition(Duration::from_secs(5), "expected loaded cloud-only rows", || {
-        let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
+        let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
             return false;
         };
 

@@ -1,6 +1,124 @@
 use std::collections::HashSet;
 
-use crate::manager::cloud_backup_manager::CloudBackupWalletItem;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupUnreadableKind,
+};
+use crate::manager::cloud_backup_manager::{CloudBackupWalletItem, CloudBackupWalletStatus};
+use crate::wallet_identity::CoveringWallets;
+
+/// One listed record of the active namespace that is not a local wallet's own backup
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CloudOnlyRow {
+    pub(crate) record_id: String,
+    pub(crate) record: CloudOnlyRecord,
+}
+
+/// What Cove knows about a listed record
+///
+/// Like the exported [`CloudBackupListedRecord`], except an extra copy keeps the identities of
+/// the local wallets that cover it, so it is matched to their own backups by wallet ID
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CloudOnlyRecord {
+    NotOnDevice(CloudBackupWalletItem),
+    ExtraCopy { wallet: CloudBackupWalletItem, covered_by: CoveringWallets },
+    Unsupported,
+    Unreadable { kind: CloudBackupUnreadableKind, trust: CloudBackupKeyTrust },
+    Unchecked,
+}
+
+impl CloudOnlyRow {
+    /// A record no local wallet covers, so restoring it adds what it holds
+    pub(crate) fn not_on_device(mut wallet: CloudBackupWalletItem) -> Self {
+        wallet.sync_status = CloudBackupWalletStatus::DeletedFromDevice;
+
+        Self { record_id: wallet.record_id.clone(), record: CloudOnlyRecord::NotOnDevice(wallet) }
+    }
+
+    /// A record whose recovery material the local wallets `covered_by` already hold
+    pub(crate) fn extra_copy(
+        mut wallet: CloudBackupWalletItem,
+        covered_by: CoveringWallets,
+    ) -> Self {
+        wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
+        wallet.restore_failure = None;
+
+        Self {
+            record_id: wallet.record_id.clone(),
+            record: CloudOnlyRecord::ExtraCopy { wallet, covered_by },
+        }
+    }
+
+    pub(crate) fn unsupported(record_id: String) -> Self {
+        Self { record_id, record: CloudOnlyRecord::Unsupported }
+    }
+
+    /// A record that could not be read; the key is unverified until verification proves it
+    pub(crate) fn unreadable(record_id: String, kind: CloudBackupUnreadableKind) -> Self {
+        let trust = CloudBackupKeyTrust::Unverified;
+
+        Self { record_id, record: CloudOnlyRecord::Unreadable { kind, trust } }
+    }
+
+    /// A record left unread because no usable local master key exists
+    pub(crate) fn unchecked(record_id: String) -> Self {
+        Self { record_id, record: CloudOnlyRecord::Unchecked }
+    }
+
+    /// The wallet a restore would add, for a record no local wallet covers
+    pub(crate) fn restorable_wallet(&self) -> Option<&CloudBackupWalletItem> {
+        match &self.record {
+            CloudOnlyRecord::NotOnDevice(wallet) => Some(wallet),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn restorable_wallet_mut(&mut self) -> Option<&mut CloudBackupWalletItem> {
+        match &mut self.record {
+            CloudOnlyRecord::NotOnDevice(wallet) => Some(wallet),
+            _ => None,
+        }
+    }
+
+    /// The local wallets that cover an extra copy, or `None` for any other row
+    pub(crate) fn covered_by(&self) -> Option<&CoveringWallets> {
+        match &self.record {
+            CloudOnlyRecord::ExtraCopy { covered_by, .. } => Some(covered_by),
+            _ => None,
+        }
+    }
+
+    /// Whether the record was read, so the row says what it holds
+    ///
+    /// An unsupported record was read far enough to know a newer Cove wrote it, so it counts
+    pub(crate) fn is_read(&self) -> bool {
+        match &self.record {
+            CloudOnlyRecord::NotOnDevice(_)
+            | CloudOnlyRecord::ExtraCopy { .. }
+            | CloudOnlyRecord::Unsupported => true,
+            CloudOnlyRecord::Unreadable { .. } | CloudOnlyRecord::Unchecked => false,
+        }
+    }
+
+    /// The record as the screen shows it
+    pub(crate) fn listed_record(&self) -> CloudBackupListedRecord {
+        match &self.record {
+            CloudOnlyRecord::NotOnDevice(wallet) => {
+                CloudBackupListedRecord::NotOnDevice { wallet: wallet.clone() }
+            }
+            CloudOnlyRecord::ExtraCopy { wallet, covered_by } => {
+                CloudBackupListedRecord::ExtraCopy {
+                    wallet: wallet.clone(),
+                    covered_by: covered_by.display_name().to_owned(),
+                }
+            }
+            CloudOnlyRecord::Unsupported => CloudBackupListedRecord::Unsupported,
+            CloudOnlyRecord::Unreadable { kind, trust } => {
+                CloudBackupListedRecord::Unreadable { kind: *kind, trust: *trust }
+            }
+            CloudOnlyRecord::Unchecked => CloudBackupListedRecord::Unchecked,
+        }
+    }
+}
 
 /// How an applied detail refresh relates to the provider listing it was built from
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,20 +132,20 @@ pub(crate) enum CloudOnlyListingUpdate {
 /// Result of one cloud-only fetch, stamped with the listing generation it started under
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CloudOnlyFetch {
-    pub(crate) wallets: Vec<CloudBackupWalletItem>,
-    /// Listed records that could not be read, so `wallets` is not the whole cloud-only set
-    pub(crate) unresolved_record_ids: Vec<String>,
+    /// One row for every cloud-only record the fetch's own provider listing found
+    pub(crate) rows: Vec<CloudOnlyRow>,
     pub(crate) listing_generation: u64,
 }
 
 impl CloudOnlyFetch {
     /// The cloud-only record IDs the fetch's own provider listing found
     fn listed_record_ids(&self) -> HashSet<String> {
-        self.wallets
-            .iter()
-            .map(|wallet| wallet.record_id.clone())
-            .chain(self.unresolved_record_ids.iter().cloned())
-            .collect()
+        self.rows.iter().map(|row| row.record_id.clone()).collect()
+    }
+
+    /// Whether every listed record was read
+    fn read_every_record(&self) -> bool {
+        self.rows.iter().all(CloudOnlyRow::is_read)
     }
 }
 
@@ -78,8 +196,8 @@ impl CloudOnlyInventory {
             self.listed_record_ids = Some(fetch_listing.clone());
         }
 
-        let complete = fetch.unresolved_record_ids.is_empty()
-            && self.listed_record_ids.as_ref() == Some(&fetch_listing);
+        let complete =
+            fetch.read_every_record() && self.listed_record_ids.as_ref() == Some(&fetch_listing);
         self.complete_fetch_generation = complete.then_some(fetch.listing_generation);
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::CloudOnlyRow;
 
 #[tokio::test(flavor = "current_thread")]
 async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
@@ -20,27 +21,9 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let wallets = manager
-        .do_fetch_cloud_only_wallets(
-            &CloudBackupWriteClient::background(
-                manager.cloud_writes.clone(),
-                ConfigGeneration::next(),
-            ),
-            0,
-        )
-        .await
-        .unwrap()
-        .wallets;
+    let rows = manager.do_fetch_cloud_only_wallets(0).await.unwrap().rows;
 
-    assert_eq!(wallets.len(), 1);
-    assert_eq!(wallets[0].record_id, record_id);
-    assert_eq!(wallets[0].name, UNSUPPORTED_CLOUD_ONLY_WALLET_NAME);
-    assert_eq!(wallets[0].sync_status, CloudBackupWalletStatus::UnsupportedVersion);
-    assert_eq!(wallets[0].network, None);
-    assert_eq!(wallets[0].wallet_mode, None);
-    assert_eq!(wallets[0].wallet_type, None);
-    assert_eq!(wallets[0].label_count, None);
-    assert_eq!(wallets[0].backup_updated_at, None);
+    assert_eq!(rows, vec![CloudOnlyRow::unsupported(record_id)]);
 }
 
 #[tokio::test(flavor = "current_thread")]

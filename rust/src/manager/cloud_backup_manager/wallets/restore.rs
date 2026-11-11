@@ -24,14 +24,49 @@ use crate::wallet::secret_upgrade::{
     ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeSource,
 };
 use crate::wallet_identity::{
-    BackupRecoveryMaterial, ExistingWalletIdentitySet, LocalWalletCoverage, WalletIdentityKey,
-    fallback_identity_key_for_backup, identity_key_for_backup,
+    BackupRecoveryMaterial, CoveringWallets, ExistingWalletIdentitySet, LocalWalletIdentities,
+    NamedWalletCoverage, WalletIdentityKey, fallback_identity_key_for_backup,
+    identity_key_for_backup,
 };
 
 pub(crate) enum WalletBackupLookup<T> {
     Found(T),
     NotFound,
     UnsupportedVersion(u32),
+}
+
+/// Why reading one wallet backup failed, by the stage that failed
+#[derive(Debug)]
+pub(crate) enum WalletBackupReadError {
+    /// The provider would not serve the record
+    Download(CloudStorageError),
+    /// The record downloaded but its payload or metadata does not parse
+    Parse(CloudBackupError),
+    /// The record does not decrypt with the key the reader holds
+    Decrypt(CloudBackupError),
+}
+
+impl WalletBackupReadError {
+    /// The provider error behind a failed download, so a caller can stop on one that affects
+    /// every record instead of only this one
+    pub(crate) fn download_error(&self) -> Option<&CloudStorageError> {
+        match self {
+            Self::Download(source) => Some(source),
+            Self::Parse(_) | Self::Decrypt(_) => None,
+        }
+    }
+}
+
+impl From<WalletBackupReadError> for CloudBackupError {
+    fn from(error: WalletBackupReadError) -> Self {
+        match error {
+            // record ids come from cloud filenames, which a user can rename to anything
+            WalletBackupReadError::Download(source) => {
+                CloudBackupError::cloud_storage_context("download wallet backup", source)
+            }
+            WalletBackupReadError::Parse(error) | WalletBackupReadError::Decrypt(error) => error,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -87,70 +122,100 @@ impl WalletBackupReader {
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError> {
-        match self.lookup_entry(record_id).await? {
-            WalletBackupLookup::Found(entry) => {
-                // the metadata is decrypted backup content, so only the parse position is kept
-                let metadata =
-                    serde_json::from_value(entry.metadata.clone()).map_err(|source| {
-                        CloudBackupError::internal_context(
-                            "parse wallet metadata",
-                            JsonDecodeError::from(source),
-                        )
-                    })?;
-                Ok(WalletBackupLookup::Found(DownloadedWalletBackup { metadata, entry }))
-            }
-            WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
+        Ok(self.read(record_id).await?)
+    }
+
+    /// Reads a record, keeping which stage failed so a listing can say why a record is unreadable
+    pub(crate) async fn read(
+        &self,
+        record_id: &str,
+    ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, WalletBackupReadError> {
+        let entry = match self.read_entry(record_id).await? {
+            WalletBackupLookup::Found(entry) => entry,
+            WalletBackupLookup::NotFound => return Ok(WalletBackupLookup::NotFound),
             WalletBackupLookup::UnsupportedVersion(version) => {
-                Ok(WalletBackupLookup::UnsupportedVersion(version))
+                return Ok(WalletBackupLookup::UnsupportedVersion(version));
             }
-        }
+        };
+
+        // the metadata is decrypted backup content, so only the parse position is kept
+        let metadata = serde_json::from_value(entry.metadata.clone())
+            .map_err(JsonDecodeError::from)
+            .map_err(|source| {
+                WalletBackupReadError::Parse(CloudBackupError::internal_context(
+                    "parse wallet metadata",
+                    source,
+                ))
+            })?;
+
+        Ok(WalletBackupLookup::Found(DownloadedWalletBackup { metadata, entry }))
     }
 
     pub(crate) async fn lookup_entry(
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<WalletEntry>, CloudBackupError> {
-        match self.download_encrypted(record_id).await? {
-            WalletBackupLookup::Found(encrypted) => {
-                let entry = self
-                    .decrypt_entry(&encrypted)
-                    .map_err(|source| CloudBackupError::crypto_context("decrypt wallet", source))?;
-                encrypted
-                    .remote_metadata
-                    .normalized_wallet(&self.namespace, record_id, Some(entry.wallet_id.as_str()))
-                    .map_err(|error| {
-                        CloudBackupError::Internal(
-                            format!("normalize wallet payload: {error}").into(),
-                        )
-                    })?;
+        Ok(self.read_entry(record_id).await?)
+    }
 
-                Ok(WalletBackupLookup::Found(entry))
-            }
-            WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
+    async fn read_entry(
+        &self,
+        record_id: &str,
+    ) -> Result<WalletBackupLookup<WalletEntry>, WalletBackupReadError> {
+        let encrypted = match self.read_encrypted(record_id).await? {
+            WalletBackupLookup::Found(encrypted) => encrypted,
+            WalletBackupLookup::NotFound => return Ok(WalletBackupLookup::NotFound),
             WalletBackupLookup::UnsupportedVersion(version) => {
-                Ok(WalletBackupLookup::UnsupportedVersion(version))
+                return Ok(WalletBackupLookup::UnsupportedVersion(version));
             }
-        }
+        };
+
+        let entry = self.decrypt_entry(&encrypted).map_err(|source| {
+            WalletBackupReadError::Decrypt(CloudBackupError::crypto_context(
+                "decrypt wallet",
+                source,
+            ))
+        })?;
+
+        encrypted
+            .remote_metadata
+            .normalized_wallet(&self.namespace, record_id, Some(entry.wallet_id.as_str()))
+            .map_err(|error| {
+                WalletBackupReadError::Parse(CloudBackupError::Internal(
+                    format!("normalize wallet payload: {error}").into(),
+                ))
+            })?;
+
+        Ok(WalletBackupLookup::Found(entry))
     }
 
     pub(crate) async fn download_encrypted(
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, CloudBackupError> {
+        Ok(self.read_encrypted(record_id).await?)
+    }
+
+    async fn read_encrypted(
+        &self,
+        record_id: &str,
+    ) -> Result<WalletBackupLookup<EncryptedWalletBackup>, WalletBackupReadError> {
         let wallet_json = match self.download_wallet_json(record_id).await {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
-            Err(error) => {
-                return Err(CloudBackupError::cloud_storage_context(
-                    "download wallet backup",
-                    error,
-                ));
+            Err(source) => {
+                return Err(WalletBackupReadError::Download(source));
             }
         };
 
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
             .map_err(JsonDecodeError::from)
-            .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
+            .map_err(|source| {
+                WalletBackupReadError::Parse(CloudBackupError::internal_context(
+                    "deserialize wallet",
+                    source,
+                ))
+            })?;
 
         match encrypted.backup_version() {
             Ok(WalletBackupVersion::V1 | WalletBackupVersion::V2) => {}
@@ -195,10 +260,10 @@ pub(crate) enum WalletRestoreOutcome {
 pub(crate) enum CloudOnlyRestoreOutcome {
     /// The backup was restored as a new local wallet
     Restored { labels_warning: Option<LabelRestoreWarning> },
-    /// A local wallet with the backup's identity now holds the backup's secret as well
-    SecretAdded { wallet_id: WalletId },
-    /// A local wallet already holds everything the backup can recover
-    AlreadyOnDevice,
+    /// The local wallet `wallet_id`, with the backup's identity, now holds its secret as well
+    SecretAdded { wallet_id: WalletId, covered_by: CoveringWallets },
+    /// Local wallets already hold everything the backup can recover; `covered_by` names them
+    AlreadyOnDevice { covered_by: CoveringWallets },
 }
 
 impl WalletRestoreSession {
@@ -266,17 +331,17 @@ impl DownloadedWalletBackup {
     /// added while it waits
     pub(crate) fn restore_cloud_only(
         &self,
-        local_wallets: &ExistingWalletIdentitySet,
+        local_wallets: &LocalWalletIdentities,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let (identity_key, identity_error) = self.identity_key();
 
         // the wallet id comes from decrypted backup content, so these logs leave it out
         match local_wallets.coverage(&identity_key, self.recovery_material()) {
-            LocalWalletCoverage::Covered => {
+            NamedWalletCoverage::Covered(covered_by) => {
                 info!("Cloud-only wallet is already on this device");
-                return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
+                return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by });
             }
-            LocalWalletCoverage::SecretMissing => {
+            NamedWalletCoverage::SecretMissing => {
                 info!(
                     "Cloud-only wallet matches a local wallet without its secret, adding the secret"
                 );
@@ -285,7 +350,7 @@ impl DownloadedWalletBackup {
                     return Ok(outcome);
                 }
             }
-            LocalWalletCoverage::Absent => {
+            NamedWalletCoverage::Absent => {
                 info!("Cloud-only wallet has no local match, restoring as new");
             }
         }
@@ -299,10 +364,7 @@ impl DownloadedWalletBackup {
     }
 
     /// How much of this backup the local wallets in `identities` already hold
-    pub(crate) fn local_coverage(
-        &self,
-        identities: &ExistingWalletIdentitySet,
-    ) -> LocalWalletCoverage {
+    pub(crate) fn local_coverage(&self, identities: &LocalWalletIdentities) -> NamedWalletCoverage {
         let (identity_key, _) = self.identity_key();
 
         identities.coverage(&identity_key, self.recovery_material())
@@ -393,15 +455,17 @@ impl DownloadedWalletBackup {
             }
         };
 
+        let covered_by = CoveringWallets::one(upgrade.target());
         let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
         match upgrade.apply(&database, keychain, source) {
-            Ok(upgraded) => {
-                Ok(Some(CloudOnlyRestoreOutcome::SecretAdded { wallet_id: upgraded.id }))
-            }
+            Ok(upgraded) => Ok(Some(CloudOnlyRestoreOutcome::SecretAdded {
+                wallet_id: upgraded.id,
+                covered_by,
+            })),
             // the local wallet gained a readable secret after coverage was read
             Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
                 info!("Cloud-only wallet secret was added locally meanwhile");
-                Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice))
+                Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }))
             }
             // the backup may hold the only readable copy of this secret, so the row stays
             // restorable instead of becoming a deletable copy

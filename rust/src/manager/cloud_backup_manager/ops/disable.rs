@@ -211,10 +211,9 @@ impl RustCloudBackupManager {
             ));
         }
 
-        if matches!(
-            inventory.cloud_only(),
-            crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { wallets, .. } if !wallets.is_empty()
-        ) {
+        // an unreadable or unchecked record may be the only copy of a wallet, so it blocks like
+        // one Cove could read
+        if inventory.cloud_only().loaded_rows().is_some_and(|rows| !rows.is_empty()) {
             return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
         }
 

@@ -122,8 +122,9 @@ pub(crate) fn complete_cloud_only_fetch(
     wallets: Vec<CloudBackupWalletItem>,
 ) -> CloudOnlyFetch {
     CloudOnlyFetch {
-        wallets,
-        unresolved_record_ids: Vec::new(),
+        rows: crate::manager::cloud_backup_manager::owner::inventory::test_support::listed_rows(
+            &wallets,
+        ),
         listing_generation: manager.inventory.read().cloud_only_listing_generation(),
     }
 }

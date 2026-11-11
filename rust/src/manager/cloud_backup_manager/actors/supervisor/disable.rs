@@ -112,7 +112,6 @@ impl CloudBackupSupervisor {
     }
 
     fn drain_disable_runtime(&mut self, manager: &RustCloudBackupManager) {
-        self.detail_workflow.clear_authorization();
         self.clear_worker_runtime_state();
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.apply_sync_state(SyncState::Idle);

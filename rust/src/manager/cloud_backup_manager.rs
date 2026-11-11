@@ -121,7 +121,7 @@ pub(crate) use self::ops::{
 };
 pub(crate) use self::owner::inventory::{
     CloudBackupDetailState, CloudBackupInventoryAuthority, CloudOnlyFetch, CloudOnlyListingUpdate,
-    CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
+    CloudOnlyRow, CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
 };
 pub(crate) use self::owner::lifecycle::LifecycleCapability;
 use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};
@@ -834,13 +834,6 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_verification_state(&self, verification: VerificationState) {
-        if matches!(
-            verification,
-            VerificationState::Idle | VerificationState::Failed(_) | VerificationState::Cancelled
-        ) {
-            self.clear_runtime_passkey_authorization();
-        }
-
         self.apply_model_event(CloudBackupStateReducerEvent::VerificationStateResolved(
             verification,
         ));
@@ -851,19 +844,11 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_recovery_state(&self, recovery: RecoveryState) {
-        if !matches!(recovery, RecoveryState::Idle) {
-            self.clear_runtime_passkey_authorization();
-        }
-
         self.apply_model_event(CloudBackupStateReducerEvent::RecoveryStateResolved(recovery));
     }
 
     pub(crate) fn apply_disable_outcome(&self, outcome: CloudBackupDisableOutcome) {
         self.apply_model_event(CloudBackupStateReducerEvent::DisableStateResolved(outcome));
-    }
-
-    pub(crate) fn clear_runtime_passkey_authorization(&self) {
-        send!(self.supervisor.clear_runtime_passkey_authorization());
     }
 
     pub(crate) async fn prepare_local_reset(
@@ -998,7 +983,6 @@ impl RustCloudBackupManager {
             ));
         }
 
-        send!(self.supervisor.cache_pending_verification_completion(completion));
         self.reconcile_pending_upload_verification_for_source(
             PendingUploadVerificationState::Confirming,
             source,

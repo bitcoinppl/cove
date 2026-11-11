@@ -1,27 +1,28 @@
 use std::collections::HashSet;
 
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::{
-    CLOUD_BACKUP_IO_CONCURRENCY, CLOUD_ONLY_FETCH_RECOVERY_MESSAGE,
-    CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE, UNSUPPORTED_CLOUD_ONLY_WALLET_NAME, blocking_cloud_error,
+    CLOUD_BACKUP_IO_CONCURRENCY, CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE, blocking_cloud_error,
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
-use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
+use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader,
+    CloudOnlyRestoreOutcome, DownloadedWalletBackup, WalletBackupLookup, WalletBackupReadError,
+    WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudOnlyFetch, RustCloudBackupManager, is_provider_wide_interruption,
+    CloudBackupWalletStatus, CloudOnlyFetch, CloudOnlyRow, RustCloudBackupManager,
+    is_provider_wide_interruption,
 };
-use crate::wallet_identity::LocalWalletCoverage;
+use crate::wallet_identity::{LocalWalletIdentities, NamedWalletCoverage};
 
 pub(crate) struct CloudBackupPreparedCloudWalletDelete {
     pub(crate) cloud: CloudStorageClient,
@@ -56,7 +57,7 @@ impl CloudBackupPreparedWalletRestore {
         // read after the download, so a local wallet deleted while it waited is not counted and
         // a wallet this run restored earlier is
         let local_wallets =
-            crate::wallet_identity::collect_existing_wallet_identities().map_err(|source| {
+            crate::wallet_identity::collect_local_wallet_identities().map_err(|source| {
                 CloudBackupError::internal_context("collect wallet identities", source)
             })?;
 
@@ -102,11 +103,9 @@ impl CloudBackupPreparedRestoreAll {
 impl RustCloudBackupManager {
     pub(crate) async fn do_fetch_cloud_only_wallets(
         &self,
-        writes: &CloudBackupWriteClient,
         listing_generation: u64,
     ) -> Result<CloudOnlyFetch, CloudBackupError> {
         self.do_fetch_cloud_only_wallets_with_client(
-            writes,
             CloudStorage::global_explicit_client(),
             listing_generation,
         )
@@ -119,7 +118,6 @@ impl RustCloudBackupManager {
     /// result can be rejected if the listing changed while the downloads were in flight
     pub(crate) async fn do_fetch_cloud_only_wallets_with_client(
         &self,
-        writes: &CloudBackupWriteClient,
         cloud: CloudStorageClient,
         listing_generation: u64,
     ) -> Result<CloudOnlyFetch, CloudBackupError> {
@@ -147,23 +145,25 @@ impl RustCloudBackupManager {
             .collect();
 
         if orphan_ids.is_empty() {
-            return Ok(CloudOnlyFetch {
-                wallets: Vec::new(),
-                unresolved_record_ids: Vec::new(),
-                listing_generation,
-            });
+            return Ok(CloudOnlyFetch { rows: Vec::new(), listing_generation });
         }
 
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
-            self.recover_local_master_key_from_cloud_without_discovery(
-                writes,
-                &namespace,
-                CLOUD_ONLY_FETCH_RECOVERY_MESSAGE,
-            )
-        })
-        .await
-        .map_err(|error| blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error))?;
+        let local_master_key = cspp
+            .load_master_key_from_store()
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
+            .filter(|master_key| master_key.namespace_id() == namespace);
+
+        // loading never asks for the passkey, so without this namespace's key on the device the
+        // records stay unchecked until a verification the user starts recovers it
+        let Some(master_key) = local_master_key else {
+            info!(
+                "No local master key for the active namespace, listing cloud-only records unchecked"
+            );
+            let rows = orphan_ids.into_iter().map(CloudOnlyRow::unchecked).collect();
+
+            return Ok(CloudOnlyFetch { rows, listing_generation });
+        };
 
         let reader = WalletBackupReader::new(
             cloud.clone(),
@@ -172,85 +172,61 @@ impl RustCloudBackupManager {
         );
 
         // collected once per fetch, so a record whose recovery material a local wallet already
-        // holds under another record ID shows as already on this device instead of restorable
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
+        // holds under another record ID shows as an extra copy instead of restorable
+        let local_wallets =
+            crate::wallet_identity::collect_local_wallet_identities().map_err(|source| {
                 CloudBackupError::internal_context("collect wallet identities", source)
             })?;
 
-        let mut items = Vec::new();
-        let mut unresolved_record_ids = Vec::new();
-        let mut lookups = stream::iter(
-            orphan_ids.into_iter().map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
+        let mut rows = Vec::with_capacity(orphan_ids.len());
+        let mut reads = stream::iter(
+            orphan_ids.into_iter().map(|record_id| read_listed_record(reader.clone(), record_id)),
         )
         .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
 
-        while let Some((record_id, lookup)) = lookups.next().await {
-            let wallet = match lookup {
+        while let Some((record_id, read)) = reads.next().await {
+            let wallet = match read {
                 Ok(WalletBackupLookup::Found(wallet)) => wallet,
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                     warn!(
                         "Cloud-only wallet backup uses unsupported wallet backup version {version}"
                     );
 
-                    items.push(CloudBackupWalletItem {
-                        name: UNSUPPORTED_CLOUD_ONLY_WALLET_NAME.into(),
-                        network: None,
-                        wallet_mode: None,
-                        wallet_type: None,
-                        fingerprint: None,
-                        label_count: None,
-                        backup_updated_at: None,
-                        sync_status: CloudBackupWalletStatus::UnsupportedVersion,
-                        restore_failure: None,
-                        record_id,
-                    });
+                    rows.push(CloudOnlyRow::unsupported(record_id));
                     continue;
                 }
+
+                // listed but gone when downloaded, so the provider cannot serve it right now
                 Ok(WalletBackupLookup::NotFound) => {
                     warn!("Failed to load cloud-only wallet backup: not found");
-                    unresolved_record_ids.push(record_id);
+                    rows.push(CloudOnlyRow::unreadable(
+                        record_id,
+                        CloudBackupUnreadableKind::NotDownloadable,
+                    ));
                     continue;
                 }
                 Err(error) => {
-                    if is_provider_wide_interruption(&error) {
-                        return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
+                    if error.download_error().is_some_and(is_provider_wide_interruption) {
+                        return Err(blocking_cloud_error(
+                            BlockingCloudStep::FetchCloudOnly,
+                            error.into(),
+                        ));
                     }
-                    warn!("Failed to load cloud-only wallet backup: {error}");
-                    unresolved_record_ids.push(record_id);
+
+                    let kind = CloudBackupUnreadableKind::from(&error);
+                    warn!(
+                        "Failed to load cloud-only wallet backup: {}",
+                        CloudBackupError::from(error)
+                    );
+                    rows.push(CloudOnlyRow::unreadable(record_id, kind));
                     continue;
                 }
             };
 
-            // a secret backup that a local public wallet only matches stays restorable, since
-            // restoring it adds the secret to that wallet and deleting it could lose the secret
-            let sync_status = match wallet.local_coverage(&existing_identities) {
-                LocalWalletCoverage::Covered => CloudBackupWalletStatus::AlreadyOnDevice,
-                LocalWalletCoverage::SecretMissing | LocalWalletCoverage::Absent => {
-                    CloudBackupWalletStatus::DeletedFromDevice
-                }
-            };
-
-            let metadata = wallet.metadata;
-            items.push(CloudBackupWalletItem {
-                name: metadata.name,
-                network: Some(metadata.network),
-                wallet_mode: Some(metadata.wallet_mode),
-                wallet_type: Some(metadata.wallet_type),
-                fingerprint: metadata
-                    .master_fingerprint
-                    .as_ref()
-                    .map(|fingerprint| fingerprint.as_ref().as_uppercase()),
-                label_count: Some(wallet.entry.labels_count),
-                backup_updated_at: (wallet.entry.updated_at != 0)
-                    .then_some(wallet.entry.updated_at),
-                sync_status,
-                restore_failure: None,
-                record_id,
-            });
+            rows.push(listed_wallet_row(wallet, record_id, &local_wallets));
         }
 
-        Ok(CloudOnlyFetch { wallets: items, unresolved_record_ids, listing_generation })
+        Ok(CloudOnlyFetch { rows, listing_generation })
     }
 
     pub(crate) async fn do_restore_cloud_wallet(
@@ -272,7 +248,7 @@ impl RustCloudBackupManager {
         &self,
         result: &Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) {
-        if let Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) = result {
+        if let Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id, .. }) = result {
             self.handle_restored_secret_added(wallet_id.clone());
         }
     }
@@ -283,12 +259,11 @@ impl RustCloudBackupManager {
         frozen_wallets: Vec<CloudBackupWalletItem>,
         listing_generation: u64,
     ) -> Result<CloudBackupPreparedRestoreAll, CloudBackupError> {
-        let authoritative_fetch =
-            self.do_fetch_cloud_only_wallets(writes, listing_generation).await?;
+        let authoritative_fetch = self.do_fetch_cloud_only_wallets(listing_generation).await?;
         let eligible_record_ids: HashSet<_> = authoritative_fetch
-            .wallets
+            .rows
             .iter()
-            .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
+            .filter_map(CloudOnlyRow::restorable_wallet)
             .map(|wallet| wallet.record_id.as_str())
             .collect();
         let ordered_queue = frozen_wallets
@@ -349,5 +324,61 @@ impl RustCloudBackupManager {
             namespace,
             record_id: record_id.to_string(),
         })
+    }
+}
+
+async fn read_listed_record(
+    reader: WalletBackupReader,
+    record_id: String,
+) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, WalletBackupReadError>) {
+    let read = reader.read(&record_id).await;
+    (record_id, read)
+}
+
+/// The row of a read record, an extra copy when a local wallet holds all it can recover
+///
+/// A secret backup that a local public wallet only matches stays restorable, since restoring it
+/// adds the secret to that wallet and deleting it could lose the secret
+fn listed_wallet_row(
+    wallet: DownloadedWalletBackup,
+    record_id: String,
+    local_wallets: &LocalWalletIdentities,
+) -> CloudOnlyRow {
+    let coverage = wallet.local_coverage(local_wallets);
+    let metadata = wallet.metadata;
+    let item = CloudBackupWalletItem {
+        name: metadata.name,
+        network: Some(metadata.network),
+        wallet_mode: Some(metadata.wallet_mode),
+        wallet_type: Some(metadata.wallet_type),
+        fingerprint: metadata
+            .master_fingerprint
+            .as_ref()
+            .map(|fingerprint| fingerprint.as_ref().as_uppercase()),
+        label_count: Some(wallet.entry.labels_count),
+        backup_updated_at: (wallet.entry.updated_at != 0).then_some(wallet.entry.updated_at),
+        sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+        restore_failure: None,
+        record_id,
+    };
+
+    match coverage {
+        NamedWalletCoverage::Covered(covered_by) => CloudOnlyRow::extra_copy(item, covered_by),
+        NamedWalletCoverage::SecretMissing | NamedWalletCoverage::Absent => {
+            CloudOnlyRow::not_on_device(item)
+        }
+    }
+}
+
+impl From<&WalletBackupReadError> for CloudBackupUnreadableKind {
+    fn from(error: &WalletBackupReadError) -> Self {
+        match error {
+            WalletBackupReadError::Download(
+                CloudStorageError::DownloadFailed(_) | CloudStorageError::NotFound(_),
+            ) => Self::NotDownloadable,
+            WalletBackupReadError::Download(_) => Self::Provider,
+            WalletBackupReadError::Parse(_) => Self::Parse,
+            WalletBackupReadError::Decrypt(_) => Self::Decrypt,
+        }
     }
 }

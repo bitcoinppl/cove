@@ -119,7 +119,6 @@ impl CloudBackupSupervisor {
             }
         };
 
-        self.detail_workflow.clear_pending_completion();
         if cleared {
             manager.refresh_pending_upload_verification_state();
         }
@@ -175,10 +174,7 @@ impl CloudBackupSupervisor {
         });
 
         match settled {
-            Ok(true) => {
-                self.detail_workflow.clear_pending_completion();
-                manager.apply_settled_verification_result(result);
-            }
+            Ok(true) => manager.apply_settled_verification_result(result),
             Ok(false) => debug!("Dropped an upload confirmation that is no longer pending"),
             Err(error) => error!("Failed to settle pending verification completion: {error}"),
         }

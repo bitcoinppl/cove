@@ -109,7 +109,6 @@ pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
-use restore_all::restore_all_marker_matches_active_namespace;
 
 mod tests {
     #![cfg(test)]
@@ -138,11 +137,7 @@ pub(crate) enum DriveAccountSwitchReinitializationCompletion {
     Handled,
 }
 
-/// Passkey proof cached only for the current supervisor session
-///
-/// The cache lets detail entry reuse fresh authorization after enable or repair,
-/// but it is intentionally lost on restart so passkey availability is checked
-/// again through the platform
+/// The passkey a wrapper repair uploaded, saved as this device's passkey once the upload lands
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct RuntimePasskeyAuthorization {
     namespace_id: String,
@@ -158,15 +153,6 @@ impl std::fmt::Debug for RuntimePasskeyAuthorization {
             .field("prf_salt", &"<redacted>")
             .finish()
     }
-}
-
-#[derive(Debug)]
-enum DetailEntryPlan {
-    RefreshOnly,
-    ResumePendingUploadConfirmation(PendingVerificationCompletion),
-    UseFreshEnableProof(RuntimePasskeyAuthorization),
-    ContinueRustOwnedVerification,
-    StartPasskeyVerification { force_discoverable: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -904,7 +890,7 @@ impl CloudBackupSupervisor {
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
-        if manager.detail_inventory_is_complete() {
+        if manager.listing_is_provider_confirmed() {
             return Produces::ok(());
         }
 
@@ -1212,28 +1198,9 @@ impl CloudBackupSupervisor {
 
         self.detail_workflow.open();
         self.ensure_supplemental_inventory_discovery(manager.clone());
-        let plan = self.detail_workflow.entry_plan(&manager);
-        match plan {
-            // started in this turn, so nothing takes the slot between entry and the verification;
-            // an operation already running reports its own result, and entry only refreshes
-            DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
-                if self.begin_manual_verification(manager.clone(), force_discoverable) {
-                    return Produces::ok(());
-                }
-            }
-            DetailEntryPlan::UseFreshEnableProof(authorization) => {
-                debug_assert_eq!(
-                    manager.current_namespace_id().ok().as_deref(),
-                    Some(authorization.namespace_id.as_str())
-                );
-            }
-            DetailEntryPlan::ResumePendingUploadConfirmation(completion) => {
-                debug_assert!(!completion.uploads().is_empty());
-            }
-            DetailEntryPlan::ContinueRustOwnedVerification => {}
-            DetailEntryPlan::RefreshOnly => {}
-        }
 
+        // entering detail only loads the inventory; it never asks for the passkey, so a missing
+        // key shows as unchecked rows until the user starts a verification
         let plan = self.detail_workflow.request_refresh();
         self.handle_detail_refresh_plan(manager, plan);
 
@@ -1297,14 +1264,6 @@ impl CloudBackupSupervisor {
 
     pub async fn request_sync_health_refresh(&mut self) -> ActorResult<()> {
         self.sync_health.request_sync_health_refresh();
-        Produces::ok(())
-    }
-
-    pub async fn cache_pending_verification_completion(
-        &mut self,
-        completion: PendingVerificationCompletion,
-    ) -> ActorResult<()> {
-        self.detail_workflow.cache_pending_completion(completion);
         Produces::ok(())
     }
 
@@ -1515,7 +1474,6 @@ impl CloudBackupSupervisor {
     /// supervisor sends it after this
     fn clear_worker_runtime_state(&mut self) {
         self.enable_continuation = None;
-        self.detail_workflow.clear_pending_completion();
         self.sync_health.clear_upload_runtime_state();
         self.uploads.clear_upload_runtime_state();
     }

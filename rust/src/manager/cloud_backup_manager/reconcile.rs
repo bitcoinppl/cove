@@ -118,10 +118,6 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn reconcile_runtime_status(&self, status: CloudBackupStatus) {
-        if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::Enabling) {
-            self.clear_runtime_passkey_authorization();
-        }
-
         let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
         let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;

@@ -28,8 +28,6 @@ impl SavedPasskeyConfirmationRetry {
 pub(crate) struct EnableRecoveryFinalization {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
-    pub(crate) credential_id: Vec<u8>,
-    pub(crate) prf_salt: [u8; 32],
     pub(crate) active_critical_key: zeroize::Zeroizing<[u8; 32]>,
     pub(crate) pending_completion: PendingVerificationCompletion,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
@@ -40,8 +38,6 @@ impl std::fmt::Debug for EnableRecoveryFinalization {
         f.debug_struct("EnableRecoveryFinalization")
             .field("context", &self.context)
             .field("namespace_id", &"<redacted>")
-            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
-            .field("prf_salt", &"<redacted>")
             .field("active_critical_key", &"<redacted>")
             .field("pending_uploads_count", &self.pending_completion.uploads().len())
             .field("cleanup_sources_count", &self.cleanup_sources.len())
@@ -53,7 +49,6 @@ pub(crate) struct EnableUploadFinalization {
     pub(crate) master_key: zeroize::Zeroizing<cove_cspp::master_key::MasterKey>,
     pub(crate) passkey: zeroize::Zeroizing<UnpersistedPrfKey>,
     pub(crate) context: CloudBackupEnableContext,
-    pub(crate) namespace_id: String,
     pub(crate) pending_completion: PendingVerificationCompletion,
 }
 

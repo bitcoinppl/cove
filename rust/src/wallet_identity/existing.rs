@@ -11,22 +11,33 @@ use super::WalletIdentityKey;
 use super::backup::no_fingerprint_wallet_id;
 
 use super::{
-    ExistingWalletIdentitySet, PublicWalletIdentity, PublicWalletIdentityError, WalletIdentityError,
+    CoveringWallet, ExistingWalletIdentitySet, LocalWalletIdentities, PublicWalletIdentity,
+    PublicWalletIdentityError, WalletIdentityError,
 };
 
 pub(crate) fn collect_existing_wallet_identities()
 -> Result<ExistingWalletIdentitySet, WalletIdentityError> {
+    collect_local_wallet_identities().map(LocalWalletIdentities::into_all)
+}
+
+/// Every local wallet's identity, kept per wallet
+///
+/// A keychain read error fails the whole read instead of leaving a wallet out, since a wallet
+/// left out could make a backup it covers look restorable or one it lacks look covered
+pub(crate) fn collect_local_wallet_identities() -> Result<LocalWalletIdentities, WalletIdentityError>
+{
     let db = Database::global();
     let keychain = Keychain::global();
-    let mut identities = ExistingWalletIdentitySet::default();
+    let mut identities = LocalWalletIdentities::default();
 
     for network in Network::iter() {
         for mode in [WalletMode::Main, WalletMode::Decoy] {
             let wallets = db.wallets.get_all(network, mode)?;
 
             for wallet in wallets {
+                let covering = CoveringWallet { id: wallet.id.clone(), name: wallet.name.clone() };
                 let duplicate_key = existing_wallet_identity_key(wallet, keychain)?;
-                identities.insert(duplicate_key);
+                identities.insert(covering, duplicate_key);
             }
         }
     }

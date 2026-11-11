@@ -11,7 +11,7 @@ use cove_types::psbt::Psbt;
 
 use super::*;
 use crate::database::test_support::RestoreWalletTarget;
-use crate::manager::cloud_backup_manager::CloudOnlyState;
+use crate::manager::cloud_backup_manager::owner::inventory::test_support::CloudOnlyStateTestExt as _;
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::manager::deferred_sender::SingleOrMany;
 use crate::manager::wallet_manager::{
@@ -451,7 +451,7 @@ async fn open_detail_with_cloud_only(manager: &RustCloudBackupManager, record_id
 
     wait_for_test_condition(Duration::from_secs(10), "the cloud-only rows load", || {
         let inventory = manager.inventory.read();
-        let CloudOnlyState::Loaded { wallets, .. } = inventory.cloud_only() else { return false };
+        let Some(wallets) = inventory.cloud_only().loaded_wallets() else { return false };
 
         // read through the held guard, since a second read can wait behind a queued writer forever
         inventory.detail_inventory_is_ready()

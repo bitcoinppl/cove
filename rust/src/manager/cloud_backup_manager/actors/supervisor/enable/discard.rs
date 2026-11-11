@@ -21,11 +21,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn clear_runtime_passkey_authorization(&mut self) -> ActorResult<()> {
-        self.detail_workflow.clear_authorization();
-        Produces::ok(())
-    }
-
     /// Ends a paused Enable or reinitialize admission accepted a Discard for
     ///
     /// Admission accepts it only for the continuation of the current lifecycle, so a Discard

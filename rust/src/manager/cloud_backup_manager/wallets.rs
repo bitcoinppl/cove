@@ -96,6 +96,6 @@ pub(crate) use payload::{
     upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
-    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReadError, WalletBackupReader,
+    WalletRestoreOutcome, WalletRestoreSession,
 };

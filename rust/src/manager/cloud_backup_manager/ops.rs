@@ -28,13 +28,10 @@ pub(crate) use enable::{
 pub(crate) use sync::CloudBackupReuploadedWallets;
 pub(crate) use undecryptable_wallets::CloudBackupPreparedUndecryptableWalletDeletion;
 
-const CLOUD_ONLY_FETCH_RECOVERY_MESSAGE: &str =
-    "Cloud backup needs verification before wallets not on this device can be loaded";
 const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before this wallet can be restored";
 const RECREATE_MANIFEST_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before the backup index can be recreated";
-const UNSUPPORTED_CLOUD_ONLY_WALLET_NAME: &str = "Unsupported wallet backup";
 pub(crate) async fn try_restore_from_local_master_key<S>(
     cloud: &CloudStorageClient,
     cspp: &cove_cspp::Cspp<S>,

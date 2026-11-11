@@ -10,14 +10,17 @@ mod listing;
 
 use std::collections::{HashMap, HashSet};
 
-pub(crate) use self::listing::{CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate};
+pub(crate) use self::listing::{
+    CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow,
+};
 use crate::manager::cloud_backup_manager::admission::DetailInventory;
 use crate::manager::cloud_backup_manager::model::CloudBackupRestoreAllRuntimeState;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupRestoreAllState, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
-    CloudBackupWalletStatus, CloudOnlyOperation, OtherBackupsOperation,
+    CloudOnlyOperation, OtherBackupsOperation,
 };
+use crate::wallet_identity::CoveringWallets;
 
 /// The loaded inventory of the active namespace
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,13 +67,24 @@ pub(crate) enum CloudOnlyState {
     NotFetched,
     Loading,
     Loaded {
-        wallets: Vec<CloudBackupWalletItem>,
-        /// Some listed backups could not be read, so `wallets` may be missing cloud-only wallets
+        rows: Vec<CloudOnlyRow>,
+        /// The rows are not a complete read of the latest listing, so a record may be unread or
+        /// missing
         incomplete: bool,
     },
     Failed {
         error: String,
     },
+}
+
+impl CloudOnlyState {
+    /// The loaded rows, or `None` while none are loaded
+    pub(crate) fn loaded_rows(&self) -> Option<&[CloudOnlyRow]> {
+        match self {
+            Self::Loaded { rows, .. } => Some(rows),
+            Self::NotFetched | Self::Loading | Self::Failed { .. } => None,
+        }
+    }
 }
 
 /// A typed input to the inventory, from the producer that observed it
@@ -93,10 +107,12 @@ pub(crate) enum InventoryInput {
     CloudOnlyFetchLoaded(CloudOnlyFetch),
     /// A listed record was restored or deleted, so it is no longer cloud-only
     CloudOnlyRowRemoved(String),
-    /// A restore found a local wallet holding everything the record can recover, applied only if
-    /// no local wallet or listing change happened since the restore read the local wallets
+    /// A restore found the local wallets `covered_by` holding everything the record can
+    /// recover, applied only if no local wallet or listing change happened since the restore
+    /// read the local wallets
     CloudOnlyRowAlreadyOnDevice {
         record_id: String,
+        covered_by: CoveringWallets,
         listing_generation: u64,
     },
     /// A restore of a listed record failed, so its row is marked until a restore starts again
@@ -204,8 +220,16 @@ impl InventoryOwner {
             InventoryInput::CloudOnlyRowRemoved(record_id) => {
                 self.remove_cloud_only_row(&record_id);
             }
-            InventoryInput::CloudOnlyRowAlreadyOnDevice { record_id, listing_generation } => {
-                self.mark_cloud_only_row_already_on_device(&record_id, listing_generation);
+            InventoryInput::CloudOnlyRowAlreadyOnDevice {
+                record_id,
+                covered_by,
+                listing_generation,
+            } => {
+                self.mark_cloud_only_row_already_on_device(
+                    &record_id,
+                    covered_by,
+                    listing_generation,
+                );
             }
             InventoryInput::CloudOnlyRestoreFailed { record_id, error } => {
                 self.mark_cloud_only_restore_failure(&record_id, error);
@@ -284,21 +308,33 @@ impl InventoryOwner {
         self.cloud_only_inventory.generation()
     }
 
-    /// Whether the loaded cloud-only rows are a complete read of the latest provider listing
-    pub(crate) fn cloud_only_is_complete_and_current(&self) -> bool {
-        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else { return false };
-        let loaded_ids: HashSet<_> = wallets.into_iter().map(|wallet| wallet.record_id).collect();
-
-        self.cloud_only_inventory.loaded_is_complete_and_current(&loaded_ids)
-    }
-
-    /// Whether the provider confirmed the inventory, so every action that needs all of it can run
-    pub(crate) fn detail_inventory_is_complete(&self) -> bool {
+    /// Whether the provider confirmed the listing the detail was built from
+    ///
+    /// Listing authority only: it says which records exist, not that every listed record was
+    /// read, which [`Self::classified`] adds
+    pub(crate) fn listing_is_provider_confirmed(&self) -> bool {
         matches!(
             &self.detail,
             CloudBackupDetailState::Complete { state }
                 if state.inventory_authority == CloudBackupInventoryAuthority::ProviderConfirmed
         )
+    }
+
+    /// The inventory as proof that it is complete, current and classified, or `None` while it
+    /// isn't
+    ///
+    /// Two facts make it: the provider confirmed the listing, and a fetch read every cloud-only
+    /// record of exactly the latest listing
+    pub(crate) fn classified(&self) -> Option<ClassifiedInventory<'_>> {
+        if !self.listing_is_provider_confirmed() {
+            return None;
+        }
+
+        let rows = self.loaded_detail()?.cloud_only.loaded_rows()?;
+        let classified = self.cloud_only_inventory.loaded_is_complete_and_current(&row_ids(rows));
+        let listing_generation = self.cloud_only_inventory.generation();
+
+        classified.then_some(ClassifiedInventory { rows, listing_generation })
     }
 
     /// Whether the inventory is trusted enough for a row's own action
@@ -327,7 +363,7 @@ impl InventoryOwner {
 
     /// How far the inventory can be trusted, as admission reads it
     pub(crate) fn readiness(&self) -> DetailInventory {
-        if self.detail_inventory_is_complete() {
+        if self.listing_is_provider_confirmed() {
             DetailInventory::Complete
         } else if self.detail_inventory_is_ready() {
             DetailInventory::Ready
@@ -340,22 +376,12 @@ impl InventoryOwner {
         matches!(self.other_backups, CloudBackupOtherBackupsState::Loaded { .. })
     }
 
-    /// Wallets Restore All can start with, or `None` while the cloud-only rows are not loaded
-    pub(crate) fn restore_all_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
-        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else { return None };
-
-        Some(eligible_restore_all_wallets(wallets))
-    }
-
-    /// Wallets Restore All still has to restore, or `None` when the rows do not prove it
+    /// The run Restore All would start, or `None` while the inventory is not classified
     ///
-    /// Proof means the rows are loaded, every listed record was read, and the rows are current
-    /// for the latest listing. Anything less is unknown rather than empty, so the Restore All
-    /// marker must stay
-    pub(crate) fn restore_all_proven_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
-        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else { return None };
-
-        self.cloud_only_is_complete_and_current().then(|| eligible_restore_all_wallets(wallets))
+    /// Restore All start and retry, and clearing its marker, all take the batch from here, so
+    /// none of them can act on a subset that left a listed record unread
+    pub(crate) fn restore_all_batch(&self) -> Option<RestoreAllBatch> {
+        self.classified().map(ClassifiedInventory::restore_all_batch)
     }
 
     /// Restore All as the cloud-only rows and the running Restore All allow it
@@ -367,8 +393,9 @@ impl InventoryOwner {
         runtime: &CloudBackupRestoreAllRuntimeState,
         operation_active: bool,
     ) -> CloudBackupRestoreAllState {
+        let classified = self.classified();
         let wallet_count = self.restore_all_eligible_wallet_count();
-        let available = self.detail_inventory_is_complete() && !operation_active;
+        let available = classified.is_some() && !operation_active;
 
         match runtime {
             CloudBackupRestoreAllRuntimeState::Running {
@@ -384,12 +411,12 @@ impl InventoryOwner {
                 cancellation_requested: *cancellation_requested,
             },
             CloudBackupRestoreAllRuntimeState::RetryRemaining => {
-                // backups that could not be read may still need restoring, so the retry stays
-                // reachable even when no loaded row is eligible
-                let incomplete =
-                    matches!(self.cloud_only(), CloudOnlyState::Loaded { incomplete: true, .. });
+                // the marker clears only once the classified inventory shows nothing is left, so
+                // loaded rows that can't show that keep the retry, disabled until they can; with
+                // no rows loaded there is nothing to retry yet
+                let rows_loaded = matches!(self.cloud_only(), CloudOnlyState::Loaded { .. });
 
-                if wallet_count == 0 && !incomplete {
+                if wallet_count == 0 && (classified.is_some() || !rows_loaded) {
                     return CloudBackupRestoreAllState::NotShown;
                 }
 
@@ -415,16 +442,14 @@ impl InventoryOwner {
 
     fn restore_all_eligible_wallet_count(&self) -> u32 {
         let Some(LoadedCloudBackupDetail {
-            cloud_only: CloudOnlyState::Loaded { wallets, .. },
-            ..
+            cloud_only: CloudOnlyState::Loaded { rows, .. }, ..
         }) = self.loaded_detail()
         else {
             return 0;
         };
 
-        wallets
-            .iter()
-            .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
+        rows.iter()
+            .filter_map(CloudOnlyRow::restorable_wallet)
             .count()
             .try_into()
             .unwrap_or(u32::MAX)
@@ -445,19 +470,16 @@ impl InventoryOwner {
         }
 
         let (cloud_only, invalidated) = match previous_loaded.as_ref().map(|s| &s.cloud_only) {
-            Some(CloudOnlyState::Loaded { wallets, .. }) => {
+            Some(CloudOnlyState::Loaded { rows, .. }) => {
                 let keep = match &cloud_only_listing {
                     CloudOnlyListingUpdate::Listed(_) => {
-                        let loaded_ids: HashSet<_> =
-                            wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
-
-                        self.cloud_only_inventory.keep_loaded_for_listing(&loaded_ids)
+                        self.cloud_only_inventory.keep_loaded_for_listing(&row_ids(rows))
                     }
                     CloudOnlyListingUpdate::Unlisted => false,
                 };
 
                 if keep {
-                    (self.loaded_cloud_only(wallets.clone()), false)
+                    (self.loaded_cloud_only(rows.clone()), false)
                 } else {
                     self.cloud_only_inventory.clear_loaded();
                     (CloudOnlyState::NotFetched, true)
@@ -502,68 +524,75 @@ impl InventoryOwner {
         retained_failures.extend(self.loaded_cloud_only_failures());
 
         // a row a local wallet now covers has nothing left to restore, so its failure is gone
-        for wallet in &mut fetch.wallets {
-            if wallet.restore_failure.is_none()
-                && wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice
-            {
+        for wallet in fetch.rows.iter_mut().filter_map(CloudOnlyRow::restorable_wallet_mut) {
+            if wallet.restore_failure.is_none() {
                 wallet.restore_failure = retained_failures.get(&wallet.record_id).cloned();
             }
         }
 
         self.cloud_only_inventory.record_loaded(&fetch);
-        let cloud_only = self.loaded_cloud_only(fetch.wallets);
+        let cloud_only = self.loaded_cloud_only(fetch.rows);
         self.resolve_cloud_only_state(cloud_only);
 
         true
     }
 
     fn loaded_cloud_only_failures(&self) -> HashMap<String, CloudBackupWalletRestoreFailure> {
-        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else {
+        let CloudOnlyState::Loaded { rows, .. } = self.cloud_only() else {
             return HashMap::new();
         };
 
-        wallets
-            .into_iter()
-            .filter_map(|wallet| wallet.restore_failure.map(|failure| (wallet.record_id, failure)))
+        rows.iter()
+            .filter_map(CloudOnlyRow::restorable_wallet)
+            .filter_map(|wallet| {
+                let failure = wallet.restore_failure.clone()?;
+                Some((wallet.record_id.clone(), failure))
+            })
             .collect()
     }
 
     /// Loaded rows marked incomplete by the same check the Restore All marker proof uses, so the
     /// retry stays visible whenever the marker cannot be cleared
-    fn loaded_cloud_only(&self, wallets: Vec<CloudBackupWalletItem>) -> CloudOnlyState {
-        let loaded_ids: HashSet<_> =
-            wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
+    fn loaded_cloud_only(&self, rows: Vec<CloudOnlyRow>) -> CloudOnlyState {
+        let incomplete = !self.cloud_only_inventory.loaded_is_complete_and_current(&row_ids(&rows));
 
-        let incomplete = !self.cloud_only_inventory.loaded_is_complete_and_current(&loaded_ids);
-
-        CloudOnlyState::Loaded { wallets, incomplete }
+        CloudOnlyState::Loaded { rows, incomplete }
     }
 
     /// Keeps a row whose recovery material a local wallet holds visible and deletable, without
     /// offering it for restore again
-    fn mark_cloud_only_row_already_on_device(&mut self, record_id: &str, listing_generation: u64) {
+    fn mark_cloud_only_row_already_on_device(
+        &mut self,
+        record_id: &str,
+        covered_by: CoveringWallets,
+        listing_generation: u64,
+    ) {
         // a local wallet change since the restore read the local wallets bumped the generation
         // and asked for a refetch, which classifies the row against the wallets that exist now
         if listing_generation != self.cloud_only_inventory.generation() {
             return;
         }
 
-        let CloudOnlyState::Loaded { mut wallets, incomplete } = self.cloud_only() else {
+        let CloudOnlyState::Loaded { mut rows, incomplete } = self.cloud_only() else {
             return;
         };
 
-        if let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id) {
-            wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
-            wallet.restore_failure = None;
+        if let Some(row) = rows.iter_mut().find(|row| row.record_id == record_id)
+            && let Some(wallet) = row.restorable_wallet()
+        {
+            *row = CloudOnlyRow::extra_copy(wallet.clone(), covered_by);
         }
 
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets, incomplete });
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete });
     }
 
     fn mark_cloud_only_restore_failure(&mut self, record_id: &str, message: String) {
         let mut cloud_only = self.cloud_only();
-        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only
-            && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
+        if let CloudOnlyState::Loaded { rows, .. } = &mut cloud_only
+            && let Some(wallet) = rows
+                .iter_mut()
+                .filter_map(CloudOnlyRow::restorable_wallet_mut)
+                .find(|wallet| wallet.record_id == record_id)
         {
             wallet.restore_failure = Some(CloudBackupWalletRestoreFailure { message });
         }
@@ -573,8 +602,8 @@ impl InventoryOwner {
 
     fn clear_cloud_only_restore_failures(&mut self, record_ids: &[String]) {
         let mut cloud_only = self.cloud_only();
-        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only {
-            for wallet in wallets {
+        if let CloudOnlyState::Loaded { rows, .. } = &mut cloud_only {
+            for wallet in rows.iter_mut().filter_map(CloudOnlyRow::restorable_wallet_mut) {
                 if record_ids.contains(&wallet.record_id) {
                     wallet.restore_failure = None;
                 }
@@ -586,13 +615,13 @@ impl InventoryOwner {
 
     /// Removes a row whose record stopped being cloud-only, keeping the listing in step with it
     fn remove_cloud_only_row(&mut self, record_id: &str) {
-        let CloudOnlyState::Loaded { mut wallets, incomplete } = self.cloud_only() else {
+        let CloudOnlyState::Loaded { mut rows, incomplete } = self.cloud_only() else {
             return;
         };
 
-        wallets.retain(|wallet| wallet.record_id != record_id);
+        rows.retain(|row| row.record_id != record_id);
         self.cloud_only_inventory.forget_record(record_id);
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets, incomplete });
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete });
     }
 
     /// Drops the local rows of wallets that are gone, and resets the cloud-only rows so a fetch
@@ -701,17 +730,122 @@ impl InventoryOwner {
     }
 }
 
-fn eligible_restore_all_wallets(wallets: Vec<CloudBackupWalletItem>) -> Vec<CloudBackupWalletItem> {
-    wallets
-        .into_iter()
-        .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
-        .collect()
+/// Proof that the inventory is complete, current and classified
+///
+/// Only [`InventoryOwner::classified`] builds one, so an action that needs every listed record
+/// can only run on an inventory whose listing the provider confirmed and whose every record was
+/// read
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ClassifiedInventory<'a> {
+    rows: &'a [CloudOnlyRow],
+    listing_generation: u64,
+}
+
+impl ClassifiedInventory<'_> {
+    /// Every wallet a Restore All run restores, frozen with the listing it was classified under
+    pub(crate) fn restore_all_batch(self) -> RestoreAllBatch {
+        let wallets =
+            self.rows.iter().filter_map(CloudOnlyRow::restorable_wallet).cloned().collect();
+
+        RestoreAllBatch { wallets, listing_generation: self.listing_generation }
+    }
+}
+
+/// The wallets of one Restore All run, taken from a [`ClassifiedInventory`]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RestoreAllBatch {
+    wallets: Vec<CloudBackupWalletItem>,
+    listing_generation: u64,
+}
+
+impl RestoreAllBatch {
+    pub(crate) fn wallets(&self) -> &[CloudBackupWalletItem] {
+        &self.wallets
+    }
+
+    /// The wallets, and the listing generation the run's fetch is checked against
+    pub(crate) fn into_parts(self) -> (Vec<CloudBackupWalletItem>, u64) {
+        (self.wallets, self.listing_generation)
+    }
+}
+
+fn row_ids(rows: &[CloudOnlyRow]) -> HashSet<String> {
+    rows.iter().map(|row| row.record_id.clone()).collect()
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::listing::CloudOnlyRecord;
+    use super::{CloudOnlyRow, CloudOnlyState};
+    use crate::manager::cloud_backup_manager::{CloudBackupWalletItem, CloudBackupWalletStatus};
+    use crate::wallet::metadata::WalletId;
+    use crate::wallet_identity::{CoveringWallet, CoveringWallets};
+
+    /// The local wallet tests use to cover an extra copy
+    pub(crate) fn test_covering_wallets() -> CoveringWallets {
+        CoveringWallets::one(CoveringWallet {
+            id: WalletId::from("local-wallet".to_string()),
+            name: "Local wallet".to_string(),
+        })
+    }
+
+    /// The row a fetch makes for a wallet item, read from the item's status
+    pub(crate) fn listed_row(wallet: &CloudBackupWalletItem) -> CloudOnlyRow {
+        let record_id = wallet.record_id.clone();
+
+        match wallet.sync_status {
+            CloudBackupWalletStatus::AlreadyOnDevice => {
+                CloudOnlyRow::extra_copy(wallet.clone(), test_covering_wallets())
+            }
+            CloudBackupWalletStatus::UnsupportedVersion => CloudOnlyRow::unsupported(record_id),
+            CloudBackupWalletStatus::RemoteStateUnknown => CloudOnlyRow::unchecked(record_id),
+            _ => CloudOnlyRow::not_on_device(wallet.clone()),
+        }
+    }
+
+    pub(crate) fn listed_rows(wallets: &[CloudBackupWalletItem]) -> Vec<CloudOnlyRow> {
+        wallets.iter().map(listed_row).collect()
+    }
+
+    /// The wallet a read row holds
+    pub(crate) fn row_wallet(row: &CloudOnlyRow) -> Option<&CloudBackupWalletItem> {
+        match &row.record {
+            CloudOnlyRecord::NotOnDevice(wallet) | CloudOnlyRecord::ExtraCopy { wallet, .. } => {
+                Some(wallet)
+            }
+            CloudOnlyRecord::Unsupported
+            | CloudOnlyRecord::Unreadable { .. }
+            | CloudOnlyRecord::Unchecked => None,
+        }
+    }
+
+    pub(crate) trait CloudOnlyStateTestExt {
+        /// The wallets of the loaded rows Cove could read, or `None` while none are loaded
+        fn loaded_wallets(&self) -> Option<Vec<CloudBackupWalletItem>>;
+    }
+
+    impl CloudOnlyStateTestExt for CloudOnlyState {
+        fn loaded_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
+            let rows = self.loaded_rows()?;
+
+            Some(rows.iter().filter_map(row_wallet).cloned().collect())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::test_support::{CloudOnlyStateTestExt as _, listed_rows, test_covering_wallets};
     use super::*;
-    use crate::manager::cloud_backup_manager::CloudBackupOtherBackupsSummary;
+    use crate::manager::cloud_backup_manager::inventory::{InventoryFacts, InventoryRows};
+    use crate::manager::cloud_backup_manager::screen::{
+        CloudBackupListedRecord, CloudBackupUnreadableKind,
+    };
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupOtherBackupsSummary, CloudBackupStateReducer, CloudBackupWalletStatus,
+    };
+    use crate::wallet::metadata::WalletId;
+    use crate::wallet_identity::{CoveringWallet, CoveringWallets};
 
     impl InventoryOwner {
         fn detail(&self) -> Option<CloudBackupDetail> {
@@ -741,17 +875,10 @@ mod tests {
         }
     }
 
+    /// An owner whose provider-confirmed listing found these wallets, read by a fetch
     fn owner_with_cloud_only(wallets: Vec<CloudBackupWalletItem>) -> InventoryOwner {
         let mut owner = InventoryOwner::default();
-        owner.apply(InventoryInput::DetailRefreshApplied {
-            detail: test_detail(),
-            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
-        });
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
-            wallets,
-            incomplete: false,
-        }));
+        load_listed_cloud_only(&mut owner, &test_detail(), &wallets);
         owner
     }
 
@@ -766,16 +893,36 @@ mod tests {
         detail: &CloudBackupDetail,
         wallets: &[CloudBackupWalletItem],
     ) {
+        load_listed_rows(owner, detail, listed_rows(wallets));
+    }
+
+    // records a provider-confirmed listing of these rows and applies the fetch that read them
+    fn load_listed_rows(
+        owner: &mut InventoryOwner,
+        detail: &CloudBackupDetail,
+        rows: Vec<CloudOnlyRow>,
+    ) {
         owner.apply(InventoryInput::DetailRefreshApplied {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(wallets)),
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(row_ids(&rows)),
         });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
-            wallets: wallets.to_vec(),
-            unresolved_record_ids: Vec::new(),
+            rows,
             listing_generation: owner.cloud_only_listing_generation(),
         }));
+    }
+
+    /// The rows of a provider-confirmed listing whose fetch read two restorable wallets and an
+    /// unsupported record, and could not read one more record
+    fn mixed_fetch_rows() -> Vec<CloudOnlyRow> {
+        let mut rows = listed_rows(&[
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("unsupported", CloudBackupWalletStatus::UnsupportedVersion),
+        ]);
+        rows.push(CloudOnlyRow::unreadable("unread".into(), CloudBackupUnreadableKind::Decrypt));
+        rows
     }
 
     /// Restore All with no run in progress and no operation holding the slot
@@ -791,12 +938,7 @@ mod tests {
             | CloudBackupDetailState::Failed { retained: Some(state), .. } => state,
             other => panic!("expected a retained detail, got {other:?}"),
         };
-        let cloud_only = match loaded.cloud_only {
-            CloudOnlyState::Loaded { wallets, .. } => wallets,
-            CloudOnlyState::NotFetched
-            | CloudOnlyState::Loading
-            | CloudOnlyState::Failed { .. } => Vec::new(),
-        };
+        let cloud_only = loaded.cloud_only.loaded_wallets().unwrap_or_default();
 
         loaded
             .detail
@@ -845,8 +987,10 @@ mod tests {
 
         // the refetch lists the deleted wallet under Not on This Device, and only there
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
-            wallets: vec![cloud_only_wallet("deleted", CloudBackupWalletStatus::DeletedFromDevice)],
-            unresolved_record_ids: Vec::new(),
+            rows: listed_rows(&[cloud_only_wallet(
+                "deleted",
+                CloudBackupWalletStatus::DeletedFromDevice,
+            )]),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
 
@@ -889,16 +1033,16 @@ mod tests {
         // the matching local wallet is deleted and the refetch lands before the restore result
         owner.apply(InventoryInput::LocalWalletsChanged { local_record_ids: None });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
-            wallets: vec![wallet.clone()],
-            unresolved_record_ids: Vec::new(),
+            rows: listed_rows(std::slice::from_ref(&wallet)),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
         owner.apply(InventoryInput::CloudOnlyRowAlreadyOnDevice {
             record_id: wallet.record_id.clone(),
+            covered_by: test_covering_wallets(),
             listing_generation: restore_generation,
         });
 
-        let CloudOnlyState::Loaded { wallets, .. } = owner.cloud_only() else {
+        let Some(wallets) = owner.cloud_only().loaded_wallets() else {
             panic!("expected the refetched rows");
         };
         assert_eq!(wallets[0].sync_status, CloudBackupWalletStatus::DeletedFromDevice);
@@ -906,33 +1050,100 @@ mod tests {
         // a result read under the current generation still marks the row
         owner.apply(InventoryInput::CloudOnlyRowAlreadyOnDevice {
             record_id: wallet.record_id,
+            covered_by: test_covering_wallets(),
             listing_generation: owner.cloud_only_listing_generation(),
         });
 
-        let CloudOnlyState::Loaded { wallets, .. } = owner.cloud_only() else {
+        let Some(wallets) = owner.cloud_only().loaded_wallets() else {
             panic!("expected the refetched rows");
         };
         assert_eq!(wallets[0].sync_status, CloudBackupWalletStatus::AlreadyOnDevice);
     }
 
     #[test]
-    fn restore_all_start_requires_two_supported_complete_rows() {
+    fn restore_all_start_requires_two_restorable_rows_of_a_classified_inventory() {
         let one_wallet = owner_with_cloud_only(vec![cloud_only_wallet(
             "wallet-1",
             CloudBackupWalletStatus::DeletedFromDevice,
         )]);
         assert_eq!(restore_all_state(&one_wallet), CloudBackupRestoreAllState::NotShown);
 
-        let two_wallets = owner_with_cloud_only(vec![
-            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
-            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
-            cloud_only_wallet("unsupported", CloudBackupWalletStatus::UnsupportedVersion),
-            cloud_only_wallet("unknown", CloudBackupWalletStatus::RemoteStateUnknown),
-        ]);
+        // an unsupported record was read far enough to classify, so it holds nothing back
+        let mut classified = InventoryOwner::default();
+        let mut read_rows = mixed_fetch_rows();
+        read_rows.retain(CloudOnlyRow::is_read);
+        load_listed_rows(&mut classified, &test_detail(), read_rows);
+
         assert_eq!(
-            restore_all_state(&two_wallets),
+            restore_all_state(&classified),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
+        let batch = classified.restore_all_batch().expect("a classified inventory has a batch");
+        let batch_ids: Vec<_> = batch.wallets().iter().map(|w| w.record_id.as_str()).collect();
+        assert_eq!(batch_ids, ["wallet-1", "wallet-2"]);
+    }
+
+    #[test]
+    fn restore_all_waits_for_every_listed_record_of_a_confirmed_listing_to_be_read() {
+        let mut owner = InventoryOwner::default();
+        load_listed_rows(&mut owner, &test_detail(), mixed_fetch_rows());
+
+        // the provider confirmed the listing, but the unread record may be one more wallet
+        assert!(owner.listing_is_provider_confirmed());
+        assert!(matches!(owner.cloud_only(), CloudOnlyState::Loaded { incomplete: true, .. }));
+        assert_eq!(
+            restore_all_state(&owner),
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+        assert_eq!(owner.restore_all_batch(), None);
+    }
+
+    #[test]
+    fn restore_all_retry_of_an_unread_record_stays_disabled_with_no_restorable_row() {
+        let retry_state = |owner: &InventoryOwner| {
+            owner.restore_all(&CloudBackupRestoreAllRuntimeState::RetryRemaining, false)
+        };
+        let unread = CloudOnlyRow::unreadable("unread".into(), CloudBackupUnreadableKind::Decrypt);
+        let mut owner = InventoryOwner::default();
+        load_listed_rows(&mut owner, &test_detail(), vec![unread]);
+
+        // the record could still need restoring, so the retry stays, but nothing proves what
+        // a retry would restore
+        assert_eq!(
+            retry_state(&owner),
+            CloudBackupRestoreAllState::RetryDisabled { wallet_count: 0 }
+        );
+        assert_eq!(owner.restore_all_batch(), None);
+
+        // once every record is read and none is left, the retry is gone and the batch is empty
+        load_listed_rows(&mut owner, &test_detail(), Vec::new());
+        assert_eq!(retry_state(&owner), CloudBackupRestoreAllState::NotShown);
+        assert_eq!(owner.restore_all_batch().map(|batch| batch.wallets().len()), Some(0));
+    }
+
+    #[test]
+    fn restore_all_retry_waits_for_the_provider_to_confirm_a_read_listing() {
+        let retry_state = |owner: &InventoryOwner| {
+            owner.restore_all(&CloudBackupRestoreAllRuntimeState::RetryRemaining, false)
+        };
+        let mut owner = InventoryOwner::default();
+        owner.apply(InventoryInput::DetailRefreshApplied {
+            detail: test_detail(),
+            authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+        });
+        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            rows: Vec::new(),
+            listing_generation: owner.cloud_only_listing_generation(),
+        }));
+
+        // every listed record was read, but only the provider can say none is missing
+        assert!(matches!(owner.cloud_only(), CloudOnlyState::Loaded { incomplete: false, .. }));
+        assert_eq!(
+            retry_state(&owner),
+            CloudBackupRestoreAllState::RetryDisabled { wallet_count: 0 }
+        );
+        assert_eq!(owner.restore_all_batch(), None);
     }
 
     #[test]
@@ -962,19 +1173,16 @@ mod tests {
 
     #[test]
     fn completed_cloud_only_fetch_restores_complete_detail_with_loaded_wallets() {
-        let mut owner = owner_with_cloud_only(vec![cloud_only_wallet(
-            "stale-wallet",
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )]);
         let loaded_wallets = vec![
             cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ];
+        let mut owner = owner_with_cloud_only(loaded_wallets.clone());
 
         owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loading));
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
-            wallets: loaded_wallets.clone(),
-            incomplete: false,
+        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            rows: listed_rows(&loaded_wallets),
+            listing_generation: owner.cloud_only_listing_generation(),
         }));
         let CloudBackupDetailState::Complete { state } = owner.detail_state().clone() else {
             panic!("expected complete detail after cloud-only fetch");
@@ -982,7 +1190,7 @@ mod tests {
 
         assert_eq!(
             state.cloud_only,
-            CloudOnlyState::Loaded { wallets: loaded_wallets, incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&loaded_wallets), incomplete: false }
         );
         assert_eq!(
             restore_all_state(&owner),
@@ -992,20 +1200,17 @@ mod tests {
 
     #[test]
     fn cloud_only_completion_does_not_finish_authoritative_detail_refresh() {
-        let mut owner = owner_with_cloud_only(vec![cloud_only_wallet(
-            "stale-wallet",
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )]);
         let loaded_wallets = vec![
             cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ];
+        let mut owner = owner_with_cloud_only(loaded_wallets.clone());
 
         owner.apply(InventoryInput::DetailRefreshStarted);
         owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loading));
-        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
-            wallets: loaded_wallets.clone(),
-            incomplete: false,
+        owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            rows: listed_rows(&loaded_wallets),
+            listing_generation: owner.cloud_only_listing_generation(),
         }));
         let CloudBackupDetailState::Complete { state: retained } = owner.detail_state().clone()
         else {
@@ -1013,7 +1218,7 @@ mod tests {
         };
         assert_eq!(
             retained.cloud_only,
-            CloudOnlyState::Loaded { wallets: loaded_wallets, incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&loaded_wallets), incomplete: false }
         );
         assert_eq!(
             restore_all_state(&owner),
@@ -1181,7 +1386,7 @@ mod tests {
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
-        assert!(owner.detail_inventory_is_complete());
+        assert!(owner.listing_is_provider_confirmed());
 
         owner.apply(InventoryInput::DetailRefreshStarted);
         let CloudBackupDetailState::Complete { state: retained } = owner.detail_state().clone()
@@ -1191,7 +1396,7 @@ mod tests {
 
         assert_eq!(retained.detail, detail);
         assert_eq!(owner.detail(), Some(detail));
-        assert!(owner.detail_inventory_is_complete());
+        assert!(owner.listing_is_provider_confirmed());
         assert!(owner.detail_inventory_is_ready());
     }
 
@@ -1208,7 +1413,7 @@ mod tests {
         };
 
         assert_eq!(retained.detail, provisional);
-        assert!(!owner.detail_inventory_is_complete());
+        assert!(!owner.listing_is_provider_confirmed());
         assert!(!owner.detail_inventory_is_ready());
     }
 
@@ -1228,7 +1433,7 @@ mod tests {
         });
 
         assert_eq!(owner.detail(), Some(detail));
-        assert!(!owner.detail_inventory_is_complete());
+        assert!(!owner.listing_is_provider_confirmed());
         assert!(!owner.detail_inventory_is_ready());
 
         // a provider failure that isn't the network keeps the confirmed rows actionable
@@ -1237,7 +1442,7 @@ mod tests {
             error: "iCloud unavailable".into(),
         });
 
-        assert!(!owner.detail_inventory_is_complete());
+        assert!(!owner.listing_is_provider_confirmed());
         assert!(owner.detail_inventory_is_ready());
     }
 
@@ -1251,7 +1456,7 @@ mod tests {
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
 
-        assert!(!owner.detail_inventory_is_complete());
+        assert!(!owner.listing_is_provider_confirmed());
         assert!(owner.detail_inventory_is_ready());
     }
 
@@ -1270,8 +1475,7 @@ mod tests {
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
         });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
-            wallets: wallets.clone(),
-            unresolved_record_ids: Vec::new(),
+            rows: listed_rows(&wallets),
             listing_generation: owner.cloud_only_listing_generation(),
         }));
 
@@ -1289,7 +1493,10 @@ mod tests {
             panic!("expected complete detail");
         };
 
-        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets, incomplete: false });
+        assert_eq!(
+            state.cloud_only,
+            CloudOnlyState::Loaded { rows: listed_rows(&wallets), incomplete: false }
+        );
         assert_eq!(
             restore_all_state(&owner),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
@@ -1309,7 +1516,7 @@ mod tests {
         owner.apply(InventoryInput::DetailRefreshProvisional(test_detail()));
 
         assert_eq!(owner.detail(), Some(retained));
-        assert!(!owner.detail_inventory_is_complete());
+        assert!(!owner.listing_is_provider_confirmed());
     }
 
     #[test]
@@ -1329,5 +1536,105 @@ mod tests {
             }
         );
         assert_eq!(owner.detail(), None);
+    }
+
+    /// A local wallet's own backup, named as shown and keyed by its wallet ID
+    fn own_wallet(
+        id: &str,
+        name: &str,
+        sync_status: CloudBackupWalletStatus,
+    ) -> (CoveringWallet, CloudBackupWalletItem) {
+        let covering = CoveringWallet { id: WalletId::from(id.to_string()), name: name.into() };
+        let item = CloudBackupWalletItem {
+            name: name.into(),
+            record_id: cove_cspp::backup_data::wallet_record_id(id),
+            ..cloud_only_wallet(id, sync_status)
+        };
+
+        (covering, item)
+    }
+
+    /// The listed rows as the screen reads them, for an owner holding these own backups and
+    /// extra copies
+    fn rows_with_extra_copies(
+        own: Vec<CloudBackupWalletItem>,
+        copies: Vec<(CloudBackupWalletItem, CoveringWallet)>,
+    ) -> InventoryRows {
+        let (up_to_date, needs_sync) = own
+            .into_iter()
+            .partition(|wallet| wallet.sync_status == CloudBackupWalletStatus::Confirmed);
+
+        let mut owner = InventoryOwner::default();
+        owner.apply(InventoryInput::DetailRefreshApplied {
+            detail: CloudBackupDetail { last_sync: None, up_to_date, needs_sync },
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+        });
+
+        let rows = copies
+            .into_iter()
+            .map(|(copy, covering)| CloudOnlyRow::extra_copy(copy, CoveringWallets::one(covering)))
+            .collect();
+
+        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
+            rows,
+            incomplete: false,
+        }));
+
+        let facts = InventoryFacts::new(&owner, &CloudBackupStateReducer::default());
+        facts.view().rows.expect("expected loaded rows")
+    }
+
+    #[test]
+    fn extra_copy_is_replaced_only_by_its_own_covering_wallet() {
+        // two local wallets share a name; only the first has a current backup
+        let (backed_up, backed_up_item) =
+            own_wallet("wallet-a", "Test Wallet", CloudBackupWalletStatus::Confirmed);
+        let (not_backed_up, not_backed_up_item) =
+            own_wallet("wallet-b", "Test Wallet", CloudBackupWalletStatus::Dirty);
+
+        let copy_of_a = cloud_only_wallet("old-a", CloudBackupWalletStatus::AlreadyOnDevice);
+        let copy_of_b = CloudBackupWalletItem {
+            name: "Test Wallet".into(),
+            ..cloud_only_wallet("old-b", CloudBackupWalletStatus::AlreadyOnDevice)
+        };
+
+        let rows = rows_with_extra_copies(
+            vec![backed_up_item, not_backed_up_item],
+            vec![(copy_of_a, backed_up), (copy_of_b, not_backed_up)],
+        );
+
+        let [copy_of_a, copy_of_b] = rows.listed.as_slice() else {
+            panic!("expected two extra copies, got {:?}", rows.listed);
+        };
+
+        assert!(rows.copy_has_current_backup(copy_of_a));
+        assert!(
+            !rows.copy_has_current_backup(copy_of_b),
+            "a same-name wallet's current backup must not replace another wallet's copy"
+        );
+    }
+
+    #[test]
+    fn extra_copy_of_a_renamed_wallet_is_replaced_by_its_current_backup() {
+        let (renamed, renamed_item) =
+            own_wallet("wallet-a", "Test Wallet++", CloudBackupWalletStatus::Confirmed);
+        let old_copy = CloudBackupWalletItem {
+            name: "Test Wallet".into(),
+            ..cloud_only_wallet("old-a", CloudBackupWalletStatus::AlreadyOnDevice)
+        };
+
+        let rows = rows_with_extra_copies(vec![renamed_item], vec![(old_copy, renamed)]);
+
+        let [old_copy] = rows.listed.as_slice() else {
+            panic!("expected one extra copy, got {:?}", rows.listed);
+        };
+
+        let CloudBackupListedRecord::ExtraCopy { covered_by, .. } = &old_copy.record else {
+            panic!("expected an extra copy, got {:?}", old_copy.record);
+        };
+
+        assert_eq!(covered_by, "Test Wallet++");
+        assert!(rows.copy_has_current_backup(old_copy));
     }
 }

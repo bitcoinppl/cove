@@ -10,8 +10,9 @@ use super::screen::{
 use super::{
     CloudBackupDetailState, CloudBackupOtherBackupsState, CloudBackupRestoreAllState,
     CloudBackupStateReducer, CloudBackupWalletItem, CloudBackupWalletStatus, CloudOnlyOperation,
-    CloudOnlyState, InventoryOwner, LoadedCloudBackupDetail, OtherBackupsOperation, RecordId,
+    InventoryOwner, LoadedCloudBackupDetail, OtherBackupsOperation, RecordId,
 };
+use crate::wallet_identity::CoveringWallets;
 
 /// The inventory facts the screen projection reads
 #[derive(Debug, Clone)]
@@ -49,11 +50,29 @@ pub(crate) struct InventoryRows {
     pub(crate) last_sync: Option<u64>,
 }
 
+impl InventoryRows {
+    /// Whether a wallet covering this extra copy has its own current backup, so the copy can go
+    ///
+    /// Matched by the covering wallets' own record IDs, so a renamed wallet still matches its
+    /// copy and another wallet with the same name never does
+    pub(crate) fn copy_has_current_backup(&self, listed: &ListedRecord) -> bool {
+        self.up_to_date
+            .iter()
+            .chain(&self.needs_sync)
+            .filter(|row| row.record == CloudBackupOwnRecord::Current)
+            .map(|row| RecordId::from(row.wallet.record_id.clone()))
+            .any(|own_record_id| listed.covered_by.contains(&own_record_id))
+    }
+}
+
 /// One cloud record this device doesn't back up
 #[derive(Debug, Clone)]
 pub(crate) struct ListedRecord {
     pub(crate) record_id: RecordId,
     pub(crate) record: CloudBackupListedRecord,
+    /// For an extra copy, the own-backup record IDs of the local wallets that cover it, so the
+    /// copy is matched to their own rows by wallet ID and never by name; empty for other rows
+    pub(crate) covered_by: Vec<RecordId>,
 }
 
 impl InventoryFacts {
@@ -104,10 +123,17 @@ fn loaded_detail(detail: &CloudBackupDetailState) -> Option<&LoadedCloudBackupDe
 }
 
 fn inventory_rows(loaded: &LoadedCloudBackupDetail) -> InventoryRows {
-    let listed = match &loaded.cloud_only {
-        CloudOnlyState::Loaded { wallets, .. } => wallets.iter().map(listed_record).collect(),
-        _ => Vec::new(),
-    };
+    let listed = loaded
+        .cloud_only
+        .loaded_rows()
+        .unwrap_or_default()
+        .iter()
+        .map(|row| ListedRecord {
+            record_id: RecordId::from(row.record_id.clone()),
+            record: row.listed_record(),
+            covered_by: row.covered_by().map(own_record_ids).unwrap_or_default(),
+        })
+        .collect();
 
     InventoryRows {
         up_to_date: loaded.detail.up_to_date.iter().map(own_row).collect(),
@@ -134,16 +160,10 @@ fn own_row(wallet: &CloudBackupWalletItem) -> CloudBackupOwnRow {
     CloudBackupOwnRow { wallet: wallet.clone(), record }
 }
 
-fn listed_record(wallet: &CloudBackupWalletItem) -> ListedRecord {
-    let record = match wallet.sync_status {
-        CloudBackupWalletStatus::AlreadyOnDevice => CloudBackupListedRecord::ExtraCopy {
-            wallet: wallet.clone(),
-            covered_by: wallet.name.clone(),
-        },
-        CloudBackupWalletStatus::UnsupportedVersion => CloudBackupListedRecord::Unsupported,
-        CloudBackupWalletStatus::RemoteStateUnknown => CloudBackupListedRecord::Unchecked,
-        _ => CloudBackupListedRecord::NotOnDevice { wallet: wallet.clone() },
-    };
-
-    ListedRecord { record_id: RecordId::from(wallet.record_id.clone()), record }
+/// The record IDs of the covering wallets' own backups
+fn own_record_ids(covered_by: &CoveringWallets) -> Vec<RecordId> {
+    covered_by
+        .iter()
+        .map(|wallet| RecordId::from(cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref())))
+        .collect()
 }

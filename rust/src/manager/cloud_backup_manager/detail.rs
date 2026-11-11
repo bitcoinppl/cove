@@ -5,14 +5,14 @@ use act_zero::send;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use super::owner::inventory::InventoryInput;
+use super::owner::inventory::{InventoryInput, RestoreAllBatch};
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CloudBackupDetail, CloudBackupExclusiveOperationClaim, CloudBackupInventoryAuthority,
     CloudBackupInventoryIncompleteReason, CloudBackupListedDetail, CloudBackupManagerAction,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
-    CloudBackupStore, CloudBackupWalletItem, CloudOnlyFetch, CloudOnlyListingUpdate,
-    CloudOnlyState, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    CloudBackupStore, CloudOnlyFetch, CloudOnlyListingUpdate, CloudOnlyState,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     RustCloudBackupManager,
 };
 
@@ -135,12 +135,14 @@ pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
         record_id: String,
         warning: Option<CloudBackupCloudOnlyOperationWarning>,
     },
-    /// A local wallet holds everything the record can recover, so it stays as a deletable row
+    /// The local wallets `covered_by` hold everything the record can recover, so it stays as a
+    /// deletable row
     ///
     /// `listing_generation` is the generation observed before the restore read the local
     /// wallets, so a later local wallet change can discard the result
     AlreadyOnDevice {
         record_id: String,
+        covered_by: crate::wallet_identity::CoveringWallets,
         listing_generation: u64,
     },
     Deleted {
@@ -199,8 +201,8 @@ impl RustCloudBackupManager {
 }
 
 impl RustCloudBackupManager {
-    pub(crate) fn detail_inventory_is_complete(&self) -> bool {
-        self.inventory.read().detail_inventory_is_complete()
+    pub(crate) fn listing_is_provider_confirmed(&self) -> bool {
+        self.inventory.read().listing_is_provider_confirmed()
     }
 
     pub(crate) fn detail_inventory_is_ready(&self) -> bool {
@@ -470,11 +472,13 @@ impl RustCloudBackupManager {
             }
             CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                 record_id,
+                covered_by,
                 listing_generation,
             } => {
                 self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
                 self.apply_inventory(InventoryInput::CloudOnlyRowAlreadyOnDevice {
                     record_id,
+                    covered_by,
                     listing_generation,
                 });
             }
@@ -510,14 +514,10 @@ impl RustCloudBackupManager {
         inventory.restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some())
     }
 
-    /// Wallets Restore All can start with, or `None` while the cloud-only rows are not loaded
-    pub(crate) fn restore_all_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
-        self.inventory.read().restore_all_eligible_wallets()
-    }
-
-    /// Wallets Restore All still has to restore, or `None` when the rows do not prove it
-    pub(crate) fn restore_all_proven_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
-        self.inventory.read().restore_all_proven_eligible_wallets()
+    /// The run Restore All would start, or `None` while the inventory is not classified, which
+    /// is unknown rather than empty
+    pub(crate) fn restore_all_batch(&self) -> Option<RestoreAllBatch> {
+        self.inventory.read().restore_all_batch()
     }
 
     pub(crate) fn apply_restore_all_started(
@@ -593,10 +593,13 @@ mod tests {
         complete_loaded_outcome, ensure_cloud_backup_test_tokio_runtime, listed_detail,
         manager_without_actors, test_globals, test_lock,
     };
-    use super::super::{CloudBackupWalletStatus, PersistedCloudBackupState};
+    use super::super::{CloudBackupWalletItem, CloudBackupWalletStatus, PersistedCloudBackupState};
     use super::*;
     use crate::database::Database;
     use crate::manager::cloud_backup_manager::CloudBackupWalletRestoreFailure;
+    use crate::manager::cloud_backup_manager::owner::inventory::test_support::{
+        CloudOnlyStateTestExt as _, listed_rows,
+    };
 
     // these tests assert the cache state an outcome leaves, which a running supervisor would
     // move on by starting the fetch an invalidated cache asks for
@@ -672,7 +675,7 @@ mod tests {
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
-            CloudOnlyState::Loaded { wallets: vec![wallet_b], incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&[wallet_b]), incomplete: false }
         );
     }
 
@@ -697,7 +700,7 @@ mod tests {
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
-            CloudOnlyState::Loaded { wallets: vec![], incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&[]), incomplete: false }
         );
     }
 
@@ -774,7 +777,7 @@ mod tests {
             vec![wallet.clone()],
         ));
 
-        let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
+        let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
             panic!("expected loaded cloud-only rows");
         };
         assert_eq!(
@@ -788,7 +791,7 @@ mod tests {
             record_id: wallet.record_id,
         });
 
-        let CloudOnlyState::Loaded { wallets, .. } = manager.inventory.read().cloud_only() else {
+        let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
             panic!("expected loaded cloud-only rows");
         };
         assert_eq!(wallets[0].restore_failure, None);

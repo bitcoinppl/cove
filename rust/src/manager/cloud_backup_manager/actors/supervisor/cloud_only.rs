@@ -45,9 +45,8 @@ impl CloudBackupSupervisor {
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager
-                .do_fetch_cloud_only_wallets_with_client(&writes, cloud, listing_generation)
-                .await;
+            let result =
+                manager.do_fetch_cloud_only_wallets_with_client(cloud, listing_generation).await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }
@@ -212,16 +211,18 @@ impl CloudBackupSupervisor {
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => (
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, .. }) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,
+                    covered_by,
                     listing_generation,
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => (
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,
+                    covered_by,
                     listing_generation,
                 },
                 false,

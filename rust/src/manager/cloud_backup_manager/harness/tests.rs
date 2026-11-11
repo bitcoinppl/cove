@@ -548,7 +548,7 @@ fn turn_off_is_admitted_before_the_detail_inventory_loads() {
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
         let namespace = FakeAccount::new(1, 0).seed(&app);
-        assert!(!app.manager().detail_inventory_is_complete(), "{}", app.describe());
+        assert!(!app.manager().listing_is_provider_confirmed(), "{}", app.describe());
 
         app.current().then_can(&[N::TurnOff]);
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)

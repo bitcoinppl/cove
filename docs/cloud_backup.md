@@ -351,12 +351,21 @@ Device. A batch prepares one identity-aware reader/session and restores records
 sequentially.
 
 Rust derives eligibility from active-namespace rows whose status is
-`DeletedFromDevice`. Initial Restore All is shown for at least two eligible
-wallets; Retry Remaining can be shown for one or more. Availability additionally
-requires complete inventory and no conflicting exclusive operation. At start,
-Rust freezes the visible order, refetches authoritative active-namespace
-inventory, and intersects the two sets. Newly appeared, stale, unsupported, or
-already-local rows are not added to the run.
+`DeletedFromDevice`, and only from a classified inventory: the inventory owner
+builds a `ClassifiedInventory` proof only when the provider confirmed the
+listing and every listed record was read. Being confirmed by the provider and
+having every record read are separate facts, and the proof needs both. Restore
+All's start, its Retry Remaining, and the marker clear all take the run's
+wallets from the proof's `RestoreAllBatch`, so none of them can act on a
+partial inventory. Initial Restore All is shown for at least two eligible
+wallets, and is disabled until the inventory is classified. While the marker
+stays, Retry Remaining shows once the cloud-only rows have loaded, and stays
+disabled until the inventory is classified, even when no row is eligible yet.
+Once a classified inventory has no eligible wallet left, the marker clears and
+the retry goes away. Availability also requires no conflicting exclusive
+operation. At start, Rust freezes the visible order, refetches authoritative
+active-namespace inventory, and intersects the two sets. Newly appeared, stale,
+unsupported, or already-local rows are not added to the run.
 
 The supervisor represents a live batch as one typed Restore All run containing
 its exclusive claim and cancellation token. Claim-tagged reducer events own

@@ -94,8 +94,6 @@ impl CloudBackupSupervisor {
         let finalization = EnableRecoveryFinalization {
             context,
             namespace_id: namespace_id.clone(),
-            credential_id,
-            prf_salt,
             active_critical_key,
             pending_completion: pending_completion.clone(),
             cleanup_sources,
@@ -131,8 +129,6 @@ impl CloudBackupSupervisor {
         let EnableRecoveryFinalization {
             context,
             namespace_id,
-            credential_id,
-            prf_salt,
             active_critical_key,
             pending_completion,
             cleanup_sources,
@@ -181,11 +177,6 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
-            namespace_id: namespace_id.clone(),
-            credential_id,
-            prf_salt,
-        });
         self.enable_continuation = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();

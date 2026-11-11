@@ -23,10 +23,9 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        // only a loaded, complete and current cache proves nothing is left, anything else keeps
-        // the marker so a later fetch can decide
-        if manager.restore_all_proven_eligible_wallets().is_none_or(|eligible| !eligible.is_empty())
-        {
+        // only a classified inventory proves nothing is left, anything else keeps the marker so
+        // a later fetch can decide
+        if manager.restore_all_batch().is_none_or(|batch| !batch.wallets().is_empty()) {
             manager.apply_restore_all_retry_required();
             return;
         }
@@ -45,9 +44,11 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(frozen_wallets) = manager.restore_all_eligible_wallets() else { return };
-        let listing_generation = manager.inventory.read().cloud_only_listing_generation();
-        let frozen_count = frozen_wallets.len() as u32;
+
+        // the run freezes the batch of a classified inventory, the one Restore All availability
+        // was projected from, so it never starts on rows that left a listed record unread
+        let Some(batch) = manager.restore_all_batch() else { return };
+        let frozen_count = batch.wallets().len() as u32;
         let projected_state = manager.projected_restore_all_state();
         let can_start = match (retry, projected_state) {
             (false, CloudBackupRestoreAllState::StartAvailable { wallet_count }) => {
@@ -80,6 +81,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
+        let (frozen_wallets, listing_generation) = batch.into_parts();
         manager.clear_cloud_only_restore_failures(
             &frozen_wallets.iter().map(|wallet| wallet.record_id.clone()).collect::<Vec<_>>(),
         );
@@ -227,20 +229,22 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
+                        covered_by,
                         listing_generation,
                     },
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
+                        covered_by,
                         listing_generation,
                     },
                 );
@@ -347,9 +351,11 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        // an unloaded, incomplete or outdated cache is unknown rather than empty, so the marker stays
-        match manager.restore_all_proven_eligible_wallets() {
-            Some(eligible) if eligible.is_empty() => self.finish_restore_all_clean(&manager, claim),
+        // an inventory that is not classified is unknown rather than empty, so the marker stays
+        match manager.restore_all_batch() {
+            Some(batch) if batch.wallets().is_empty() => {
+                self.finish_restore_all_clean(&manager, claim);
+            }
             Some(_) => self.finish_restore_all_retry_remaining(&manager, claim),
             None => {
                 self.finish_restore_all_retry_remaining(&manager, claim);

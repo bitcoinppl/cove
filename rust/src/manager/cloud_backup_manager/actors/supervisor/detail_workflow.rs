@@ -1,11 +1,5 @@
 use std::time::{Duration, Instant};
 
-use super::{DetailEntryPlan, RuntimePasskeyAuthorization};
-use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupStatus, PendingVerificationCompletion, RustCloudBackupManager,
-    VerificationState,
-};
-
 pub(crate) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,9 +137,6 @@ impl DetailRefreshCoordinator {
 pub(crate) struct DetailWorkflow {
     refresh: DetailRefreshCoordinator,
     clock: Instant,
-    pending_verification_completion: Option<PendingVerificationCompletion>,
-    // clearing session-only proof with this workflow makes detail entry re-check passkey availability
-    runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
     next_result_generation: u64,
     newest_result_generation: Option<u64>,
 }
@@ -155,8 +146,6 @@ impl Default for DetailWorkflow {
         Self {
             refresh: DetailRefreshCoordinator::default(),
             clock: Instant::now(),
-            pending_verification_completion: None,
-            runtime_passkey_authorization: None,
             next_result_generation: 0,
             newest_result_generation: None,
         }
@@ -209,71 +198,6 @@ impl DetailWorkflow {
 
     pub(crate) fn is_latest_result(&self, claim: DetailResultClaim) -> bool {
         self.newest_result_generation == Some(claim.0)
-    }
-
-    pub(crate) fn entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
-        let state = manager.state.read();
-        if !matches!(state.status(), CloudBackupStatus::Enabled) {
-            return DetailEntryPlan::RefreshOnly;
-        }
-
-        if super::restore_all_marker_matches_active_namespace(manager) {
-            return DetailEntryPlan::RefreshOnly;
-        }
-
-        if matches!(
-            state.verification(),
-            VerificationState::Verifying
-                | VerificationState::Verified(_)
-                | VerificationState::PasskeyConfirmed
-        ) {
-            return DetailEntryPlan::ContinueRustOwnedVerification;
-        }
-
-        if let Some(completion) = self.pending_verification_completion.clone() {
-            return DetailEntryPlan::ResumePendingUploadConfirmation(completion);
-        }
-
-        if let Some(authorization) = self.authorization_for_current_manager(manager) {
-            return DetailEntryPlan::UseFreshEnableProof(authorization);
-        }
-
-        DetailEntryPlan::StartPasskeyVerification { force_discoverable: true }
-    }
-
-    pub(crate) fn cache_pending_completion(&mut self, completion: PendingVerificationCompletion) {
-        self.pending_verification_completion = Some(completion);
-    }
-
-    pub(crate) fn clear_pending_completion(&mut self) {
-        self.pending_verification_completion = None;
-    }
-
-    pub(crate) fn set_authorization(&mut self, authorization: RuntimePasskeyAuthorization) {
-        self.runtime_passkey_authorization = Some(authorization);
-    }
-
-    pub(crate) fn clear_authorization(&mut self) {
-        self.runtime_passkey_authorization = None;
-    }
-
-    fn authorization_for_current_manager(
-        &self,
-        manager: &RustCloudBackupManager,
-    ) -> Option<RuntimePasskeyAuthorization> {
-        let authorization = self.runtime_passkey_authorization.as_ref()?;
-        let Ok(namespace_id) = manager.current_namespace_id() else {
-            return None;
-        };
-
-        let cloud_keychain = CloudBackupKeychain::global();
-        let credential_id = cloud_keychain.load_credential_id().ok().flatten()?;
-        let prf_salt = cloud_keychain.load_prf_salt().ok().flatten()?;
-
-        (authorization.namespace_id == namespace_id
-            && authorization.credential_id == credential_id
-            && authorization.prf_salt == prf_salt)
-            .then(|| authorization.clone())
     }
 
     fn now(&self) -> Duration {

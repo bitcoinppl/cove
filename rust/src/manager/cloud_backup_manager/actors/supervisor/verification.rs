@@ -202,7 +202,6 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        self.detail_workflow.clear_pending_completion();
         if matches!(
             manager.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
@@ -308,7 +307,6 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.detail_workflow.set_authorization(authorization);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
@@ -686,7 +684,6 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.detail_workflow.set_authorization(authorization);
                 if let Err(error) = self
                     .runtime
                     .commit(|lifecycle| manager.finish_passkey_wrapper_repair(lifecycle, uploaded))

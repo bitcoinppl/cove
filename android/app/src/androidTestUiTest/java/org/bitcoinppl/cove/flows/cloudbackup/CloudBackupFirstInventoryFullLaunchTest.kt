@@ -118,8 +118,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
             ),
         )
 
-        // both holds are set before the activity starts, so bootstrap's discovery, sync health and
-        // passkey verification all wait at the gate and the detail's snapshot is the first snapshot
+        // both holds are set before the activity starts, so bootstrap's discovery and sync health
+        // wait at the gate and the detail's snapshot is the first snapshot
         ScriptedCloudStorageAccess.closeWalletListGate()
         ScriptedCloudStorageAccess.blockNextWalletListSnapshot()
         launchFullApp(resetData = false)
@@ -140,20 +140,25 @@ class CloudBackupFirstInventoryFullLaunchTest {
         ScriptedCloudStorageAccess.releaseWalletListGate()
         ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
 
-        // the gate also held passkey verification, which finishes after the release and can
-        // redraw the detail, so the rows are tapped only once it has settled
+        // the released listings can still redraw the detail, so the rows are tapped only once the
+        // inventory has settled; nothing verifies on its own, so the restored backup stays not verified
         waitUntil("the provider's answer should confirm both cloud-only rows") {
             val manager = CloudBackupManager.getInstance()
 
             manager.isInventoryComplete &&
                 !manager.isInventoryChecking &&
-                manager.verificationState is CloudBackupVerificationState.Verified &&
+                manager.verificationState is CloudBackupVerificationState.NotVerified &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
         }
 
         device.waitForIdle()
         assertRowOpensEnabledActions(WALLET_TWO)
+
+        // loading the inventory and opening a row never ask for the passkey
+        for (invocation in listOf(ScriptedPasskeyProvider.Invocation.AUTHENTICATE, ScriptedPasskeyProvider.Invocation.DISCOVER)) {
+            assertEquals("the relaunch asked for the passkey ($invocation)", 0, ScriptedPasskeyProvider.callCount(invocation))
+        }
     }
 
     /**

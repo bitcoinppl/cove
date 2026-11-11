@@ -459,7 +459,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restart_marker_enters_detail_without_passkey_verification",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::detail_entry_after_restart_never_asks_for_the_passkey",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read",
   "rust:rust/src/manager/cloud_backup_manager/store.rs::atomic_state_mutations_preserve_restore_marker_count_and_verification",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRelaunchAfterKillOffersRetryRemainingWithoutAutomaticWork",

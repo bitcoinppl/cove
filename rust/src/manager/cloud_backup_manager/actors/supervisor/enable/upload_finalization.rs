@@ -336,7 +336,6 @@ impl CloudBackupSupervisor {
             master_key: upload.master_key,
             passkey: upload.passkey,
             context: upload.context,
-            namespace_id: upload.namespace_id.clone(),
             pending_completion: pending_completion.clone(),
         };
         let write = self.write.clone();
@@ -374,13 +373,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let EnableUploadFinalization {
-            master_key,
-            passkey,
-            context,
-            namespace_id,
-            pending_completion,
-        } = finalization;
+        let EnableUploadFinalization { master_key, passkey, context, pending_completion } =
+            finalization;
 
         let activation = manager.activate_persisted_pending_verification_completion_for_source(
             pending_completion,
@@ -428,11 +422,6 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
-            namespace_id,
-            credential_id: passkey.credential_id.clone(),
-            prf_salt: passkey.prf_salt,
-        });
         self.enable_continuation = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();

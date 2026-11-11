@@ -27,7 +27,7 @@ use crate::manager::cloud_backup_manager::admission::{
     UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::{
-    InventoryFacts, InventoryView, ListedRecord,
+    InventoryFacts, InventoryRows, InventoryView, ListedRecord,
 };
 use crate::manager::cloud_backup_manager::{
     CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupConfiguredState,
@@ -252,13 +252,13 @@ fn configured_screen(
 
     let last_sync = inventory.rows.as_ref().and_then(|rows| rows.last_sync);
     if let Some(rows) = inventory.rows {
+        let (not_on_device, extra_copies) = listed_rows(&rows, snapshot);
         sections.push(CloudBackupSection::Wallets(CloudBackupWalletsSection {
             up_to_date: rows.up_to_date,
             needs_sync: rows.needs_sync,
             sync: configured.sync.clone(),
         }));
 
-        let (not_on_device, extra_copies) = listed_rows(rows.listed, snapshot);
         if !not_on_device.is_empty()
             || inventory.restore_all != CloudBackupRestoreAllState::NotShown
         {
@@ -313,26 +313,40 @@ fn recovery_operation(
 
 /// The listed rows, split into Not on This Device and Extra Copies
 fn listed_rows(
-    listed: Vec<ListedRecord>,
+    rows: &InventoryRows,
     snapshot: &AdmissionSnapshot,
 ) -> (Vec<CloudBackupListedRow>, Vec<CloudBackupListedRow>) {
-    let (extra_copies, not_on_device) = listed
-        .into_iter()
-        .map(|listed| listed_row(listed, snapshot))
+    let (extra_copies, not_on_device) = rows
+        .listed
+        .iter()
+        .map(|listed| listed_row(listed, rows.copy_has_current_backup(listed), snapshot))
         .partition(|row| matches!(row.record, CloudBackupListedRecord::ExtraCopy { .. }));
 
     (not_on_device, extra_copies)
 }
 
-fn listed_row(listed: ListedRecord, snapshot: &AdmissionSnapshot) -> CloudBackupListedRow {
-    let ListedRecord { record_id, record } = listed;
+/// A listed row with its controls; `copy_replaced` says a covering wallet has its own current backup
+fn listed_row(
+    listed: &ListedRecord,
+    copy_replaced: bool,
+    snapshot: &AdmissionSnapshot,
+) -> CloudBackupListedRow {
+    let ListedRecord { record_id, record, .. } = listed.clone();
     let restore = UserIntent::RestoreCloudWallet(record_id.clone());
     let delete = UserIntent::DeleteCloudWallet(record_id.clone());
     let standard_delete =
         CloudBackupRowActionKind::Delete { confirmation: CloudBackupDeleteConfirmation::Standard };
 
     let actions = match &record {
-        CloudBackupListedRecord::ExtraCopy { .. } | CloudBackupListedRecord::Unsupported => {
+        // an extra copy may go only once a wallet it copies has its own current backup
+        CloudBackupListedRecord::ExtraCopy { .. } if copy_replaced => {
+            vec![row_action(standard_delete, &delete, snapshot)]
+        }
+        CloudBackupListedRecord::ExtraCopy { .. } => vec![
+            row_action(CloudBackupRowActionKind::BackUpFirst, &UserIntent::SyncUnsynced, snapshot),
+            row_action(CloudBackupRowActionKind::CheckAgain, &UserIntent::RefreshDetail, snapshot),
+        ],
+        CloudBackupListedRecord::Unsupported => {
             vec![row_action(standard_delete, &delete, snapshot)]
         }
         CloudBackupListedRecord::Unchecked => vec![row_action(
