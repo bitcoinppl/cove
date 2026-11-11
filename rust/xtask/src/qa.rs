@@ -21,6 +21,7 @@ use std::{
     str::FromStr,
 };
 
+mod availability_gates;
 mod next_action_assertions;
 
 const MANIFEST_DIR: &str = "qa/checklist";
@@ -77,6 +78,7 @@ pub fn run(command: QaCommand) -> Result<()> {
             let tracked = tracked_files(&root)?;
             let mut report = manifest.check(&root, &tracked);
             report.errors.extend(next_action_assertions::check(&root, &tracked));
+            report.errors.extend(availability_gates::check(&root, &tracked));
 
             for warning in &report.warnings {
                 println!("{} {warning}", "!".yellow());

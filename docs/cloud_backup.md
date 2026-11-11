@@ -38,6 +38,13 @@ dispatch uses. A platform draws a control only for an action in the list and
 enables it only when it is available; an unavailable action carries the reason
 to show as its caption. Rust marks the Google Drive actions as Android only.
 
+`just qa-check` enforces this in the Cloud Backup views: every Kotlin
+`enabled =` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an
+action's or row action's `isAvailable`. The only other flags allowed are a few
+per-view local facts, such as the setup checkboxes or a Cancel that waits on an
+Enable with no cancel action, listed with their reasons in
+`rust/xtask/src/qa/availability_gates.rs`.
+
 The Settings row shows `TurnOffIncomplete` while a committed Turn Off still has
 to finish, and `TurnedOnAgain` while the heal notice is on a configured backup.
 Dismissing the notice dispatches `DismissNotice(Heal)`, which clears it from
