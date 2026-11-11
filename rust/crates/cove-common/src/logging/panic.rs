@@ -8,7 +8,7 @@ use std::panic::PanicHookInfo;
 
 use super::capture;
 
-/// Target for the console copy of the panic line, which the capture filter skips
+/// Target shown on the panic line in the marker and the capture
 pub(crate) const PANIC_LOG_TARGET: &str = "cove_common::logging::panic";
 
 pub(crate) fn install_hook() {
@@ -16,8 +16,9 @@ pub(crate) fn install_hook() {
 
     std::panic::set_hook(Box::new(move |info| {
         let line = panic_line(info);
+        // no tracing call here: a panic raised inside a subscriber that holds its own lock
+        // would hang re-entering it instead of aborting
         capture::record_panic(&line);
-        tracing::error!(target: PANIC_LOG_TARGET, "{line}");
 
         // the default hook prints the payload, which can hold secrets from a formatted
         // message, so only debug builds keep it for local backtraces

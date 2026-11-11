@@ -1,10 +1,7 @@
 use std::sync::Once;
 
 use tracing::Level;
-use tracing_subscriber::{
-    EnvFilter,
-    filter::{FilterExt as _, Targets, filter_fn},
-};
+use tracing_subscriber::{EnvFilter, filter::Targets};
 
 pub mod capture;
 mod panic;
@@ -15,9 +12,13 @@ static INIT: Once = Once::new();
 ///
 /// Cove crates log at INFO and dependencies at WARN so a developer's console filter
 /// can neither flood the bounded capture with debug output nor silence it
-const CAPTURE_FILTER: &str = "warn,cove=info";
+///
+/// electrum-client warns on every retry and connection attempt and prints raw server
+/// responses, so it is held to ERROR to keep an unreachable node from flooding the capture
+const CAPTURE_FILTER: &str = "warn,cove=info,electrum_client=error";
 const CAPTURE_DEFAULT_LEVEL: Level = Level::WARN;
 const CAPTURE_COVE_LEVEL: Level = Level::INFO;
+const CAPTURE_ELECTRUM_CLIENT_LEVEL: Level = Level::ERROR;
 
 pub fn init() {
     INIT.call_once(|| {
@@ -37,11 +38,6 @@ pub fn init() {
 
         let console_filter = std::env::var("RUST_LOG").unwrap_or_default();
 
-        // the panic hook records its own capture line without blocking, so the capture
-        // layer skips the console copy instead of taking the capture lock inside the hook
-        let capture_filter = capture_targets().and(filter_fn(|metadata| {
-            metadata.target() != panic::PANIC_LOG_TARGET
-        }));
 
         tracing_subscriber::registry()
             .with(
@@ -50,7 +46,7 @@ pub fn init() {
                     .with_ansi(false)
                     .with_filter(EnvFilter::from_default_env()),
             )
-            .with(capture::layer().with_filter(capture_filter))
+            .with(capture::layer().with_filter(capture_targets()))
             .init();
 
         panic::install_hook();
@@ -62,5 +58,8 @@ pub fn init() {
 }
 
 fn capture_targets() -> Targets {
-    Targets::new().with_default(CAPTURE_DEFAULT_LEVEL).with_target("cove", CAPTURE_COVE_LEVEL)
+    Targets::new()
+        .with_default(CAPTURE_DEFAULT_LEVEL)
+        .with_target("cove", CAPTURE_COVE_LEVEL)
+        .with_target("electrum_client", CAPTURE_ELECTRUM_CLIENT_LEVEL)
 }
