@@ -147,11 +147,7 @@ impl WalletImportPreview {
             };
         }
 
-        match import::validate_wallet_type_secret(
-            &metadata.wallet_type,
-            &wallet_backup.secret,
-            &metadata.name,
-        ) {
+        match import::validate_wallet_type_secret(&metadata.wallet_type, &wallet_backup.secret) {
             Ok(WalletTypeSecretValidation::Valid) => Self { will_import: true, warning: None },
             Ok(WalletTypeSecretValidation::Degraded) => Self {
                 will_import: true,
