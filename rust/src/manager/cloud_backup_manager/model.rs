@@ -2033,6 +2033,7 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
     use crate::manager::cloud_backup_manager::{
         CloudBackupEnableContext, CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary,
         CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupVerificationMetadata,
@@ -2045,7 +2046,7 @@ mod tests {
         generation: u64,
     ) -> CloudBackupStateReducerEvent {
         CloudBackupStateReducerEvent::ExclusiveOperationStarted(
-            CloudBackupExclusiveOperationClaim::new(operation, generation),
+            CloudBackupExclusiveOperationClaim::new(operation, operation_id(generation)),
         )
     }
 
@@ -2570,7 +2571,7 @@ mod tests {
         ]);
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            1,
+            operation_id(1),
         );
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
@@ -2587,7 +2588,7 @@ mod tests {
         });
         let stale_claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            0,
+            operation_id(0),
         );
         model.apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
             claim: stale_claim,
@@ -2957,7 +2958,10 @@ mod tests {
         model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1));
         model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Restore, 1),
+            CloudBackupExclusiveOperationClaim::new(
+                CloudBackupExclusiveOperation::Restore,
+                operation_id(1),
+            ),
         ));
 
         let effects = model.apply_event(operation_event(CloudBackupExclusiveOperation::Enable, 2));
@@ -2979,8 +2983,10 @@ mod tests {
     #[test]
     fn enable_completion_emits_context_after_operation_finishes() {
         let context = CloudBackupEnableContext::settings_manual();
-        let claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            operation_id(1),
+        );
         let mut model = CloudBackupStateReducer::default();
 
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
@@ -3013,7 +3019,7 @@ mod tests {
     fn releasing_the_enable_claim_republishes_the_settings_row() {
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::EnableNoDiscovery,
-            1,
+            operation_id(1),
         );
         let mut model = CloudBackupStateReducer::default();
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
@@ -3102,7 +3108,7 @@ mod tests {
     fn exclusive_operation_start_projects_latest_operation_without_locking() {
         let active_claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RecreateManifest,
-            1,
+            operation_id(1),
         );
         let cases = [
             CloudBackupExclusiveOperation::Enable,
@@ -3114,7 +3120,8 @@ mod tests {
             let mut model = CloudBackupStateReducer::default();
             model
                 .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(active_claim));
-            let next_claim = CloudBackupExclusiveOperationClaim::new(operation, index as u64 + 2);
+            let next_claim =
+                CloudBackupExclusiveOperationClaim::new(operation, operation_id(index as u64 + 2));
 
             model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(next_claim));
 
@@ -3136,10 +3143,14 @@ mod tests {
     #[test]
     fn stale_exclusive_operation_finish_does_not_clear_newer_operation() {
         let mut model = CloudBackupStateReducer::default();
-        let stale_claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 1);
-        let current_claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 2);
+        let stale_claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            operation_id(1),
+        );
+        let current_claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            operation_id(2),
+        );
 
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(stale_claim));
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim));
@@ -3209,8 +3220,10 @@ mod tests {
     #[test]
     fn matching_finish_releases_reconciled_background_status() {
         let mut model = CloudBackupStateReducer::default();
-        let claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            operation_id(1),
+        );
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
         let runtime_effects = model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));

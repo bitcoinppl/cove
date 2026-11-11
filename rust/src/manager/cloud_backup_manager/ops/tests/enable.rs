@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
@@ -126,7 +127,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             preparation.recovered_passkey_metadata(),
         )
         .unwrap();
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Enable,
+        operation_id(42),
+    );
     manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
     let error = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap_err();
@@ -172,7 +176,10 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     let CloudBackupEnablePasskeyPreparation::Ready(ready) = preparation else {
         panic!("expected authenticated passkey material");
     };
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Enable,
+        operation_id(42),
+    );
     manager.project_exclusive_operation_started(claim);
     manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
     let writes = operation_write_client_for_test(&manager, claim);
@@ -234,7 +241,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         PendingEnableNamespaceOwnership::RecoveredExisting
     );
     assert!(matches!(staged_journal.phase(), PendingEnableJournalPhase::PasskeyRegistered(_)));
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Enable,
+        operation_id(42),
+    );
     manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
     let completion = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap();

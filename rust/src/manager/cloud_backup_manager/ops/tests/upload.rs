@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
 #[test]
 fn persist_xpub_wallets_saves_each_wallet_in_its_own_scope() {
@@ -186,8 +187,10 @@ async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace(
     CloudBackupKeychain::global().save_namespace_id("0123456789abcdef0123456789abcdef").unwrap();
 
     let manager = init_manager();
-    let claim =
-        CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::RecreateManifest, 1);
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::RecreateManifest,
+        operation_id(1),
+    );
     let writes = operation_write_client_for_test(&manager, claim);
     let error = manager.prepare_reupload_all_wallets(writes).await.unwrap_err();
 

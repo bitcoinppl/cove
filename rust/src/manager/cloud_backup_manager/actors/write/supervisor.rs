@@ -883,6 +883,7 @@ mod tests {
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, reset_cloud_backup_test_state, test_globals,
     };
+    use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
     use crate::manager::cloud_backup_manager::{
         DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
     };
@@ -902,7 +903,7 @@ mod tests {
             3,
             Some(CloudBackupExclusiveOperationClaim::new(
                 CloudBackupExclusiveOperation::ReinitializeBackup,
-                7,
+                operation_id(7),
             )),
         );
 
@@ -969,7 +970,10 @@ mod tests {
             .block_until_drained(
                 blocker,
                 WeakAddr::<CloudBackupSupervisor>::default(),
-                CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 42),
+                CloudBackupExclusiveOperationClaim::new(
+                    CloudBackupExclusiveOperation::Disable,
+                    operation_id(42),
+                ),
             )
             .await
             .unwrap();
@@ -993,8 +997,10 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn write_command_contexts_carry_identity_and_origin() {
         let mut supervisor = CloudBackupWriteSupervisor::default();
-        let origin =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 42);
+        let origin = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            operation_id(42),
+        );
 
         let first_context = supervisor.advance_operation_command_id(origin);
         assert_eq!(first_context.origin(), Some(origin));
@@ -1014,7 +1020,7 @@ mod tests {
         let supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            u64::MAX,
+            operation_id(u64::MAX),
         );
 
         let result = CloudBackupWriteSupervisor::ensure_operation_origin_current(
@@ -1034,7 +1040,7 @@ mod tests {
         let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            u64::MAX,
+            operation_id(u64::MAX),
         );
         let command = supervisor.advance_operation_command_id(stale);
 
@@ -1061,7 +1067,7 @@ mod tests {
             Some(in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed));
         let stale = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            u64::MAX,
+            operation_id(u64::MAX),
         );
         let command = supervisor.advance_operation_command_id(stale);
 
@@ -1091,7 +1097,7 @@ mod tests {
         let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
         let stale = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            u64::MAX,
+            operation_id(u64::MAX),
         );
         let command = supervisor.advance_operation_command_id(stale);
         let (sender, receiver) = oneshot::channel();

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use super::*;
 use crate::manager::cloud_backup_manager::CloudBackupWalletVerificationIssues;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
 fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decryption_failed: u32) {
     manager.apply_verification_state(VerificationState::NeedsAttention(DeepVerificationReport {
@@ -97,7 +98,7 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     );
     let claim = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
-        1,
+        operation_id(1),
     );
     manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);

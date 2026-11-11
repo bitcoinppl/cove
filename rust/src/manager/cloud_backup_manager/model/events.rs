@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::DriveAccountSwitchId;
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
@@ -77,9 +78,14 @@ pub(crate) enum CloudBackupRestoreAllRuntimeState {
     RetryRemaining,
 }
 
+/// The identity a claim's completions are matched against
+///
+/// A drive account switch's reinitialization is identified by its persisted transition id
+/// instead of an `OperationId`, because it resumes across a relaunch and a process-local id
+/// would not survive one
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CloudBackupExclusiveOperationOwner {
-    Generation(u64),
+    Operation(OperationId),
     DriveAccountSwitch(DriveAccountSwitchId),
 }
 
@@ -94,8 +100,8 @@ pub(crate) struct CloudBackupExclusiveOperationClaim {
 }
 
 impl CloudBackupExclusiveOperationClaim {
-    pub(crate) fn new(operation: CloudBackupExclusiveOperation, generation: u64) -> Self {
-        Self { operation, owner: CloudBackupExclusiveOperationOwner::Generation(generation) }
+    pub(crate) fn new(operation: CloudBackupExclusiveOperation, id: OperationId) -> Self {
+        Self { operation, owner: CloudBackupExclusiveOperationOwner::Operation(id) }
     }
 
     pub(crate) fn drive_account_switch(transition_id: DriveAccountSwitchId) -> Self {
@@ -114,7 +120,7 @@ impl CloudBackupExclusiveOperationClaim {
             CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id) => {
                 Some(transition_id)
             }
-            CloudBackupExclusiveOperationOwner::Generation(_) => None,
+            CloudBackupExclusiveOperationOwner::Operation(_) => None,
         }
     }
 }

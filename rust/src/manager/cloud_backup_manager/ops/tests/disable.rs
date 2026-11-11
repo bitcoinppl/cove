@@ -1,6 +1,7 @@
 use super::*;
 use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 
 /// A Turn Off stopped before its commit point leaves the backup configured, with nothing to
 /// keep enabled, and returns the failure message
@@ -328,8 +329,10 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
 
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    let claim =
-        CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::RecreateManifest, 1);
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::RecreateManifest,
+        operation_id(1),
+    );
     manager.project_exclusive_operation_started(claim);
 
     let error = manager.prepare_disable_cloud_backup().await.unwrap_err();

@@ -1,5 +1,6 @@
 
 use super::*;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommittedDisable, DisableCommitReview, DisablingRecord,
@@ -753,7 +754,7 @@ async fn supervisor_rejects_second_exclusive_operation_while_active() {
 fn local_reset_cancels_restore_without_releasing_its_claim() {
     let claim = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::Restore,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
     let cancellation = Arc::new(AtomicBool::new(false));
     let mut active = ActiveOperation::default();
@@ -1158,7 +1159,7 @@ async fn assert_completion_ignores_stale_claim(
     );
 
     let current = begin(&mut supervisor, &manager);
-    let stale = CloudBackupExclusiveOperationClaim::new(current.operation(), u64::MAX);
+    let stale = CloudBackupExclusiveOperationClaim::new(current.operation(), operation_id(u64::MAX));
 
     complete(&mut supervisor, stale).await;
 
@@ -1621,7 +1622,7 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         .unwrap();
     let stale = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::RepairPasskey,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
 
     let detail_claim = supervisor.detail_workflow.start_operation_result();
@@ -3016,6 +3017,43 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn stale_completion_is_discarded_without_touching_the_running_operation() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    let finished = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
+        .unwrap();
+    supervisor.complete_exclusive_operation(finished).await.unwrap();
+    let running = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+        .unwrap();
+    // the state snapshot has no PartialEq, so its debug form stands in for it
+    let before = format!("{:?}", manager.state());
+
+    // the finished operation's late failure and success both arrive while the next one runs
+    supervisor
+        .fail_exclusive_operation(finished, CloudBackupError::Internal("late failure".into()))
+        .await
+        .unwrap();
+    supervisor.complete_exclusive_operation(finished).await.unwrap();
+
+    assert_eq!(supervisor.active_operation, Some(running));
+    assert_eq!(manager.projected_exclusive_operation(), Some(running));
+    assert_eq!(format!("{:?}", manager.state()), before);
+    assert_eq!(supervisor.last_outcome, None, "a stale completion is never a rejection");
+
+    supervisor.complete_exclusive_operation(running).await.unwrap();
+
+    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn keep_enabled_finishes_active_disable_operation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
@@ -3748,7 +3786,7 @@ async fn stale_restore_all_record_dispatch_does_not_mutate_current_claim() {
         .unwrap();
     let stale = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
 
     let applied = supervisor

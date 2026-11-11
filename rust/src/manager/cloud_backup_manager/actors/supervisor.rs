@@ -4,7 +4,7 @@
 //! child actors or spawned tasks. Each exclusive operation receives a claim that
 //! every async completion must present before it can update manager state
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 #[cfg(test)]
 use std::time::Duration;
@@ -14,7 +14,7 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use super::CloudBackupSyncHealthWorker;
 use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
@@ -33,6 +33,7 @@ use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::verify::{
     CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationStep,
@@ -99,8 +100,6 @@ mod tests {
 
     include!("supervisor/tests.rs");
 }
-
-static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DriveAccountSwitchReinitializationCompletion {
@@ -259,6 +258,25 @@ impl ActiveOperation {
     /// Whether `claim` still owns the active operation, so completions for superseded claims are ignored
     fn is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
         self.claim() == Some(claim)
+    }
+
+    /// Whether a completion carrying `claim` belongs to the running operation
+    ///
+    /// A completion for an operation that already finished, was cancelled or was handed off is
+    /// stale. It is discarded here with a `debug!` log and is never reported to the user, since
+    /// the user's intent was admitted and the operation that replaced it reports its own result
+    fn accepts_completion(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+        completion: &'static str,
+    ) -> bool {
+        let current = self.claim();
+        if current == Some(claim) {
+            return true;
+        }
+
+        debug!("Cloud Backup discarded stale {completion} for {claim:?}, running {current:?}");
+        false
     }
 
     fn start_standard(&mut self, claim: CloudBackupExclusiveOperationClaim) {
@@ -441,7 +459,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<Arc<RustCloudBackupManager>> {
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "completion") {
             return None;
         }
 
@@ -512,8 +530,7 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
-        let claim = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
+        let claim = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
         manager.project_exclusive_operation_started(claim);
         if operation == CloudBackupExclusiveOperation::Restore {
             self.active_operation
@@ -538,8 +555,7 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
-        let to = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
+        let to = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
         self.active_operation.start_standard(to);
         manager.project_exclusive_operation_handed_off(from, to);
         Some(to)
@@ -552,10 +568,9 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            operation_id,
+            OperationId::next(),
         );
         let cancellation = Arc::new(AtomicBool::new(false));
         self.active_operation.start_restore_all(RestoreRun::new(claim, cancellation));
@@ -573,7 +588,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "completion") {
             return Produces::ok(());
         }
 
@@ -596,7 +611,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "failure") {
             return Produces::ok(());
         }
 

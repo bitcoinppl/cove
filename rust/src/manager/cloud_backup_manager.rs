@@ -1389,6 +1389,7 @@ mod tests {
         ensure_cloud_backup_test_tokio_runtime, listed_detail,
         persisted_enabled_cloud_backup_state, test_globals, test_lock,
     };
+    use super::owner::operation::test_support::operation_id;
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
@@ -1830,7 +1831,7 @@ mod tests {
 
         manager.project_exclusive_operation_started(CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            1,
+            operation_id(1),
         ));
 
         assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
@@ -1845,7 +1846,7 @@ mod tests {
 
         manager.project_exclusive_operation_started(CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            1,
+            operation_id(1),
         ));
 
         assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
@@ -1863,7 +1864,7 @@ mod tests {
 
         manager.project_exclusive_operation_started(CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Restore,
-            1,
+            operation_id(1),
         ));
 
         assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
@@ -1881,7 +1882,7 @@ mod tests {
 
         manager.project_exclusive_operation_started(CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::Enable,
-            1,
+            operation_id(1),
         ));
         manager.sync_persisted_state();
 

@@ -157,7 +157,7 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
     ) -> ActorResult<()> {
         if let Some(claim) = claim
-            && !self.active_operation.is_current(claim)
+            && !self.active_operation.accepts_completion(claim, "verification")
         {
             return Produces::ok(());
         }

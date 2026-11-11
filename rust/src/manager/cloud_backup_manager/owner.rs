@@ -5,3 +5,4 @@
 //! inputs; only the owner decides what is persisted
 
 pub(crate) mod lifecycle;
+pub(crate) mod operation;

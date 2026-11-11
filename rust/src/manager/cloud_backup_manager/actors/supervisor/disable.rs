@@ -70,7 +70,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "disable write drain") {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -108,7 +108,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "disable write drain") {
             return Produces::ok(());
         }
 
@@ -333,7 +333,7 @@ impl CloudBackupSupervisor {
             warn!("Failed to lift cloud backup disable fence: {error}");
         }
 
-        if !self.active_operation.is_current(claim) {
+        if !self.active_operation.accepts_completion(claim, "Keep Enabled") {
             return Produces::ok(());
         }
 
