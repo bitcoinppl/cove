@@ -13,7 +13,7 @@ use tokio::runtime::Handle;
 
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
-use super::fakes::{HarnessCloud, HarnessKeychain, HarnessPasskey};
+use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
@@ -63,6 +63,7 @@ impl NextAction {
 #[derive(Debug)]
 struct HarnessEnv {
     handle: &'static Handle,
+    keychain: HarnessKeychain,
     cloud: HarnessCloud,
     passkey: HarnessPasskey,
 }
@@ -81,12 +82,12 @@ fn env() -> &'static HarnessEnv {
         let cloud = HarnessCloud::load(globals.cloud.clone(), root.join("cloud.json"));
         let passkey = HarnessPasskey::new(globals.passkey.clone());
 
-        let _ = Keychain::new(Box::new(keychain));
+        let _ = Keychain::new(Box::new(keychain.clone()));
         let _ = CloudStorage::new(Box::new(cloud.clone()));
         let _ = PasskeyAccess::new(Box::new(passkey.clone()));
         CONNECTIVITY_MANAGER.set_connection_state(true);
 
-        HarnessEnv { handle, cloud, passkey }
+        HarnessEnv { handle, keychain, cloud, passkey }
     })
 }
 
@@ -108,6 +109,7 @@ fn bounded_block_on<T>(what: &str, future: impl Future<Output = T>) -> T {
 #[derive(Debug)]
 pub(crate) struct TestApp {
     manager: Arc<RustCloudBackupManager>,
+    pub(crate) keychain: HarnessKeychain,
     pub(crate) cloud: HarnessCloud,
     pub(crate) passkey: HarnessPasskey,
     pub(crate) clock: HarnessClock,
@@ -151,6 +153,7 @@ impl TestApp {
 
         let app = Self {
             manager,
+            keychain: env.keychain.clone(),
             cloud: env.cloud.clone(),
             passkey: env.passkey.clone(),
             clock,
@@ -236,8 +239,10 @@ impl TestApp {
     /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
     /// park. A current-thread runtime parks only with an empty run queue, so after a round every
     /// task the event woke has run as far as it can. The app is settled after a round in which
-    /// no fake call is answering. Calls waiting on a `Hold` and tasks waiting on the paused clock
-    /// count as settled, so tests release holds and advance time as events
+    /// no fake call is answering and the supervisor's stage checkpoint shows no operation in an
+    /// `Effecting` stage. An effect runs off the runtime, so the park alone can't see it. Calls
+    /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
+    /// release holds and advance time as events
     pub(crate) fn settle(&self) {
         let supervisor = self.manager.supervisor.clone();
         let writes = self.manager.cloud_writes.clone();
@@ -252,9 +257,33 @@ impl TestApp {
             runtime::wait_until_idle(&format!("the runtime to go idle after {}", self.last_event));
 
             // a passkey request answers on a blocking thread while the runtime is idle
-            if self.cloud.running_calls() == 0 && self.passkey.running_calls() == 0 {
+            if self.cloud.running_calls() != 0 || self.passkey.running_calls() != 0 {
+                continue;
+            }
+
+            // an effect waiting on a held call is settled; the test releases it as an event
+            if fakes::held_calls() != 0 {
                 return;
             }
+
+            let checkpoint = format!("the supervisor's stage checkpoint after {}", self.last_event);
+            let mut effects_settled = self
+                .block_on(&checkpoint, call!(supervisor.harness_effects_settled()))
+                .expect("stage checkpoint");
+            if effects_settled.try_recv().is_ok() {
+                return;
+            }
+
+            let effect = format!("the in-flight effect to report after {}", self.last_event);
+            // the effect may go on to wait on a held call, which settles it as well
+            self.block_on(&effect, async {
+                tokio::select! {
+                    settled = effects_settled => {
+                        settled.expect("the supervisor stopped with an effect in flight");
+                    }
+                    () = fakes::until_a_call_is_held() => {}
+                }
+            });
         }
 
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
@@ -281,6 +310,14 @@ impl TestApp {
         let supervisor = self.manager.supervisor.clone();
         self.block_on("the supervisor's admission answer", async move {
             call!(supervisor.harness_admission(action.intent())).await.expect("admission")
+        })
+    }
+
+    /// What admission says now for an intent no [`NextAction`] names, such as a platform call
+    pub(crate) fn admission_of(&self, intent: UserIntent) -> Admission {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("the supervisor's admission answer", async move {
+            call!(supervisor.harness_admission(intent)).await.expect("admission")
         })
     }
 

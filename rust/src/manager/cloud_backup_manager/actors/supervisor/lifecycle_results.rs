@@ -10,7 +10,72 @@ use crate::manager::cloud_backup_manager::verify::{
     IntegrityDowngrade, PendingVerificationSettlement,
 };
 
+/// A keychain write a worker prepared for the owner to apply
+///
+/// Verification and missing-key recovery prove a passkey and a master key off the actor. They
+/// don't write the keychain themselves: the owner applies the write in its handler, where a reset
+/// or a Turn Off can't interleave with it
+pub(crate) enum OwnedKeychainWrite {
+    /// The passkey that just decrypted the cloud master key
+    Passkey { credential_id: Vec<u8>, prf_salt: [u8; 32] },
+    /// The cloud master key that passkey proved, replacing a missing or stale local key
+    MasterKey(cove_cspp::master_key::MasterKey),
+}
+
+impl std::fmt::Debug for OwnedKeychainWrite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Passkey { .. } => f.write_str("Passkey(<redacted>)"),
+            Self::MasterKey(_) => f.write_str("MasterKey(<redacted>)"),
+        }
+    }
+}
+
 impl CloudBackupSupervisor {
+    /// Applies keychain writes a worker prepared, while a configured backup owns them
+    ///
+    /// The keys belong to the configured namespace, so only a configured body has a place for
+    /// them. After a Turn Off committed, during a reset, or with backup off, the write is
+    /// refused as `Cancelled` and the worker stops, so a late worker leaves no stale key behind
+    pub async fn apply_keychain_writes(
+        &mut self,
+        writes: Vec<OwnedKeychainWrite>,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
+
+        self.rebase_idle_runtime(&manager);
+        if !matches!(self.runtime, Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. })
+        {
+            debug!("Cloud Backup refused keychain writes {writes:?} outside a configured backup");
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        let keychain = Keychain::global();
+        for write in writes {
+            let result = match write {
+                OwnedKeychainWrite::Passkey { credential_id, prf_salt } => {
+                    CloudBackupKeychain::new(keychain.clone())
+                        .save_passkey(&credential_id, prf_salt)
+                        .map_err(|source| {
+                            CloudBackupError::internal_context("save cloud backup passkey", source)
+                        })
+                }
+                OwnedKeychainWrite::MasterKey(master_key) => cove_cspp::Cspp::new(keychain.clone())
+                    .save_master_key(&master_key)
+                    .map_err(|source| {
+                        CloudBackupError::internal_context("save local master key", source)
+                    }),
+            };
+            if let Err(error) = result {
+                return Produces::ok(Err(error));
+            }
+        }
+
+        Produces::ok(Ok(()))
+    }
+
     /// The cloud lists `wallet_count` wallet backups for the active namespace
     pub async fn record_cloud_wallet_count(&mut self, wallet_count: u32) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };

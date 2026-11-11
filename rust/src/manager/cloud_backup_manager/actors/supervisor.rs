@@ -14,6 +14,7 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
+use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
 use super::CloudBackupSyncHealthWorker;
@@ -30,8 +31,8 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::database::error::DatabaseError;
-use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
-use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
+use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
+use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
@@ -91,11 +92,12 @@ mod other_backups;
 mod restore_all;
 mod runtime;
 
-use runtime::{IdleFacts, RestoreRun, Runtime};
+use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
 mod undecryptable_wallets;
 mod verification;
 
 pub(crate) use dispatch::DispatchOutcome;
+pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
@@ -105,6 +107,20 @@ mod tests {
     #![cfg(test)]
 
     include!("supervisor/tests.rs");
+}
+
+/// Proof that the lifecycle owner is changing Cloud Backup's local keychain state
+///
+/// Only the supervisor and its submodules can mint one: in a handler, or for an `Effecting`
+/// stage it started. Together with the recovery-cleanup permit, which can only exist while no
+/// supervisor does, it gives the keychain namespace one owner at any time
+#[derive(Debug)]
+pub(crate) struct OwnerToken(());
+
+impl OwnerToken {
+    fn mint() -> Self {
+        Self(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1421,23 +1437,111 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn prepare_local_reset_runtime(&mut self) -> ActorResult<()> {
-        if let Some(released_claim) = self.runtime.prepare_local_reset()
-            && let Some(manager) = self.manager()
+    /// Closes admission for a local reset; the receiver answers once no effect is in flight
+    ///
+    /// A cancellable operation ends now. One in an `Effecting` stage keeps authority until its
+    /// completion message arrives, and the reset continues then. The caller awaits the
+    /// receiver, so this handler never waits and the actor still receives that completion
+    pub async fn begin_local_reset(
+        &mut self,
+    ) -> ActorResult<Result<oneshot::Receiver<()>, Rejection>> {
+        if let Some(manager) = self.manager()
+            && let Admission::Rejected(rejection) = self.admit(&manager, &UserIntent::LocalReset)
         {
-            manager.project_exclusive_operation_finished(released_claim);
+            return Produces::ok(Err(rejection));
         }
+
+        let (ready, receiver) = oneshot::channel();
+        let start = self.runtime.begin_reset(ready);
+        debug!("Cloud Backup local reset began: {start:?}");
+        if let Some(manager) = self.manager() {
+            match start {
+                ResetStart::Cancelled(claim) | ResetStart::AwaitingEffect(claim) => {
+                    manager.project_exclusive_operation_finished(claim);
+                }
+                ResetStart::Idle => {}
+            }
+        }
+
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
         self.pending_disable_write_drain = None;
-        self.clear_upload_runtime_state().await
+        self.clear_upload_runtime_state().await?;
+        Produces::ok(Ok(receiver))
     }
+
+    /// Clears Cloud Backup's local keychain state for a full wipe, as the namespace's owner
+    pub async fn clear_local_state_for_reset(
+        &mut self,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        if !matches!(self.runtime, Runtime::Resetting { held: None, .. }) {
+            return Produces::ok(Err(CloudBackupError::Internal(
+                "cloud backup local state can only be cleared by a ready reset".into(),
+            )));
+        }
+
+        let owner = OwnerToken::mint();
+        let result = CloudBackupKeychain::global()
+            .clear_local_state(&LocalStateOwner::Lifecycle(&owner))
+            .map_err(|source| {
+                CloudBackupError::internal_context(
+                    "clear cloud backup local keychain state",
+                    source,
+                )
+            });
+
+        Produces::ok(result)
+    }
+
+    /// Ends a local reset with the body it left, and reopens admission
+    ///
+    /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
+    /// here so an idle body never waits for the next admission to catch up with the wipe
+    pub async fn finish_local_reset(&mut self, outcome: LocalResetOutcome) -> ActorResult<()> {
+        if !matches!(self.runtime, Runtime::Resetting { .. }) {
+            return Produces::ok(());
+        }
+
+        let after = match outcome {
+            LocalResetOutcome::Wiped => Runtime::off(),
+            LocalResetOutcome::Abandoned => Runtime::at_load(
+                None,
+                IdleFacts {
+                    record: &RustCloudBackupManager::load_persisted_state(),
+                    pending_enable_recovery: false,
+                },
+            ),
+        };
+        self.runtime.finish_reset(after);
+        debug!("Cloud Backup local reset finished: {outcome:?}");
+
+        Produces::ok(())
+    }
+}
+
+/// How a local reset ended
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalResetOutcome {
+    /// The database reset committed, so Cloud Backup is off
+    Wiped,
+    /// The wipe failed before its commit, so the stored record still holds
+    Abandoned,
 }
 
 pub(crate) mod test_support {
     #![cfg(test)]
 
     use super::*;
+
+    impl CloudBackupKeychain {
+        /// Clears local state the way the lifecycle owner does, for test setup
+        pub(crate) fn clear_local_state_for_test(
+            &self,
+        ) -> Result<(), crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError>
+        {
+            self.clear_local_state(&LocalStateOwner::Lifecycle(&OwnerToken::mint()))
+        }
+    }
 
     impl CloudBackupSupervisor {
         /// What dispatch would do with `intent` now, without doing it
@@ -1452,6 +1556,15 @@ pub(crate) mod test_support {
                 None => Admission::Rejected(Rejection::NotConfigured),
             };
             Produces::ok(admission)
+        }
+
+        /// The stage checkpoint: answers once no operation is waiting on an off-actor effect
+        pub(crate) async fn harness_effects_settled(
+            &mut self,
+        ) -> ActorResult<oneshot::Receiver<()>> {
+            let (settled, receiver) = oneshot::channel();
+            self.runtime.when_effects_settle(settled);
+            Produces::ok(receiver)
         }
 
         pub(crate) async fn harness_last_outcome(

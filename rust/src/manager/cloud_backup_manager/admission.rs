@@ -53,6 +53,8 @@ pub(crate) enum UserIntent {
     CancelDriveAccountSwitch,
     /// The platform reconciles a Google Drive account switch it found unfinished
     RetryDriveAccountSwitchRecovery,
+    /// A full wipe resets Cloud Backup's local state
+    LocalReset,
 }
 
 /// Which Enable the user asked for
@@ -152,6 +154,8 @@ pub(crate) enum Rejection {
     KeepEnabledUnavailable,
     /// Nothing is waiting to be continued, such as a saved passkey with no paused Enable
     NothingToContinue,
+    /// A local reset is wiping Cloud Backup's local state
+    Resetting,
 }
 
 /// The lifecycle body admission decides on
@@ -165,6 +169,8 @@ pub(crate) enum AdmissionBody {
     FinishingDisable,
     PendingEnableRecovery,
     LoadFailed,
+    /// A local reset closed admission until it finishes
+    Resetting,
 }
 
 /// What admission needs to know about a configured backup
@@ -217,6 +223,9 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
     use UserIntent as I;
 
     match intent {
+        // a reset closed admission: nothing starts and nothing is presented until it finishes
+        _ if snapshot.body == AdmissionBody::Resetting => Rejected(Rejection::Resetting),
+
         // the continuation of a paused Enable: it needs the Enable it continues
         I::ConfirmSavedPasskey => match (snapshot.enable_awaits_saved_passkey, snapshot.running) {
             (_, Some(Op::Enable)) => Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Enable)),
@@ -224,6 +233,9 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             (true, None) => Accepted,
             (false, None) => Rejected(Rejection::NothingToContinue),
         },
+
+        // a full wipe is admitted from every body; only another reset closes it, above
+        I::LocalReset => Accepted,
 
         // a recorded switch, or a platform one Rust lost, can always be reconciled
         I::RetryDriveAccountSwitchRecovery => match snapshot.body {
@@ -347,6 +359,7 @@ fn starts_while_off(
         (AdmissionBody::Configured(_), None) => Admission::Rejected(Rejection::NotConfigured),
         (AdmissionBody::FinishingDisable, None) => Admission::Rejected(Rejection::TurnOffCommitted),
         (AdmissionBody::LoadFailed, None) => Admission::Rejected(Rejection::LoadFailed),
+        (AdmissionBody::Resetting, None) => Admission::Rejected(Rejection::Resetting),
     }
 }
 
@@ -419,6 +432,7 @@ fn not_configured(body: AdmissionBody) -> Rejection {
         AdmissionBody::Disabled => Rejection::CloudBackupOff,
         AdmissionBody::LoadFailed => Rejection::LoadFailed,
         AdmissionBody::FinishingDisable => Rejection::TurnOffCommitted,
+        AdmissionBody::Resetting => Rejection::Resetting,
         AdmissionBody::Configured(_)
         | AdmissionBody::Enabling
         | AdmissionBody::Restoring

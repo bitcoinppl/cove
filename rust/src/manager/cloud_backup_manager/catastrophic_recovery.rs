@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use crate::database::Database;
 use cove_device::{
     cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError},
@@ -7,7 +5,7 @@ use cove_device::{
 };
 use cove_util::ResultExt as _;
 
-use super::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain};
+use super::CloudBackupKeychain;
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -53,9 +51,13 @@ impl CatastrophicCloudRestoreProvider {
 /// the database handle so bootstrap can start from a clean state
 #[uniffi::export]
 pub fn reset_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
-    wipe_local_data_for_catastrophic_recovery()?;
-    clear_in_process_cloud_backup_state_for_catastrophic_recovery();
-    reinit_database_after_catastrophic_recovery()
+    // the cleanup permit is held until the database is reinitialized, so no Cloud Backup manager
+    // can bootstrap on the old database in between; it would own a namespace this reset deletes
+    let cleanup = wipe_local_data_for_catastrophic_recovery()?;
+    cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+    let reinit = reinit_database_after_catastrophic_recovery();
+    drop(cleanup);
+    reinit
 }
 
 #[uniffi::export]
@@ -137,7 +139,8 @@ fn catastrophic_cloud_restore_error(
     }
 }
 
-fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
+fn wipe_local_data_for_catastrophic_recovery()
+-> Result<crate::wallet::deletion::RecoveryCleanup, CatastrophicRecoveryError> {
     let cleanup = crate::wallet::deletion::RecoveryCleanup::prepare_database_unavailable()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
     cleanup.delete_all_wallet_items().map_err_str(CatastrophicRecoveryError::Failure)?;
@@ -145,8 +148,12 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
         .delete_key_teleport_receive_session()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
 
+    // no supervisor exists while the permit is held, so the permit owns the namespace here
+    let owner = cleanup.cloud_backup_owner().ok_or_else(|| {
+        CatastrophicRecoveryError::Failure("cloud backup cleanup permit missing".into())
+    })?;
     CloudBackupKeychain::global()
-        .clear_local_state()
+        .clear_local_state(&owner)
         .map_err_str(CatastrophicRecoveryError::Failure)?;
 
     cleanup
@@ -166,15 +173,7 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
         .map_err_prefix("remove database", CatastrophicRecoveryError::Failure)?;
 
     receive_session_reset.commit();
-    Ok(())
-}
-
-fn clear_in_process_cloud_backup_state_for_catastrophic_recovery() {
-    cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
-
-    if let Some(manager) = LazyLock::get(&CLOUD_BACKUP_MANAGER) {
-        manager.clear_in_process_state_for_local_reset();
-    }
+    Ok(cleanup)
 }
 
 fn reinit_database_after_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {

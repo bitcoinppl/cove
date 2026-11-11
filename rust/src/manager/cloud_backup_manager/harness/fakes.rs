@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::time::Duration;
 
 use cove_device::cloud_storage::{
     CloudAccessPolicy, CloudBackupUploadStatus, CloudStorageAccess, CloudStorageError,
@@ -23,6 +25,7 @@ use tokio::sync::watch;
 
 use super::deadline::Deadline;
 use super::process::{checkpoint, on_checkpoint};
+use crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     MockCloudDurableContents, MockCloudStorage, MockPasskeyProviderImpl,
 };
@@ -100,13 +103,29 @@ impl Hold {
     }
 
     async fn enter_and_wait(&self) {
+        HELD_CALLS.send_modify(|held| *held += 1);
         self.0.stage.send_modify(|stage| *stage = HoldStage::Entered);
         self.wait_for(HoldStage::Released, "to be released by the test").await;
+        HELD_CALLS.send_modify(|held| *held -= 1);
     }
 
     fn finish(&self) {
         self.0.stage.send_modify(|stage| *stage = HoldStage::Finished);
     }
+}
+
+/// Fake calls of any kind waiting on a [`Hold`]
+static HELD_CALLS: LazyLock<watch::Sender<usize>> = LazyLock::new(|| watch::Sender::new(0));
+
+/// How many fake calls are waiting for the test to release them
+pub(crate) fn held_calls() -> usize {
+    *HELD_CALLS.borrow()
+}
+
+/// Resolves once some fake call is waiting for the test to release it
+pub(crate) async fn until_a_call_is_held() {
+    let mut held = HELD_CALLS.subscribe();
+    let _ = held.wait_for(|held| *held > 0).await;
 }
 
 fn write_json(path: &PathBuf, value: &impl serde::Serialize) {
@@ -616,12 +635,21 @@ impl PasskeyProvider for HarnessPasskey {
 pub(crate) struct HarnessKeychain {
     pub(crate) inner: MockKeychain,
     file: Arc<PathBuf>,
+    /// How long each delete takes, like a platform keychain under load
+    slow_deletes: Arc<Mutex<Option<Duration>>>,
+    /// Holds the next delete of the namespace item until the test releases it
+    namespace_delete_hold: Arc<Mutex<Option<Hold>>>,
 }
 
 impl HarnessKeychain {
     pub(crate) fn load(inner: MockKeychain, file: PathBuf) -> Self {
         inner.restore_entries(read_json(&file));
-        let keychain = Self { inner, file: Arc::new(file) };
+        let keychain = Self {
+            inner,
+            file: Arc::new(file),
+            slow_deletes: Arc::default(),
+            namespace_delete_hold: Arc::default(),
+        };
         let flushed = keychain.clone();
         on_checkpoint(move || flushed.persist());
         keychain
@@ -629,6 +657,18 @@ impl HarnessKeychain {
 
     pub(crate) fn persist(&self) {
         write_json(&self.file, &self.inner.entries_snapshot());
+    }
+
+    /// Makes every later delete take `duration` on its own thread, without a hold the test
+    /// releases, so the only way to wait for it is the owner's stage checkpoint
+    pub(crate) fn slow_deletes(&self, duration: Duration) {
+        *self.slow_deletes.lock() = Some(duration);
+    }
+
+    /// Holds the next delete of the namespace item, which only clearing local state makes
+    pub(crate) fn hold_namespace_delete(&self, hold: Hold) {
+        hold.label("held keychain namespace delete".into());
+        *self.namespace_delete_hold.lock() = Some(hold);
     }
 }
 
@@ -644,6 +684,21 @@ impl KeychainAccess for HarnessKeychain {
     }
 
     fn delete(&self, key: String) -> bool {
+        if let Some(duration) = *self.slow_deletes.lock() {
+            std::thread::sleep(duration);
+        }
+
+        let hold = (key == CSPP_NAMESPACE_ID_KEY)
+            .then(|| self.namespace_delete_hold.lock().take())
+            .flatten();
+        if let Some(hold) = hold {
+            futures::executor::block_on(hold.enter_and_wait());
+            let deleted = self.inner.delete(key);
+            self.persist();
+            hold.finish();
+            return deleted;
+        }
+
         let deleted = self.inner.delete(key);
         self.persist();
         deleted

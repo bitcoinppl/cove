@@ -258,7 +258,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(()) | Err(CloudBackupError::CloudStorage(CloudStorageError::NotFound(_))) => {
-                self.schedule_disable_local_cleanup(manager, claim, disabling);
+                self.schedule_disable_local_cleanup(claim, disabling);
             }
             Err(CloudBackupError::CloudStorage(error)) => {
                 let message =
@@ -281,14 +281,28 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    /// Starts Turn Off's local cleanup as the operation's `Effecting` stage
+    ///
+    /// The keychain clear can't be taken back once it starts, so a reset that begins meanwhile
+    /// waits for `complete_disable_local_cleanup` instead of wiping beside it
     fn schedule_disable_local_cleanup(
-        &self,
-        manager: Arc<RustCloudBackupManager>,
+        &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         disabling: CommittedDisable,
     ) {
+        if !self.runtime.begin_effect(claim, Effect::LocalCleanup) {
+            return;
+        }
+
+        let owner = OwnerToken::mint();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.finish_disable_local_cleanup();
+            // a platform keychain call blocks its thread, so it runs off the runtime
+            let result = cove_tokio::unblock::run_blocking(move || {
+                RustCloudBackupManager::run_disable_local_cleanup(&LocalStateOwner::Lifecycle(
+                    &owner,
+                ))
+            })
+            .await;
             send!(addr.complete_disable_local_cleanup(claim, disabling, result));
         });
     }
@@ -312,6 +326,8 @@ impl CloudBackupSupervisor {
             );
             return Produces::ok(());
         }
+
+        manager.apply_disable_local_cleanup();
 
         if let Err(error) =
             manager.persist_disabled_after_remote_delete(&self.lifecycle, &disabling)

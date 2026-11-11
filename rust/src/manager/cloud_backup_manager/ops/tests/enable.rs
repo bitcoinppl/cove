@@ -844,22 +844,6 @@ async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
     assert!(globals.cloud.has_namespace(&wallet_namespace));
 }
 
-#[test]
-fn clear_in_process_state_for_local_reset_clears_enable_state() {
-    let _guard = test_lock().lock();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-        SavedPasskeyConfirmationMode::Manual,
-    ));
-
-    manager.clear_in_process_state_for_local_reset();
-
-    assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorization() {
     let _guard = async_test_lock().lock().await;

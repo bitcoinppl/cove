@@ -775,7 +775,7 @@ async fn supervisor_rejects_second_exclusive_operation_while_active() {
 }
 
 #[test]
-fn local_reset_cancels_restore_without_releasing_its_claim() {
+fn local_reset_cancels_restore_and_revokes_its_claim() {
     let claim = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::Restore,
         operation_id(u64::MAX),
@@ -784,11 +784,15 @@ fn local_reset_cancels_restore_without_releasing_its_claim() {
     let mut active = Runtime::Disabled { op: None };
     active.start_restore(RestoreRun::new(claim, Arc::clone(&cancellation))).unwrap();
 
-    let released_claim = active.prepare_local_reset();
+    let (ready, mut effects_settled) = oneshot::channel();
+    let start = active.begin_reset(ready);
 
-    assert!(released_claim.is_none());
+    // a restore is cancellable, so the reset neither waits for it nor lets it report again
+    assert_eq!(start, ResetStart::Cancelled(claim));
     assert!(cancellation.load(Ordering::Acquire));
-    assert_eq!(active, Some(claim));
+    assert!(effects_settled.try_recv().is_ok());
+    assert!(!active.accepts_completion(claim, "restore completion"));
+    assert!(active.restore(claim).is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]

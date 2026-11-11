@@ -459,9 +459,16 @@ impl LifecycleWriter {
     /// time. Before this point nothing is persisted, so a crash or failure leaves Cloud Backup
     /// configured with nothing deleted
     ///
-    /// The review is checked against the stored configuration inside the commit transaction,
-    /// not against a value the caller read, so a review taken against an older configuration
-    /// cannot commit
+    /// The review is checked against the stored configuration, not against a value the caller
+    /// read, so a review taken against an older configuration cannot commit
+    ///
+    /// The namespace is read from the keychain before the transaction, which is sound because the
+    /// namespace has one owner at a time: only the supervisor, which runs this in its handler,
+    /// changes it, and a full wipe clears it through the supervisor's reset. Catastrophic recovery
+    /// clears it only while no supervisor exists ([`LocalStateOwner`]). So nothing can change it
+    /// between this read and the commit
+    ///
+    /// [`LocalStateOwner`]: crate::manager::cloud_backup_manager::LocalStateOwner
     pub(crate) fn commit_disable(
         &self,
         review: &DisableCommitReview,
@@ -476,20 +483,19 @@ impl LifecycleWriter {
             retry_after: None,
         };
 
+        // the namespace this configuration uses lives in the keychain, outside the record
+        let stored_namespace = CloudBackupKeychain::global().namespace_id().map_err(|error| {
+            CloudBackupError::internal_context("read namespace_id for disable", error)
+        })?;
+        let review_matches = stored_namespace.as_deref() == Some(review.namespace_id.as_str());
+
         let mutation = self
             .mutate(|state| {
                 let PersistedCloudBackupState::Configured(configured) = state else {
                     return Ok(CommitDisable::NotConfigured);
                 };
 
-                // the namespace this configuration uses lives in the keychain; it is read while
-                // the commit transaction holds the record, so the review is compared with what is
-                // stored now
-                let stored_namespace =
-                    CloudBackupKeychain::global().namespace_id().map_err(|error| {
-                        CloudBackupError::internal_context("read namespace_id for disable", error)
-                    })?;
-                if stored_namespace.as_deref() != Some(review.namespace_id.as_str()) {
+                if !review_matches {
                     return Ok(CommitDisable::StaleReview);
                 }
 

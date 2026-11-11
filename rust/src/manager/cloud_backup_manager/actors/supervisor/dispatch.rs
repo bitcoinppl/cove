@@ -233,7 +233,8 @@ impl CloudBackupSupervisor {
             // these answer their caller, so their own handlers admit them and reply
             I::SwitchDriveAccount
             | I::CancelDriveAccountSwitch
-            | I::RetryDriveAccountSwitchRecovery => {
+            | I::RetryDriveAccountSwitchRecovery
+            | I::LocalReset => {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
             }
         }

@@ -10,6 +10,7 @@ mod deadline;
 mod fakes;
 mod fixtures;
 mod process;
+mod reset_tests;
 mod runtime;
 mod tests;
 

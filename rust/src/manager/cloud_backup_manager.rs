@@ -49,6 +49,7 @@ use crate::manager::reconcile_channel::ReconcileChannel;
 use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode};
 
 pub(crate) use self::actors::CloudBackupRestoreEvent;
+use self::actors::supervisor::LocalResetOutcome;
 use self::actors::{
     CloudBackupSupervisor, CloudBackupUploadedWallet, CloudBackupWalletCountRefresh,
     CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
@@ -87,6 +88,7 @@ pub(crate) use self::error::{
     is_provider_wide_interruption, offline_error_for_step,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
+pub(crate) use self::keychain::LocalStateOwner;
 #[cfg(test)]
 pub(crate) use self::model::test_support;
 pub(crate) use self::model::{
@@ -329,7 +331,17 @@ impl CloudBackupResetPermit {
         self.resume_allowed = false;
     }
 
+    /// Clears Cloud Backup's local keychain state through its owner, the supervisor
+    pub(crate) async fn clear_local_state(&self) -> Result<(), CloudBackupError> {
+        call!(self.manager.supervisor.clear_local_state_for_reset())
+            .await
+            .map_err(CloudBackupError::internal)?
+    }
+
     pub(crate) async fn complete_after_database_reset(mut self) -> Result<(), CloudBackupError> {
+        call!(self.manager.supervisor.finish_local_reset(LocalResetOutcome::Wiped))
+            .await
+            .map_err(CloudBackupError::internal)?;
         call!(self.manager.supervisor.clear_upload_runtime_state())
             .await
             .map_err(CloudBackupError::internal)?;
@@ -345,6 +357,9 @@ impl CloudBackupResetPermit {
     pub(crate) async fn resume_after_failed_reset(
         mut self,
     ) -> Result<CloudBackupResetRecovery, CloudBackupError> {
+        call!(self.manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
+            .await
+            .map_err(CloudBackupError::internal)?;
         call!(self.manager.cloud_writes.unblock(self.blocker))
             .await
             .map_err(CloudBackupError::internal)?;
@@ -380,6 +395,8 @@ impl Drop for CloudBackupResetPermit {
         let status = self.previous_status.clone();
         let resume_allowed = self.resume_allowed;
         cove_tokio::task::spawn(async move {
+            let _ =
+                call!(manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await;
             let _ = call!(manager.cloud_writes.unblock(blocker)).await;
             let resumed = if resume_allowed {
                 call!(manager.supervisor.resume_wallet_uploads_from_persisted_state()).await.is_ok()
@@ -405,6 +422,7 @@ impl RustCloudBackupManager {
         previous_status: CloudBackupStatus,
         blocker: Option<CloudBackupWriteBlocker>,
     ) {
+        let _ = call!(self.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await;
         let unblocked = match blocker {
             Some(blocker) => call!(self.cloud_writes.unblock(blocker)).await.is_ok(),
             None => true,
@@ -855,29 +873,6 @@ impl RustCloudBackupManager {
         send!(self.supervisor.clear_runtime_passkey_authorization());
     }
 
-    pub(crate) fn clear_in_process_state_for_local_reset(&self) {
-        let supervisor = self.supervisor.clone();
-        if let Err(error) = cove_tokio::task::block_on(async move {
-            call!(supervisor.clear_upload_runtime_state()).await
-        }) {
-            error!("Failed to clear cloud backup runtime state during local reset: {error}");
-        }
-
-        self.clear_prompt_state();
-        self.clear_enable_progress_report();
-        self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.observe_sync_health(CloudSyncHealth::Unknown);
-        self.apply_enable_state(CloudBackupEnableState::Idle);
-        self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
-        self.apply_verification_state(VerificationState::Idle);
-        self.apply_sync_state(SyncState::Idle);
-        self.apply_recovery_state(RecoveryState::Idle);
-        self.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Reset);
-        self.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Idle);
-        self.reconcile_runtime_status(CloudBackupStatus::Disabled);
-    }
-
     pub(crate) async fn prepare_local_reset(
         self: &Arc<Self>,
     ) -> Result<CloudBackupResetPermit, CloudBackupError> {
@@ -888,9 +883,27 @@ impl RustCloudBackupManager {
         }
 
         let previous_status = self.current_status();
-        if let Err(error) = call!(self.supervisor.prepare_local_reset_runtime()).await {
+        let effects_settled = match call!(self.supervisor.begin_local_reset()).await {
+            Ok(Ok(effects_settled)) => effects_settled,
+            Ok(Err(rejection)) => {
+                self.local_reset_in_progress.store(false, Ordering::Release);
+                return Err(CloudBackupError::Deferred(format!(
+                    "cloud backup local reset was not admitted: {rejection:?}"
+                )));
+            }
+            Err(error) => {
+                self.recover_failed_local_reset_preparation(previous_status, None).await;
+                return Err(CloudBackupError::internal(error));
+            }
+        };
+
+        // the supervisor answers once an effect that was in flight reports; waiting here, not in
+        // its handler, keeps its mailbox free to receive that completion
+        if effects_settled.await.is_err() {
             self.recover_failed_local_reset_preparation(previous_status, None).await;
-            return Err(CloudBackupError::internal(error));
+            return Err(CloudBackupError::Internal(
+                "cloud backup reset stopped before its effects reported".into(),
+            ));
         }
 
         let reset_id = NEXT_LOCAL_RESET_ID.fetch_add(1, Ordering::Relaxed);
@@ -916,6 +929,16 @@ impl RustCloudBackupManager {
             resume_allowed: true,
             completed: false,
         })
+    }
+
+    /// Hands keychain writes a worker prepared to the owner, which applies them in its handler
+    pub(crate) async fn apply_owned_keychain_writes(
+        &self,
+        writes: Vec<actors::supervisor::OwnedKeychainWrite>,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.supervisor.apply_keychain_writes(writes))
+            .await
+            .map_err(CloudBackupError::internal)?
     }
 
     /// Projects a committed lifecycle write into runtime status and flags
@@ -1064,7 +1087,7 @@ mod manager_test_support {
         }
 
         pub(crate) fn debug_reset_cloud_backup_state(&self) {
-            if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
+            if let Err(error) = CloudBackupKeychain::global().clear_local_state_for_test() {
                 error!("Failed to clear cloud backup keychain state: {error}");
                 return;
             }

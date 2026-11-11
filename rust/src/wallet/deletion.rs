@@ -91,6 +91,10 @@ impl PreparedFullWipe {
         delete_registered_wallet(target)
     }
 
+    pub(crate) async fn clear_cloud_backup_local_state(&self) -> Result<(), CloudBackupError> {
+        self.cloud_reset.clear_local_state().await
+    }
+
     pub(crate) fn prevent_cloud_resume(&mut self) {
         self.cloud_reset.prevent_resume();
     }
@@ -137,7 +141,7 @@ enum RecoveryCleanupProof {
     FullWipe,
     DatabaseUnavailable {
         _wallet: RecoveryCleanupPermit,
-        _cloud_backup: CloudBackupRecoveryCleanupPermit,
+        cloud_backup: CloudBackupRecoveryCleanupPermit,
     },
 }
 
@@ -148,6 +152,20 @@ pub(crate) struct RecoveryCleanup {
 }
 
 impl RecoveryCleanup {
+    /// The owner of Cloud Backup's local keychain state while no Cloud Backup manager exists
+    pub(crate) fn cloud_backup_owner(
+        &self,
+    ) -> Option<crate::manager::cloud_backup_manager::LocalStateOwner<'_>> {
+        use crate::manager::cloud_backup_manager::LocalStateOwner;
+
+        match &self.proof {
+            RecoveryCleanupProof::DatabaseUnavailable { cloud_backup, .. } => {
+                Some(LocalStateOwner::RecoveryCleanup(cloud_backup))
+            }
+            RecoveryCleanupProof::FullWipe => None,
+        }
+    }
+
     /// Reserve cleanup for startup recovery when the main database cannot be read
     pub(crate) fn prepare_database_unavailable() -> Result<Self, RecoveryCleanupAcquireError> {
         let wallet = WalletLifecycleCoordinator::global().begin_recovery_cleanup()?;
@@ -155,10 +173,7 @@ impl RecoveryCleanup {
             .map_err_str(RecoveryCleanupAcquireError::CloudBackup)?;
 
         Ok(Self {
-            proof: RecoveryCleanupProof::DatabaseUnavailable {
-                _wallet: wallet,
-                _cloud_backup: cloud_backup,
-            },
+            proof: RecoveryCleanupProof::DatabaseUnavailable { _wallet: wallet, cloud_backup },
         })
     }
 

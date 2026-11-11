@@ -8,6 +8,8 @@ use std::collections::HashSet;
 
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
 use cove_cspp::master_key::MasterKey;
+
+use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -229,7 +231,6 @@ impl CloudBackupDeepVerificationAutoSyncCompletion {
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
     pub(crate) cloud_keychain: CloudBackupKeychain,
-    pub(crate) cspp: cove_cspp::Cspp<Keychain>,
     pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
     pub(crate) namespace: String,
@@ -355,15 +356,14 @@ impl VerificationSession {
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let cspp = cove_cspp::Cspp::new(keychain);
-        let local_master_key = cspp.load_master_key_from_store().map_err(|source| {
-            CloudBackupError::internal_context("load local master key", source)
-        })?;
+        let local_master_key =
+            cove_cspp::Cspp::new(keychain).load_master_key_from_store().map_err(|source| {
+                CloudBackupError::internal_context("load local master key", source)
+            })?;
 
         Ok(Self {
             manager: manager.clone(),
             cloud_keychain,
-            cspp,
             cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
             namespace: manager.current_namespace_id()?,
@@ -412,7 +412,7 @@ impl VerificationSession {
         if let ContinuableMasterKeyResolution::Authenticated(authenticated_master) =
             &master_key_resolution
         {
-            self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+            self.apply_verified_cloud_master_key(&authenticated_master.master_key).await?;
         }
 
         let started = std::time::Instant::now();
@@ -568,9 +568,11 @@ impl VerificationSession {
         match master_key_crypto::decrypt_master_key(encrypted_master, &authenticated.prf_key) {
             // cloud wrapper decrypted, so this is the trusted master key for later wallet checks
             Ok(master_key) => {
-                if let Err(error) =
-                    self.cloud_keychain.save_passkey(&authenticated.credential_id, prf_salt)
-                {
+                let write = OwnedKeychainWrite::Passkey {
+                    credential_id: authenticated.credential_id.clone(),
+                    prf_salt,
+                };
+                if let Err(error) = self.manager.apply_owned_keychain_writes(vec![write]).await {
                     return Ok(MasterKeyResolution::Finished(
                         self.retry_result(
                             CloudBackupError::internal_context("save cloud backup passkey", error)
@@ -605,25 +607,21 @@ impl VerificationSession {
         }
     }
 
-    fn apply_verified_cloud_master_key(
+    async fn apply_verified_cloud_master_key(
         &mut self,
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
         let repaired = match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
-                self.cspp.save_master_key(master_key).map_err(|source| {
-                    CloudBackupError::internal_context("repair local master key", source)
-                })?;
+                self.save_verified_master_key(master_key).await?;
                 info!("Repaired local master key from cloud");
                 true
             }
 
             // replace a stale local key after cloud decryption proves the cloud key is valid
             Some(local_key) if local_key.as_bytes() != master_key.as_bytes() => {
-                self.cspp.save_master_key(master_key).map_err(|source| {
-                    CloudBackupError::internal_context("repair local master key", source)
-                })?;
+                self.save_verified_master_key(master_key).await?;
                 info!("Repaired local master key to match cloud");
                 true
             }
@@ -638,6 +636,17 @@ impl VerificationSession {
         }
 
         Ok(())
+    }
+
+    async fn save_verified_master_key(
+        &self,
+        master_key: &MasterKey,
+    ) -> Result<(), CloudBackupError> {
+        let write = OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes()));
+        self.manager.apply_owned_keychain_writes(vec![write]).await.map_err(|error| match error {
+            CloudBackupError::Cancelled => CloudBackupError::Cancelled,
+            error => CloudBackupError::internal_context("repair local master key", error),
+        })
     }
 
     async fn repair_wrapper_from_local_key(

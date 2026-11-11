@@ -91,7 +91,8 @@ impl From<crate::manager::cloud_backup_manager::admission::Rejection>
             | R::DetailInventoryNotLoaded
             | R::OtherBackupsNotLoaded
             | R::RestoreAllUnavailable
-            | R::KeepEnabledUnavailable => Self::Busy,
+            | R::KeepEnabledUnavailable
+            | R::Resetting => Self::Busy,
         }
     }
 }

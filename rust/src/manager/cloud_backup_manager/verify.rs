@@ -5,6 +5,7 @@ mod pending_completion;
 mod session;
 mod wrapper_repair;
 
+use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use act_zero::send;
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
@@ -395,7 +396,6 @@ impl RustCloudBackupManager {
         cloud: cove_device::cloud_storage::CloudStorageClient,
     ) -> Result<MasterKey, CloudBackupError> {
         let keychain = Keychain::global();
-        let cspp = cove_cspp::Cspp::new(keychain.clone());
         let passkey = PasskeyAccess::global();
 
         let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
@@ -459,14 +459,14 @@ impl RustCloudBackupManager {
                 }
             })?;
 
-        CloudBackupKeychain::new(keychain.clone())
-            .save_passkey(&authenticated.credential_id, encrypted.prf_salt)
-            .map_err(|source| {
-                CloudBackupError::internal_context("save cspp credentials", source)
-            })?;
-        cspp.save_master_key(&master_key).map_err(|source| {
-            CloudBackupError::internal_context("save recovered master key", source)
-        })?;
+        self.apply_owned_keychain_writes(vec![
+            OwnedKeychainWrite::Passkey {
+                credential_id: authenticated.credential_id.clone(),
+                prf_salt: encrypted.prf_salt,
+            },
+            OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes())),
+        ])
+        .await?;
 
         info!("Recovered local master key from cloud");
         Ok(master_key)

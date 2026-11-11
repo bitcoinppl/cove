@@ -8,10 +8,19 @@
 //! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch
 //! - while idle: the supervisor rebases the body on its own committed record when it starts work
 //! - while an operation runs, the operation holds its body until it ends or hands off
+//! - a local reset replaces the body with `Resetting`, which nothing can start in, and the owner
+//!   sets the body the wipe left when it finishes
+//!
+//! Every stage of an operation ends by itself or can be cancelled:
+//! - `Stage::Running` work is cancellable: a reset revokes the claim, so every later completion
+//!   and every write the worker asks the owner for is refused
+//! - `Stage::Effecting` work is an off-actor effect that can't be taken back once it started; it
+//!   ends with its completion message, and `Effect::bound` names what bounds it
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use tokio::sync::oneshot;
 use tracing::debug;
 
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupTransition};
@@ -52,6 +61,56 @@ pub(crate) enum Runtime {
         error: String,
         op: Option<DisabledOp>,
     },
+    /// A local reset closed admission; an effect that was in flight finishes here, and nothing
+    /// else can start until the owner sets the body the reset left
+    Resetting {
+        /// The operation whose off-actor effect was running when the reset began; the reset
+        /// waits on its stage, so it continues without blocking a handler
+        held: Option<OpRun>,
+    },
+}
+
+/// Where a running operation stands
+#[derive(Debug, Default)]
+pub(crate) enum Stage {
+    /// The worker is running; a reset cancels it by revoking the claim
+    #[default]
+    Running,
+    /// An off-actor effect that can't be cancelled is in flight; the operation keeps authority
+    /// until the effect's completion message arrives
+    Effecting {
+        effect: Effect,
+        /// Told when the effect's completion arrives
+        settled: Vec<oneshot::Sender<()>>,
+    },
+}
+
+/// An off-actor effect an operation waits on
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Effect {
+    /// Turn Off's local cleanup: keychain items, the master key and sync rows
+    LocalCleanup,
+    /// A platform passkey request whose credential, once created, must be recorded
+    PasskeyRegistration,
+}
+
+/// What ends a stage that can't be cancelled
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StageBound {
+    /// A synchronous platform keychain call on a blocking thread, which returns or fails
+    KeychainCall,
+    /// The platform's interactive passkey timeout: five minutes on iOS
+    /// (`PasskeyProviderImpl.interactiveRequestTimeout`); Android's cap is PR 3's
+    PlatformPasskeyTimeout,
+}
+
+impl Effect {
+    pub(crate) fn bound(self) -> StageBound {
+        match self {
+            Self::LocalCleanup => StageBound::KeychainCall,
+            Self::PasskeyRegistration => StageBound::PlatformPasskeyTimeout,
+        }
+    }
 }
 
 /// Work that starts from a device without a configured backup
@@ -97,14 +156,11 @@ pub(crate) enum RecoveryOp {
     Restore(RestoreRun),
 }
 
-/// A running operation, identified by its claim, which carries its `OperationId`
-///
-/// Every nested op holds one, so an operation's stage goes here: B2c adds the stage field with
-/// `Running` and `Effecting`, for an operation waiting on an off-actor effect it can't cancel,
-/// without reshaping `Runtime` or the per-body op enums
+/// A running operation, identified by its claim, which carries its `OperationId`, and its stage
 #[derive(Debug)]
 pub(crate) struct OpRun {
     claim: CloudBackupExclusiveOperationClaim,
+    stage: Stage,
 }
 
 /// A restore or Restore All run, whose worker keeps draining until it observes cancellation
@@ -127,8 +183,35 @@ impl RestoreRun {
 
 impl OpRun {
     fn new(claim: CloudBackupExclusiveOperationClaim) -> Self {
-        Self { claim }
+        Self { claim, stage: Stage::Running }
     }
+
+    /// Ends an `Effecting` stage and tells everyone waiting on it
+    fn effect_reported(&mut self) {
+        if let Stage::Effecting { effect, settled } = std::mem::take(&mut self.stage) {
+            debug!("Cloud Backup {:?} finished effecting {effect:?}", self.claim);
+            for waiter in settled {
+                let _ = waiter.send(());
+            }
+        }
+    }
+}
+
+/// What a reset did with the operation that was running when it began
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResetStart {
+    /// Nothing was running
+    Idle,
+    /// A cancellable operation ended; its later completions are stale
+    Cancelled(CloudBackupExclusiveOperationClaim),
+    /// An effect is in flight; the reset continues when its completion arrives
+    AwaitingEffect(CloudBackupExclusiveOperationClaim),
+}
+
+/// The running operation, taken out of its body
+enum TakenOp {
+    Standard(OpRun),
+    Restore(RestoreRun),
 }
 
 /// An operation the current body has no place for
@@ -201,7 +284,9 @@ impl Runtime {
 
     /// Moves an idle body onto the owner's current facts; a running operation holds its body
     pub(crate) fn rebase_idle(&mut self, facts: IdleFacts<'_>) {
-        if self.claim().is_some() || matches!(self, Self::LoadFailed { .. }) {
+        if self.claim().is_some()
+            || matches!(self, Self::LoadFailed { .. } | Self::Resetting { .. })
+        {
             return;
         }
 
@@ -225,6 +310,7 @@ impl Runtime {
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
             Self::PendingEnableRecovery { .. } => AdmissionBody::PendingEnableRecovery,
             Self::LoadFailed { .. } => AdmissionBody::LoadFailed,
+            Self::Resetting { .. } => AdmissionBody::Resetting,
         }
     }
 
@@ -246,7 +332,70 @@ impl Runtime {
             Self::FinishingDisable { op, .. } => op.as_ref().map(|op| op.0.claim),
             Self::DriveAccountSwitch { op } => op.as_ref().map(|op| op.0.claim),
             Self::PendingEnableRecovery { op } => op.as_ref().map(RecoveryOp::claim),
-            Self::LoadFailed { .. } => None,
+            // the held effect answers only through `accepts_completion`; nothing else may use it
+            Self::LoadFailed { .. } | Self::Resetting { .. } => None,
+        }
+    }
+
+    /// The running standard operation, where its stage lives; `op_run` is the shared twin
+    fn op_run_mut(&mut self) -> Option<&mut OpRun> {
+        match self {
+            Self::Disabled {
+                op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
+            }
+            | Self::Corrupted {
+                op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
+                ..
+            }
+            | Self::FinishingDisable { op: Some(ResumeDisable(run)), .. }
+            | Self::DriveAccountSwitch { op: Some(SwitchOp(run)) }
+            | Self::PendingEnableRecovery {
+                op: Some(RecoveryOp::Continue(run) | RecoveryOp::Discard(run)),
+            }
+            | Self::Configured {
+                op:
+                    Some(
+                        ConfiguredOp::TurnOff(run)
+                        | ConfiguredOp::Verify(run)
+                        | ConfiguredOp::RepairPasskey(run)
+                        | ConfiguredOp::RestoreCloudWallet(run)
+                        | ConfiguredOp::DeleteRecords(run)
+                        | ConfiguredOp::RecoverOtherBackups(run)
+                        | ConfiguredOp::DeleteOtherBackups(run)
+                        | ConfiguredOp::Reinitialize(run)
+                        | ConfiguredOp::RecreateManifest(run),
+                    ),
+            } => Some(run),
+            Self::Resetting { held, .. } => held.as_mut(),
+            _ => None,
+        }
+    }
+
+    /// Puts the operation with `claim` in an `Effecting` stage for `effect`
+    ///
+    /// Returns false when `claim` no longer runs, so the caller must not start the effect
+    pub(crate) fn begin_effect(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        effect: Effect,
+    ) -> bool {
+        if !self.is_current(claim) {
+            return false;
+        }
+
+        let Some(run) = self.op_run_mut() else { return false };
+        debug!("Cloud Backup {claim:?} is effecting {effect:?}, bounded by {:?}", effect.bound());
+        run.stage = Stage::Effecting { effect, settled: Vec::new() };
+        true
+    }
+
+    /// Answers `settled` once no off-actor effect is in flight
+    pub(crate) fn when_effects_settle(&mut self, settled: oneshot::Sender<()>) {
+        match self.op_run_mut().map(|run| &mut run.stage) {
+            Some(Stage::Effecting { settled: waiters, .. }) => waiters.push(settled),
+            Some(Stage::Running) | None => {
+                let _ = settled.send(());
+            }
         }
     }
 
@@ -261,13 +410,29 @@ impl Runtime {
     /// A completion for an operation that already finished, was cancelled or was handed off is
     /// stale. It is discarded here with a `debug!` log and is never reported to the user, since
     /// the user's intent was admitted and the operation that replaced it reports its own result
+    ///
+    /// The completion an `Effecting` operation waits on ends that stage here, since every
+    /// completion passes through this one match. During a reset, the held effect's completion
+    /// frees it and lets the reset continue; the operation itself does not go on
     pub(crate) fn accepts_completion(
-        &self,
+        &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         completion: &'static str,
     ) -> bool {
+        if let Self::Resetting { held } = self
+            && let Some(mut run) = held.take_if(|run| run.claim == claim)
+        {
+            debug!("Cloud Backup reset received {completion} for {claim:?}");
+            run.effect_reported();
+            return false;
+        }
+
         let current = self.claim();
         if current == Some(claim) {
+            if let Some(run) = self.op_run_mut() {
+                run.effect_reported();
+            }
+
             return true;
         }
 
@@ -395,7 +560,8 @@ impl Runtime {
                 | Self::FinishingDisable { .. }
                 | Self::DriveAccountSwitch { .. }
                 | Self::PendingEnableRecovery { .. }
-                | Self::LoadFailed { .. },
+                | Self::LoadFailed { .. }
+                | Self::Resetting { .. },
                 NewOp::Standard(_) | NewOp::Restore(_),
             ) => return Err(unstartable(self)),
         }
@@ -478,23 +644,76 @@ impl Runtime {
         }
     }
 
-    /// Cancels draining restore work but releases operations with no retained cancellation owner
-    pub(crate) fn prepare_local_reset(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        let restore = match self {
-            Self::Disabled { op: Some(DisabledOp::Restore(run)) }
-            | Self::Corrupted { op: Some(DisabledOp::Restore(run)), .. }
-            | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)) }
-            | Self::Configured { op: Some(ConfiguredOp::RestoreAll(run)) } => Some(run),
-            _ => None,
+    /// Closes admission for a local reset
+    ///
+    /// A cancellable operation ends here: its claim is revoked, so its later completions are
+    /// stale and the owner refuses the writes it asks for, and a restore worker also sees its
+    /// cancellation. An operation in an `Effecting` stage is held until its completion arrives,
+    /// and `ready` is answered then, so the reset never waits inside a handler
+    pub(crate) fn begin_reset(&mut self, ready: oneshot::Sender<()>) -> ResetStart {
+        let taken = self.take_op();
+        let (held, start) = match taken {
+            None => (None, ResetStart::Idle),
+            Some(TakenOp::Restore(run)) => {
+                run.cancellation.store(true, Ordering::Release);
+                (None, ResetStart::Cancelled(run.claim))
+            }
+            Some(TakenOp::Standard(run)) => match run.stage {
+                Stage::Effecting { .. } => {
+                    let claim = run.claim;
+                    (Some(run), ResetStart::AwaitingEffect(claim))
+                }
+                Stage::Running => (None, ResetStart::Cancelled(run.claim)),
+            },
         };
-        if let Some(run) = restore {
-            run.cancellation.store(true, Ordering::Release);
-            return None;
+
+        *self = Self::Resetting { held };
+        self.when_effects_settle(ready);
+        start
+    }
+
+    /// The body a finished reset leaves: off after a wipe, or the committed record otherwise
+    pub(crate) fn finish_reset(&mut self, after: Self) {
+        if let Self::Resetting { held: Some(run), .. } = self {
+            // the reset only continues once its held effect reported, so this is a bug
+            debug_assert!(false, "Cloud Backup reset finished while {:?} was in flight", run.claim);
         }
 
-        let claim = self.claim()?;
-        self.clear();
-        Some(claim)
+        *self = after;
+    }
+
+    /// The body when nothing has been loaded or committed yet
+    pub(crate) fn off() -> Self {
+        Self::Disabled { op: None }
+    }
+
+    fn take_op(&mut self) -> Option<TakenOp> {
+        match self {
+            Self::Disabled { op } | Self::Corrupted { op, .. } => op.take().map(|op| match op {
+                DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run) => TakenOp::Standard(run),
+                DisabledOp::Restore(run) => TakenOp::Restore(run),
+            }),
+            Self::Configured { op } => op.take().map(|op| match op {
+                ConfiguredOp::RestoreAll(run) => TakenOp::Restore(run),
+                ConfiguredOp::TurnOff(run)
+                | ConfiguredOp::Verify(run)
+                | ConfiguredOp::RepairPasskey(run)
+                | ConfiguredOp::RestoreCloudWallet(run)
+                | ConfiguredOp::DeleteRecords(run)
+                | ConfiguredOp::RecoverOtherBackups(run)
+                | ConfiguredOp::DeleteOtherBackups(run)
+                | ConfiguredOp::Reinitialize(run)
+                | ConfiguredOp::RecreateManifest(run) => TakenOp::Standard(run),
+            }),
+            Self::FinishingDisable { op, .. } => op.take().map(|op| TakenOp::Standard(op.0)),
+            Self::DriveAccountSwitch { op } => op.take().map(|op| TakenOp::Standard(op.0)),
+            Self::PendingEnableRecovery { op } => op.take().map(|op| match op {
+                RecoveryOp::Continue(run) | RecoveryOp::Discard(run) => TakenOp::Standard(run),
+                RecoveryOp::Restore(run) => TakenOp::Restore(run),
+            }),
+            Self::Resetting { held, .. } => held.take().map(TakenOp::Standard),
+            Self::LoadFailed { .. } => None,
+        }
     }
 
     /// Ends the running operation; the body stays until the next start rebases it
@@ -505,6 +724,11 @@ impl Runtime {
             Self::FinishingDisable { op, .. } => *op = None,
             Self::DriveAccountSwitch { op } => *op = None,
             Self::PendingEnableRecovery { op } => *op = None,
+            Self::Resetting { held } => {
+                if let Some(mut run) = held.take() {
+                    run.effect_reported();
+                }
+            }
             Self::LoadFailed { .. } => {}
         }
     }
@@ -566,7 +790,9 @@ impl Runtime {
             }
             | Self::Configured { .. }
             | Self::DriveAccountSwitch { .. }
-            | Self::PendingEnableRecovery { .. } => (None, None),
+            | Self::PendingEnableRecovery { .. }
+            // the reset's own projection shows the wipe
+            | Self::Resetting { .. } => (None, None),
         };
 
         ExportedRuntime { status, disable }

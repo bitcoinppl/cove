@@ -21,9 +21,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::{
-        CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupRecoveryCoverage,
-    },
+    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupRecoveryCoverage},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
@@ -747,8 +745,10 @@ async fn wipe_all_data_with_tier(
             .purge_orphan_wallet_artifacts()
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletArtifacts, source))?;
 
-        CloudBackupKeychain::global()
-            .clear_local_state()
+        // the supervisor owns the keychain namespace, so it clears it under the reset it holds
+        prepared
+            .clear_cloud_backup_local_state()
+            .await
             .map_err(|source| local_reset_error(LocalDataResetStage::CloudBackup, source))?;
 
         prepared.prevent_cloud_resume();

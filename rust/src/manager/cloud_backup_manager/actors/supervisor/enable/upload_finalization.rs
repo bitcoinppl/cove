@@ -44,11 +44,16 @@ impl CloudBackupSupervisor {
     }
 
     pub(crate) fn schedule_create_new_enable_passkey(
-        &self,
+        &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
     ) {
+        // a created credential must be recorded, so a reset waits for this request to answer
+        if !self.runtime.begin_effect(claim, Effect::PasskeyRegistration) {
+            return;
+        }
+
         let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
@@ -133,12 +138,17 @@ impl CloudBackupSupervisor {
     }
 
     pub(crate) fn schedule_enable_passkey_registration(
-        &self,
+        &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
     ) {
+        // a created credential must be recorded, so a reset waits for this request to answer
+        if !self.runtime.begin_effect(claim, Effect::PasskeyRegistration) {
+            return;
+        }
+
         let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {

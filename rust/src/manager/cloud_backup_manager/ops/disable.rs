@@ -9,6 +9,7 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageE
 use super::blocking_cloud_error;
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupTransition};
+use crate::manager::cloud_backup_manager::keychain::LocalStateOwner;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommitDisable, CommittedDisable, DisableCommitReview, DisablingRecord, LifecycleWriter,
@@ -278,14 +279,24 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) fn finish_disable_local_cleanup(&self) -> Result<(), CloudBackupError> {
-        CloudBackupKeychain::global().clear_local_state().map_err(|source| {
+    /// Turn Off's local cleanup effect: keychain items, the master key and sync rows
+    ///
+    /// Runs off the actor in the operation's `Effecting` stage; the owner applies the
+    /// presentation with [`Self::apply_disable_local_cleanup`] once the effect reports
+    pub(crate) fn run_disable_local_cleanup(
+        owner: &LocalStateOwner<'_>,
+    ) -> Result<(), CloudBackupError> {
+        CloudBackupKeychain::global().clear_local_state(owner).map_err(|source| {
             CloudBackupError::internal_context("clear cloud backup local keychain state", source)
         })?;
         Database::global().cloud_blob_sync_states.delete_all().map_err(|source| {
             CloudBackupError::internal_context("clear cloud backup blob sync state", source)
         })?;
 
+        Ok(())
+    }
+
+    pub(crate) fn apply_disable_local_cleanup(&self) {
         self.apply_detail_outcome(
             crate::manager::cloud_backup_manager::CloudBackupDetailOutcome::Cleared,
         );
@@ -296,7 +307,6 @@ impl RustCloudBackupManager {
             crate::manager::cloud_backup_manager::CloudBackupOtherBackupsOutcome::Idle,
         );
         self.apply_recovery_state(crate::manager::cloud_backup_manager::RecoveryState::Idle);
-        Ok(())
     }
 
     pub(crate) async fn prepare_keep_cloud_backup_enabled(

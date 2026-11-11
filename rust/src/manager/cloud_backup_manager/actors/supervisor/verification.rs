@@ -92,6 +92,14 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        // a created credential must be recorded, so a reset waits for this request to answer
+        if !self.runtime.begin_effect(claim, Effect::PasskeyRegistration) {
+            // the claim was taken above in this handler, so a false here is an owner bug. The
+            // claim isn't current, so there is nothing of its own to finish
+            warn!("Cloud Backup didn't start the passkey repair: claim {claim:?} wasn't current");
+            return;
+        }
+
         manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
         addr.send_fut_with(move |addr| async move {
             let result = if no_discovery {

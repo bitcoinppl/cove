@@ -1198,7 +1198,7 @@ fn clear_local_state_treats_empty_keychain_as_success() {
     let globals = test_globals();
     globals.reset();
 
-    CloudBackupKeychain::global().clear_local_state().unwrap();
+    CloudBackupKeychain::global().clear_local_state_for_test().unwrap();
     assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
 }
 
@@ -1229,7 +1229,7 @@ fn clear_local_state_removes_master_key_and_passkey_metadata() {
     assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_some());
     assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).unwrap().is_some());
 
-    cloud_keychain.clear_local_state().unwrap();
+    cloud_keychain.clear_local_state_for_test().unwrap();
 
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_none());
@@ -1253,7 +1253,7 @@ fn clear_local_state_attempts_passkey_metadata_after_master_key_delete_failure()
 
     globals.keychain.fail_delete_at(1);
 
-    let error = cloud_keychain.clear_local_state().unwrap_err();
+    let error = cloud_keychain.clear_local_state_for_test().unwrap_err();
 
     assert!(matches!(
         error,

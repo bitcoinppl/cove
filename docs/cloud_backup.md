@@ -41,6 +41,16 @@ supervisor, but the supervisor never waits on the write supervisor: it sends a
 message and handles the reply as a later completion, so the two actors can't
 deadlock waiting on each other.
 
+Workers prepare keychain writes and the supervisor applies them, so a write that
+arrives after a reset or Turn Off began is refused instead of restoring wiped
+state. An effect that can't be cancelled once it starts, such as Turn Off's local
+cleanup or a passkey registration, puts its operation in an `Effecting` stage,
+and the operation keeps the slot until the effect reports. A local reset, which
+a full wipe uses, closes admission, cancels running operations, waits for any
+in-flight effect to report, and then has the supervisor clear the Cloud Backup
+keychain namespace. Catastrophic recovery clears the namespace only while no
+Cloud Backup manager exists, so the namespace has one owner at a time.
+
 A finished reinitialize, including one at the end of a Google Drive account
 switch, hands its slot straight to a verification of the new backup under a new
 claim. That verification reports the backup as enabled, so it reads the cloud,
