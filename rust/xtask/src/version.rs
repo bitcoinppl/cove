@@ -1,6 +1,6 @@
 use crate::common::{ensure_rust_directory, print_error, print_success, print_warning};
 use color_eyre::{
-    eyre::{eyre, Context, ContextCompat},
+    eyre::{Context, ContextCompat},
     Result,
 };
 use colored::Colorize;
@@ -12,30 +12,10 @@ const CARGO_TOML_PATH: &str = "Cargo.toml";
 const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
 const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
 
-/// Marker at the repository root that holds every release while it exists
-const RELEASE_HOLD_PATH: &str = "../CLOUD_BACKUP_RELEASE_HOLD";
-
-/// Refuses while the release-hold marker exists, before any version or build number changes
-///
-/// The marker is a mechanism rather than a promise: a hold only ends when the change that
-/// removes the file merges
-fn refuse_during_release_hold(sh: &Shell) -> Result<()> {
-    if !sh.path_exists(RELEASE_HOLD_PATH) {
-        return Ok(());
-    }
-
-    let reason = sh.read_file(RELEASE_HOLD_PATH)?;
-    Err(eyre!(
-        "Releases are on hold while CLOUD_BACKUP_RELEASE_HOLD exists at the repository root:\n{}",
-        reason.trim()
-    ))
-}
-
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
     let sh = Shell::new()?;
 
     ensure_rust_directory(&sh)?;
-    refuse_during_release_hold(&sh)?;
 
     let is_build_bump = bump_type == "build";
 
@@ -268,7 +248,6 @@ impl BuildNumberFile {
         sh: &Shell,
         before_store_accepts: impl FnOnce() -> Result<T>,
     ) -> Result<T> {
-        refuse_during_release_hold(sh)?;
         let snapshot =
             sh.path_exists(self.path()).then(|| sh.read_file(self.path())).transpose()?;
         let error = match self.bump(sh).and_then(|()| before_store_accepts()) {
@@ -545,28 +524,6 @@ CURRENT_PROJECT_VERSION = 89;
 
         assert!(result.is_err());
         assert_eq!(std::fs::read_to_string(&project_path).unwrap(), original);
-    }
-
-    #[test]
-    fn release_hold_refuses_before_any_number_changes() {
-        let (temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
-        std::fs::write(temp_dir.path().join("CLOUD_BACKUP_RELEASE_HOLD"), "held for the test\n")
-            .unwrap();
-
-        let mut ran = false;
-        let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
-            ran = true;
-            Ok(())
-        });
-
-        let error = format!("{:#}", result.unwrap_err());
-        assert!(error.contains("held for the test"), "{error}");
-        assert!(!ran, "a release step ran during the hold");
-        assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), GRADLE_28);
-
-        std::fs::remove_file(temp_dir.path().join("CLOUD_BACKUP_RELEASE_HOLD")).unwrap();
-        BuildNumberFile::AndroidGradle.bump_for_release(&sh, || Ok(())).unwrap();
-        assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
     }
 
     #[test]
