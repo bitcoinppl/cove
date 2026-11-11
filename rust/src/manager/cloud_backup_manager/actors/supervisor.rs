@@ -1547,6 +1547,15 @@ pub(crate) mod test_support {
         }
     }
 
+    /// What a test reset finds on one test's supervisor
+    pub(crate) enum LeftoverOperationForTest {
+        /// An off-actor effect is in flight; the receiver answers once it settles
+        Settling(oneshot::Receiver<()>),
+        /// No operation runs any more; `orphaned` when its test already dropped the manager,
+        /// so the supervisor can begin no operation again
+        Ended { orphaned: bool },
+    }
+
     impl CloudBackupSupervisor {
         /// What dispatch would do with `intent` now, without doing it
         pub(crate) async fn harness_admission(
@@ -1651,6 +1660,31 @@ pub(crate) mod test_support {
                 .expect("begin exclusive operation");
 
             Produces::ok((claim, CloudBackupWriteClient::for_operation(self.write.clone(), claim)))
+        }
+
+        /// Ends the operation a previous test left running, once no off-actor effect is in flight
+        ///
+        /// While an effect runs, answers a receiver for its settling; the caller asks again
+        /// after it, so an effect a late completion began is waited out too. Once the claim is
+        /// gone, later completions are stale and start nothing
+        pub async fn end_leftover_operation_for_test(
+            &mut self,
+        ) -> ActorResult<LeftoverOperationForTest> {
+            let (settled, mut receiver) = oneshot::channel();
+            self.runtime.when_effects_settle(settled);
+            if receiver.try_recv().is_err() {
+                return Produces::ok(LeftoverOperationForTest::Settling(receiver));
+            }
+
+            let manager = self.manager();
+            if let Some(claim) = self.runtime.take_claim()
+                && let Some(manager) = &manager
+            {
+                manager.project_exclusive_operation_finished(claim);
+            }
+
+            self.rebase_idle_runtime();
+            Produces::ok(LeftoverOperationForTest::Ended { orphaned: manager.is_none() })
         }
 
         /// Ends any operation a previous test left running and rebases on the reset record

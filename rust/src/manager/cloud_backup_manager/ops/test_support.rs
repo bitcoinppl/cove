@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
-use act_zero::call;
+use act_zero::{WeakAddr, call};
 use bip39::Mnemonic;
 use cove_cspp::backup_data::{
     MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
@@ -40,7 +40,9 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStore, CloudBackupWalletItem,
     CloudBackupWriteClient, CloudOnlyFetch, PendingEnableJournal,
     PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState, actors::restore::RestoreOperation,
+    PendingUploadVerificationState,
+    actors::restore::RestoreOperation,
+    actors::supervisor::{CloudBackupSupervisor, test_support::LeftoverOperationForTest},
     master_key_wrapper_revision_hash,
 };
 
@@ -1420,6 +1422,12 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 ) {
     ensure_cloud_backup_test_tokio_runtime();
     wait_for_cleanup_idle_for_test(manager);
+
+    // a previous test can end with its operation still running on its own manager's
+    // supervisor, such as an Enable it started last; ending it first, after any passkey
+    // registration it began answers, keeps its late calls from counting against the shared
+    // fakes this test is about to reset
+    end_leftover_operations_for_test(manager);
     crate::database::cloud_backup::restore_activation::test_support::reset();
     globals.reset();
     clear_local_wallets();
@@ -1443,6 +1451,73 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
         .expect("clear upload runtime state");
     before_reconnect();
     CONNECTIVITY_MANAGER.set_connection_state(true);
+}
+
+/// Supervisors of the managers tests built that may still run an operation
+///
+/// Each test builds its own manager, but every manager shares the process-global fakes, so a
+/// reset has to reach the supervisors of earlier tests too, not only its own
+static TEST_SUPERVISORS: StdMutex<Vec<WeakAddr<CloudBackupSupervisor>>> = StdMutex::new(Vec::new());
+
+/// Ends the operation any test's supervisor left running, waiting, bounded, for its effects
+///
+/// A supervisor whose test dropped its manager can begin no operation again, so once it is
+/// ended it leaves the registry. One that parks an effect for good, such as a gated passkey
+/// call, delays a single reset by the bound and is then dropped from the registry too, since
+/// waiting on it again would only delay every later reset
+fn end_leftover_operations_for_test(manager: &RustCloudBackupManager) {
+    let supervisors = {
+        let mut supervisors = TEST_SUPERVISORS.lock().expect("test supervisors lock");
+        let current = manager.supervisor.downgrade();
+        if !supervisors.contains(&current) {
+            supervisors.push(current);
+        }
+
+        supervisors.clone()
+    };
+
+    let bound = loaded_host_wait(Duration::from_secs(2));
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let _task = cove_tokio::task::spawn(async move {
+        let mut finished = Vec::new();
+        for supervisor in supervisors {
+            let ended = tokio::time::timeout(bound, end_leftover_operation(supervisor.clone()));
+            match ended.await {
+                Ok(Some(LeftoverOperationForTest::Ended { orphaned: false })) => {}
+                Ok(Some(_) | None) => finished.push(supervisor),
+                Err(_) => {
+                    eprintln!(
+                        "cloud backup test reset: a previous operation was still effecting after {bound:?}"
+                    );
+                    finished.push(supervisor);
+                }
+            }
+        }
+
+        let _ = sender.send(finished);
+    });
+
+    let finished = receiver.recv().expect("receive ended test supervisors");
+    TEST_SUPERVISORS
+        .lock()
+        .expect("test supervisors lock")
+        .retain(|supervisor| !finished.contains(supervisor));
+}
+
+/// Asks one supervisor until its leftover operation has ended, or `None` once the actor is gone
+async fn end_leftover_operation(
+    supervisor: WeakAddr<CloudBackupSupervisor>,
+) -> Option<LeftoverOperationForTest> {
+    loop {
+        match call!(supervisor.end_leftover_operation_for_test()).await {
+            // a dropped waiter means the effect's operation ended; asking again sees it
+            Ok(LeftoverOperationForTest::Settling(settled)) => {
+                let _ = settled.await;
+            }
+            Ok(ended) => return Some(ended),
+            Err(_) => return None,
+        }
+    }
 }
 
 fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
