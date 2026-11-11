@@ -2171,7 +2171,8 @@ pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
 
 /// Runs the pending upload confirmation the way the verifier does, waiting for the settle
 pub(crate) async fn finalize_pending_verification_for_test(manager: &RustCloudBackupManager) {
-    let basis = call!(manager.supervisor.wallet_set_basis()).await.expect("wallet set basis");
+    let basis =
+        call!(manager.supervisor.evidence_basis_for_confirmation()).await.expect("evidence basis");
     if let Some(settlement) = manager.ready_pending_verification_settlement(basis).await {
         call!(manager.supervisor.settle_pending_verification(settlement))
             .await

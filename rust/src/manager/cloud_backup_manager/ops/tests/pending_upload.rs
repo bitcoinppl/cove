@@ -889,7 +889,7 @@ async fn empty_confirmation_reads_no_provider_while_an_enable_runs() {
         OperationId::next(),
     );
     manager.project_exclusive_operation_started(enable);
-    let basis = call!(manager.supervisor.wallet_set_basis()).await.unwrap();
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
     let listings = globals.cloud.list_wallet_files_attempt_count();
 
     let settlement =
@@ -931,7 +931,7 @@ async fn pending_upload_settle_read_before_a_wallet_change_is_dropped() {
         )
         .unwrap();
 
-    let basis = call!(manager.supervisor.wallet_set_basis()).await.unwrap();
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
     let settlement =
         manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
 
@@ -947,6 +947,66 @@ async fn pending_upload_settle_read_before_a_wallet_change_is_dropped() {
     assert!(
         matches!(configured.verification, PersistedBackupVerificationState::Required { .. }),
         "the stale settle verified the changed wallet set: {:?}",
+        configured.verification
+    );
+    assert!(manager.pending_verification_completion().is_some());
+}
+
+/// An upload confirmation read before the configuration changed was read from a backup that may
+/// no longer be the one configured, such as the same namespace on another Drive account, so the
+/// settle is dropped even though the wallet set and the marker are unchanged
+#[tokio::test(flavor = "current_thread")]
+async fn pending_upload_settle_read_before_a_configuration_change_is_dropped() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    // this test is the verifier pass whose settle goes stale, so it holds the pass the manager's
+    // own loop would otherwise run; that loop's settle under the newer configuration is valid
+    let _verifier_pass =
+        crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass().await;
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    // a Drive account switch starts and rolls back while the confirmation is on its way to the
+    // supervisor, which moves the configuration on twice and keeps the marker
+    let transition_id = manager.begin_drive_account_switch().await.unwrap();
+    manager.cancel_drive_account_switch(transition_id).await.unwrap();
+    manager.confirm_drive_account_switch_rolled_back(transition_id).await.unwrap();
+    let marker = manager.pending_verification_completion();
+    assert_eq!(marker.as_ref(), Some(&settlement.completion), "the switch replaced the marker");
+
+    call!(manager.supervisor.settle_pending_verification(settlement)).await.unwrap();
+
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    assert!(
+        !matches!(configured.verification, PersistedBackupVerificationState::Verified { .. }),
+        "a settle read under the older configuration verified this one: {:?}",
         configured.verification
     );
     assert!(manager.pending_verification_completion().is_some());

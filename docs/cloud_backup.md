@@ -99,7 +99,7 @@ writes the fact itself.
 
 | Fact | Single writer | Typed inputs from producers |
 |---|---|---|
-| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it only through `commit`, which publishes the write policy after every write | Verification results, upload confirmations (carrying the wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
+| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it only through `commit`, which publishes the write policy after every write | Verification results, upload confirmations (carrying the configuration and wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
 | Runtime operation (the body and the operation nested in it) | The supervisor's `OwnedRuntime` | Worker completions carrying the operation's claim |
 | Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
 | Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |
@@ -311,8 +311,10 @@ for a configuration that was replaced.
 When a new policy lets ordinary writes run again, the lane tells the supervisor
 (`ordinary_writes_resumed`). The supervisor then resumes uploads from the
 persisted dirty state and restarts the pending-upload verifier, so a paused
-upload runs exactly once. Upload confirmations carry the wallet-set generation
-they read, and the supervisor drops one that a wallet change outdated.
+upload runs exactly once. Upload confirmations carry the configuration and
+wallet-set generation they read (`EvidenceBasis`), and the supervisor drops one
+that a wallet change or a new configuration outdated, such as a Drive account
+switch that keeps the namespace.
 
 Operation-owned writes use `CloudBackupWriteClient::for_operation`, so their
 class carries the operation claim. Background writes take a ticket for the
@@ -349,9 +351,10 @@ running. Verify only joins the pending upload confirmation when uploads already
 wait for it. Some verification results prepare follow-up work, such as
 repairing the passkey wrapper or uploading missing wallet blobs. The supervisor
 owns those continuations so each follow-up remains tied to the same
-exclusive-operation claim. Each run carries the wallet-set generation it read,
-including across a retry after lost connectivity, so its evidence is judged
-against its own read, never another run's.
+exclusive-operation claim. Each run carries the configuration and wallet-set
+generation it read, including across a retry after lost connectivity, so its
+evidence is judged against its own read, never another run's or another
+configuration's.
 
 ## Related Notes
 

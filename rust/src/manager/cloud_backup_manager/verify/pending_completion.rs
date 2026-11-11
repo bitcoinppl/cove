@@ -13,7 +13,7 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
-use crate::manager::cloud_backup_manager::actors::supervisor::WalletSetGeneration;
+use crate::manager::cloud_backup_manager::actors::supervisor::EvidenceBasis;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, PendingEnableJournalPhase, PendingVerificationUpload,
@@ -43,12 +43,12 @@ const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
 
 /// An upload confirmation that finished, for the lifecycle owner to settle
 ///
-/// The owner accepts it only while `completion` is still the stored marker and the local wallet
-/// set is still `basis`, the one this evidence was read under. A confirmation that a manual
+/// The owner accepts it only while `completion` is still the stored marker and the configuration
+/// and local wallet set are still `basis`, the ones this evidence was read under. A confirmation that a manual
 /// verification, a newer marker or a wallet change superseded is dropped without effects
 #[derive(Debug)]
 pub(crate) struct PendingVerificationSettlement {
-    pub(crate) basis: WalletSetGeneration,
+    pub(crate) basis: EvidenceBasis,
     pub(crate) completion: PendingVerificationCompletion,
     pub(crate) result: DeepVerificationResult,
 }
@@ -56,10 +56,10 @@ pub(crate) struct PendingVerificationSettlement {
 impl RustCloudBackupManager {
     /// Checks the pending upload confirmation and returns its settlement once it finished
     ///
-    /// `basis` is the owner's wallet set, read before any evidence here
+    /// `basis` is the owner's configuration and wallet set, read before any evidence here
     pub(crate) async fn ready_pending_verification_settlement(
         &self,
-        basis: WalletSetGeneration,
+        basis: EvidenceBasis,
     ) -> Option<PendingVerificationSettlement> {
         if Self::pending_enable_finalization_owns_completion() {
             return None;
@@ -116,7 +116,7 @@ impl RustCloudBackupManager {
     }
 
     fn expired_pending_verification_settlement(
-        basis: WalletSetGeneration,
+        basis: EvidenceBasis,
         completion: PendingVerificationCompletion,
     ) -> PendingVerificationSettlement {
         warn!(

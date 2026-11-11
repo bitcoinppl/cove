@@ -141,24 +141,24 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// The local wallet set an upload confirmation reads its evidence under
+    /// The configuration and local wallet set an upload confirmation reads its evidence under
     ///
-    /// The pending upload worker asks before it reads, so a wallet change after this answer makes
-    /// its settlement stale
-    pub async fn wallet_set_basis(&mut self) -> ActorResult<WalletSetGeneration> {
-        Produces::ok(self.wallet_set)
+    /// The pending upload worker asks before it reads, so a wallet change or a new configuration
+    /// after this answer makes its settlement stale
+    pub async fn evidence_basis_for_confirmation(&mut self) -> ActorResult<EvidenceBasis> {
+        Produces::ok(self.evidence_basis())
     }
 
     /// Settles an upload confirmation, accepted only while it is still the stored marker and the
-    /// wallet set it read is still current
+    /// configuration and wallet set it read are still current
     pub(crate) fn apply_pending_verification_settlement(
         &mut self,
         manager: &RustCloudBackupManager,
         settlement: PendingVerificationSettlement,
     ) {
         let PendingVerificationSettlement { basis, completion, result } = settlement;
-        if basis != self.wallet_set {
-            debug!("Dropped an upload confirmation read before a wallet change");
+        if basis != self.evidence_basis() {
+            debug!("Dropped an upload confirmation read before a wallet or configuration change");
             return;
         }
 
@@ -199,35 +199,36 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// Records a verification run's evidence, unless the wallet set changed since the run read
-    /// the wallets at `basis`
+    /// Records a verification run's evidence, unless the configuration or wallet set changed
+    /// since the run read the wallets at `basis`
     pub(crate) fn record_verification_evidence(
         &mut self,
         manager: &RustCloudBackupManager,
-        basis: WalletSetGeneration,
+        basis: EvidenceBasis,
         result: &DeepVerificationResult,
     ) {
-        if basis != self.wallet_set {
-            debug!("Cloud Backup discarded verification evidence for an older wallet set");
+        if basis != self.evidence_basis() {
+            debug!("Cloud Backup discarded verification evidence for an older basis {basis:?}");
             return;
         }
 
         self.runtime.commit(|lifecycle| manager.persist_verification_result(lifecycle, result));
     }
 
-    /// Records a finished verification run's evidence and shows its result, or, when the wallet
-    /// set changed since the run read the wallets at `basis`, ends the run without either
+    /// Records a finished verification run's evidence and shows its result, or, when the
+    /// configuration or wallet set changed since the run read the wallets at `basis`, ends the
+    /// run without either
     ///
     /// The wallet change already recorded that the backup needs verifying, so showing the older
     /// result would contradict it
     pub(crate) fn settle_verification_evidence(
         &mut self,
         manager: &RustCloudBackupManager,
-        basis: WalletSetGeneration,
+        basis: EvidenceBasis,
         result: DeepVerificationResult,
     ) {
-        if basis != self.wallet_set {
-            debug!("Cloud Backup discarded verification result for an older wallet set");
+        if basis != self.evidence_basis() {
+            debug!("Cloud Backup discarded verification result for an older basis {basis:?}");
             manager.apply_verification_state(VerificationState::Idle);
             return;
         }

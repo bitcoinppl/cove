@@ -1312,7 +1312,7 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
                         continuation: DeepVerificationContinuation::RecreateManifest {
                             attempt: VerificationAttempt::Initial,
                         },
-                        basis: supervisor.wallet_set,
+                        basis: supervisor.evidence_basis(),
                     },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
@@ -1330,7 +1330,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.wallet_set }, Err(CloudBackupError::Internal("completion".into())))
+                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.evidence_basis() }, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1346,7 +1346,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
             };
             supervisor
                 .complete_deep_verification_wrapper_repair_resume(
-                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1364,7 +1364,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_upload(
-                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1382,7 +1382,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
             };
             supervisor
                 .complete_deep_verification_auto_sync_finalization(
-                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1400,7 +1400,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_resume(
-                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
@@ -1429,7 +1429,7 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
                         continuation: DeepVerificationContinuation::ReinitializeBackup {
                             attempt: VerificationAttempt::Initial,
                         },
-                        basis: supervisor.wallet_set,
+                        basis: supervisor.evidence_basis(),
                     },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
@@ -5024,7 +5024,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
                 continuation: DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },
-                basis: supervisor.wallet_set,
+                basis: supervisor.evidence_basis(),
             },
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
         )
@@ -5042,7 +5042,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
                 continuation: DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },
-                basis: supervisor.wallet_set,
+                basis: supervisor.evidence_basis(),
             },
             step,
         )

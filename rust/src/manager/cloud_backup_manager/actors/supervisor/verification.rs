@@ -40,14 +40,14 @@ impl DeepVerificationContinuation {
 /// One run of a verification operation
 ///
 /// Every message of the run carries it, so the run's repair, auto-sync and result are accepted
-/// only while its operation runs, and its evidence is judged against the wallet set this run
-/// read rather than whichever run started last
+/// only while its operation runs, and its evidence is judged against the configuration and wallet
+/// set this run read rather than whichever run started last
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VerificationRun {
     pub(crate) claim: CloudBackupExclusiveOperationClaim,
     pub(crate) continuation: DeepVerificationContinuation,
-    /// The local wallet set when this run started reading the wallets
-    pub(crate) basis: WalletSetGeneration,
+    /// The configuration and local wallet set when this run started reading the wallets
+    pub(crate) basis: EvidenceBasis,
 }
 
 impl CloudBackupSupervisor {
@@ -226,7 +226,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        let run = VerificationRun { claim, continuation, basis: self.wallet_set };
+        let run = VerificationRun { claim, continuation, basis: self.evidence_basis() };
         let force_discoverable = continuation.force_discoverable();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {

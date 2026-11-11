@@ -195,7 +195,7 @@ impl CloudBackupSupervisor {
         // running, so the read is local state only
         if should_finalize_now
             && let Some(settlement) =
-                manager.ready_pending_verification_settlement(self.wallet_set).await
+                manager.ready_pending_verification_settlement(self.evidence_basis()).await
         {
             self.apply_pending_verification_settlement(&manager, settlement);
         }

@@ -20,7 +20,7 @@ use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob};
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNamespaceCommit};
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
+    CloudBackupWriteCompletion, CloudBackupWriteSupervisor, ConfigGeneration,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -269,6 +269,18 @@ impl From<Result<(), CloudBackupError>> for SyncRequestOutcome {
     }
 }
 
+/// What verification evidence was read under: the backup configuration and the local wallet set
+///
+/// A producer reads it from the supervisor before it reads any evidence, and the supervisor
+/// records the evidence only while both are still current. A verification operation's claim
+/// already pins its configuration; background upload confirmation has no claim, so the
+/// configuration here is what keeps one backup's confirmation from settling another's
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct EvidenceBasis {
+    config: ConfigGeneration,
+    wallet_set: WalletSetGeneration,
+}
+
 /// Actor that owns Cloud Backup operation exclusivity, async completions and the durable
 /// lifecycle record
 ///
@@ -395,6 +407,11 @@ impl CloudBackupSupervisor {
             #[cfg(test)]
             invariant_log: test_support::DispatchLog::default(),
         }
+    }
+
+    /// The configuration and wallet set evidence read now would be judged against
+    pub(crate) fn evidence_basis(&self) -> EvidenceBasis {
+        EvidenceBasis { config: self.runtime.generation(), wallet_set: self.wallet_set }
     }
 
     fn manager(&self) -> Option<Arc<RustCloudBackupManager>> {
@@ -1700,7 +1717,7 @@ pub(crate) mod test_support {
                     force_discoverable,
                     attempt: VerificationAttempt::Initial,
                 },
-                basis: self.wallet_set,
+                basis: self.evidence_basis(),
             })
         }
 

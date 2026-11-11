@@ -195,3 +195,18 @@ impl RustCloudBackupManager {
         send!(self.supervisor.wake_pending_upload_verifier());
     }
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use tokio::sync::MutexGuard;
+
+    use super::PENDING_UPLOAD_VERIFIER_LOCK;
+
+    /// Takes the one verifier pass, for a test that reads and settles a confirmation itself
+    ///
+    /// A manager's own verifier loop waits for the guard before its next pass, so it cannot settle
+    /// the marker under the test while the guard is held
+    pub(crate) async fn hold_verifier_pass() -> MutexGuard<'static, ()> {
+        PENDING_UPLOAD_VERIFIER_LOCK.lock().await
+    }
+}

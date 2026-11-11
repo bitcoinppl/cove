@@ -181,11 +181,12 @@ impl PendingUploadVerifier {
         }
     }
 
-    /// Reads the owner's wallet set first, then the upload evidence under it, so a wallet change
-    /// after the read makes the settlement stale instead of recording old evidence
+    /// Reads the owner's configuration and wallet set first, then the upload evidence under them,
+    /// so a wallet change or a new configuration after the read makes the settlement stale instead
+    /// of recording old evidence
     async fn ready_pending_verification_settlement(&self) -> Option<PendingVerificationSettlement> {
         // a worker may wait on the lifecycle owner
-        let basis = match call!(self.0.supervisor.wallet_set_basis()).await {
+        let basis = match call!(self.0.supervisor.evidence_basis_for_confirmation()).await {
             Ok(basis) => basis,
             Err(error) => {
                 warn!("Pending upload verification: lifecycle owner stopped: {error}");
