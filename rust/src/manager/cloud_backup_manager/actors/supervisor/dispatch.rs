@@ -1,13 +1,12 @@
 use super::*;
-use crate::manager::cloud_backup_manager::CloudBackupNoticeKind;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionSnapshot, ContinuationOwner, ContinuationStage, EnableIntent,
     EnablePromptAnswers, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
     evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
-    CloudBackupStateReducer,
+    CloudBackupAcceptedEnablePrompt, CloudBackupDetailState, CloudBackupEnableContext,
+    CloudBackupEnablePromptChoice, CloudBackupNoticeKind, CloudBackupStateReducer,
 };
 use tracing::debug;
 
@@ -83,7 +82,13 @@ impl CloudBackupSupervisor {
     pub(crate) fn admission_snapshot(&self, manager: &RustCloudBackupManager) -> AdmissionSnapshot {
         let body = self.runtime.admission_body();
 
-        let detail_inventory = manager.inventory.read().readiness();
+        let (detail_inventory, detail_checking) = {
+            let inventory = manager.inventory.read();
+            let checking =
+                matches!(inventory.detail_state(), CloudBackupDetailState::Checking { .. });
+
+            (inventory.readiness(), checking)
+        };
 
         let restore_all = match manager.projected_restore_all_state() {
             CloudBackupRestoreAllState::StartAvailable { .. } => {
@@ -101,6 +106,7 @@ impl CloudBackupSupervisor {
             running: self.runtime.claim().map(CloudBackupExclusiveOperationClaim::operation),
             sync_running: self.active_sync_request.is_some(),
             detail_inventory,
+            detail_checking,
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
             continuation: self.paused_continuation(manager),

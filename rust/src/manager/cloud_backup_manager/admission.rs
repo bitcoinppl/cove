@@ -156,10 +156,6 @@ pub(crate) enum Admission {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CoalescibleIntent {
     /// A detail refresh is already loading, and the inventory shows it loading
-    #[expect(
-        dead_code,
-        reason = "reserved for an inventory owner that reports a refresh in flight"
-    )]
     RefreshDetail,
     /// A sync is already running, and the wallet rows show it syncing
     SyncUnsynced,
@@ -254,6 +250,8 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) running: Option<CloudBackupExclusiveOperation>,
     pub(crate) sync_running: bool,
     pub(crate) detail_inventory: DetailInventory,
+    /// The inventory shows a detail load in progress
+    pub(crate) detail_checking: bool,
     pub(crate) other_backups_loaded: bool,
     pub(crate) restore_all: RestoreAllAdmission,
     /// An Enable or reinitialize that stopped before it finished, if one is waiting
@@ -438,8 +436,12 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         | I::DismissMissingPasskeyReminder
         | I::DismissVerificationPrompt
         | I::PromptEnablePasskeyChoice(_)
-        | I::EnterDetail
-        | I::RefreshDetail => Accepted,
+        | I::EnterDetail => Accepted,
+
+        // a load the inventory already shows answers Check Again; a silent refresh under a
+        // loaded inventory shows nothing, so the tap is accepted and queues the next load
+        I::RefreshDetail if snapshot.detail_checking => Coalesced(CoalescibleIntent::RefreshDetail),
+        I::RefreshDetail => Accepted,
 
         I::Enable(kind, _) => starts_while_off(snapshot, kind.operation()),
 

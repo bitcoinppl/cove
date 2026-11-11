@@ -16,9 +16,10 @@ use super::types::{
     CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen, CloudBackupHealNotice,
     CloudBackupListedRecord, CloudBackupListedRow, CloudBackupNotOnDeviceSection,
     CloudBackupNoticeKind, CloudBackupOperationKind, CloudBackupOtherBackupsSection,
-    CloudBackupRecoveryOperation, CloudBackupRejection, CloudBackupRowAction,
-    CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody,
-    CloudBackupSection, CloudBackupVerificationView, CloudBackupWalletsSection,
+    CloudBackupProgressSection, CloudBackupRecoveryOperation, CloudBackupRejection,
+    CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, CloudBackupVerificationView,
+    CloudBackupWalletsSection,
 };
 use crate::manager::cloud_backup_manager::actors::supervisor::{Runtime, enable_prompt_answers};
 use crate::manager::cloud_backup_manager::admission::{
@@ -116,6 +117,7 @@ fn admission_snapshot(
         running: reducer.active_operation().map(CloudBackupExclusiveOperationClaim::operation),
         sync_running,
         detail_inventory: inventory.readiness,
+        detail_checking: inventory.progress == Some(CloudBackupProgressSection::InventoryChecking),
         other_backups_loaded: matches!(
             inventory.other_backups,
             CloudBackupOtherBackupsState::Loaded { .. }

@@ -428,6 +428,30 @@ async fn detail_entry_loads_the_inventory_without_asking_for_the_passkey() {
     assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn check_again_joins_a_detail_load_the_inventory_already_shows() {
+    use crate::manager::cloud_backup_manager::admission::{Admission, CoalescibleIntent};
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+
+    dispatch_and_wait(&manager, CloudBackupManagerAction::RefreshDetail).await;
+
+    let outcome = call!(manager.supervisor.harness_last_outcome())
+        .await
+        .unwrap()
+        .expect("Check Again should have been dispatched");
+    assert_eq!(outcome.admission, Admission::Coalesced(CoalescibleIntent::RefreshDetail));
+    assert!(matches!(
+        manager.inventory.read().detail_state(),
+        CloudBackupDetailState::Checking { .. }
+    ));
+}
+
 /// Waits until a detail load has finished, whether it completed or failed
 async fn wait_for_detail_load_to_settle(manager: &RustCloudBackupManager) {
     wait_for_test_condition(Duration::from_secs(5), "detail load to settle", || {
