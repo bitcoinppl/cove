@@ -252,10 +252,17 @@ incomplete, not a confirmed empty inventory. Restore and destructive actions
 that depend on absence or a complete set stay disabled until the state is
 `Complete`.
 
-The supervisor embeds a `DetailWorkflow` that owns detail entry planning,
-runtime passkey authorization, pending verification completion, and refresh
-scheduling. It permits one screen refresh in flight and coalesces further
-requests into one trailing refresh. Rust starts refresh generations no more than
+The inventory loads silently. Entering the detail screen only requests a
+refresh; it never asks for the passkey. The cloud-only fetch reads records
+with the master key already on this device, and with no local key for the
+active namespace it lists every record as Unchecked, which the screen answers
+with a Verify card. Only a user's Verify asks for the passkey.
+
+The supervisor embeds a `DetailWorkflow` that owns refresh scheduling. It
+permits one screen refresh in flight and coalesces further requests into one
+trailing refresh. A Check Again tapped while the inventory shows Checking joins
+that load (`CoalescibleIntent::RefreshDetail`); one tapped under a loaded
+inventory, whose refresh runs silently, is accepted and queues the next load. Rust starts refresh generations no more than
 once every five seconds and admits results by start order, so an older screen or
 operation refresh cannot overwrite a newer one. Closing the detail screen
 invalidates its refresh owner without cancelling manager-owned operations.
@@ -267,7 +274,10 @@ wallet shows only under Not on This Device once the cloud-only rows are read
 again, even when the refresh fails. Everything else waits for the refresh.
 A detail result that read the local wallets before the deletion, from a refresh
 or a verification, gets the same check against the current local wallets when
-it lands, so it can't list the wallet as local again.
+it lands, so it can't list the wallet as local again. The owner also counts the
+local wallet changes it applies, and a backup integrity check's detail carries
+the count it read under: one read before a wallet was added or deleted is
+dropped, since the change already asked for the refresh that replaces it.
 
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
@@ -279,10 +289,24 @@ Verification progress takes priority over inventory progress: a standalone card
 when no wallet rows are listed, an inline row when they are. The verification
 section draws no second running indicator.
 
-Rust also splits the cloud rows. A record of a wallet this device already holds
-lists under Extra Copies, where only delete applies, and every other cloud row
-under Not on This Device, with Restore All. The platforms draw the sections in
-the order Rust lists them and derive none of them.
+Each listed record is one typed row: Not on This Device, Extra Copy,
+Unsupported, Unreadable (with why: the download, the provider, parsing or
+decryption failed) or Unchecked (no local master key). Only a listing whose
+every record was read completes, so Unreadable and Unchecked rows keep Restore
+All off. Turn Off doesn't block on them: since either may be the only copy, its
+review warns about them and asks for a second confirmation.
+
+An Extra Copy is another backup record of a wallet this device already holds.
+Coverage names every local wallet that holds the record's identity by wallet
+ID, never by name, so a renamed wallet still covers its old copy and a
+same-name wallet never covers another's. The copy can be deleted once one of
+those wallets has its own current backup (matched by its own record ID);
+until then it offers Back up first.
+
+Rust also splits the cloud rows into sections: Extra Copies under Extra Copies,
+and every other cloud row under Not on This Device, with Restore All and the
+incomplete list's Check Again. The platforms draw the sections in the order
+Rust lists them and derive none of them.
 
 ## Passkeys And Enable
 
