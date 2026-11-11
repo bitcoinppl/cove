@@ -86,7 +86,7 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
                 reason: .platformAuthorizationFailedAfterPresentation
             )
         case .userCancelled:
-            throw PasskeyError.UserCancelled
+            throw PasskeyError.NotCompleted
         case .noCredential:
             throw PasskeyError.NoCredentialFound
         }

@@ -11,7 +11,7 @@ final class PasskeyProviderImplTests: XCTestCase {
     private static let mainQueueCancellationTimeout: TimeInterval = 10
 
     func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
-        let delegate = PasskeyDelegate(context: .discoverAssertion)
+        let delegate = PasskeyDelegate(context: .discoverAssertion, anchor: UIWindow())
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
             relyingPartyIdentifier: "example.com"
         ).createCredentialAssertionRequest(challenge: Data(count: 32))
@@ -36,7 +36,7 @@ final class PasskeyProviderImplTests: XCTestCase {
     }
 
     func testInteractiveRequestTimeoutCancelsOnMainQueueAndReturnsPresentedFailure() {
-        let delegate = PasskeyDelegate(context: .registration, timeout: 0.01)
+        let delegate = PasskeyDelegate(context: .registration, anchor: UIWindow(), timeout: 0.01)
         let cancellation = expectation(description: "controller cancelled")
 
         XCTAssertThrowsError(
@@ -58,7 +58,7 @@ final class PasskeyProviderImplTests: XCTestCase {
     }
 
     func testLateCallbackCannotReplaceTimeoutResult() {
-        let delegate = PasskeyDelegate(context: .authenticateAssertion, timeout: 0.01)
+        let delegate = PasskeyDelegate(context: .authenticateAssertion, anchor: UIWindow(), timeout: 0.01)
         let cancellation = expectation(description: "controller cancelled")
 
         XCTAssertThrowsError(
@@ -133,7 +133,7 @@ final class PasskeyProviderImplTests: XCTestCase {
             diagnosticMessage: "cancelled"
         )
 
-        guard case .userCancelled = failure else {
+        guard case .notCompleted = failure else {
             XCTFail("expected cancellation")
             return
         }
