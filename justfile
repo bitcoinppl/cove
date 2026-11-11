@@ -293,6 +293,12 @@ qa-check:
 test test="" flags="":
     cargo nextest run --locked {{ test }} --workspace {{ flags }}
 
+# [bounded] Run the Cloud Backup tests, or those matching a nextest filter expression
+[group('test')]
+[working-directory('rust')]
+test-cloud-backup filter="test(cloud_backup)" flags="":
+    cargo nextest run --locked -p cove --lib -E '{{ filter }}' {{ flags }}
+
 # Needs uv, which installs Python 3.12 for the emulator when it is missing, and cargo-nextest
 # [bounded] Run the TAPSIGNER tests against Coinkite's card emulator
 [group('test')]
