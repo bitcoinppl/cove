@@ -56,9 +56,11 @@ dispatch uses. A platform draws a control only for an action in the list and
 enables it only when it is available; an unavailable action carries the reason
 to show as its caption. Rust marks the Google Drive actions as Android only.
 A recorded Google Drive account switch is its own admission body: it admits
-only the switch's Retry and Cancel, and rejects everything else, Turn Off
-included, as the switch running. A second switch call during one answers
-`Busy`.
+only the switch's own controls, and rejects everything else, Turn Off included,
+as the switch running. A second Switch during one answers `Busy`. Try Again is
+available once a step of the switch failed, or once the switch stopped with
+nothing running. Cancel is available as well until the switch's reinitialize
+starts. A switch paused for its saved passkey offers only Confirm Saved Passkey.
 
 `just qa-check` enforces this in the Cloud Backup views: every Kotlin
 `enabled =` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an
@@ -147,6 +149,38 @@ Google Drive account switch's reinitialization also names the switch's persisted
 transition id, which platform callbacks match across a relaunch, but resuming
 the switch starts a run with a new `OperationId`. A completion from a run that a
 reset revoked therefore never matches the run that resumed the switch.
+
+The account switch has one owner, the supervisor, and Android only carries out
+its account-storage steps. Switch, Try Again and Cancel are dispatch actions.
+The supervisor asks for each platform step on the reconcile channel (choose an
+account, report the platform's state, commit, finalize, roll back), and Android
+answers each with a typed `DriveAccountSwitchPlatformResult` through
+`report_drive_account_switch_platform_result`. The supervisor records the
+switch's phase, decides the next step, and projects the switch's stage:
+switching, waiting on its saved passkey, or needing attention with a message
+for the reader. Android reports its state once at launch, so the supervisor
+picks up a switch a relaunch interrupted. A failed reinitialize is rerun only
+on Try Again, never at launch, because it may ask for a passkey; Try Again is
+its way out, and Cancel stays unavailable, since the reinitialize may already
+have begun moving this device to the new backup. A relaunch restores the
+failed attempt's registered passkey for confirmation, and the switch records
+that pause too, so the screen shows Confirm Saved Passkey at once, before
+Android reports anything. A switch with nothing running always shows a way
+out: Confirm Saved Passkey while paused, otherwise Try Again. A switch that rolls back also
+discards the key material its stopped reinitialize kept on this device, so it
+can't come back at the next launch as a reinitialize of the previous backup.
+
+A run of the switch's reinitialize ends one of three ways: succeeded, failed,
+or paused for its saved passkey. Each moves the switch to its next phase, and
+only a run that succeeded keeps its claim, through the platform's commit. When
+saving that phase fails, the run's claim ends anyway, the record still says
+reinitializing, and the supervisor keeps how the run ended in memory. The
+switch then shows the save failure with Try Again. Try Again, Android's state
+report and Confirm Saved Passkey each save that phase before they read the
+switch, and go on from it: to the commit, a rerun of the failed reinitialize,
+or the pause. A held claim therefore always means a run is in progress. A
+relaunch loses the unsaved result, and Android's launch report runs the
+reinitialize again, as after a crash during one.
 
 Work that waits on the provider runs off the supervisor's mailbox, so the
 supervisor keeps answering admission and resets meanwhile. A recovered Enable
@@ -254,6 +288,11 @@ A system alert or confirmation dialog can't carry an identifier on its container
 on iOS, and a dialog button may not carry its identifier on every OS version,
 so UI tests match dialog buttons by label too.
 
+The last outcome shows next to the control its target names. When no drawn
+control answers it, because Rust names no control for the action, the screen
+no longer lists the row, or the control is Android's Switch Google Account menu
+item, both platforms show it at the top of the screen instead.
+
 ### Dialogs and Prompts Follow the Screen
 
 An open dialog, sheet or prompt keeps only which Rust target it is for: the
@@ -295,6 +334,7 @@ writes the fact itself.
 | Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
 | Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
 | Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, the other-backups scan |
+| Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
 
 Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
@@ -445,10 +485,15 @@ that is proven to be incomplete and owned by that fresh attempt.
 
 A newly saved passkey, or an upload that failed, pauses the work that ran it.
 The supervisor keeps what that work needs to go on as one `EnableContinuation`,
-typed with its owner: a fresh Enable while backup is off, or a reinitialize of
-the configured backup. Confirm Saved Passkey restarts the owner's operation, so
-a paused reinitialize goes on as a reinitialize: it uploads the new backup,
-switches to it and verifies it. Admission accepts Confirm Saved Passkey and
+typed with its owner: a fresh Enable while backup is off, a reinitialize of
+the configured backup, or the reinitialize of a Google Drive account switch.
+Confirm Saved Passkey restarts the owner's operation, so a paused reinitialize
+goes on as a reinitialize: it uploads the new backup, switches to it and
+verifies it. A paused switch holds its phase until the user confirms; it asks
+the platform for no commit, and its confirmed reinitialize goes on as that
+switch's run, which then asks the platform to commit the new account. A
+switch's paused reinitialize has no Discard, since the account it wrote to is
+the one the switch is moving to. Admission accepts Confirm Saved Passkey and
 Discard only for a continuation that belongs to the current lifecycle, and
 Discard also for an Enable waiting on one of its prompts, the existing-backup
 prompt or the passkey choice. A Discard that arrives after Enable finished is
@@ -592,6 +637,13 @@ confirmation. It asks the supervisor to persist the enabled state after a final
 upload and waits for that answer before it marks the wallets uploaded. It
 re-decides the class before it applies the completion, so a write whose
 operation ended meanwhile is reported cancelled.
+
+A reinitialize owns the namespaces from its start, the same way. Its policy
+pauses ordinary writes and source cleanup, so a cleanup whose proof was read
+before the reinitialize began never deletes a source it may recover. It then
+drains the lane before it lists the namespaces, so a cleanup delete that was
+already running finishes before the reinitialize reads what exists. When it
+ends, the new generation makes anything left from before stale.
 
 A confirmed Turn Off pauses ordinary writes through the policy, then queues a
 drain barrier of its own. The barrier comes back only after the write in flight

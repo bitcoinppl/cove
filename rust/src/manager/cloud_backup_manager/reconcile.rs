@@ -25,17 +25,33 @@ pub enum DriveAccountSwitchPlatformState {
     Committed(u64),
 }
 
-/// Platform action required to reconcile a persisted Google Drive account switch
+/// What Android's half of a Google Drive account switch did, reported to Rust's switch owner
+///
+/// Rust asks for each step with a `DriveAccountSwitch*Required` message, and Android answers each
+/// with one of these. They are service results, never user intents: the user's Switch, Retry and
+/// Cancel go through dispatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum DriveAccountSwitchReconcileAction {
-    /// Rust and platform state require no immediate platform mutation
-    None,
-    /// Atomically commit the staged Google Drive identity
-    Commit(u64),
-    /// Atomically discard the staged Google Drive identity
-    Rollback(u64),
-    /// Remove the completed transition marker without changing identity
-    Finalize(u64),
+pub enum DriveAccountSwitchPlatformResult {
+    /// The platform's durable switch state, reported at launch and when Rust asks for it
+    State(DriveAccountSwitchPlatformState),
+    /// The user picked another account and Android staged it durably
+    AccountSelected(u64),
+    /// The user picked the account already in use, or left the picker
+    AccountUnchanged(u64),
+    /// Android couldn't show the picker or stage the account the user picked
+    AccountSelectionFailed(u64),
+    /// Android committed its staged account
+    Committed(u64),
+    /// Android couldn't commit its staged account, which stays staged
+    CommitFailed(u64),
+    /// Android removed its committed transition marker
+    Finalized(u64),
+    /// Android couldn't remove its committed transition marker
+    FinalizeFailed(u64),
+    /// Android discarded its staged account and is back on the previous one
+    RolledBack(u64),
+    /// Android couldn't discard its staged account
+    RollbackFailed(u64),
 }
 
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
@@ -45,6 +61,10 @@ pub enum CloudBackupReconcileMessage {
     /// `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
     Screen(Box<CloudBackupScreenDelta>),
     EnableCompleted(CloudBackupEnableContext),
+    /// Android must show the account picker and stage the account the user picks
+    DriveAccountSwitchSelectionRequired(u64),
+    /// Android must report its durable switch state
+    DriveAccountSwitchStateRequired,
     /// Android must atomically commit its staged Google Drive identity
     DriveAccountSwitchCommitRequired(u64),
     /// Android must atomically discard its staged Google Drive identity

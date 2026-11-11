@@ -20,7 +20,7 @@ impl EnableContinuation {
         claim: CloudBackupExclusiveOperationClaim,
         session: PendingEnableSession,
     ) -> Self {
-        Self::new(ContinuationOwner::of(claim.operation()), session)
+        Self::new(ContinuationOwner::of(claim), session)
     }
 
     pub(crate) fn new(owner: ContinuationOwner, session: PendingEnableSession) -> Self {

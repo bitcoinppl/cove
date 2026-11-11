@@ -277,8 +277,10 @@ impl CloudBackupSupervisor {
             provider_hint: passkey.provider_hint.clone(),
         };
 
-        // the journal does not record which work wrote it; the body restart loaded does
-        let owner = ContinuationOwner::of_body(self.runtime.admission_body());
+        // the journal does not record which work wrote it; the body restart loaded does, and a
+        // recorded switch names the switch its reinitialize belongs to
+        let switch = Self::drive_account_switch().map(|transition| transition.transition_id);
+        let owner = ContinuationOwner::of_body(self.runtime.admission_body(), switch);
         self.enable_continuation = Some(EnableContinuation::new(
             owner,
             PendingEnableSession::awaiting_saved_passkey_confirmation(
@@ -291,6 +293,10 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
             SavedPasskeyConfirmationMode::Manual,
         ));
+
+        if let ContinuationOwner::DriveAccountSwitch(transition_id) = owner {
+            self.drive_account_switch_reinitialization_restored_paused(manager, transition_id);
+        }
 
         Ok(())
     }

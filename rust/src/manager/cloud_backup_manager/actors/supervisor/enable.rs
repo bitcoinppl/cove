@@ -120,7 +120,11 @@ impl CloudBackupSupervisor {
             }
         }
 
-        match self.drive_account_switch_reinitialization_finished(manager, claim, false) {
+        match self.drive_account_switch_reinitialization_finished(
+            manager,
+            claim,
+            DriveAccountSwitchReinitializationEnd::Failed,
+        ) {
             DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
             DriveAccountSwitchReinitializationCompletion::Stale
             | DriveAccountSwitchReinitializationCompletion::Handled => return,
@@ -136,7 +140,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
-            match self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+            match self.drive_account_switch_reinitialization_finished(
+                &manager,
+                claim,
+                DriveAccountSwitchReinitializationEnd::Succeeded,
+            ) {
                 DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
                 DriveAccountSwitchReinitializationCompletion::Stale
                 | DriveAccountSwitchReinitializationCompletion::Handled => return,

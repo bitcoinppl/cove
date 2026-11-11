@@ -8559,32 +8559,7 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
      */
     func backupWalletCount()  -> UInt32?
 
-    /**
-     * Claim the exclusive operation and return after all prior cloud writes drain
-     */
-    func beginDriveAccountSwitch() async throws  -> UInt64
-
-    /**
-     * Move an unstarted account transition to its rollback phase
-     */
-    func cancelDriveAccountSwitch(transitionId: UInt64) async throws
-
     func cloudStorageDidChange()
-
-    /**
-     * Release the transition after Android commits its staged account
-     */
-    func confirmDriveAccountSwitchCommitted(transitionId: UInt64) async throws
-
-    /**
-     * Release the transition after Android discards its staged account
-     */
-    func confirmDriveAccountSwitchRolledBack(transitionId: UInt64) async throws
-
-    /**
-     * Continue the claimed transition after Android durably stages the selected account
-     */
-    func continueDriveAccountSwitch(transitionId: UInt64) async throws
 
     func hasPendingCloudUploadVerification()  -> Bool
 
@@ -8599,11 +8574,13 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     func onboardingEnableCompletionReadiness()  -> CloudBackupOnboardingCompletionReadiness
 
     /**
-     * Reconcile persisted Rust and Android transition state after process startup
+     * Hands Rust's switch owner what Android's half of a Google Drive account switch did
      *
-     * Android must complete the returned action before starting its initial cloud refresh
+     * Android sends one result for each step a `DriveAccountSwitch*Required` message asked for,
+     * and its durable state at launch. The switch owner decides the next step, and any recovery
+     * the user sees, from it
      */
-    func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState) async throws  -> DriveAccountSwitchReconcileAction
+    func reportDriveAccountSwitchPlatformResult(result: DriveAccountSwitchPlatformResult)
 
     func resumePendingCloudUploadVerification()
 
@@ -8613,9 +8590,14 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     func startBackgroundInventoryDiscovery()
 
     /**
-     * The screen the platform starts from; every later change arrives as a `Screen` delta
+     * The screen the platform starts from, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedScreen::applying`]: every later change arrives as a `Screen` delta,
+     * and the deltas published before this read, still queued for the listener, are at or
+     * before its revision, so they are skipped instead of replayed over it
      */
-    func state()  -> CloudBackupScreen
+    func state()  -> CloudBackupPublishedScreen
 
     /**
      * Read persisted cloud backup state from DB and update in-memory state
@@ -8632,6 +8614,13 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
 
     func dispatch(action: CloudBackupManagerAction)
 
+    /**
+     * Delivers every message, in the order it was sent, starting with those queued before this
+     * call
+     *
+     * Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+     * those by revision. The other messages are events with no revision, delivered in order
+     */
     func listenForUpdates(reconciler: CloudBackupManagerReconciler)
 
 }
@@ -8722,112 +8711,12 @@ open func backupWalletCount() -> UInt32?  {
 })
 }
 
-    /**
-     * Claim the exclusive operation and return after all prior cloud writes drain
-     */
-open func beginDriveAccountSwitch()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(
-                    self.uniffiCloneHandle()
-
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_u64,
-            completeFunc: ffi_cove_rust_future_complete_u64,
-            freeFunc: ffi_cove_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
-}
-
-    /**
-     * Move an unstarted account transition to its rollback phase
-     */
-open func cancelDriveAccountSwitch(transitionId: UInt64)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(transitionId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
-}
-
 open func cloudStorageDidChange()  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
-}
-
-    /**
-     * Release the transition after Android commits its staged account
-     */
-open func confirmDriveAccountSwitchCommitted(transitionId: UInt64)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(transitionId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
-}
-
-    /**
-     * Release the transition after Android discards its staged account
-     */
-open func confirmDriveAccountSwitchRolledBack(transitionId: UInt64)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(transitionId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
-}
-
-    /**
-     * Continue the claimed transition after Android durably stages the selected account
-     */
-open func continueDriveAccountSwitch(transitionId: UInt64)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(transitionId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
 }
 
 open func hasPendingCloudUploadVerification() -> Bool  {
@@ -8864,25 +8753,19 @@ open func onboardingEnableCompletionReadiness() -> CloudBackupOnboardingCompleti
 }
 
     /**
-     * Reconcile persisted Rust and Android transition state after process startup
+     * Hands Rust's switch owner what Android's half of a Google Drive account switch did
      *
-     * Android must complete the returned action before starting its initial cloud refresh
+     * Android sends one result for each step a `DriveAccountSwitch*Required` message asked for,
+     * and its durable state at launch. The switch owner decides the next step, and any recovery
+     * the user sees, from it
      */
-open func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState)async throws  -> DriveAccountSwitchReconcileAction  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
-                    self.uniffiCloneHandle(),
-                    FfiConverterTypeDriveAccountSwitchPlatformState_lower(platformState)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDriveAccountSwitchReconcileAction_lift,
-            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
-        )
+open func reportDriveAccountSwitchPlatformResult(result: DriveAccountSwitchPlatformResult)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeDriveAccountSwitchPlatformResult_lower(result),uniffiCallStatus
+    )
+}
 }
 
 open func resumePendingCloudUploadVerification()  {try! rustCall() {
@@ -8905,10 +8788,15 @@ open func startBackgroundInventoryDiscovery()  {try! rustCall() {
 }
 
     /**
-     * The screen the platform starts from; every later change arrives as a `Screen` delta
+     * The screen the platform starts from, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedScreen::applying`]: every later change arrives as a `Screen` delta,
+     * and the deltas published before this read, still queued for the listener, are at or
+     * before its revision, so they are skipped instead of replayed over it
      */
-open func state() -> CloudBackupScreen  {
-    return try!  FfiConverterTypeCloudBackupScreen_lift(try! rustCall() {
+open func state() -> CloudBackupPublishedScreen  {
+    return try!  FfiConverterTypeCloudBackupPublishedScreen_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_state(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -8960,6 +8848,13 @@ open func dispatch(action: CloudBackupManagerAction)  {try! rustCall() {
 }
 }
 
+    /**
+     * Delivers every message, in the order it was sent, starting with those queued before this
+     * call
+     *
+     * Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+     * those by revision. The other messages are events with no revision, delivered in order
+     */
 open func listenForUpdates(reconciler: CloudBackupManagerReconciler)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_listen_for_updates(
@@ -16426,13 +16321,17 @@ public func FfiConverterTypeCloudBackupDrawnControl_lower(_ value: CloudBackupDr
  * A Google Drive account switch that needs the user to retry or cancel it
  */
 public struct CloudBackupDriveAccountSwitchRecovery: Equatable, Hashable {
-    public var transitionId: UInt64
+    /**
+     * What went wrong, written for the reader
+     */
     public var message: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(transitionId: UInt64, message: String) {
-        self.transitionId = transitionId
+    public init(
+        /**
+         * What went wrong, written for the reader
+         */message: String) {
         self.message = message
     }
 
@@ -16452,13 +16351,11 @@ public struct FfiConverterTypeCloudBackupDriveAccountSwitchRecovery: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDriveAccountSwitchRecovery {
         return
             try CloudBackupDriveAccountSwitchRecovery(
-                transitionId: FfiConverterUInt64.read(from: &buf),
                 message: FfiConverterString.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudBackupDriveAccountSwitchRecovery, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.transitionId, into: &buf)
         FfiConverterString.write(value.message, into: &buf)
     }
 }
@@ -16483,18 +16380,12 @@ public func FfiConverterTypeCloudBackupDriveAccountSwitchRecovery_lower(_ value:
  * A recorded Google Drive account switch; Android only
  */
 public struct CloudBackupDriveAccountSwitchScreen: Equatable, Hashable {
-    /**
-     * Set when Rust and the platform disagree about the switch and the user must retry
-     */
-    public var recovery: CloudBackupDriveAccountSwitchRecovery?
+    public var stage: CloudBackupDriveAccountSwitchStage
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(
-        /**
-         * Set when Rust and the platform disagree about the switch and the user must retry
-         */recovery: CloudBackupDriveAccountSwitchRecovery?) {
-        self.recovery = recovery
+    public init(stage: CloudBackupDriveAccountSwitchStage) {
+        self.stage = stage
     }
 
 
@@ -16513,12 +16404,12 @@ public struct FfiConverterTypeCloudBackupDriveAccountSwitchScreen: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDriveAccountSwitchScreen {
         return
             try CloudBackupDriveAccountSwitchScreen(
-                recovery: FfiConverterOptionTypeCloudBackupDriveAccountSwitchRecovery.read(from: &buf)
+                stage: FfiConverterTypeCloudBackupDriveAccountSwitchStage.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudBackupDriveAccountSwitchScreen, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeCloudBackupDriveAccountSwitchRecovery.write(value.recovery, into: &buf)
+        FfiConverterTypeCloudBackupDriveAccountSwitchStage.write(value.stage, into: &buf)
     }
 }
 
@@ -17422,6 +17313,96 @@ public func FfiConverterTypeCloudBackupProgress_lower(_ value: CloudBackupProgre
 
 
 /**
+ * A screen as it was published, with the revision that orders it against every delta
+ *
+ * The platform starts from the one `state()` returns and advances it only with
+ * [`CloudBackupPublishedScreen::applying`]. Deltas sent before that snapshot was read can
+ * still be queued for the platform; the revision is how they are told apart from the ones
+ * that come after it
+ */
+public struct CloudBackupPublishedScreen: Equatable, Hashable {
+    /**
+     * How many deltas the manager had published when this screen was current; the screen
+     * before anything is loaded is revision 0
+     */
+    public var revision: UInt64
+    public var screen: CloudBackupScreen
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * How many deltas the manager had published when this screen was current; the screen
+         * before anything is loaded is revision 0
+         */revision: UInt64, screen: CloudBackupScreen) {
+        self.revision = revision
+        self.screen = screen
+    }
+
+
+    /**
+     * This screen advanced by `delta`, or this screen as it is when it already includes `delta`
+     *
+     * The only way a platform updates its screen, so both apps and the Rust test reconciler
+     * apply a delta the same way. The platform's first screen is a snapshot, and deltas
+     * published before it was read can still be queued behind it; replaying one would show
+     * an older or mixed screen, so a delta at or before this revision changes nothing. Deltas
+     * arrive in revision order, so the next one after the snapshot is the one this revision
+     * precedes
+     */
+public func applying(delta: CloudBackupScreenDelta) -> CloudBackupPublishedScreen  {
+    return try!  FfiConverterTypeCloudBackupPublishedScreen_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackuppublishedscreen_applying(
+            FfiConverterTypeCloudBackupPublishedScreen_lower(self),
+        FfiConverterTypeCloudBackupScreenDelta_lower(delta),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupPublishedScreen: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupPublishedScreen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPublishedScreen {
+        return
+            try CloudBackupPublishedScreen(
+                revision: FfiConverterUInt64.read(from: &buf),
+                screen: FfiConverterTypeCloudBackupScreen.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupPublishedScreen, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.revision, into: &buf)
+        FfiConverterTypeCloudBackupScreen.write(value.screen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPublishedScreen_lift(_ buf: RustBuffer) throws -> CloudBackupPublishedScreen {
+    return try FfiConverterTypeCloudBackupPublishedScreen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPublishedScreen_lower(_ value: CloudBackupPublishedScreen) -> RustBuffer {
+    return FfiConverterTypeCloudBackupPublishedScreen.lower(value)
+}
+
+
+/**
  * Restore summary shown after cloud backup onboarding restore completes
  */
 public struct CloudBackupRestoreReport: Equatable, Hashable {
@@ -17548,10 +17529,72 @@ public func FfiConverterTypeCloudBackupRowAction_lower(_ value: CloudBackupRowAc
 
 
 /**
+ * One control on one listed row
+ *
+ * An open row sheet or delete confirmation holds only this, and a row outcome names it; each reads
+ * the control's current action from the latest screen with [`CloudBackupScreen::row_action`], so
+ * none keeps a copy of a decision Rust has since replaced
+ */
+public struct CloudBackupRowTarget: Equatable, Hashable {
+    public var recordId: RecordId
+    public var control: CloudBackupRowControl
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recordId: RecordId, control: CloudBackupRowControl) {
+        self.recordId = recordId
+        self.control = control
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupRowTarget: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRowTarget: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRowTarget {
+        return
+            try CloudBackupRowTarget(
+                recordId: FfiConverterTypeRecordId.read(from: &buf),
+                control: FfiConverterTypeCloudBackupRowControl.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupRowTarget, into buf: inout [UInt8]) {
+        FfiConverterTypeRecordId.write(value.recordId, into: &buf)
+        FfiConverterTypeCloudBackupRowControl.write(value.control, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowTarget_lift(_ buf: RustBuffer) throws -> CloudBackupRowTarget {
+    return try FfiConverterTypeCloudBackupRowTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowTarget_lower(_ value: CloudBackupRowTarget) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRowTarget.lower(value)
+}
+
+
+/**
  * Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
  *
- * `state()` returns the first one; every later change arrives as one [`CloudBackupScreenDelta`],
- * which each platform applies with [`CloudBackupScreen::applying`] in a single assignment
+ * `state()` returns the one last published as a [`CloudBackupPublishedScreen`]; every later
+ * change arrives as one [`CloudBackupScreenDelta`], which each platform applies with
+ * [`CloudBackupPublishedScreen::applying`] in a single assignment
  */
 public struct CloudBackupScreen: Equatable, Hashable {
     public var body: CloudBackupScreenBody
@@ -17607,17 +17650,28 @@ public func drawnControls() -> [CloudBackupDrawnControl]  {
 }
 
     /**
-     * This screen with `delta` applied
-     *
-     * The only way a platform updates its screen, so both apps and the Rust test reconciler
-     * apply a delta the same way
+     * The listed row for `record_id`, or `None` once this screen no longer lists it
      */
-public func applying(delta: CloudBackupScreenDelta) -> CloudBackupScreen  {
-    return try!  FfiConverterTypeCloudBackupScreen_lift(try! rustCall() {
+public func listedRow(recordId: RecordId) -> CloudBackupListedRow?  {
+    return try!  FfiConverterOptionTypeCloudBackupListedRow.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_method_cloudbackupscreen_applying(
+    uniffi_cove_fn_method_cloudbackupscreen_listed_row(
             FfiConverterTypeCloudBackupScreen_lower(self),
-        FfiConverterTypeCloudBackupScreenDelta_lower(delta),uniffiCallStatus
+        FfiConverterTypeRecordId_lower(recordId),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The current action for `target`, or `None` once Rust no longer offers that control on the
+     * row, which closes a dialog bound to it
+     */
+public func rowAction(target: CloudBackupRowTarget) -> CloudBackupRowAction?  {
+    return try!  FfiConverterOptionTypeCloudBackupRowAction.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupscreen_row_action(
+            FfiConverterTypeCloudBackupScreen_lower(self),
+        FfiConverterTypeCloudBackupRowTarget_lower(target),uniffiCallStatus
     )
 })
 }
@@ -17675,10 +17729,15 @@ public func FfiConverterTypeCloudBackupScreen_lower(_ value: CloudBackupScreen) 
 /**
  * A change to the screen, with only the parts that changed
  *
- * Each platform applies it with [`CloudBackupScreen::applying`] in one state assignment, so no
- * frame shows a half-applied update
+ * Each platform applies it with [`CloudBackupPublishedScreen::applying`] in one state
+ * assignment, so no frame shows a half-applied update
  */
 public struct CloudBackupScreenDelta: Equatable, Hashable {
+    /**
+     * The revision of the screen this delta publishes; it changes the screen published at the
+     * revision before it
+     */
+    public var revision: UInt64
     public var body: CloudBackupScreenBody?
     public var settingsRow: CloudBackupSettingsRowStatus?
     public var healNotice: CloudBackupHealNoticeUpdate?
@@ -17688,7 +17747,12 @@ public struct CloudBackupScreenDelta: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(body: CloudBackupScreenBody?, settingsRow: CloudBackupSettingsRowStatus?, healNotice: CloudBackupHealNoticeUpdate?, lastOutcome: CloudBackupLastOutcomeUpdate?, rootPrompt: CloudBackupRootPrompt?, actions: CloudBackupActions?) {
+    public init(
+        /**
+         * The revision of the screen this delta publishes; it changes the screen published at the
+         * revision before it
+         */revision: UInt64, body: CloudBackupScreenBody?, settingsRow: CloudBackupSettingsRowStatus?, healNotice: CloudBackupHealNoticeUpdate?, lastOutcome: CloudBackupLastOutcomeUpdate?, rootPrompt: CloudBackupRootPrompt?, actions: CloudBackupActions?) {
+        self.revision = revision
         self.body = body
         self.settingsRow = settingsRow
         self.healNotice = healNotice
@@ -17713,6 +17777,7 @@ public struct FfiConverterTypeCloudBackupScreenDelta: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupScreenDelta {
         return
             try CloudBackupScreenDelta(
+                revision: FfiConverterUInt64.read(from: &buf),
                 body: FfiConverterOptionTypeCloudBackupScreenBody.read(from: &buf),
                 settingsRow: FfiConverterOptionTypeCloudBackupSettingsRowStatus.read(from: &buf),
                 healNotice: FfiConverterOptionTypeCloudBackupHealNoticeUpdate.read(from: &buf),
@@ -17723,6 +17788,7 @@ public struct FfiConverterTypeCloudBackupScreenDelta: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: CloudBackupScreenDelta, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.revision, into: &buf)
         FfiConverterOptionTypeCloudBackupScreenBody.write(value.body, into: &buf)
         FfiConverterOptionTypeCloudBackupSettingsRowStatus.write(value.settingsRow, into: &buf)
         FfiConverterOptionTypeCloudBackupHealNoticeUpdate.write(value.healNotice, into: &buf)
@@ -25169,6 +25235,10 @@ public enum CloudBackupControlSurface: Equatable, Hashable {
      * Android's top-bar menu
      */
     case menu
+    /**
+     * The prompt over the screen: the Enable, passkey and verification prompts' choices
+     */
+    case rootPrompt
 
 
 
@@ -25211,6 +25281,8 @@ public struct FfiConverterTypeCloudBackupControlSurface: FfiConverterRustBuffer 
         case 10: return .turnOffDialogs
 
         case 11: return .menu
+
+        case 12: return .rootPrompt
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25262,6 +25334,10 @@ public struct FfiConverterTypeCloudBackupControlSurface: FfiConverterRustBuffer 
 
         case .menu:
             writeInt(&buf, Int32(11))
+
+
+        case .rootPrompt:
+            writeInt(&buf, Int32(12))
 
         }
     }
@@ -25634,103 +25710,73 @@ public func FfiConverterTypeCloudBackupDisableScreen_lower(_ value: CloudBackupD
 
 
 /**
- * Failure to coordinate an Android Google Drive account transition
+ * Where a Google Drive account switch stands for the user
  */
-public
-enum CloudBackupDriveAccountSwitchError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-
+public enum CloudBackupDriveAccountSwitchStage: Equatable, Hashable {
 
     /**
-     * Another exclusive Cloud Backup operation owns the supervisor
+     * Cove is moving Cloud Backup to the selected account; nothing waits on the user
      */
-    case Busy
+    case switching
     /**
-     * Cloud Backup has no configured state to move to another account
+     * The new account's backup registered a passkey the user must confirm was saved before
+     * the switch goes on; the screen offers Confirm Saved Passkey
      */
-    case NotConfigured
+    case awaitingSavedPasskeyConfirmation
     /**
-     * The supplied transition does not own the current operation
+     * A step of the switch failed and the user must try again, or cancel while the previous
+     * account can still come back
      */
-    case InvalidTransition
-    /**
-     * Persistence or actor coordination failed
-     */
-    case Internal(String
+    case needsAttention(CloudBackupDriveAccountSwitchRecovery
     )
 
 
 
 
-// The local Rust `Display` implementation.
-public var description: String {
-    return try!  FfiConverterString.lift(
-        try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(
-            FfiConverterTypeCloudBackupDriveAccountSwitchError_lower(self),uniffiCallStatus
-    )
-}
-    )
-}
-
-
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
 
 }
 
 #if compiler(>=6)
-extension CloudBackupDriveAccountSwitchError: Sendable {}
+extension CloudBackupDriveAccountSwitchStage: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCloudBackupDriveAccountSwitchError: FfiConverterRustBuffer {
-    typealias SwiftType = CloudBackupDriveAccountSwitchError
+public struct FfiConverterTypeCloudBackupDriveAccountSwitchStage: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupDriveAccountSwitchStage
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDriveAccountSwitchError {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDriveAccountSwitchStage {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
+        case 1: return .switching
 
+        case 2: return .awaitingSavedPasskeyConfirmation
 
+        case 3: return .needsAttention(try FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(from: &buf)
+        )
 
-        case 1: return .Busy
-        case 2: return .NotConfigured
-        case 3: return .InvalidTransition
-        case 4: return .Internal(
-            try FfiConverterString.read(from: &buf)
-            )
-
-         default: throw UniffiInternalError.unexpectedEnumCase
+        default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: CloudBackupDriveAccountSwitchError, into buf: inout [UInt8]) {
+    public static func write(_ value: CloudBackupDriveAccountSwitchStage, into buf: inout [UInt8]) {
         switch value {
 
 
-
-
-
-        case .Busy:
+        case .switching:
             writeInt(&buf, Int32(1))
 
 
-        case .NotConfigured:
+        case .awaitingSavedPasskeyConfirmation:
             writeInt(&buf, Int32(2))
 
 
-        case .InvalidTransition:
+        case let .needsAttention(v1):
             writeInt(&buf, Int32(3))
-
-
-        case let .Internal(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(v1, into: &buf)
 
         }
     }
@@ -25740,16 +25786,17 @@ public struct FfiConverterTypeCloudBackupDriveAccountSwitchError: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCloudBackupDriveAccountSwitchError_lift(_ buf: RustBuffer) throws -> CloudBackupDriveAccountSwitchError {
-    return try FfiConverterTypeCloudBackupDriveAccountSwitchError.lift(buf)
+public func FfiConverterTypeCloudBackupDriveAccountSwitchStage_lift(_ buf: RustBuffer) throws -> CloudBackupDriveAccountSwitchStage {
+    return try FfiConverterTypeCloudBackupDriveAccountSwitchStage.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCloudBackupDriveAccountSwitchError_lower(_ value: CloudBackupDriveAccountSwitchError) -> RustBuffer {
-    return FfiConverterTypeCloudBackupDriveAccountSwitchError.lower(value)
+public func FfiConverterTypeCloudBackupDriveAccountSwitchStage_lower(_ value: CloudBackupDriveAccountSwitchStage) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDriveAccountSwitchStage.lower(value)
 }
+
 
 
 /**
@@ -26606,6 +26653,18 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
      * Google Drive authorization, separate from verification
      */
     case reconnectDrive
+    /**
+     * Moves Cloud Backup to another Google Drive account; Android only
+     */
+    case switchDriveAccount
+    /**
+     * Try Again on a Google Drive account switch that needs attention
+     */
+    case retryDriveAccountSwitchRecovery
+    /**
+     * Restores the previous Google Drive account of a switch that needs attention
+     */
+    case cancelDriveAccountSwitch
     case refreshDetail
     case enterDetail
     /**
@@ -26726,20 +26785,26 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case 35: return .reconnectDrive
 
-        case 36: return .refreshDetail
+        case 36: return .switchDriveAccount
 
-        case 37: return .enterDetail
+        case 37: return .retryDriveAccountSwitchRecovery
 
-        case 38: return .leaveDetail
+        case 38: return .cancelDriveAccountSwitch
 
-        case 39: return .retryLoad
+        case 39: return .refreshDetail
 
-        case 40: return .resetOnThisDevice
+        case 40: return .enterDetail
 
-        case 41: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        case 41: return .leaveDetail
+
+        case 42: return .retryLoad
+
+        case 43: return .resetOnThisDevice
+
+        case 44: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 42: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
+        case 45: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -26901,33 +26966,45 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(35))
 
 
-        case .refreshDetail:
+        case .switchDriveAccount:
             writeInt(&buf, Int32(36))
 
 
-        case .enterDetail:
+        case .retryDriveAccountSwitchRecovery:
             writeInt(&buf, Int32(37))
 
 
-        case .leaveDetail:
+        case .cancelDriveAccountSwitch:
             writeInt(&buf, Int32(38))
 
 
-        case .retryLoad:
+        case .refreshDetail:
             writeInt(&buf, Int32(39))
 
 
-        case .resetOnThisDevice:
+        case .enterDetail:
             writeInt(&buf, Int32(40))
 
 
-        case let .promptEnablePasskeyChoice(v1):
+        case .leaveDetail:
             writeInt(&buf, Int32(41))
+
+
+        case .retryLoad:
+            writeInt(&buf, Int32(42))
+
+
+        case .resetOnThisDevice:
+            writeInt(&buf, Int32(43))
+
+
+        case let .promptEnablePasskeyChoice(v1):
+            writeInt(&buf, Int32(44))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
         case let .acceptEnablePrompt(v1):
-            writeInt(&buf, Int32(42))
+            writeInt(&buf, Int32(45))
             FfiConverterTypeCloudBackupEnablePromptChoice.write(v1, into: &buf)
 
         }
@@ -27595,7 +27672,7 @@ public enum CloudBackupOutcomeTarget: Equatable, Hashable {
 
     case action(CloudBackupScreenAction
     )
-    case row(recordId: RecordId, action: CloudBackupRowActionKind
+    case row(target: CloudBackupRowTarget
     )
 
 
@@ -27621,7 +27698,7 @@ public struct FfiConverterTypeCloudBackupOutcomeTarget: FfiConverterRustBuffer {
         case 1: return .action(try FfiConverterTypeCloudBackupScreenAction.read(from: &buf)
         )
 
-        case 2: return .row(recordId: try FfiConverterTypeRecordId.read(from: &buf), action: try FfiConverterTypeCloudBackupRowActionKind.read(from: &buf)
+        case 2: return .row(target: try FfiConverterTypeCloudBackupRowTarget.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -27637,10 +27714,9 @@ public struct FfiConverterTypeCloudBackupOutcomeTarget: FfiConverterRustBuffer {
             FfiConverterTypeCloudBackupScreenAction.write(v1, into: &buf)
 
 
-        case let .row(recordId,action):
+        case let .row(target):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeRecordId.write(recordId, into: &buf)
-            FfiConverterTypeCloudBackupRowActionKind.write(action, into: &buf)
+            FfiConverterTypeCloudBackupRowTarget.write(target, into: &buf)
 
         }
     }
@@ -28196,12 +28272,22 @@ public func FfiConverterTypeCloudBackupProgressSection_lower(_ value: CloudBacku
 public enum CloudBackupReconcileMessage: Equatable, Hashable {
 
     /**
-     * What changed on the screen; the platform applies it with `CloudBackupScreen::applying`
+     * What changed on the screen; the platform applies it with
+     * `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
      */
     case screen(CloudBackupScreenDelta
     )
     case enableCompleted(CloudBackupEnableContext
     )
+    /**
+     * Android must show the account picker and stage the account the user picks
+     */
+    case driveAccountSwitchSelectionRequired(UInt64
+    )
+    /**
+     * Android must report its durable switch state
+     */
+    case driveAccountSwitchStateRequired
     /**
      * Android must atomically commit its staged Google Drive identity
      */
@@ -28244,13 +28330,18 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case 2: return .enableCompleted(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 3: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
+        case 3: return .driveAccountSwitchSelectionRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 4: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        case 4: return .driveAccountSwitchStateRequired
+
+        case 5: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 5: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
+        case 6: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 7: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -28271,18 +28362,27 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
-        case let .driveAccountSwitchCommitRequired(v1):
+        case let .driveAccountSwitchSelectionRequired(v1):
             writeInt(&buf, Int32(3))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
-        case let .driveAccountSwitchRollbackRequired(v1):
+        case .driveAccountSwitchStateRequired:
             writeInt(&buf, Int32(4))
+
+
+        case let .driveAccountSwitchCommitRequired(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .driveAccountSwitchRollbackRequired(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case let .driveAccountSwitchFinalizeRequired(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }
@@ -29001,6 +29101,18 @@ public enum CloudBackupRowActionKind: Equatable, Hashable {
 
 
 
+    /**
+     * Which control this action is drawn as
+     */
+public func control() -> CloudBackupRowControl  {
+    return try!  FfiConverterTypeCloudBackupRowControl_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackuprowactionkind_control(
+            FfiConverterTypeCloudBackupRowActionKind_lower(self),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -29080,7 +29192,114 @@ public func FfiConverterTypeCloudBackupRowActionKind_lower(_ value: CloudBackupR
 
 
 /**
+ * Which control on a row, whatever it currently asks the user to confirm
+ *
+ * The identity of a row control: its shape and availability are read from the row's current
+ * [`CloudBackupRowAction`], so a change to either never makes it another control
+ */
+
+public enum CloudBackupRowControl: Equatable, Hashable {
+
+    case restore
+    case delete
+    case backUpFirst
+    case checkAgain
+    case verify
+
+
+
+    /**
+     * The row control's part of its accessibility identifier: its name in lower camel case
+     */
+public func identifierName() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackuprowcontrol_identifier_name(
+            FfiConverterTypeCloudBackupRowControl_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupRowControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRowControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupRowControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRowControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .restore
+
+        case 2: return .delete
+
+        case 3: return .backUpFirst
+
+        case 4: return .checkAgain
+
+        case 5: return .verify
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupRowControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .restore:
+            writeInt(&buf, Int32(1))
+
+
+        case .delete:
+            writeInt(&buf, Int32(2))
+
+
+        case .backUpFirst:
+            writeInt(&buf, Int32(3))
+
+
+        case .checkAgain:
+            writeInt(&buf, Int32(4))
+
+
+        case .verify:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowControl_lift(_ buf: RustBuffer) throws -> CloudBackupRowControl {
+    return try FfiConverterTypeCloudBackupRowControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowControl_lower(_ value: CloudBackupRowControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRowControl.lower(value)
+}
+
+
+
+/**
  * A control that dispatches one intent; the platform maps each to its `CloudBackupManagerAction`
+ *
+ * Its name in lower camel case is its part of the control's accessibility identifier
  */
 
 public enum CloudBackupScreenAction: Equatable, Hashable {
@@ -29089,7 +29308,14 @@ public enum CloudBackupScreenAction: Equatable, Hashable {
     case restoreFromCloudBackup
     case cancelRestore
     case confirmSavedPasskey
-    case acceptEnablePrompt
+    /**
+     * The Enable prompt's Use Existing Passkey, offered on every Enable prompt
+     */
+    case acceptEnablePromptUseExisting
+    /**
+     * The Enable prompt's Create New Backup, offered only on a prompt that can start one
+     */
+    case acceptEnablePromptCreateNew
     case discardPendingEnable
     case confirmPendingEnableCleanup
     case verify
@@ -29164,6 +29390,18 @@ public func isAndroidOnly() -> Bool  {
 })
 }
 
+    /**
+     * The action's part of its accessibility identifier: its name in lower camel case
+     */
+public func identifierName() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupscreenaction_identifier_name(
+            FfiConverterTypeCloudBackupScreenAction_lower(self),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -29190,63 +29428,65 @@ public struct FfiConverterTypeCloudBackupScreenAction: FfiConverterRustBuffer {
 
         case 4: return .confirmSavedPasskey
 
-        case 5: return .acceptEnablePrompt
+        case 5: return .acceptEnablePromptUseExisting
 
-        case 6: return .discardPendingEnable
+        case 6: return .acceptEnablePromptCreateNew
 
-        case 7: return .confirmPendingEnableCleanup
+        case 7: return .discardPendingEnable
 
-        case 8: return .verify
+        case 8: return .confirmPendingEnableCleanup
 
-        case 9: return .repairPasskey
+        case 9: return .verify
 
-        case 10: return .syncUnsynced
+        case 10: return .repairPasskey
 
-        case 11: return .refreshDetail
+        case 11: return .syncUnsynced
 
-        case 12: return .recreateManifest
+        case 12: return .refreshDetail
 
-        case 13: return .reinitializeBackup
+        case 13: return .recreateManifest
 
-        case 14: return .startRestoreAll
+        case 14: return .reinitializeBackup
 
-        case 15: return .retryRestoreAllRemaining
+        case 15: return .startRestoreAll
 
-        case 16: return .cancelRestoreAll
+        case 16: return .retryRestoreAllRemaining
 
-        case 17: return .deleteUnreadableBackups
+        case 17: return .cancelRestoreAll
 
-        case 18: return .recoverOtherBackups
+        case 18: return .deleteUnreadableBackups
 
-        case 19: return .deleteOtherBackups
+        case 19: return .recoverOtherBackups
 
-        case 20: return .turnOff
+        case 20: return .deleteOtherBackups
 
-        case 21: return .confirmDisable
+        case 21: return .turnOff
 
-        case 22: return .cancelDisable
+        case 22: return .confirmDisable
 
-        case 23: return .restoreFirst
+        case 23: return .cancelDisable
 
-        case 24: return .verifyFirst
+        case 24: return .restoreFirst
 
-        case 25: return .resumeDisable
+        case 25: return .verifyFirst
 
-        case 26: return .stopUsingOnThisDevice
+        case 26: return .resumeDisable
 
-        case 27: return .dismissHealNotice
+        case 27: return .stopUsingOnThisDevice
 
-        case 28: return .reconnectDrive
+        case 28: return .dismissHealNotice
 
-        case 29: return .switchDriveAccount
+        case 29: return .reconnectDrive
 
-        case 30: return .retryDriveAccountSwitchRecovery
+        case 30: return .switchDriveAccount
 
-        case 31: return .cancelDriveAccountSwitch
+        case 31: return .retryDriveAccountSwitchRecovery
 
-        case 32: return .retryLoad
+        case 32: return .cancelDriveAccountSwitch
 
-        case 33: return .resetOnThisDevice
+        case 33: return .retryLoad
+
+        case 34: return .resetOnThisDevice
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29272,120 +29512,124 @@ public struct FfiConverterTypeCloudBackupScreenAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case .acceptEnablePrompt:
+        case .acceptEnablePromptUseExisting:
             writeInt(&buf, Int32(5))
 
 
-        case .discardPendingEnable:
+        case .acceptEnablePromptCreateNew:
             writeInt(&buf, Int32(6))
 
 
-        case .confirmPendingEnableCleanup:
+        case .discardPendingEnable:
             writeInt(&buf, Int32(7))
 
 
-        case .verify:
+        case .confirmPendingEnableCleanup:
             writeInt(&buf, Int32(8))
 
 
-        case .repairPasskey:
+        case .verify:
             writeInt(&buf, Int32(9))
 
 
-        case .syncUnsynced:
+        case .repairPasskey:
             writeInt(&buf, Int32(10))
 
 
-        case .refreshDetail:
+        case .syncUnsynced:
             writeInt(&buf, Int32(11))
 
 
-        case .recreateManifest:
+        case .refreshDetail:
             writeInt(&buf, Int32(12))
 
 
-        case .reinitializeBackup:
+        case .recreateManifest:
             writeInt(&buf, Int32(13))
 
 
-        case .startRestoreAll:
+        case .reinitializeBackup:
             writeInt(&buf, Int32(14))
 
 
-        case .retryRestoreAllRemaining:
+        case .startRestoreAll:
             writeInt(&buf, Int32(15))
 
 
-        case .cancelRestoreAll:
+        case .retryRestoreAllRemaining:
             writeInt(&buf, Int32(16))
 
 
-        case .deleteUnreadableBackups:
+        case .cancelRestoreAll:
             writeInt(&buf, Int32(17))
 
 
-        case .recoverOtherBackups:
+        case .deleteUnreadableBackups:
             writeInt(&buf, Int32(18))
 
 
-        case .deleteOtherBackups:
+        case .recoverOtherBackups:
             writeInt(&buf, Int32(19))
 
 
-        case .turnOff:
+        case .deleteOtherBackups:
             writeInt(&buf, Int32(20))
 
 
-        case .confirmDisable:
+        case .turnOff:
             writeInt(&buf, Int32(21))
 
 
-        case .cancelDisable:
+        case .confirmDisable:
             writeInt(&buf, Int32(22))
 
 
-        case .restoreFirst:
+        case .cancelDisable:
             writeInt(&buf, Int32(23))
 
 
-        case .verifyFirst:
+        case .restoreFirst:
             writeInt(&buf, Int32(24))
 
 
-        case .resumeDisable:
+        case .verifyFirst:
             writeInt(&buf, Int32(25))
 
 
-        case .stopUsingOnThisDevice:
+        case .resumeDisable:
             writeInt(&buf, Int32(26))
 
 
-        case .dismissHealNotice:
+        case .stopUsingOnThisDevice:
             writeInt(&buf, Int32(27))
 
 
-        case .reconnectDrive:
+        case .dismissHealNotice:
             writeInt(&buf, Int32(28))
 
 
-        case .switchDriveAccount:
+        case .reconnectDrive:
             writeInt(&buf, Int32(29))
 
 
-        case .retryDriveAccountSwitchRecovery:
+        case .switchDriveAccount:
             writeInt(&buf, Int32(30))
 
 
-        case .cancelDriveAccountSwitch:
+        case .retryDriveAccountSwitchRecovery:
             writeInt(&buf, Int32(31))
 
 
-        case .retryLoad:
+        case .cancelDriveAccountSwitch:
             writeInt(&buf, Int32(32))
 
 
-        case .resetOnThisDevice:
+        case .retryLoad:
             writeInt(&buf, Int32(33))
+
+
+        case .resetOnThisDevice:
+            writeInt(&buf, Int32(34))
 
         }
     }
@@ -30069,6 +30313,376 @@ public func FfiConverterTypeCloudBackupTurnOffFailure_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeCloudBackupTurnOffFailure_lower(_ value: CloudBackupTurnOffFailure) -> RustBuffer {
     return FfiConverterTypeCloudBackupTurnOffFailure.lower(value)
+}
+
+
+
+/**
+ * Something on the Cloud Backup screens a UI test finds by its accessibility identifier
+ *
+ * Provider names stay in visible text and never in an identifier, so one identifier names the
+ * same control on iOS and Android
+ */
+
+public enum CloudBackupUiElement: Equatable, Hashable {
+
+    /**
+     * The control that sends a global action, wherever it is drawn
+     */
+    case action(action: CloudBackupScreenAction
+    )
+    /**
+     * The reason under a disabled action's control
+     */
+    case actionUnavailable(action: CloudBackupScreenAction
+    )
+    /**
+     * The confirm button of the dialog an action opens before it dispatches
+     */
+    case actionConfirm(action: CloudBackupScreenAction
+    )
+    /**
+     * A row control
+     */
+    case rowAction(target: CloudBackupRowTarget
+    )
+    /**
+     * The confirm button of the dialog a row control opens before it dispatches
+     */
+    case rowConfirm(target: CloudBackupRowTarget
+    )
+    /**
+     * A wallet's row in any list; on Android a listed row opens its action sheet
+     */
+    case walletRow(recordId: RecordId
+    )
+    /**
+     * The reason every row in a section shares, drawn once above them
+     */
+    case rowsUnavailable
+    case lastOutcome
+    case lastOutcomeDismiss
+    case healNotice
+    /**
+     * The heal notice's own Turn Off
+     */
+    case healNoticeTurnOff
+    case turnOffPreparing
+    case turnOffOffline
+    /**
+     * Try Again in the offline Turn Off dialog
+     */
+    case turnOffOfflineTryAgain
+    /**
+     * The first Turn Off dialog, which describes what it deletes
+     */
+    case turnOffReview
+    /**
+     * The review's Continue to the final dialog of a two-step Turn Off
+     */
+    case turnOffContinue
+    /**
+     * The review's Check Again, when Cove couldn't check everything
+     */
+    case turnOffCheckAgain
+    /**
+     * The final dialog of a two-step Turn Off
+     */
+    case turnOffFinal
+    case turnOffDraining
+    case finishingDisable
+    case loadFailed
+    case corrupted
+    /**
+     * Android only
+     */
+    case driveAccountSwitch
+    case inventoryChecking
+    case inventoryIncomplete
+    /**
+     * The support code an incomplete setup shows, to quote when asking for help
+     */
+    case recoverySupportCode
+    /**
+     * Android only: the top-bar menu
+     */
+    case menu
+    /**
+     * The Enable prompt for a backup that already exists
+     */
+    case promptExistingBackupFound
+    /**
+     * The prompt that asks which passkey to use
+     */
+    case promptPasskeyChoice
+    /**
+     * The repair prompt's Create New Passkey, which sends the same action as its Use Existing
+     * Passkey and so needs its own identifier
+     */
+    case promptPasskeyChoiceCreateNewPasskey
+    case promptMissingPasskeyReminder
+    case promptVerification
+
+
+
+    /**
+     * The identifier both apps give this element
+     */
+public func accessibilityIdentifier() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupuielement_accessibility_identifier(
+            FfiConverterTypeCloudBackupUiElement_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupUiElement: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupUiElement: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupUiElement
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupUiElement {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .action(action: try FfiConverterTypeCloudBackupScreenAction.read(from: &buf)
+        )
+
+        case 2: return .actionUnavailable(action: try FfiConverterTypeCloudBackupScreenAction.read(from: &buf)
+        )
+
+        case 3: return .actionConfirm(action: try FfiConverterTypeCloudBackupScreenAction.read(from: &buf)
+        )
+
+        case 4: return .rowAction(target: try FfiConverterTypeCloudBackupRowTarget.read(from: &buf)
+        )
+
+        case 5: return .rowConfirm(target: try FfiConverterTypeCloudBackupRowTarget.read(from: &buf)
+        )
+
+        case 6: return .walletRow(recordId: try FfiConverterTypeRecordId.read(from: &buf)
+        )
+
+        case 7: return .rowsUnavailable
+
+        case 8: return .lastOutcome
+
+        case 9: return .lastOutcomeDismiss
+
+        case 10: return .healNotice
+
+        case 11: return .healNoticeTurnOff
+
+        case 12: return .turnOffPreparing
+
+        case 13: return .turnOffOffline
+
+        case 14: return .turnOffOfflineTryAgain
+
+        case 15: return .turnOffReview
+
+        case 16: return .turnOffContinue
+
+        case 17: return .turnOffCheckAgain
+
+        case 18: return .turnOffFinal
+
+        case 19: return .turnOffDraining
+
+        case 20: return .finishingDisable
+
+        case 21: return .loadFailed
+
+        case 22: return .corrupted
+
+        case 23: return .driveAccountSwitch
+
+        case 24: return .inventoryChecking
+
+        case 25: return .inventoryIncomplete
+
+        case 26: return .recoverySupportCode
+
+        case 27: return .menu
+
+        case 28: return .promptExistingBackupFound
+
+        case 29: return .promptPasskeyChoice
+
+        case 30: return .promptPasskeyChoiceCreateNewPasskey
+
+        case 31: return .promptMissingPasskeyReminder
+
+        case 32: return .promptVerification
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupUiElement, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .action(action):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeCloudBackupScreenAction.write(action, into: &buf)
+
+
+        case let .actionUnavailable(action):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeCloudBackupScreenAction.write(action, into: &buf)
+
+
+        case let .actionConfirm(action):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeCloudBackupScreenAction.write(action, into: &buf)
+
+
+        case let .rowAction(target):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeCloudBackupRowTarget.write(target, into: &buf)
+
+
+        case let .rowConfirm(target):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeCloudBackupRowTarget.write(target, into: &buf)
+
+
+        case let .walletRow(recordId):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeRecordId.write(recordId, into: &buf)
+
+
+        case .rowsUnavailable:
+            writeInt(&buf, Int32(7))
+
+
+        case .lastOutcome:
+            writeInt(&buf, Int32(8))
+
+
+        case .lastOutcomeDismiss:
+            writeInt(&buf, Int32(9))
+
+
+        case .healNotice:
+            writeInt(&buf, Int32(10))
+
+
+        case .healNoticeTurnOff:
+            writeInt(&buf, Int32(11))
+
+
+        case .turnOffPreparing:
+            writeInt(&buf, Int32(12))
+
+
+        case .turnOffOffline:
+            writeInt(&buf, Int32(13))
+
+
+        case .turnOffOfflineTryAgain:
+            writeInt(&buf, Int32(14))
+
+
+        case .turnOffReview:
+            writeInt(&buf, Int32(15))
+
+
+        case .turnOffContinue:
+            writeInt(&buf, Int32(16))
+
+
+        case .turnOffCheckAgain:
+            writeInt(&buf, Int32(17))
+
+
+        case .turnOffFinal:
+            writeInt(&buf, Int32(18))
+
+
+        case .turnOffDraining:
+            writeInt(&buf, Int32(19))
+
+
+        case .finishingDisable:
+            writeInt(&buf, Int32(20))
+
+
+        case .loadFailed:
+            writeInt(&buf, Int32(21))
+
+
+        case .corrupted:
+            writeInt(&buf, Int32(22))
+
+
+        case .driveAccountSwitch:
+            writeInt(&buf, Int32(23))
+
+
+        case .inventoryChecking:
+            writeInt(&buf, Int32(24))
+
+
+        case .inventoryIncomplete:
+            writeInt(&buf, Int32(25))
+
+
+        case .recoverySupportCode:
+            writeInt(&buf, Int32(26))
+
+
+        case .menu:
+            writeInt(&buf, Int32(27))
+
+
+        case .promptExistingBackupFound:
+            writeInt(&buf, Int32(28))
+
+
+        case .promptPasskeyChoice:
+            writeInt(&buf, Int32(29))
+
+
+        case .promptPasskeyChoiceCreateNewPasskey:
+            writeInt(&buf, Int32(30))
+
+
+        case .promptMissingPasskeyReminder:
+            writeInt(&buf, Int32(31))
+
+
+        case .promptVerification:
+            writeInt(&buf, Int32(32))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupUiElement_lift(_ buf: RustBuffer) throws -> CloudBackupUiElement {
+    return try FfiConverterTypeCloudBackupUiElement.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupUiElement_lower(_ value: CloudBackupUiElement) -> RustBuffer {
+    return FfiConverterTypeCloudBackupUiElement.lower(value)
 }
 
 
@@ -32862,6 +33476,195 @@ public func FfiConverterTypeDiscoveryState_lower(_ value: DiscoveryState) -> Rus
 
 
 /**
+ * What Android's half of a Google Drive account switch did, reported to Rust's switch owner
+ *
+ * Rust asks for each step with a `DriveAccountSwitch*Required` message, and Android answers each
+ * with one of these. They are service results, never user intents: the user's Switch, Retry and
+ * Cancel go through dispatch
+ */
+
+public enum DriveAccountSwitchPlatformResult: Equatable, Hashable {
+
+    /**
+     * The platform's durable switch state, reported at launch and when Rust asks for it
+     */
+    case state(DriveAccountSwitchPlatformState
+    )
+    /**
+     * The user picked another account and Android staged it durably
+     */
+    case accountSelected(UInt64
+    )
+    /**
+     * The user picked the account already in use, or left the picker
+     */
+    case accountUnchanged(UInt64
+    )
+    /**
+     * Android couldn't show the picker or stage the account the user picked
+     */
+    case accountSelectionFailed(UInt64
+    )
+    /**
+     * Android committed its staged account
+     */
+    case committed(UInt64
+    )
+    /**
+     * Android couldn't commit its staged account, which stays staged
+     */
+    case commitFailed(UInt64
+    )
+    /**
+     * Android removed its committed transition marker
+     */
+    case finalized(UInt64
+    )
+    /**
+     * Android couldn't remove its committed transition marker
+     */
+    case finalizeFailed(UInt64
+    )
+    /**
+     * Android discarded its staged account and is back on the previous one
+     */
+    case rolledBack(UInt64
+    )
+    /**
+     * Android couldn't discard its staged account
+     */
+    case rollbackFailed(UInt64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DriveAccountSwitchPlatformResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDriveAccountSwitchPlatformResult: FfiConverterRustBuffer {
+    typealias SwiftType = DriveAccountSwitchPlatformResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DriveAccountSwitchPlatformResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .state(try FfiConverterTypeDriveAccountSwitchPlatformState.read(from: &buf)
+        )
+
+        case 2: return .accountSelected(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 3: return .accountUnchanged(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 4: return .accountSelectionFailed(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 5: return .committed(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 6: return .commitFailed(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 7: return .finalized(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 8: return .finalizeFailed(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 9: return .rolledBack(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 10: return .rollbackFailed(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DriveAccountSwitchPlatformResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .state(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeDriveAccountSwitchPlatformState.write(v1, into: &buf)
+
+
+        case let .accountSelected(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .accountUnchanged(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .accountSelectionFailed(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .committed(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .commitFailed(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .finalized(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .finalizeFailed(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .rolledBack(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .rollbackFailed(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDriveAccountSwitchPlatformResult_lift(_ buf: RustBuffer) throws -> DriveAccountSwitchPlatformResult {
+    return try FfiConverterTypeDriveAccountSwitchPlatformResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDriveAccountSwitchPlatformResult_lower(_ value: DriveAccountSwitchPlatformResult) -> RustBuffer {
+    return FfiConverterTypeDriveAccountSwitchPlatformResult.lower(value)
+}
+
+
+
+/**
  * Durable Google Drive account-switch state owned by the platform
  */
 
@@ -32948,110 +33751,6 @@ public func FfiConverterTypeDriveAccountSwitchPlatformState_lift(_ buf: RustBuff
 #endif
 public func FfiConverterTypeDriveAccountSwitchPlatformState_lower(_ value: DriveAccountSwitchPlatformState) -> RustBuffer {
     return FfiConverterTypeDriveAccountSwitchPlatformState.lower(value)
-}
-
-
-
-/**
- * Platform action required to reconcile a persisted Google Drive account switch
- */
-
-public enum DriveAccountSwitchReconcileAction: Equatable, Hashable {
-
-    /**
-     * Rust and platform state require no immediate platform mutation
-     */
-    case none
-    /**
-     * Atomically commit the staged Google Drive identity
-     */
-    case commit(UInt64
-    )
-    /**
-     * Atomically discard the staged Google Drive identity
-     */
-    case rollback(UInt64
-    )
-    /**
-     * Remove the completed transition marker without changing identity
-     */
-    case finalize(UInt64
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension DriveAccountSwitchReconcileAction: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeDriveAccountSwitchReconcileAction: FfiConverterRustBuffer {
-    typealias SwiftType = DriveAccountSwitchReconcileAction
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DriveAccountSwitchReconcileAction {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .none
-
-        case 2: return .commit(try FfiConverterUInt64.read(from: &buf)
-        )
-
-        case 3: return .rollback(try FfiConverterUInt64.read(from: &buf)
-        )
-
-        case 4: return .finalize(try FfiConverterUInt64.read(from: &buf)
-        )
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: DriveAccountSwitchReconcileAction, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .none:
-            writeInt(&buf, Int32(1))
-
-
-        case let .commit(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterUInt64.write(v1, into: &buf)
-
-
-        case let .rollback(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterUInt64.write(v1, into: &buf)
-
-
-        case let .finalize(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt64.write(v1, into: &buf)
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDriveAccountSwitchReconcileAction_lift(_ buf: RustBuffer) throws -> DriveAccountSwitchReconcileAction {
-    return try FfiConverterTypeDriveAccountSwitchReconcileAction.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDriveAccountSwitchReconcileAction_lower(_ value: DriveAccountSwitchReconcileAction) -> RustBuffer {
-    return FfiConverterTypeDriveAccountSwitchReconcileAction.lower(value)
 }
 
 
@@ -49437,30 +50136,6 @@ fileprivate struct FfiConverterOptionTypeCloudBackupDetail: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeCloudBackupDriveAccountSwitchRecovery: FfiConverterRustBuffer {
-    typealias SwiftType = CloudBackupDriveAccountSwitchRecovery?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeCloudBackupHealNoticeUpdate: FfiConverterRustBuffer {
     typealias SwiftType = CloudBackupHealNoticeUpdate?
 
@@ -49533,6 +50208,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupLastOutcomeUpdate: FfiConver
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCloudBackupListedRow: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupListedRow?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupListedRow.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupListedRow.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCloudBackupPasskeyHint: FfiConverterRustBuffer {
     typealias SwiftType = CloudBackupPasskeyHint?
 
@@ -49573,6 +50272,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupProgress: FfiConverterRustBu
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCloudBackupProgress.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCloudBackupRowAction: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupRowAction?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupRowAction.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupRowAction.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -50952,6 +51675,31 @@ fileprivate struct FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupUiElement: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupUiElement]
+
+    public static func write(_ value: [CloudBackupUiElement], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupUiElement.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupUiElement] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupUiElement]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupUiElement.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCloudBackupVerificationControl: FfiConverterRustBuffer {
     typealias SwiftType = [CloudBackupVerificationControl]
 
@@ -51784,6 +52532,18 @@ public func cloudBackupScreenFixtures() -> [CloudBackupScreenFixture]  {
     )
 })
 }
+/**
+ * Every element both apps tag, with `record-1` standing for a row's record
+ *
+ * The platform contract tests check their own mapping against each of these
+ */
+public func cloudBackupUiElements() -> [CloudBackupUiElement]  {
+    return try!  FfiConverterSequenceTypeCloudBackupUiElement.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_cloud_backup_ui_elements(uniffiCallStatus
+    )
+})
+}
 public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
         uniffiCallStatus in
@@ -52259,6 +53019,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_cloud_backup_screen_fixtures() != 4768) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_cloud_backup_ui_elements() != 21236) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267) {
@@ -52870,22 +53633,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch() != 55166) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch() != 12726) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed() != 33416) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back() != 34858) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch() != 3329) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437) {
@@ -52897,7 +53645,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 63487) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result() != 37200) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590) {
@@ -52906,7 +53654,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_start_background_inventory_discovery() != 61634) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 28863) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 17498) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state() != 19758) {
@@ -52918,7 +53666,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 7867) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 44175) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 58357) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 40315) {

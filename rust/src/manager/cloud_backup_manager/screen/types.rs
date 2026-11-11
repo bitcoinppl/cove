@@ -390,14 +390,26 @@ pub enum CloudBackupTurnOffFailure {
 /// A recorded Google Drive account switch; Android only
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupDriveAccountSwitchScreen {
-    /// Set when Rust and the platform disagree about the switch and the user must retry
-    pub recovery: Option<CloudBackupDriveAccountSwitchRecovery>,
+    pub stage: CloudBackupDriveAccountSwitchStage,
+}
+
+/// Where a Google Drive account switch stands for the user
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupDriveAccountSwitchStage {
+    /// Cove is moving Cloud Backup to the selected account; nothing waits on the user
+    Switching,
+    /// The new account's backup registered a passkey the user must confirm was saved before
+    /// the switch goes on; the screen offers Confirm Saved Passkey
+    AwaitingSavedPasskeyConfirmation,
+    /// A step of the switch failed and the user must try again, or cancel while the previous
+    /// account can still come back
+    NeedsAttention(CloudBackupDriveAccountSwitchRecovery),
 }
 
 /// A Google Drive account switch that needs the user to retry or cancel it
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupDriveAccountSwitchRecovery {
-    pub transition_id: u64,
+    /// What went wrong, written for the reader
     pub message: String,
 }
 

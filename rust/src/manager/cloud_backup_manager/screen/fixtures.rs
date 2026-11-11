@@ -26,17 +26,18 @@ mod debug {
         CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation, CloudBackupDisableConfirmation,
         CloudBackupDisableImpact, CloudBackupDisableReview, CloudBackupDisableScreen,
         CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
-        CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen,
-        CloudBackupFinishingDisableStage, CloudBackupHealNotice, CloudBackupInventoryAssessment,
-        CloudBackupInventoryControl, CloudBackupListedRecord, CloudBackupListedRow,
-        CloudBackupMenuControl, CloudBackupNamedCount, CloudBackupNotOnDeviceSection,
-        CloudBackupOperationKind, CloudBackupOtherBackupsControl, CloudBackupOtherBackupsSection,
-        CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection,
-        CloudBackupRecoveryKind, CloudBackupRecoveryOperation, CloudBackupRejection,
-        CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
-        CloudBackupScreenBody, CloudBackupScreenFixture, CloudBackupSection,
-        CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupVerificationSection,
-        CloudBackupVerificationView, CloudBackupWalletsControl, CloudBackupWalletsSection,
+        CloudBackupDriveAccountSwitchStage, CloudBackupExtraCopiesSection,
+        CloudBackupFinishingDisableScreen, CloudBackupFinishingDisableStage, CloudBackupHealNotice,
+        CloudBackupInventoryAssessment, CloudBackupInventoryControl, CloudBackupListedRecord,
+        CloudBackupListedRow, CloudBackupMenuControl, CloudBackupNamedCount,
+        CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOtherBackupsControl,
+        CloudBackupOtherBackupsSection, CloudBackupOwnRecord, CloudBackupOwnRow,
+        CloudBackupProgressSection, CloudBackupRecoveryKind, CloudBackupRecoveryOperation,
+        CloudBackupRejection, CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen,
+        CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupScreenFixture,
+        CloudBackupSection, CloudBackupTurnOffFailure, CloudBackupVerificationControl,
+        CloudBackupVerificationSection, CloudBackupVerificationView, CloudBackupWalletsControl,
+        CloudBackupWalletsSection,
     };
     use crate::manager::cloud_backup_manager::model::CloudBackupPasskeyRepairState;
     use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
@@ -100,6 +101,10 @@ mod debug {
                 finishing_disable_authorization_required(),
             ),
             fixture("drive-account-switch", drive_account_switch()),
+            fixture(
+                "drive-account-switch-awaiting-saved-passkey",
+                drive_account_switch_awaiting_saved_passkey(),
+            ),
             fixture("pending-enable-recovery", pending_enable_recovery()),
             fixture("load-failed", load_failed()),
             fixture("corrupted", corrupted()),
@@ -927,13 +932,24 @@ mod debug {
         )
     }
 
+    fn drive_account_switch_awaiting_saved_passkey() -> CloudBackupScreen {
+        screen(
+            CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
+                stage: CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation,
+            }),
+            CloudBackupSettingsRowStatus::Active,
+            available(&[A::ConfirmSavedPasskey]),
+        )
+    }
+
     fn drive_account_switch() -> CloudBackupScreen {
         screen(
             CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-                recovery: Some(CloudBackupDriveAccountSwitchRecovery {
-                    transition_id: 7,
-                    message: "Cloud Backup could not finish switching Google accounts".into(),
-                }),
+                stage: CloudBackupDriveAccountSwitchStage::NeedsAttention(
+                    CloudBackupDriveAccountSwitchRecovery {
+                        message: "Cloud Backup could not finish switching Google accounts".into(),
+                    },
+                ),
             }),
             CloudBackupSettingsRowStatus::RecoveryRequired,
             available(&[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]),

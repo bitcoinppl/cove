@@ -21,10 +21,6 @@ internal sealed interface CloudBackupDialog {
     data object ReinitializeConfirmation : CloudBackupDialog
 
     data object AccountSwitchConfirmation : CloudBackupDialog
-
-    data object AccountSwitchInProgress : CloudBackupDialog
-
-    data class AccountSwitchFailed(val message: String) : CloudBackupDialog
 }
 
 @Composable
@@ -42,10 +38,6 @@ internal fun CloudBackupDialogHost(
             ReinitializeCloudBackupDialog(manager, onDismiss)
         CloudBackupDialog.AccountSwitchConfirmation ->
             AccountSwitchConfirmationDialog(manager, onDismiss, onSwitchAccount)
-        CloudBackupDialog.AccountSwitchInProgress ->
-            AccountSwitchInProgressDialog()
-        is CloudBackupDialog.AccountSwitchFailed ->
-            AccountSwitchFailedDialog(dialog.message, onDismiss)
     }
 }
 
@@ -156,30 +148,5 @@ private fun AccountSwitchConfirmationDialog(
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         destructive = false,
-    )
-}
-
-@Composable
-private fun AccountSwitchInProgressDialog() {
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Choosing Google Account") },
-        text = { Text("Waiting for Google Drive account selection") },
-        confirmButton = {},
-    )
-}
-
-@Composable
-private fun AccountSwitchFailedDialog(
-    message: String,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Google Account Wasn't Switched") },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("OK") }
-        },
     )
 }

@@ -560,6 +560,9 @@ pub enum PersistedDriveAccountSwitchPhase {
     #[serde(rename = "AwaitingAccountCommitFailed")]
     AwaitingReinitializationRetry,
     AwaitingAccountRollback,
+    /// The switch's reinitialize registered a passkey and waits for the user to confirm they
+    /// saved it; nothing exists in the new account yet
+    AwaitingSavedPasskeyConfirmation,
 }
 
 impl PersistedConfiguredCloudBackup {

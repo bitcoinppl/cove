@@ -73,13 +73,12 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
     DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
-    DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, InventoryReadAt, InventoryScope, OtherBackupsOperation,
-    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
-    blocking_cloud_error, is_provider_wide_interruption,
+    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, InventoryReadAt,
+    InventoryScope, OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
+    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
+    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
+    RecoveryAction, RecoveryState, RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState,
+    VerificationState, WalletId, blocking_cloud_error, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -98,8 +97,10 @@ mod runtime;
 use owned_runtime::OwnedRuntime;
 #[cfg(test)]
 pub(crate) use owned_runtime::{OpTransition, OwnerView};
+#[cfg(test)]
+pub(crate) use runtime::Finish;
 pub(crate) use runtime::Runtime;
-use runtime::{Effect, IdleFacts, ResetStart, RestoreRun};
+use runtime::{Effect, ResetStart, RestoreRun};
 use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
@@ -107,8 +108,10 @@ mod workers;
 
 use enable::EnableContinuation;
 
+pub(crate) use account_switch::{
+    DriveAccountSwitchReinitializationEnd, UnsavedDriveAccountSwitchCompletion,
+};
 pub(crate) use dispatch::DispatchOutcome;
-pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
@@ -311,6 +314,9 @@ pub(crate) struct CloudBackupSupervisor {
     /// The Enable or reinitialize that stopped before it finished, with the lifecycle it
     /// belongs to
     enable_continuation: Option<EnableContinuation>,
+    /// A switch's reinitialize that ended while saving the switch's next phase failed; its run
+    /// and claim are over, and the switch saves this before it reads its phase again
+    drive_account_switch_unsaved: Option<UnsavedDriveAccountSwitchCompletion>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
@@ -395,6 +401,7 @@ impl CloudBackupSupervisor {
             manager,
             runtime,
             enable_continuation: None,
+            drive_account_switch_unsaved: None,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
@@ -615,7 +622,7 @@ impl CloudBackupSupervisor {
 
         // clearing the runtime publishes, so the screen shows the failure with the body it left
         self.screen_outcome.operation_failed(claim, &error);
-        self.runtime.clear();
+        self.runtime.finish(claim);
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -835,6 +842,7 @@ impl CloudBackupSupervisor {
                 manager.refresh_sync_health();
                 let detail_claim =
                     self.detail_workflow.start_operation_result(manager.inventory_scope());
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_sync_request_refresh_detail(
@@ -979,7 +987,7 @@ impl CloudBackupSupervisor {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
             let completion =
-                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot, config).await;
             send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim, scope));
         });
     }
@@ -994,7 +1002,8 @@ impl CloudBackupSupervisor {
     ) {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.confirm_cloud_backup_detail_inventory(confirmation.clone()).await;
+            let result =
+                manager.confirm_cloud_backup_detail_inventory(confirmation.clone(), config).await;
             send!(addr.complete_confirm_refresh_detail(
                 confirmation,
                 result,
@@ -1646,7 +1655,7 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// Ends a local reset with the body it left, and reopens admission
+    /// Ends a local reset with the body it left, and reopens admission; `None` when no reset ran
     ///
     /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
     /// here so an idle body never waits for the next admission to catch up with the wipe
@@ -1861,6 +1870,7 @@ pub(crate) mod test_support {
                     attempt: VerificationAttempt::Initial,
                 },
                 basis: self.evidence_basis(),
+                read_at: manager.inventory_read_at(),
             })
         }
 
@@ -1892,7 +1902,7 @@ pub(crate) mod test_support {
                 manager.publish_screen(&self.runtime, || self.screen_inputs(manager));
             }
 
-            let sent = manager
+            let (screens, others): (Vec<_>, Vec<_>) = manager
                 .reconciler
                 .receiver()
                 .try_iter()
@@ -1900,11 +1910,17 @@ pub(crate) mod test_support {
                     SingleOrMany::Single(message) => vec![message],
                     SingleOrMany::Many(messages) => messages,
                 })
+                .partition(|message| matches!(message, CloudBackupReconcileMessage::Screen(_)));
+            let sent = screens
+                .into_iter()
                 .filter_map(|message| match message {
                     CloudBackupReconcileMessage::Screen(delta) => Some(*delta),
                     _ => None,
                 })
                 .collect();
+
+            // a test playing the platform reads the requests this read passed over
+            crate::manager::cloud_backup_manager::set_aside_reconcile_messages(others);
 
             let CloudBackupPublishedScreen { revision, screen: published } = manager.state();
             ScreenView {

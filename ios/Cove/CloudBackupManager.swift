@@ -83,8 +83,11 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
 
-        // drive account switching is Android-only, so iOS intentionally ignores these messages
-        case .driveAccountSwitchCommitRequired,
+        // drive account switching is Android-only and iOS never dispatches a switch, so Rust
+        // never asks iOS for these platform steps
+        case .driveAccountSwitchSelectionRequired,
+             .driveAccountSwitchStateRequired,
+             .driveAccountSwitchCommitRequired,
              .driveAccountSwitchRollbackRequired,
              .driveAccountSwitchFinalizeRequired:
             break

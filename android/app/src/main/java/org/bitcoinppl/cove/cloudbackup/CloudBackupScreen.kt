@@ -37,27 +37,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupDriveAccountSwitchScreen
+import org.bitcoinppl.cove_core.CloudBackupDriveAccountSwitchStage
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupMenuControl
 import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
-
-private const val TAG = "CloudBackupScreen"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +62,6 @@ fun CloudBackupScreen(
 ) {
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = LocalCloudBackupPresentationCoordinator.current
-    val coroutineScope = rememberCoroutineScope()
 
     var dialog by remember { mutableStateOf<CloudBackupDialog?>(null) }
     var wasDisabled by remember(manager) { mutableStateOf(manager.screen.body is CloudBackupScreenBody.Disabled) }
@@ -127,23 +121,11 @@ fun CloudBackupScreen(
         dialog = dialog,
         manager = manager,
         onDismiss = { dialog = null },
+        // Rust runs the switch from here: the switch body shows its progress, and a switch that
+        // fails is drawn as the outcome of this control
         onSwitchAccount = {
-            dialog = CloudBackupDialog.AccountSwitchInProgress
-            coroutineScope.launch {
-                try {
-                    val error =
-                        runCatchingCancellable(TAG, "Google Drive account switch failed") {
-                            manager.switchDriveAccount()
-                        }.exceptionOrNull()
-
-                    dialog = error?.let {
-                        CloudBackupDialog.AccountSwitchFailed(driveAccountSelectionErrorMessage(it))
-                    }
-                } catch (error: CancellationException) {
-                    dialog = null
-                    throw error
-                }
-            }
+            dialog = null
+            manager.dispatch(CloudBackupManagerAction.SwitchDriveAccount)
         },
     )
 }
@@ -230,13 +212,10 @@ internal fun CloudBackupScreenFrame(
                     .background(colors.background)
                     .padding(paddingValues),
         ) {
-            manager.driveAccountSwitchPlatformFailure?.let { failure ->
-                DriveAccountSwitchRecoveryCard(
-                    message = failure.message,
-                    onRetry = {
-                        manager.retryDriveAccountSwitchRecovery(failure.transitionId, failure.message)
-                    },
-                )
+            // an outcome with no control on screen to show it, such as Switch Google Account's in
+            // the options menu or a row's while the rows are read again, shows under the bar
+            screen.unplacedOutcome()?.let { outcome ->
+                CloudBackupLastOutcomeNote(outcome = outcome, target = outcome.target, onDispatch = manager::dispatch)
             }
 
             CloudBackupBody(manager = manager, screen = screen, actions = actions)
@@ -433,13 +412,11 @@ private fun CloudBackupCorruptedContent(
 }
 
 @Composable
-internal fun DriveAccountSwitchRecoveryCard(
+private fun DriveAccountSwitchRecoveryCard(
     message: String,
+    retry: CloudBackupActionAvailability,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
-    // a platform failure's retry belongs to Android, so only Rust's recovery passes an availability
-    retry: CloudBackupActionAvailability = CloudBackupActionAvailability.Available,
-    retryAction: CloudBackupScreenAction? = null,
 ) {
     Card(
         modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -462,11 +439,17 @@ internal fun DriveAccountSwitchRecoveryCard(
             Button(
                 onClick = onRetry,
                 enabled = retry.isAvailable,
-                modifier = retryAction?.let { Modifier.testTag(CloudBackupTags.action(it)) } ?: Modifier,
+                modifier =
+                    Modifier.testTag(
+                        CloudBackupTags.action(CloudBackupScreenAction.RETRY_DRIVE_ACCOUNT_SWITCH_RECOVERY),
+                    ),
             ) {
                 Text("Try Again")
             }
-            CloudBackupUnavailableCaption(retry.caption, retryAction?.let(CloudBackupTags::unavailable))
+            CloudBackupUnavailableCaption(
+                retry.caption,
+                CloudBackupTags.unavailable(CloudBackupScreenAction.RETRY_DRIVE_ACCOUNT_SWITCH_RECOVERY),
+            )
         }
     }
 }
@@ -477,15 +460,60 @@ private fun CloudBackupDriveAccountSwitchContent(
     screen: CloudBackupScreen,
     switch: CloudBackupDriveAccountSwitchScreen,
 ) {
-    val recovery = switch.recovery
-    if (recovery == null) {
-        CloudBackupProgressContent(
-            title = "Switching Google account",
-            message = "Cove is setting up Cloud Backup in the selected Google account",
-        )
-        return
+    when (val stage = switch.stage) {
+        CloudBackupDriveAccountSwitchStage.Switching ->
+            CloudBackupProgressContent(
+                title = "Switching Google account",
+                message = "Choose a Google account, then Cove sets up Cloud Backup in it",
+            )
+        CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation ->
+            DriveAccountSwitchSavedPasskeyContent(manager, screen)
+        is CloudBackupDriveAccountSwitchStage.NeedsAttention ->
+            DriveAccountSwitchNeedsAttentionContent(manager, screen, stage.v1.message)
     }
+}
 
+/** The new account's backup registered a passkey, which the user confirms they saved */
+@Composable
+private fun DriveAccountSwitchSavedPasskeyContent(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+) {
+    Column(
+        modifier =
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(CloudBackupTags.DRIVE_ACCOUNT_SWITCH),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Confirm your new passkey", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Cove created a passkey for Cloud Backup in the selected Google account. Confirm it " +
+                "was saved to finish switching accounts.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        CloudBackupActionButton(
+            screen = screen,
+            action = CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY,
+            title = "Confirm Saved Passkey",
+            onDispatch = manager::dispatch,
+            onClick = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
+        )
+        CloudBackupLastOutcomeNote(
+            outcome = screen.lastOutcome,
+            target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY),
+            onDispatch = manager::dispatch,
+        )
+    }
+}
+
+@Composable
+private fun DriveAccountSwitchNeedsAttentionContent(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    message: String,
+) {
     Column(
         modifier =
             Modifier
@@ -496,12 +524,11 @@ private fun CloudBackupDriveAccountSwitchContent(
         val retry = screen.actions.lookup(CloudBackupScreenAction.RETRY_DRIVE_ACCOUNT_SWITCH_RECOVERY)
         if (retry != null) {
             DriveAccountSwitchRecoveryCard(
-                message = recovery.message,
-                onRetry = {
-                    manager.retryDriveAccountSwitchRecovery(recovery.transitionId, recovery.message)
-                },
+                message = message,
                 retry = retry,
-                retryAction = CloudBackupScreenAction.RETRY_DRIVE_ACCOUNT_SWITCH_RECOVERY,
+                onRetry = {
+                    manager.dispatch(CloudBackupManagerAction.RetryDriveAccountSwitchRecovery)
+                },
             )
         }
 
@@ -511,7 +538,7 @@ private fun CloudBackupDriveAccountSwitchContent(
             title = "Cancel Account Switch",
             style = CloudBackupActionStyle.TEXT,
             onDispatch = manager::dispatch,
-            onClick = { manager.cancelDriveAccountSwitch(recovery.transitionId) },
+            onClick = { manager.dispatch(CloudBackupManagerAction.CancelDriveAccountSwitch) },
             modifier = Modifier.padding(horizontal = 16.dp),
         )
     }

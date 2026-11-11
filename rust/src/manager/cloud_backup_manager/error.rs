@@ -57,9 +57,10 @@ const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "If this keeps happening, update Cove or contact support."
 );
 
-/// Failure to coordinate an Android Google Drive account transition
-#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-#[uniffi::export(Display)]
+/// Why a step of an Android Google Drive account switch could not run
+///
+/// Internal to the switch's owner, which turns each into what the screen shows
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum CloudBackupDriveAccountSwitchError {
     /// Another exclusive Cloud Backup operation owns the supervisor
     #[error("another cloud backup operation is already in progress")]
@@ -73,31 +74,6 @@ pub enum CloudBackupDriveAccountSwitchError {
     /// Persistence or actor coordination failed
     #[error("internal Google Drive account switch error: {0}")]
     Internal(String),
-}
-
-impl From<crate::manager::cloud_backup_manager::admission::Rejection>
-    for CloudBackupDriveAccountSwitchError
-{
-    fn from(rejection: crate::manager::cloud_backup_manager::admission::Rejection) -> Self {
-        use crate::manager::cloud_backup_manager::admission::Rejection as R;
-
-        match rejection {
-            R::CloudBackupOff | R::NotConfigured => Self::NotConfigured,
-            R::NothingToCancel | R::NothingToContinue | R::ReviewStale | R::TryAgainFirst => {
-                Self::InvalidTransition
-            }
-            R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
-            R::Corrupted => Self::Internal("cloud backup lifecycle record is corrupted".into()),
-            // a committed Turn Off is still finishing, so the platform retries later
-            R::TurnOffCommitted
-            | R::OperationRunning(_)
-            | R::DetailInventoryNotLoaded
-            | R::OtherBackupsNotLoaded
-            | R::RestoreAllUnavailable
-            | R::Resetting
-            | R::DriveAccountSwitch => Self::Busy,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -614,7 +590,7 @@ impl CloudBackupError {
 
             // the passkey sheet was dismissed, which is an expected outcome
             Self::Passkey(error)
-                if matches!(error.passkey_error(), Some(PasskeyError::UserCancelled)) =>
+                if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)) =>
             {
                 info!("{operation}: {self}");
             }

@@ -50,6 +50,7 @@ import org.bitcoinppl.cove_core.CloudBackupSection
 import org.bitcoinppl.cove_core.CloudBackupUiElement
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationView
+import org.bitcoinppl.cove_core.RecordId
 
 /**
  * Test tags: the accessibility identifiers iOS gives the same elements, listed in docs/cloud_backup.md
@@ -232,6 +233,43 @@ internal fun CloudBackupLastOutcomeNote(
         ) {
             Icon(Icons.Default.Close, contentDescription = "Dismiss")
         }
+    }
+}
+
+/**
+ * The last outcome when no drawn control answers it, so it is drawn under the top bar instead
+ *
+ * The rule iOS's `unplacedOutcome` follows: an action's outcome is unplaced when Rust names no
+ * control for it, and a row's when the screen no longer lists the row, as while a fetch reads the
+ * rows again. Switch Google Account sits in the options menu, which can't hold a note, so its
+ * outcome is always drawn here. Read from the screen's data rather than the FFI lookups, for the
+ * reason [lookup] gives
+ */
+internal fun CloudBackupScreen.unplacedOutcome(): CloudBackupLastOutcome? {
+    val outcome = lastOutcome ?: return null
+    val placed =
+        when (val target = outcome.target) {
+            is CloudBackupOutcomeTarget.Action ->
+                target.v1 != CloudBackupScreenAction.SWITCH_DRIVE_ACCOUNT && actions.lookup(target.v1) != null
+            is CloudBackupOutcomeTarget.Row -> listsRow(target.target.recordId)
+        }
+
+    return outcome.takeUnless { placed }
+}
+
+/** Whether a section lists the row for [recordId]; the rows the exported `listedRow` searches */
+private fun CloudBackupScreen.listsRow(recordId: RecordId): Boolean {
+    val configured = (body as? CloudBackupScreenBody.Configured)?.v1 ?: return false
+
+    return configured.sections.any { section ->
+        val rows =
+            when (section) {
+                is CloudBackupSection.NotOnDevice -> section.v1.rows
+                is CloudBackupSection.ExtraCopies -> section.v1.rows
+                else -> emptyList()
+            }
+
+        rows.any { it.recordId == recordId }
     }
 }
 

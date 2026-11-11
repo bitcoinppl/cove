@@ -15,7 +15,8 @@ use super::notices::Notices;
 use super::types::{
     CloudBackupActionAvailability, CloudBackupActionEntry, CloudBackupActions,
     CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation, CloudBackupDisableScreen,
-    CloudBackupDriveAccountSwitchScreen, CloudBackupExtraCopiesSection,
+    CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
+    CloudBackupDriveAccountSwitchStage, CloudBackupExtraCopiesSection,
     CloudBackupFinishingDisableScreen, CloudBackupInventoryControl, CloudBackupKeyTrust,
     CloudBackupListedRecord, CloudBackupListedRow, CloudBackupMenuControl,
     CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOtherBackupsControl,
@@ -28,8 +29,9 @@ use super::types::{
 };
 use crate::manager::cloud_backup_manager::actors::supervisor::Runtime;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationStage,
-    EnableIntent, Rejection, ReviewExit, UserIntent, evaluate_admission,
+    Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
+    ContinuationStage, EnableIntent, Rejection, ReviewExit, SwitchAdmission, UserIntent,
+    evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::{
     InventoryFacts, InventoryProgress, InventoryRows, InventoryView, ListedRecord,
@@ -86,10 +88,11 @@ fn body(
 ) -> CloudBackupScreenBody {
     use AdmissionBody as B;
 
-    // a switch the platform and Rust disagree on needs the user whatever the record says
+    // a switch step that failed needs the user whatever the record says, since a failed
+    // finalize comes after the record is gone
     if let Some(recovery) = presentation.drive_account_switch_recovery() {
         return CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-            recovery: Some(recovery),
+            stage: CloudBackupDriveAccountSwitchStage::NeedsAttention(recovery),
         });
     }
 
@@ -115,7 +118,7 @@ fn body(
         },
         B::DriveAccountSwitch => {
             CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-                recovery: None,
+                stage: drive_account_switch_stage(admission),
             })
         }
         B::Configured => CloudBackupScreenBody::Configured(configured_screen(
@@ -151,6 +154,34 @@ fn enable_waits_on_user(flow: &CloudBackupEnableFlow, admission: &AdmissionSnaps
         | CloudBackupEnableFlow::WaitingForPasskeyAvailability => false,
     }
 }
+
+/// A recorded switch with no failed step: paused on its saved passkey while its reinitialize
+/// holds a continuation and nothing runs, stopped when admission says it needs the user anyway,
+/// otherwise moving on its own
+fn drive_account_switch_stage(admission: &AdmissionSnapshot) -> CloudBackupDriveAccountSwitchStage {
+    let paused = admission.running.is_none()
+        && admission.continuation.is_some_and(|paused| {
+            matches!(paused.owner, ContinuationOwner::DriveAccountSwitch(_))
+                && paused.stage == ContinuationStage::AwaitingSavedPasskey
+        });
+    if paused {
+        return CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation;
+    }
+
+    match admission.drive_account_switch {
+        SwitchAdmission::NeedsAttention { .. } => {
+            CloudBackupDriveAccountSwitchStage::NeedsAttention(
+                CloudBackupDriveAccountSwitchRecovery {
+                    message: DRIVE_ACCOUNT_SWITCH_STOPPED_MESSAGE.into(),
+                },
+            )
+        }
+        SwitchAdmission::None => CloudBackupDriveAccountSwitchStage::Switching,
+    }
+}
+
+const DRIVE_ACCOUNT_SWITCH_STOPPED_MESSAGE: &str =
+    "Cloud Backup stopped while changing Google accounts. Try again to finish.";
 
 fn is_enable(operation: CloudBackupExclusiveOperation) -> bool {
     use CloudBackupExclusiveOperation as Op;
@@ -575,7 +606,9 @@ fn settings_row(
         }
         CloudBackupScreenBody::Configured(_)
         | CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-            recovery: None,
+            stage:
+                CloudBackupDriveAccountSwitchStage::Switching
+                | CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation,
         }) => presentation.configured_settings_row(),
         CloudBackupScreenBody::DriveAccountSwitch(_)
         | CloudBackupScreenBody::PendingEnableRecovery(_) => Row::RecoveryRequired,

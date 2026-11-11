@@ -1,8 +1,7 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionSnapshot, ContinuationOwner, ContinuationStage, EnableIntent,
-    EnablePromptAnswers, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
-    evaluate_admission,
+    EnablePromptAnswers, PausedContinuation, RestoreAllAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
 use crate::manager::cloud_backup_manager::turn_off::{
@@ -241,6 +240,11 @@ impl CloudBackupSupervisor {
             _ => RestoreAllAdmission::Unavailable,
         };
 
+        // each read of the reducer is its own statement: a guard held across another read
+        // deadlocks once a writer waits, since parking_lot's RwLock lets the writer go first
+        let enable_prompt = enable_prompt_answers(&manager.state.read());
+        let drive_account_switch = self.drive_account_switch_admission(manager);
+
         AdmissionSnapshot {
             body,
             running: self.runtime.claim().map(CloudBackupExclusiveOperationClaim::operation),
@@ -250,8 +254,9 @@ impl CloudBackupSupervisor {
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
             continuation: self.paused_continuation(manager),
-            enable_prompt: enable_prompt_answers(&manager.state.read()),
+            enable_prompt,
             turn_off: self.runtime.turn_off_admission(),
+            drive_account_switch,
         }
     }
 
@@ -293,20 +298,6 @@ impl CloudBackupSupervisor {
     /// Remembers that `intent`'s control started the operation `claim`
     fn attribute(&mut self, claim: CloudBackupExclusiveOperationClaim, intent: &UserIntent) {
         self.screen_outcome.started(claim, intent);
-    }
-
-    /// Admits an intent that answers its caller, as a typed error on anything but `Accepted`
-    pub(crate) fn admit_or<E: From<Rejection>>(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        intent: UserIntent,
-        coalesced: E,
-    ) -> Result<(), E> {
-        match self.admit(manager, &intent) {
-            Admission::Accepted => Ok(()),
-            Admission::Coalesced(_) => Err(coalesced),
-            Admission::Rejected(rejection) => Err(rejection.into()),
-        }
     }
 
     // exhaustive, like the intent map: every admitted intent starts exactly one piece of work
@@ -404,7 +395,7 @@ impl CloudBackupSupervisor {
             // on a configured backup, Google Drive authorization runs through the detail
             // verification, as it did before it had its own intent
             I::ReconnectDrive => {
-                self.start_user_verification(
+                self.start_verification_intent(
                     manager,
                     CloudBackupVerificationSource::CloudBackupDetail,
                     false,
@@ -436,11 +427,11 @@ impl CloudBackupSupervisor {
                     }
                 }
             }
-            // these answer their caller, so their own handlers admit them and reply
-            I::SwitchDriveAccount
-            | I::CancelDriveAccountSwitch
-            | I::RetryDriveAccountSwitchRecovery
-            | I::LocalReset => {
+            I::SwitchDriveAccount => self.start_drive_account_switch(&manager),
+            I::RetryDriveAccountSwitchRecovery => self.retry_drive_account_switch(&manager),
+            I::CancelDriveAccountSwitch => self.cancel_drive_account_switch(&manager),
+            // the reset answers its caller, so its own handler admits it and replies
+            I::LocalReset => {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
             }
             // their admission allocated what they start, and dispatch starts it in their place

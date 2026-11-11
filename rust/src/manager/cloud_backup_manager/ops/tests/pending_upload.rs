@@ -1,5 +1,6 @@
 use super::*;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedBackupVerificationState};
+use crate::manager::cloud_backup_manager::DriveAccountSwitchPlatformResult;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::test_support::loaded_host_wait;
 use cove_tokio::FutureTimeoutExt as _;
@@ -991,9 +992,17 @@ async fn pending_upload_settle_read_before_a_configuration_change_is_dropped() {
 
     // a Drive account switch starts and rolls back while the confirmation is on its way to the
     // supervisor, which moves the configuration on twice and keeps the marker
-    let transition_id = manager.begin_drive_account_switch().await.unwrap();
-    manager.cancel_drive_account_switch(transition_id).await.unwrap();
-    manager.confirm_drive_account_switch_rolled_back(transition_id).await.unwrap();
+    let transition_id = super::account_switch::start_drive_account_switch(&manager).await;
+    manager
+        .drive_account_switch_platform_result_handled(
+            DriveAccountSwitchPlatformResult::AccountUnchanged(transition_id),
+        )
+        .await;
+    manager
+        .drive_account_switch_platform_result_handled(DriveAccountSwitchPlatformResult::RolledBack(
+            transition_id,
+        ))
+        .await;
     let marker = manager.pending_verification_completion();
     assert_eq!(marker.as_ref(), Some(&settlement.completion), "the switch replaced the marker");
 

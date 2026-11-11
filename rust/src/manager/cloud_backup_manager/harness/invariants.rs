@@ -25,14 +25,16 @@ use crate::manager::cloud_backup_manager::actors::UploadFinish;
 use crate::manager::cloud_backup_manager::actors::supervisor::test_support::{
     DispatchRecord, ScreenView,
 };
-use crate::manager::cloud_backup_manager::actors::supervisor::{OpTransition, OwnerView};
+use crate::manager::cloud_backup_manager::actors::supervisor::{Finish, OpTransition, OwnerView};
 use crate::manager::cloud_backup_manager::actors::write::{
     CommandClass, ConfiguredWriter, ConfiguredWrites, Decision, LaneDecision, OffWrites,
     PolicyBody, VersionedPolicy, WritePolicy,
 };
-use crate::manager::cloud_backup_manager::admission::UserIntent;
+use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
 use crate::manager::cloud_backup_manager::inventory::InventoryRows;
-use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::model::{
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
+};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupListedRecord, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
     CloudBackupScreenBody, CloudBackupSection, undrawn_actions,
@@ -497,6 +499,28 @@ impl Invariants {
     }
 }
 
+/// An accepted Verify that left no Verify operation running at the end of its admission turn
+///
+/// The only accepted Verify that starts no operation is one that joined uploads already waiting
+/// for confirmation, whose verifier owns its own evidence
+fn verify_without_its_operation(record: &DispatchRecord) -> Option<String> {
+    if !matches!(record.intent, UserIntent::StartVerification { .. })
+        || record.admission != Some(Admission::Accepted)
+        || record.joined_upload_confirmation
+    {
+        return None;
+    }
+
+    let started = record.running_after.filter(|after| Some(*after) != record.running_before);
+    match started.map(CloudBackupExclusiveOperationClaim::operation) {
+        Some(CloudBackupExclusiveOperation::Verify) => None,
+        _ => Some(format!(
+            "an accepted {:?} started {started:?}, running {:?} before it",
+            record.intent, record.running_before
+        )),
+    }
+}
+
 /// The parts of two screens that differ, each with both values
 fn screen_differences(left: &CloudBackupScreen, right: &CloudBackupScreen) -> String {
     let mut differences = Vec::new();
@@ -593,9 +617,13 @@ fn check_exits(
         // a Turn Off review that is preparing or shown holds Turn Off, and its Cancel leaves it
         Body::Configured(_) => &[A::TurnOff, A::CancelDisable],
         Body::FinishingDisable(_) => &[A::ResumeDisable, A::StopUsingOnThisDevice],
-        Body::DriveAccountSwitch(_) => {
-            &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
-        }
+        // a switch paused on its saved passkey goes on through Confirm; one that failed or
+        // stopped through Try Again or Cancel
+        Body::DriveAccountSwitch(_) => &[
+            A::ConfirmSavedPasskey,
+            A::RetryDriveAccountSwitchRecovery,
+            A::CancelDriveAccountSwitch,
+        ],
         // allowlisted: support-only cleanup has no safe automatic exit, so the user contacts
         // support with the code the body shows
         Body::PendingEnableRecovery(recovery)

@@ -6,11 +6,11 @@
 
 use super::types::{
     CloudBackupConfiguredScreen, CloudBackupControlSurface, CloudBackupDisableScreen,
-    CloudBackupDrawnControl, CloudBackupFinishingDisableStage, CloudBackupHealNotice,
-    CloudBackupInventoryControl, CloudBackupMenuControl, CloudBackupOtherBackupsControl,
-    CloudBackupProgressSection, CloudBackupRecoveryKind, CloudBackupScreen,
-    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
-    CloudBackupVerificationControl, CloudBackupWalletsControl,
+    CloudBackupDrawnControl, CloudBackupDriveAccountSwitchStage, CloudBackupFinishingDisableStage,
+    CloudBackupHealNotice, CloudBackupInventoryControl, CloudBackupMenuControl,
+    CloudBackupOtherBackupsControl, CloudBackupProgressSection, CloudBackupRecoveryKind,
+    CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupWalletsControl,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableFlow, CloudBackupPasskeyChoiceIntent, CloudBackupPendingEnableCleanupState,
@@ -134,9 +134,17 @@ impl Drawn {
                 CloudBackupPendingEnableCleanupState::SupportOnly
                 | CloudBackupPendingEnableCleanupState::Cleaning => &[],
             },
-            CloudBackupScreenBody::DriveAccountSwitch(_) => {
-                &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
-            }
+            CloudBackupScreenBody::DriveAccountSwitch(switch) => match switch.stage {
+                CloudBackupDriveAccountSwitchStage::Switching => &[],
+                // a switch's reinitialize has no Discard: once it started, the switch only goes on
+                CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation => {
+                    &[A::ConfirmSavedPasskey]
+                }
+                // Cancel stays drawn after the commit, unavailable, so the user sees why
+                CloudBackupDriveAccountSwitchStage::NeedsAttention(_) => {
+                    &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
+                }
+            },
             // Reconnect asks for the consent the provider stopped the last run for
             CloudBackupScreenBody::FinishingDisable(finishing) => match finishing.stage {
                 CloudBackupFinishingDisableStage::Failed {

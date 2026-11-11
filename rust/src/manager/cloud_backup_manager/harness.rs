@@ -3,6 +3,7 @@
 //! Each harness test body runs in its own child process (see [`process`]), so the case owns the
 //! Tokio runtime every `spawn_actor` lands on, the provider globals and the database file
 
+mod account_switch_tests;
 mod app;
 mod clock;
 mod continuation_tests;
@@ -27,7 +28,8 @@ pub(crate) use self::fakes::{
     CallId, CloudCall, CloudFault, HarnessCloud, HarnessPasskey, Hold, PasskeyCall, PasskeyMode,
 };
 pub(crate) use self::fixtures::{
-    FakeAccount, change_a_wallet, finish_wipe, keychain_namespace, load_detail, persisted,
-    seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
+    FakeAccount, SeededRecord, change_a_wallet, finish_wipe, keychain_namespace, load_detail,
+    persisted, seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
+    verifiable_wrapper,
 };
 pub(crate) use self::process::{PhaseEnd, run_case};

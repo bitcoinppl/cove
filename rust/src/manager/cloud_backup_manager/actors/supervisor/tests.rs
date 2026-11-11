@@ -44,8 +44,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
-    staged_pending_enable_journal, supervisor_checkpoint, wait_for_background_refreshes,
-    wait_for_test_condition, wallet_entry_with_labels,
+    staged_pending_enable_journal, supervisor_checkpoint, unowned_writes, current_config,
+    wait_for_background_refreshes, wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
@@ -56,6 +56,8 @@ use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
+use crate::manager::cloud_backup_manager::screen::CloudBackupDriveAccountSwitchStage;
+use crate::manager::cloud_backup_manager::{DriveAccountSwitchPlatformResult, RequestedDriveAccountSwitchStep};
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle, CloudBackupListedDetail,
     CloudBackupOtherBackupsSummary,
@@ -819,7 +821,9 @@ fn local_reset_cancels_restore_and_revokes_its_claim() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
+async fn drive_account_switch_holds_a_second_switch_and_an_unchanged_account_releases_claim() {
+    use DriveAccountSwitchPlatformResult as R;
+
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     persist_enabled_for_supervisor_test();
@@ -828,51 +832,36 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let (transition_id, _ready) = supervisor
-        .begin_drive_account_switch()
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
-    let busy = supervisor
-        .begin_drive_account_switch()
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
+    supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
+    let transition = *RustCloudBackupManager::load_persisted_state()
+        .drive_account_switch()
+        .expect("the switch is recorded");
+    let transition_id = transition.transition_id.value();
+    let claim = supervisor.runtime.claim().expect("the switch runs");
 
-    assert_eq!(busy, CloudBackupDriveAccountSwitchError::Busy);
+    // a second Switch is held off and leaves the first one's record and claim
+    supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
 
-    let invalid_commit = supervisor
-        .confirm_drive_account_switch_committed((transition_id.value() + 1).into())
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
+    assert_eq!(RustCloudBackupManager::load_persisted_state().drive_account_switch(), Some(&transition));
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
 
-    assert_eq!(invalid_commit, CloudBackupDriveAccountSwitchError::InvalidTransition);
+    // a commit for another transition moves nothing and asks the user to look
+    platform_result(&mut supervisor, R::Committed(transition_id + 1)).await;
 
-    supervisor
-        .cancel_drive_account_switch(transition_id)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
-    supervisor
-        .confirm_drive_account_switch_rolled_back(transition_id)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    assert_eq!(persisted_drive_account_switch_phase(), Some(PersistedDriveAccountSwitchPhase::AwaitingAccountSelection));
+    assert!(manager.state.read().drive_account_switch_recovery().is_some());
+
+    // the user backed out of the picker: the platform discards the staged account
+    platform_result(&mut supervisor, R::AccountUnchanged(transition_id)).await;
+
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![RequestedDriveAccountSwitchStep::Rollback(transition_id)]);
+
+    platform_result(&mut supervisor, R::RolledBack(transition_id)).await;
 
     assert!(RustCloudBackupManager::load_persisted_state().drive_account_switch().is_none());
     assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_eq!(manager.state.read().drive_account_switch_recovery(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -892,15 +881,13 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let action = supervisor
-        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::NoTransition)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::State(DriveAccountSwitchPlatformState::NoTransition),
+    )
+    .await;
 
-    assert_eq!(action, DriveAccountSwitchReconcileAction::Rollback(7));
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![RequestedDriveAccountSwitchStep::Rollback(7)]);
     assert_eq!(
         RustCloudBackupManager::load_persisted_state()
             .drive_account_switch()
@@ -926,25 +913,16 @@ async fn drive_account_switch_restart_preserves_failed_reinitialization_for_retr
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let action = supervisor
-        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(7))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::State(DriveAccountSwitchPlatformState::Staged(7)),
+    )
+    .await;
 
-    assert_eq!(action, DriveAccountSwitchReconcileAction::None);
-    assert!(!manager.reconciler.receiver().try_iter().any(|messages| match messages {
-        SingleOrMany::Single(message) => matches!(
-            message,
-            CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
-        ),
-        SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
-            message,
-            CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
-        )),
-    }));
+    // the failed reinitialize may ask for a passkey, so it waits for the user's Try Again
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![]);
+    assert_eq!(supervisor.runtime, None);
+    assert!(manager.state.read().drive_account_switch_recovery().is_some());
     assert_eq!(
         RustCloudBackupManager::load_persisted_state().drive_account_switch(),
         Some(&transition)
@@ -973,24 +951,26 @@ async fn a_recorded_drive_account_switch_admits_only_its_retry_and_cancel() {
     assert_eq!(evaluate_admission(&UserIntent::TurnOff, &snapshot), switch_holds);
     assert_eq!(evaluate_admission(&UserIntent::SyncUnsynced, &snapshot), switch_holds);
     assert_eq!(evaluate_admission(&UserIntent::RecreateManifest, &snapshot), switch_holds);
+
+    // the switch stopped with nothing running, so Try Again picks it up; its reinitialize may
+    // have begun moving this device to the new backup, so Cancel can't bring the previous one back
     assert_eq!(
         evaluate_admission(&UserIntent::RetryDriveAccountSwitchRecovery, &snapshot),
         Admission::Accepted
+    );
+    assert_eq!(
+        evaluate_admission(&UserIntent::CancelDriveAccountSwitch, &snapshot),
+        Admission::Rejected(Rejection::NothingToCancel)
     );
 
     // the Turn Off review never opens, so nothing pauses beside the switch
     supervisor.dispatch(UserIntent::TurnOff).await.unwrap().await.unwrap();
     assert_eq!(supervisor.runtime.turn_off_admission(), TurnOffAdmission::None);
 
-    // the platform retries a second switch later rather than treating the backup as off
-    let busy = supervisor
-        .begin_drive_account_switch()
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(busy, CloudBackupDriveAccountSwitchError::Busy);
+    // a second switch never replaces the recorded one
+    supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
+    assert_eq!(RustCloudBackupManager::load_persisted_state().drive_account_switch(), Some(&transition));
+    assert_eq!(supervisor.runtime, None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1016,15 +996,13 @@ async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization()
     supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
-    let action = supervisor
-        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(7))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::State(DriveAccountSwitchPlatformState::Staged(7)),
+    )
+    .await;
 
-    assert_eq!(action, DriveAccountSwitchReconcileAction::None);
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![]);
     assert_eq!(supervisor.runtime.claim(), Some(claim));
     assert_eq!(
         RustCloudBackupManager::load_persisted_state().drive_account_switch(),
@@ -1113,7 +1091,11 @@ async fn failed_drive_account_reinitialization_does_not_request_account_commit()
     manager.project_exclusive_operation_started(claim);
 
     assert_eq!(
-        supervisor.drive_account_switch_reinitialization_finished(&manager, claim, false),
+        supervisor.drive_account_switch_reinitialization_finished(
+            &manager,
+            claim,
+            DriveAccountSwitchReinitializationEnd::Failed,
+        ),
         DriveAccountSwitchReinitializationCompletion::Handled
     );
 
@@ -1151,15 +1133,10 @@ async fn drive_account_switch_reports_busy_while_disable_is_persisted() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let error = supervisor
-        .begin_drive_account_switch()
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
+    supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
 
-    assert_eq!(error, CloudBackupDriveAccountSwitchError::Busy);
+    assert!(RustCloudBackupManager::load_persisted_state().drive_account_switch().is_none());
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![]);
     assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
@@ -1174,15 +1151,13 @@ async fn drive_account_switch_restart_finalizes_platform_only_commit() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let action = supervisor
-        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Committed(7))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::State(DriveAccountSwitchPlatformState::Committed(7)),
+    )
+    .await;
 
-    assert_eq!(action, DriveAccountSwitchReconcileAction::Finalize(7));
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![RequestedDriveAccountSwitchStep::Finalize(7)]);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1202,15 +1177,13 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let action = supervisor
-        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Committed(8))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::State(DriveAccountSwitchPlatformState::Committed(8)),
+    )
+    .await;
 
-    assert_eq!(action, DriveAccountSwitchReconcileAction::None);
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![]);
     assert_eq!(
         RustCloudBackupManager::load_persisted_state().drive_account_switch(),
         Some(&transition)
@@ -1225,7 +1198,11 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
     let CloudBackupScreenBody::DriveAccountSwitch(screen) = manager.published_screen().body else {
         panic!("the recovery card is not on screen: {:?}", manager.published_screen().body);
     };
-    assert_eq!(screen.recovery.map(|recovery| recovery.transition_id), Some(7));
+    assert!(
+        matches!(screen.stage, CloudBackupDriveAccountSwitchStage::NeedsAttention(_)),
+        "the switch does not ask for the user: {:?}",
+        screen.stage
+    );
 }
 
 fn begin_exclusive(
@@ -1379,11 +1356,11 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
                 .complete_verification(
                     VerificationRun {
                         claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
                         continuation: DeepVerificationContinuation::RecreateManifest {
                             attempt: VerificationAttempt::Initial,
                         },
+                        basis: supervisor.evidence_basis(),
+                        read_at: InventoryReadAt::default(),
                     },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
@@ -1401,15 +1378,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(
-                    VerificationRun {
-                        claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
-                        continuation,
-                    },
-                    Err(CloudBackupError::Internal("completion".into())),
-                )
+                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() }, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1425,12 +1394,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
             };
             supervisor
                 .complete_deep_verification_wrapper_repair_resume(
-                    VerificationRun {
-                        claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
-                        continuation,
-                    },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1448,12 +1412,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_upload(
-                    VerificationRun {
-                        claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
-                        continuation,
-                    },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1471,12 +1430,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
             };
             supervisor
                 .complete_deep_verification_auto_sync_finalization(
-                    VerificationRun {
-                        claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
-                        continuation,
-                    },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1494,12 +1448,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_resume(
-                    VerificationRun {
-                        claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
-                        continuation,
-                    },
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis(), read_at: InventoryReadAt::default() },
                     CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
@@ -1525,11 +1474,11 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
                 .complete_verification(
                     VerificationRun {
                         claim,
-                        basis: supervisor.wallet_set,
-                        read_at: InventoryReadAt::default(),
                         continuation: DeepVerificationContinuation::ReinitializeBackup {
                             attempt: VerificationAttempt::Initial,
                         },
+                        basis: supervisor.evidence_basis(),
+                        read_at: InventoryReadAt::default(),
                     },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
@@ -4673,14 +4622,14 @@ async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wa
         CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
     );
 
-    let restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
+    let restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     restore.restore_record(&restored_record_id).await.unwrap();
     manager.handle_local_wallets_changed();
     supervisor_checkpoint(&manager).await;
     assert_ne!(manager.inventory_read_at(), read_at, "the restore should move the epoch");
 
     // the refresh the change asked for lists the restored wallet as local
-    let refreshed = manager.refresh_cloud_backup_detail().await.expect("a detail refresh");
+    let refreshed = manager.refresh_cloud_backup_detail(current_config(&manager).await).await.expect("a detail refresh");
     super::apply_refresh_detail_result(&manager, manager.inventory_scope(), &refreshed);
 
     let shows_restored = |manager: &RustCloudBackupManager| {
@@ -5164,6 +5113,11 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
     assert_eq!(wallet_type(&wrapped_segwit.id), Some(WalletType::WatchOnly));
 }
 
+/// Hands `result` to the supervisor under test and waits until it has handled it
+async fn platform_result(supervisor: &mut CloudBackupSupervisor, result: DriveAccountSwitchPlatformResult) {
+    supervisor.drive_account_switch_platform_result(result).await.unwrap().await.unwrap();
+}
+
 fn persisted_drive_account_switch_phase() -> Option<PersistedDriveAccountSwitchPhase> {
     RustCloudBackupManager::load_persisted_state()
         .drive_account_switch()
@@ -5219,38 +5173,32 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let (transition_id, _ready) = supervisor
-        .begin_drive_account_switch()
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
+    let transition_id = RustCloudBackupManager::load_persisted_state()
+        .drive_account_switch()
+        .expect("the switch is recorded")
+        .transition_id;
     let claim = supervisor.runtime.claim().expect("the switch runs");
     assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
 
-    let stale = supervisor
-        .continue_drive_account_switch((transition_id.value() + 1).into())
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
+    // a selection staged for another transition moves nothing
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::AccountSelected(transition_id.value() + 1),
+    )
+    .await;
 
-    assert_eq!(stale, CloudBackupDriveAccountSwitchError::InvalidTransition);
     assert_eq!(
         persisted_drive_account_switch_phase(),
         Some(PersistedDriveAccountSwitchPhase::AwaitingAccountSelection)
     );
 
     // the user picked the new account: the backup is reinitialized there under the switch's claim
-    supervisor
-        .continue_drive_account_switch(transition_id)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::AccountSelected(transition_id.value()),
+    )
+    .await;
 
     assert_eq!(
         persisted_drive_account_switch_phase(),
@@ -5263,15 +5211,14 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         Destructive::ReinitializingBackup
     );
 
-    let repeated = supervisor
-        .continue_drive_account_switch(transition_id)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
+    // a repeated selection joins the running reinitialize rather than starting another
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::AccountSelected(transition_id.value()),
+    )
+    .await;
 
-    assert_eq!(repeated, CloudBackupDriveAccountSwitchError::InvalidTransition);
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
 
     // reinitializing in the new account fails: the switch waits for a retry, never a commit
     supervisor
@@ -5291,9 +5238,10 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 0);
 
-    // try again on the recovery prompt restarts the same switch in a new run, not a plain
+    // Try Again on the switch's recovery restarts the same switch in a new run, not a plain
     // reinitialize
-    supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+    assert!(manager.state.read().drive_account_switch_recovery().is_some());
+    supervisor.dispatch(UserIntent::RetryDriveAccountSwitchRecovery).await.unwrap().await.unwrap();
     let failed_run = claim;
     let claim = supervisor.runtime.claim().expect("the retry runs");
 
@@ -5321,15 +5269,17 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
 
     // once the platform commits, the switch ends like any reinitialize and the new account's backup
     // is verified
-    supervisor
-        .confirm_drive_account_switch_committed(transition_id)
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
+    platform_result(
+        &mut supervisor,
+        DriveAccountSwitchPlatformResult::Committed(transition_id.value()),
+    )
+    .await;
 
     assert_eq!(persisted_drive_account_switch_phase(), None);
+    assert_eq!(
+        manager.drained_drive_account_switch_steps(),
+        vec![RequestedDriveAccountSwitchStep::Finalize(transition_id.value())]
+    );
     assert_reinitialized_backup_verification_reads_cloud(&mut supervisor, &manager, claim).await;
 }
 
@@ -5423,11 +5373,11 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         .complete_verification(
             VerificationRun {
                 claim: reinitialize_claim,
-                basis: supervisor.wallet_set,
-                read_at: manager.inventory_read_at(),
                 continuation: DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },
+                basis: supervisor.evidence_basis(),
+                read_at: manager.inventory_read_at(),
             },
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
         )
@@ -5442,11 +5392,11 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         .complete_verification(
             VerificationRun {
                 claim: verification_claim,
-                basis: supervisor.wallet_set,
-                read_at: manager.inventory_read_at(),
                 continuation: DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },
+                basis: supervisor.evidence_basis(),
+                read_at: manager.inventory_read_at(),
             },
             step,
         )
@@ -5497,28 +5447,6 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
         panic!("verification run was not produced");
     };
     supervisor.require_verification_after_wallet_change(20).await.unwrap();
-
-    // a second request while it runs starts no second run that could lend it a newer basis, and
-    // Turn Off waits for it
-    supervisor.dispatch(verify).await.unwrap();
-    assert!(matches!(
-        supervisor.last_outcome.as_ref().map(|outcome| &outcome.admission),
-        Some(Admission::Coalesced(_))
-    ));
-    supervisor.start_verification(false).await.unwrap();
-    assert_eq!(supervisor.runtime.claim(), Some(first));
-    supervisor.dispatch(UserIntent::TurnOff).await.unwrap();
-    assert!(matches!(
-        supervisor.last_outcome.as_ref().map(|outcome| &outcome.admission),
-        Some(Admission::Rejected(Rejection::OperationRunning(CloudBackupExclusiveOperation::Verify)))
-    ));
-
-    let run = VerificationRun {
-        claim: first,
-        basis,
-        read_at: manager.inventory_read_at(),
-        continuation: manual,
-    };
     supervisor.complete_verification(run, verified()).await.unwrap();
 
     assert!(
@@ -5541,15 +5469,9 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     );
 
     // a verification that starts after the change reads the new wallet set, so it counts
-    assert_eq!(supervisor.runtime.claim(), None);
-    let basis = supervisor.wallet_set;
-    supervisor.start_verification(false).await.unwrap();
-    let second = supervisor.runtime.claim().expect("the verification holds an operation");
-    let run = VerificationRun {
-        claim: second,
-        basis,
-        read_at: manager.inventory_read_at(),
-        continuation: manual,
+    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
+    else {
+        panic!("verification run was not produced");
     };
     supervisor.complete_verification(run, verified()).await.unwrap();
 

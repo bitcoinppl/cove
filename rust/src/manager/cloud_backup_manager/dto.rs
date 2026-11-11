@@ -143,6 +143,12 @@ pub enum CloudBackupManagerAction {
     DismissNotice(CloudBackupNoticeKind),
     /// Google Drive authorization, separate from verification
     ReconnectDrive,
+    /// Moves Cloud Backup to another Google Drive account; Android only
+    SwitchDriveAccount,
+    /// Try Again on a Google Drive account switch that needs attention
+    RetryDriveAccountSwitchRecovery,
+    /// Restores the previous Google Drive account of a switch that needs attention
+    CancelDriveAccountSwitch,
     RefreshDetail,
     EnterDetail,
     /// The detail screen went away; a Turn Off review still open is cancelled

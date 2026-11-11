@@ -44,8 +44,8 @@ pub use self::types::{
 };
 #[cfg(test)]
 pub(crate) use self::types::{
-    CloudBackupListedRow, CloudBackupOutcomeTarget, CloudBackupRowActionKind, CloudBackupSection,
-    CloudBackupVerificationControl,
+    CloudBackupDriveAccountSwitchStage, CloudBackupListedRow, CloudBackupOutcomeTarget,
+    CloudBackupRowActionKind, CloudBackupSection, CloudBackupVerificationControl,
 };
 use crate::database::cloud_backup::PersistedHealNotice;
 

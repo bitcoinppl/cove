@@ -40,7 +40,6 @@ use cove_cspp::MasterKeyPromotionStatus;
 use cove_device::cloud_storage::CloudSyncHealth;
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
-use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::{Condvar, Mutex, RwLock};
 use tracing::{error, info, warn};
@@ -82,7 +81,7 @@ pub use self::dto::{
 
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
 pub type CloudBackupState = self::dto::CloudBackupState;
-pub use self::error::CloudBackupDriveAccountSwitchError;
+pub(crate) use self::error::CloudBackupDriveAccountSwitchError;
 pub(crate) use self::error::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupError,
@@ -136,7 +135,7 @@ pub(crate) use self::pending_verification::{
     PendingVerificationCompletion, PendingVerificationUpload,
 };
 use self::reconcile::CloudBackupReconcileMessage;
-pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
+pub use self::reconcile::{DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState};
 pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 use self::screen::PublishedScreen;
@@ -282,6 +281,12 @@ pub enum CloudBackupManagerAction {
     DismissNotice(CloudBackupNoticeKind),
     /// Google Drive authorization, separate from verification
     ReconnectDrive,
+    /// Moves Cloud Backup to another Google Drive account; Android only
+    SwitchDriveAccount,
+    /// Try Again on a Google Drive account switch that needs attention
+    RetryDriveAccountSwitchRecovery,
+    /// Restores the previous Google Drive account of a switch that needs attention
+    CancelDriveAccountSwitch,
     RefreshDetail,
     EnterDetail,
     /// The detail screen went away; a Turn Off review still open is cancelled
@@ -1052,6 +1057,10 @@ impl RustCloudBackupManager {
 }
 
 #[cfg(test)]
+pub(crate) use manager_test_support::{
+    RequestedDriveAccountSwitchStep, set_aside_reconcile_messages,
+};
+#[cfg(test)]
 mod manager_test_support {
     /// What the inventory owner holds, read in one place for test assertions
     #[derive(Debug, Clone)]
@@ -1060,9 +1069,74 @@ mod manager_test_support {
         pub(crate) restore_all: CloudBackupRestoreAllState,
     }
 
+    /// A Google Drive account switch step Rust asked the platform to take, as tests assert it
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum RequestedDriveAccountSwitchStep {
+        SelectAccount(u64),
+        ReportState,
+        Commit(u64),
+        Finalize(u64),
+        Rollback(u64),
+    }
+
     use super::*;
+    use crate::manager::deferred_sender::SingleOrMany;
+
+    /// Messages a test read took off the reconcile queue for its own kind, kept for the read
+    /// that takes the rest
+    ///
+    /// The harness's screen read drains the queue for screen deltas; the platform requests it
+    /// passes over wait here for the test that plays the platform. Each harness case and each
+    /// nextest test runs in its own process, so no other test shares them
+    static SET_ASIDE_RECONCILE_MESSAGES: Mutex<Vec<CloudBackupReconcileMessage>> =
+        Mutex::new(Vec::new());
+
+    /// Keeps `messages` another test read drained but doesn't handle
+    pub(crate) fn set_aside_reconcile_messages(
+        messages: impl IntoIterator<Item = CloudBackupReconcileMessage>,
+    ) {
+        SET_ASIDE_RECONCILE_MESSAGES.lock().extend(messages);
+    }
 
     impl RustCloudBackupManager {
+        /// Drains the reconcile queue and returns the switch steps it asked for, in order
+        pub(crate) fn drained_drive_account_switch_steps(
+            &self,
+        ) -> Vec<RequestedDriveAccountSwitchStep> {
+            use CloudBackupReconcileMessage as M;
+            use RequestedDriveAccountSwitchStep as Step;
+
+            let set_aside = std::mem::take(&mut *SET_ASIDE_RECONCILE_MESSAGES.lock());
+            let receiver = self.reconciler.receiver();
+            let queued = receiver.try_iter().flat_map(|field| match field {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(messages) => messages,
+            });
+
+            set_aside
+                .into_iter()
+                .chain(queued)
+                .filter_map(|message| match message {
+                    M::DriveAccountSwitchSelectionRequired(id) => Some(Step::SelectAccount(id)),
+                    M::DriveAccountSwitchStateRequired => Some(Step::ReportState),
+                    M::DriveAccountSwitchCommitRequired(id) => Some(Step::Commit(id)),
+                    M::DriveAccountSwitchFinalizeRequired(id) => Some(Step::Finalize(id)),
+                    M::DriveAccountSwitchRollbackRequired(id) => Some(Step::Rollback(id)),
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// Hands `result` to the switch's owner and waits until it has handled it
+        pub(crate) async fn drive_account_switch_platform_result_handled(
+            &self,
+            result: DriveAccountSwitchPlatformResult,
+        ) {
+            call!(self.supervisor.drive_account_switch_platform_result(result))
+                .await
+                .expect("the supervisor handles the platform result");
+        }
+
         /// Seeds `state` directly and projects it, bypassing the lifecycle owner
         pub(crate) fn persist_cloud_backup_state(
             &self,
@@ -1198,68 +1272,16 @@ impl RustCloudBackupManager {
         send!(self.supervisor.cloud_reachable(CloudReachable::StorageChanged));
     }
 
-    /// Claim the exclusive operation and return after all prior cloud writes drain
-    pub async fn begin_drive_account_switch(
-        &self,
-    ) -> Result<u64, CloudBackupDriveAccountSwitchError> {
-        let (transition_id, ready) = call!(self.supervisor.begin_drive_account_switch())
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)??;
-        ready.await.map_err_str(CloudBackupDriveAccountSwitchError::Internal)??;
-
-        Ok(transition_id.value())
-    }
-
-    /// Continue the claimed transition after Android durably stages the selected account
-    pub async fn continue_drive_account_switch(
-        &self,
-        transition_id: u64,
-    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.continue_drive_account_switch(transition_id.into()))
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
-    }
-
-    /// Move an unstarted account transition to its rollback phase
-    pub async fn cancel_drive_account_switch(
-        &self,
-        transition_id: u64,
-    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.cancel_drive_account_switch(transition_id.into()))
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
-    }
-
-    /// Release the transition after Android commits its staged account
-    pub async fn confirm_drive_account_switch_committed(
-        &self,
-        transition_id: u64,
-    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.confirm_drive_account_switch_committed(transition_id.into()))
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
-    }
-
-    /// Release the transition after Android discards its staged account
-    pub async fn confirm_drive_account_switch_rolled_back(
-        &self,
-        transition_id: u64,
-    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.confirm_drive_account_switch_rolled_back(transition_id.into()))
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
-    }
-
-    /// Reconcile persisted Rust and Android transition state after process startup
+    /// Hands Rust's switch owner what Android's half of a Google Drive account switch did
     ///
-    /// Android must complete the returned action before starting its initial cloud refresh
-    pub async fn reconcile_drive_account_switch(
+    /// Android sends one result for each step a `DriveAccountSwitch*Required` message asked for,
+    /// and its durable state at launch. The switch owner decides the next step, and any recovery
+    /// the user sees, from it
+    pub fn report_drive_account_switch_platform_result(
         &self,
-        platform_state: DriveAccountSwitchPlatformState,
-    ) -> Result<DriveAccountSwitchReconcileAction, CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.reconcile_drive_account_switch(platform_state))
-            .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+        result: DriveAccountSwitchPlatformResult,
+    ) {
+        send!(self.supervisor.drive_account_switch_platform_result(result));
     }
 
     /// Check if cloud backup is enabled, used as nav guard

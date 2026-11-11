@@ -8,7 +8,6 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -25,18 +24,9 @@ import org.bitcoinppl.cove_core.CloudBackupPublishedScreen
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
+import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformResult
 import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
-import org.bitcoinppl.cove_core.DriveAccountSwitchReconcileAction
 import org.bitcoinppl.cove_core.RustCloudBackupManager
-
-/**
- * A failure in Android's half of a Google Drive account switch, such as saving the staged
- * account; Rust can't observe these, so the manager holds them until a retry succeeds
- */
-internal data class DriveAccountSwitchPlatformFailure(
-    val transitionId: ULong,
-    val message: String,
-)
 
 @Stable
 class CloudBackupManager private constructor(
@@ -80,9 +70,6 @@ class CloudBackupManager private constructor(
     var enableCompletion by mutableStateOf<TaggedItem<CloudBackupEnableContext>?>(null)
         private set
 
-    internal var driveAccountSwitchPlatformFailure by mutableStateOf<DriveAccountSwitchPlatformFailure?>(null)
-        private set
-
     private var hasReconciledDisabledState = false
 
     init {
@@ -90,33 +77,9 @@ class CloudBackupManager private constructor(
 
         if (startLiveUpdates && rust != null) {
             rust.listenForUpdates(this)
-            rustScope.launch {
-                val reconciled =
-                    runCatching {
-                        val action = rustGuard.withHandleSuspend(rust) {
-                            reconcileDriveAccountSwitch(
-                                driveAccountSwitchCallbacks?.platformState?.invoke()
-                                    ?: DriveAccountSwitchPlatformState.NoTransition,
-                            )
-                        }
 
-                        reconcileDriveAccountSwitchAction(action)
-                    }
-                        .onFailure { error ->
-                            Log.e(TAG, "failed to reconcile drive account switch", error)
-                        }
-                        .getOrDefault(false)
-                if (!reconciled) return@launch
-
-                runCatching {
-                    withRust {
-                        cloudStorageDidChange()
-                    }
-                }
-                    .onFailure { error ->
-                        Log.w(TAG, "initial cloud storage refresh failed", error)
-                    }
-            }
+            // Rust settles any switch the account store left unfinished, then reads the cloud
+            rustScope.launch { reportDriveAccountSwitchState() }
         }
     }
 
@@ -129,14 +92,6 @@ class CloudBackupManager private constructor(
         block: RustCloudBackupManager.() -> T,
     ): T =
         withRust(block) ?: defaultValue
-
-    @Suppress("RedundantSuspendModifier")
-    private suspend fun <T> withRustSuspend(
-        block: suspend RustCloudBackupManager.() -> T,
-    ): T {
-        val rust = checkNotNull(rust) { "RustCloudBackupManager is unavailable" }
-        return rustGuard.withHandleSuspend(rust, block)
-    }
 
     internal constructor(initialPublished: CloudBackupPublishedScreen) : this(null, initialPublished, false)
 
@@ -226,69 +181,6 @@ class CloudBackupManager private constructor(
         }
     }
 
-    internal suspend fun switchDriveAccount() {
-        val callbacks = checkNotNull(driveAccountSwitchCallbacks) {
-            "Google Drive account switching is unavailable"
-        }
-        check(callbacks.platformState() is DriveAccountSwitchPlatformState.NoTransition) {
-            "a Google Drive account switch is already being recovered"
-        }
-        val transitionId = withRustSuspend { beginDriveAccountSwitch() }
-
-        var transitionCompleted = false
-        try {
-            val selection = callbacks.selectAccount(transitionId)
-            if (selection == DriveAccountSelectionOutcome.Unchanged) {
-                val rolledBack = withContext(NonCancellable) {
-                    rollbackDriveAccountSwitch(transitionId)
-                }
-                check(rolledBack) { "unchanged Google Drive account switch could not be released" }
-
-                transitionCompleted = true
-                return
-            }
-
-            withRustSuspend { continueDriveAccountSwitch(transitionId) }
-
-            transitionCompleted = true
-        } finally {
-            if (!transitionCompleted) {
-                withContext(NonCancellable) {
-                    rollbackDriveAccountSwitch(transitionId)
-                }
-            }
-        }
-    }
-
-    @Suppress("RedundantSuspendModifier")
-    private suspend fun rollbackDriveAccountSwitch(transitionId: ULong): Boolean {
-        val cancelled = runCatching { withRustSuspend { cancelDriveAccountSwitch(transitionId) } }
-            .onFailure { error -> Log.w(TAG, "failed to cancel drive account switch", error) }
-            .isSuccess
-        if (!cancelled) {
-            return false
-        }
-
-        val rolledBack =
-            runCatching {
-                driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
-                    ?.confirmsNoTransition() == true
-            }
-                .onFailure { error -> Log.e(TAG, "failed to roll back staged drive account", error) }
-                .getOrDefault(false)
-        if (!rolledBack) {
-            Log.e(TAG, "failed to roll back staged drive account")
-        }
-
-        val confirmed =
-            rolledBack &&
-                runCatching { withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) } }
-                    .onFailure { error -> Log.w(TAG, "failed to confirm drive account rollback", error) }
-                    .isSuccess
-
-        return confirmed
-    }
-
     override fun reconcile(message: CloudBackupReconcileMessage) {
         mainScope.launch {
             apply(message)
@@ -311,164 +203,121 @@ class CloudBackupManager private constructor(
 
             is CloudBackupReconcileMessage.EnableCompleted ->
                 enableCompletion = TaggedItem(message.v1)
+            // the account picker is UI, so it runs on the main scope
+            is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
+                val transitionId = message.v1
+                mainScope.launch { selectDriveAccount(transitionId) }
+            }
+            CloudBackupReconcileMessage.DriveAccountSwitchStateRequired ->
+                rustScope.launch { reportDriveAccountSwitchState() }
             is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
                 val transitionId = message.v1
-                rustScope.launch {
-                    commitDriveAccountSwitch(transitionId)
-                }
+                rustScope.launch { commitDriveAccountSwitch(transitionId) }
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 val transitionId = message.v1
-                rustScope.launch {
-                    rollBackReconciledDriveAccountSwitch(transitionId)
-                }
+                rustScope.launch { rollBackDriveAccountSwitch(transitionId) }
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
                 val transitionId = message.v1
-                rustScope.launch {
-                    finalizeDriveAccountSwitch(transitionId)
-                }
+                rustScope.launch { finalizeDriveAccountSwitch(transitionId) }
             }
         }.let {}
 
         refreshPersistedEnabledState(forceDisabledNotification = wasTurningOff)
     }
 
-    /**
-     * Retries a Google Drive account switch that Rust or Android reported as stuck
+    /*
+     * Android's half of a Google Drive account switch
      *
-     * Rust's recovery comes with the `DriveAccountSwitch` body; Android's own failures come from
-     * [driveAccountSwitchPlatformFailure]. Either way the retry reconciles both halves again
+     * Rust owns the switch and asks for one step at a time; each step here runs the account
+     * store's mechanics and hands Rust the typed result, which decides the next step and what the
+     * screen shows. A step that throws is reported as that step's failure
      */
-    internal fun retryDriveAccountSwitchRecovery(transitionId: ULong, message: String) {
-        rustScope.launch {
-            val callbacks = driveAccountSwitchCallbacks
-            if (callbacks == null) {
-                reportDriveAccountSwitchPlatformFailure(
-                    transitionId,
-                    "Google Drive account recovery is unavailable",
-                )
-                return@launch
-            }
 
-            runCatching {
-                val action = withRustSuspend {
-                    reconcileDriveAccountSwitch(callbacks.platformState())
+    private suspend fun selectDriveAccount(transitionId: ULong) {
+        val callbacks = driveAccountSwitchCallbacks
+        val result =
+            runCatching { checkNotNull(callbacks) { "Google Drive account switching is unavailable" } }
+                .mapCatching { it.selectAccount(transitionId) }
+                .map { selection ->
+                    when (selection) {
+                        DriveAccountSelectionOutcome.Changed ->
+                            DriveAccountSwitchPlatformResult.AccountSelected(transitionId)
+                        DriveAccountSelectionOutcome.Unchanged ->
+                            DriveAccountSwitchPlatformResult.AccountUnchanged(transitionId)
+                    }
                 }
-                reconcileDriveAccountSwitchAction(action)
-            }.onFailure { error ->
-                Log.e(TAG, "failed to retry drive account recovery", error)
-                reportDriveAccountSwitchPlatformFailure(transitionId, message)
+                .onFailure { error -> Log.e(TAG, "google drive account selection failed", error) }
+                .getOrDefault(DriveAccountSwitchPlatformResult.AccountSelectionFailed(transitionId))
+
+        reportDriveAccountSwitchResult(result)
+    }
+
+    private fun reportDriveAccountSwitchState() {
+        val state =
+            runCatching { driveAccountSwitchCallbacks?.platformState?.invoke() }
+                .onFailure { error -> Log.e(TAG, "failed to read drive account switch state", error) }
+                .getOrNull() ?: DriveAccountSwitchPlatformState.NoTransition
+
+        reportDriveAccountSwitchResult(DriveAccountSwitchPlatformResult.State(state))
+    }
+
+    private suspend fun commitDriveAccountSwitch(transitionId: ULong) {
+        val committed =
+            runCatching { driveAccountSwitchCallbacks?.commit?.invoke(transitionId) }
+                .onFailure { error -> Log.e(TAG, "failed to commit drive account", error) }
+                .getOrNull()
+                ?.confirmsCommitted(transitionId) == true
+
+        reportDriveAccountSwitchResult(
+            if (committed) {
+                DriveAccountSwitchPlatformResult.Committed(transitionId)
+            } else {
+                DriveAccountSwitchPlatformResult.CommitFailed(transitionId)
+            },
+        )
+    }
+
+    private suspend fun finalizeDriveAccountSwitch(transitionId: ULong) {
+        val finalized =
+            runCatching { driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId) }
+                .onFailure { error -> Log.e(TAG, "failed to finalize drive account", error) }
+                .getOrNull()
+                ?.confirmsNoTransition() == true
+
+        reportDriveAccountSwitchResult(
+            if (finalized) {
+                DriveAccountSwitchPlatformResult.Finalized(transitionId)
+            } else {
+                DriveAccountSwitchPlatformResult.FinalizeFailed(transitionId)
+            },
+        )
+    }
+
+    private suspend fun rollBackDriveAccountSwitch(transitionId: ULong) {
+        val rolledBack =
+            runCatching { driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) }
+                .onFailure { error -> Log.e(TAG, "failed to roll back staged drive account", error) }
+                .getOrNull()
+                ?.confirmsNoTransition() == true
+
+        reportDriveAccountSwitchResult(
+            if (rolledBack) {
+                DriveAccountSwitchPlatformResult.RolledBack(transitionId)
+            } else {
+                DriveAccountSwitchPlatformResult.RollbackFailed(transitionId)
+            },
+        )
+    }
+
+    private fun reportDriveAccountSwitchResult(result: DriveAccountSwitchPlatformResult) {
+        runCatching {
+            withRust {
+                reportDriveAccountSwitchPlatformResult(result)
             }
         }
-    }
-
-    /** Cancels a recorded Google Drive account switch and restores the previous account */
-    internal fun cancelDriveAccountSwitch(transitionId: ULong) {
-        rustScope.launch {
-            if (!rollbackDriveAccountSwitch(transitionId)) {
-                reportDriveAccountSwitchPlatformFailure(
-                    transitionId,
-                    "Cove couldn't restore the previous Google Drive account; try again",
-                )
-            }
-        }
-    }
-
-    private suspend fun reconcileDriveAccountSwitchAction(
-        action: DriveAccountSwitchReconcileAction,
-    ): Boolean =
-        when (action) {
-            is DriveAccountSwitchReconcileAction.None -> true
-            is DriveAccountSwitchReconcileAction.Commit -> commitDriveAccountSwitch(action.v1)
-            is DriveAccountSwitchReconcileAction.Rollback ->
-                rollBackReconciledDriveAccountSwitch(action.v1)
-            is DriveAccountSwitchReconcileAction.Finalize -> finalizeDriveAccountSwitch(action.v1)
-        }
-
-    private suspend fun commitDriveAccountSwitch(transitionId: ULong): Boolean {
-        val receipt = driveAccountSwitchCallbacks?.commit?.invoke(transitionId)
-        if (receipt?.confirmsCommitted(transitionId) != true) {
-            reportDriveAccountSwitchPlatformFailure(
-                transitionId,
-                "Cove couldn't save the selected Google Drive account; try again",
-            )
-            return false
-        }
-
-        val confirmed = runCatching {
-            withRustSuspend { confirmDriveAccountSwitchCommitted(transitionId) }
-        }.onFailure { error ->
-            Log.e(TAG, "failed to confirm drive account commit", error)
-        }.isSuccess
-        return if (confirmed) {
-            finalizeDriveAccountSwitch(transitionId)
-        } else {
-            reportDriveAccountSwitchPlatformFailure(
-                transitionId,
-                "Cove couldn't finish changing Google Drive accounts; try again",
-            )
-            false
-        }
-    }
-
-    private suspend fun finalizeDriveAccountSwitch(transitionId: ULong): Boolean {
-        if (
-            driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId)
-                ?.confirmsNoTransition() != true
-        ) {
-            reportDriveAccountSwitchPlatformFailure(
-                transitionId,
-                "Cove couldn't finish saving the selected Google Drive account; try again",
-            )
-            return false
-        }
-
-        clearDriveAccountSwitchPlatformFailure(transitionId)
-        return true
-    }
-
-    private suspend fun rollBackReconciledDriveAccountSwitch(transitionId: ULong): Boolean {
-        if (
-            driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
-                ?.confirmsNoTransition() != true
-        ) {
-            reportDriveAccountSwitchPlatformFailure(
-                transitionId,
-                "Cove couldn't restore the previous Google Drive account; try again",
-            )
-            return false
-        }
-
-        return runCatching {
-            withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) }
-        }.onSuccess {
-            clearDriveAccountSwitchPlatformFailure(transitionId)
-        }.onFailure { error ->
-            Log.e(TAG, "failed to confirm drive account rollback", error)
-            reportDriveAccountSwitchPlatformFailure(
-                transitionId,
-                "Cove couldn't finish restoring the previous Google Drive account; try again",
-            )
-        }.isSuccess
-    }
-
-    private fun reportDriveAccountSwitchPlatformFailure(
-        transitionId: ULong,
-        message: String,
-    ) {
-        Log.e(TAG, message)
-        mainScope.launch {
-            driveAccountSwitchPlatformFailure = DriveAccountSwitchPlatformFailure(transitionId, message)
-        }
-    }
-
-    private fun clearDriveAccountSwitchPlatformFailure(transitionId: ULong) {
-        mainScope.launch {
-            if (driveAccountSwitchPlatformFailure?.transitionId == transitionId) {
-                driveAccountSwitchPlatformFailure = null
-            }
-        }
+            .onFailure { error -> Log.e(TAG, "failed to report drive account switch $result", error) }
     }
 
     private fun refreshPersistedEnabledState(forceDisabledNotification: Boolean = false) {

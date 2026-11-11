@@ -13,6 +13,7 @@ use cove_device::keychain::Keychain;
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd,
     TestApp, change_a_wallet, finish_wipe, keychain_namespace, load_detail, persisted, run_case,
+    seed_verifiable_master_key,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -31,10 +32,10 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
     current_background_writes, wallet_entry_with_labels,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupKeychain,
-    CloudBackupManagerAction, CloudBackupStore, CloudBackupVerificationSource,
-    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError,
+    CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
+    CloudBackupStore, CloudBackupVerificationSource, DriveAccountSwitchPlatformResult,
+    DriveAccountSwitchPlatformState, RequestedDriveAccountSwitchStep,
 };
 
 fn local_master_key_present() -> bool {
@@ -380,9 +381,8 @@ fn a_turned_off_configurations_late_keychain_save_is_refused() {
         let first_writes = app.block_on("A's writes", current_background_writes(&manager));
         load_detail(&mut app);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         let second = FakeAccount::new(1, 0).seed(&app);
         let second_key = master_key_bytes().expect("B's master key");
         let second_credential = credential_id();
@@ -488,56 +488,8 @@ fn wipe_during_verification_leaves_no_stale_key() {
     });
 }
 
-/// Keys a background worker prepared for one configuration never land on the next: after Turn
-/// Off and a new configuration, the first configuration's late keychain write is refused and the
-/// new configuration's own write still lands
-#[test]
-fn a_turned_off_configurations_late_keychain_write_is_refused() {
-    let test =
-        concat!(module_path!(), "::a_turned_off_configurations_late_keychain_write_is_refused");
-    run_case(test, &[PhaseEnd::Exit], |_| {
-        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        let manager = app.manager().clone();
-        let first = FakeAccount::new(1, 0).seed(&app);
-        let first_key = *local_master_key().as_bytes();
-        let first_owner = app.block_on("the first owner", background_owner(&manager));
-        load_detail(&mut app);
-
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
-        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
-        let second = FakeAccount::new(1, 0).seed(&app);
-        let second_key = *local_master_key().as_bytes();
-        let second_credential = CloudBackupKeychain::global().load_credential_id().expect("read");
-        assert_ne!(first, second);
-        assert_ne!(first_key, second_key);
-
-        // the first configuration's worker answers late with its keys
-        let late = vec![
-            OwnedKeychainWrite::Passkey { credential_id: vec![0xa1; 16], prf_salt: [0xa2; 32] },
-            OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(first_key)),
-        ];
-        let refused =
-            app.block_on("the late write", manager.apply_owned_keychain_writes(first_owner, late));
-
-        assert!(matches!(refused, Err(CloudBackupError::Cancelled)), "{refused:?}");
-        assert_eq!(keychain_namespace(), Some(second));
-        assert_eq!(*local_master_key().as_bytes(), second_key);
-        assert_eq!(
-            CloudBackupKeychain::global().load_credential_id().expect("read"),
-            second_credential
-        );
-
-        // the current configuration's background work still owns its keys
-        let second_owner = app.block_on("the second owner", background_owner(&manager));
-        let own = vec![OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(second_key))];
-        let applied = app
-            .block_on("the current write", manager.apply_owned_keychain_writes(second_owner, own));
-        assert!(applied.is_ok(), "{applied:?}");
-    });
-}
-
-/// The platform calls that start or recover a Google Drive account switch, and a full wipe, are
-/// admitted like dispatched intents, and a rejection reaches the caller as a typed error
+/// A Google Drive account switch's Switch, Try Again and Cancel, and a full wipe, are admitted
+/// like any dispatched intent, and a rejected Switch records nothing for the platform to act on
 #[test]
 fn routed_entry_points_are_admitted_or_rejected_with_a_reason() {
     let test =
@@ -559,19 +511,28 @@ fn routed_entry_points_are_admitted_or_rejected_with_a_reason() {
         );
         assert_eq!(
             app.admission_of(UserIntent::RetryDriveAccountSwitchRecovery),
-            Admission::Accepted
+            Admission::Rejected(Rejection::NothingToContinue)
         );
         assert_eq!(app.admission_of(UserIntent::LocalReset), Admission::Accepted);
 
-        let manager = app.manager().clone();
-        let switch =
-            app.block_on("the switch call to answer", manager.begin_drive_account_switch());
-        assert_eq!(switch, Err(CloudBackupDriveAccountSwitchError::NotConfigured));
-        let recovery = app.block_on(
-            "the recovery call to answer",
-            manager.reconcile_drive_account_switch(DriveAccountSwitchPlatformState::NoTransition),
-        );
-        assert_eq!(recovery, Ok(DriveAccountSwitchReconcileAction::None));
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_can(&[N::Enable]);
+        assert_eq!(persisted_switch_phase(), None);
+        assert_eq!(app.manager().drained_drive_account_switch_steps(), vec![]);
+
+        // the platform found no switch at launch, so nothing is asked of it
+        app.event("the platform reports no switch", |app| {
+            let manager = app.manager().clone();
+            app.block_on(
+                "the switch's owner to handle the state",
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::State(
+                        DriveAccountSwitchPlatformState::NoTransition,
+                    ),
+                ),
+            );
+        })
+        .then_can(&[N::Enable]);
+        assert_eq!(app.manager().drained_drive_account_switch_steps(), vec![]);
 
         FakeAccount::new(1, 0).seed(&app);
         app.current().then_can(&[N::TurnOff]);
@@ -683,10 +644,13 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
         // provider read that a reset cancels by revoking the run's claim
         CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
 
-        let manager = app.manager().clone();
-        let transition_id = app
-            .block_on("the switch to drain the lane", manager.begin_drive_account_switch())
-            .expect("the switch starts");
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+        let transition_id =
+            persisted().drive_account_switch().expect("the switch starts").transition_id.value();
+        assert_eq!(
+            app.manager().drained_drive_account_switch_steps(),
+            vec![RequestedDriveAccountSwitchStep::SelectAccount(transition_id)]
+        );
         let revoked_listing = Hold::default();
         app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(revoked_listing.clone()));
 
@@ -694,9 +658,10 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
             let manager = app.manager().clone();
             app.block_on(
                 "the switch to continue",
-                manager.continue_drive_account_switch(transition_id),
-            )
-            .expect("continue the switch");
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::AccountSelected(transition_id),
+                ),
+            );
         })
         .then_cannot(&[N::Enable]);
         app.block_on("the first run's listing to start", revoked_listing.entered());
@@ -720,13 +685,14 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
         app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(resumed_listing.clone()));
         app.event("the app reconciles the switch the platform still stages", |app| {
             let manager = app.manager().clone();
-            let action = app.block_on(
+            app.block_on(
                 "the reconcile to answer",
-                manager.reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(
-                    transition_id,
-                )),
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::State(
+                        DriveAccountSwitchPlatformState::Staged(transition_id),
+                    ),
+                ),
             );
-            assert_eq!(action, Ok(DriveAccountSwitchReconcileAction::None));
         })
         .then_cannot(&[N::Enable]);
         app.block_on("the resumed run's listing to start", resumed_listing.entered());
@@ -840,17 +806,27 @@ fn a_detail_refresh_from_before_an_account_switch_is_dropped() {
         app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
         app.block_on("the old account's detail read to start", held_read.entered());
 
-        let manager = app.manager().clone();
-        let transition_id = app
-            .block_on("the switch to drain the lane", manager.begin_drive_account_switch())
-            .expect("the switch starts");
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+        let transition_id = persisted()
+            .drive_account_switch()
+            .expect("the switch is recorded")
+            .transition_id
+            .value();
+        assert_eq!(
+            app.manager().drained_drive_account_switch_steps(),
+            vec![RequestedDriveAccountSwitchStep::SelectAccount(transition_id)],
+            "{}",
+            app.describe()
+        );
+
         app.event("the platform staged the selected account", |app| {
             let manager = app.manager().clone();
             app.block_on(
-                "the switch to continue",
-                manager.continue_drive_account_switch(transition_id),
-            )
-            .expect("continue the switch");
+                "the switch's owner to take the selected account",
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::AccountSelected(transition_id),
+                ),
+            );
         })
         .then_cannot(&[N::Enable]);
         assert_ne!(

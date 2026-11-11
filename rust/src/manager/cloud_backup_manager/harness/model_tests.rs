@@ -17,16 +17,16 @@
 //!
 //! Both rest on finite-time assumptions about the cooperative fakes the checks switch to: a
 //! released hold answers, the passkey provider answers `Succeeds`, the cloud has no scripted
-//! fault left, the platform finishes a Drive switch within [`PLATFORM_STEPS_LIMIT`] steps, and
+//! fault left, the platform and the user finish a Drive switch within [`PLATFORM_STEPS_LIMIT`]
+//! steps, and
 //! every operation timer fires within the clock advances [`TestApp::quiesce`] makes.
 //!
 //! Every case prints its seed and a compact trace. To replay one sequence case:
 //! `COVE_MODEL_SEED=<seed> COVE_MODEL_CASES=1 cargo test -p cove --lib -- model_sequences`
 //! (`COVE_MODEL_STEPS` caps the sequence length; each case ends at a length its seed picks, so
 //! the checks at its end start from varied states). A failing probe prints its own replay
-//! command. A minimized failure becomes a named test; a seed that found a production bug is
-//! parked in [`PARKED_SEEDS`] until the bug is fixed, and a dead end many seeds reach is parked
-//! by its durable state in [`parked_dead_end`].
+//! command. A minimized failure becomes a named test, and a seed that found a production bug is
+//! parked in [`PARKED_SEEDS`] until the bug is fixed.
 //!
 //! The reference model is a semantic subset: what the record forbids. Positive availability and
 //! the screen's sections join it once Rust projects the screen
@@ -45,12 +45,15 @@ use super::{
     change_a_wallet, finish_wipe, persisted, run_case, seed_legacy_stuck_disabling,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDriveAccountSwitchPhase};
+use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::admission::Admission;
-use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupScreenAction, CloudBackupScreenBody,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupVerificationSource,
-    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction, RustCloudBackupManager,
+    DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState,
+    RequestedDriveAccountSwitchStep, RustCloudBackupManager,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -92,9 +95,10 @@ const MAX_HOLD_AGE: usize = 4;
 /// review, and a Try Again each take a few
 const ESCAPE_EVENTS_LIMIT: usize = 12;
 
-/// The most steps the cooperative platform takes to finish a Drive switch: stage the selected
-/// account, then reconcile until Rust asks it to commit or roll back, with the reinitialize in
-/// between given the clock and every held call it waits on
+/// The most steps the cooperative platform takes to finish a Drive switch: answer what Rust
+/// asked for, stage the selected account, then commit and finalize it, with the user's Confirm
+/// Saved Passkey or Try Again in between and the reinitialize given the clock and every held call
+/// it waits on
 const PLATFORM_STEPS_LIMIT: usize = 6;
 
 /// The credential the passkey provider registers whenever Enable or Reinitialize asks for a new
@@ -109,19 +113,6 @@ const PARKED_SEEDS: &[(u64, &str)] = &[];
 
 fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
     std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
-}
-
-/// A production dead end many seeds reach, matched by the durable state it leaves, with what it
-/// found; an escape that fails there stops and prints it instead of failing, so the rest of the
-/// model keeps guarding until the fix lands and this goes
-///
-/// A Drive switch whose reinitialize failed stays in `AwaitingReinitializationRetry`: Retry
-/// reconciles to no action and starts nothing, Cancel has nothing running to cancel, and
-/// Reinitialize is rejected for the switch, so no step the platform or the user takes leaves it
-fn parked_dead_end() -> Option<&'static str> {
-    let phase = persisted().drive_account_switch().map(|transition| transition.phase);
-    (phase == Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry))
-        .then_some("a failed Drive switch reinitialize has no exit (AwaitingReinitializationRetry)")
 }
 
 fn parked(seed: u64) -> bool {
@@ -203,6 +194,10 @@ enum Tap {
     DismissVerificationPrompt,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
+    /// Try Again on a Drive switch that needs attention
+    RetryDriveAccountSwitch,
+    /// Cancel on a Drive switch that needs attention
+    CancelDriveAccountSwitch,
 }
 
 impl Tap {
@@ -253,12 +248,14 @@ impl Tap {
             Self::DismissVerificationPrompt => A::DismissVerificationPrompt,
             Self::DismissPasskeyChoicePrompt => A::DismissPasskeyChoicePrompt,
             Self::DismissMissingPasskeyReminder => A::DismissMissingPasskeyReminder,
+            Self::RetryDriveAccountSwitch => A::RetryDriveAccountSwitchRecovery,
+            Self::CancelDriveAccountSwitch => A::CancelDriveAccountSwitch,
         }
     }
 
     /// Whether this tap may register a new passkey, which the provider's next create answers
     fn registers_a_passkey(self) -> bool {
-        matches!(self, Self::Enable | Self::Reinitialize)
+        matches!(self, Self::Enable | Self::Reinitialize | Self::RetryDriveAccountSwitch)
     }
 }
 
@@ -296,8 +293,9 @@ enum Event {
     /// The oldest held call completes
     ReleaseHeld,
     Passkey(PasskeyAnswer),
-    /// The platform takes the next step of a Google Drive account switch; while the user picks
-    /// an account, `proceed` stages it and its absence cancels the switch
+    /// The platform takes the next step of a Google Drive account switch, and with none under
+    /// way the user taps Switch; while the user picks an account, `proceed` stages it and its
+    /// absence keeps the account in use
     DriveSwitch {
         proceed: bool,
     },
@@ -333,9 +331,16 @@ const FINISHING_EVENTS: [Event; 2] =
 /// A Turn Off whose Try Again failed, which offers the escape path
 const ESCAPE_EVENTS: [Event; 2] =
     [Event::Tap(Tap::StopUsingOnThisDevice), Event::Tap(Tap::ResumeDisable)];
-/// A Drive switch in progress, which otherwise rarely gets the platform steps it needs
-const SWITCH_EVENTS: [Event; 2] =
-    [Event::DriveSwitch { proceed: true }, Event::DriveSwitch { proceed: false }];
+/// A Drive switch in progress, which otherwise rarely gets the platform steps it needs, and the
+/// switch's exits: Confirm Saved Passkey on one paused for its saved passkey, Try Again and Cancel
+/// on one that needs attention
+const SWITCH_EVENTS: [Event; 5] = [
+    Event::DriveSwitch { proceed: true },
+    Event::DriveSwitch { proceed: false },
+    Event::Tap(Tap::ConfirmSavedPasskey),
+    Event::Tap(Tap::RetryDriveAccountSwitch),
+    Event::Tap(Tap::CancelDriveAccountSwitch),
+];
 
 /// Draws the next event; while a Turn Off or a Drive switch is under way, three draws in four come
 /// from `focus`
@@ -447,104 +452,87 @@ impl DrivePlatform {
         parsed.unwrap_or(Self::Idle)
     }
 
-    /// The platform's next step of the switch, with its state after it
+    /// The platform's next step: it answers every step Rust asked for since it last looked, in
+    /// order, then the user answers the account picker if it is open
+    ///
+    /// It drains the requests once, when the event starts: an answer leads Rust to ask for its
+    /// next step, which the next platform step answers
     fn step(self, app: &TestApp, proceed: bool) -> Self {
-        let manager = app.manager().clone();
-        match self {
-            Self::Idle => {
-                let began = platform_call(app, "a Drive switch to begin", async move {
-                    manager.begin_drive_account_switch().await
-                });
-                match began {
-                    Ok(id) => Self::Choosing(id),
-                    Err(error) => {
-                        println!("model: the Drive switch did not begin: {error:?}");
-                        Self::Idle
-                    }
-                }
-            }
+        let requested = app.manager().drained_drive_account_switch_steps();
+        let platform =
+            requested.into_iter().fold(self, |platform, request| platform.answer(app, request));
 
-            // the platform stages the selected account durably, then lets Rust go on
-            Self::Choosing(id) if proceed => {
-                let continued = platform_call(app, "the Drive switch to continue", async move {
-                    manager.continue_drive_account_switch(id).await
-                });
-                if let Err(error) = continued {
-                    println!("model: the staged Drive switch did not continue: {error:?}");
-                }
-
-                Self::Staged(id)
-            }
-
-            // nothing was staged, so after Rust rolls back there is nothing to discard
-            Self::Choosing(id) => {
-                let cancelled = platform_call(app, "the Drive switch to cancel", async move {
-                    manager.cancel_drive_account_switch(id).await
-                });
-                if let Err(error) = cancelled {
-                    println!("model: the Drive switch did not cancel: {error:?}");
-                    return Self::Choosing(id);
-                }
-
-                let manager = app.manager().clone();
-                let released = platform_call(app, "the rollback to be confirmed", async move {
-                    manager.confirm_drive_account_switch_rolled_back(id).await
-                });
-                if let Err(error) = released {
-                    println!("model: the cancelled Drive switch was not released: {error:?}");
-                }
-
-                Self::Idle
-            }
-
-            Self::Staged(_) | Self::Committed(_) => self.reconcile(app),
-        }
+        platform.pick(app, proceed)
     }
 
-    /// Reconciles with Rust and carries out the action it answers, as Android does at launch and
-    /// while a staged switch waits
-    fn reconcile(self, app: &TestApp) -> Self {
-        let manager = app.manager().clone();
-        let reported = self.reported();
-        let action = platform_call(app, "the Drive switch to reconcile", async move {
-            manager.reconcile_drive_account_switch(reported).await
-        });
+    /// Carries out the step Rust asked for, as Android does
+    fn answer(self, app: &TestApp, request: RequestedDriveAccountSwitchStep) -> Self {
+        use DriveAccountSwitchPlatformResult as Result;
+        use RequestedDriveAccountSwitchStep as Asked;
 
-        let manager = app.manager().clone();
-        match action {
-            Ok(DriveAccountSwitchReconcileAction::None) => self,
-            Ok(DriveAccountSwitchReconcileAction::Commit(id)) => {
-                let released = platform_call(app, "the commit to be confirmed", async move {
-                    manager.confirm_drive_account_switch_committed(id).await
-                });
-                match released {
-                    Ok(()) => Self::Idle,
-                    Err(error) => {
-                        println!("model: the committed Drive switch was not released: {error:?}");
-                        Self::Committed(id)
-                    }
-                }
-            }
-
-            // the platform discards what it staged before telling Rust
-            Ok(DriveAccountSwitchReconcileAction::Rollback(id)) => {
-                let released = platform_call(app, "the rollback to be confirmed", async move {
-                    manager.confirm_drive_account_switch_rolled_back(id).await
-                });
-                if let Err(error) = released {
-                    println!("model: the rolled-back Drive switch was not released: {error:?}");
-                }
-
-                Self::Idle
-            }
-
-            Ok(DriveAccountSwitchReconcileAction::Finalize(_)) => Self::Idle,
-            Err(error) => {
-                println!("model: the Drive switch did not reconcile: {error:?}");
+        match request {
+            // the account picker opens and waits for the user
+            Asked::SelectAccount(id) => Self::Choosing(id),
+            Asked::ReportState => {
+                report(app, Result::State(self.reported()));
                 self
             }
+
+            // the platform commits only the account it staged for this switch
+            Asked::Commit(id) if matches!(self, Self::Staged(staged) | Self::Committed(staged) if staged == id) =>
+            {
+                report(app, Result::Committed(id));
+                Self::Committed(id)
+            }
+            Asked::Commit(id) => {
+                report(app, Result::CommitFailed(id));
+                self
+            }
+            Asked::Finalize(id) => {
+                report(app, Result::Finalized(id));
+                Self::Idle
+            }
+
+            // a committed account can't be discarded
+            Asked::Rollback(id) if self == Self::Committed(id) => {
+                report(app, Result::RollbackFailed(id));
+                self
+            }
+            Asked::Rollback(id) => {
+                report(app, Result::RolledBack(id));
+                Self::Idle
+            }
         }
     }
+
+    /// The user answers the open account picker: `proceed` picks another account, which the
+    /// platform stages durably, and its absence keeps the account in use
+    fn pick(self, app: &TestApp, proceed: bool) -> Self {
+        use DriveAccountSwitchPlatformResult as Result;
+
+        let Self::Choosing(id) = self else { return self };
+        if proceed {
+            report(app, Result::AccountSelected(id));
+            return Self::Staged(id);
+        }
+
+        report(app, Result::AccountUnchanged(id));
+        Self::Idle
+    }
+
+    /// Reports the platform's durable switch state, as Android does at every launch
+    fn report_state(self, app: &TestApp) -> Self {
+        report(app, DriveAccountSwitchPlatformResult::State(self.reported()));
+        self
+    }
+}
+
+/// Hands the platform's `result` to the switch's owner and waits until it has handled it
+fn report(app: &TestApp, result: DriveAccountSwitchPlatformResult) {
+    let manager = app.manager().clone();
+    platform_call(app, "the switch's owner to take the platform's result", async move {
+        manager.drive_account_switch_platform_result_handled(result).await;
+    });
 }
 
 /// Runs a platform call to the manager that may wait on work already in flight
@@ -714,6 +702,13 @@ impl Case {
                     PasskeyAnswer::ProviderFailure => PasskeyMode::ProviderFailure,
                 });
             }),
+            // with no switch under way the user taps Switch, and Rust asks for the account picker
+            Event::DriveSwitch { .. }
+                if self.platform == DrivePlatform::Idle
+                    && persisted().drive_account_switch().is_none() =>
+            {
+                app.dispatch(CloudBackupManagerAction::SwitchDriveAccount)
+            }
             Event::DriveSwitch { proceed } => {
                 let platform = &mut self.platform;
                 app.event("the platform's next Drive switch step", move |app| {
@@ -753,8 +748,8 @@ impl Case {
         }
     }
 
-    /// The platform reconciles its Drive switch with Rust at launch, as Android does before its
-    /// first cloud refresh
+    /// The platform reports its Drive switch state at launch, as Android does before its first
+    /// cloud refresh
     fn reconcile_at_launch(&mut self, step: usize) {
         self.platform = self.platform.durable();
         let recorded = persisted().drive_account_switch().is_some();
@@ -762,11 +757,12 @@ impl Case {
             return;
         }
 
-        self.trace.push(format!("{step}: the platform reconciles at launch"));
+        self.trace.push(format!("{step}: the platform reports its switch state at launch"));
         let platform = &mut self.platform;
-        let reconciled = self.app.event("the platform reconciles its Drive switch", move |app| {
-            *platform = platform.reconcile(app);
-        });
+        let reconciled =
+            self.app.event("the platform reports its Drive switch state", move |app| {
+                *platform = platform.report_state(app);
+            });
 
         let record = Database::global().cloud_backup_state.get().expect("read the record");
         reconciled.then_cannot(forbidden_by_record(&record));
@@ -799,21 +795,54 @@ impl Case {
                 &ESCAPE_EVENTS
             }
             CloudBackupScreenBody::FinishingDisable(_) => &FINISHING_EVENTS,
-            _ if self.platform != DrivePlatform::Idle => &SWITCH_EVENTS,
+            _ if self.switch_under_way() => &SWITCH_EVENTS,
             _ => &[],
         };
 
         generate(rng, self.held.len(), focus)
     }
 
-    /// The cooperative platform finishes the Drive switch it is in; the reinitialize the switch
-    /// runs gets the clock and every held call between the platform's steps
-    ///
-    /// Answers whether it finished: it stops unfinished only in a [`parked_dead_end`]
-    fn finish_platform_switch(&mut self, steps: usize) -> bool {
+    /// Whether a Drive switch is under way: on the platform, in the durable record or on screen
+    fn switch_under_way(&self) -> bool {
+        self.platform != DrivePlatform::Idle
+            || persisted().drive_account_switch().is_some()
+            || matches!(
+                self.app.manager().published_screen().body,
+                CloudBackupScreenBody::DriveAccountSwitch(_)
+            )
+    }
+
+    /// The exit the switch on screen offers that goes on with it: Confirm Saved Passkey on a
+    /// switch paused for its saved passkey, Try Again on one that needs attention
+    fn switch_exit(&self) -> Option<CloudBackupManagerAction> {
+        let screen = self.app.manager().published_screen();
+        if !matches!(screen.body, CloudBackupScreenBody::DriveAccountSwitch(_)) {
+            return None;
+        }
+
+        [
+            (
+                CloudBackupScreenAction::ConfirmSavedPasskey,
+                CloudBackupManagerAction::ConfirmSavedPasskey,
+            ),
+            (
+                CloudBackupScreenAction::RetryDriveAccountSwitchRecovery,
+                CloudBackupManagerAction::RetryDriveAccountSwitchRecovery,
+            ),
+        ]
+        .into_iter()
+        .find(|(control, _)| screen.actions.is_available(*control))
+        .map(|(_, action)| action)
+    }
+
+    /// The cooperative platform and user finish the Drive switch under way: the platform answers
+    /// each step Rust asks for and stages the picked account, and the user takes the exit the
+    /// switch offers; the reinitialize the switch runs gets the clock and every held call between
+    /// the steps
+    fn finish_platform_switch(&mut self, steps: usize) {
         for _ in 0..PLATFORM_STEPS_LIMIT {
-            if self.platform == DrivePlatform::Idle {
-                return true;
+            if !self.switch_under_way() {
+                break;
             }
 
             let platform = &mut self.platform;
@@ -822,6 +851,10 @@ impl Case {
                     *platform = platform.step(app, true);
                 })
                 .then_cannot(&[]);
+            if let Some(exit) = self.switch_exit() {
+                self.app.dispatch(exit).then_cannot(&[]);
+            }
+
             self.app
                 .event("cooperative fakes answer what they hold", |_| {
                     fakes::release_held_calls();
@@ -830,24 +863,15 @@ impl Case {
             self.app.advance_clock(Duration::from_secs(61)).then_cannot(&[]);
         }
 
-        if self.platform != DrivePlatform::Idle
-            && let Some(found) = parked_dead_end()
-        {
-            println!("model step {steps}: the escape stops in a parked dead end: {found}");
-            self.trace.push(format!("{steps}: parked dead end: {found}"));
-            return false;
-        }
-
-        assert_eq!(
-            self.platform,
-            DrivePlatform::Idle,
+        assert!(
+            !self.switch_under_way(),
             "the cooperative platform did not finish its Drive switch in \
-             {PLATFORM_STEPS_LIMIT} steps\n{}\n{}",
+             {PLATFORM_STEPS_LIMIT} steps, platform {:?}\n{}\n{}",
+            self.platform,
             self.trace.join("\n"),
             self.app.describe()
         );
         self.trace.push(format!("{steps}: the platform finished its Drive switch"));
-        true
     }
 
     /// Invariant 4a at quiescence, then 4b, the escape property: from the state the case
@@ -857,8 +881,8 @@ impl Case {
     /// Drives the app out of the state it starts from, so it runs once per process: at the end
     /// of a sequence case, or at the step a probe replayed to. A running Enable or restore takes
     /// its cooperative exit while the app quiesces: it finishes, and an Enable that stops for
-    /// the user is left by its Discard. A Drive switch is finished by the cooperative platform
-    /// first. A body with no Turn Off (a recovery, an account switch, a failed load or a
+    /// the user is left by its Discard. A Drive switch is finished first by the cooperative
+    /// platform and the user's Confirm Saved Passkey or Try Again. A body with no Turn Off (a recovery, an account switch, a failed load or a
     /// corrupted record) has its own exits, which 4a checks at quiescence
     fn escape(&mut self, steps: usize) {
         let starts = self.app.manager().published_screen().body;
@@ -872,9 +896,7 @@ impl Case {
                 app.manager().handle_connectivity_change(ConnectivityStatus::Connected);
             })
             .then_cannot(&[]);
-        if !self.finish_platform_switch(steps) {
-            return;
-        }
+        self.finish_platform_switch(steps);
 
         let quiesced = self.app.quiesce();
         let record = Database::global().cloud_backup_state.get().expect("read the record");

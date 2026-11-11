@@ -1119,6 +1119,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_cloud_backup_screen_fixtures(
     ): Short
+    external fun uniffi_cove_checksum_func_cloud_backup_ui_elements(
+    ): Short
     external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
     ): Short
     external fun uniffi_cove_checksum_func_balance_presentation_provisional(
@@ -1525,17 +1527,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch(
-    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
     ): Short
@@ -1543,7 +1535,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch(
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
     ): Short
@@ -2687,26 +2679,16 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_wallet_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(`ptr`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(`ptr`: Long,`transitionId`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(`ptr`: Long,`transitionId`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(`ptr`: Long,`transitionId`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(`ptr`: Long,`transitionId`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(`ptr`: Long,`platformState`: RustBuffer.ByValue,
-    ): Long
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(`ptr`: Long,`result`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_start_background_inventory_discovery(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3541,10 +3523,16 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_catastrophicrecoveryerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_cloudbackupuielement_accessibility_identifier(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackuprowactionkind_control(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackuprowcontrol_identifier_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupscreenaction_is_android_only(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_cloudbackupscreenaction_identifier_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3651,9 +3639,13 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_cloudbackupdrawncontrol_is_android_only(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_cloudbackuppublishedscreen_applying(`ptr`: RustBuffer.ByValue,`delta`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupscreen_drawn_controls(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_cloudbackupscreen_applying(`ptr`: RustBuffer.ByValue,`delta`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_cloudbackupscreen_listed_row(`ptr`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackupscreen_row_action(`ptr`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3710,6 +3702,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_func_cspp_wallets_directory(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cloud_backup_screen_fixtures(uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_cloud_backup_ui_elements(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3982,6 +3976,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_cloud_backup_screen_fixtures() != 4768.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_cloud_backup_ui_elements() != 21236.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
@@ -4593,22 +4590,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch() != 55166.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch() != 12726.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed() != 33416.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back() != 34858.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch() != 3329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437.toShort()) {
@@ -4620,7 +4602,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 63487.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result() != 37200.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
@@ -4629,7 +4611,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_start_background_inventory_discovery() != 61634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 28863.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 17498.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state() != 19758.toShort()) {
@@ -4641,7 +4623,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 7867.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 44175.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 58357.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 40315.toShort()) {
@@ -20883,32 +20865,7 @@ public interface RustCloudBackupManagerInterface {
      */
     fun `backupWalletCount`(): kotlin.UInt?
 
-    /**
-     * Claim the exclusive operation and return after all prior cloud writes drain
-     */
-    suspend fun `beginDriveAccountSwitch`(): kotlin.ULong
-
-    /**
-     * Move an unstarted account transition to its rollback phase
-     */
-    suspend fun `cancelDriveAccountSwitch`(`transitionId`: kotlin.ULong)
-
     fun `cloudStorageDidChange`()
-
-    /**
-     * Release the transition after Android commits its staged account
-     */
-    suspend fun `confirmDriveAccountSwitchCommitted`(`transitionId`: kotlin.ULong)
-
-    /**
-     * Release the transition after Android discards its staged account
-     */
-    suspend fun `confirmDriveAccountSwitchRolledBack`(`transitionId`: kotlin.ULong)
-
-    /**
-     * Continue the claimed transition after Android durably stages the selected account
-     */
-    suspend fun `continueDriveAccountSwitch`(`transitionId`: kotlin.ULong)
 
     fun `hasPendingCloudUploadVerification`(): kotlin.Boolean
 
@@ -20923,11 +20880,13 @@ public interface RustCloudBackupManagerInterface {
     fun `onboardingEnableCompletionReadiness`(): CloudBackupOnboardingCompletionReadiness
 
     /**
-     * Reconcile persisted Rust and Android transition state after process startup
+     * Hands Rust's switch owner what Android's half of a Google Drive account switch did
      *
-     * Android must complete the returned action before starting its initial cloud refresh
+     * Android sends one result for each step a `DriveAccountSwitch*Required` message asked for,
+     * and its durable state at launch. The switch owner decides the next step, and any recovery
+     * the user sees, from it
      */
-    suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState): DriveAccountSwitchReconcileAction
+    fun `reportDriveAccountSwitchPlatformResult`(`result`: DriveAccountSwitchPlatformResult)
 
     fun `resumePendingCloudUploadVerification`()
 
@@ -20937,9 +20896,14 @@ public interface RustCloudBackupManagerInterface {
     fun `startBackgroundInventoryDiscovery`()
 
     /**
-     * The screen the platform starts from; every later change arrives as a `Screen` delta
+     * The screen the platform starts from, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedScreen::applying`]: every later change arrives as a `Screen` delta,
+     * and the deltas published before this read, still queued for the listener, are at or
+     * before its revision, so they are skipped instead of replayed over it
      */
-    fun `state`(): CloudBackupScreen
+    fun `state`(): CloudBackupPublishedScreen
 
     /**
      * Read persisted cloud backup state from DB and update in-memory state
@@ -20956,6 +20920,13 @@ public interface RustCloudBackupManagerInterface {
 
     fun `dispatch`(`action`: CloudBackupManagerAction)
 
+    /**
+     * Delivers every message, in the order it was sent, starting with those queued before this
+     * call
+     *
+     * Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+     * those by revision. The other messages are events with no revision, delivered in order
+     */
     fun `listenForUpdates`(`reconciler`: CloudBackupManagerReconciler)
 
     companion object
@@ -21104,56 +21075,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     }
 
 
-
-    /**
-     * Claim the exclusive operation and return after all prior cloud writes drain
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `beginDriveAccountSwitch`() : kotlin.ULong {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(
-                uniffiHandle,
-
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
-        // lift function
-        { FfiConverterULong.lift(it) },
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Move an unstarted account transition to its rollback phase
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `cancelDriveAccountSwitch`(`transitionId`: kotlin.ULong) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(
-                uniffiHandle,
-
-        FfiConverterULong.lower(`transitionId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
-    }
-
     override fun `cloudStorageDidChange`()
         =
     callWithHandle {
@@ -21165,84 +21086,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     }
 
 
-
-
-    /**
-     * Release the transition after Android commits its staged account
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `confirmDriveAccountSwitchCommitted`(`transitionId`: kotlin.ULong) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
-                uniffiHandle,
-
-        FfiConverterULong.lower(`transitionId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Release the transition after Android discards its staged account
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `confirmDriveAccountSwitchRolledBack`(`transitionId`: kotlin.ULong) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
-                uniffiHandle,
-
-        FfiConverterULong.lower(`transitionId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Continue the claimed transition after Android durably stages the selected account
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `continueDriveAccountSwitch`(`transitionId`: kotlin.ULong) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(
-                uniffiHandle,
-
-        FfiConverterULong.lower(`transitionId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
-    }
 
     override fun `hasPendingCloudUploadVerification`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -21291,30 +21134,23 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
 
     /**
-     * Reconcile persisted Rust and Android transition state after process startup
+     * Hands Rust's switch owner what Android's half of a Google Drive account switch did
      *
-     * Android must complete the returned action before starting its initial cloud refresh
-     */
-    @Throws(CloudBackupDriveAccountSwitchException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState) : DriveAccountSwitchReconcileAction {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
-                uniffiHandle,
+     * Android sends one result for each step a `DriveAccountSwitch*Required` message asked for,
+     * and its durable state at launch. The switch owner decides the next step, and any recovery
+     * the user sees, from it
+     */override fun `reportDriveAccountSwitchPlatformResult`(`result`: DriveAccountSwitchPlatformResult)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(
+        it,
 
-        FfiConverterTypeDriveAccountSwitchPlatformState.lower(`platformState`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeDriveAccountSwitchReconcileAction.lift(it) },
-        // Error FFI converter
-        CloudBackupDriveAccountSwitchException.ErrorHandler,
-    )
+        FfiConverterTypeDriveAccountSwitchPlatformResult.lower(`result`),_status)
+}
     }
+
+
 
     override fun `resumePendingCloudUploadVerification`()
         =
@@ -21345,9 +21181,14 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
 
     /**
-     * The screen the platform starts from; every later change arrives as a `Screen` delta
-     */override fun `state`(): CloudBackupScreen {
-            return FfiConverterTypeCloudBackupScreen.lift(
+     * The screen the platform starts from, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedScreen::applying`]: every later change arrives as a `Screen` delta,
+     * and the deltas published before this read, still queued for the listener, are at or
+     * before its revision, so they are skipped instead of replayed over it
+     */override fun `state`(): CloudBackupPublishedScreen {
+            return FfiConverterTypeCloudBackupPublishedScreen.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_state(
@@ -21413,7 +21254,14 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
 
 
-    override fun `listenForUpdates`(`reconciler`: CloudBackupManagerReconciler)
+
+    /**
+     * Delivers every message, in the order it was sent, starting with those queued before this
+     * call
+     *
+     * Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+     * those by revision. The other messages are events with no revision, delivered in order
+     */override fun `listenForUpdates`(`reconciler`: CloudBackupManagerReconciler)
         =
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -33286,8 +33134,9 @@ public object FfiConverterTypeCloudBackupDrawnControl: FfiConverterRustBuffer<Cl
  * A Google Drive account switch that needs the user to retry or cancel it
  */
 data class CloudBackupDriveAccountSwitchRecovery (
-    var `transitionId`: kotlin.ULong
-    ,
+    /**
+     * What went wrong, written for the reader
+     */
     var `message`: kotlin.String
 
 ){
@@ -33305,18 +33154,15 @@ data class CloudBackupDriveAccountSwitchRecovery (
 public object FfiConverterTypeCloudBackupDriveAccountSwitchRecovery: FfiConverterRustBuffer<CloudBackupDriveAccountSwitchRecovery> {
     override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchRecovery {
         return CloudBackupDriveAccountSwitchRecovery(
-            FfiConverterULong.read(buf),
             FfiConverterString.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupDriveAccountSwitchRecovery) = (
-            FfiConverterULong.allocationSize(value.`transitionId`) +
             FfiConverterString.allocationSize(value.`message`)
     )
 
     override fun write(value: CloudBackupDriveAccountSwitchRecovery, buf: ByteBuffer) {
-            FfiConverterULong.write(value.`transitionId`, buf)
             FfiConverterString.write(value.`message`, buf)
     }
 }
@@ -33327,10 +33173,7 @@ public object FfiConverterTypeCloudBackupDriveAccountSwitchRecovery: FfiConverte
  * A recorded Google Drive account switch; Android only
  */
 data class CloudBackupDriveAccountSwitchScreen (
-    /**
-     * Set when Rust and the platform disagree about the switch and the user must retry
-     */
-    var `recovery`: CloudBackupDriveAccountSwitchRecovery?
+    var `stage`: CloudBackupDriveAccountSwitchStage
 
 ){
 
@@ -33347,16 +33190,16 @@ data class CloudBackupDriveAccountSwitchScreen (
 public object FfiConverterTypeCloudBackupDriveAccountSwitchScreen: FfiConverterRustBuffer<CloudBackupDriveAccountSwitchScreen> {
     override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchScreen {
         return CloudBackupDriveAccountSwitchScreen(
-            FfiConverterOptionalTypeCloudBackupDriveAccountSwitchRecovery.read(buf),
+            FfiConverterTypeCloudBackupDriveAccountSwitchStage.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupDriveAccountSwitchScreen) = (
-            FfiConverterOptionalTypeCloudBackupDriveAccountSwitchRecovery.allocationSize(value.`recovery`)
+            FfiConverterTypeCloudBackupDriveAccountSwitchStage.allocationSize(value.`stage`)
     )
 
     override fun write(value: CloudBackupDriveAccountSwitchScreen, buf: ByteBuffer) {
-            FfiConverterOptionalTypeCloudBackupDriveAccountSwitchRecovery.write(value.`recovery`, buf)
+            FfiConverterTypeCloudBackupDriveAccountSwitchStage.write(value.`stage`, buf)
     }
 }
 
@@ -33995,6 +33838,77 @@ public object FfiConverterTypeCloudBackupProgress: FfiConverterRustBuffer<CloudB
 
 
 /**
+ * A screen as it was published, with the revision that orders it against every delta
+ *
+ * The platform starts from the one `state()` returns and advances it only with
+ * [`CloudBackupPublishedScreen::applying`]. Deltas sent before that snapshot was read can
+ * still be queued for the platform; the revision is how they are told apart from the ones
+ * that come after it
+ */
+data class CloudBackupPublishedScreen (
+    /**
+     * How many deltas the manager had published when this screen was current; the screen
+     * before anything is loaded is revision 0
+     */
+    var `revision`: kotlin.ULong
+    ,
+    var `screen`: CloudBackupScreen
+
+){
+
+    /**
+     * This screen advanced by `delta`, or this screen as it is when it already includes `delta`
+     *
+     * The only way a platform updates its screen, so both apps and the Rust test reconciler
+     * apply a delta the same way. The platform's first screen is a snapshot, and deltas
+     * published before it was read can still be queued behind it; replaying one would show
+     * an older or mixed screen, so a delta at or before this revision changes nothing. Deltas
+     * arrive in revision order, so the next one after the snapshot is the one this revision
+     * precedes
+     */ fun `applying`(`delta`: CloudBackupScreenDelta): CloudBackupPublishedScreen {
+            return FfiConverterTypeCloudBackupPublishedScreen.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackuppublishedscreen_applying(FfiConverterTypeCloudBackupPublishedScreen.lower(this),
+
+        FfiConverterTypeCloudBackupScreenDelta.lower(`delta`),_status)
+}
+    )
+    }
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPublishedScreen: FfiConverterRustBuffer<CloudBackupPublishedScreen> {
+    override fun read(buf: ByteBuffer): CloudBackupPublishedScreen {
+        return CloudBackupPublishedScreen(
+            FfiConverterULong.read(buf),
+            FfiConverterTypeCloudBackupScreen.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupPublishedScreen) = (
+            FfiConverterULong.allocationSize(value.`revision`) +
+            FfiConverterTypeCloudBackupScreen.allocationSize(value.`screen`)
+    )
+
+    override fun write(value: CloudBackupPublishedScreen, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`revision`, buf)
+            FfiConverterTypeCloudBackupScreen.write(value.`screen`, buf)
+    }
+}
+
+
+
+/**
  * Restore summary shown after cloud backup onboarding restore completes
  */
 data class CloudBackupRestoreReport (
@@ -34092,10 +34006,56 @@ public object FfiConverterTypeCloudBackupRowAction: FfiConverterRustBuffer<Cloud
 
 
 /**
+ * One control on one listed row
+ *
+ * An open row sheet or delete confirmation holds only this, and a row outcome names it; each reads
+ * the control's current action from the latest screen with [`CloudBackupScreen::row_action`], so
+ * none keeps a copy of a decision Rust has since replaced
+ */
+data class CloudBackupRowTarget (
+    var `recordId`: RecordId
+    ,
+    var `control`: CloudBackupRowControl
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRowTarget: FfiConverterRustBuffer<CloudBackupRowTarget> {
+    override fun read(buf: ByteBuffer): CloudBackupRowTarget {
+        return CloudBackupRowTarget(
+            FfiConverterTypeRecordId.read(buf),
+            FfiConverterTypeCloudBackupRowControl.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupRowTarget) = (
+            FfiConverterTypeRecordId.allocationSize(value.`recordId`) +
+            FfiConverterTypeCloudBackupRowControl.allocationSize(value.`control`)
+    )
+
+    override fun write(value: CloudBackupRowTarget, buf: ByteBuffer) {
+            FfiConverterTypeRecordId.write(value.`recordId`, buf)
+            FfiConverterTypeCloudBackupRowControl.write(value.`control`, buf)
+    }
+}
+
+
+
+/**
  * Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
  *
- * `state()` returns the first one; every later change arrives as one [`CloudBackupScreenDelta`],
- * which each platform applies with [`CloudBackupScreen::applying`] in a single assignment
+ * `state()` returns the one last published as a [`CloudBackupPublishedScreen`]; every later
+ * change arrives as one [`CloudBackupScreenDelta`], which each platform applies with
+ * [`CloudBackupPublishedScreen::applying`] in a single assignment
  */
 data class CloudBackupScreen (
     var `body`: CloudBackupScreenBody
@@ -34138,16 +34098,28 @@ data class CloudBackupScreen (
 
 
     /**
-     * This screen with `delta` applied
-     *
-     * The only way a platform updates its screen, so both apps and the Rust test reconciler
-     * apply a delta the same way
-     */ fun `applying`(`delta`: CloudBackupScreenDelta): CloudBackupScreen {
-            return FfiConverterTypeCloudBackupScreen.lift(
+     * The listed row for `record_id`, or `None` once this screen no longer lists it
+     */ fun `listedRow`(`recordId`: RecordId): CloudBackupListedRow? {
+            return FfiConverterOptionalTypeCloudBackupListedRow.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_cloudbackupscreen_applying(FfiConverterTypeCloudBackupScreen.lower(this),
+    UniffiLib.uniffi_cove_fn_method_cloudbackupscreen_listed_row(FfiConverterTypeCloudBackupScreen.lower(this),
 
-        FfiConverterTypeCloudBackupScreenDelta.lower(`delta`),_status)
+        FfiConverterTypeRecordId.lower(`recordId`),_status)
+}
+    )
+    }
+
+
+
+    /**
+     * The current action for `target`, or `None` once Rust no longer offers that control on the
+     * row, which closes a dialog bound to it
+     */ fun `rowAction`(`target`: CloudBackupRowTarget): CloudBackupRowAction? {
+            return FfiConverterOptionalTypeCloudBackupRowAction.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupscreen_row_action(FfiConverterTypeCloudBackupScreen.lower(this),
+
+        FfiConverterTypeCloudBackupRowTarget.lower(`target`),_status)
 }
     )
     }
@@ -34200,10 +34172,16 @@ public object FfiConverterTypeCloudBackupScreen: FfiConverterRustBuffer<CloudBac
 /**
  * A change to the screen, with only the parts that changed
  *
- * Each platform applies it with [`CloudBackupScreen::applying`] in one state assignment, so no
- * frame shows a half-applied update
+ * Each platform applies it with [`CloudBackupPublishedScreen::applying`] in one state
+ * assignment, so no frame shows a half-applied update
  */
 data class CloudBackupScreenDelta (
+    /**
+     * The revision of the screen this delta publishes; it changes the screen published at the
+     * revision before it
+     */
+    var `revision`: kotlin.ULong
+    ,
     var `body`: CloudBackupScreenBody?
     ,
     var `settingsRow`: CloudBackupSettingsRowStatus?
@@ -34231,6 +34209,7 @@ data class CloudBackupScreenDelta (
 public object FfiConverterTypeCloudBackupScreenDelta: FfiConverterRustBuffer<CloudBackupScreenDelta> {
     override fun read(buf: ByteBuffer): CloudBackupScreenDelta {
         return CloudBackupScreenDelta(
+            FfiConverterULong.read(buf),
             FfiConverterOptionalTypeCloudBackupScreenBody.read(buf),
             FfiConverterOptionalTypeCloudBackupSettingsRowStatus.read(buf),
             FfiConverterOptionalTypeCloudBackupHealNoticeUpdate.read(buf),
@@ -34241,6 +34220,7 @@ public object FfiConverterTypeCloudBackupScreenDelta: FfiConverterRustBuffer<Clo
     }
 
     override fun allocationSize(value: CloudBackupScreenDelta) = (
+            FfiConverterULong.allocationSize(value.`revision`) +
             FfiConverterOptionalTypeCloudBackupScreenBody.allocationSize(value.`body`) +
             FfiConverterOptionalTypeCloudBackupSettingsRowStatus.allocationSize(value.`settingsRow`) +
             FfiConverterOptionalTypeCloudBackupHealNoticeUpdate.allocationSize(value.`healNotice`) +
@@ -34250,6 +34230,7 @@ public object FfiConverterTypeCloudBackupScreenDelta: FfiConverterRustBuffer<Clo
     )
 
     override fun write(value: CloudBackupScreenDelta, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`revision`, buf)
             FfiConverterOptionalTypeCloudBackupScreenBody.write(value.`body`, buf)
             FfiConverterOptionalTypeCloudBackupSettingsRowStatus.write(value.`settingsRow`, buf)
             FfiConverterOptionalTypeCloudBackupHealNoticeUpdate.write(value.`healNotice`, buf)
@@ -41984,7 +41965,11 @@ enum class CloudBackupControlSurface {
     /**
      * Android's top-bar menu
      */
-    MENU;
+    MENU,
+    /**
+     * The prompt over the screen: the Enable, passkey and verification prompts' choices
+     */
+    ROOT_PROMPT;
 
 
 
@@ -42274,134 +42259,104 @@ public object FfiConverterTypeCloudBackupDisableScreen : FfiConverterRustBuffer<
 
 
 
-
-
 /**
- * Failure to coordinate an Android Google Drive account transition
+ * Where a Google Drive account switch stands for the user
  */
-sealed class CloudBackupDriveAccountSwitchException: kotlin.Exception() {
+sealed class CloudBackupDriveAccountSwitchStage {
 
     /**
-     * Another exclusive Cloud Backup operation owns the supervisor
+     * Cove is moving Cloud Backup to the selected account; nothing waits on the user
      */
-    class Busy(
-        ) : CloudBackupDriveAccountSwitchException() {
-        override val message
-            get() = ""
-    }
+    object Switching : CloudBackupDriveAccountSwitchStage()
+
 
     /**
-     * Cloud Backup has no configured state to move to another account
+     * The new account's backup registered a passkey the user must confirm was saved before
+     * the switch goes on; the screen offers Confirm Saved Passkey
      */
-    class NotConfigured(
-        ) : CloudBackupDriveAccountSwitchException() {
-        override val message
-            get() = ""
-    }
+    object AwaitingSavedPasskeyConfirmation : CloudBackupDriveAccountSwitchStage()
+
 
     /**
-     * The supplied transition does not own the current operation
+     * A step of the switch failed and the user must try again, or cancel while the previous
+     * account can still come back
      */
-    class InvalidTransition(
-        ) : CloudBackupDriveAccountSwitchException() {
-        override val message
-            get() = ""
-    }
+    data class NeedsAttention(
+        val v1: org.bitcoinppl.cove_core.CloudBackupDriveAccountSwitchRecovery) : CloudBackupDriveAccountSwitchStage()
 
-    /**
-     * Persistence or actor coordination failed
-     */
-    class Internal(
+    {
 
-        val v1: kotlin.String
-        ) : CloudBackupDriveAccountSwitchException() {
-        override val message
-            get() = "v1=${ v1 }"
+
+        companion object
     }
 
 
 
 
-    // The local Rust `Display`/`Debug` implementation.
-    override fun toString(): String {
-        return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(FfiConverterTypeCloudBackupDriveAccountSwitchError.lower(this),
-        _status)
-}
-    )
-    }
-
-    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<CloudBackupDriveAccountSwitchException> {
-        override fun lift(error_buf: RustBuffer.ByValue): CloudBackupDriveAccountSwitchException = FfiConverterTypeCloudBackupDriveAccountSwitchError.lift(error_buf)
-    }
 
 
+
+
+    companion object
 }
 
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupDriveAccountSwitchError : FfiConverterRustBuffer<CloudBackupDriveAccountSwitchException> {
-    override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchException {
-
-
+public object FfiConverterTypeCloudBackupDriveAccountSwitchStage : FfiConverterRustBuffer<CloudBackupDriveAccountSwitchStage>{
+    override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchStage {
         return when(buf.getInt()) {
-            1 -> CloudBackupDriveAccountSwitchException.Busy()
-            2 -> CloudBackupDriveAccountSwitchException.NotConfigured()
-            3 -> CloudBackupDriveAccountSwitchException.InvalidTransition()
-            4 -> CloudBackupDriveAccountSwitchException.Internal(
-                FfiConverterString.read(buf),
+            1 -> CloudBackupDriveAccountSwitchStage.Switching
+            2 -> CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation
+            3 -> CloudBackupDriveAccountSwitchStage.NeedsAttention(
+                FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(buf),
                 )
-            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
-    override fun allocationSize(value: CloudBackupDriveAccountSwitchException): ULong {
-        return when(value) {
-            is CloudBackupDriveAccountSwitchException.Busy -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
+    override fun allocationSize(value: CloudBackupDriveAccountSwitchStage): ULong = when(value) {
+        is CloudBackupDriveAccountSwitchStage.Switching -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
                 4UL
             )
-            is CloudBackupDriveAccountSwitchException.NotConfigured -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
+        }
+        is CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
                 4UL
             )
-            is CloudBackupDriveAccountSwitchException.InvalidTransition -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
+        }
+        is CloudBackupDriveAccountSwitchStage.NeedsAttention -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
                 4UL
-            )
-            is CloudBackupDriveAccountSwitchException.Internal -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.allocationSize(value.v1)
             )
         }
     }
 
-    override fun write(value: CloudBackupDriveAccountSwitchException, buf: ByteBuffer) {
+    override fun write(value: CloudBackupDriveAccountSwitchStage, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupDriveAccountSwitchException.Busy -> {
+            is CloudBackupDriveAccountSwitchStage.Switching -> {
                 buf.putInt(1)
                 Unit
             }
-            is CloudBackupDriveAccountSwitchException.NotConfigured -> {
+            is CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation -> {
                 buf.putInt(2)
                 Unit
             }
-            is CloudBackupDriveAccountSwitchException.InvalidTransition -> {
+            is CloudBackupDriveAccountSwitchStage.NeedsAttention -> {
                 buf.putInt(3)
-                Unit
-            }
-            is CloudBackupDriveAccountSwitchException.Internal -> {
-                buf.putInt(4)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
-
 }
+
+
 
 
 
@@ -43385,6 +43340,24 @@ sealed class CloudBackupManagerAction {
     object ReconnectDrive : CloudBackupManagerAction()
 
 
+    /**
+     * Moves Cloud Backup to another Google Drive account; Android only
+     */
+    object SwitchDriveAccount : CloudBackupManagerAction()
+
+
+    /**
+     * Try Again on a Google Drive account switch that needs attention
+     */
+    object RetryDriveAccountSwitchRecovery : CloudBackupManagerAction()
+
+
+    /**
+     * Restores the previous Google Drive account of a switch that needs attention
+     */
+    object CancelDriveAccountSwitch : CloudBackupManagerAction()
+
+
     object RefreshDetail : CloudBackupManagerAction()
 
 
@@ -43500,15 +43473,18 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 FfiConverterTypeCloudBackupNoticeKind.read(buf),
                 )
             35 -> CloudBackupManagerAction.ReconnectDrive
-            36 -> CloudBackupManagerAction.RefreshDetail
-            37 -> CloudBackupManagerAction.EnterDetail
-            38 -> CloudBackupManagerAction.LeaveDetail
-            39 -> CloudBackupManagerAction.RetryLoad
-            40 -> CloudBackupManagerAction.ResetOnThisDevice
-            41 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+            36 -> CloudBackupManagerAction.SwitchDriveAccount
+            37 -> CloudBackupManagerAction.RetryDriveAccountSwitchRecovery
+            38 -> CloudBackupManagerAction.CancelDriveAccountSwitch
+            39 -> CloudBackupManagerAction.RefreshDetail
+            40 -> CloudBackupManagerAction.EnterDetail
+            41 -> CloudBackupManagerAction.LeaveDetail
+            42 -> CloudBackupManagerAction.RetryLoad
+            43 -> CloudBackupManagerAction.ResetOnThisDevice
+            44 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            42 -> CloudBackupManagerAction.AcceptEnablePrompt(
+            45 -> CloudBackupManagerAction.AcceptEnablePrompt(
                 FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -43737,6 +43713,24 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is CloudBackupManagerAction.SwitchDriveAccount -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.RetryDriveAccountSwitchRecovery -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.CancelDriveAccountSwitch -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupManagerAction.RefreshDetail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -43936,33 +43930,45 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 buf.putInt(35)
                 Unit
             }
-            is CloudBackupManagerAction.RefreshDetail -> {
+            is CloudBackupManagerAction.SwitchDriveAccount -> {
                 buf.putInt(36)
                 Unit
             }
-            is CloudBackupManagerAction.EnterDetail -> {
+            is CloudBackupManagerAction.RetryDriveAccountSwitchRecovery -> {
                 buf.putInt(37)
                 Unit
             }
-            is CloudBackupManagerAction.LeaveDetail -> {
+            is CloudBackupManagerAction.CancelDriveAccountSwitch -> {
                 buf.putInt(38)
                 Unit
             }
-            is CloudBackupManagerAction.RetryLoad -> {
+            is CloudBackupManagerAction.RefreshDetail -> {
                 buf.putInt(39)
                 Unit
             }
-            is CloudBackupManagerAction.ResetOnThisDevice -> {
+            is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(40)
                 Unit
             }
-            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+            is CloudBackupManagerAction.LeaveDetail -> {
                 buf.putInt(41)
+                Unit
+            }
+            is CloudBackupManagerAction.RetryLoad -> {
+                buf.putInt(42)
+                Unit
+            }
+            is CloudBackupManagerAction.ResetOnThisDevice -> {
+                buf.putInt(43)
+                Unit
+            }
+            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+                buf.putInt(44)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.AcceptEnablePrompt -> {
-                buf.putInt(42)
+                buf.putInt(45)
                 FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }
@@ -44438,8 +44444,7 @@ sealed class CloudBackupOutcomeTarget {
     }
 
     data class Row(
-        val `recordId`: org.bitcoinppl.cove_core.RecordId,
-        val `action`: org.bitcoinppl.cove_core.CloudBackupRowActionKind) : CloudBackupOutcomeTarget()
+        val `target`: org.bitcoinppl.cove_core.CloudBackupRowTarget) : CloudBackupOutcomeTarget()
 
     {
 
@@ -44467,8 +44472,7 @@ public object FfiConverterTypeCloudBackupOutcomeTarget : FfiConverterRustBuffer<
                 FfiConverterTypeCloudBackupScreenAction.read(buf),
                 )
             2 -> CloudBackupOutcomeTarget.Row(
-                FfiConverterTypeRecordId.read(buf),
-                FfiConverterTypeCloudBackupRowActionKind.read(buf),
+                FfiConverterTypeCloudBackupRowTarget.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -44486,8 +44490,7 @@ public object FfiConverterTypeCloudBackupOutcomeTarget : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeRecordId.allocationSize(value.`recordId`)
-                + FfiConverterTypeCloudBackupRowActionKind.allocationSize(value.`action`)
+                + FfiConverterTypeCloudBackupRowTarget.allocationSize(value.`target`)
             )
         }
     }
@@ -44501,8 +44504,7 @@ public object FfiConverterTypeCloudBackupOutcomeTarget : FfiConverterRustBuffer<
             }
             is CloudBackupOutcomeTarget.Row -> {
                 buf.putInt(2)
-                FfiConverterTypeRecordId.write(value.`recordId`, buf)
-                FfiConverterTypeCloudBackupRowActionKind.write(value.`action`, buf)
+                FfiConverterTypeCloudBackupRowTarget.write(value.`target`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -45045,7 +45047,8 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
 sealed class CloudBackupReconcileMessage {
 
     /**
-     * What changed on the screen; the platform applies it with `CloudBackupScreen::applying`
+     * What changed on the screen; the platform applies it with
+     * `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
      */
     data class Screen(
         val v1: CloudBackupScreenDelta) : CloudBackupReconcileMessage()
@@ -45064,6 +45067,24 @@ sealed class CloudBackupReconcileMessage {
 
         companion object
     }
+
+    /**
+     * Android must show the account picker and stage the account the user picks
+     */
+    data class DriveAccountSwitchSelectionRequired(
+        val v1: kotlin.ULong) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android must report its durable switch state
+     */
+    object DriveAccountSwitchStateRequired : CloudBackupReconcileMessage()
+
 
     /**
      * Android must atomically commit its staged Google Drive identity
@@ -45123,13 +45144,17 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             2 -> CloudBackupReconcileMessage.EnableCompleted(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
+            3 -> CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired(
                 FfiConverterULong.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
+            4 -> CloudBackupReconcileMessage.DriveAccountSwitchStateRequired
+            5 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
                 FfiConverterULong.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
+            6 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
+                FfiConverterULong.read(buf),
+                )
+            7 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -45149,6 +45174,19 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.DriveAccountSwitchStateRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
@@ -45186,18 +45224,27 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
+            is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
                 buf.putInt(3)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
+            is CloudBackupReconcileMessage.DriveAccountSwitchStateRequired -> {
                 buf.putInt(4)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
+                buf.putInt(5)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
+                buf.putInt(6)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -46027,6 +46074,19 @@ sealed class CloudBackupRowActionKind {
 
 
 
+    /**
+     * Which control this action is drawn as
+     */ fun `control`(): CloudBackupRowControl {
+            return FfiConverterTypeCloudBackupRowControl.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackuprowactionkind_control(FfiConverterTypeCloudBackupRowActionKind.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
 
 
     companion object
@@ -46115,7 +46175,65 @@ public object FfiConverterTypeCloudBackupRowActionKind : FfiConverterRustBuffer<
 
 
 /**
+ * Which control on a row, whatever it currently asks the user to confirm
+ *
+ * The identity of a row control: its shape and availability are read from the row's current
+ * [`CloudBackupRowAction`], so a change to either never makes it another control
+ */
+
+enum class CloudBackupRowControl {
+
+    RESTORE,
+    DELETE,
+    BACK_UP_FIRST,
+    CHECK_AGAIN,
+    VERIFY;
+
+
+    /**
+     * The row control's part of its accessibility identifier: its name in lower camel case
+     */ fun `identifierName`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackuprowcontrol_identifier_name(FfiConverterTypeCloudBackupRowControl.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRowControl: FfiConverterRustBuffer<CloudBackupRowControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRowControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRowControl) = 4UL
+
+    override fun write(value: CloudBackupRowControl, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * A control that dispatches one intent; the platform maps each to its `CloudBackupManagerAction`
+ *
+ * Its name in lower camel case is its part of the control's accessibility identifier
  */
 
 enum class CloudBackupScreenAction {
@@ -46124,7 +46242,14 @@ enum class CloudBackupScreenAction {
     RESTORE_FROM_CLOUD_BACKUP,
     CANCEL_RESTORE,
     CONFIRM_SAVED_PASSKEY,
-    ACCEPT_ENABLE_PROMPT,
+    /**
+     * The Enable prompt's Use Existing Passkey, offered on every Enable prompt
+     */
+    ACCEPT_ENABLE_PROMPT_USE_EXISTING,
+    /**
+     * The Enable prompt's Create New Backup, offered only on a prompt that can start one
+     */
+    ACCEPT_ENABLE_PROMPT_CREATE_NEW,
     DISCARD_PENDING_ENABLE,
     CONFIRM_PENDING_ENABLE_CLEANUP,
     VERIFY,
@@ -46192,6 +46317,19 @@ enum class CloudBackupScreenAction {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_cloudbackupscreenaction_is_android_only(FfiConverterTypeCloudBackupScreenAction.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+    /**
+     * The action's part of its accessibility identifier: its name in lower camel case
+     */ fun `identifierName`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupscreenaction_identifier_name(FfiConverterTypeCloudBackupScreenAction.lower(this),
         _status)
 }
     )
@@ -47171,6 +47309,626 @@ public object FfiConverterTypeCloudBackupTurnOffFailure: FfiConverterRustBuffer<
 
     override fun write(value: CloudBackupTurnOffFailure, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * Something on the Cloud Backup screens a UI test finds by its accessibility identifier
+ *
+ * Provider names stay in visible text and never in an identifier, so one identifier names the
+ * same control on iOS and Android
+ */
+sealed class CloudBackupUiElement {
+
+    /**
+     * The control that sends a global action, wherever it is drawn
+     */
+    data class Action(
+        val `action`: org.bitcoinppl.cove_core.CloudBackupScreenAction) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The reason under a disabled action's control
+     */
+    data class ActionUnavailable(
+        val `action`: org.bitcoinppl.cove_core.CloudBackupScreenAction) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The confirm button of the dialog an action opens before it dispatches
+     */
+    data class ActionConfirm(
+        val `action`: org.bitcoinppl.cove_core.CloudBackupScreenAction) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A row control
+     */
+    data class RowAction(
+        val `target`: org.bitcoinppl.cove_core.CloudBackupRowTarget) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The confirm button of the dialog a row control opens before it dispatches
+     */
+    data class RowConfirm(
+        val `target`: org.bitcoinppl.cove_core.CloudBackupRowTarget) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A wallet's row in any list; on Android a listed row opens its action sheet
+     */
+    data class WalletRow(
+        val `recordId`: org.bitcoinppl.cove_core.RecordId) : CloudBackupUiElement()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The reason every row in a section shares, drawn once above them
+     */
+    object RowsUnavailable : CloudBackupUiElement()
+
+
+    object LastOutcome : CloudBackupUiElement()
+
+
+    object LastOutcomeDismiss : CloudBackupUiElement()
+
+
+    object HealNotice : CloudBackupUiElement()
+
+
+    /**
+     * The heal notice's own Turn Off
+     */
+    object HealNoticeTurnOff : CloudBackupUiElement()
+
+
+    object TurnOffPreparing : CloudBackupUiElement()
+
+
+    object TurnOffOffline : CloudBackupUiElement()
+
+
+    /**
+     * Try Again in the offline Turn Off dialog
+     */
+    object TurnOffOfflineTryAgain : CloudBackupUiElement()
+
+
+    /**
+     * The first Turn Off dialog, which describes what it deletes
+     */
+    object TurnOffReview : CloudBackupUiElement()
+
+
+    /**
+     * The review's Continue to the final dialog of a two-step Turn Off
+     */
+    object TurnOffContinue : CloudBackupUiElement()
+
+
+    /**
+     * The review's Check Again, when Cove couldn't check everything
+     */
+    object TurnOffCheckAgain : CloudBackupUiElement()
+
+
+    /**
+     * The final dialog of a two-step Turn Off
+     */
+    object TurnOffFinal : CloudBackupUiElement()
+
+
+    object TurnOffDraining : CloudBackupUiElement()
+
+
+    object FinishingDisable : CloudBackupUiElement()
+
+
+    object LoadFailed : CloudBackupUiElement()
+
+
+    object Corrupted : CloudBackupUiElement()
+
+
+    /**
+     * Android only
+     */
+    object DriveAccountSwitch : CloudBackupUiElement()
+
+
+    object InventoryChecking : CloudBackupUiElement()
+
+
+    object InventoryIncomplete : CloudBackupUiElement()
+
+
+    /**
+     * The support code an incomplete setup shows, to quote when asking for help
+     */
+    object RecoverySupportCode : CloudBackupUiElement()
+
+
+    /**
+     * Android only: the top-bar menu
+     */
+    object Menu : CloudBackupUiElement()
+
+
+    /**
+     * The Enable prompt for a backup that already exists
+     */
+    object PromptExistingBackupFound : CloudBackupUiElement()
+
+
+    /**
+     * The prompt that asks which passkey to use
+     */
+    object PromptPasskeyChoice : CloudBackupUiElement()
+
+
+    /**
+     * The repair prompt's Create New Passkey, which sends the same action as its Use Existing
+     * Passkey and so needs its own identifier
+     */
+    object PromptPasskeyChoiceCreateNewPasskey : CloudBackupUiElement()
+
+
+    object PromptMissingPasskeyReminder : CloudBackupUiElement()
+
+
+    object PromptVerification : CloudBackupUiElement()
+
+
+
+
+
+
+
+    /**
+     * The identifier both apps give this element
+     */ fun `accessibilityIdentifier`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupuielement_accessibility_identifier(FfiConverterTypeCloudBackupUiElement.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupUiElement : FfiConverterRustBuffer<CloudBackupUiElement>{
+    override fun read(buf: ByteBuffer): CloudBackupUiElement {
+        return when(buf.getInt()) {
+            1 -> CloudBackupUiElement.Action(
+                FfiConverterTypeCloudBackupScreenAction.read(buf),
+                )
+            2 -> CloudBackupUiElement.ActionUnavailable(
+                FfiConverterTypeCloudBackupScreenAction.read(buf),
+                )
+            3 -> CloudBackupUiElement.ActionConfirm(
+                FfiConverterTypeCloudBackupScreenAction.read(buf),
+                )
+            4 -> CloudBackupUiElement.RowAction(
+                FfiConverterTypeCloudBackupRowTarget.read(buf),
+                )
+            5 -> CloudBackupUiElement.RowConfirm(
+                FfiConverterTypeCloudBackupRowTarget.read(buf),
+                )
+            6 -> CloudBackupUiElement.WalletRow(
+                FfiConverterTypeRecordId.read(buf),
+                )
+            7 -> CloudBackupUiElement.RowsUnavailable
+            8 -> CloudBackupUiElement.LastOutcome
+            9 -> CloudBackupUiElement.LastOutcomeDismiss
+            10 -> CloudBackupUiElement.HealNotice
+            11 -> CloudBackupUiElement.HealNoticeTurnOff
+            12 -> CloudBackupUiElement.TurnOffPreparing
+            13 -> CloudBackupUiElement.TurnOffOffline
+            14 -> CloudBackupUiElement.TurnOffOfflineTryAgain
+            15 -> CloudBackupUiElement.TurnOffReview
+            16 -> CloudBackupUiElement.TurnOffContinue
+            17 -> CloudBackupUiElement.TurnOffCheckAgain
+            18 -> CloudBackupUiElement.TurnOffFinal
+            19 -> CloudBackupUiElement.TurnOffDraining
+            20 -> CloudBackupUiElement.FinishingDisable
+            21 -> CloudBackupUiElement.LoadFailed
+            22 -> CloudBackupUiElement.Corrupted
+            23 -> CloudBackupUiElement.DriveAccountSwitch
+            24 -> CloudBackupUiElement.InventoryChecking
+            25 -> CloudBackupUiElement.InventoryIncomplete
+            26 -> CloudBackupUiElement.RecoverySupportCode
+            27 -> CloudBackupUiElement.Menu
+            28 -> CloudBackupUiElement.PromptExistingBackupFound
+            29 -> CloudBackupUiElement.PromptPasskeyChoice
+            30 -> CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey
+            31 -> CloudBackupUiElement.PromptMissingPasskeyReminder
+            32 -> CloudBackupUiElement.PromptVerification
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupUiElement): ULong = when(value) {
+        is CloudBackupUiElement.Action -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupScreenAction.allocationSize(value.`action`)
+            )
+        }
+        is CloudBackupUiElement.ActionUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupScreenAction.allocationSize(value.`action`)
+            )
+        }
+        is CloudBackupUiElement.ActionConfirm -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupScreenAction.allocationSize(value.`action`)
+            )
+        }
+        is CloudBackupUiElement.RowAction -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRowTarget.allocationSize(value.`target`)
+            )
+        }
+        is CloudBackupUiElement.RowConfirm -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRowTarget.allocationSize(value.`target`)
+            )
+        }
+        is CloudBackupUiElement.WalletRow -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeRecordId.allocationSize(value.`recordId`)
+            )
+        }
+        is CloudBackupUiElement.RowsUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.LastOutcome -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.LastOutcomeDismiss -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.HealNotice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.HealNoticeTurnOff -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffPreparing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffOffline -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffOfflineTryAgain -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffReview -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffContinue -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffCheckAgain -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffFinal -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.TurnOffDraining -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.FinishingDisable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.LoadFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.Corrupted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.DriveAccountSwitch -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.InventoryChecking -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.InventoryIncomplete -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.RecoverySupportCode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.Menu -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.PromptExistingBackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.PromptPasskeyChoice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.PromptMissingPasskeyReminder -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUiElement.PromptVerification -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupUiElement, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupUiElement.Action -> {
+                buf.putInt(1)
+                FfiConverterTypeCloudBackupScreenAction.write(value.`action`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.ActionUnavailable -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupScreenAction.write(value.`action`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.ActionConfirm -> {
+                buf.putInt(3)
+                FfiConverterTypeCloudBackupScreenAction.write(value.`action`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.RowAction -> {
+                buf.putInt(4)
+                FfiConverterTypeCloudBackupRowTarget.write(value.`target`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.RowConfirm -> {
+                buf.putInt(5)
+                FfiConverterTypeCloudBackupRowTarget.write(value.`target`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.WalletRow -> {
+                buf.putInt(6)
+                FfiConverterTypeRecordId.write(value.`recordId`, buf)
+                Unit
+            }
+            is CloudBackupUiElement.RowsUnavailable -> {
+                buf.putInt(7)
+                Unit
+            }
+            is CloudBackupUiElement.LastOutcome -> {
+                buf.putInt(8)
+                Unit
+            }
+            is CloudBackupUiElement.LastOutcomeDismiss -> {
+                buf.putInt(9)
+                Unit
+            }
+            is CloudBackupUiElement.HealNotice -> {
+                buf.putInt(10)
+                Unit
+            }
+            is CloudBackupUiElement.HealNoticeTurnOff -> {
+                buf.putInt(11)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffPreparing -> {
+                buf.putInt(12)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffOffline -> {
+                buf.putInt(13)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffOfflineTryAgain -> {
+                buf.putInt(14)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffReview -> {
+                buf.putInt(15)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffContinue -> {
+                buf.putInt(16)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffCheckAgain -> {
+                buf.putInt(17)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffFinal -> {
+                buf.putInt(18)
+                Unit
+            }
+            is CloudBackupUiElement.TurnOffDraining -> {
+                buf.putInt(19)
+                Unit
+            }
+            is CloudBackupUiElement.FinishingDisable -> {
+                buf.putInt(20)
+                Unit
+            }
+            is CloudBackupUiElement.LoadFailed -> {
+                buf.putInt(21)
+                Unit
+            }
+            is CloudBackupUiElement.Corrupted -> {
+                buf.putInt(22)
+                Unit
+            }
+            is CloudBackupUiElement.DriveAccountSwitch -> {
+                buf.putInt(23)
+                Unit
+            }
+            is CloudBackupUiElement.InventoryChecking -> {
+                buf.putInt(24)
+                Unit
+            }
+            is CloudBackupUiElement.InventoryIncomplete -> {
+                buf.putInt(25)
+                Unit
+            }
+            is CloudBackupUiElement.RecoverySupportCode -> {
+                buf.putInt(26)
+                Unit
+            }
+            is CloudBackupUiElement.Menu -> {
+                buf.putInt(27)
+                Unit
+            }
+            is CloudBackupUiElement.PromptExistingBackupFound -> {
+                buf.putInt(28)
+                Unit
+            }
+            is CloudBackupUiElement.PromptPasskeyChoice -> {
+                buf.putInt(29)
+                Unit
+            }
+            is CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey -> {
+                buf.putInt(30)
+                Unit
+            }
+            is CloudBackupUiElement.PromptMissingPasskeyReminder -> {
+                buf.putInt(31)
+                Unit
+            }
+            is CloudBackupUiElement.PromptVerification -> {
+                buf.putInt(32)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -50759,6 +51517,318 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
 
 
 /**
+ * What Android's half of a Google Drive account switch did, reported to Rust's switch owner
+ *
+ * Rust asks for each step with a `DriveAccountSwitch*Required` message, and Android answers each
+ * with one of these. They are service results, never user intents: the user's Switch, Retry and
+ * Cancel go through dispatch
+ */
+sealed class DriveAccountSwitchPlatformResult {
+
+    /**
+     * The platform's durable switch state, reported at launch and when Rust asks for it
+     */
+    data class State(
+        val v1: org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The user picked another account and Android staged it durably
+     */
+    data class AccountSelected(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The user picked the account already in use, or left the picker
+     */
+    data class AccountUnchanged(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android couldn't show the picker or stage the account the user picked
+     */
+    data class AccountSelectionFailed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android committed its staged account
+     */
+    data class Committed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android couldn't commit its staged account, which stays staged
+     */
+    data class CommitFailed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android removed its committed transition marker
+     */
+    data class Finalized(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android couldn't remove its committed transition marker
+     */
+    data class FinalizeFailed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android discarded its staged account and is back on the previous one
+     */
+    data class RolledBack(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android couldn't discard its staged account
+     */
+    data class RollbackFailed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformResult()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDriveAccountSwitchPlatformResult : FfiConverterRustBuffer<DriveAccountSwitchPlatformResult>{
+    override fun read(buf: ByteBuffer): DriveAccountSwitchPlatformResult {
+        return when(buf.getInt()) {
+            1 -> DriveAccountSwitchPlatformResult.State(
+                FfiConverterTypeDriveAccountSwitchPlatformState.read(buf),
+                )
+            2 -> DriveAccountSwitchPlatformResult.AccountSelected(
+                FfiConverterULong.read(buf),
+                )
+            3 -> DriveAccountSwitchPlatformResult.AccountUnchanged(
+                FfiConverterULong.read(buf),
+                )
+            4 -> DriveAccountSwitchPlatformResult.AccountSelectionFailed(
+                FfiConverterULong.read(buf),
+                )
+            5 -> DriveAccountSwitchPlatformResult.Committed(
+                FfiConverterULong.read(buf),
+                )
+            6 -> DriveAccountSwitchPlatformResult.CommitFailed(
+                FfiConverterULong.read(buf),
+                )
+            7 -> DriveAccountSwitchPlatformResult.Finalized(
+                FfiConverterULong.read(buf),
+                )
+            8 -> DriveAccountSwitchPlatformResult.FinalizeFailed(
+                FfiConverterULong.read(buf),
+                )
+            9 -> DriveAccountSwitchPlatformResult.RolledBack(
+                FfiConverterULong.read(buf),
+                )
+            10 -> DriveAccountSwitchPlatformResult.RollbackFailed(
+                FfiConverterULong.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: DriveAccountSwitchPlatformResult): ULong = when(value) {
+        is DriveAccountSwitchPlatformResult.State -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeDriveAccountSwitchPlatformState.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.AccountSelected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.AccountUnchanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.AccountSelectionFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.Committed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.CommitFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.Finalized -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.FinalizeFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.RolledBack -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformResult.RollbackFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: DriveAccountSwitchPlatformResult, buf: ByteBuffer) {
+        when(value) {
+            is DriveAccountSwitchPlatformResult.State -> {
+                buf.putInt(1)
+                FfiConverterTypeDriveAccountSwitchPlatformState.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.AccountSelected -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.AccountUnchanged -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.AccountSelectionFailed -> {
+                buf.putInt(4)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.Committed -> {
+                buf.putInt(5)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.CommitFailed -> {
+                buf.putInt(6)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.Finalized -> {
+                buf.putInt(7)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.FinalizeFailed -> {
+                buf.putInt(8)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.RolledBack -> {
+                buf.putInt(9)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformResult.RollbackFailed -> {
+                buf.putInt(10)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * Durable Google Drive account-switch state owned by the platform
  */
 sealed class DriveAccountSwitchPlatformState {
@@ -50856,142 +51926,6 @@ public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRust
             }
             is DriveAccountSwitchPlatformState.Committed -> {
                 buf.putInt(3)
-                FfiConverterULong.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-/**
- * Platform action required to reconcile a persisted Google Drive account switch
- */
-sealed class DriveAccountSwitchReconcileAction {
-
-    /**
-     * Rust and platform state require no immediate platform mutation
-     */
-    object None : DriveAccountSwitchReconcileAction()
-
-
-    /**
-     * Atomically commit the staged Google Drive identity
-     */
-    data class Commit(
-        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
-
-    {
-
-
-        companion object
-    }
-
-    /**
-     * Atomically discard the staged Google Drive identity
-     */
-    data class Rollback(
-        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
-
-    {
-
-
-        companion object
-    }
-
-    /**
-     * Remove the completed transition marker without changing identity
-     */
-    data class Finalize(
-        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
-
-    {
-
-
-        companion object
-    }
-
-
-
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeDriveAccountSwitchReconcileAction : FfiConverterRustBuffer<DriveAccountSwitchReconcileAction>{
-    override fun read(buf: ByteBuffer): DriveAccountSwitchReconcileAction {
-        return when(buf.getInt()) {
-            1 -> DriveAccountSwitchReconcileAction.None
-            2 -> DriveAccountSwitchReconcileAction.Commit(
-                FfiConverterULong.read(buf),
-                )
-            3 -> DriveAccountSwitchReconcileAction.Rollback(
-                FfiConverterULong.read(buf),
-                )
-            4 -> DriveAccountSwitchReconcileAction.Finalize(
-                FfiConverterULong.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: DriveAccountSwitchReconcileAction): ULong = when(value) {
-        is DriveAccountSwitchReconcileAction.None -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is DriveAccountSwitchReconcileAction.Commit -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterULong.allocationSize(value.v1)
-            )
-        }
-        is DriveAccountSwitchReconcileAction.Rollback -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterULong.allocationSize(value.v1)
-            )
-        }
-        is DriveAccountSwitchReconcileAction.Finalize -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterULong.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: DriveAccountSwitchReconcileAction, buf: ByteBuffer) {
-        when(value) {
-            is DriveAccountSwitchReconcileAction.None -> {
-                buf.putInt(1)
-                Unit
-            }
-            is DriveAccountSwitchReconcileAction.Commit -> {
-                buf.putInt(2)
-                FfiConverterULong.write(value.v1, buf)
-                Unit
-            }
-            is DriveAccountSwitchReconcileAction.Rollback -> {
-                buf.putInt(3)
-                FfiConverterULong.write(value.v1, buf)
-                Unit
-            }
-            is DriveAccountSwitchReconcileAction.Finalize -> {
-                buf.putInt(4)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -70925,38 +71859,6 @@ public object FfiConverterOptionalTypeCloudBackupDetail: FfiConverterRustBuffer<
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeCloudBackupDriveAccountSwitchRecovery: FfiConverterRustBuffer<CloudBackupDriveAccountSwitchRecovery?> {
-    override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchRecovery? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(buf)
-    }
-
-    override fun allocationSize(value: CloudBackupDriveAccountSwitchRecovery?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.allocationSize(value)
-        }
-    }
-
-    override fun write(value: CloudBackupDriveAccountSwitchRecovery?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeCloudBackupHealNoticeUpdate: FfiConverterRustBuffer<CloudBackupHealNoticeUpdate?> {
     override fun read(buf: ByteBuffer): CloudBackupHealNoticeUpdate? {
         if (buf.get().toInt() == 0) {
@@ -71053,6 +71955,38 @@ public object FfiConverterOptionalTypeCloudBackupLastOutcomeUpdate: FfiConverter
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeCloudBackupListedRow: FfiConverterRustBuffer<CloudBackupListedRow?> {
+    override fun read(buf: ByteBuffer): CloudBackupListedRow? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupListedRow.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupListedRow?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupListedRow.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupListedRow?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupListedRow.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<CloudBackupPasskeyHint?> {
     override fun read(buf: ByteBuffer): CloudBackupPasskeyHint? {
         if (buf.get().toInt() == 0) {
@@ -71107,6 +72041,38 @@ public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffe
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupProgress.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupRowAction: FfiConverterRustBuffer<CloudBackupRowAction?> {
+    override fun read(buf: ByteBuffer): CloudBackupRowAction? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupRowAction.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupRowAction?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupRowAction.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupRowAction?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupRowAction.write(value, buf)
         }
     }
 }
@@ -72801,6 +73767,34 @@ public object FfiConverterSequenceTypeCloudBackupSection: FfiConverterRustBuffer
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeCloudBackupUiElement: FfiConverterRustBuffer<List<CloudBackupUiElement>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupUiElement> {
+        val len = buf.getInt()
+        return List<CloudBackupUiElement>(len) {
+            FfiConverterTypeCloudBackupUiElement.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupUiElement>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupUiElement.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupUiElement>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupUiElement.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeCloudBackupVerificationControl: FfiConverterRustBuffer<List<CloudBackupVerificationControl>> {
     override fun read(buf: ByteBuffer): List<CloudBackupVerificationControl> {
         val len = buf.getInt()
@@ -73650,6 +74644,21 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
             return FfiConverterSequenceTypeCloudBackupScreenFixture.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_cloud_backup_screen_fixtures(
+
+        _status)
+}
+    )
+    }
+
+
+        /**
+         * Every element both apps tag, with `record-1` standing for a row's record
+         *
+         * The platform contract tests check their own mapping against each of these
+         */ fun `cloudBackupUiElements`(): List<CloudBackupUiElement> {
+            return FfiConverterSequenceTypeCloudBackupUiElement.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_cloud_backup_ui_elements(
 
         _status)
 }

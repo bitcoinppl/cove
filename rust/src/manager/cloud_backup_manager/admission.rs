@@ -8,6 +8,9 @@
 
 use super::screen::CloudBackupTurnOffFailure;
 use super::turn_off::FinishFailure;
+use crate::database::cloud_backup::DriveAccountSwitchId;
+
+use super::model::CloudBackupExclusiveOperationClaim;
 use super::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
     CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupVerificationSource, RecordId,
@@ -64,11 +67,11 @@ pub(crate) enum UserIntent {
     ResetOnThisDevice,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
-    /// The platform starts moving Cloud Backup to another Google Drive account
+    /// The user starts moving Cloud Backup to another Google Drive account
     SwitchDriveAccount,
-    /// The user backs out of the Google Drive account picker; the switch's Cancel
+    /// Cancel on a switch that needs attention: restores the previous account
     CancelDriveAccountSwitch,
-    /// The platform reconciles a Google Drive account switch it found unfinished
+    /// Try Again on a switch that needs attention: runs its failed step again
     RetryDriveAccountSwitchRecovery,
     /// A full wipe resets Cloud Backup's local state
     LocalReset,
@@ -153,6 +156,9 @@ impl From<CloudBackupManagerAction> for UserIntent {
             A::StopUsingOnThisDevice => Self::StopUsingOnThisDevice,
             A::DismissNotice(kind) => Self::DismissNotice(kind),
             A::ReconnectDrive => Self::ReconnectDrive,
+            A::SwitchDriveAccount => Self::SwitchDriveAccount,
+            A::RetryDriveAccountSwitchRecovery => Self::RetryDriveAccountSwitchRecovery,
+            A::CancelDriveAccountSwitch => Self::CancelDriveAccountSwitch,
             A::LeaveDetail => Self::LeaveDetail,
             A::RetryLoad => Self::RetryLoad,
             A::ResetOnThisDevice => Self::ResetOnThisDevice,
@@ -330,6 +336,20 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) enable_prompt: EnablePromptAnswers,
     /// What a Turn Off intent can act on: the held review and the running Turn Off's stage
     pub(crate) turn_off: TurnOffAdmission,
+    /// What a Google Drive account switch's Retry and Cancel can act on
+    pub(crate) drive_account_switch: SwitchAdmission,
+}
+
+/// Where a Google Drive account switch stands for the user
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SwitchAdmission {
+    /// No switch waits for the user; a recorded one moves on its own or waits on its passkey
+    None,
+    /// A step of the switch failed, or the switch stopped, and waits for the user's Try Again
+    NeedsAttention {
+        /// The platform hasn't committed the new account, so Cancel can restore the previous one
+        can_cancel: bool,
+    },
 }
 
 /// The Enable each answer to the Enable prompt on screen starts; both are `None` with no prompt
@@ -359,13 +379,16 @@ pub(crate) struct PausedContinuation {
 /// The lifecycle a paused continuation belongs to, which decides what continues it
 ///
 /// A continuation only goes on in its own lifecycle: a fresh Enable continues while the backup is
-/// off, and a reinitialize continues on the configured backup it replaces
+/// off, a reinitialize continues on the configured backup it replaces, and a Google Drive account
+/// switch's reinitialize continues in the switch it belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ContinuationOwner {
     /// An Enable on a device without a configured backup
     Enable,
     /// A reinitialize of the configured backup
     Reinitialize,
+    /// The reinitialize of the Google Drive account switch it names
+    DriveAccountSwitch(DriveAccountSwitchId),
 }
 
 /// Where a paused continuation stopped
@@ -381,32 +404,40 @@ pub(crate) enum ContinuationStage {
 }
 
 impl ContinuationOwner {
-    /// The owner of the work an Enable flow runs under `operation`
+    /// The owner of the work an Enable flow runs under `claim`
     ///
-    /// The Enable flow runs under one of Enable's claims or a reinitialize's
-    pub(crate) fn of(operation: CloudBackupExclusiveOperation) -> Self {
-        match operation {
-            CloudBackupExclusiveOperation::ReinitializeBackup => Self::Reinitialize,
-            _ => Self::Enable,
+    /// The Enable flow runs under one of Enable's claims or a reinitialize's, and a switch's
+    /// reinitialize claim names its switch
+    pub(crate) fn of(claim: CloudBackupExclusiveOperationClaim) -> Self {
+        match (claim.operation(), claim.drive_account_switch_id()) {
+            (_, Some(transition_id)) => Self::DriveAccountSwitch(transition_id),
+            (CloudBackupExclusiveOperation::ReinitializeBackup, None) => Self::Reinitialize,
+            (_, None) => Self::Enable,
         }
     }
 
     /// The owner of work found paused in `body` at restart
     ///
-    /// A fresh Enable runs only while the backup is off and a reinitialize only on a configured
-    /// backup, so the body tells them apart
-    pub(crate) fn of_body(body: AdmissionBody) -> Self {
-        match body {
-            AdmissionBody::Configured => Self::Reinitialize,
-            AdmissionBody::Disabled
-            | AdmissionBody::Enabling
-            | AdmissionBody::Restoring
-            | AdmissionBody::FinishingDisable
-            | AdmissionBody::PendingEnableRecovery
-            | AdmissionBody::DriveAccountSwitch
-            | AdmissionBody::LoadFailed
-            | AdmissionBody::Corrupted
-            | AdmissionBody::Resetting => Self::Enable,
+    /// A fresh Enable runs only while the backup is off, a reinitialize only on a configured
+    /// backup, and a switch's reinitialize only in the recorded switch `switch` names
+    pub(crate) fn of_body(body: AdmissionBody, switch: Option<DriveAccountSwitchId>) -> Self {
+        match (body, switch) {
+            (AdmissionBody::DriveAccountSwitch, Some(transition_id)) => {
+                Self::DriveAccountSwitch(transition_id)
+            }
+            (AdmissionBody::Configured, _) => Self::Reinitialize,
+            (
+                AdmissionBody::Disabled
+                | AdmissionBody::Enabling
+                | AdmissionBody::Restoring
+                | AdmissionBody::FinishingDisable
+                | AdmissionBody::PendingEnableRecovery
+                | AdmissionBody::DriveAccountSwitch
+                | AdmissionBody::LoadFailed
+                | AdmissionBody::Corrupted
+                | AdmissionBody::Resetting,
+                _,
+            ) => Self::Enable,
         }
     }
 
@@ -414,7 +445,9 @@ impl ContinuationOwner {
     pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
         match self {
             Self::Enable => CloudBackupExclusiveOperation::Enable,
-            Self::Reinitialize => CloudBackupExclusiveOperation::ReinitializeBackup,
+            Self::Reinitialize | Self::DriveAccountSwitch(_) => {
+                CloudBackupExclusiveOperation::ReinitializeBackup
+            }
         }
     }
 
@@ -422,9 +455,10 @@ impl ContinuationOwner {
     fn owns(self, body: AdmissionBody) -> bool {
         match (self, body) {
             (Self::Enable, AdmissionBody::Disabled | AdmissionBody::PendingEnableRecovery)
-            | (Self::Reinitialize, AdmissionBody::Configured) => true,
+            | (Self::Reinitialize, AdmissionBody::Configured)
+            | (Self::DriveAccountSwitch(_), AdmissionBody::DriveAccountSwitch) => true,
             (
-                Self::Enable | Self::Reinitialize,
+                Self::Enable | Self::Reinitialize | Self::DriveAccountSwitch(_),
                 AdmissionBody::Disabled
                 | AdmissionBody::Enabling
                 | AdmissionBody::Restoring
@@ -488,6 +522,15 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
                     Coalesced(CoalescibleIntent::RepeatOfRunning(Op::DiscardPendingEnable))
                 }
                 (_, Some(running)) => Rejected(Rejection::OperationRunning(running)),
+                // a switch's reinitialize has no Discard: the platform staged the new account
+                // for it, and only the switch decides whether that account stays
+                (
+                    Some(PausedContinuation {
+                        owner: ContinuationOwner::DriveAccountSwitch(_),
+                        ..
+                    }),
+                    None,
+                ) => Rejected(Rejection::NothingToCancel),
                 (Some(_), None) => Accepted,
                 (None, None) => Rejected(Rejection::NothingToContinue),
             }
@@ -496,15 +539,18 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         // a full wipe is admitted from every body; only another reset closes it, above
         I::LocalReset => Accepted,
 
-        // a recorded switch, or a platform one Rust lost, can always be reconciled
-        I::RetryDriveAccountSwitchRecovery => match snapshot.body {
-            AdmissionBody::LoadFailed => Rejected(Rejection::LoadFailed),
-            _ => Accepted,
+        // a switch's Try Again and Cancel answer the step that failed; a switch that moves on
+        // its own needs neither
+        I::RetryDriveAccountSwitchRecovery => match snapshot.drive_account_switch {
+            SwitchAdmission::NeedsAttention { .. } => Accepted,
+            SwitchAdmission::None => Rejected(Rejection::NothingToContinue),
         },
         I::SwitchDriveAccount => configured_and_idle(snapshot, Some(Op::ReinitializeBackup)),
-        I::CancelDriveAccountSwitch => match snapshot.running {
-            Some(Op::ReinitializeBackup) => Accepted,
-            _ => Rejected(Rejection::NothingToCancel),
+        I::CancelDriveAccountSwitch => match snapshot.drive_account_switch {
+            SwitchAdmission::NeedsAttention { can_cancel: true } => Accepted,
+            SwitchAdmission::NeedsAttention { can_cancel: false } | SwitchAdmission::None => {
+                Rejected(Rejection::NothingToCancel)
+            }
         },
 
         // presentation intents answer prompts; their handlers own the prompt they answer
@@ -696,6 +742,8 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
 }
 
 /// A detail verification, which a Turn Off review's Verify First also starts
+///
+/// A verification is an operation, so a repeat while one runs joins it
 fn start_verification(snapshot: &AdmissionSnapshot) -> Admission {
     configured_and_idle(snapshot, Some(CloudBackupExclusiveOperation::Verify))
 }

@@ -214,7 +214,7 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Result<bool, CloudBackupError> {
-        let owner = ContinuationOwner::of(claim.operation());
+        let owner = ContinuationOwner::of(claim);
         let Some(ready) = self.take_ready_enable_upload(owner)? else {
             return Ok(false);
         };
