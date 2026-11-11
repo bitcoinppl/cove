@@ -1,3 +1,4 @@
+use cove_util::json::JsonDecodeError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -177,8 +178,10 @@ pub struct WalletEntry {
 
 impl WalletEntry {
     /// Deserializes a wallet entry and fills compatibility metadata for old payloads
-    pub fn from_json_slice(bytes: &[u8]) -> Result<Self, serde_json::Error> {
-        let mut entry: Self = serde_json::from_slice(bytes)?;
+    ///
+    /// The bytes are decrypted backup content, so a failure keeps only its category and position
+    pub fn from_json_slice(bytes: &[u8]) -> Result<Self, JsonDecodeError> {
+        let mut entry: Self = serde_json::from_slice(bytes).map_err(JsonDecodeError::from)?;
 
         if entry.content_revision_hash.is_empty() {
             entry.content_revision_hash = hex::encode(Sha256::digest(bytes));

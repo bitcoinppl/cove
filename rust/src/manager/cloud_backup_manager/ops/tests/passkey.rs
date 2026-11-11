@@ -1363,6 +1363,49 @@ async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
     assert!(error.to_string().contains("wallet files missing"), "{error}");
 }
 
+// a wallet entry that decrypts with the local key but fails to parse leaves the key proof
+// inconclusive, and the proof summary keeps only serde's category and position
+#[tokio::test(flavor = "current_thread")]
+async fn wrapper_repair_keeps_malformed_decrypted_values_out_of_logs() {
+    use crate::test_support::log_capture::LogCapture;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+
+    let marker = "private-user-text-in-wallet-entry";
+    let wallet = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(wallet.id.as_ref());
+    let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
+    entry["wallet_mode"] = serde_json::Value::from(marker);
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes_for_json(&entry, &master_key),
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+    let capture = LogCapture::start();
+    let error = manager.prepare_passkey_wrapper_repair_no_discovery().await.unwrap_err();
+    let logs = capture.text();
+
+    // failure messages never print the logs or the error, which would carry the marker
+    assert!(!logs.contains(marker), "key proof logs quote decrypted backup content");
+    assert!(!error.to_string().contains(marker), "error text quotes decrypted backup content");
+    assert!(logs.contains("decrypt_failed=1"), "key proof summary missing");
+    assert!(
+        logs.contains("first_error=deserialization failed: data error at line 1 column"),
+        "key proof cause missing"
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fails() {
     let _guard = async_test_lock().lock().await;

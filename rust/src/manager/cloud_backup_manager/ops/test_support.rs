@@ -1703,6 +1703,37 @@ pub(crate) fn encrypted_wallet_backup_bytes_for_entry(
     serde_json::to_vec(&encrypted).unwrap()
 }
 
+/// Encrypts wallet entry JSON as-is, so a test can upload decrypted content that fails to parse
+pub(crate) fn encrypted_wallet_backup_bytes_for_json(
+    entry_json: &serde_json::Value,
+    master_key: &cove_cspp::master_key::MasterKey,
+) -> Vec<u8> {
+    use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
+
+    let critical_key = zeroize::Zeroizing::new(master_key.critical_data_key());
+    let wallet_salt = [3; 32];
+    let nonce = [5; 12];
+    let wallet_key = zeroize::Zeroizing::new(cove_cspp::key_derivation::derive_wallet_key(
+        &critical_key,
+        &wallet_salt,
+    ));
+
+    let plaintext = serde_json::to_vec(entry_json).unwrap();
+    let ciphertext = ChaCha20Poly1305::new((&*wallet_key).into())
+        .encrypt((&nonce).into(), plaintext.as_slice())
+        .unwrap();
+
+    let encrypted = cove_cspp::backup_data::EncryptedWalletBackup {
+        version: 1,
+        remote_metadata: Default::default(),
+        wallet_salt,
+        nonce,
+        ciphertext,
+    };
+
+    serde_json::to_vec(&encrypted).unwrap()
+}
+
 pub(crate) fn sample_labels_jsonl() -> &'static str {
     r#"{"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","label":"last txn received","origin":"pkh([73c5da0a/44h/0h/0h])"}"#
 }

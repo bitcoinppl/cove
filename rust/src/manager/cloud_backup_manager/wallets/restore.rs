@@ -5,6 +5,7 @@ use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_util::ResultExt as _;
+use cove_util::json::JsonDecodeError;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -85,9 +86,13 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError> {
         match self.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => {
+                // the metadata is decrypted backup content, so only the parse position is kept
                 let metadata =
                     serde_json::from_value(entry.metadata.clone()).map_err(|source| {
-                        CloudBackupError::internal_context("parse wallet metadata", source)
+                        CloudBackupError::internal_context(
+                            "parse wallet metadata",
+                            JsonDecodeError::from(source),
+                        )
                     })?;
                 Ok(WalletBackupLookup::Found(DownloadedWalletBackup { metadata, entry }))
             }

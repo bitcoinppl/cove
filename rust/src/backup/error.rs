@@ -1,5 +1,6 @@
 use crate::wallet_identity::WalletIdentityError;
 use cove_types::WalletId;
+use cove_util::json::JsonDecodeError;
 use tracing::{error, warn};
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
@@ -129,22 +130,7 @@ impl BackupError {
     ///
     /// serde's message quotes the offending value, which here is decrypted backup content
     pub(crate) fn deserialization(context: &str, error: &serde_json::Error) -> Self {
-        use serde_json::error::Category;
-
-        let category = match error.classify() {
-            Category::Io => "I/O",
-            Category::Syntax => "syntax",
-            Category::Data => "data",
-            Category::Eof => "end of input",
-        };
-
-        // from_value errors have no source position
-        let message = match (error.line(), error.column()) {
-            (0, _) => format!("{context}: {category} error"),
-            (line, column) => format!("{context}: {category} error at line {line} column {column}"),
-        };
-
-        Self::Deserialization(message)
+        Self::Deserialization(format!("{context}: {}", JsonDecodeError::from(error)))
     }
 
     /// A stable variant name, safe to log
