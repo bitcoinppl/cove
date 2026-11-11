@@ -46,6 +46,23 @@ pub enum TransportError {
     UnknownError(String),
 }
 
+impl TransportError {
+    /// The failure without text taken from the card response, which is NFC payload data, for logs
+    pub(crate) fn log_summary(&self) -> String {
+        match self {
+            Self::CkTap(error) => format!("card rejected the command: {error}"),
+            Self::UnknownCardErrorCode { code, .. } => format!("unknown card error code {code}"),
+            Self::CiborDe(_) => "card response could not be decoded".to_string(),
+            Self::CiborValue(_) => "card value could not be represented".to_string(),
+            Self::Transport(_) => "card transport failed".to_string(),
+            Self::IncorrectSignature(_) => "card signature did not verify".to_string(),
+            Self::UnknownCardType(_) => "unsupported card type".to_string(),
+            Self::CvcChangeError(_) => "card CVC change failed".to_string(),
+            Self::UnknownError(_) => "unknown card error".to_string(),
+        }
+    }
+}
+
 /// Card errors defined by the CkTap protocol
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum CkTapError {
