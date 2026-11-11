@@ -99,6 +99,23 @@ final class CloudBackupHostControl {
         }
     }
 
+    /// Holds the next namespace delete made after this call, before the cloud deletes anything,
+    /// until `release(id)`
+    func holdNextNamespaceDelete(id: String) throws {
+        let deletesSoFar = state.count(.namespaceDelete)
+        try update {
+            $0.holds.append(.init(id: id, point: .namespaceDelete, matchingCallsToSkip: deletesSoFar))
+        }
+    }
+
+    /// Fails the namespace delete numbered `attempt`, counted from one across every launch
+    func failNamespaceDelete(
+        attempt: Int,
+        error: CloudBackupUITestScript.NamespaceDeleteError = .notAvailable
+    ) throws {
+        try update { $0.namespaceDeleteFailures.append(.init(attempt: attempt, error: error)) }
+    }
+
     /// Answers the next passkey assertions with `results`, whether the app authenticates with a
     /// known credential or discovers one; the last result repeats
     ///

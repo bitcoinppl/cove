@@ -8,8 +8,9 @@ import XCTest
 /// that wallet behind in the cloud
 final class CloudBackupDisableFullAppUITests: XCTestCase {
     private static let heldUpload = "new-wallet-upload"
+    private static let heldNamespaceDelete = "namespace-delete"
 
-    /// How long the disable must keep waiting on the held write before the test releases it
+    /// How long a test watches the cloud keep the backup before it moves on
     private static let heldWriteObservation: TimeInterval = 3
 
     private var app: XCUIApplication!
@@ -82,6 +83,41 @@ final class CloudBackupDisableFullAppUITests: XCTestCase {
         )
     }
 
+    /// Smoke test of the host's namespace delete seams: a held delete keeps the backup, and a
+    /// scripted failure of that attempt keeps it after the release
+    func testHeldNamespaceDeleteThenScriptedFailureKeepsTheBackup() throws {
+        let control = try CloudBackupHostControl(script: .init(cloud: .freshEnable, namespaceResults: [.empty]))
+        robot.launch(control: control)
+        robot.startFreshEnableFromOnboarding()
+        robot.finishOnboardingAfterCloudBackupEnabled()
+
+        control.releaseVisibility()
+        control.waitForAppState("the fresh backup never confirmed", timeout: 60) {
+            !$0.pendingUploadVerification && $0.verification == "verified"
+        }
+        let namespace = try XCTUnwrap(control.cloudNamespaces.first, "the enable wrote no backup")
+
+        try control.holdNextNamespaceDelete(id: Self.heldNamespaceDelete)
+        try control.failNamespaceDelete(attempt: 1)
+
+        robot.openSettings()
+        openCloudBackupDetailWhateverItsStatus()
+        control.waitForAppState("the detail never confirmed its inventory, which Disable needs") {
+            $0.detail == "complete" && $0.inventoryComplete
+        }
+        disableThroughBothConfirmations()
+
+        control.waitForHold(Self.heldNamespaceDelete)
+        XCTAssertEqual(control.state.count(.namespaceDelete), 1, "the held delete should be the first attempt")
+        assertBackupKept(control, namespace: namespace, while: "the namespace delete is held")
+
+        // the released attempt fails as scripted, so the cloud keeps the backup; Cove retries a
+        // failed Turn Off only after its retry delay, which outlasts this observation
+        control.release(Self.heldNamespaceDelete)
+        assertBackupKept(control, namespace: namespace, while: "the released delete failed")
+        XCTAssertEqual(control.state.count(.namespaceDelete), 1, "the failed delete was retried at once")
+    }
+
     // MARK: - Steps
 
     /// Opens Cloud Backup detail from Settings by the configured row, whose title follows the
@@ -107,6 +143,17 @@ final class CloudBackupDisableFullAppUITests: XCTestCase {
         let finalConfirmation = app.alerts["Delete Cloud Backups?"]
         XCTAssertTrue(finalConfirmation.waitForExistence(timeout: 10), "the final disable confirmation never showed")
         finalConfirmation.buttons["Delete Cloud Backups and Disable"].tap()
+    }
+
+    /// The cloud keeps the backup and the app stays enabled for a while
+    private func assertBackupKept(_ control: CloudBackupHostControl, namespace: String, while situation: String) {
+        let deadline = Date().addingTimeInterval(Self.heldWriteObservation)
+        while Date() < deadline {
+            XCTAssertEqual(control.cloudNamespaces, [namespace], "the backup disappeared while \(situation)")
+            XCTAssertNotEqual(control.appState?.lifecycle, "disabled", "Cloud Backup turned off while \(situation)")
+
+            Thread.sleep(forTimeInterval: 0.2)
+        }
     }
 
     /// The disable keeps waiting on the held write for a while, deleting nothing

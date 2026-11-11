@@ -104,6 +104,9 @@ struct CloudBackupUITestScript: Codable, Equatable {
         /// Before the keychain deletes the pending enable journal, the last step of an enable's
         /// local promotion, after the new master key and passkey are committed
         case pendingEnableJournalDelete
+        /// When `deleteNamespace` is called, before the cloud deletes anything or fails it as
+        /// scripted; skipped calls count every namespace delete
+        case namespaceDelete
     }
 
     /// A call that waits until the test creates `release-<id>`
@@ -128,6 +131,21 @@ struct CloudBackupUITestScript: Codable, Equatable {
         var kind: UploadKind
         var attempt: Int
         var error: ProviderError
+    }
+
+    /// How a scripted namespace delete fails
+    enum NamespaceDeleteError: String, Codable {
+        case offline
+        case notAvailable
+        /// The provider wants the user to sign in again, such as an expired Google Drive grant
+        case authorizationRequired
+    }
+
+    /// Fails one namespace delete call, counted from one across every launch, after any hold on
+    /// it is released; the cloud keeps the backup
+    struct NamespaceDeleteFailure: Codable, Equatable {
+        var attempt: Int
+        var error: NamespaceDeleteError
     }
 
     /// Fails every master key backup download after the first `callsToSkip` across every
@@ -162,6 +180,7 @@ struct CloudBackupUITestScript: Codable, Equatable {
 
     var holds: [Hold] = []
     var uploadFailures: [UploadFailure] = []
+    var namespaceDeleteFailures: [NamespaceDeleteFailure] = []
     var masterDownloadFailure: MasterDownloadFailure?
 
     /// Failures for the fixture cloud's uploads of wallets the fixture doesn't hold, such as one
@@ -241,7 +260,8 @@ enum CloudBackupUITestCall: Equatable {
     /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
     case newWalletUpload
     case uploadStatus(recordId: String)
-    /// A namespace deletion, which disabling Cloud Backup makes once its writes have drained
+    /// A namespace delete call, which disabling Cloud Backup makes once its writes have drained,
+    /// counted whether it is held, fails as scripted or deletes the backup
     case namespaceDelete
     case passkeyCreate
     case passkeyAuthenticate

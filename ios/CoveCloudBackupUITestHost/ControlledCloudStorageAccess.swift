@@ -166,7 +166,14 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
         try throwIfOffline()
-        controller.record(.namespaceDelete)
+        let attempt = controller.record(.namespaceDelete) + 1
+
+        // a hold keeps the delete in flight, so a test can check what the app allows meanwhile
+        await controller.holdIfScripted(at: .namespaceDelete, matchingCallIndex: attempt - 1)
+        if let failure = controller.script().namespaceDeleteFailures.first(where: { $0.attempt == attempt }) {
+            throw Self.storageError(failure.error)
+        }
+
         store.deleteNamespace(namespace)
     }
 
@@ -343,6 +350,14 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         case .offline: .Offline("scripted provider is offline")
         case .notAvailable: .NotAvailable("scripted provider is unavailable")
         case .quotaExceeded: .QuotaExceeded
+        }
+    }
+
+    private static func storageError(_ failure: CloudBackupUITestScript.NamespaceDeleteError) -> CloudStorageError {
+        switch failure {
+        case .offline: .Offline("scripted provider is offline")
+        case .notAvailable: .NotAvailable("scripted namespace delete failure")
+        case .authorizationRequired: .AuthorizationRequired("scripted authorization failure")
         }
     }
 

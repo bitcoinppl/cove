@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.testconfig
 
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.FixtureWalletDownloadResult
+import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.NamespaceDeleteError
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.NamespaceResult
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Result
@@ -251,6 +252,43 @@ class ScriptedProviderTest {
             )
             assertEquals(listOf(namespace), ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT))
         }
+
+    @Test
+    fun namespaceDeleteFailsByAttemptAndWaitsOnAHoldUntilReleased() {
+        val namespace = ScriptedCloudBackupFixture.NAMESPACE
+        ScriptedCloudStorageAccess.configureProductionFixtureRestore()
+        ScriptedCloudStorageAccess.failNamespaceDelete(attempt = 1, NamespaceDeleteError.AUTHORIZATION_REQUIRED)
+
+        val failed =
+            runCatching {
+                runBlocking { ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT) }
+            }.exceptionOrNull()
+        assertTrue(failed is CloudStorageException.AuthorizationRequired)
+        assertEquals(
+            listOf(namespace),
+            runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) },
+        )
+
+        ScriptedCloudStorageAccess.holdNextNamespaceDelete()
+        val delete =
+            Thread {
+                runBlocking { ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT) }
+            }
+        delete.start()
+
+        assertTrue(ScriptedCloudStorageAccess.awaitHeldNamespaceDelete())
+        assertTrue(delete.isAlive)
+        assertEquals(
+            listOf(namespace),
+            runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) },
+        )
+
+        ScriptedCloudStorageAccess.releaseHeldNamespaceDelete()
+        delete.join()
+
+        assertTrue(runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) }.isEmpty())
+        assertEquals(2, ScriptedCloudStorageAccess.namespaceDeleteCount())
+    }
 
     private fun ByteArray.sha256(): String =
         MessageDigest

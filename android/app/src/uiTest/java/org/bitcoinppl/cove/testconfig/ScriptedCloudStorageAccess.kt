@@ -102,7 +102,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private val uploads = CopyOnWriteArrayList<Upload>()
 
     @Volatile
-    private var walletUploadBlock: WalletUploadBlock? = null
+    private var walletUploadBlock: AttemptHold? = null
+
+    private val namespaceDeleteFailures = CopyOnWriteArrayList<NamespaceDeleteFailure>()
+
+    @Volatile
+    private var namespaceDeleteHold: AttemptHold? = null
 
     // the fixture's namespace is built in, so deleting it leaves this mark until a master key
     // upload recreates it, as the iOS host's deleted-namespace marker does
@@ -138,6 +143,26 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val error: UploadError,
     )
 
+    /** How a scripted namespace delete fails */
+    enum class NamespaceDeleteError {
+        OFFLINE,
+        NOT_AVAILABLE,
+        AUTHORIZATION_REQUIRED,
+        ;
+
+        fun exception(): CloudStorageException =
+            when (this) {
+                OFFLINE -> CloudStorageException.Offline("scripted provider is offline")
+                NOT_AVAILABLE -> CloudStorageException.NotAvailable("scripted namespace delete failure")
+                AUTHORIZATION_REQUIRED -> CloudStorageException.AuthorizationRequired("scripted authorization failure")
+            }
+    }
+
+    private data class NamespaceDeleteFailure(
+        val attempt: Int,
+        val error: NamespaceDeleteError,
+    )
+
     /** One upload the app asked the provider to store, with [recordId] null for the master key */
     data class Upload(
         val kind: UploadKind,
@@ -146,11 +171,19 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val accepted: Boolean,
     )
 
-    private class WalletUploadBlock(
+    /** Parks the call numbered [attempt] of one kind until the test releases it */
+    private class AttemptHold(
         val attempt: Int,
     ) {
         val entered = CountDownLatch(1)
         val release = CompletableDeferred<Unit>()
+
+        suspend fun enterIfClaimedBy(call: Int) {
+            if (call != attempt) return
+
+            entered.countDown()
+            release.await()
+        }
     }
 
     fun attach(context: Context): CloudStorageAccess {
@@ -280,8 +313,36 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
      */
     fun mostUploadStatusChecksOfOneRecord(): Int = uploadStatusChecks.values.maxOfOrNull { it.get() } ?: 0
 
-    /** Namespace deletes either cloud was asked to make */
+    /** Namespace deletes either cloud was asked to make, failed or held ones included */
     fun namespaceDeleteCount(): Int = namespaceDeletes.get()
+
+    /**
+     * Fails the namespace delete numbered [attempt], counted from one since the scenario was
+     * configured, after any hold on it is released; the cloud keeps the backup
+     */
+    fun failNamespaceDelete(
+        attempt: Int,
+        error: NamespaceDeleteError = NamespaceDeleteError.NOT_AVAILABLE,
+    ) {
+        require(attempt > 0) { "namespace delete attempts are one-based" }
+        namespaceDeleteFailures += NamespaceDeleteFailure(attempt, error)
+    }
+
+    /**
+     * Holds the next namespace delete before the cloud deletes anything, until
+     * [releaseHeldNamespaceDelete], so a test can check what the app allows while it is in flight
+     */
+    fun holdNextNamespaceDelete() {
+        namespaceDeleteHold?.release?.complete(Unit)
+        namespaceDeleteHold = AttemptHold(attempt = namespaceDeletes.get() + 1)
+    }
+
+    fun awaitHeldNamespaceDelete(timeoutMs: Long = 20_000): Boolean =
+        namespaceDeleteHold?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseHeldNamespaceDelete() {
+        namespaceDeleteHold?.release?.complete(Unit)
+    }
 
     fun walletListCount(): Int = walletLists.get()
 
@@ -477,7 +538,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
      * action made it
      */
     fun blockNextWalletUpload() {
-        walletUploadBlock = WalletUploadBlock(attempt = walletUploads.get() + 1)
+        walletUploadBlock = AttemptHold(attempt = walletUploads.get() + 1)
     }
 
     fun awaitBlockedWalletUpload(timeoutMs: Long = 20_000): Boolean =
@@ -761,10 +822,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ) {
         val attempt = walletUploads.incrementAndGet()
         recordUpload(UploadKind.WALLET, attempt, namespace, recordId)
-        walletUploadBlock?.takeIf { it.attempt == attempt }?.let { block ->
-            block.entered.countDown()
-            block.release.await()
-        }
+        walletUploadBlock?.enterIfClaimedBy(attempt)
 
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
@@ -799,6 +857,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         uploads.clear()
         walletUploadBlock?.release?.complete(Unit)
         walletUploadBlock = null
+        namespaceDeleteFailures.clear()
+        namespaceDeleteHold?.release?.complete(Unit)
+        namespaceDeleteHold = null
     }
 
     /** Records the upload, and throws the scripted failure when one fails this attempt */
@@ -941,7 +1002,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy,
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
-        namespaceDeletes.incrementAndGet()
+        val attempt = namespaceDeletes.incrementAndGet()
+        namespaceDeleteHold?.enterIfClaimedBy(attempt)
+        namespaceDeleteFailures.firstOrNull { it.attempt == attempt }?.let { throw it.error.exception() }
 
         val scenario = freshEnableScenario
         if (scenario != null) {
