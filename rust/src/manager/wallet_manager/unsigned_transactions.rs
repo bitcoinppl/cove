@@ -4,7 +4,9 @@ use act_zero::send;
 use tracing::{debug, error, warn};
 
 use crate::{
-    database::Database,
+    database::{
+        Database, error::DatabaseError, unsigned_transactions::UnsignedTransactionsTableError,
+    },
     transaction::{TxId, unsigned_transaction::UnsignedTransaction},
 };
 use cove_types::confirm::ConfirmDetails;
@@ -80,7 +82,16 @@ impl RustWalletManager {
         let db = Database::global();
 
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref()).map_err(|error| {
-            error!("failed to delete unsigned transaction: {error}");
+            // a draft already deleted by another screen is a user race, not a storage fault
+            match &error {
+                DatabaseError::UnsignedTransactions(
+                    UnsignedTransactionsTableError::NoRecordFound,
+                ) => {
+                    warn!("unsigned transaction to delete was already gone");
+                }
+                _ => error!("failed to delete unsigned transaction: {error}"),
+            }
+
             Error::DeleteUnsignedTransactionError(error)
         })?;
 

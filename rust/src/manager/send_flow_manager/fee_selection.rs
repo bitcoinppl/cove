@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
-use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
+use crate::{
+    fee_client::FEE_CLIENT, manager::wallet_manager::WalletManagerError, transaction::FeeRate,
+    wallet::Address,
+};
 
 use cove_types::{
     amount::Amount,
@@ -210,6 +213,16 @@ impl RustSendFlowManager {
 
         let mut fee_rate_options = match new_fee_rate_options {
             Ok(Ok(fee_rate_options)) => fee_rate_options,
+            // an amount below dust or above the spendable balance is an input state the screen
+            // shows, and its message changes with every keystroke, so it is not a failure
+            Ok(Err(WalletManagerError::OutputBelowDustLimit)) => {
+                return debug!("send flow fees unavailable: amount below dust limit");
+            }
+
+            Ok(Err(WalletManagerError::InsufficientFunds(_))) => {
+                return debug!("send flow fees unavailable: insufficient funds");
+            }
+
             Ok(Err(error)) => {
                 return self.record_fee_failure(Some(format!("unable to calculate fees: {error}")));
             }
