@@ -963,9 +963,9 @@ asks for consent instead.
 
 A row delete removes one listed backup record: Delete Cloud Wallet removes one
 row, and Delete Undecryptable removes the records the configured key couldn't
-decrypt. Each delete runs under a `DeleteAuthorization`. Only the inventory's
-`DeleteAuthority` can create one, and the lane checks it again right before the
-delete runs.
+decrypt. Each delete runs under a `DeleteAuthorization`. Only `DeleteAuthority`
+can create one, the supervisor holds the only authority, created at bootstrap,
+and the lane checks the authorization again right before the delete runs.
 
 ### What each row may delete
 
@@ -994,13 +994,14 @@ enough, because another device may have removed or replaced that backup since.
 
 ### Authorization
 
-The authority mints an authorization in the same supervisor turn that starts the
-delete operation, from a `DeleteView` that the inventory owner gives under
-one lock. The view holds:
+Delete Cloud Wallet's authorization is minted in the supervisor turn that starts
+the delete operation. Delete Undecryptable's is minted in the turn that receives
+the batch's read, before anything is deleted. Both come from a `DeleteView` that
+the inventory owner gives under one lock. The view holds:
 
 - the active namespace
-- the listing generation, which every new listing, invalidation, or local
-  wallet change bumps
+- the listing generation, which a listing with a different set of records, an
+  invalidation, or a local wallet change bumps
 - where the inventory was read (`InventoryReadAt`): its configuration scope,
   and the local wallets epoch, which every local wallet change bumps
 - the configuration generation
@@ -1008,9 +1009,10 @@ one lock. The view holds:
   read under the latest listing
 
 Every record must be deletable, and all of them must fall into one category. A
-refusal finishes the operation with the row's remedy as its message, and
-nothing reaches the lane. Rows that an invalidation left on screen authorize
-nothing until a fetch reads them again.
+refusal finishes the operation and sends nothing to the lane. Its message is the
+row's remedy (back up first, verify, or check again), or, for a record the
+inventory no longer lists, that the backup changed and to check again. Rows that
+an invalidation left on screen authorize nothing until a fetch reads them again.
 
 The screen draws each row's Delete from the same view, read through the same
 rule, in the supervisor turn that projects it. A row offers Delete only where
@@ -1039,11 +1041,17 @@ the configuration. Then it reads the local wallets and the cloud records. The
 inventory owner keeps what it read only if the listing hasn't changed since, so
 a wallet imported during the read can't leave its own backup named as
 unreadable. The view trusts the read only under the configuration it was made
-under. The authority then mints one authorization for exactly those records. The batch deletes only those records, in record order, and
-reads each one again first, skipping a record that now decrypts. Each delete is
-checked at the lane like any row delete. The batch stops at the first stale
-target or failure and reports how many records it removed. Records it hadn't
-reached stay.
+under. The authority then mints one authorization for exactly those records,
+and only from that read: a read the owner dropped, or a record a later fetch
+classified as anything but undecryptable, authorizes nothing. A fetch's parse
+failure keeps its class, since the read found only decrypt failures. The batch
+deletes only those records, in record order, and reads each one again first,
+skipping a record that now decrypts. Each delete is checked at the lane like any
+row delete. The batch stops at the first stale target or failure: the records
+it already removed stay removed, and the records it hadn't reached stay. A stale target shows that the backup changed and asks to
+check again. A finished batch, or one that found nothing to delete, verifies
+again. A batch never grows: a record found after its authorization needs a new
+one.
 
 ## Verification And Recovery
 

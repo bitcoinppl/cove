@@ -266,3 +266,27 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests check that a row whose wallet is on this device waits until a read finds that wallet's own backup current in the cloud, even when its sync row once said confirmed, and that a delete queued behind a write deletes nothing once its wallet is back on the device
 # ui tests on both apps open the second of two cloud-only rows, check that the action sheet and Delete Forever confirmation name it, cancel without deleting, then delete it and check that scripted cloud storage deleted only its record at exactly its current and legacy locations, and that once the inventory refresh after the delete is applied the row is gone while the other cloud-only row and the local wallet stay; the real iCloud and Google Drive providers' delete calls are not exercised
+
+[[row]]
+id = "s05-cloud-row-delete-refused-when-the-backup-changed"
+section = "5"
+title = "Cloud row delete refused when the backup changed"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_seed_backup_only_a_watch_only_wallet_matches_may_be_the_only_copy",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::rows_an_invalidation_left_on_screen_offer_and_authorize_no_delete",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::row_delete_waits_for_the_write_in_flight",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_authorization_for_a_record_that_left_and_came_back_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_of_a_record_already_gone_completes",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_whose_relist_fails_still_removes_the_row",
+    "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::a_row_delete_trusted_under_an_earlier_configuration_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_whose_inventory_changed_partway_keeps_the_rest",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_deletes_only_the_confirmed_records_still_undecryptable",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_a_later_read_finds_readable_is_not_authorized",
+]
+# rust tests check that a seed backup a watch-only wallet matches still counts as possibly the only copy, that rows an invalidation left on screen offer no Delete and authorize nothing until a fetch reads them again, that a delete queued behind a write, or one whose record left and came back, or one trusted under an earlier configuration deletes nothing, that a record already gone or a failed relist still completes the delete, that an undecryptable batch stops at the first changed record and keeps the rest, that a batch deletes only the confirmed records still undecryptable when it runs, and that a batch never deletes a record a later fetch reads
