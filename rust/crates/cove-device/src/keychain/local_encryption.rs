@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use cove_util::{ResultExt as _, encryption::Cryptor};
 
 use super::{
-    KeychainError, SharedAccess,
+    KeychainError, SavedValueParseError, SharedAccess,
     encrypted_pair::{EncryptedPair, State},
 };
 
@@ -39,12 +39,9 @@ impl LocalEncryptionKeyStore {
 
         let cryptor = Cryptor::try_from_string(&cryptor_str).map_err_str(KeychainError::Decrypt)?;
         let hex = cryptor.decrypt_from_string(&encrypted).map_err_str(KeychainError::Decrypt)?;
-        let decoded =
-            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(KeychainError::ParseSavedValue)?);
-        let bytes = decoded
-            .as_slice()
-            .try_into()
-            .map_err(|_| KeychainError::ParseSavedValue("not 32 bytes".into()))?;
+        let parse_error = KeychainError::ParseSavedValue(SavedValueParseError::LocalEncryptionKey);
+        let decoded = Zeroizing::new(hex::decode(hex.as_str()).map_err(|_| parse_error.clone())?);
+        let bytes = decoded.as_slice().try_into().map_err(|_| parse_error)?;
 
         Ok(Some(bytes))
     }

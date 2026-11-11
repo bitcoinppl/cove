@@ -52,7 +52,7 @@ pub enum KeychainError {
 
     /// A stored value could not be parsed
     #[error("unable to parse saved value: {0}")]
-    ParseSavedValue(String),
+    ParseSavedValue(SavedValueParseError),
 
     /// A value could not be encrypted
     #[error("unable to encrypt: {0}")]
@@ -69,6 +69,43 @@ pub enum KeychainError {
     /// A complete wallet secret already exists
     #[error("wallet secret already exists")]
     WalletSecretExists,
+}
+
+/// Which saved keychain value could not be parsed
+///
+/// The parser errors quote the saved text, which is key material or a descriptor, so only the
+/// value's role is kept
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+pub enum SavedValueParseError {
+    #[error("invalid xpub")]
+    Xpub,
+
+    #[error("missing external descriptor")]
+    MissingExternalDescriptor,
+
+    #[error("missing internal descriptor")]
+    MissingInternalDescriptor,
+
+    #[error("invalid external descriptor")]
+    ExternalDescriptor,
+
+    #[error("invalid internal descriptor")]
+    InternalDescriptor,
+
+    #[error("invalid mnemonic")]
+    Mnemonic,
+
+    #[error("invalid extended private key")]
+    Xpriv,
+
+    #[error("unknown wallet secret type")]
+    UnknownWalletSecretType,
+
+    #[error("invalid local encryption key")]
+    LocalEncryptionKey,
+
+    #[error("invalid TAPSIGNER backup")]
+    TapSignerBackup,
 }
 
 /// Platform access to secure key-value storage

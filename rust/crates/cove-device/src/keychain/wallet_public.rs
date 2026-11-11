@@ -5,7 +5,7 @@ use bitcoin::bip32::Xpub;
 
 use cove_types::WalletId;
 
-use super::{KeychainError, SharedAccess};
+use super::{KeychainError, SavedValueParseError, SharedAccess};
 
 #[derive(Debug, Clone)]
 pub(crate) struct WalletPublicDataStore(SharedAccess);
@@ -24,12 +24,8 @@ impl WalletPublicDataStore {
             return Ok(None);
         };
 
-        let xpub = Xpub::from_str(&value).map_err(|error| {
-            KeychainError::ParseSavedValue(format!(
-                "Unable to parse saved xpub, something went wrong \
-                 with saving, this should not happen {error}"
-            ))
-        })?;
+        let xpub = Xpub::from_str(&value)
+            .map_err(|_| KeychainError::ParseSavedValue(SavedValueParseError::Xpub))?;
 
         Ok(Some(xpub))
     }
@@ -56,20 +52,20 @@ impl WalletPublicDataStore {
         };
 
         let mut lines = value.lines();
-        let external = lines.next().ok_or_else(|| {
-            KeychainError::ParseSavedValue("missing external descriptor".to_string())
+        let external = lines.next().ok_or(KeychainError::ParseSavedValue(
+            SavedValueParseError::MissingExternalDescriptor,
+        ))?;
+
+        let internal = lines.next().ok_or(KeychainError::ParseSavedValue(
+            SavedValueParseError::MissingInternalDescriptor,
+        ))?;
+
+        let external = ExtendedDescriptor::from_str(external).map_err(|_| {
+            KeychainError::ParseSavedValue(SavedValueParseError::ExternalDescriptor)
         })?;
 
-        let internal = lines.next().ok_or_else(|| {
-            KeychainError::ParseSavedValue("missing internal descriptor".to_string())
-        })?;
-
-        let external = ExtendedDescriptor::from_str(external).map_err(|error| {
-            KeychainError::ParseSavedValue(format!("invalid external descriptor: {error}"))
-        })?;
-
-        let internal = ExtendedDescriptor::from_str(internal).map_err(|error| {
-            KeychainError::ParseSavedValue(format!("invalid internal descriptor: {error}"))
+        let internal = ExtendedDescriptor::from_str(internal).map_err(|_| {
+            KeychainError::ParseSavedValue(SavedValueParseError::InternalDescriptor)
         })?;
 
         Ok(Some((external, internal)))
@@ -105,4 +101,50 @@ fn xpub_key_name(id: &WalletId) -> String {
 
 fn descriptor_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_public_descriptor")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use bdk_wallet::descriptor::ExtendedDescriptor;
+
+    use crate::keychain::test_support::{MockKeychain, keychain, wallet_id};
+    use crate::keychain::{KeychainError, SavedValueParseError};
+
+    const XPUB: &str = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+
+    // the descriptor and xpub parsers quote the saved text, which must not reach the error
+    #[test]
+    fn unparseable_saved_values_name_the_value_without_quoting_it() {
+        let id = wallet_id();
+        let descriptor_key = format!("{id}::wallet_public_descriptor");
+        let xpub_key = format!("{id}::wallet_xpub");
+        let bare_xpub_line = format!("{XPUB}\nwpkh({XPUB}/1/*)");
+        let truncated_xpub = &XPUB[..XPUB.len() - 1];
+        let access = MockKeychain::with_entries(&[
+            (descriptor_key.as_str(), bare_xpub_line.as_str()),
+            (xpub_key.as_str(), truncated_xpub),
+        ]);
+        let keychain = keychain(access);
+
+        // the fixture must make the parsers echo the saved text, or the checks below prove nothing
+        let raw_descriptor_error = ExtendedDescriptor::from_str(XPUB).unwrap_err().to_string();
+        assert!(raw_descriptor_error.contains(truncated_xpub), "{raw_descriptor_error}");
+
+        let descriptor_error = keychain.get_public_descriptor(&id).unwrap_err();
+        let xpub_error = keychain.get_wallet_xpub(&id).unwrap_err();
+
+        assert_eq!(
+            descriptor_error,
+            KeychainError::ParseSavedValue(SavedValueParseError::ExternalDescriptor)
+        );
+        assert_eq!(xpub_error, KeychainError::ParseSavedValue(SavedValueParseError::Xpub));
+
+        for error in [descriptor_error, xpub_error] {
+            for text in [error.to_string(), format!("{error:?}")] {
+                assert!(!text.contains(truncated_xpub), "{text}");
+            }
+        }
+    }
 }
