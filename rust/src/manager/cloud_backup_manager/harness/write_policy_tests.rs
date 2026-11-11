@@ -14,6 +14,7 @@ use super::{
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::actors::write::{CloudBackupWriteClient, Decision};
 use crate::manager::cloud_backup_manager::admission::PauseReason;
+use crate::manager::cloud_backup_manager::wallets::WalletUpload;
 use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupManagerAction};
 
 /// Submits one background upload under `client` and waits for the lane's answer
@@ -26,7 +27,8 @@ fn upload(
     let record = record.to_string();
     app.block_on("the background upload's answer", async move {
         let cloud = CloudStorage::global_explicit_client();
-        client.upload_wallet_backup(cloud, namespace, record, vec![1, 2, 3]).await
+        let upload = WalletUpload::opaque_for_test(record, vec![1, 2, 3]);
+        client.upload_wallet_backup(cloud, namespace, upload).await.map(drop)
     })
 }
 

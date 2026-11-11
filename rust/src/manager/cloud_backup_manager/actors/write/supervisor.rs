@@ -33,6 +33,7 @@ use super::worker::{
 use crate::manager::cloud_backup_manager::owner::delete_authorization::{
     DeleteAuthorization, StaleTarget,
 };
+use crate::manager::cloud_backup_manager::wallets::WalletUpload;
 
 pub(crate) type CloudBackupWriteResultReceiver<T> =
     oneshot::Receiver<CloudBackupWriteCommandResult<T>>;
@@ -42,6 +43,8 @@ pub(crate) type CloudBackupWriteResultReceiver<T> =
 pub(crate) enum LaneOutput {
     Done,
     RowDelete(RowDeleteReport),
+    /// A wallet upload wrote nothing, so its local completion was not applied
+    KeptKeyMaterial,
 }
 
 /// Monotonic identifier for commands accepted by the write supervisor
@@ -458,6 +461,12 @@ impl CloudBackupWriteSupervisor {
         } else {
             match (self.ensure_current(&active.class), result) {
                 (Err(error), _) => Err(error),
+
+                // nothing was written, so there is no local state to record
+                (Ok(()), Ok(CloudBackupRemoteWriteResult::KeptKeyMaterial)) => {
+                    Ok(LaneOutput::KeptKeyMaterial)
+                }
+
                 (Ok(()), Ok(output)) => self.apply_local_completion(&active, output).await,
                 (Ok(()), Err(error)) => Err(error),
             }
@@ -594,20 +603,20 @@ impl CloudBackupWriteSupervisor {
         Ok(())
     }
 
+    /// Uploads one wallet record, unless at execution it would replace key material
     pub(crate) async fn upload_wallet_backup(
         &mut self,
         class: CommandClass,
         cloud: CloudStorageClient,
         namespace: String,
-        record_id: String,
-        data: Vec<u8>,
+        upload: WalletUpload,
         completion: Option<CloudBackupWriteCompletion>,
     ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let completion = completion
             .map_or(CloudBackupWriteLocalCompletion::None, CloudBackupWriteLocalCompletion::Apply);
         let receiver = self.submit(
             class,
-            CloudBackupRemoteWriteCommand::UploadWallet { cloud, namespace, record_id, data },
+            CloudBackupRemoteWriteCommand::UploadWallet { cloud, namespace, upload },
             completion,
         );
         Produces::ok(receiver)

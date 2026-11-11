@@ -49286,7 +49286,12 @@ enum class CloudBackupWalletStatus {
      */
     ALREADY_ON_DEVICE,
     UNSUPPORTED_VERSION,
-    REMOTE_STATE_UNKNOWN;
+    REMOTE_STATE_UNKNOWN,
+    /**
+     * The cloud copy holds this wallet's key or TAPSIGNER backup and this device doesn't, so the
+     * copy is kept as it is and uploads from this device leave it unchanged
+     */
+    SECRET_MISSING_LOCALLY;
 
 
 

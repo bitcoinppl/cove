@@ -261,6 +261,29 @@ struct MockCloudState {
     dirty_wallet_on_next_backup_check: Option<WalletId>,
     download_requests: Vec<MockCloudDownloadRequest>,
     uploads: Vec<MockCloudUpload>,
+    explicit_missing_record_lookup: MockMissingRecordLookup,
+}
+
+/// How a consent-allowed download answers for a record the provider doesn't hold
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum MockMissingRecordLookup {
+    /// `NotFound` at once, as Google Drive and the silent iOS client answer
+    #[default]
+    NotFound,
+    /// `SyncPending`, as iOS's consent-allowed lookup ends once it stops waiting for the record
+    /// to sync; the fake answers at once instead of after the wait
+    SyncPending,
+}
+
+impl MockMissingRecordLookup {
+    fn missing(self, policy: CloudAccessPolicy, path: String) -> CloudStorageError {
+        match (self, policy) {
+            (Self::SyncPending, CloudAccessPolicy::ConsentAllowed) => {
+                CloudStorageError::SyncPending(path)
+            }
+            _ => CloudStorageError::NotFound(path),
+        }
+    }
 }
 
 /// A file the provider accepted, at the path it was asked to write
@@ -630,6 +653,12 @@ impl MockCloudStorage {
             Some(CloudStorageError::NotFound(message.into()));
     }
 
+    /// Answers consent-allowed downloads of missing records the way iOS does, until the next
+    /// reset
+    pub(crate) fn set_explicit_missing_record_lookup(&self, lookup: MockMissingRecordLookup) {
+        self.state.lock().explicit_missing_record_lookup = lookup;
+    }
+
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
         self.state.lock().reflect_uploaded_wallets_in_listing = enabled;
     }
@@ -841,7 +870,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
-        _policy: CloudAccessPolicy,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let gate = {
             let mut state = self.state.lock();
@@ -869,11 +898,12 @@ impl CloudStorageAccess for MockCloudStorage {
             if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
                 Err(error)
             } else {
+                let lookup = state.explicit_missing_record_lookup;
                 state
                     .master_key_backups
                     .get(&namespace)
                     .cloned()
-                    .ok_or(CloudStorageError::NotFound(namespace))
+                    .ok_or_else(|| lookup.missing(policy, namespace))
             }
         };
 
@@ -955,12 +985,14 @@ impl CloudStorageAccess for MockCloudStorage {
             return Ok(backup);
         }
 
-        self.state
-            .lock()
-            .wallet_backups
-            .get(&(namespace.clone(), record_id.clone()))
-            .cloned()
-            .ok_or(CloudStorageError::NotFound(format!("{namespace}/{record_id}")))
+        let state = self.state.lock();
+        state.wallet_backups.get(&(namespace.clone(), record_id.clone())).cloned().ok_or_else(
+            || {
+                state
+                    .explicit_missing_record_lookup
+                    .missing(policy, format!("{namespace}/{record_id}"))
+            },
+        )
     }
 
     async fn delete_wallet_backup(

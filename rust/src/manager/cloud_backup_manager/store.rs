@@ -1,15 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
-use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_types::network::Network;
 use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use strum::IntoEnumIterator as _;
 
-use super::actors::CloudBackupWriteClient;
+use super::actors::{CloudBackupWriteClient, WalletUploadOutcome};
 use super::cloud_inventory::LocalWalletSnapshot;
-use super::wallets::{BackupSecret, PreparedWalletBackup, prepare_wallet_backup};
+use super::wallets::{BackupSecret, PreparedWalletBackup, WalletUpload, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBlobSyncState;
@@ -81,39 +79,22 @@ impl CloudBackupStore {
         let wallets = self.all_wallets()?;
         let total = completed_before_wallets.saturating_add(wallets.len() as u32);
         let mut uploaded_wallets = Vec::new();
-        report_progress(CloudBackupProgress { completed: completed_before_wallets, total });
+        let mut completed = completed_before_wallets;
+        report_progress(CloudBackupProgress { completed, total });
 
         for metadata in wallets {
             let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
-            let remote_metadata = RemotePayloadMetadata::wallet(
-                namespace,
-                &prepared.record_id,
-                prepared.entry.wallet_id.as_str(),
-                prepared.entry.updated_at,
-            );
-            let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
-                &prepared.entry,
-                critical_key,
-                remote_metadata,
-            )
-            .map_err(CloudBackupError::crypto)?;
+            let upload = WalletUpload::encrypt(&prepared, namespace, critical_key)?;
 
-            let wallet_json = serde_json::to_vec(&encrypted).map_err(CloudBackupError::internal)?;
+            // a wallet whose cloud copy kept its key material isn't recorded as uploaded
+            let outcome =
+                writes.upload_wallet_backup(cloud.clone(), namespace.to_string(), upload).await?;
+            if outcome == WalletUploadOutcome::Uploaded {
+                uploaded_wallets.push(prepared);
+            }
 
-            writes
-                .upload_wallet_backup(
-                    cloud.clone(),
-                    namespace.to_string(),
-                    prepared.record_id.clone(),
-                    wallet_json,
-                )
-                .await?;
-
-            uploaded_wallets.push(prepared);
-            report_progress(CloudBackupProgress {
-                completed: completed_before_wallets.saturating_add(uploaded_wallets.len() as u32),
-                total,
-            });
+            completed = completed.saturating_add(1);
+            report_progress(CloudBackupProgress { completed, total });
         }
 
         Ok(uploaded_wallets)

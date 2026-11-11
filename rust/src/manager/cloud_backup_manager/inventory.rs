@@ -339,7 +339,10 @@ fn own_row(wallet: &CloudBackupWalletItem, own_secrets: &OwnSecretFacts) -> Clou
         | CloudBackupWalletStatus::Uploading
         | CloudBackupWalletStatus::UploadedPendingConfirmation => CloudBackupOwnRecord::Pending,
         CloudBackupWalletStatus::Failed => CloudBackupOwnRecord::Stale,
-        CloudBackupWalletStatus::DeletedFromDevice => CloudBackupOwnRecord::SecretMissingLocally,
+        CloudBackupWalletStatus::DeletedFromDevice
+        | CloudBackupWalletStatus::SecretMissingLocally => {
+            CloudBackupOwnRecord::SecretMissingLocally
+        }
         CloudBackupWalletStatus::UnsupportedVersion
         | CloudBackupWalletStatus::RemoteStateUnknown => CloudBackupOwnRecord::Missing,
     };

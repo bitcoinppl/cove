@@ -290,3 +290,27 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_a_later_read_finds_readable_is_not_authorized",
 ]
 # rust tests check that a seed backup a watch-only wallet matches still counts as possibly the only copy, that rows an invalidation left on screen offer no Delete and authorize nothing until a fetch reads them again, that a delete queued behind a write, or one whose record left and came back, or one trusted under an earlier configuration deletes nothing, that a record already gone or a failed relist still completes the delete, that an undecryptable batch stops at the first changed record and keeps the rest, that a batch deletes only the confirmed records still undecryptable when it runs, and that a batch never deletes a record a later fetch reads
+
+[[row]]
+id = "s05-cloud-upload-keeps-a-key-this-device-lost"
+section = "5"
+title = "Cloud upload keeps a key this device lost"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/actors/write/**",
+    "rust/src/manager/cloud_backup_manager/wallets/upload.rs",
+    "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+    "rust/src/manager/cloud_backup_manager/verify/integrity.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/payload.rs",
+    "rust/src/manager/cloud_backup_manager/wallet_changes.rs",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailWalletSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupWalletRows.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::startup_auto_sync_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_rename_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_dirty_upload_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_watch_only_wallet_still_replaces_its_watch_only_copy",
+]
+# rust tests check that a hot wallet downgraded to watch-only and a TAPSIGNER wallet missing its backup leave their key-bearing cloud record unchanged through the startup auto-sync, a rename and the dirty-upload queue, show Key not on device instead of Confirmed, and that a watch-only wallet over a watch-only record still uploads and confirms. The badge text has no UI test on either platform

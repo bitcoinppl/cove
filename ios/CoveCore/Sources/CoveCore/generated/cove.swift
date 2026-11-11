@@ -32032,6 +32032,11 @@ public enum CloudBackupWalletStatus: Equatable, Hashable {
     case alreadyOnDevice
     case unsupportedVersion
     case remoteStateUnknown
+    /**
+     * The cloud copy holds this wallet's key or TAPSIGNER backup and this device doesn't, so the
+     * copy is kept as it is and uploads from this device leave it unchanged
+     */
+    case secretMissingLocally
 
 
 
@@ -32070,6 +32075,8 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
         case 8: return .unsupportedVersion
 
         case 9: return .remoteStateUnknown
+
+        case 10: return .secretMissingLocally
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -32113,6 +32120,10 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
 
         case .remoteStateUnknown:
             writeInt(&buf, Int32(9))
+
+
+        case .secretMissingLocally:
+            writeInt(&buf, Int32(10))
 
         }
     }

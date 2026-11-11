@@ -841,6 +841,52 @@ drains the lane before it lists the namespaces, so a cleanup delete that was
 already running finishes before the reinitialize reads what exists. When it
 ends, the new generation makes anything left from before stale.
 
+### Uploads never drop key material
+
+A wallet upload replaces the wallet's cloud record. The record may hold the last
+copy of a seed, a master private key or a TAPSIGNER backup. For example, a hot
+wallet whose key is missing from the keychain, such as one left by a delete that
+stopped after its keychain stage, opens as watch-only. A TAPSIGNER wallet whose
+backup is missing also uploads as watch-only. So the lane never lets a record
+without key material replace one that has it. The one gap is a record this
+device can't see yet, described below.
+
+- Every wallet upload is a `WalletUpload`, built only by encrypting a prepared
+  entry. It records whether that entry carries key material
+  (`BackupSecret::Held`) or not (`WatchOnly`), and an upload without key
+  material keeps the key that reads the record it would replace.
+- The worker checks just before the remote write, so a record another device
+  wrote while the upload waited is the one it checks, once this device's
+  provider can see it. An upload without key material reads the current record
+  first.
+  - It first asks the provider whether it holds the record
+    (`WalletBackupReader::summary_if_present`, through `is_backup_uploaded`),
+    and reads the record only if so. A record the provider doesn't hold has
+    nothing to lose, so the upload goes ahead. Asking first matters on iOS,
+    where a consent-allowed read of a record iCloud doesn't hold waits for it
+    to sync and ends in `SyncPending`, never `NotFound`; without it, the first
+    upload of every watch-only wallet failed there.
+  - On iOS, "holds" means the record is in this device's iCloud metadata index
+    or is already a local file. A record this device can't see yet, whether
+    another device just wrote it or the index hasn't listed it yet, counts as
+    absent, so a watch-only upload can replace it unchecked. This is tracked as
+    a cross-device follow-up.
+  - If the record holds key material (`BackupSecret::may_replace` is false), or
+    its version is newer than this build reads, nothing is written. The lane
+    answers `WalletUploadOutcome::KeptKeyMaterial` and applies no local
+    completion, so the wallet is never marked pending or confirmed.
+  - If the record doesn't decrypt or parse, the upload fails instead of
+    replacing it unchecked.
+- A batch skips the kept wallet and uploads the rest. The dirty-upload queue
+  marks the row `Failed` with no retry. Restoring the key marks the wallet dirty
+  again.
+- The inventory applies the same `may_replace` rule. A local wallet whose cloud
+  copy holds key material this device lacks shows `SecretMissingLocally`, not
+  any upload state, and its own row is Secret Missing Locally.
+- This check is the only one: no caller decides on its own whether an upload
+  is safe. A watch-only wallet whose cloud copy is watch-only too still uploads
+  and confirms.
+
 A confirmed Turn Off pauses ordinary writes through the policy, then queues a
 drain barrier of its own. The barrier comes back only after the write in flight
 and those queued ahead of it have finished. Only then does Turn Off commit and

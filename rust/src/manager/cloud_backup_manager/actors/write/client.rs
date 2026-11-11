@@ -14,7 +14,8 @@ use super::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,
 };
-use super::worker::RowDeleteReport;
+use super::worker::{RowDeleteReport, WalletUploadOutcome};
+use crate::manager::cloud_backup_manager::wallets::WalletUpload;
 
 /// Who a producer writes for, which gives every command or local effect it sends its class
 ///
@@ -122,36 +123,49 @@ impl CloudBackupWriteClient {
         &self,
         cloud: CloudStorageClient,
         namespace: String,
-        record_id: String,
-        data: Vec<u8>,
-    ) -> Result<(), CloudBackupError> {
+        upload: WalletUpload,
+    ) -> Result<WalletUploadOutcome, CloudBackupError> {
         let class = self.owner.class();
-        let receiver = call!(
-            self.supervisor.upload_wallet_backup(class, cloud, namespace, record_id, data, None)
-        )
-        .await;
-        self.await_done(receiver).await
+        let receiver =
+            call!(self.supervisor.upload_wallet_backup(class, cloud, namespace, upload, None))
+                .await;
+        self.await_wallet_upload(receiver).await
     }
 
+    /// Uploads a wallet record and applies `completion` only once it was written
     pub(crate) async fn upload_wallet_backup_with_completion(
         &self,
         cloud: CloudStorageClient,
         namespace: String,
-        record_id: String,
-        data: Vec<u8>,
+        upload: WalletUpload,
         completion: CloudBackupWriteCompletion,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<WalletUploadOutcome, CloudBackupError> {
         let class = self.owner.class();
         let receiver = call!(self.supervisor.upload_wallet_backup(
             class,
             cloud,
             namespace,
-            record_id,
-            data,
+            upload,
             Some(completion)
         ))
         .await;
-        self.await_done(receiver).await
+        self.await_wallet_upload(receiver).await
+    }
+
+    async fn await_wallet_upload<E>(
+        &self,
+        receiver: Result<CloudBackupWriteResultReceiver<LaneOutput>, E>,
+    ) -> Result<WalletUploadOutcome, CloudBackupError>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        match self.await_result(receiver).await? {
+            LaneOutput::Done => Ok(WalletUploadOutcome::Uploaded),
+            LaneOutput::KeptKeyMaterial => Ok(WalletUploadOutcome::KeptKeyMaterial),
+            LaneOutput::RowDelete(_) => Err(CloudBackupError::Internal(
+                "cloud backup write lane answered a wallet upload with a row delete report".into(),
+            )),
+        }
     }
 
     pub(crate) async fn upload_master_key_backup(
@@ -248,7 +262,7 @@ impl CloudBackupWriteClient {
 
         match self.await_result(receiver).await? {
             LaneOutput::RowDelete(report) => Ok(report),
-            LaneOutput::Done => Err(CloudBackupError::Internal(
+            LaneOutput::Done | LaneOutput::KeptKeyMaterial => Err(CloudBackupError::Internal(
                 "cloud backup write lane answered a row delete without its report".into(),
             )),
         }

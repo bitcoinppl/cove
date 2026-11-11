@@ -445,7 +445,7 @@ fn metadata_with_repaired_origin(
             metadata.origin = Some(origin);
 
             // the origin is part of the Cloud Backup revision, so a confirmed backup uploads again
-            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_repair(&result.before, &result.after);
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&result.before, &result.after);
         }
         Err(error) => {
             warn!(%error, "unable to persist the repaired wallet origin; the next load retries")

@@ -205,6 +205,9 @@ pub enum CloudBackupWalletStatus {
     AlreadyOnDevice,
     UnsupportedVersion,
     RemoteStateUnknown,
+    /// The cloud copy holds this wallet's key or TAPSIGNER backup and this device doesn't, so the
+    /// copy is kept as it is and uploads from this device leave it unchanged
+    SecretMissingLocally,
 }
 
 /// Privacy-safe restore failure associated with a cloud-only wallet row

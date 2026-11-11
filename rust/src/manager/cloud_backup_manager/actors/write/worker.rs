@@ -11,6 +11,7 @@ use super::CloudBackupWriteError;
 use super::keychain::{KeychainSave, OwnedKeychainWrite, save_owned_keychain_writes};
 use super::supervisor::{CloudBackupWriteCommandContext, CloudBackupWriteSupervisor};
 use crate::manager::cloud_backup_manager::owner::delete_authorization::StaleTarget;
+use crate::manager::cloud_backup_manager::wallets::WalletUpload;
 
 /// What one authorized row delete did
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +20,17 @@ pub(crate) enum RowDeleteReport {
     Removed { already_absent: bool, relist: Relist },
     /// The authorization no longer matched the inventory at the queue head; nothing was deleted
     StaleTarget(StaleTarget),
+}
+
+/// What one wallet upload did
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletUploadOutcome {
+    /// The record was written
+    Uploaded,
+    /// Nothing was written: the cloud record holds key material this upload lacks, and it may be
+    /// the last copy of it
+    KeptKeyMaterial,
 }
 
 /// The listing a row delete runs after the record is gone
@@ -35,8 +47,7 @@ pub(crate) enum CloudBackupRemoteWriteCommand {
     UploadWallet {
         cloud: CloudStorageClient,
         namespace: String,
-        record_id: String,
-        data: Vec<u8>,
+        upload: WalletUpload,
     },
     UploadMasterKey {
         cloud: CloudStorageClient,
@@ -75,6 +86,8 @@ pub(crate) enum CloudBackupRemoteWriteCommand {
 #[derive(Debug)]
 pub(crate) enum CloudBackupRemoteWriteResult {
     None,
+    /// A wallet upload wrote nothing, since it would have replaced key material
+    KeptKeyMaterial,
     /// The record is gone; the listing after it is separate, so its failure doesn't undo the
     /// delete
     WalletRecordRemoved {
@@ -89,7 +102,15 @@ pub(crate) enum CloudBackupRemoteWriteResult {
 impl CloudBackupRemoteWriteCommand {
     async fn execute(self) -> Result<CloudBackupRemoteWriteResult, CloudBackupWriteError> {
         match self {
-            Self::UploadWallet { cloud, namespace, record_id, data } => {
+            Self::UploadWallet { cloud, namespace, upload } => {
+                // the replaced record is read here, just before the write, so a copy another
+                // device wrote while this upload waited in the lane is the one checked
+                if upload.drops_key_material(&cloud, &namespace).await? {
+                    warn!("Cloud backup upload would drop key material, keeping the cloud copy");
+                    return Ok(CloudBackupRemoteWriteResult::KeptKeyMaterial);
+                }
+
+                let (record_id, data) = upload.into_parts();
                 cloud.upload_wallet_backup(namespace, record_id, data).await?;
                 Ok(CloudBackupRemoteWriteResult::None)
             }

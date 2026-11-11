@@ -134,6 +134,12 @@ impl CloudWalletInventory {
         for wallet in &self.local_wallets {
             let copy = match self.remote_wallet_state(wallet) {
                 RemoteWalletState::Matching(summary) | RemoteWalletState::Stale(summary) => {
+                    // the write lane refuses an upload that may not replace this copy, so the key
+                    // it holds is only in the cloud
+                    if !wallet.local_secret.may_replace(summary.secret) {
+                        facts.missing_locally.insert(wallet.record_id.clone());
+                    }
+
                     match summary.secret {
                         BackupSecret::Held => CloudCopySecret::Held,
                         BackupSecret::WatchOnly => CloudCopySecret::WatchOnly,
@@ -144,10 +150,6 @@ impl CloudWalletInventory {
                 }
                 RemoteWalletState::Missing => continue,
             };
-
-            if copy == CloudCopySecret::Held && wallet.local_secret == BackupSecret::WatchOnly {
-                facts.missing_locally.insert(wallet.record_id.clone());
-            }
 
             facts.cloud_copies.insert(wallet.record_id.clone(), copy);
         }
@@ -200,6 +202,12 @@ impl CloudWalletInventory {
     fn sync_status_for_wallet(&self, wallet: &LocalWalletSnapshot) -> CloudBackupWalletStatus {
         let sync_state = self.sync_states_by_record_id.get(&wallet.record_id);
         match self.remote_wallet_state(wallet) {
+            // the write lane refuses this wallet's uploads, so no upload state applies
+            RemoteWalletState::Matching(summary) | RemoteWalletState::Stale(summary)
+                if !wallet.local_secret.may_replace(summary.secret) =>
+            {
+                CloudBackupWalletStatus::SecretMissingLocally
+            }
             RemoteWalletState::Matching(_) => CloudBackupWalletStatus::Confirmed,
             RemoteWalletState::Unsupported => {
                 sync_status_from_state(sync_state, CloudBackupWalletStatus::UnsupportedVersion)
@@ -269,7 +277,8 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
         | CloudBackupWalletStatus::UploadedPendingConfirmation
         | CloudBackupWalletStatus::Failed
         | CloudBackupWalletStatus::UnsupportedVersion
-        | CloudBackupWalletStatus::RemoteStateUnknown => Some(WalletItemBucket::NeedsSync),
+        | CloudBackupWalletStatus::RemoteStateUnknown
+        | CloudBackupWalletStatus::SecretMissingLocally => Some(WalletItemBucket::NeedsSync),
     }
 }
 
