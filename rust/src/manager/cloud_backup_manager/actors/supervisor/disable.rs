@@ -80,10 +80,6 @@ impl CloudBackupSupervisor {
         };
 
         manager.apply_disable_outcome(CloudBackupDisableOutcome::Started);
-        let drained = match drained {
-            Ok(()) => self.drain_disable_runtime(&manager).await,
-            Err(error) => Err(error),
-        };
         if let Err(error) = drained {
             let message = error
                 .logged_reader_message("Failed to clear cloud backup runtime state before disable");
@@ -100,10 +96,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if !self.runtime.accepts_completion(claim, "disable write drain") {
-            return Produces::ok(());
-        }
-
+        self.drain_disable_runtime(&manager);
         match attempt {
             DisableAttempt::Committed(committed) => {
                 self.schedule_disable_namespace_delete(claim, committed);
@@ -116,23 +109,11 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    async fn drain_disable_runtime(
-        &mut self,
-        manager: &RustCloudBackupManager,
-    ) -> Result<(), CloudBackupError> {
-        self.pending_enable_session = None;
-        self.detail_workflow.clear_pending_completion();
+    fn drain_disable_runtime(&mut self, manager: &RustCloudBackupManager) {
         self.detail_workflow.clear_authorization();
-        call!(self.sync_health.clear_upload_runtime_state())
-            .await
-            .map_err(CloudBackupError::internal)?;
-        call!(self.uploads.clear_upload_runtime_state())
-            .await
-            .map_err(CloudBackupError::internal)?;
-
+        self.clear_worker_runtime_state();
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.apply_sync_state(SyncState::Idle);
-        Ok(())
     }
 
     fn schedule_disable_blocker_check(

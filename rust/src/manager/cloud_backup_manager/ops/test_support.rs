@@ -1443,6 +1443,10 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let _task = cove_tokio::task::spawn(async move {
         let result = match call!(supervisor.clear_upload_runtime_state()).await {
+            Ok(()) => call!(supervisor.workers_checkpoint_for_test()).await,
+            Err(error) => Err(error),
+        };
+        let result = match result {
             Ok(()) => call!(supervisor.reset_runtime_for_test()).await,
             Err(error) => Err(error),
         };
@@ -2046,6 +2050,9 @@ pub(crate) async fn clear_wallet_upload_runtime_for_test_async(manager: &RustClo
     call!(manager.supervisor.clear_upload_runtime_state())
         .await
         .expect("clear upload runtime state");
+    call!(manager.supervisor.workers_checkpoint_for_test())
+        .await
+        .expect("the workers cleared their state");
 }
 
 pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
@@ -2055,6 +2062,9 @@ pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
     call!(manager.supervisor.resume_wallet_uploads_from_persisted_state())
         .await
         .expect("resume wallet uploads from persisted state");
+    call!(manager.supervisor.workers_checkpoint_for_test())
+        .await
+        .expect("the upload worker resumed its uploads");
 }
 
 /// Lifecycle results reach the supervisor as messages; its mailbox barrier proves every message

@@ -13,14 +13,11 @@ use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, sen
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
-use cove_tokio::task::spawn_actor;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
-use super::CloudBackupSyncHealthWorker;
-use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
+use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob};
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNamespaceCommit};
-use super::uploads::CloudBackupUploadWorker;
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
     CloudBackupWriteCompletion, CloudBackupWriteSupervisor, WriteOwner,
@@ -99,8 +96,10 @@ use owned_runtime::OwnedRuntime;
 #[cfg(test)]
 pub(crate) use owned_runtime::{OpTransition, OwnerView};
 use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
+use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
+mod workers;
 
 pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use lifecycle_results::OwnedKeychainWrite;
@@ -285,9 +284,9 @@ impl From<Result<(), CloudBackupError>> for SyncRequestOutcome {
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
-    cleanup: Addr<CloudBackupCleanupWorker>,
-    sync_health: Addr<CloudBackupSyncHealthWorker>,
-    uploads: Addr<CloudBackupUploadWorker>,
+    cleanup: CleanupWorker,
+    sync_health: SyncHealthWorker,
+    uploads: UploadWorker,
     write: Addr<CloudBackupWriteSupervisor>,
     /// The lifecycle body with the running operation nested in it, and the only lifecycle
     /// writer, both published to the write lane
@@ -374,9 +373,9 @@ impl CloudBackupSupervisor {
 
         Self {
             addr: WeakAddr::default(),
-            cleanup: spawn_actor(CloudBackupCleanupWorker::new(manager.clone())),
-            sync_health: spawn_actor(CloudBackupSyncHealthWorker::new(manager.clone())),
-            uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
+            cleanup: CleanupWorker::spawn(manager.clone()),
+            sync_health: SyncHealthWorker::spawn(manager.clone()),
+            uploads: UploadWorker::spawn(manager.clone()),
             write: cloud_writes,
             manager,
             runtime,
@@ -1253,12 +1252,12 @@ impl CloudBackupSupervisor {
         &mut self,
         namespace_id: String,
     ) -> ActorResult<()> {
-        call!(self.sync_health.start_master_key_upload_confirmation_grace(namespace_id)).await?;
+        self.sync_health.start_master_key_upload_confirmation_grace(namespace_id);
         Produces::ok(())
     }
 
     pub async fn request_sync_health_refresh(&mut self) -> ActorResult<()> {
-        call!(self.sync_health.request_sync_health_refresh()).await?;
+        self.sync_health.request_sync_health_refresh();
         Produces::ok(())
     }
 
@@ -1275,7 +1274,7 @@ impl CloudBackupSupervisor {
         wallet_id: WalletId,
         immediate: bool,
     ) -> ActorResult<()> {
-        call!(self.uploads.schedule_wallet_upload(wallet_id, immediate)).await?;
+        self.uploads.schedule_wallet_upload(wallet_id, immediate);
         Produces::ok(())
     }
 
@@ -1308,23 +1307,23 @@ impl CloudBackupSupervisor {
     /// every one of them up, and the pending upload verifier restarts with them. Both are sent,
     /// not awaited, so this handler never waits on a worker
     pub async fn ordinary_writes_resumed(&mut self) -> ActorResult<()> {
-        send!(self.uploads.resume_wallet_uploads_from_persisted_state());
-        send!(self.uploads.ensure_pending_upload_verification_loop());
+        self.uploads.resume_wallet_uploads_from_persisted_state();
+        self.uploads.ensure_pending_upload_verification_loop();
         Produces::ok(())
     }
 
     pub async fn resume_wallet_uploads_from_persisted_state(&mut self) -> ActorResult<()> {
-        call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await?;
+        self.uploads.resume_wallet_uploads_from_persisted_state();
         Produces::ok(())
     }
 
     pub async fn ensure_pending_upload_verification_loop(&mut self) -> ActorResult<()> {
-        call!(self.uploads.ensure_pending_upload_verification_loop()).await?;
+        self.uploads.ensure_pending_upload_verification_loop();
         Produces::ok(())
     }
 
     pub async fn wake_pending_upload_verifier(&mut self) -> ActorResult<()> {
-        call!(self.uploads.wake_pending_upload_verifier()).await?;
+        self.uploads.wake_pending_upload_verifier();
         Produces::ok(())
     }
 
@@ -1461,11 +1460,19 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn clear_upload_runtime_state(&mut self) -> ActorResult<()> {
+        self.clear_worker_runtime_state();
+        Produces::ok(())
+    }
+
+    /// Clears the upload and sync-health workers' timers and retry state
+    ///
+    /// The workers handle their mailboxes in order, so each clears before any message the
+    /// supervisor sends it after this
+    fn clear_worker_runtime_state(&mut self) {
         self.pending_enable_session = None;
         self.detail_workflow.clear_pending_completion();
-        call!(self.sync_health.clear_upload_runtime_state()).await?;
-        call!(self.uploads.clear_upload_runtime_state()).await?;
-        Produces::ok(())
+        self.sync_health.clear_upload_runtime_state();
+        self.uploads.clear_upload_runtime_state();
     }
 
     /// Closes admission for a local reset; the receiver answers once no effect is in flight
@@ -1496,7 +1503,7 @@ impl CloudBackupSupervisor {
 
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
-        self.clear_upload_runtime_state().await?;
+        self.clear_worker_runtime_state();
         Produces::ok(Ok(receiver))
     }
 
@@ -1562,11 +1569,13 @@ pub(crate) mod test_support {
     #![cfg(test)]
 
     use super::*;
+    use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
 
     impl CloudBackupSupervisor {
         /// Whether this supervisor's sync-health worker has no refresh in flight or queued
         pub(crate) async fn sync_health_refresh_idle_for_test(&mut self) -> ActorResult<bool> {
-            let idle = call!(self.sync_health.sync_health_refresh_idle_for_test()).await?;
+            let sync_health = self.sync_health.addr_for_test();
+            let idle = call!(sync_health.sync_health_refresh_idle_for_test()).await?;
             Produces::ok(idle)
         }
     }
@@ -1640,7 +1649,7 @@ pub(crate) mod test_support {
                 owner: self.runtime.take_view(),
                 dispatches: std::mem::take(&mut self.invariant_log.dispatches),
                 shown_operation,
-                uploads: self.uploads.clone(),
+                uploads: self.uploads.addr_for_test().clone(),
             })
         }
 
@@ -1687,7 +1696,8 @@ pub(crate) mod test_support {
             &mut self,
             wallet_id: WalletId,
         ) -> ActorResult<()> {
-            call!(self.uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
+            let uploads = self.uploads.addr_for_test();
+            call!(uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
             Produces::ok(())
         }
 
@@ -1695,7 +1705,8 @@ pub(crate) mod test_support {
             &mut self,
             wallet_id: WalletId,
         ) -> ActorResult<u32> {
-            let count = call!(self.uploads.wallet_upload_retry_count_for_test(wallet_id)).await?;
+            let uploads = self.uploads.addr_for_test();
+            let count = call!(uploads.wallet_upload_retry_count_for_test(wallet_id)).await?;
             Produces::ok(count)
         }
 
@@ -1801,8 +1812,19 @@ pub(crate) mod test_support {
             Produces::ok(())
         }
 
+        /// Answers once the upload and sync-health workers handled every message the supervisor
+        /// sent them before this, since the supervisor only sends to them
+        pub async fn workers_checkpoint_for_test(&mut self) -> ActorResult<()> {
+            let uploads = self.uploads.addr_for_test();
+            call!(uploads.checkpoint_for_test()).await?;
+            let sync_health = self.sync_health.addr_for_test();
+            call!(sync_health.checkpoint_for_test()).await?;
+            Produces::ok(())
+        }
+
         pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {
-            let idle = call!(self.cleanup.is_idle_for_test()).await?;
+            let cleanup = self.cleanup.addr_for_test();
+            let idle = call!(cleanup.is_idle_for_test()).await?;
             Produces::ok(idle)
         }
 
@@ -1810,7 +1832,8 @@ pub(crate) mod test_support {
             &mut self,
             job: CloudBackupCleanupJob,
         ) -> ActorResult<()> {
-            call!(self.cleanup.enqueue_cleanup(job)).await?;
+            let cleanup = self.cleanup.addr_for_test();
+            call!(cleanup.enqueue_cleanup(job)).await?;
             Produces::ok(())
         }
     }

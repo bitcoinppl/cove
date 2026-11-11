@@ -205,19 +205,13 @@ impl CloudBackupSupervisor {
 
         // queued after Enable ends, so the job carries the generation of the configuration it
         // proved its sources under, and the lane drops its deletes once that changes
-        if let Err(error) = call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
+        self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
             generation: self.runtime.generation(),
             cloud: CloudStorage::global_explicit_client(),
             active_namespace_id: namespace_id.clone(),
             active_critical_key: *active_critical_key,
             sources: cleanup_sources,
-        }))
-        .await
-        {
-            warn!(
-                "Recovered enable committed, but merge-source cleanup could not be scheduled; retaining source backups: {error}"
-            );
-        }
+        });
 
         Produces::ok(())
     }

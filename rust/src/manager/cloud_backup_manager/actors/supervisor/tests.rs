@@ -1,6 +1,7 @@
 
 use super::verification::VerificationRun;
 use super::*;
+use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use crate::manager::cloud_backup_manager::ops::DisableAttempt;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
@@ -3153,7 +3154,6 @@ async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() 
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.sync_health = Addr::detached();
 
     persist_enabled_under(&mut supervisor);
     let claim = supervisor
@@ -3162,7 +3162,14 @@ async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() 
     test_disabling_state();
     let attempt = test_uncommitted_attempt();
 
-    supervisor.complete_disable_write_drain(claim, attempt, Ok(())).await.unwrap();
+    supervisor
+        .complete_disable_write_drain(
+            claim,
+            attempt,
+            Err(CloudBackupError::Internal("write lane stopped".into())),
+        )
+        .await
+        .unwrap();
 
     // nothing was committed, so the record is still configured and nothing can be kept
     assert_eq!(supervisor.runtime, None);

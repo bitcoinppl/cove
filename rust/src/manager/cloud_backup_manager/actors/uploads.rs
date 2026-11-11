@@ -547,6 +547,11 @@ mod tests {
     };
 
     impl CloudBackupUploadWorker {
+        /// Answers after every message sent to the worker before it
+        pub(crate) async fn checkpoint_for_test(&mut self) -> ActorResult<()> {
+            Produces::ok(())
+        }
+
         pub(crate) async fn run_wallet_upload_inline_for_test(
             &mut self,
             wallet_id: WalletId,

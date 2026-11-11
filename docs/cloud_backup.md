@@ -49,9 +49,11 @@ verification's result stale. A stale result neither overwrites the reset nor
 shows on screen.
 
 Waits go one way only. The write supervisor and other workers may `call!` the
-supervisor, but the supervisor never waits on the write supervisor: it sends a
-message and handles the reply as a later completion, so the two actors can't
-deadlock waiting on each other.
+supervisor, but the supervisor never waits on them. It sends the write
+supervisor a message and handles the reply as a later completion. It tells the
+upload, sync-health and cleanup workers what to do with `send!` and never
+awaits them. So no actor can deadlock waiting on another, and a busy worker
+can't hold a reset or a lifecycle completion behind its mailbox.
 
 Workers prepare keychain writes and the supervisor applies them. Each write
 carries its producer's authority: the running operation's claim, or the

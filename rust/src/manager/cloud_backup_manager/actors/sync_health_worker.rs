@@ -190,6 +190,11 @@ mod tests {
     use super::*;
 
     impl CloudBackupSyncHealthWorker {
+        /// Answers after every message sent to the worker before it
+        pub(crate) async fn checkpoint_for_test(&mut self) -> ActorResult<()> {
+            Produces::ok(())
+        }
+
         /// Whether no refresh is in flight or queued
         pub(crate) async fn sync_health_refresh_idle_for_test(&mut self) -> ActorResult<bool> {
             Produces::ok(self.sync_health_refresh_state == SyncHealthRefreshState::Idle)
