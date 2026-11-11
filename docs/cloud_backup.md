@@ -26,7 +26,11 @@ operation claims, and UI reconciliation.
 restore, disable, repair, verification, sync, and cloud-only flows, then applies
 typed completions back through the manager. Exclusive operations carry a
 `CloudBackupExclusiveOperationClaim` so every async completion can prove it
-still belongs to the active operation.
+still belongs to the active operation. Each run gets its own `OperationId`. A
+Google Drive account switch's reinitialization also names the switch's persisted
+transition id, which platform callbacks match across a relaunch, but resuming
+the switch starts a run with a new `OperationId`. A completion from a run that a
+reset revoked therefore never matches the run that resumed the switch.
 
 The supervisor is also the only writer of the durable lifecycle record: it holds
 the one `LifecycleWriter`, which bootstrap moves into it. Work that runs off the

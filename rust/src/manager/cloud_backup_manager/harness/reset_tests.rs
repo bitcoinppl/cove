@@ -11,11 +11,13 @@ use cove_device::keychain::Keychain;
 use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::{
-    CloudCall, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp,
-    change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
+    CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd,
+    TestApp, change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::database::cloud_backup::{
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedDriveAccountSwitchPhase,
+};
 use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
@@ -418,5 +420,102 @@ fn abandoned_reset_wakes_the_uploads_it_paused_exactly_once() {
 
         app.advance_clock(Duration::from_secs(600)).then_can(&[N::TurnOff]);
         assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads + 1, "a second upload ran");
+    });
+}
+
+fn persisted_switch_phase() -> Option<PersistedDriveAccountSwitchPhase> {
+    persisted().drive_account_switch().map(|transition| transition.phase)
+}
+
+/// A reset revokes the running reinitialization of a Google Drive account switch. When the wipe
+/// fails before its commit, the switch is still recorded and its recovery resumes it in a new
+/// run. The revoked run's completion, released after that, belongs to no run: it can't end the
+/// resumed run or move the switch on
+#[test]
+fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switch() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switch"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        // without a local master key the reinitialize first lists the cloud's namespaces, a
+        // provider read that a reset cancels by revoking the run's claim
+        CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
+
+        let manager = app.manager().clone();
+        let transition_id = app
+            .block_on("the switch to drain the lane", manager.begin_drive_account_switch())
+            .expect("the switch starts");
+        let revoked_listing = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(revoked_listing.clone()));
+
+        app.event("the platform staged the selected account", |app| {
+            let manager = app.manager().clone();
+            app.block_on(
+                "the switch to continue",
+                manager.continue_drive_account_switch(transition_id),
+            )
+            .expect("continue the switch");
+        })
+        .then_cannot(&[N::Enable]);
+        app.block_on("the first run's listing to start", revoked_listing.entered());
+        let revoked = app.manager().projected_exclusive_operation().expect("the first run");
+
+        let manager = app.manager().clone();
+        let permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+        app.event("the wipe fails before its commit", |app| {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        })
+        .then_cannot(&[N::Enable]);
+        assert_eq!(
+            persisted_switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::Reinitializing)
+        );
+
+        let resumed_listing = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(resumed_listing.clone()));
+        app.event("the app reconciles the switch the platform still stages", |app| {
+            let manager = app.manager().clone();
+            let action = app.block_on(
+                "the reconcile to answer",
+                manager.reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(
+                    transition_id,
+                )),
+            );
+            assert_eq!(action, Ok(DriveAccountSwitchReconcileAction::None));
+        })
+        .then_cannot(&[N::Enable]);
+        app.block_on("the resumed run's listing to start", resumed_listing.entered());
+        let resumed = app.manager().projected_exclusive_operation().expect("the resumed run");
+        assert_eq!(resumed.drive_account_switch_id(), revoked.drive_account_switch_id());
+        assert_ne!(resumed, revoked, "the resumed run reused the revoked run's identity");
+
+        app.event("release the revoked run's listing", |_| revoked_listing.release())
+            .then_cannot(&[N::Enable]);
+        app.block_on("the revoked run's listing to return", revoked_listing.finished());
+        assert_eq!(
+            app.manager().projected_exclusive_operation(),
+            Some(resumed),
+            "the revoked run's completion ended the resumed run\n{}",
+            app.describe()
+        );
+        assert_eq!(
+            persisted_switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::Reinitializing)
+        );
+
+        app.event("release the resumed run's listing", |_| resumed_listing.release())
+            .then_cannot(&[N::Enable]);
+        assert_ne!(
+            persisted_switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::Reinitializing),
+            "the resumed run never reported\n{}",
+            app.describe()
+        );
     });
 }

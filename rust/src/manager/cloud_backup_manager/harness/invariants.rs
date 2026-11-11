@@ -238,8 +238,8 @@ impl Invariants {
         Ok(())
     }
 
-    /// 5, operations: one runs at a time, each process-local id starts once and ends at most
-    /// once, the ledger agrees with the runtime, and the screen shows no operation that ended
+    /// 5, operations: one runs at a time, each run's claim starts once and ends at most once,
+    /// the ledger agrees with the runtime, and the screen shows no operation that ended
     fn check_operations(
         &mut self,
         transitions: &[OpTransition],
@@ -256,9 +256,7 @@ impl Invariants {
                         return violation(format!("{started:?} started while {running:?} runs"));
                     }
 
-                    // a Drive account switch resumes under its persisted transition id
-                    let process_local = started.drive_account_switch_id().is_none();
-                    if process_local && self.started.contains(&started) {
+                    if self.started.contains(&started) {
                         return violation(format!("{started:?} started a second time"));
                     }
 

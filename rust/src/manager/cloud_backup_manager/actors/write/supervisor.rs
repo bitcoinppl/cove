@@ -723,8 +723,13 @@ mod tests {
         let other = claim(Op::DeleteOtherBackups, 3);
         let enable = claim(Op::Enable, 4);
         let discard = claim(Op::DiscardPendingEnable, 5);
-        let switch = CloudBackupExclusiveOperationClaim::drive_account_switch(7.into());
-        let other_switch = CloudBackupExclusiveOperationClaim::drive_account_switch(8.into());
+        let switch =
+            CloudBackupExclusiveOperationClaim::drive_account_switch(7.into(), operation_id(7));
+        let other_switch =
+            CloudBackupExclusiveOperationClaim::drive_account_switch(8.into(), operation_id(8));
+        // the same switch resumed after a reset revoked its earlier run
+        let earlier_run =
+            CloudBackupExclusiveOperationClaim::drive_account_switch(7.into(), operation_id(9));
         let verify = claim(Op::Verify, 6);
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
@@ -856,6 +861,11 @@ mod tests {
             (
                 policy(PolicyBody::AccountSwitch { op: Some(switch) }),
                 CommandClass::Operation(other_switch),
+                Decision::Stale,
+            ),
+            (
+                policy(PolicyBody::AccountSwitch { op: Some(switch) }),
+                CommandClass::Operation(earlier_run),
                 Decision::Stale,
             ),
             (

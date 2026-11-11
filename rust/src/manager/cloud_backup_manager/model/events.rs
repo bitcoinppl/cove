@@ -74,36 +74,37 @@ pub(crate) enum CloudBackupRestoreAllRuntimeState {
     RetryRemaining,
 }
 
-/// The identity a claim's completions are matched against
-///
-/// A drive account switch's reinitialization is identified by its persisted transition id
-/// instead of an `OperationId`, because it resumes across a relaunch and a process-local id
-/// would not survive one
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CloudBackupExclusiveOperationOwner {
-    Operation(OperationId),
-    DriveAccountSwitch(DriveAccountSwitchId),
-}
-
 /// Ownership proof for an exclusive operation
 ///
 /// Async completions must present the claim they started with before the
 /// reducer or supervisor accepts their result
+///
+/// Every run gets its own `OperationId`, and completions match on it. A Google Drive account
+/// switch's reinitialization also carries the switch's persisted transition id, which platform
+/// callbacks name across a relaunch. The transition id says which switch a run works for, never
+/// which run it is: resuming the switch after a relaunch or an abandoned reset starts a run with
+/// a fresh id, so a completion from the run a reset revoked never matches the one that resumed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupExclusiveOperationClaim {
     operation: CloudBackupExclusiveOperation,
-    owner: CloudBackupExclusiveOperationOwner,
+    id: OperationId,
+    drive_account_switch: Option<DriveAccountSwitchId>,
 }
 
 impl CloudBackupExclusiveOperationClaim {
     pub(crate) fn new(operation: CloudBackupExclusiveOperation, id: OperationId) -> Self {
-        Self { operation, owner: CloudBackupExclusiveOperationOwner::Operation(id) }
+        Self { operation, id, drive_account_switch: None }
     }
 
-    pub(crate) fn drive_account_switch(transition_id: DriveAccountSwitchId) -> Self {
+    /// One run of the reinitialization for the Drive account switch `transition_id`
+    pub(crate) fn drive_account_switch(
+        transition_id: DriveAccountSwitchId,
+        id: OperationId,
+    ) -> Self {
         Self {
             operation: CloudBackupExclusiveOperation::ReinitializeBackup,
-            owner: CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id),
+            id,
+            drive_account_switch: Some(transition_id),
         }
     }
 
@@ -112,12 +113,7 @@ impl CloudBackupExclusiveOperationClaim {
     }
 
     pub(crate) fn drive_account_switch_id(self) -> Option<DriveAccountSwitchId> {
-        match self.owner {
-            CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id) => {
-                Some(transition_id)
-            }
-            CloudBackupExclusiveOperationOwner::Operation(_) => None,
-        }
+        self.drive_account_switch
     }
 }
 

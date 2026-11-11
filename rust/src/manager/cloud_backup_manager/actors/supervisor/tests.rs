@@ -953,7 +953,10 @@ async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization()
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
     supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
@@ -989,7 +992,10 @@ async fn stale_drive_account_switch_completion_cannot_finish_live_operation() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
     supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
@@ -1043,7 +1049,10 @@ async fn failed_drive_account_reinitialization_does_not_request_account_commit()
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
     supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
@@ -4763,7 +4772,8 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         .await
         .unwrap()
         .unwrap();
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
+    let claim = supervisor.runtime.claim().expect("the switch runs");
+    assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
 
     let stale = supervisor
         .continue_drive_account_switch((transition_id.value() + 1).into())
@@ -4827,14 +4837,18 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 0);
 
-    // try again on the recovery prompt restarts the same switch, not a plain reinitialize
+    // try again on the recovery prompt restarts the same switch in a new run, not a plain
+    // reinitialize
     supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+    let failed_run = claim;
+    let claim = supervisor.runtime.claim().expect("the retry runs");
 
+    assert_ne!(claim, failed_run);
+    assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
     assert_eq!(
         persisted_drive_account_switch_phase(),
         Some(PersistedDriveAccountSwitchPhase::Reinitializing)
     );
-    assert_eq!(supervisor.runtime.claim(), Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
     assert_eq!(
         configured_cloud_backup_state(&manager).destructive_operation,

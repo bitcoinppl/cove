@@ -45,7 +45,10 @@ impl CloudBackupSupervisor {
         }
 
         let transition_id = DriveAccountSwitchId::new(rand::random());
-        let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
+        let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+            transition_id,
+            OperationId::next(),
+        );
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not start {unstartable:?}");
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Busy));
@@ -489,7 +492,11 @@ impl CloudBackupSupervisor {
                 .ok_or(CloudBackupDriveAccountSwitchError::Busy);
         }
 
-        let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
+        // a new run of the switch, never the identity of a run that ended or a reset revoked
+        let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+            transition_id,
+            OperationId::next(),
+        );
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not resume {unstartable:?}");
             return Err(CloudBackupDriveAccountSwitchError::Busy);
