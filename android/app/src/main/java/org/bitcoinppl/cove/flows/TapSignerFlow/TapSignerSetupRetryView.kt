@@ -114,7 +114,9 @@ fun TapSignerSetupRetryView(
                     } catch (error: CancellationException) {
                         throw error
                     } catch (e: Exception) {
-                        Log.w("TapSignerSetupRetry", "TAPSIGNER setup retry failed", e)
+                        // card errors can carry the card's response text, so log only the kind
+                        val kind = e.javaClass.simpleName
+                        Log.w("TapSignerSetupRetry", "TAPSIGNER setup retry failed: $kind")
                         app.sheetState = null
                         app.alertState =
                             TaggedItem(
