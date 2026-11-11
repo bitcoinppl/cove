@@ -10,5 +10,9 @@ futures = "0.3.30"
 tokio = { workspace = true, features = ["time", "rt"] }
 tracing = { workspace = true }
 
+[features]
+# counts blocking calls for a test harness's idle check; enabled only through dev-dependencies
+test-support = []
+
 [lints]
 workspace = true

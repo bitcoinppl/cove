@@ -309,8 +309,9 @@ impl TestApp {
     /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
     /// park. A current-thread runtime parks only with an empty run queue, so after a round every
     /// task the event woke has run as far as it can. The app is settled after a round in which
-    /// no fake call is answering and the supervisor's stage checkpoint shows no operation in an
-    /// `Effecting` stage. An effect runs off the runtime, so the park alone can't see it. Calls
+    /// no fake call is answering, no blocking call is in flight or answered, and the
+    /// supervisor's stage checkpoint shows no operation in an `Effecting` stage. An effect or a
+    /// blocking call runs off the runtime, so the park alone can't see it. Calls
     /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
     /// release holds and advance time as events
     pub(crate) fn settle(&self) {
@@ -318,6 +319,7 @@ impl TestApp {
         let writes = self.manager.cloud_writes.clone();
 
         for _ in 0..SETTLE_ROUNDS {
+            let blocking = cove_tokio::task::blocking_calls();
             let barrier = format!("the actors' mailbox barrier after {}", self.last_event);
             self.block_on(&barrier, async {
                 call!(supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
@@ -334,6 +336,14 @@ impl TestApp {
             // an effect waiting on a held call is settled; the test releases it as an event
             if fakes::held_calls() != 0 {
                 return;
+            }
+
+            // a blocking call's answer wakes the runtime only after the blocking thread returns,
+            // so a park seen while one was in flight, or answered during the round, can be early;
+            // the count is per process, and a case phase's process runs only its own test
+            if blocking.in_flight != 0 || cove_tokio::task::blocking_calls() != blocking {
+                self.wait_for_blocking_answer(blocking);
+                continue;
             }
 
             let checkpoint = format!("the supervisor's stage checkpoint after {}", self.last_event);
@@ -357,6 +367,21 @@ impl TestApp {
         }
 
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
+    }
+
+    /// Waits until a blocking call seen in `before` answers its caller, one answered already, or
+    /// a call is held
+    ///
+    /// The answer comes from another thread, so the wait polls. A blocking call that enters a
+    /// hold answers only when the test releases it, so a hold ends the wait and the next round
+    /// settles on it; an in-flight call that never answers fails on the deadline instead of using
+    /// up the settle rounds
+    fn wait_for_blocking_answer(&self, before: cove_tokio::task::BlockingCalls) {
+        let _deadline =
+            Deadline::arm(format!("a blocking call to answer after {}", self.last_event));
+        while cove_tokio::task::blocking_calls() == before && fakes::held_calls() == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
