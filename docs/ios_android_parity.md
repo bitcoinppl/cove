@@ -201,7 +201,10 @@ the shared recovery contract.
 - Rust owns inventory completeness, retained rows, refresh generations, enable
   lifecycle, passkey retry policy, Restore All eligibility/order/progress,
   cancellation, and row outcomes
-- Swift and Kotlin project the exported state and dispatch user intent
+- Swift and Kotlin draw Rust's `CloudBackupScreen` and dispatch user intent.
+  Both render every fixture from `cloud_backup_screen_fixtures()` in a contract
+  test, and `just qa-check` requires every Cloud Backup enable flag to read an
+  action's availability
 - iOS owns FileManager, `NSMetadataQuery`, file coordination, and Authentication
   Services outcome classification
 - Android owns Drive token/account binding, Drive API mechanics, and Credential
@@ -215,16 +218,17 @@ to Rust and regenerate both platform bindings.
 
 ### Inventory parity
 
-Both detail screens project `Checking`, `Complete`, and `Failed` without dropping
-known wallet rows. Only `Complete` enables Restore All and the destructive actions
-that depend on an authoritative set. A single cloud-only row may restore or
+Both detail screens draw Rust's progress section (inventory checking or
+incomplete, with its reason) without dropping known wallet rows. Rust enables
+Restore All, Recreate Manifest and Reinitialize only for a complete,
+provider-confirmed inventory. A single cloud-only row may restore or
 delete its wallet from `Complete`, or from `Failed` when the retained rows were
 provider-confirmed or a trusted local snapshot, unless the failure was offline:
 an offline device keeps the rows listed with their actions disabled until a check
 succeeds. Rust owns that rule and sends it as each row action's availability;
 neither app keeps a readiness flag of its own. Retry requests are Rust-coordinated: one refresh
 may run, one trailing request is retained, starts are at least five seconds
-apart, and stale or closed-owner results are ignored.
+apart, and stale results are ignored.
 
 Provider mechanics differ:
 
@@ -247,10 +251,15 @@ retained active namespace.
 
 Platform code must classify passkey presentation outcomes into typed results.
 Only pre-presentation platform unavailability receives bounded automatic retry.
-Presented failure, cancellation, mismatch, unsupported provider, invalid result,
-and no credential do not retry automatically. Only the typed no-credential
-result may continue into the owning enable or repair flow's explicit
-registration step; every other failure stops.
+Presented failure, a request that didn't complete (`NotCompleted`), no ready
+presenter (`NotReady`), mismatch, unsupported provider, invalid result, and no
+credential do not retry automatically. iOS reports any
+`ASAuthorizationError.canceled` (1001) as `NotCompleted`, and Android reports
+`CreateCredentialCancellationException` and `GetCredentialCancellationException`
+the same way. The retry budget differs: iOS retries any operation for up to 15
+seconds, Android only a discovery assertion for up to 2 seconds. Only the
+typed no-credential result may continue into the owning enable or repair
+flow's explicit registration step; every other failure stops.
 
 Both platforms use the same presenter readiness and request bounds:
 
@@ -278,6 +287,18 @@ Both platforms use the same presenter readiness and request bounds:
   reports a presented platform authorization failure.
 - The presence check is bounded at one second, and a presence check that is not
   ready or runs past its bound is indeterminate.
+
+### Turn Off parity
+
+Both platforms render Rust's Turn Off review with the same buttons: iOS as
+system alerts, Android as Compose dialogs. The offline dialog's title differs
+("Can't Reach iCloud" on iOS, "No Connection" on Android). Both draw the
+`FinishingDisable` panel with Try Again and Stop Using on This Device; Android
+asks for confirmation before Stop Using, while iOS shows the same warning as
+the section's footer. Both show the heal notice with Turn Off and Dismiss, but
+its title differs ("Cloud Backup is on again" on iOS, "Cloud Backup Was Turned
+On Again" on Android). Both Settings rows show `TurnOffIncomplete` and
+`TurnedOnAgain`.
 
 ### Restore All parity
 
