@@ -63,12 +63,23 @@ pub(crate) enum VerifierStop {
     WritesPaused,
 }
 
+/// Where the pending upload verifier loop is
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verifier {
+    Stopped,
+    /// `rerun` records a request to run that arrived while the loop ran. The loop may already
+    /// have decided to stop on an answer that request supersedes, such as a paused lane that
+    /// resumed since, so its finish starts it again
+    Running {
+        rerun: bool,
+    },
+}
+
 #[derive(Debug)]
 pub(crate) struct CloudBackupUploadWorker {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
-    pending_upload_verifier_running: bool,
-    pending_upload_verifier_blocked_on_authorization: bool,
+    pending_upload_verifier: Verifier,
     pending_upload_verifier_wakeup: Arc<Notify>,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
     wallet_upload_retry_counts: HashMap<WalletId, u32>,
@@ -107,8 +118,7 @@ impl CloudBackupUploadWorker {
         Self {
             addr: WeakAddr::default(),
             manager,
-            pending_upload_verifier_running: false,
-            pending_upload_verifier_blocked_on_authorization: false,
+            pending_upload_verifier: Verifier::Stopped,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
@@ -132,8 +142,7 @@ impl CloudBackupUploadWorker {
         &mut self,
         manager: Arc<RustCloudBackupManager>,
     ) {
-        self.pending_upload_verifier_running = true;
-        self.pending_upload_verifier_blocked_on_authorization = false;
+        self.pending_upload_verifier = Verifier::Running { rerun: false };
         let manager = Arc::downgrade(&manager);
         let wakeup = Arc::clone(&self.pending_upload_verifier_wakeup);
         self.addr.send_fut_with(move |addr| async move {
@@ -427,7 +436,8 @@ impl CloudBackupUploadWorker {
     }
 
     pub(crate) async fn ensure_pending_upload_verification_loop(&mut self) -> ActorResult<()> {
-        if self.pending_upload_verifier_running {
+        if let Verifier::Running { rerun } = &mut self.pending_upload_verifier {
+            *rerun = true;
             return Produces::ok(());
         }
 
@@ -440,7 +450,7 @@ impl CloudBackupUploadWorker {
     }
 
     pub(crate) async fn wake_pending_upload_verifier(&mut self) -> ActorResult<()> {
-        if self.pending_upload_verifier_running {
+        if matches!(self.pending_upload_verifier, Verifier::Running { .. }) {
             self.pending_upload_verifier_wakeup.notify_one();
         }
 
@@ -451,25 +461,26 @@ impl CloudBackupUploadWorker {
         &mut self,
         stop: VerifierStop,
     ) -> ActorResult<()> {
-        self.pending_upload_verifier_running = false;
-        self.pending_upload_verifier_blocked_on_authorization =
-            stop == VerifierStop::BlockedOnAuthorization;
+        let rerun = self.pending_upload_verifier == Verifier::Running { rerun: true };
+        self.pending_upload_verifier = Verifier::Stopped;
 
         match stop {
-            VerifierStop::BlockedOnAuthorization => {
+            VerifierStop::BlockedOnAuthorization if !rerun => {
                 info!("Pending upload verification: paused until cloud authorization is restored");
                 return Produces::ok(());
             }
-            VerifierStop::WritesPaused => {
+            VerifierStop::WritesPaused if !rerun => {
                 info!("Pending upload verification: paused until cloud backup writes run again");
                 return Produces::ok(());
             }
-            VerifierStop::Idle => {}
+            VerifierStop::BlockedOnAuthorization
+            | VerifierStop::WritesPaused
+            | VerifierStop::Idle => {}
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        if manager.has_pending_cloud_upload_verification() {
+        if rerun || manager.has_pending_cloud_upload_verification() {
             self.spawn_pending_upload_verification_loop_task(manager);
             return Produces::ok(());
         }
@@ -515,6 +526,9 @@ impl PendingUploadRetryBackoff {
 
 #[cfg(test)]
 mod tests {
+    use act_zero::call;
+    use cove_tokio::task::spawn_actor;
+
     use super::*;
     use crate::database::Database;
     use crate::database::cloud_backup::{
@@ -522,10 +536,14 @@ mod tests {
         PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBlobSyncState,
         PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup, PersistedPasskeyState,
     };
-    use crate::manager::cloud_backup_manager::CloudBackupKeychain;
+    use crate::manager::cloud_backup_manager::cspp_exports::master_key_wrapper_revision_hash;
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime,
-        test_globals,
+        test_globals, wait_for_test_condition,
+    };
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupKeychain, DeepVerificationReport, PendingVerificationCompletion,
+        PendingVerificationUpload,
     };
 
     impl CloudBackupUploadWorker {
@@ -637,12 +655,81 @@ mod tests {
             .unwrap();
 
         let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
-        worker.pending_upload_verifier_running = true;
+        worker.pending_upload_verifier = Verifier::Running { rerun: false };
 
         // pending evidence is still stored, but a loop the lane paused is restarted by the lane's
         // wake, not respawned here
         worker.pending_upload_verifier_finished(VerifierStop::WritesPaused).await.unwrap();
+        assert_eq!(worker.pending_upload_verifier, Verifier::Stopped);
 
-        assert!(!worker.pending_upload_verifier_running);
+        // the lane resumed and its wake arrived before the paused loop's finish: the finish
+        // starts the loop again instead of losing the only wake
+        worker.pending_upload_verifier = Verifier::Running { rerun: false };
+        worker.ensure_pending_upload_verification_loop().await.unwrap();
+        worker.pending_upload_verifier_finished(VerifierStop::WritesPaused).await.unwrap();
+        assert_eq!(worker.pending_upload_verifier, Verifier::Running { rerun: false });
+    }
+
+    /// The lane's resume wake reaches the worker before the paused verifier's finish. With no
+    /// other event, the restarted verifier confirms the pending upload and settles its completion
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_resume_before_the_paused_verifiers_finish_settles_pending_uploads() {
+        let _guard = async_test_lock().lock().await;
+        ensure_cloud_backup_test_tokio_runtime();
+        let globals = test_globals();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        // the wrapper upload landed in the cloud and waits for its confirmation
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+        let wrapper_json = vec![1, 2, 3];
+        globals.cloud.set_master_key_backup(namespace.clone(), wrapper_json.clone());
+        let pending_wrapper = PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace.clone(),
+            PersistedCloudBlobState::UploadedPendingConfirmation(
+                CloudBlobUploadedPendingConfirmationState {
+                    revision_hash: master_key_wrapper_revision_hash(&wrapper_json),
+                    uploaded_at: cove_util::time::unix_timestamp_secs_or_zero(),
+                    attempt_count: 0,
+                    last_checked_at: None,
+                },
+            ),
+        );
+        Database::global().cloud_blob_sync_states.set(&pending_wrapper).unwrap();
+        manager
+            .replace_pending_verification_completion(
+                &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+                PendingVerificationCompletion::new(
+                    DeepVerificationReport {
+                        master_key_wrapper_repaired: false,
+                        local_master_key_repaired: false,
+                        credential_recovered: false,
+                        wallets_verified: 0,
+                        wallet_issues: Default::default(),
+                        detail: None,
+                    },
+                    namespace,
+                    vec![PendingVerificationUpload::master_key_wrapper()],
+                ),
+            )
+            .unwrap();
+
+        // a verifier that read a paused ticket and is about to report its stop
+        let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
+        worker.pending_upload_verifier = Verifier::Running { rerun: false };
+        let worker = spawn_actor(worker);
+
+        call!(worker.ensure_pending_upload_verification_loop()).await.unwrap();
+        call!(worker.pending_upload_verifier_finished(VerifierStop::WritesPaused)).await.unwrap();
+
+        wait_for_test_condition(
+            Duration::from_secs(5),
+            "the restarted verifier confirms the upload and settles the completion",
+            || {
+                manager.pending_verification_completion().is_none()
+                    && !manager.has_pending_cloud_upload_verification()
+            },
+        )
+        .await;
     }
 }
