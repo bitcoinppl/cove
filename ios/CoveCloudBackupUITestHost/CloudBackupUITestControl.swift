@@ -333,6 +333,21 @@ struct CloudBackupUITestAppState: Codable, Equatable {
     /// The Settings row status case without its message, such as `confirming`, `active` or
     /// `settingUp`
     var settingsRow: String
+    /// What Rust decided is on the Cloud Backup screen, nil while the manager exposes no screen
+    var screen: Screen?
+
+    /// The screen Rust projects, by case and action name, so a test checks what the app may do
+    /// next rather than which controls the lazily built form has drawn
+    struct Screen: Codable, Equatable {
+        /// The body case, such as `configured` or `finishingDisable`
+        var body: String
+        /// The global actions available now, such as `turnOff` or `verify`
+        var actions: [String]
+        /// The Turn Off review or progress case, nil when no Turn Off is under way
+        var disable: String?
+        /// The notices shown, such as `heal`, and the last outcome with the intent it answers
+        var notices: [String]
+    }
 
     struct Wallet: Codable, Equatable {
         var recordId: String

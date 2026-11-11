@@ -107,7 +107,9 @@ enum CloudBackupUITestStateProbe {
             syncError: manager.syncError,
             wallets: walletRows(manager.detail),
             lifecycle: lifecycleDescription(manager.lifecycle),
-            settingsRow: settingsRowDescription(manager.settingsRowStatus)
+            settingsRow: settingsRowDescription(manager.settingsRowStatus),
+            // the manager has no projected screen to read yet
+            screen: nil
         )
     }
 
