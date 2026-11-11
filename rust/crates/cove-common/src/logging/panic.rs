@@ -4,7 +4,7 @@
 //! cause. The hook writes a small marker file synchronously before the abort and the next
 //! report shows it
 
-use std::panic::PanicHookInfo;
+use std::{io::Write as _, panic::PanicHookInfo};
 
 use super::capture;
 
@@ -16,9 +16,14 @@ pub(crate) fn install_hook() {
 
     std::panic::set_hook(Box::new(move |info| {
         let line = panic_line(info);
+
         // no tracing call here: a panic raised inside a subscriber that holds its own lock
         // would hang re-entering it instead of aborting
         capture::record_panic(&line);
+
+        // release builds skip the default hook, so this payload-free line is all the console
+        // gets; nothing useful can be done if stderr is closed
+        let _ = writeln!(std::io::stderr(), "{line}");
 
         // the default hook prints the payload, which can hold secrets from a formatted
         // message, so only debug builds keep it for local backtraces

@@ -38,7 +38,6 @@ pub fn init() {
 
         let console_filter = std::env::var("RUST_LOG").unwrap_or_default();
 
-
         tracing_subscriber::registry()
             .with(
                 fmt::layer()

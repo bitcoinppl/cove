@@ -636,6 +636,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             let message = error.isAuthError()
                 ? "Wrong PIN, please try again"
                 : "TapSigner operation failed. Please try again."
+
             // a wrong PIN is a user input error, not a card or app fault
             if error.isAuthError() {
                 logger.warn("TapSigner PIN rejected: \(operationKind(command))")

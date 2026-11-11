@@ -210,6 +210,7 @@ struct BackupImportView: View {
             do {
                 let attrs = try url.resourceValues(forKeys: [.fileSizeKey])
                 if let size = attrs.fileSize, size > 50_000_000 {
+                    logger.warn("backup file rejected: too large, bytes=\(size)")
                     throw BackupError.FileTooLarge
                 }
 
