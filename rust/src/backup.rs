@@ -461,6 +461,7 @@ mod tests {
             logs.contains("backup import failed kind=\"keychain\""),
             "keychain kind not logged"
         );
+
         assert!(!logs.contains(wallet_name), "logs quote the wallet name");
         assert!(!logs.contains("xpub6Cbad"), "logs quote the xpub");
     }
