@@ -55,6 +55,34 @@ fn paused_clock_moves_only_when_the_test_advances_it() {
     });
 }
 
+/// A blocking job no fake and no operation stage knows about keeps the app unsettled until the
+/// task waiting on it has run: the park can't see the job while it is dispatched, while it runs,
+/// or while its answer is on the way back
+#[test]
+fn settle_waits_for_a_blocking_job_and_the_task_waiting_on_it() {
+    let test =
+        concat!(module_path!(), "::settle_waits_for_a_blocking_job_and_the_task_waiting_on_it");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let answered = Arc::new(AtomicBool::new(false));
+        let job_answered = answered.clone();
+
+        app.event("a task starts a blocking job", |_| {
+            let _task = cove_tokio::task::spawn(async move {
+                // a platform call that takes a while on its own thread, long enough that the
+                // runtime parks and the old settle returned first
+                cove_tokio::task::spawn_blocking(|| std::thread::sleep(Duration::from_millis(50)))
+                    .await
+                    .expect("blocking job");
+                job_answered.store(true, Ordering::SeqCst);
+            });
+        })
+        .then_can(&[N::Enable]);
+
+        assert!(answered.load(Ordering::SeqCst), "settled before the blocking job's task ran");
+    });
+}
+
 #[test]
 fn soft_relaunch_keeps_durable_state_without_prompting() {
     let test = concat!(module_path!(), "::soft_relaunch_keeps_durable_state_without_prompting");

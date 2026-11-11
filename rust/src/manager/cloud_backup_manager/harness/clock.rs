@@ -28,7 +28,9 @@ impl HarnessClock {
         test_clock::advance(by.as_secs());
 
         // tokio advances a paused clock only from the runtime's own thread; from the test
-        // thread the parked driver would never see the new time
+        // thread the parked driver would never see the new time. Its `advance` then yields to
+        // the time driver, so every timer this step makes due fires before the runtime thread
+        // can park, which is why settling can trust a park
         cove_tokio::task::spawn(tokio::time::advance(by)).await.expect("advance harness clock");
     }
 }

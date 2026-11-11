@@ -25,6 +25,7 @@ use tokio::sync::watch;
 
 use super::deadline::Deadline;
 use super::process::{checkpoint, on_checkpoint};
+use super::runtime::WaitingThread;
 use crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     MockCloudDurableContents, MockCloudStorage, MockPasskeyProviderImpl,
@@ -64,6 +65,9 @@ pub(crate) struct Hold(Arc<HoldInner>);
 struct HoldInner {
     stage: watch::Sender<HoldStage>,
     call: Mutex<String>,
+    /// The held call's place among the calls waiting for the test, from the moment it enters
+    /// until the test releases it
+    held: Mutex<Option<HeldCall>>,
 }
 
 impl Default for Hold {
@@ -71,7 +75,31 @@ impl Default for Hold {
         Self(Arc::new(HoldInner {
             stage: watch::Sender::new(HoldStage::Armed),
             call: Mutex::new("an unscripted held call".into()),
+            held: Mutex::new(None),
         }))
+    }
+}
+
+/// One fake call waiting for the test to release it
+///
+/// Until this drops the call counts among the held calls, and when the fake waits on a
+/// blocking-pool thread, that thread counts as waiting for the test
+#[derive(Debug)]
+struct HeldCall {
+    _thread: WaitingThread,
+}
+
+impl HeldCall {
+    /// Counts the call that starts waiting on this thread
+    fn enter() -> Self {
+        HELD_CALLS.send_modify(|held| *held += 1);
+        Self { _thread: WaitingThread::enter() }
+    }
+}
+
+impl Drop for HeldCall {
+    fn drop(&mut self) {
+        HELD_CALLS.send_modify(|held| *held -= 1);
     }
 }
 
@@ -82,7 +110,13 @@ impl Hold {
     }
 
     pub(crate) fn release(&self) {
-        self.0.stage.send_modify(|stage| *stage = HoldStage::Released);
+        self.0.stage.send_modify(|stage| {
+            // the call stops waiting for the test here, on the releasing thread: its own thread
+            // or task takes a moment to notice the release, and settling must not count it as
+            // held in that moment
+            self.0.held.lock().take();
+            *stage = HoldStage::Released;
+        });
     }
 
     /// Resolves once the released call has returned to its caller
@@ -102,20 +136,35 @@ impl Hold {
         receiver.wait_for(|current| rank(current) >= rank(&stage)).await.expect("hold dropped");
     }
 
-    async fn enter_and_wait(&self) {
-        HELD_CALLS.send_modify(|held| *held += 1);
-
+    /// Starts waiting for the test, unless the test already released this hold
+    fn enter(&self) {
         // a hold the test released before its call started lets that call through: overwriting
         // the release would strand the call with nothing left to release it
         self.0.stage.send_if_modified(|stage| {
             let armed = *stage == HoldStage::Armed;
             if armed {
+                *self.0.held.lock() = Some(HeldCall::enter());
                 *stage = HoldStage::Entered;
             }
             armed
         });
+    }
+
+    async fn enter_and_wait(&self) {
+        self.enter();
         self.wait_for(HoldStage::Released, "to be released by the test").await;
-        HELD_CALLS.send_modify(|held| *held -= 1);
+    }
+
+    /// Waits for the release on the thread a fake's call blocks
+    ///
+    /// On a blocking-pool thread, the thread counts as waiting for the test exactly as long as
+    /// the call counts as held, so settling sees every other moment of the call as a blocking
+    /// job in flight
+    fn block_until_released(&self) {
+        self.enter();
+        futures::executor::block_on(
+            self.wait_for(HoldStage::Released, "to be released by the test"),
+        );
     }
 
     fn finish(&self) {
@@ -510,7 +559,6 @@ struct PasskeyCalls {
     counts: HashMap<PasskeyCall, usize>,
     log: Vec<CallId<PasskeyCall>>,
     forbidden: Vec<CallId<PasskeyCall>>,
-    running: usize,
 }
 
 /// Passkey provider fake; the mock's results answer `Succeeds` and `Slow` requests
@@ -532,11 +580,6 @@ impl HarnessPasskey {
 
     pub(crate) fn interactive_calls(&self) -> Vec<CallId<PasskeyCall>> {
         self.calls.lock().log.clone()
-    }
-
-    /// Requests answering on a blocking thread, excluding held and never-answered ones
-    pub(crate) fn running_calls(&self) -> usize {
-        self.calls.lock().running
     }
 
     /// Interactive calls made while the mode was `FailOnAnyInteractiveCall`
@@ -561,24 +604,26 @@ impl HarnessPasskey {
 
         let mode = self.mode.lock().clone();
 
-        // passkey requests run on blocking threads, so waiting here never stalls the runtime; a
-        // held or never-answered request counts as settled, like a held cloud call
+        // passkey requests run on blocking-pool threads, so waiting here never stalls the
+        // runtime; a held or never-answered request counts as settled, like a held cloud call.
+        // Settling waits for every other moment of the request as a job in the runtime's pool
         match &mode {
             PasskeyMode::Slow(hold) => {
                 hold.label(format!("held passkey call {:?} #{}", id.kind, id.nth));
-                futures::executor::block_on(hold.enter_and_wait());
+                hold.block_until_released();
             }
 
-            PasskeyMode::NeverCompletes => loop {
-                std::thread::park();
-            },
+            PasskeyMode::NeverCompletes => {
+                let _waiting = WaitingThread::enter();
+                loop {
+                    std::thread::park();
+                }
+            }
 
             _ => {}
         }
 
-        // the runtime can go idle while this blocking thread answers, so settling waits on it
-        self.calls.lock().running += 1;
-        let result = match mode {
+        match mode {
             PasskeyMode::Succeeds => answer(),
             PasskeyMode::NotCompleted => Err(PasskeyError::UserCancelled),
             PasskeyMode::ProviderFailure => Err(PasskeyError::RequestFailed {
@@ -597,10 +642,7 @@ impl HarnessPasskey {
                 self.calls.lock().forbidden.push(id);
                 Err(PasskeyError::UserCancelled)
             }
-        };
-
-        self.calls.lock().running -= 1;
-        result
+        }
     }
 }
 
@@ -682,7 +724,7 @@ impl HarnessKeychain {
     }
 
     /// Makes every later delete take `duration` on its own thread, without a hold the test
-    /// releases, so the only way to wait for it is the owner's stage checkpoint
+    /// releases, so settling waits for it as a blocking job in the runtime's pool
     pub(crate) fn slow_deletes(&self, duration: Duration) {
         *self.slow_deletes.lock() = Some(duration);
     }
@@ -714,7 +756,7 @@ impl KeychainAccess for HarnessKeychain {
             .then(|| self.namespace_delete_hold.lock().take())
             .flatten();
         if let Some(hold) = hold {
-            futures::executor::block_on(hold.enter_and_wait());
+            hold.block_until_released();
             let deleted = self.inner.delete(key);
             self.persist();
             hold.finish();

@@ -1,7 +1,4 @@
-/// Run `f` on a blocking thread and wait for its answer
-///
-/// With the `test-support` feature, the call counts in `task::blocking_calls` until the caller
-/// has the answer
+/// Run `f` on a blocking thread and wait for its result
 pub async fn run_blocking<F, R>(f: F) -> R
 where
     F: FnOnce() -> R + Send + 'static,

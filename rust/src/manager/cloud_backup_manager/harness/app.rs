@@ -338,33 +338,40 @@ impl TestApp {
         }
     }
 
-    /// Wait until the actors have handled every message and no provider call is running
+    /// Wait until the actors have handled every message and no off-runtime work is in flight
     ///
-    /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
-    /// park. A current-thread runtime parks only with an empty run queue, so after a round every
-    /// task the event woke has run as far as it can. The app is settled after a round in which
-    /// no fake call is answering, no blocking call is in flight or answered, the supervisor's
-    /// stage checkpoint shows no operation in an `Effecting` stage, and the write lane has no
-    /// command in flight. An effect, a blocking call and a lane keychain save run off the
-    /// runtime, so the park alone can't see them. Calls
-    /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
-    /// release holds and advance time as events
+    /// A round waits for the runtime's blocking pool to go quiet, runs a mailbox barrier on both
+    /// actors, and waits for the runtime thread to park. A current-thread runtime parks only
+    /// with an empty run queue, so after a round every task the event woke has run as far as it
+    /// can. A blocking job runs off the runtime, where the park can't see it, and its answer
+    /// wakes a task later. So a round counts only if the pool stayed quiet from before its
+    /// barrier until the park: then no job existed that could still wake a task. The app is
+    /// settled after such a round in which no cloud call is answering and the supervisor's stage
+    /// checkpoint shows no operation in an `Effecting` stage. Calls waiting on a `Hold` and
+    /// tasks waiting on the paused clock count as settled, so tests release holds and advance
+    /// time as events
     pub(crate) fn settle(&self) {
         let supervisor = self.manager.supervisor.clone();
         let writes = self.manager.cloud_writes.clone();
 
         for _ in 0..SETTLE_ROUNDS {
-            let blocking = cove_tokio::task::blocking_calls();
+            let jobs = format!("the blocking jobs to answer after {}", self.last_event);
+            let quiet = runtime::wait_until_pool_is_quiet(&jobs);
+
             let barrier = format!("the actors' mailbox barrier after {}", self.last_event);
             self.block_on(&barrier, async {
                 call!(supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
                 call!(writes.harness_checkpoint()).await.expect("write supervisor checkpoint");
             });
 
-            runtime::wait_until_idle(&format!("the runtime to go idle after {}", self.last_event));
+            let park = format!("the runtime to go idle after {}", self.last_event);
 
-            // a passkey request answers on a blocking thread while the runtime is idle
-            if self.cloud.running_calls() != 0 || self.passkey.running_calls() != 0 {
+            // a job dispatched or answered during the round wakes tasks the next barrier runs
+            if runtime::wait_until_parked(&park) != quiet {
+                continue;
+            }
+
+            if self.cloud.running_calls() != 0 {
                 continue;
             }
 
@@ -373,35 +380,12 @@ impl TestApp {
                 return;
             }
 
-            // a blocking call's answer wakes the runtime only after the blocking thread returns,
-            // so a park seen while one was in flight, or answered during the round, can be early;
-            // the count is per process, and a case phase's process runs only its own test
-            if blocking.in_flight != 0 || cove_tokio::task::blocking_calls() != blocking {
-                self.wait_for_blocking_answer(blocking);
-                continue;
-            }
-
             let checkpoint = format!("the supervisor's stage checkpoint after {}", self.last_event);
             let mut effects_settled = self
                 .block_on(&checkpoint, call!(supervisor.harness_effects_settled()))
                 .expect("stage checkpoint");
             if effects_settled.try_recv().is_ok() {
-                // the lane saves proven keys on a blocking thread, which the park can't see either
-                let lane = format!("the write lane's idle checkpoint after {}", self.last_event);
-                let mut lane_idle =
-                    self.block_on(&lane, call!(writes.when_idle())).expect("lane checkpoint");
-                if lane_idle.try_recv().is_ok() {
-                    return;
-                }
-
-                let command = format!("the lane's command to finish after {}", self.last_event);
-                self.block_on(&command, async {
-                    tokio::select! {
-                        idle = lane_idle => idle.expect("the write lane stopped with a command in flight"),
-                        () = fakes::until_a_call_is_held() => {}
-                    }
-                });
-                continue;
+                return;
             }
 
             let effect = format!("the in-flight effect to report after {}", self.last_event);
@@ -417,21 +401,6 @@ impl TestApp {
         }
 
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
-    }
-
-    /// Waits until a blocking call seen in `before` answers its caller, one answered already, or
-    /// a call is held
-    ///
-    /// The answer comes from another thread, so the wait polls. A blocking call that enters a
-    /// hold answers only when the test releases it, so a hold ends the wait and the next round
-    /// settles on it; an in-flight call that never answers fails on the deadline instead of using
-    /// up the settle rounds
-    fn wait_for_blocking_answer(&self, before: cove_tokio::task::BlockingCalls) {
-        let _deadline =
-            Deadline::arm(format!("a blocking call to answer after {}", self.last_event));
-        while cove_tokio::task::blocking_calls() == before && fakes::held_calls() == 0 {
-            std::thread::sleep(Duration::from_millis(1));
-        }
     }
 
     fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
