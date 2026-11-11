@@ -29,44 +29,56 @@ private const val TAG = "TapSignerBackupExport"
  * picker is still open, and the picker result can arrive only after the app unlocks. The request
  * is kept here and [TapSignerBackupExportHost], which lives as long as the app shell, owns the
  * picker and the write, matching the iOS share sheet that outlives the TAPSIGNER sheet
+ *
+ * A picker result always belongs to the request that opened it, so a request made while a picker
+ * is open waits for that picker to return before opening its own
  */
 class TapSignerBackupExports {
     private class Request(
         val fileName: String,
         val getBackup: suspend () -> ByteArray,
-    ) {
-        var isPickerOpen = false
-    }
+    )
 
-    private var request by mutableStateOf<Request?>(null)
+    // waiting for the picker to open
+    private var pending by mutableStateOf<Request?>(null)
 
-    /** Asks the user where to save the backup that [getBackup] returns, replacing any unsaved request */
+    // its picker is open, so the next result is for it
+    private var active by mutableStateOf<Request?>(null)
+
+    /** Asks the user where to save the backup that [getBackup] returns, replacing any request not yet shown */
     fun request(
         fileName: String,
         getBackup: suspend () -> ByteArray,
     ) {
-        request = Request(fileName, getBackup)
+        pending = Request(fileName, getBackup)
     }
 
-    /** The file name to open the picker with, returned once per request */
-    internal fun fileNameToLaunch(): String? {
-        val pending = request ?: return null
-        if (pending.isPickerOpen) return null
-
-        pending.isPickerOpen = true
-        return pending.fileName
+    /** Drops every request, for a session reset, wipe or mode switch that discards its picker result */
+    fun clear() {
+        pending = null
+        active = null
     }
 
-    /** Ends the request the picker answered, returning how to read the backup to save */
-    internal fun takeForResult(): (suspend () -> ByteArray)? {
-        val pending = request ?: return null
-        request = null
-        return pending.getBackup
+    /** Marks the waiting request as shown and returns its file name, or null while a picker is open */
+    internal fun startNext(): String? {
+        if (active != null) return null
+
+        val next = pending ?: return null
+        pending = null
+        active = next
+        return next.fileName
     }
 
-    // read by the host so each new request opens the picker
-    internal val pendingRequest: Any?
-        get() = request
+    /** Ends the request whose picker returned, returning how to read the backup to save */
+    internal fun finishActive(): (suspend () -> ByteArray)? {
+        val finished = active ?: return null
+        active = null
+        return finished.getBackup
+    }
+
+    // read by the host so it opens the next picker when a request arrives or a picker returns
+    internal val launchState: Pair<Any?, Any?>
+        get() = pending to active
 }
 
 /** Opens the save location picker for each TAPSIGNER backup request and writes the backup there */
@@ -81,7 +93,7 @@ fun TapSignerBackupExportHost(app: AppManager) {
             ActivityResultContracts.CreateDocument("text/plain"),
         ) { uri ->
             val getBackup =
-                exports.takeForResult() ?: run {
+                exports.finishActive() ?: run {
                     if (uri != null) Log.w(TAG, "TAPSIGNER backup save location returned with no pending backup")
                     return@rememberLockAwareLauncherForActivityResult
                 }
@@ -116,8 +128,8 @@ fun TapSignerBackupExportHost(app: AppManager) {
             }
         }
 
-    LaunchedEffect(exports.pendingRequest) {
-        val fileName = exports.fileNameToLaunch() ?: return@LaunchedEffect
+    LaunchedEffect(exports.launchState) {
+        val fileName = exports.startNext() ?: return@LaunchedEffect
         launcher.launch(fileName)
     }
 }

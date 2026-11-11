@@ -394,6 +394,9 @@ class AppManager private constructor() : FfiReconcile {
         clearWalletManager()
         clearKeyTeleportManager()
         corruptedWalletDeletionRetry = null
+
+        // a decoy mode switch drops a held picker result, so its request would never finish
+        tapSignerBackupExports.clear()
     }
 
     /**
