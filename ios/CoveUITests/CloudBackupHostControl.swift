@@ -47,6 +47,41 @@ final class CloudBackupHostControl {
 
     func configure(_ app: XCUIApplication) {
         app.launchEnvironment[CloudBackupUITestControl.environmentKey] = directory.path
+
+        // Rust looks for the request file in the directory this names, not at this path
+        app.launchEnvironment[CloudBackupUITestControl.legacyStuckRecordEnvironmentKey] = directory.path
+    }
+
+    private var legacyStuckRecordRequestURL: URL {
+        directory.appendingPathComponent(CloudBackupUITestControl.legacyStuckRecordRequestFileName)
+    }
+
+    /// Asks Rust to replace the configured Cloud Backup record with the legacy stuck Disabling
+    /// record when the app next starts, before load normalization heals it
+    ///
+    /// Call it while the app is stopped, such as in `killAndRelaunch`'s `whileStopped`
+    func requestLegacyStuckRecordOnNextLaunch() throws {
+        try CloudBackupUITestControl.writeAtomically(Data(), to: legacyStuckRecordRequestURL)
+    }
+
+    /// Waits until the launched app took the legacy stuck record request
+    func waitForLegacyStuckRecordSeeded(
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let path = legacyStuckRecordRequestURL.path
+        let deadline = Date().addingTimeInterval(timeout)
+        while FileManager.default.fileExists(atPath: path), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: path),
+            "the app never took the legacy stuck record request; app log in \(directory.path)",
+            file: file,
+            line: line
+        )
     }
 
     /// Rewrites the script the running host reads on its next provider call

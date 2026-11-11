@@ -23,6 +23,15 @@ enum CloudBackupUITestControl {
     /// The cloud backup manager's state as the app holds it, a `CloudBackupUITestAppState`
     static let appStateFileName = "app-state.json"
 
+    /// The variable naming the directory that holds the request file of Rust's debug-only seam
+    /// that replaces the configured Cloud Backup record with the legacy stuck Disabling record, a
+    /// Turn Off that never deleted anything, at the next bootstrap; the same name the Android host
+    /// sets
+    static let legacyStuckRecordEnvironmentKey = "COVE_UI_TEST_LEGACY_STUCK_RECORD"
+    /// That request file, which Rust deletes once it wrote the record, before load normalization
+    /// heals it, so a request applies to one launch
+    static let legacyStuckRecordRequestFileName = "seed-legacy-stuck-record"
+
     /// Gate that keeps fresh-enable uploads unreadable until the test creates its release file
     static let visibilityGate = "visibility"
 
