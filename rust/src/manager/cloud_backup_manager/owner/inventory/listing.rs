@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::manager::cloud_backup_manager::inventory::{CopyCover, InventoryListedClass};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupUnreadableKind,
 };
@@ -79,11 +80,19 @@ impl CloudOnlyRow {
         }
     }
 
-    /// The local wallets that cover an extra copy, or `None` for any other row
-    pub(crate) fn covered_by(&self) -> Option<&CoveringWallets> {
+    /// What Turn Off's impact reads this row as, keeping an extra copy's covering wallets and
+    /// what it holds, so Turn Off can check this device still holds it
+    pub(crate) fn impact_class(&self) -> InventoryListedClass {
         match &self.record {
-            CloudOnlyRecord::ExtraCopy { covered_by, .. } => Some(covered_by),
-            _ => None,
+            CloudOnlyRecord::NotOnDevice(wallet) => {
+                InventoryListedClass::NotOnDevice { name: wallet.name.clone() }
+            }
+            CloudOnlyRecord::ExtraCopy { covered_by, .. } => {
+                InventoryListedClass::ExtraCopy(CopyCover::from(covered_by))
+            }
+            CloudOnlyRecord::Unsupported => InventoryListedClass::Unsupported,
+            CloudOnlyRecord::Unreadable { .. } => InventoryListedClass::Unreadable,
+            CloudOnlyRecord::Unchecked => InventoryListedClass::Unchecked,
         }
     }
 

@@ -14,7 +14,9 @@ mod sync;
 mod undecryptable_wallets;
 
 pub(crate) use cloud_only::{CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll};
-pub(crate) use disable::{CLOUD_BACKUP_LOAD_FAILED_MESSAGE, next_disable_generation};
+pub(crate) use disable::{
+    CLOUD_BACKUP_LOAD_FAILED_MESSAGE, DISABLE_EVIDENCE_DEADLINE, next_disable_generation,
+};
 pub(crate) use enable::{
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
     CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,

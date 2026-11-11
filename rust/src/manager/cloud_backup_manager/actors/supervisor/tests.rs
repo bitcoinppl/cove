@@ -3290,7 +3290,7 @@ async fn a_configuration_change_makes_the_turn_off_review_stale() {
     let generation = supervisor.runtime.generation();
     let review = empty_review(VALID_NAMESPACE_ID);
     let review_id = review.review_id.get();
-    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
+    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(Box::new(review))));
     let confirm = UserIntent::ConfirmDisable { review_id };
     assert_eq!(
         evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
@@ -3324,7 +3324,7 @@ async fn an_operation_started_from_the_review_ends_it() {
 
     persist_enabled_under(&mut supervisor);
     let review = empty_review(VALID_NAMESPACE_ID);
-    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
+    supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(Box::new(review))));
     assert!(supervisor.runtime.turn_off_review().is_some());
 
     let claim = supervisor
@@ -3368,7 +3368,7 @@ async fn a_restore_first_the_inventory_cannot_start_leaves_the_review_open() {
     for (names, rejection) in cases {
         let review = review_not_on_device(VALID_NAMESPACE_ID, names);
         let review_id = review.review_id.get();
-        supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
+        supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(Box::new(review))));
         let restore_first = UserIntent::LeaveReview { review_id, to: ReviewExit::RestoreFirst };
         let snapshot = supervisor.admission_snapshot(&manager, &manager.inventory_facts());
         assert_eq!(evaluate_admission(&restore_first, &snapshot), Admission::Rejected(rejection));

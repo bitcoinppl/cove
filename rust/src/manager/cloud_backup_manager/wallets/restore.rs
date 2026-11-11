@@ -455,7 +455,7 @@ impl DownloadedWalletBackup {
             }
         };
 
-        let covered_by = CoveringWallets::one(upgrade.target());
+        let covered_by = CoveringWallets::one(upgrade.target(), BackupRecoveryMaterial::Secret);
         let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
         match upgrade.apply(&database, keychain, source) {
             Ok(upgraded) => Ok(Some(CloudOnlyRestoreOutcome::SecretAdded {

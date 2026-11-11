@@ -3,7 +3,7 @@
 //! The screen projection reads the inventory only through [`InventoryFacts`], built from the
 //! inventory owner and, for Restore All's progress, the reducer
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use super::admission::DetailInventory;
 use super::screen::{
@@ -13,15 +13,18 @@ use super::screen::{
 use super::{
     CloudBackupDetailState, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupRestoreAllState, CloudBackupStateReducer, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudOnlyOperation, InventoryOwner, LoadedCloudBackupDetail,
-    OtherBackupsOperation, OwnSecretFacts, RecordId, RustCloudBackupManager,
+    CloudBackupWalletStatus, CloudCopySecret, CloudOnlyOperation, InventoryOwner, InventoryReadAt,
+    LoadedCloudBackupDetail, OtherBackupsOperation, OwnSecretFacts, RecordId,
+    RustCloudBackupManager,
 };
-use crate::wallet_identity::CoveringWallets;
+use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallets};
 
 /// The inventory facts the screen projection reads
 #[derive(Debug, Clone)]
 pub(crate) struct InventoryFacts {
     readiness: DetailInventory,
+    classified: bool,
+    read_at: InventoryReadAt,
     detail: CloudBackupDetailState,
     restore_all: CloudBackupRestoreAllState,
     other_backups: CloudBackupOtherBackupsState,
@@ -32,8 +35,10 @@ pub(crate) struct InventoryFacts {
 /// The inventory as the screen draws it
 #[derive(Debug, Clone)]
 pub(crate) struct InventoryView {
-    /// How far the inventory has loaded
-    pub(crate) readiness: DetailInventory,
+    /// The owner proved the inventory complete, current and classified
+    pub(crate) classified: bool,
+    /// The configuration and the local wallet changes the inventory reflects
+    pub(crate) read_at: InventoryReadAt,
     /// Shown while the inventory loads or after a load failed
     pub(crate) progress: Option<InventoryProgress>,
     /// The rows of the last finished load, kept through a refresh or a failure
@@ -60,9 +65,8 @@ pub(crate) struct InventoryRows {
     /// Cloud records this device doesn't back up, in listing order
     pub(crate) listed: Vec<ListedRecord>,
     pub(crate) last_sync: Option<u64>,
-    /// Own record IDs of wallets holding no secret here whose cloud copy couldn't be read, so
-    /// whether only the cloud holds their secret is unchecked
-    pub(crate) secret_unchecked: HashSet<String>,
+    /// What each own record's cloud copy holds, by record ID
+    pub(crate) own_cloud_copies: HashMap<String, CloudCopySecret>,
 }
 
 impl InventoryRows {
@@ -76,54 +80,63 @@ impl InventoryRows {
             .chain(&self.needs_sync)
             .filter(|row| row.record == CloudBackupOwnRecord::Current)
             .map(|row| RecordId::from(row.wallet.record_id.clone()))
-            .any(|own_record_id| listed.covered_by.contains(&own_record_id))
+            .any(|own_record_id| listed.covered_by().contains(&own_record_id))
     }
 }
 
-/// What the inventory knows that a Turn Off impact classifies a fresh listing with
+/// What the inventory knows that a Turn Off impact classifies a fresh listing and a fresh read
+/// of this device's wallets with
 ///
-/// Built from the view alone, so the impact reads the same rows the screen draws
+/// Built from the view alone, so the impact reads the same rows the screen draws. It carries
+/// what each own record's cloud copy holds, never whether this device held the secret when the
+/// inventory read it: Turn Off reads that itself when it asks, since a wallet can lose its
+/// secret without the inventory hearing of it
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InventoryImpactInputs {
     /// How complete the inventory behind these classes is
     pub(crate) assessment: CloudBackupInventoryAssessment,
-    /// Own records whose cloud copy holds a secret this device doesn't, by record ID, with names
-    pub(crate) secret_missing_locally: BTreeMap<String, String>,
-    /// Own records whose cloud copy couldn't be read to tell, by record ID, with names
-    pub(crate) secret_unchecked: BTreeMap<String, String>,
+    /// What each own record's cloud copy holds, by record ID
+    pub(crate) own_cloud_copies: BTreeMap<String, CloudCopySecret>,
     /// What each listed record that isn't a local wallet's own backup is, by record ID
     pub(crate) listed: BTreeMap<String, InventoryListedClass>,
+    /// The configuration and the local wallet changes these facts reflect
+    pub(crate) read_at: InventoryReadAt,
 }
 
 /// What a listed record that isn't a local wallet's own backup is
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum InventoryListedClass {
     NotOnDevice { name: String },
-    ExtraCopy,
+    ExtraCopy(CopyCover),
     Unsupported,
     Unreadable,
     Unchecked,
 }
 
-impl From<&CloudBackupListedRecord> for InventoryListedClass {
-    fn from(record: &CloudBackupListedRecord) -> Self {
-        match record {
-            CloudBackupListedRecord::NotOnDevice { wallet } => {
-                Self::NotOnDevice { name: wallet.name.clone() }
-            }
-            CloudBackupListedRecord::ExtraCopy { .. } => Self::ExtraCopy,
-            CloudBackupListedRecord::Unsupported => Self::Unsupported,
-            CloudBackupListedRecord::Unreadable { .. } => Self::Unreadable,
-            CloudBackupListedRecord::Unchecked => Self::Unchecked,
-        }
+/// Which local wallets an extra copy was read as covered by, and what it holds
+///
+/// The inventory read the coverage, but a wallet can lose its secret without the inventory
+/// hearing of it, so Turn Off checks it again against its own read of this device's wallets
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CopyCover {
+    /// The covering wallets' own-backup record IDs, which key this device's wallets
+    pub(crate) covered_by: Vec<RecordId>,
+    /// What the copy can recover, which a covering wallet must still hold
+    pub(crate) material: BackupRecoveryMaterial,
+}
+
+impl From<&CoveringWallets> for CopyCover {
+    fn from(covering: &CoveringWallets) -> Self {
+        Self { covered_by: own_record_ids(covering), material: covering.material() }
     }
 }
 
 impl InventoryView {
     /// The inventory's facts for a Turn Off impact
     ///
-    /// Complete only when every listed record was read and every own record's secret was
-    /// checked. With no loaded rows the inventory knows nothing, so it's unknown
+    /// Complete only when the owner proves the inventory classified: the provider confirmed the
+    /// listing and every listed record was read. Whether each own record's risk could be told is
+    /// the impact's to tell. With no loaded rows the inventory knows nothing, so it's unknown
     pub(crate) fn impact_inputs(&self) -> InventoryImpactInputs {
         let reason = match self.progress {
             Some(InventoryProgress::Incomplete(reason)) => reason,
@@ -133,44 +146,30 @@ impl InventoryView {
         let Some(rows) = &self.rows else {
             return InventoryImpactInputs {
                 assessment: CloudBackupInventoryAssessment::Unknown { reason },
-                secret_missing_locally: BTreeMap::new(),
-                secret_unchecked: BTreeMap::new(),
+                own_cloud_copies: BTreeMap::new(),
                 listed: BTreeMap::new(),
+                read_at: self.read_at,
             };
         };
-
-        let mut secret_missing_locally = BTreeMap::new();
-        let mut secret_unchecked = BTreeMap::new();
-        for row in rows.up_to_date.iter().chain(&rows.needs_sync) {
-            let wallet = &row.wallet;
-
-            if row.record == CloudBackupOwnRecord::SecretMissingLocally {
-                secret_missing_locally.insert(wallet.record_id.clone(), wallet.name.clone());
-            }
-
-            if rows.secret_unchecked.contains(&wallet.record_id) {
-                secret_unchecked.insert(wallet.record_id.clone(), wallet.name.clone());
-            }
-        }
 
         let listed = rows
             .listed
             .iter()
-            .map(|listed| {
-                (listed.record_id.clone().into(), InventoryListedClass::from(&listed.record))
-            })
+            .map(|listed| (listed.record_id.clone().into(), listed.class.clone()))
             .collect();
 
-        let assessment = match self.readiness {
-            DetailInventory::Complete if secret_unchecked.is_empty() => {
-                CloudBackupInventoryAssessment::Complete
-            }
-            DetailInventory::Complete | DetailInventory::Ready | DetailInventory::NotLoaded => {
-                CloudBackupInventoryAssessment::Partial { reason }
-            }
+        let assessment = if self.classified {
+            CloudBackupInventoryAssessment::Complete
+        } else {
+            CloudBackupInventoryAssessment::Partial { reason }
         };
 
-        InventoryImpactInputs { assessment, secret_missing_locally, secret_unchecked, listed }
+        InventoryImpactInputs {
+            assessment,
+            own_cloud_copies: rows.own_cloud_copies.clone().into_iter().collect(),
+            listed,
+            read_at: self.read_at,
+        }
     }
 }
 
@@ -179,9 +178,22 @@ impl InventoryView {
 pub(crate) struct ListedRecord {
     pub(crate) record_id: RecordId,
     pub(crate) record: CloudBackupListedRecord,
+    /// What the record is, with an extra copy's covering wallets
+    pub(crate) class: InventoryListedClass,
+}
+
+impl ListedRecord {
     /// For an extra copy, the own-backup record IDs of the local wallets that cover it, so the
     /// copy is matched to their own rows by wallet ID and never by name; empty for other rows
-    pub(crate) covered_by: Vec<RecordId>,
+    pub(crate) fn covered_by(&self) -> &[RecordId] {
+        match &self.class {
+            InventoryListedClass::ExtraCopy(cover) => &cover.covered_by,
+            InventoryListedClass::NotOnDevice { .. }
+            | InventoryListedClass::Unsupported
+            | InventoryListedClass::Unreadable
+            | InventoryListedClass::Unchecked => &[],
+        }
+    }
 }
 
 impl InventoryRows {
@@ -205,6 +217,8 @@ impl InventoryFacts {
     pub(crate) fn new(owner: &InventoryOwner, reducer: &CloudBackupStateReducer) -> Self {
         Self {
             readiness: owner.readiness(),
+            classified: owner.classified().is_some(),
+            read_at: owner.read_at(),
             detail: owner.detail_state().clone(),
             restore_all: owner
                 .restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some()),
@@ -234,7 +248,8 @@ impl InventoryFacts {
         };
 
         InventoryView {
-            readiness: self.readiness,
+            classified: self.classified,
+            read_at: self.read_at,
             progress,
             rows: loaded_detail(&self.detail).map(inventory_rows),
             restore_all: self.restore_all.clone(),
@@ -264,7 +279,7 @@ fn inventory_rows(loaded: &LoadedCloudBackupDetail) -> InventoryRows {
         .map(|row| ListedRecord {
             record_id: RecordId::from(row.record_id.clone()),
             record: row.listed_record(),
-            covered_by: row.covered_by().map(own_record_ids).unwrap_or_default(),
+            class: row.impact_class(),
         })
         .collect();
 
@@ -275,7 +290,7 @@ fn inventory_rows(loaded: &LoadedCloudBackupDetail) -> InventoryRows {
         needs_sync: loaded.detail.needs_sync.iter().map(own_row).collect(),
         listed,
         last_sync: loaded.detail.last_sync,
-        secret_unchecked: loaded.own_secrets.unchecked.clone(),
+        own_cloud_copies: loaded.own_secrets.cloud_copies.clone(),
     }
 }
 

@@ -11,8 +11,8 @@ use super::WalletIdentityKey;
 use super::backup::no_fingerprint_wallet_id;
 
 use super::{
-    CoveringWallet, ExistingWalletIdentitySet, LocalWalletIdentities, PublicWalletIdentity,
-    PublicWalletIdentityError, WalletIdentityError,
+    BackupRecoveryMaterial, CoveringWallet, ExistingWalletIdentitySet, LocalWalletIdentities,
+    NamedWalletCoverage, PublicWalletIdentity, PublicWalletIdentityError, WalletIdentityError,
 };
 
 pub(crate) fn collect_existing_wallet_identities()
@@ -45,7 +45,24 @@ pub(crate) fn collect_local_wallet_identities() -> Result<LocalWalletIdentities,
     Ok(identities)
 }
 
-fn existing_wallet_identity_key(
+/// Whether a local wallet holds the seed a backup of `metadata`'s wallet could hold
+///
+/// Keys that backup as the wallet itself, since a wallet's own backup is of that wallet, and
+/// asks the coverage a restore asks of a secret backup: only a local hot wallet whose secret is
+/// stored and decrypts covers it, so a public-only wallet never does. A keychain read error is
+/// returned instead of read as covered
+pub(crate) fn local_wallets_hold_seed_of(
+    identities: &LocalWalletIdentities,
+    metadata: &WalletMetadata,
+    keychain: &Keychain,
+) -> Result<bool, WalletIdentityError> {
+    let key = existing_wallet_identity_key(metadata.clone(), keychain)?;
+    let coverage = identities.coverage(&key, BackupRecoveryMaterial::Secret);
+
+    Ok(matches!(coverage, NamedWalletCoverage::Covered(_)))
+}
+
+pub(crate) fn existing_wallet_identity_key(
     metadata: WalletMetadata,
     keychain: &Keychain,
 ) -> Result<WalletIdentityKey, WalletIdentityError> {

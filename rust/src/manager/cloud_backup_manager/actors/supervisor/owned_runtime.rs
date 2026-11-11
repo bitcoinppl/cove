@@ -33,16 +33,18 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
+#[cfg(test)]
+use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommittedDisable, LifecycleLoad, LifecycleWriter,
+    DisableCommitReview, LifecycleLoad, LifecycleWriter,
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, RetryWake,
-    ReviewId, TurnOffReview,
+    ReviewId, TurnOffCommit, TurnOffReview,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupStatus, InventoryScope, RustCloudBackupManager,
+    CloudBackupError, CloudBackupStatus, InventoryScope, RustCloudBackupManager,
 };
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
@@ -304,12 +306,29 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.start_restore_all(run))
     }
 
+    /// Commits the confirmed Turn Off `claim` runs and moves its body to the committed disable
+    /// in one step, then publishes
+    ///
+    /// The record write and the body change are one call, so the record can't move to Disabling
+    /// without the body that deletes, and a Turn Off that no longer runs writes nothing
     pub(crate) fn commit_turn_off(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        committed: CommittedDisable,
-    ) -> Option<FinishRun> {
-        self.mutate(|runtime| runtime.commit_turn_off(claim, committed))
+        review: &DisableCommitReview,
+        attempt_id: u64,
+    ) -> Result<TurnOffCommit, CloudBackupError> {
+        #[cfg(test)]
+        let before = self.runtime.claim();
+
+        let lifecycle = &self.lifecycle;
+        let commit =
+            self.runtime.commit_turn_off(claim, || lifecycle.commit_disable(review, attempt_id));
+
+        #[cfg(test)]
+        self.record_transition(before);
+
+        self.publish();
+        commit
     }
 
     /// Replaces the Turn Off review an idle configured body holds

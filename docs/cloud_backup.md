@@ -380,8 +380,9 @@ Locally only when its cloud backup holds one, such as a seed for a wallet now
 watch-only here. The record header doesn't say which kind of secret a backup
 holds, so the detail load reads it from the records it already decrypts with
 the master key on this device; an imported xpub backed up as watch-only is never
-marked. When a watch-only wallet's backup couldn't be read, its secret is
-unchecked, and the inventory's assessment for a Turn Off stays partial.
+marked. The inventory keeps what each own backup holds, a secret, none, or
+unread, and Turn Off pairs it with the secrets this device holds when it
+reviews.
 
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
@@ -608,30 +609,70 @@ asks for consent instead.
    operation or pausing writes. Only an idle configured body holds it, and a
    running operation replaces that body, so the two never exist together: any
    operation start, body change, Cancel or `LeaveDetail` ends it. The review
-   lists the namespace and counts other backup namespaces silently, and never
-   asks for a passkey or lets the provider ask for consent; the recheck after
-   the drain lists the same way. The listing proves which records are this device's own
-   backups, and the detail inventory says whether an own backup holds a secret
-   this device lacks. An own backup whose secret the inventory couldn't check
-   counts as unchecked. The review's assessment is always the detail
-   inventory's, so an inventory that isn't complete asks twice even when every
-   listed record is this device's own. Other records are classified by the
-   detail inventory as not on this device, extra copies, unreadable,
-   unsupported or unchecked. A record the inventory hasn't classified counts as
-   unchecked. The screen shows `Preparing`, then `Reviewing` with a
-   `CloudBackupDisableImpact`, or `Offline` when the provider can't be reached.
-   Tapping Turn Off again is the dialogs' Check Again.
-2. **Confirmation.** The impact asks once when only this device's backups and
-   extra copies would be deleted. It asks twice when anything is not on this
-   device, a local wallet's secret is missing, anything is unchecked, unreadable
-   or unsupported, or the assessment isn't complete; a failed listing makes it
-   unknown. Names are capped at three with a count of the rest. Backups made
-   with another passkey are a line in the dialog and are left in place.
+   lists the namespace, reads this device's wallets and the secret each holds
+   from the keychain, and counts other backup namespaces, all silently, and
+   never asks for a passkey or lets the provider ask for consent; the recheck
+   after the drain gathers the same way. The listing proves which records are
+   this device's own backups. An own backup is at risk when this device doesn't
+   hold the wallet's secret now and the detail inventory says the backup holds
+   one, and unchecked when the inventory couldn't read what the backup holds or
+   doesn't support it, even while this device holds the seed. An own backup the
+   inventory hasn't read yet, such as the one Turn Off's own drain uploaded, is
+   safe while the wallet identity coverage check a restore uses finds a local
+   hot wallet holding the wallet's seed, since its record is that wallet's, and
+   unchecked otherwise: a public-only wallet never holds a seed, and a keychain
+   read error leaves it unknown. A wallet whose
+   secret was deleted while its record stayed is named this way, though the
+   inventory read it while it still held its secret. An extra copy is judged by
+   the same read: the inventory keeps which local wallets covered it and
+   whether it holds a secret or public keys only, and it stays an extra copy
+   only while one of those wallets is still here and, for a secret, still holds
+   it. When every covering wallet that is left lacks the secret, those wallets
+   are named as missing their secret; when none is left, or one couldn't be
+   read, the copy is unchecked. The local read
+   is bound to the configuration and the count of local wallet changes the
+   inventory reflects, so a wallet change or a new configuration the inventory
+   applies while it reads makes the impact unknown. The review's assessment is
+   always the detail inventory's: it is complete only when the inventory owner
+   proves every listed record classified, so an inventory that isn't asks
+   twice even when every listed record is this device's own. Other records are
+   classified by the detail inventory as not on this device, extra copies,
+   unreadable, unsupported or unchecked. A record the inventory hasn't
+   classified counts as unchecked. The screen shows `Preparing`, then
+   `Reviewing` with a `CloudBackupDisableImpact`, or `Offline` when the
+   provider can't be reached.
+
+   Gathering this evidence is bounded. A listing that hasn't answered within 20
+   seconds is dropped and makes the impact unknown, which asks twice. The count
+   of other backups never holds it: the count is left out when it isn't in by
+   the time the listing is. This device's wallets are read last, after the
+   listing, so their secrets are as close to a commit as the evidence gets.
+
+   Tapping Turn Off again is the dialogs' Check Again. It asks the inventory
+   owner for a fresh classification and joins a refresh that is already
+   running. The review is built once that refresh lands or fails, or at the
+   same 20-second deadline, with the assessment the inventory reached. A
+   result dropped as from an earlier configuration doesn't count as landing.
+2. **Confirmation.** The impact asks once only with a known safe set: the
+   assessment is complete, the namespace lists at least one record, and every
+   listed record is this device's own backup or an extra copy, known safe by
+   the rules above. Anything else asks twice: an empty backup, anything
+   not on this device, a local wallet's missing secret, anything unchecked,
+   unreadable or unsupported, or an assessment that isn't complete; a failed
+   listing makes it unknown. Names are capped at three with a count of the
+   rest. Backups made with another passkey are a line in the dialog and are
+   left in place.
 3. **Consent.** `ConfirmDisable { review_id }` is admitted only for the review
    on screen. It starts the Turn Off operation, which drains as above, then
-   lists again. If the fresh impact puts any new record in a risk category, or
-   its assessment is worse, the operation ends and a new review replaces the
-   old one with `changed_since_confirmation`. Otherwise Turn Off commits.
+   gathers the evidence again, keychain read included. If the fresh impact puts
+   any new record in a risk category, such as a wallet whose secret left this
+   device since the review, or a wallet covering an extra copy lost its secret,
+   or a wallet whose own backup is listed left this device while that backup is
+   at risk or unchecked, or its assessment is worse, the operation ends and a
+   new review replaces the old one with `changed_since_confirmation`. Otherwise
+   Turn Off commits: the runtime writes the commit and moves the body to
+   `FinishingDisable` in one step, so a commit always comes with the run that
+   finishes it, and a Turn Off that has already ended writes nothing.
 4. **Leaving for the risk.** A review that names wallets not on this device
    offers `RestoreFirst`, and one with backups Cove couldn't check offers
    `VerifyFirst`. Each sends one intent bound to the review, like Confirm:

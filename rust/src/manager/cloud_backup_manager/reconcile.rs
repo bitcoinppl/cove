@@ -107,6 +107,11 @@ impl RustCloudBackupManager {
             send!(self.supervisor.ensure_cloud_only_fetch());
         }
 
+        // the supervisor holds whatever waits on the classification, such as a Turn Off review
+        if let Some(request) = effects.classification_settled {
+            send!(self.supervisor.inventory_classification_settled(request));
+        }
+
         effects
     }
 

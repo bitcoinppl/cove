@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use cove_device::cloud_storage::{
@@ -82,24 +82,45 @@ impl Default for Hold {
 
 /// One fake call waiting for the test to release it
 ///
-/// Until this drops the call counts among the held calls, and when the fake waits on a
+/// Until this drops the call is listed in [`HELD_CALLS`], and when the fake waits on a
 /// blocking-pool thread, that thread counts as waiting for the test
 #[derive(Debug)]
 struct HeldCall {
+    /// The hold the listing names, weak so a hold never keeps its own listing alive
+    hold: Weak<HoldInner>,
     _thread: WaitingThread,
 }
 
 impl HeldCall {
-    /// Counts the call that starts waiting on this thread
-    fn enter() -> Self {
-        HELD_CALLS.send_modify(|held| *held += 1);
-        Self { _thread: WaitingThread::enter() }
+    /// Lists the call that starts waiting on this thread
+    fn enter(hold: &Hold) -> Self {
+        HELD_CALLS.send_modify(|held| held.push(hold.clone()));
+        Self { hold: Arc::downgrade(&hold.0), _thread: WaitingThread::enter() }
     }
 }
 
 impl Drop for HeldCall {
     fn drop(&mut self) {
-        HELD_CALLS.send_modify(|held| *held -= 1);
+        HELD_CALLS.send_modify(|held| {
+            let position = held
+                .iter()
+                .position(|other| std::ptr::eq(Arc::as_ptr(&other.0), self.hold.as_ptr()));
+            if let Some(position) = position {
+                held.remove(position);
+            }
+        });
+    }
+}
+
+/// Ends a held call's listing once its caller stops waiting, released or not
+///
+/// A caller can abandon a held call, as an evidence stage does past its deadline, and a call
+/// left listed would make every later settle return early
+struct StopsWaiting<'a>(&'a Hold);
+
+impl Drop for StopsWaiting<'_> {
+    fn drop(&mut self) {
+        self.0.0.held.lock().take();
     }
 }
 
@@ -140,15 +161,14 @@ impl Hold {
         receiver.wait_for(|current| rank(current) >= rank(&stage)).await.expect("hold dropped");
     }
 
-    async fn enter_and_wait(&self) {
-        HELD_CALLS.send_modify(|held| held.push(self.clone()));
-
+    /// Starts waiting for the test, unless the test already released this hold
+    fn enter(&self) {
         // a hold the test released before its call started lets that call through: overwriting
         // the release would strand the call with nothing left to release it
         self.0.stage.send_if_modified(|stage| {
             let armed = *stage == HoldStage::Armed;
             if armed {
-                *self.0.held.lock() = Some(HeldCall::enter());
+                *self.0.held.lock() = Some(HeldCall::enter(self));
                 *stage = HoldStage::Entered;
             }
             armed
@@ -157,13 +177,20 @@ impl Hold {
 
     async fn enter_and_wait(&self) {
         self.enter();
+        let _stops_waiting = StopsWaiting(self);
         self.wait_for(HoldStage::Released, "to be released by the test").await;
-        HELD_CALLS.send_modify(|held| {
-            let position = held.iter().position(|other| Arc::ptr_eq(&other.0, &self.0));
-            if let Some(position) = position {
-                held.remove(position);
-            }
-        });
+    }
+
+    /// Waits for the release on the thread a fake's call blocks
+    ///
+    /// On a blocking-pool thread, the thread counts as waiting for the test exactly as long as
+    /// the call counts as held, so settling sees every other moment of the call as a blocking
+    /// job in flight
+    fn block_until_released(&self) {
+        self.enter();
+        futures::executor::block_on(
+            self.wait_for(HoldStage::Released, "to be released by the test"),
+        );
     }
 
     fn finish(&self) {
@@ -180,11 +207,6 @@ pub(crate) fn held_calls() -> Vec<String> {
     HELD_CALLS.borrow().iter().map(Hold::name).collect()
 }
 
-/// Whether any fake call is waiting for the test to release it
-pub(crate) fn any_call_held() -> bool {
-    !HELD_CALLS.borrow().is_empty()
-}
-
 /// Releases every fake call waiting on a hold now, the way quiescence delivers what is held
 pub(crate) fn release_held_calls() {
     // a released call removes itself from the list, so the list is copied before releasing
@@ -198,6 +220,13 @@ pub(crate) fn release_held_calls() {
 pub(crate) async fn until_a_call_is_held() {
     let mut held = HELD_CALLS.subscribe();
     let _ = held.wait_for(|held| !held.is_empty()).await;
+}
+
+/// Resolves once no fake call waits on a hold, as when its caller released or abandoned it
+pub(crate) async fn until_no_call_is_held() {
+    let _deadline = Deadline::arm("every held call to be released or abandoned");
+    let mut held = HELD_CALLS.subscribe();
+    let _ = held.wait_for(Vec::is_empty).await;
 }
 
 fn write_json(path: &PathBuf, value: &impl serde::Serialize) {

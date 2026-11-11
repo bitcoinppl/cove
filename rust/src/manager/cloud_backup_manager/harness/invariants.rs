@@ -14,7 +14,7 @@
 //! policy the owner pushed and the lane has not applied yet, is tracked as pending, never
 //! reported as a violation, and must be acknowledged by the next boundary
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use act_zero::call;
 
@@ -664,7 +664,7 @@ fn check_inventory_rows(
 
         let names_a_covering_wallet = own.iter().any(|own| {
             own.wallet.name == *covered_by
-                && listed.covered_by.contains(&RecordId::from(own.wallet.record_id.clone()))
+                && listed.covered_by().contains(&RecordId::from(own.wallet.record_id.clone()))
         });
         if !names_a_covering_wallet {
             return violation(format!(
@@ -731,12 +731,15 @@ fn running_claim(body: &PolicyBody) -> Option<CloudBackupExclusiveOperationClaim
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::cloud_backup_manager::inventory::ListedRecord;
+    use crate::manager::cloud_backup_manager::inventory::{
+        CopyCover, InventoryListedClass, ListedRecord,
+    };
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::owner::operation::OperationId;
     use crate::manager::cloud_backup_manager::screen::{
         CloudBackupListedRow, cloud_backup_screen_fixtures,
     };
+    use crate::wallet_identity::BackupRecoveryMaterial;
 
     /// 4a: a restore whose last completion was lost passes a pending boundary, which may still
     /// hold work it waits on, and fails at quiescence, where nothing is left to end it
@@ -779,16 +782,20 @@ mod tests {
             needs_sync: Vec::new(),
             listed: Vec::new(),
             last_sync: None,
-            secret_unchecked: HashSet::new(),
+            own_cloud_copies: HashMap::new(),
         };
         let listed = |row: &CloudBackupListedRow| ListedRecord {
             record_id: row.record_id.clone(),
             record: row.record.clone(),
-            covered_by: match row.record {
+            // only an extra copy's covering wallets matter to these checks
+            class: match row.record {
                 CloudBackupListedRecord::ExtraCopy { .. } => {
-                    vec![RecordId::from(covering.to_owned())]
+                    InventoryListedClass::ExtraCopy(CopyCover {
+                        covered_by: vec![RecordId::from(covering.to_owned())],
+                        material: BackupRecoveryMaterial::Secret,
+                    })
                 }
-                _ => Vec::new(),
+                _ => InventoryListedClass::Unchecked,
             },
         };
         for section in &configured.sections {

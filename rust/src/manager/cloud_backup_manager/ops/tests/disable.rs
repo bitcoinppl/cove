@@ -269,8 +269,9 @@ async fn a_wallet_deleted_between_review_and_confirm_asks_again_and_deletes_noth
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     let (metadata, _) = backed_up_local_wallet(globals, &namespace);
 
+    // no inventory read the backup, so it is unchecked even while the wallet is here
     let review = review_turn_off(&manager).await;
-    assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 0));
+    assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 1));
 
     Database::global()
         .wallets()
@@ -661,4 +662,248 @@ async fn turn_off_waits_for_the_write_in_flight_before_it_commits_and_deletes() 
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
+}
+
+/// Saves a hot wallet named `name` with its seed in the keychain, backs it up to `namespace` and
+/// lists it there
+async fn backed_up_hot_wallet(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+    namespace: &str,
+    name: &str,
+) -> WalletMetadata {
+    let mnemonic = Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap();
+    backed_up_hot_wallet_with(manager, globals, namespace, name, mnemonic).await
+}
+
+/// [`backed_up_hot_wallet`] for a wallet holding `mnemonic`
+async fn backed_up_hot_wallet_with(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+    namespace: &str,
+    name: &str,
+    mnemonic: Mnemonic,
+) -> WalletMetadata {
+    let metadata = save_hot_wallet(name, mnemonic);
+
+    backup_wallets_for_test(manager, std::slice::from_ref(&metadata)).await.unwrap();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    globals
+        .cloud
+        .set_wallet_files(namespace.to_owned(), vec![wallet_filename_from_record_id(&record_id)]);
+
+    metadata
+}
+
+/// Saves a hot wallet named `name` holding `mnemonic` in the keychain, as this device's only
+/// wallet
+fn save_hot_wallet(name: &str, mnemonic: Mnemonic) -> WalletMetadata {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic);
+
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.name = name.into();
+    metadata.wallet_type = WalletType::Hot;
+
+    let xpub = secret.xpub(metadata.network);
+    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
+    metadata.master_fingerprint =
+        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
+
+    let keychain = Keychain::global();
+    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
+    Database::global()
+        .wallets()
+        .save_all_wallets(metadata.network, metadata.wallet_mode, vec![metadata.clone()])
+        .unwrap();
+
+    metadata
+}
+
+/// Loads the inventory the way opening the detail screen does, and waits until the provider
+/// confirmed it and every listed record was classified
+async fn load_inventory(manager: &RustCloudBackupManager) {
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the inventory loads", || {
+        manager.inventory.read().classified().is_some()
+    })
+    .await;
+}
+
+/// A wallet whose seed is gone while its record stays, as a deletion that fails after it
+/// removed the keychain items leaves it, has its only seed in the cloud copy. The review reads
+/// this device's secrets when it's built, so it names that wallet and asks twice, though the
+/// inventory read the wallet while it still held its seed
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_whose_seed_was_deleted_before_the_review_is_named_and_asks_twice() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let wallet = backed_up_hot_wallet(&manager, globals, &namespace, "Savings").await;
+    load_inventory(&manager).await;
+
+    assert!(Keychain::global().delete_wallet_items(&wallet.id));
+    let review = review_turn_off(&manager).await;
+
+    assert_eq!(review.impact.own_backups, 1);
+    assert_eq!(review.impact.own_secret_missing_locally.names, ["Savings"]);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// The same loss between the review and the recheck: the user confirmed a review that said the
+/// wallet stays on this device, so the recheck asks again instead of deleting its only seed
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_whose_seed_was_deleted_after_the_review_asks_again_and_deletes_nothing() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let wallet = backed_up_hot_wallet(&manager, globals, &namespace, "Savings").await;
+    load_inventory(&manager).await;
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!(review.impact.own_secret_missing_locally.names, Vec::<String>::new());
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One);
+
+    assert!(Keychain::global().delete_wallet_items(&wallet.id));
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    let CloudBackupDisableScreen::Reviewing(again) = turn_off_screen(&manager) else {
+        panic!("expected a new review, got {:?}", turn_off_screen(&manager));
+    };
+    assert!(again.changed_since_confirmation);
+    assert_eq!(again.impact.own_secret_missing_locally.names, ["Savings"]);
+    assert_eq!(again.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// An extra copy is safe to delete only while a wallet here holds what it can recover. Here the
+/// copy's record id is no local wallet's and the wallet covering it has no backup of its own,
+/// so only the copy holds its seed off this device. The recheck judges the copy by that wallet's
+/// seed as it reads it then: once the seed is gone after the review, Confirm asks again and
+/// deletes nothing
+#[tokio::test(flavor = "current_thread")]
+async fn an_extra_copy_whose_wallet_lost_its_seed_after_the_review_asks_again_and_deletes_nothing()
+{
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    // the copy is the backup of a wallet with the same seed that this device no longer has
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let mnemonic = Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap();
+    let removed =
+        backed_up_hot_wallet_with(&manager, globals, &namespace, "Old Savings", mnemonic.clone())
+            .await;
+    assert!(Keychain::global().delete_wallet_items(&removed.id));
+
+    let wallet = save_hot_wallet("Savings", mnemonic);
+    assert_ne!(wallet_record_id(wallet.id.as_ref()), wallet_record_id(removed.id.as_ref()));
+    load_inventory(&manager).await;
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!((review.impact.own_backups, review.impact.extra_copies), (0, 1));
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One);
+
+    assert!(Keychain::global().delete_wallet_items(&wallet.id));
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    let CloudBackupDisableScreen::Reviewing(again) = turn_off_screen(&manager) else {
+        panic!("expected a new review, got {:?}", turn_off_screen(&manager));
+    };
+    assert!(again.changed_since_confirmation);
+    assert_eq!(again.impact.own_secret_missing_locally.names, ["Savings"]);
+    assert_eq!(again.impact.extra_copies, 0);
+    assert_eq!(again.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// A backup Cove couldn't read isn't known safe, even while this device holds its seed, so it
+/// asks twice
+#[tokio::test(flavor = "current_thread")]
+async fn an_own_backup_cove_could_not_read_asks_twice_though_the_seed_is_here() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let wallet = backed_up_hot_wallet(&manager, globals, &namespace, "Savings").await;
+    let record_id = wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(namespace.clone(), record_id, b"not a backup".to_vec());
+    load_inventory(&manager).await;
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 1));
+    assert_ne!(review.impact.assessment, CloudBackupInventoryAssessment::Complete);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+    assert_nothing_turned_off(globals, &namespace);
+}
+
+/// A backup that lists nothing has nothing known safe to delete, so it asks twice
+#[tokio::test(flavor = "current_thread")]
+async fn an_empty_backup_asks_twice() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    load_inventory(&manager).await;
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!(review.impact.assessment, CloudBackupInventoryAssessment::Complete);
+    assert_eq!(review.impact.own_backups, 0);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+}
+
+/// Check Again asks the inventory for a fresh classification: once the provider answers again,
+/// the review it builds reads that classification instead of the failed one it replaced
+#[tokio::test(flavor = "current_thread")]
+async fn check_again_reads_a_fresh_inventory_once_the_provider_answers() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    backed_up_hot_wallet(&manager, globals, &namespace, "Savings").await;
+
+    // the inventory couldn't load, and nothing reloads it when the provider recovers
+    globals.cloud.fail_list_wallet_files("provider unavailable");
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the inventory load fails", || {
+        matches!(manager.inventory.read().detail_state(), CloudBackupDetailState::Failed { .. })
+    })
+    .await;
+
+    let review = review_turn_off(&manager).await;
+    assert_ne!(review.impact.assessment, CloudBackupInventoryAssessment::Complete);
+    assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+
+    globals.cloud.clear_list_wallet_files_error();
+    let again = review_turn_off(&manager).await;
+
+    assert_ne!(again.review_id, review.review_id);
+    assert_eq!(again.impact.assessment, CloudBackupInventoryAssessment::Complete);
+    assert_eq!(again.impact.own_backups, 1);
+    assert_eq!(again.impact.confirmation, CloudBackupDisableConfirmation::One);
 }

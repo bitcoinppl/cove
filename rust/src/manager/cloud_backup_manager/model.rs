@@ -15,7 +15,7 @@ use super::{
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 mod events;
@@ -76,19 +76,33 @@ pub(crate) struct CloudBackupListedDetail {
 }
 
 /// What the local wallets' own records say about secrets only the cloud may hold
+///
+/// `missing_locally` pairs each cloud copy with the secret this device held when the inventory
+/// read it, which is what the screen draws. `cloud_copies` is what each copy holds on its own, so
+/// Turn Off can pair it with this device's secrets as they are when it asks
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct OwnSecretFacts {
-    /// Own record IDs whose cloud copy holds a secret this device doesn't
+    /// Own record IDs whose cloud copy holds a secret this device didn't when the inventory read
     pub(crate) missing_locally: HashSet<String>,
-    /// Own record IDs of wallets holding no secret here whose cloud copy couldn't be read, so
-    /// whether it holds one isn't known
-    pub(crate) unchecked: HashSet<String>,
+    /// What each local wallet's own cloud copy holds, by record ID; a wallet with no copy in the
+    /// listing the inventory read has no entry
+    pub(crate) cloud_copies: HashMap<String, CloudCopySecret>,
+}
+
+/// What a wallet's own cloud copy holds, as the inventory read it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloudCopySecret {
+    /// The copy holds a seed, key or TAPSIGNER backup
+    Held,
+    WatchOnly,
+    /// The copy couldn't be read, so what it holds isn't known
+    Unread,
 }
 
 impl OwnSecretFacts {
     pub(crate) fn retain_local_wallets(&mut self, local_record_ids: &HashSet<String>) {
         self.missing_locally.retain(|record_id| local_record_ids.contains(record_id));
-        self.unchecked.retain(|record_id| local_record_ids.contains(record_id));
+        self.cloud_copies.retain(|record_id, _| local_record_ids.contains(record_id));
     }
 }
 

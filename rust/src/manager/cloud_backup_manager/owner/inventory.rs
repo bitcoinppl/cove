@@ -157,6 +157,11 @@ pub(crate) enum InventoryInput {
     },
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
+    /// A caller, such as Turn Off's Check Again, wants a fresh classification: it settles once a
+    /// detail refresh that lands after this request has landed and its listed records were read,
+    /// or once either failed. A refresh already running counts, so the request joins it. A new
+    /// configuration drops the request with the rest of the inventory
+    ClassificationRequested(ClassificationRequestId),
 }
 
 /// What a producer observed, applied only in the scope it was requested under
@@ -200,6 +205,27 @@ pub(crate) struct InventoryEffects {
     /// The result was requested under an earlier configuration and dropped, so its producer
     /// asks again under the current one
     pub(crate) dropped: bool,
+    /// The requested classification settled with this input, complete or not
+    pub(crate) classification_settled: Option<ClassificationRequestId>,
+}
+
+/// Identifies one request for a fresh classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ClassificationRequestId(u64);
+
+impl From<u64> for ClassificationRequestId {
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+/// How far a requested classification has come
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClassificationRequest {
+    /// Waits for a detail refresh the provider confirmed, or one that failed
+    AwaitingRefresh(ClassificationRequestId),
+    /// The refresh landed; waits for the records it listed to be read
+    AwaitingRecords(ClassificationRequestId),
 }
 
 /// How many local wallet changes the owner has applied
@@ -247,6 +273,8 @@ pub(crate) struct InventoryOwner {
     /// that replaces them so a failed restore stays marked
     cloud_only_failures_awaiting_refetch: HashMap<String, CloudBackupWalletRestoreFailure>,
     other_backups: CloudBackupOtherBackupsState,
+    /// The one fresh classification a caller waits for; a newer request replaces it
+    classification_request: Option<ClassificationRequest>,
 }
 
 impl Default for InventoryOwner {
@@ -260,6 +288,7 @@ impl Default for InventoryOwner {
             cloud_only_inventory: CloudOnlyInventory::default(),
             cloud_only_failures_awaiting_refetch: HashMap::new(),
             other_backups: CloudBackupOtherBackupsState::NotChecked,
+            classification_request: None,
         }
     }
 }
@@ -268,20 +297,79 @@ impl InventoryOwner {
     /// Applies one input; the only way the inventory changes
     pub(crate) fn apply(&mut self, input: InventoryInput) -> InventoryEffects {
         let before = self.clone();
-        let (refetch_needed, dropped) = match input {
+
+        // only a result the owner accepts can settle a classification, so one dropped as from an
+        // earlier configuration or as read before a wallet change never counts as landed
+        let (refetch_needed, dropped, refresh_landed) = match input {
             InventoryInput::Result { scope, .. } if scope != self.scope => {
                 debug!("Cloud Backup dropped an inventory result from an earlier configuration");
-                (false, true)
+                (false, true, false)
             }
-            input => (self.apply_input(input), false),
+            input => {
+                let refresh_landed = self.lands_refresh(&input);
+                (self.apply_input(input), false, refresh_landed)
+            }
         };
+
+        let classification_settled = self.advance_classification_request(refresh_landed);
 
         let changed = *self != before;
         if changed {
             self.generation.0 += 1;
         }
 
-        InventoryEffects { changed, refetch_needed, dropped }
+        InventoryEffects { changed, refetch_needed, dropped, classification_settled }
+    }
+
+    /// Whether `input` ends a detail refresh for a classification request: the provider confirmed
+    /// the listing, or the refresh failed or was cleared
+    ///
+    /// A detail from the local snapshot alone isn't the provider's answer, so the request keeps
+    /// waiting for one that is
+    fn lands_refresh(&self, input: &InventoryInput) -> bool {
+        let InventoryInput::Result { result, .. } = input else { return false };
+
+        match result {
+            InventoryResult::DetailRefreshApplied { authority, .. } => {
+                *authority == CloudBackupInventoryAuthority::ProviderConfirmed
+            }
+            InventoryResult::VerifiedDetailApplied { read_at, .. } => {
+                read_at.local_wallets == self.local_wallets_epoch
+            }
+            InventoryResult::DetailRefreshFailed { .. } | InventoryResult::DetailCleared => true,
+            _ => false,
+        }
+    }
+
+    /// Moves the requested classification on after an input, returning its id once it settled
+    fn advance_classification_request(
+        &mut self,
+        refresh_landed: bool,
+    ) -> Option<ClassificationRequestId> {
+        let id = match self.classification_request? {
+            ClassificationRequest::AwaitingRefresh(id) if refresh_landed => id,
+            ClassificationRequest::AwaitingRefresh(_) => return None,
+            ClassificationRequest::AwaitingRecords(id) => id,
+        };
+
+        // a failed or cleared detail is as far as this classification gets
+        let records_settled = match &self.detail {
+            CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Failed { .. } => true,
+            CloudBackupDetailState::Checking { .. } | CloudBackupDetailState::Complete { .. } => {
+                matches!(
+                    self.cloud_only(),
+                    CloudOnlyState::Loaded { .. } | CloudOnlyState::Failed { .. }
+                )
+            }
+        };
+
+        if !records_settled {
+            self.classification_request = Some(ClassificationRequest::AwaitingRecords(id));
+            return None;
+        }
+
+        self.classification_request = None;
+        Some(id)
     }
 
     fn apply_input(&mut self, input: InventoryInput) -> bool {
@@ -322,6 +410,9 @@ impl InventoryOwner {
             }
             InventoryInput::OtherBackupsOperationResolved(other_backups_operation) => {
                 self.resolve_other_backups_operation(other_backups_operation);
+            }
+            InventoryInput::ClassificationRequested(id) => {
+                self.classification_request = Some(ClassificationRequest::AwaitingRefresh(id));
             }
         }
 
@@ -961,7 +1052,7 @@ pub(crate) mod test_support {
     };
     use crate::manager::cloud_backup_manager::{CloudBackupWalletItem, CloudBackupWalletStatus};
     use crate::wallet::metadata::WalletId;
-    use crate::wallet_identity::{CoveringWallet, CoveringWallets};
+    use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 
     pub(crate) trait InventoryOwnerTestExt {
         /// Applies a result requested under the owner's current configuration
@@ -976,10 +1067,13 @@ pub(crate) mod test_support {
 
     /// The local wallet tests use to cover an extra copy
     pub(crate) fn test_covering_wallets() -> CoveringWallets {
-        CoveringWallets::one(CoveringWallet {
-            id: WalletId::from("local-wallet".to_string()),
-            name: "Local wallet".to_string(),
-        })
+        CoveringWallets::one(
+            CoveringWallet {
+                id: WalletId::from("local-wallet".to_string()),
+                name: "Local wallet".to_string(),
+            },
+            BackupRecoveryMaterial::Secret,
+        )
     }
 
     /// The row a fetch makes for a wallet item, read from the item's status
@@ -1040,7 +1134,7 @@ mod tests {
         CloudBackupOtherBackupsSummary, CloudBackupStateReducer, CloudBackupWalletStatus,
     };
     use crate::wallet::metadata::WalletId;
-    use crate::wallet_identity::{CoveringWallet, CoveringWallets};
+    use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 
     impl InventoryOwner {
         fn detail(&self) -> Option<CloudBackupDetail> {
@@ -1828,7 +1922,12 @@ mod tests {
 
         let rows = copies
             .into_iter()
-            .map(|(copy, covering)| CloudOnlyRow::extra_copy(copy, CoveringWallets::one(covering)))
+            .map(|(copy, covering)| {
+                CloudOnlyRow::extra_copy(
+                    copy,
+                    CoveringWallets::one(covering, BackupRecoveryMaterial::Secret),
+                )
+            })
             .collect();
 
         owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loaded {

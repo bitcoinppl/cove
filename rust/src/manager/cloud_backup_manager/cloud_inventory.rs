@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use super::wallets::{BackupSecret, RemoteWalletBackupSummary};
 use super::{
     CloudBackupDetail, CloudBackupError, CloudBackupListedDetail, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWalletStatus, OwnSecretFacts,
+    CloudBackupWalletItem, CloudBackupWalletStatus, CloudCopySecret, OwnSecretFacts,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -123,34 +123,33 @@ impl CloudWalletInventory {
         }
     }
 
-    /// Which own records hold a secret this device lacks, read from the records the remote
-    /// truth already decrypted with the local master key
+    /// What each own record's cloud copy holds, and which hold a secret this device lacked when
+    /// it was read, from the records the remote truth already decrypted with the local master key
     ///
     /// A wallet that holds no secret here and whose cloud copy is watch-only too, such as an
-    /// imported xpub, risks nothing. When the copy couldn't be read, whether it holds a secret is
-    /// unchecked rather than assumed either way
+    /// imported xpub, risks nothing. A copy that couldn't be read is unread rather than assumed
+    /// either way
     fn own_secret_facts(&self) -> OwnSecretFacts {
         let mut facts = OwnSecretFacts::default();
-        let lacking_secret = self
-            .local_wallets
-            .iter()
-            .filter(|wallet| wallet.local_secret == BackupSecret::WatchOnly);
-
-        for wallet in lacking_secret {
-            let record_id = wallet.record_id.clone();
-            match self.remote_wallet_state(wallet) {
-                RemoteWalletState::Matching(summary) | RemoteWalletState::Stale(summary)
-                    if summary.secret == BackupSecret::Held =>
-                {
-                    facts.missing_locally.insert(record_id);
+        for wallet in &self.local_wallets {
+            let copy = match self.remote_wallet_state(wallet) {
+                RemoteWalletState::Matching(summary) | RemoteWalletState::Stale(summary) => {
+                    match summary.secret {
+                        BackupSecret::Held => CloudCopySecret::Held,
+                        BackupSecret::WatchOnly => CloudCopySecret::WatchOnly,
+                    }
                 }
                 RemoteWalletState::Unknown | RemoteWalletState::Unsupported => {
-                    facts.unchecked.insert(record_id);
+                    CloudCopySecret::Unread
                 }
-                RemoteWalletState::Matching(_)
-                | RemoteWalletState::Stale(_)
-                | RemoteWalletState::Missing => {}
+                RemoteWalletState::Missing => continue,
+            };
+
+            if copy == CloudCopySecret::Held && wallet.local_secret == BackupSecret::WatchOnly {
+                facts.missing_locally.insert(wallet.record_id.clone());
             }
+
+            facts.cloud_copies.insert(wallet.record_id.clone(), copy);
         }
 
         facts
@@ -327,6 +326,7 @@ mod tests {
         CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
         PersistedCloudBlobState,
     };
+    use crate::manager::cloud_backup_manager::wallets::LocalSecret;
 
     fn sync_state(state: PersistedCloudBlobState) -> PersistedCloudBlobSyncState {
         PersistedCloudBlobSyncState::wallet(
@@ -719,8 +719,8 @@ mod tests {
         use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
         use crate::manager::cloud_backup_manager::owner::inventory::test_support::InventoryOwnerTestExt as _;
         use crate::manager::cloud_backup_manager::{
-            CloudBackupInventoryAuthority, CloudBackupStateReducer, CloudOnlyListingUpdate,
-            CloudOnlyState, InventoryOwner, InventoryResult, OwnSecretUpdate,
+            CloudBackupInventoryAuthority, CloudBackupStateReducer, CloudOnlyFetch,
+            CloudOnlyListingUpdate, InventoryOwner, InventoryResult, OwnSecretUpdate,
         };
 
         let mut remote_wallet_truth = RemoteWalletTruth::default();
@@ -777,49 +777,85 @@ mod tests {
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
             own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
         });
-        owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loaded {
+        owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: Vec::new(),
-            incomplete: false,
+            listing_generation: owner.cloud_only_listing_generation(),
         }));
 
         InventoryFacts::new(&owner, &CloudBackupStateReducer::default()).view().impact_inputs()
     }
 
+    /// The impact of turning off a namespace that lists exactly these local wallets, each read by
+    /// the inventory with the cloud copy given, on a device holding the secrets given now
+    fn impact_of(
+        wallets: &[(&str, BackupSecret, Option<BackupSecret>)],
+        secrets_now: &[(&str, LocalSecret)],
+    ) -> crate::manager::cloud_backup_manager::screen::CloudBackupDisableImpact {
+        use crate::manager::cloud_backup_manager::InventoryReadAt;
+        use crate::manager::cloud_backup_manager::turn_off::{
+            DisableEvidence, DisableImpact, ImpactFacts, ListingEvidence, LocalEvidence,
+            LocalWallet, OtherBackupsCount, OwnSeedCoverage,
+        };
+
+        let listing = wallets.iter().map(|(name, ..)| format!("record-{name}")).collect();
+        let local = secrets_now
+            .iter()
+            .map(|(name, secret)| {
+                let own_seed = match secret {
+                    LocalSecret::Held => OwnSeedCoverage::Held,
+                    LocalSecret::Unreadable => OwnSeedCoverage::Unknown,
+                    LocalSecret::Missing | LocalSecret::NeverHeld => OwnSeedCoverage::NotHeld,
+                };
+                let wallet = LocalWallet { name: (*name).into(), secret: *secret, own_seed };
+                (format!("record-{name}"), wallet)
+            })
+            .collect::<BTreeMap<_, _>>();
+        let evidence = DisableEvidence {
+            namespace_id: "ns".into(),
+            listing: ListingEvidence::Listed(listing),
+            local: LocalEvidence::Read { read_at: InventoryReadAt::default(), wallets: local },
+            other_backups: OtherBackupsCount::Counted(0),
+        };
+
+        let facts = ImpactFacts::from(impact_inputs_for(wallets));
+        DisableImpact::assess(&evidence, &facts).screen()
+    }
+
     #[test]
     fn own_record_with_its_secret_only_in_the_cloud_is_at_risk() {
-        use crate::manager::cloud_backup_manager::CloudBackupInventoryIncompleteReason;
-        use crate::manager::cloud_backup_manager::screen::CloudBackupInventoryAssessment;
-
-        let names = |entries: &[&str]| -> BTreeMap<String, String> {
-            entries.iter().map(|name| (format!("record-{name}"), (*name).to_string())).collect()
+        use crate::manager::cloud_backup_manager::screen::{
+            CloudBackupDisableConfirmation, CloudBackupInventoryAssessment,
         };
 
         // a wallet downgraded to watch-only here whose backup still holds its seed, an imported
         // xpub backed up as watch-only, and a hot wallet holding its own seed
-        let checked = impact_inputs_for(&[
-            ("Downgraded", BackupSecret::WatchOnly, Some(BackupSecret::Held)),
-            ("Imported Xpub", BackupSecret::WatchOnly, Some(BackupSecret::WatchOnly)),
-            ("Hot", BackupSecret::Held, Some(BackupSecret::Held)),
-        ]);
-
-        assert_eq!(checked.secret_missing_locally, names(&["Downgraded"]));
-        assert_eq!(checked.secret_unchecked, BTreeMap::new());
-        assert_eq!(checked.assessment, CloudBackupInventoryAssessment::Complete);
-
-        // a watch-only wallet whose backup couldn't be read might have its seed only there
-        let unread = impact_inputs_for(&[
-            ("Unread", BackupSecret::WatchOnly, None),
-            ("Hot Unread", BackupSecret::Held, None),
-        ]);
-
-        assert_eq!(unread.secret_missing_locally, BTreeMap::new());
-        assert_eq!(unread.secret_unchecked, names(&["Unread"]));
-        assert_eq!(
-            unread.assessment,
-            CloudBackupInventoryAssessment::Partial {
-                reason: CloudBackupInventoryIncompleteReason::Unknown
-            }
+        let checked = impact_of(
+            &[
+                ("Downgraded", BackupSecret::WatchOnly, Some(BackupSecret::Held)),
+                ("Imported Xpub", BackupSecret::WatchOnly, Some(BackupSecret::WatchOnly)),
+                ("Hot", BackupSecret::Held, Some(BackupSecret::Held)),
+            ],
+            &[
+                ("Downgraded", LocalSecret::Missing),
+                ("Imported Xpub", LocalSecret::NeverHeld),
+                ("Hot", LocalSecret::Held),
+            ],
         );
+
+        assert_eq!(checked.own_backups, 3);
+        assert_eq!(checked.own_secret_missing_locally.names, ["Downgraded"]);
+        assert_eq!(checked.unchecked, 0);
+        assert_eq!(checked.assessment, CloudBackupInventoryAssessment::Complete);
+        assert_eq!(checked.confirmation, CloudBackupDisableConfirmation::Two);
+
+        // the hot wallet lost its seed after the inventory read it, and its copy still holds it
+        let lost_since = impact_of(
+            &[("Hot", BackupSecret::Held, Some(BackupSecret::Held))],
+            &[("Hot", LocalSecret::Missing)],
+        );
+
+        assert_eq!(lost_since.own_secret_missing_locally.names, ["Hot"]);
+        assert_eq!(lost_since.confirmation, CloudBackupDisableConfirmation::Two);
     }
 
     #[test]
@@ -827,29 +863,16 @@ mod tests {
         use crate::manager::cloud_backup_manager::screen::{
             CloudBackupDisableConfirmation, CloudBackupInventoryAssessment,
         };
-        use crate::manager::cloud_backup_manager::turn_off::{
-            DisableEvidence, DisableImpact, ImpactFacts,
-        };
 
-        let wallets = [
-            ("Unread", BackupSecret::WatchOnly, None),
-            ("Hot", BackupSecret::Held, Some(BackupSecret::Held)),
-        ];
-        let record_ids: HashSet<String> =
-            wallets.iter().map(|(name, ..)| format!("record-{name}")).collect();
-        let evidence = DisableEvidence {
-            namespace_id: "ns".into(),
-            listing: Ok(record_ids.clone()),
-            local: Some(record_ids),
-            other_backups: 0,
-        };
-
-        // every listed record is this device's own, so only the unread secret check is at risk
-        let facts = ImpactFacts::from(impact_inputs_for(&wallets));
-        let screen = DisableImpact::assess(&evidence, &facts).screen();
+        // a watch-only wallet whose backup couldn't be read might have its seed only there, and
+        // a backup Cove couldn't read is never known safe, even beside a hot wallet's own seed
+        let screen = impact_of(
+            &[("Unread", BackupSecret::WatchOnly, None), ("Hot Unread", BackupSecret::Held, None)],
+            &[("Unread", LocalSecret::Missing), ("Hot Unread", LocalSecret::Held)],
+        );
 
         assert_eq!(screen.own_backups, 2);
-        assert_eq!(screen.unchecked, 1);
+        assert_eq!(screen.unchecked, 2);
         assert!(matches!(screen.assessment, CloudBackupInventoryAssessment::Partial { .. }));
         assert_eq!(screen.confirmation, CloudBackupDisableConfirmation::Two);
     }

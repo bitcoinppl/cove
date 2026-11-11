@@ -41,12 +41,14 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupPendingEnableRecovery, CloudBackupStatus,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, DisablingRecord};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommitDisable, CommittedDisable, DisablingRecord,
+};
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, FinishStart,
-    RetryWake, ReviewId, TurnOffReview,
+    RetryWake, ReviewId, TurnOffCommit, TurnOffReview,
 };
 
 /// The lifecycle body and the operation running in it
@@ -770,35 +772,47 @@ impl Runtime {
         Ok(())
     }
 
-    /// The Turn Off with `claim` committed: its body becomes the committed disable, and the same
-    /// operation keeps running there as the run that deletes, so nothing configured can start
-    /// beside it
-    pub(crate) fn commit_turn_off(
+    /// Commits the Turn Off with `claim` through `write`, and on a commit makes its body the
+    /// committed disable, where the same operation keeps running as the run that deletes, so
+    /// nothing configured can start beside it
+    ///
+    /// The run is taken out of the body before the write, so a Turn Off that no longer runs
+    /// writes nothing, and a commit always moves the body: the run it moves is already in hand.
+    /// Nothing else reads the body during the write, which runs inside this call
+    pub(crate) fn commit_turn_off<E>(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        committed: CommittedDisable,
-    ) -> Option<FinishRun> {
-        let Self::Configured(body) = self else { return None };
-        if !matches!(body, ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) if run.claim == claim)
-        {
-            return None;
-        }
-
-        let ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) =
-            std::mem::replace(body, ConfiguredBody::IDLE)
-        else {
-            return None;
+        write: impl FnOnce() -> Result<CommitDisable, E>,
+    ) -> Result<TurnOffCommit, E> {
+        let Self::Configured(body) = self else { return Ok(TurnOffCommit::NotCurrent) };
+        let run = match std::mem::replace(body, ConfiguredBody::IDLE) {
+            ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) if run.claim == claim => run,
+            other => {
+                *body = other;
+                return Ok(TurnOffCommit::NotCurrent);
+            }
         };
 
-        let start = FinishStart::of(committed.disposition, DeleteAuthority::Commit);
-        *self = Self::FinishingDisable {
-            committed,
-            op: Some(ResumeDisable(run)),
-            failure: None,
-            wake: None,
+        let refused = match write() {
+            Ok(CommitDisable::Committed(committed)) => {
+                let start = FinishStart::of(committed.disposition, DeleteAuthority::Commit);
+                *self = Self::FinishingDisable {
+                    committed: committed.clone(),
+                    op: Some(ResumeDisable(run)),
+                    failure: None,
+                    wake: None,
+                };
+
+                return Ok(TurnOffCommit::Committed { run: FinishRun { claim, start }, committed });
+            }
+            Ok(CommitDisable::StaleReview) => Ok(TurnOffCommit::StaleReview),
+            Ok(CommitDisable::NotConfigured) => Ok(TurnOffCommit::NotConfigured),
+            Err(error) => Err(error),
         };
 
-        Some(FinishRun { claim, start })
+        // nothing was committed, so the Turn Off runs on as it did, for its caller to end
+        *body = ConfiguredBody::Running(ConfiguredOp::TurnOff(run));
+        refused
     }
 
     /// Consent to the review `review_id`: takes it out of the idle configured body and starts
@@ -823,7 +837,7 @@ impl Runtime {
             OperationId::next(),
         );
         *self = Self::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(OpRun::new(claim))));
-        Ok(ConfirmedTurnOff { claim, review })
+        Ok(ConfirmedTurnOff { claim, review: *review })
     }
 
     /// Starts a finishing run of the committed Turn Off this body holds, with `authority`
@@ -1284,5 +1298,72 @@ impl RecoveryOp {
             Self::Continue(run) | Self::Discard(run) => run.claim,
             Self::Restore(run) => run.claim,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manager::cloud_backup_manager::owner::lifecycle::DisableDisposition;
+
+    fn turn_off_claim() -> CloudBackupExclusiveOperationClaim {
+        CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            OperationId::next(),
+        )
+    }
+
+    fn running_turn_off(claim: CloudBackupExclusiveOperationClaim) -> Runtime {
+        Runtime::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(OpRun::new(claim))))
+    }
+
+    fn committed() -> CommittedDisable {
+        CommittedDisable {
+            namespace_id: "namespace".into(),
+            attempt_id: 1,
+            committed_at: 1,
+            last_error: None,
+            retry_after: None,
+            disposition: DisableDisposition::DeleteRemote,
+            try_again_failed: false,
+        }
+    }
+
+    /// A commit that writes always moves the body and returns the run that finishes it, a
+    /// refused write leaves the Turn Off running for its caller to end, and a Turn Off that no
+    /// longer runs is refused before anything is written
+    #[test]
+    fn a_turn_off_commit_moves_the_body_with_its_run_and_a_stale_one_writes_nothing() {
+        let claim = turn_off_claim();
+
+        let mut stale = running_turn_off(claim);
+        let mut wrote = false;
+        let refused = stale.commit_turn_off::<()>(turn_off_claim(), || {
+            wrote = true;
+            Ok(CommitDisable::Committed(committed()))
+        });
+        assert_eq!(refused, Ok(TurnOffCommit::NotCurrent));
+        assert!(!wrote, "a stale claim reached the durable write");
+        assert_eq!(stale.claim(), Some(claim));
+
+        let mut runtime = running_turn_off(claim);
+        let commit =
+            runtime.commit_turn_off::<()>(claim, || Ok(CommitDisable::Committed(committed())));
+        let Ok(TurnOffCommit::Committed { run, committed: moved }) = commit else {
+            panic!("expected a commit, got {commit:?}");
+        };
+        assert_eq!(run, FinishRun { claim, start: FinishStart::Delete(DeleteAuthority::Commit) });
+        assert_eq!(moved, committed());
+        assert!(matches!(runtime, Runtime::FinishingDisable { .. }));
+        assert_eq!(runtime.claim(), Some(claim));
+
+        let mut kept = running_turn_off(claim);
+        let stale_review = kept.commit_turn_off::<()>(claim, || Ok(CommitDisable::StaleReview));
+        assert_eq!(stale_review, Ok(TurnOffCommit::StaleReview));
+        assert!(matches!(
+            kept,
+            Runtime::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(_)))
+        ));
+        assert_eq!(kept.claim(), Some(claim));
     }
 }

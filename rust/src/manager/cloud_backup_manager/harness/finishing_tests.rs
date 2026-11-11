@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorageError};
+use cove_device::keychain::Keychain;
 
 use super::process::checkpoint;
 use super::{
@@ -19,7 +20,11 @@ use crate::database::cloud_backup::{
 };
 use crate::manager::cloud_backup_manager::CloudBackupManagerAction;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
+use crate::manager::cloud_backup_manager::screen::CloudBackupDisableConfirmation;
 use crate::manager::connectivity_manager::ConnectivityStatus;
+use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
+use crate::wallet::fingerprint::Fingerprint;
+use crate::wallet::metadata::WalletMetadata;
 
 fn offline() -> CloudFault {
     CloudFault::Fail(CloudStorageError::Offline("scripted".into()))
@@ -236,5 +241,86 @@ fn turn_off_review_and_recheck_never_ask_for_provider_consent() {
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
         assert!(app.cloud.inner.has_namespace(&namespace));
+    });
+}
+
+/// Imports a new hot wallet whose seed this device keeps, as Import does, which asks for its
+/// first backup
+///
+/// The wallet has no backup in the namespace yet, so its first upload writes a record the
+/// inventory never read
+fn add_a_hot_wallet(app: &TestApp) {
+    let target = Database::global().global_config.wallet_target();
+    let mnemonic = NumberOfBip39Words::Twelve.generate_mnemonic();
+    let xpub = mnemonic.xpub(target.network.into());
+    let fingerprint = Fingerprint::from(xpub.fingerprint());
+    let mut metadata =
+        WalletMetadata::new_imported_from_mnemonic("Imported", target.network, fingerprint);
+    metadata.wallet_mode = target.mode;
+
+    let keychain = Keychain::global();
+    keychain.save_wallet_key(&metadata.id, mnemonic).expect("save the wallet's seed");
+    keychain.save_wallet_xpub(&metadata.id, xpub).expect("save the wallet's xpub");
+
+    let wallets = Database::global().wallets();
+    let mut all = wallets.get_all(target.network, target.mode).expect("read the wallets");
+    all.push(metadata.clone());
+    wallets.save_all_wallets(target.network, target.mode, all).expect("save the new wallet");
+
+    // saving a new wallet asks the global manager for its backup, so the harness's manager is
+    // asked directly
+    app.manager().backup_new_wallet(metadata);
+}
+
+/// Turn Off waits for a new wallet's first upload, then rechecks the listing: the record that
+/// upload wrote is this device's own backup of a seed it keeps, so the one confirmation commits
+/// instead of reopening the review as changed since the user checked
+///
+/// Nothing reads a record the inventory hasn't seen between the upload and the recheck, so the
+/// recheck lists the new record without an inventory read of it, as on a device
+#[test]
+fn turn_off_commits_on_one_confirmation_after_draining_a_new_wallet_s_upload() {
+    let test = concat!(
+        module_path!(),
+        "::turn_off_commits_on_one_confirmation_after_draining_a_new_wallet_s_upload"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        // a cloud lists what was uploaded to it, so the recheck after the drain sees the new record
+        app.cloud.inner.set_reflect_uploaded_wallets_in_listing(true);
+
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::UploadWallet, CloudFault::Hold(hold.clone()));
+        app.event("a new hot wallet is imported", |app| {
+            add_a_hot_wallet(app);
+        })
+        .then_can(&[N::TurnOff]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+        app.block_on("the new wallet's upload to be held", hold.entered());
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
+        assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 0), "{review:?}");
+
+        app.confirm_turn_off().then_can(&[N::CancelDisable]).then_cannot(&[N::Enable]);
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "committed before the drain");
+
+        let downloads = app.cloud.count(CloudCall::DownloadWallet);
+        app.event("the new wallet's upload finishes", |_| hold.release())
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff, N::ConfirmDisable]);
+        assert_eq!(app.turn_off_review(), None, "the drain's own upload reopened the review");
+        assert_eq!(
+            app.cloud.count(CloudCall::DownloadWallet),
+            downloads,
+            "the inventory read the new record before the recheck"
+        );
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 1);
     });
 }

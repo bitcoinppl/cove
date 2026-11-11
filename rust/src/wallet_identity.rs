@@ -7,6 +7,7 @@ pub(crate) use backup::{fallback_identity_key_for_backup, identity_key_for_backu
 pub(crate) use existing::{
     collect_existing_wallet_identities, collect_local_wallet_identities,
     existing_origin_less_wallet_by_identity, existing_public_wallet_by_identity_strict,
+    local_wallets_hold_seed_of,
 };
 pub(crate) use identity_set::{
     BackupRecoveryMaterial, CoveringWallet, CoveringWallets, ExistingWalletIdentitySet,
@@ -678,5 +679,53 @@ mod tests {
             }
             error => panic!("unexpected error: {error}"),
         }
+    }
+
+    /// Only a local hot wallet whose secret reads holds the seed of a wallet's own backup: a
+    /// public-only wallet never does, and a keychain read error is an error rather than held
+    #[test]
+    fn only_a_readable_hot_wallet_holds_the_seed_of_a_wallets_own_backup() {
+        use super::existing::existing_wallet_identity_key;
+        use crate::test_support::{WALLET_MNEMONIC_KEY_SUFFIX, shared_mock_keychain};
+
+        let (_guard, keychain) = test_keychain();
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+
+        // the same fingerprint throughout, so only the wallet type and the keychain differ
+        let hot = metadata("Hot", WalletType::Hot);
+        keychain.save_wallet_key(&hot.id, mnemonic).unwrap();
+        let public_only = metadata("Xpub", WalletType::XpubOnly);
+        let lost_secret = metadata("Hot without its secret", WalletType::Hot);
+
+        let identities = |wallets: &[&WalletMetadata]| {
+            let mut identities = LocalWalletIdentities::default();
+            for wallet in wallets {
+                let covering = CoveringWallet { id: wallet.id.clone(), name: wallet.name.clone() };
+                let key = existing_wallet_identity_key((*wallet).clone(), keychain).unwrap();
+                identities.insert(covering, key);
+            }
+
+            identities
+        };
+        let holds = |identities: &LocalWalletIdentities, wallet: &WalletMetadata| {
+            local_wallets_hold_seed_of(identities, wallet, keychain)
+        };
+
+        assert!(holds(&identities(&[&hot]), &hot).unwrap());
+        assert!(!holds(&identities(&[&public_only]), &public_only).unwrap());
+        assert!(!holds(&identities(&[&lost_secret]), &lost_secret).unwrap());
+
+        // another local hot wallet of the same seed holds it for a public-only wallet
+        assert!(holds(&identities(&[&public_only, &hot]), &public_only).unwrap());
+
+        let all = identities(&[&hot]);
+        shared_mock_keychain().fail_reads_for(format!("{}{WALLET_MNEMONIC_KEY_SUFFIX}", hot.id));
+        let unreadable = holds(&all, &hot);
+        shared_mock_keychain().clear_read_failures();
+
+        assert!(unreadable.is_err(), "a keychain read error counted as {unreadable:?}");
     }
 }

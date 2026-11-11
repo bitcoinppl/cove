@@ -5,7 +5,7 @@ use crate::manager::cloud_backup_manager::{
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
 use crate::test_support::{LoadedHostDeadline, loaded_host_wait, raw_wallet_keychain_entries};
-use crate::wallet_identity::{CoveringWallet, CoveringWallets};
+use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
@@ -1786,10 +1786,10 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
     assert_eq!(
         duplicate_outcome,
         CloudOnlyRestoreOutcome::AlreadyOnDevice {
-            covered_by: CoveringWallets::one(CoveringWallet {
-                id: second_wallet.id.clone(),
-                name: second_wallet.name.clone(),
-            }),
+            covered_by: CoveringWallets::one(
+                CoveringWallet { id: second_wallet.id.clone(), name: second_wallet.name.clone() },
+                BackupRecoveryMaterial::PublicOnly,
+            ),
         }
     );
     assert_eq!(globals.passkey.authenticate_count(), 0);

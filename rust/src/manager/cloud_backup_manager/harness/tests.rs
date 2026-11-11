@@ -24,8 +24,10 @@ use crate::manager::cloud_backup_manager::admission::{
     Admission, PauseReason, Rejection, UserIntent,
 };
 use crate::manager::cloud_backup_manager::model::CloudBackupPasskeyRepairState;
-use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
+use crate::manager::cloud_backup_manager::ops::{
+    CLOUD_BACKUP_LOAD_FAILED_MESSAGE, DISABLE_EVIDENCE_DEADLINE,
+};
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
@@ -431,6 +433,96 @@ fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_r
     });
 }
 
+/// A wallet listing that never answers ends at Turn Off's evidence deadline as unknown evidence,
+/// so the review asks twice, and a confirmed Turn Off commits past a recheck listing that never
+/// answers either
+#[test]
+fn turn_off_reaches_a_review_and_a_commit_past_a_wallet_listing_that_never_answers() {
+    let test = concat!(
+        module_path!(),
+        "::turn_off_reaches_a_review_and_a_commit_past_a_wallet_listing_that_never_answers"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        let review_listing = Hold::default();
+        app.cloud.script_next(CloudCall::ListWalletFiles, CloudFault::Hold(review_listing.clone()));
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_cannot(&[N::ConfirmDisable, N::Enable]);
+        app.block_on("the review's listing to be held", review_listing.entered());
+        assert!(
+            app.turn_off_review().is_none(),
+            "a review before its evidence: {}",
+            app.describe()
+        );
+
+        app.advance_clock(DISABLE_EVIDENCE_DEADLINE)
+            .then_can(&[N::ConfirmDisable, N::CancelDisable])
+            .then_cannot(&[N::Enable]);
+        let review = app.turn_off_review().expect("the Turn Off review past its deadline");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two, "{review:?}");
+        assert!(app.cloud.inner.has_namespace(&namespace), "a review deleted the backup");
+
+        let recheck_listing = Hold::default();
+        app.cloud
+            .script_next(CloudCall::ListWalletFiles, CloudFault::Hold(recheck_listing.clone()));
+        app.confirm_turn_off().then_cannot(&[N::Enable]);
+        app.block_on("the recheck's listing to be held", recheck_listing.entered());
+
+        app.advance_clock(DISABLE_EVIDENCE_DEADLINE)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// The other-backups count is information for the dialog, so a count that never answers holds
+/// neither the review nor the recheck, with no clock advance, and the review leaves it out
+#[test]
+fn turn_off_reaches_a_review_and_a_commit_past_a_backup_count_that_never_answers() {
+    let test = concat!(
+        module_path!(),
+        "::turn_off_reaches_a_review_and_a_commit_past_a_backup_count_that_never_answers"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        let review_count = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(review_count.clone()));
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[N::Enable]);
+        app.block_on("the review's count to have started", review_count.entered());
+
+        // the evidence that decides lands while the count is held, and the stage drops the count
+        app.event("the review drops its count", abandon_held_calls)
+            .then_can(&[N::ConfirmDisable, N::CancelDisable])
+            .then_cannot(&[N::Enable]);
+        let review = app.turn_off_review().expect("the Turn Off review without its count");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
+        assert_eq!(review.impact.other_backups, 0, "{review:?}");
+
+        let recheck_count = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(recheck_count.clone()));
+        app.confirm_turn_off().then_cannot(&[N::TurnOff]);
+        app.block_on("the recheck's count to have started", recheck_count.entered());
+        app.event("the recheck drops its count", abandon_held_calls)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+    });
+}
+
+/// Waits until every held call's caller has dropped it, without releasing any
+fn abandon_held_calls(app: &TestApp) {
+    app.block_on("the held calls to be abandoned", super::fakes::until_no_call_is_held());
+}
+
 /// Restore Them First on a review naming one wallet not on this device ends the review and
 /// restores that wallet in the same tap, after which Turn Off asks once
 #[test]
@@ -525,8 +617,8 @@ fn verify_first_ends_the_review_and_runs_the_verification() {
     let test = concat!(module_path!(), "::verify_first_ends_the_review_and_runs_the_verification");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 1).seed_records(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 1).seed_records(&app).namespace;
+        seed_verifiable_master_key(&app, &namespace);
 
         // with no inventory loaded, the record not on this device is one Cove couldn't check
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
@@ -1175,8 +1267,8 @@ fn a_verification_that_fails_on_the_passkey_offers_a_repair() {
         concat!(module_path!(), "::a_verification_that_fails_on_the_passkey_offers_a_repair");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
         app.current().then_can(&[N::Verify]);
         assert_eq!(passkey_card(&app), None);
         assert_eq!(control(&app, CloudBackupScreenAction::RepairPasskey), None);
@@ -1212,8 +1304,8 @@ fn a_cancelled_verification_never_offers_a_passkey_repair() {
     let test = concat!(module_path!(), "::a_cancelled_verification_never_offers_a_passkey_repair");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
         let status = persisted().status();
 
         app.passkey.set_mode(PasskeyMode::NotCompleted);
@@ -1241,8 +1333,8 @@ fn a_verification_that_fails_off_the_passkey_offers_no_repair() {
         concat!(module_path!(), "::a_verification_that_fails_off_the_passkey_offers_no_repair");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
 
         let error = CloudStorageError::DownloadFailed("master key".into());
         app.cloud.script_next(CloudCall::DownloadMasterKey, CloudFault::Fail(error));
@@ -1274,8 +1366,8 @@ fn a_passkey_request_that_cannot_present_yet_changes_nothing() {
         concat!(module_path!(), "::a_passkey_request_that_cannot_present_yet_changes_nothing");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
         let status = persisted().status();
 
         script_missing_passkey(
@@ -1297,8 +1389,8 @@ fn a_clean_backup_offers_no_sync_and_no_rebuild() {
     let test = concat!(module_path!(), "::a_clean_backup_offers_no_sync_and_no_rebuild");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
         load_detail(&mut app);
 
         app.dispatch(verify()).then_can(&[N::Verify, N::TurnOff]);
@@ -1339,7 +1431,7 @@ fn a_backup_from_a_newer_version_offers_no_verify_and_no_rebuild() {
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
         let namespace = FakeAccount::new(1, 0).seed(&app);
-        seed_verifiable_master_key(&app);
+        seed_verifiable_master_key(&app, &namespace);
         write_newer_master_key_version(&app, &namespace);
         load_detail(&mut app);
 

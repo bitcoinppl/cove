@@ -12,9 +12,11 @@ use super::runtime::{ConfiguredBody, ConfiguredOp};
 use super::*;
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::admission::TurnOffAdmission;
-use crate::manager::cloud_backup_manager::ops::next_disable_generation;
+use crate::manager::cloud_backup_manager::ops::{
+    DISABLE_EVIDENCE_DEADLINE, next_disable_generation,
+};
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
-    CommitDisable, CommittedDisable, DisableCommitReview,
+    CommittedDisable, DisableCommitReview,
 };
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupDisableNotStartedReason, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
@@ -23,18 +25,92 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, AutomaticResume, ConfirmedTurnOff, DeleteAuthority, DisableEvidence,
     DisableImpact, DisableReview, EvidenceUnavailable, FinishFailure, FinishRun, FinishStart,
-    ImpactFacts, RetryWake, ReviewId, TurnOffReview,
+    ImpactFacts, ListingEvidence, PreparingStage, RetryWake, ReviewId, TurnOffCommit,
+    TurnOffReview,
 };
+use crate::manager::cloud_backup_manager::{ClassificationRequestId, InventoryInput};
 
 impl CloudBackupSupervisor {
     /// Turn Off tapped: builds the review the dialogs show
     ///
-    /// Nothing runs and nothing pauses until the user confirms; a tap while a review is on
-    /// screen builds a fresh one, which is the dialogs' Check Again. Admission accepts Turn Off
-    /// only in an idle configured body, which is the one body that holds a review
+    /// Nothing runs and nothing pauses until the user confirms. A tap while a review is on
+    /// screen is the dialogs' Check Again: it first asks the inventory owner for a fresh
+    /// classification, joining a refresh already running, so a provider that answers again
+    /// replaces the facts the last review was missing. Admission accepts Turn Off only in an
+    /// idle configured body, which is the one body that holds a review
     pub(crate) fn begin_turn_off_review(&mut self, manager: Arc<RustCloudBackupManager>) {
         let review_id = ReviewId::next();
-        self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id }));
+        let check_again = self.runtime.turn_off_review().is_some();
+        if !check_again {
+            self.gather_turn_off_review(manager, review_id);
+            return;
+        }
+
+        // a review lives only on the open detail screen, so a closed refresh owner runs no
+        // refresh to wait for, and the review goes on with the inventory as it stands
+        let plan = self.detail_workflow.request_refresh();
+        if plan == DetailRefreshPlan::Ignored {
+            self.gather_turn_off_review(manager, review_id);
+            return;
+        }
+
+        let stage = PreparingStage::Classifying;
+        self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id, stage }));
+        manager.apply_inventory(InventoryInput::ClassificationRequested(review_id.into()));
+        self.handle_detail_refresh_plan(manager, plan);
+
+        // the classification can fail to settle, such as when a newer result displaces the
+        // refresh; the review then goes on at the deadline with the inventory as it stands
+        self.addr.send_fut_with(move |addr| async move {
+            tokio::time::sleep(DISABLE_EVIDENCE_DEADLINE).await;
+            send!(addr.turn_off_review_classified(review_id));
+        });
+    }
+
+    /// The inventory settled the classification a Check Again asked for
+    pub async fn inventory_classification_settled(
+        &mut self,
+        request: ClassificationRequestId,
+    ) -> ActorResult<()> {
+        let review_id = match self.runtime.turn_off_review() {
+            Some(TurnOffReview::Preparing { review_id, stage: PreparingStage::Classifying })
+                if ClassificationRequestId::from(*review_id) == request =>
+            {
+                *review_id
+            }
+            _ => return Produces::ok(()),
+        };
+
+        self.turn_off_review_classified(review_id).await
+    }
+
+    /// Check Again's classification settled or its deadline passed: the review gathers its
+    /// evidence against the inventory as it stands now
+    ///
+    /// Only the review that asked moves on, so the later of the two, or one for a review that
+    /// was replaced, is discarded
+    pub async fn turn_off_review_classified(&mut self, review_id: ReviewId) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        let classifying = matches!(
+            self.runtime.turn_off_review(),
+            Some(TurnOffReview::Preparing { review_id: held, stage: PreparingStage::Classifying })
+                if *held == review_id
+        );
+        if classifying {
+            self.gather_turn_off_review(manager, review_id);
+        }
+
+        Produces::ok(())
+    }
+
+    fn gather_turn_off_review(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        review_id: ReviewId,
+    ) {
+        let stage = PreparingStage::Gathering;
+        self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id, stage }));
         self.addr.send_fut_with(move |addr| async move {
             let evidence = manager.gather_disable_evidence().await;
             send!(addr.complete_turn_off_review(review_id, evidence));
@@ -51,7 +127,8 @@ impl CloudBackupSupervisor {
         // an operation start, a body change, Cancel and a newer tap each replace this review
         let preparing = matches!(
             self.runtime.turn_off_review(),
-            Some(TurnOffReview::Preparing { review_id: held }) if *held == review_id
+            Some(TurnOffReview::Preparing { review_id: held, stage: PreparingStage::Gathering })
+                if *held == review_id
         );
         if !preparing {
             debug!("Cloud Backup discarded the stale Turn Off review {review_id:?}");
@@ -61,12 +138,12 @@ impl CloudBackupSupervisor {
         let next = match evidence {
             Ok(evidence) => {
                 let impact = assess(&manager, &evidence);
-                Some(TurnOffReview::Reviewing(DisableReview {
+                Some(TurnOffReview::Reviewing(Box::new(DisableReview {
                     review_id,
                     namespace_id: evidence.namespace_id,
                     impact,
                     changed_since_confirmation: false,
-                }))
+                })))
             }
             Err(EvidenceUnavailable::Offline) => Some(TurnOffReview::Offline),
             Err(EvidenceUnavailable::Local(message)) => {
@@ -159,8 +236,10 @@ impl CloudBackupSupervisor {
 
         // the delete can't run without the provider, so these end before the commit
         let unreachable = match evidence.listing {
-            Err(CloudStorageIssue::Offline) => Some(CloudBackupDisableNotStartedReason::Offline),
-            Err(CloudStorageIssue::AuthorizationRequired) => {
+            ListingEvidence::Failed(CloudStorageIssue::Offline) => {
+                Some(CloudBackupDisableNotStartedReason::Offline)
+            }
+            ListingEvidence::Failed(CloudStorageIssue::AuthorizationRequired) => {
                 Some(CloudBackupDisableNotStartedReason::AuthorizationRequired)
             }
             _ => None,
@@ -181,12 +260,14 @@ impl CloudBackupSupervisor {
         if rechecked.grew_since(&review.impact) {
             info!("Cloud Backup changed since the Turn Off review, so it asks again");
             self.end_turn_off(&manager, claim);
-            self.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(DisableReview {
-                review_id: ReviewId::next(),
-                namespace_id: review.namespace_id,
-                impact: rechecked,
-                changed_since_confirmation: true,
-            })));
+            self.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(Box::new(
+                DisableReview {
+                    review_id: ReviewId::next(),
+                    namespace_id: review.namespace_id,
+                    impact: rechecked,
+                    changed_since_confirmation: true,
+                },
+            ))));
             return Produces::ok(());
         }
 
@@ -202,20 +283,20 @@ impl CloudBackupSupervisor {
     ) -> ActorResult<()> {
         let commit_review = DisableCommitReview { namespace_id: review.namespace_id };
         let attempt_id = next_disable_generation();
-        let committed =
-            self.runtime.commit(|lifecycle| lifecycle.commit_disable(&commit_review, attempt_id));
 
-        match committed {
-            Ok(CommitDisable::Committed(committed)) => {
-                match self.runtime.commit_turn_off(claim, committed.clone()) {
-                    Some(run) => self.finish_committed(&manager, run, committed),
-                    // the recheck found this claim current in this same turn
-                    None => warn!("Cloud Backup committed a Turn Off whose operation ended"),
-                }
+        match self.runtime.commit_turn_off(claim, &commit_review, attempt_id) {
+            Ok(TurnOffCommit::Committed { run, committed }) => {
+                self.finish_committed(&manager, run, committed);
+            }
+            // a completion for a Turn Off that ended wrote nothing, and its end already
+            // published; the recheck found this claim current in this same handler, so this is
+            // only reachable if that changes
+            Ok(TurnOffCommit::NotCurrent) => {
+                debug!("Cloud Backup dropped a Turn Off commit whose operation ended");
             }
             // the record moved on without this device's backup, so there is nothing to turn off
-            Ok(CommitDisable::NotConfigured) => self.end_turn_off(&manager, claim),
-            Ok(CommitDisable::StaleReview) => {
+            Ok(TurnOffCommit::NotConfigured) => self.end_turn_off(&manager, claim),
+            Ok(TurnOffCommit::StaleReview) => {
                 let reason = CloudBackupRejection::ReviewStale;
                 self.end_turn_off_not_started(
                     &manager,
@@ -267,7 +348,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        self.runtime.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -549,6 +630,9 @@ fn assess(manager: &RustCloudBackupManager, evidence: &DisableEvidence) -> Disab
 }
 
 /// The inventory's facts a Turn Off impact reads, as they stand now
+///
+/// The impact pairs them with the evidence's own read of this device's wallets, which the
+/// facts' local wallet epoch tells stale from current
 pub(crate) fn impact_facts(manager: &RustCloudBackupManager) -> ImpactFacts {
     ImpactFacts::from(manager.inventory_facts().view().impact_inputs())
 }

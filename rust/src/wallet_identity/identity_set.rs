@@ -33,7 +33,7 @@ pub(crate) enum WalletIdentityKey {
 }
 
 /// What a backup can recover a wallet from
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum BackupRecoveryMaterial {
     /// A seed or extended private key that can sign
     Secret,
@@ -197,19 +197,30 @@ pub(crate) struct CoveringWallet {
 pub(crate) struct CoveringWallets {
     first: CoveringWallet,
     rest: Vec<CoveringWallet>,
+    /// What the backup can recover, which each covering wallet held when coverage was read, so a
+    /// later check can tell whether they still hold it
+    material: BackupRecoveryMaterial,
 }
 
 impl CoveringWallets {
-    pub(crate) fn one(wallet: CoveringWallet) -> Self {
-        Self { first: wallet, rest: Vec::new() }
+    pub(crate) fn one(wallet: CoveringWallet, material: BackupRecoveryMaterial) -> Self {
+        Self { first: wallet, rest: Vec::new(), material }
     }
 
     /// `None` when no wallet covers the backup
-    pub(crate) fn from_wallets(wallets: impl IntoIterator<Item = CoveringWallet>) -> Option<Self> {
+    pub(crate) fn from_wallets(
+        wallets: impl IntoIterator<Item = CoveringWallet>,
+        material: BackupRecoveryMaterial,
+    ) -> Option<Self> {
         let mut wallets = wallets.into_iter();
         let first = wallets.next()?;
 
-        Some(Self { first, rest: wallets.collect() })
+        Some(Self { first, rest: wallets.collect(), material })
+    }
+
+    /// What the backup can recover
+    pub(crate) fn material(&self) -> BackupRecoveryMaterial {
+        self.material
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &CoveringWallet> {
@@ -269,7 +280,7 @@ impl LocalWalletIdentities {
             })
             .map(|(wallet, _)| wallet.clone());
 
-        if let Some(covering) = CoveringWallets::from_wallets(covering) {
+        if let Some(covering) = CoveringWallets::from_wallets(covering, material) {
             return NamedWalletCoverage::Covered(covering);
         }
 
