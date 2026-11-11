@@ -275,9 +275,18 @@ again, even when the refresh fails. Everything else waits for the refresh.
 A detail result that read the local wallets before the deletion, from a refresh
 or a verification, gets the same check against the current local wallets when
 it lands, so it can't list the wallet as local again. The owner also counts the
-local wallet changes it applies, and a backup integrity check's detail carries
-the count it read under: one read before a wallet was added or deleted is
-dropped, since the change already asked for the refresh that replaces it.
+local wallet changes it applies. A backup integrity check's detail, and a deep
+verification's or an upload confirmation's, carries the count from before it
+read the local wallets: one read before a wallet was added, restored or deleted
+is dropped, since the change already asked for the refresh that replaces it.
+
+An own row whose wallet holds no secret on this device is marked Secret Missing
+Locally only when its cloud backup holds one, such as a seed for a wallet now
+watch-only here. The record header doesn't say which kind of secret a backup
+holds, so the detail load reads it from the records it already decrypts with
+the master key on this device; an imported xpub backed up as watch-only is never
+marked. When a watch-only wallet's backup couldn't be read, its secret is
+unchecked, and the inventory's assessment for a Turn Off stays partial.
 
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
