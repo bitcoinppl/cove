@@ -4,7 +4,8 @@
 //! provider completions and failures, held calls released later as stale results, timer
 //! advances, Background and Foreground, wallet changes and relaunches, and after every event
 //! checks the harness invariants and the next actions the reference model derives from the durable
-//! record.
+//! record. While a Turn Off is on screen, most draws move it forward (consent, a failed delete,
+//! Try Again, Stop Using on This Device), so cases reach the commit and the escape path.
 //!
 //! Every case prints its seed and a compact trace. To replay one case:
 //! `COVE_MODEL_SEED=<seed> COVE_MODEL_CASES=1 cargo test -p cove --lib -- model_sequences`
@@ -25,6 +26,8 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::manager::cloud_backup_manager::admission::Admission;
+use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupVerificationSource,
     RustCloudBackupManager,
@@ -83,6 +86,10 @@ enum Tap {
     TurnOff,
     /// Consent to the Turn Off review on screen, which commits and finishes Turn Off
     ConfirmDisable,
+    /// Try Again on a committed Turn Off that stopped
+    ResumeDisable,
+    /// The escape path after a failed Try Again: finish Turn Off on this device only
+    StopUsingOnThisDevice,
     Verify,
     SyncUnsynced,
     Restore,
@@ -97,10 +104,12 @@ enum Tap {
 }
 
 impl Tap {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 16] = [
         Self::Enable,
         Self::TurnOff,
         Self::ConfirmDisable,
+        Self::ResumeDisable,
+        Self::StopUsingOnThisDevice,
         Self::Verify,
         Self::SyncUnsynced,
         Self::Restore,
@@ -123,6 +132,8 @@ impl Tap {
             Self::TurnOff => A::DisableCloudBackup,
             // with no review on screen this answers none, which admission rejects as stale
             Self::ConfirmDisable => A::ConfirmDisable { review_id: review_id.unwrap_or_default() },
+            Self::ResumeDisable => A::ResumeDisable,
+            Self::StopUsingOnThisDevice => A::StopUsingOnThisDevice,
             Self::Verify => A::StartVerification(CloudBackupVerificationSource::CloudBackupDetail),
             Self::SyncUnsynced => A::SyncUnsynced,
             Self::Restore => A::RestoreFromCloudBackup,
@@ -176,7 +187,26 @@ const SCRIPTED_CALLS: [CloudCall; 5] = [
     CloudCall::ListNamespaces,
 ];
 
-fn generate(rng: &mut Rng, held: usize) -> Event {
+/// Events that move a Turn Off on screen forward; uniform taps almost never chain consent, a
+/// failed finishing run and a failed Try Again, so the escape path needs this nudge
+///
+/// A confirmed Turn Off settles within its dispatch, so it stops in `FinishingDisable` only when
+/// its delete fails, which has to be scripted before the confirmation
+const REVIEW_EVENTS: [Event; 2] =
+    [Event::Tap(Tap::ConfirmDisable), Event::FailNext(CloudCall::DeleteNamespace)];
+/// A stopped Turn Off: Try Again, which offers Stop Using only once it fails too
+const FINISHING_EVENTS: [Event; 2] =
+    [Event::FailNext(CloudCall::DeleteNamespace), Event::Tap(Tap::ResumeDisable)];
+/// A Turn Off whose Try Again failed, which offers the escape path
+const ESCAPE_EVENTS: [Event; 2] =
+    [Event::Tap(Tap::StopUsingOnThisDevice), Event::Tap(Tap::ResumeDisable)];
+
+/// Draws the next event; while a Turn Off is on screen, three draws in four come from `focus`
+fn generate(rng: &mut Rng, held: usize, focus: &[Event]) -> Event {
+    if !focus.is_empty() && rng.below(4) < 3 {
+        return rng.pick(focus);
+    }
+
     // taps weigh the most, so most cases reach operations; the rest is the platform and providers
     match rng.below(20) {
         0..=8 => Event::Tap(rng.pick(&Tap::ALL)),
@@ -259,6 +289,12 @@ impl Case {
         println!("model step {step}: {event:?}");
 
         let app = &mut self.app;
+        let stops_using = matches!(event, Event::Tap(Tap::StopUsingOnThisDevice))
+            && app.admission(N::StopUsingOnThisDevice) == Admission::Accepted;
+        if stops_using {
+            println!("model step {step}: stopping use on this device");
+        }
+
         let step = match event {
             Event::Tap(tap) => {
                 let review_id = app.turn_off_review().map(|review| review.review_id);
@@ -315,6 +351,14 @@ impl Case {
         let record = Database::global().cloud_backup_state.get().expect("read the record");
         step.then_cannot(forbidden_by_record(&record));
 
+        // the escape path touches no provider, so only a write held in flight can delay it
+        if stops_using && self.held.is_empty() {
+            assert!(
+                matches!(record, PersistedCloudBackupState::Disabled),
+                "Stop Using on This Device left {record:?}"
+            );
+        }
+
         for (_, age) in &mut self.held {
             *age += 1;
         }
@@ -326,7 +370,18 @@ impl Case {
             return Event::ReleaseHeld;
         }
 
-        generate(rng, self.held.len())
+        let focus: &[Event] = match self.app.manager().published_screen().body {
+            _ if self.app.turn_off_review().is_some() => &REVIEW_EVENTS,
+            CloudBackupScreenBody::FinishingDisable(_)
+                if self.app.admission(N::StopUsingOnThisDevice) == Admission::Accepted =>
+            {
+                &ESCAPE_EVENTS
+            }
+            CloudBackupScreenBody::FinishingDisable(_) => &FINISHING_EVENTS,
+            _ => &[],
+        };
+
+        generate(rng, self.held.len(), focus)
     }
 
     /// Releases what is still held, so every result arrives before the case ends
