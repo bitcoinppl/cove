@@ -1707,6 +1707,7 @@ pub(crate) fn encrypted_wallet_backup_bytes_for_entry(
 pub(crate) fn encrypted_wallet_backup_bytes_for_json(
     entry_json: &serde_json::Value,
     master_key: &cove_cspp::master_key::MasterKey,
+    remote_metadata: cove_cspp::backup_data::remote_payload::RemotePayloadMetadata,
 ) -> Vec<u8> {
     use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 
@@ -1725,7 +1726,7 @@ pub(crate) fn encrypted_wallet_backup_bytes_for_json(
 
     let encrypted = cove_cspp::backup_data::EncryptedWalletBackup {
         version: 1,
-        remote_metadata: Default::default(),
+        remote_metadata,
         wallet_salt,
         nonce,
         ciphertext,

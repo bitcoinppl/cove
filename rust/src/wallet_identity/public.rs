@@ -4,7 +4,7 @@ use bdk_wallet::bitcoin::bip32::{Fingerprint as BdkFingerprint, Xpub};
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_device::keychain::{Keychain, KeychainError};
-use cove_util::{result_ext::ResultExt as _, sha256_hash};
+use cove_util::sha256_hash;
 
 use crate::keys::{self, Descriptors};
 use crate::network::Network;
@@ -47,14 +47,16 @@ pub(crate) enum PublicWalletIdentityError {
     #[error("failed to synthesize descriptor identity from xpub: {0}")]
     Descriptor(#[from] keys::Error),
 
-    #[error("failed to parse fingerprint: {0}")]
-    Fingerprint(String),
+    // the parsers' own text can quote the rejected xpub or descriptor, and these errors reach
+    // logs, so only the failure is kept
+    #[error("failed to parse fingerprint")]
+    Fingerprint,
 
-    #[error("failed to parse xpub: {0}")]
-    Xpub(String),
+    #[error("failed to parse xpub")]
+    Xpub,
 
-    #[error("failed to parse descriptor: {0}")]
-    DescriptorParse(String),
+    #[error("failed to parse descriptor")]
+    DescriptorParse,
 }
 
 impl PublicWalletIdentity {
@@ -80,9 +82,9 @@ impl PublicWalletIdentity {
         internal: &str,
     ) -> Result<Self, PublicWalletIdentityError> {
         let external = ExtendedDescriptor::from_str(external)
-            .map_err_str(PublicWalletIdentityError::DescriptorParse)?;
+            .map_err(|_| PublicWalletIdentityError::DescriptorParse)?;
         let internal = ExtendedDescriptor::from_str(internal)
-            .map_err_str(PublicWalletIdentityError::DescriptorParse)?;
+            .map_err(|_| PublicWalletIdentityError::DescriptorParse)?;
 
         Ok(Self::from_descriptor_pair(&external, &internal))
     }
@@ -97,7 +99,7 @@ impl PublicWalletIdentity {
         network: Network,
         address_type: WalletAddressType,
     ) -> Result<Self, PublicWalletIdentityError> {
-        let xpub = Xpub::from_str(xpub).map_err_str(PublicWalletIdentityError::Xpub)?;
+        let xpub = Xpub::from_str(xpub).map_err(|_| PublicWalletIdentityError::Xpub)?;
 
         let Some(fingerprint) = fingerprint else {
             return Ok(Self::from_xpub(xpub));
@@ -118,7 +120,7 @@ impl PublicWalletIdentity {
         };
 
         let fingerprint = BdkFingerprint::from_str(&fingerprint.as_lowercase())
-            .map_err_str(PublicWalletIdentityError::Fingerprint)?;
+            .map_err(|_| PublicWalletIdentityError::Fingerprint)?;
 
         let account = xpub.account_index();
         let descriptors = match address_type {

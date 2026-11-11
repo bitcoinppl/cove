@@ -64,7 +64,7 @@ fn public_identity_from_backup(
             &descriptors.internal,
         )
         .map_err(|source| WalletIdentityError::BackupDescriptor {
-            wallet_name: metadata.name.clone(),
+            wallet_id: metadata.id.clone(),
             source,
         })?;
 
@@ -80,7 +80,7 @@ fn public_identity_from_backup(
             metadata.address_type,
         )
         .map_err(|source| WalletIdentityError::BackupXpub {
-            wallet_name: metadata.name.clone(),
+            wallet_id: metadata.id.clone(),
             source,
         })?;
 
