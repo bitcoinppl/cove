@@ -889,9 +889,13 @@ extension WalletManager {
             recomputeLedgerStateForMetadataChange()
 
         case let .walletScannerResponse(scannerResponse):
-            logger.debug("walletScannerResponse: \(scannerResponse)")
-            if case let .foundAddresses(addressTypes) = scannerResponse {
+            // only the kind and count: the response carries each type's first address
+            switch scannerResponse {
+            case let .foundAddresses(addressTypes):
+                logger.debug("walletScannerResponse: foundAddresses, \(addressTypes.count) address types")
                 foundAddresses = addressTypes
+            case .noneFound:
+                logger.debug("walletScannerResponse: noneFound")
             }
 
         case let .nodeConnectionFailed(error):

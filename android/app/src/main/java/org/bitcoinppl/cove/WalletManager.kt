@@ -899,14 +899,13 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
-                logDebug("walletScannerResponse: ${message.v1}")
+                // only the kind and count: the response carries each type's first address
                 when (val response = message.v1) {
                     is ScannerResponse.FoundAddresses -> {
+                        logDebug("walletScannerResponse: FoundAddresses, ${response.v1.size} address types")
                         foundAddresses = response.v1
                     }
-                    else -> {
-                        // handle other scanner response types
-                    }
+                    else -> logDebug("walletScannerResponse: ${response::class.simpleName}")
                 }
             }
 
