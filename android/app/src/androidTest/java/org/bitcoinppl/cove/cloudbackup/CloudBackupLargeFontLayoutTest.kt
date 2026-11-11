@@ -7,6 +7,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -52,7 +53,7 @@ class CloudBackupLargeFontLayoutTest {
             row.performClick()
         }
 
-        assertActionReachable("Enable Cloud Backup", compose.onNodeWithTag("onboarding.cloudBackup.enable"))
+        assertActionReachable("Enable Cloud Backup", compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.ENABLE)))
         assertActionReachable("Cancel", compose.onNodeWithTag("onboarding.cloudBackup.cancel"))
     }
 
@@ -127,8 +128,41 @@ class CloudBackupLargeFontLayoutTest {
         assertTextReachable("CB-0000")
         assertActionReachable(
             "Remove Incomplete Setup",
-            compose.onNodeWithTag("cloudBackup.recovery.removeIncompleteSetup"),
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)),
         )
+    }
+
+    // the Turn Off review's first dialog, the longest one, with every way forward and out
+    @Test
+    fun turnOffReviewKeepsContinueAndCancelReachable() {
+        showScreen(cloudBackupFixture("turn-off-review"))
+
+        assertDialogActionReachable("Continue", compose.onNodeWithTag(CloudBackupTags.TURN_OFF_REVIEW_CONTINUE))
+        assertDialogActionReachable(
+            "Cancel",
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CANCEL_DISABLE)),
+        )
+    }
+
+    @Test
+    fun finishingDisableKeepsTryAgainAndStopUsingReachable() {
+        showScreen(cloudBackupFixture("finishing-disable"))
+
+        assertTextReachable("Cloud Backup Is Being Turned Off")
+        listOf(CloudBackupScreenAction.RESUME_DISABLE, CloudBackupScreenAction.STOP_USING_ON_THIS_DEVICE).forEach { action ->
+            assertActionReachable(action.name, compose.onNodeWithTag(CloudBackupTags.action(action)))
+        }
+    }
+
+    @Test
+    fun healNoticeKeepsDismissAndTurnOffReachable() {
+        showScreen(cloudBackupFixture("configured-heal-notice"))
+
+        assertActionReachable(
+            "Dismiss",
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.DISMISS_HEAL_NOTICE)),
+        )
+        assertActionReachable("Turn Off Cloud Backup", compose.onNodeWithTag(CloudBackupTags.HEAL_NOTICE_TURN_OFF))
     }
 
     private fun showScreen(screen: CloudBackupScreen) {
@@ -173,6 +207,22 @@ class CloudBackupLargeFontLayoutTest {
         assertTrue(
             "\"$label\" is ${node.getUnclippedBoundsInRoot()}, outside or squeezed on a screen of $screen",
             isReachable(),
+        )
+        node.assertHasClickAction()
+        node.assertIsEnabled()
+    }
+
+    // a dialog is its own root, so its actions must fit inside the dialog's window rather than the screen
+    private fun assertDialogActionReachable(
+        label: String,
+        node: SemanticsNodeInteraction,
+    ) {
+        val dialog = compose.onNode(isDialog()).getUnclippedBoundsInRoot()
+        val bounds = node.getUnclippedBoundsInRoot()
+
+        assertTrue(
+            "\"$label\" is $bounds, outside or squeezed in a dialog of $dialog",
+            bounds.top >= dialog.top && bounds.bottom <= dialog.bottom && bounds.height >= MIN_ACTION_HEIGHT,
         )
         node.assertHasClickAction()
         node.assertIsEnabled()

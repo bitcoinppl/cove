@@ -4,10 +4,14 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupWalletRestoreFailure
@@ -138,5 +142,34 @@ class CloudBackupAccessibilityTest {
             "Restore failed. Google Drive could not finish the restore",
             node.config[SemanticsProperties.StateDescription],
         )
+    }
+
+    // a Turn Off that couldn't finish says why without the user having to look for it
+    @Test
+    fun finishingDisableFailureIsAPoliteLiveRegion() {
+        showScreen(cloudBackupFixture("finishing-disable"))
+
+        val node = compose.onNodeWithText("Cove can't reach Google Drive right now.").fetchSemanticsNode()
+
+        assertEquals(LiveRegionMode.Polite, node.config[SemanticsProperties.LiveRegion])
+    }
+
+    // the review is a dialog pane, so TalkBack announces it and keeps focus inside it
+    @Test
+    fun turnOffReviewIsADialogNamedByItsTitle() {
+        showScreen(cloudBackupFixture("turn-off-review"))
+
+        compose.onNode(isDialog() and hasAnyDescendant(hasText("Before You Turn Off Cloud Backup"))).assertExists()
+    }
+
+    private fun showScreen(screen: CloudBackupScreen) {
+        compose.setContent {
+            CoveTheme(dynamicColor = false) {
+                CloudBackupScreenFrame(
+                    manager = CloudBackupManager(screen),
+                    actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
+                )
+            }
+        }
     }
 }
