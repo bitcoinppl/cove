@@ -8,6 +8,7 @@ mod clock;
 mod continuation_tests;
 mod crash_tests;
 mod deadline;
+mod enable_entry_tests;
 mod fakes;
 mod fixtures;
 mod incident_tests;

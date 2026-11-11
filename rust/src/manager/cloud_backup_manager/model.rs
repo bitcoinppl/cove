@@ -457,7 +457,28 @@ impl CloudBackupReducerState {
         &mut self,
         choice: CloudBackupEnablePromptChoice,
     ) -> Option<CloudBackupAcceptedEnablePrompt> {
-        let accepted = match (&self.phase, choice) {
+        let accepted = self.enable_prompt_answer(choice);
+        if accepted.is_some() {
+            // accept_enable_prompt deliberately routes every accepted choice through
+            // the CloudBackupLifecyclePhase::Enabling state with
+            // the CloudBackupEnableFlow::DiscoveringExistingBackup flow
+            // and CloudBackupConfiguredPrompt::None so discovery/preparation can choose
+            // the use-existing, force-new, or no-discovery follow-up
+            self.phase = CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::DiscoveringExistingBackup,
+            );
+            self.configured.prompt = CloudBackupConfiguredPrompt::None;
+        }
+
+        accepted
+    }
+
+    /// The Enable `choice` starts from the Enable prompt on screen, if one shows
+    fn enable_prompt_answer(
+        &self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
+        match (&self.phase, choice) {
             (
                 CloudBackupLifecyclePhase::Enabling(
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
@@ -489,21 +510,7 @@ impl CloudBackupReducerState {
                 CloudBackupEnablePromptChoice::CreateNew,
             ) => Some(CloudBackupAcceptedEnablePrompt::NoDiscovery(*context)),
             _ => None,
-        };
-
-        if accepted.is_some() {
-            // accept_enable_prompt deliberately routes every accepted choice through
-            // the CloudBackupLifecyclePhase::Enabling state with
-            // the CloudBackupEnableFlow::DiscoveringExistingBackup flow
-            // and CloudBackupConfiguredPrompt::None so discovery/preparation can choose
-            // the use-existing, force-new, or no-discovery follow-up
-            self.phase = CloudBackupLifecyclePhase::Enabling(
-                CloudBackupEnableFlow::DiscoveringExistingBackup,
-            );
-            self.configured.prompt = CloudBackupConfiguredPrompt::None;
         }
-
-        accepted
     }
 
     fn configured_root_prompt(&self) -> CloudBackupRootPrompt {
@@ -1550,6 +1557,14 @@ impl CloudBackupStateReducer {
     /// Whether the lifecycle shows recovery for an incomplete enable
     pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
         self.projected_pending_enable_recovery().is_some()
+    }
+
+    /// The Enable `choice` would start from the Enable prompt on screen, leaving the prompt
+    pub(crate) fn enable_prompt_answer(
+        &self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
+        self.state.enable_prompt_answer(choice)
     }
 
     /// Whether Enable stopped at the prompt that asks whether to replace an existing backup

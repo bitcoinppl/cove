@@ -1,11 +1,14 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionSnapshot, ConfiguredAdmission, ContinuationOwner, ContinuationStage,
-    DetailInventory, EnableIntent, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
-    evaluate_admission,
+    DetailInventory, EnableIntent, EnablePromptAnswers, PausedContinuation, Rejection,
+    RestoreAllAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupLifecycle,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
 };
 use tracing::debug;
 
@@ -130,6 +133,19 @@ impl CloudBackupSupervisor {
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
             continuation: self.paused_continuation(manager),
+            enable_prompt: Self::enable_prompt_answers(manager),
+        }
+    }
+
+    /// What each answer to the Enable prompt on screen starts
+    fn enable_prompt_answers(manager: &RustCloudBackupManager) -> EnablePromptAnswers {
+        let state = manager.state.read();
+        let starts =
+            |choice| state.enable_prompt_answer(choice).map(|accepted| enable_of(accepted).0);
+
+        EnablePromptAnswers {
+            use_existing: starts(CloudBackupEnablePromptChoice::UseExisting),
+            create_new: starts(CloudBackupEnablePromptChoice::CreateNew),
         }
     }
 
@@ -259,7 +275,21 @@ impl CloudBackupSupervisor {
             I::PromptEnablePasskeyChoice(context) => manager.present_passkey_choice_prompt(
                 CloudBackupPasskeyChoiceIntent::Enable(context, None),
             ),
-            I::AcceptEnablePrompt(choice) => manager.accept_enable_prompt(choice),
+            // admitted as the Enable it starts, so that Enable takes the slot in this same turn
+            // and nothing queued behind the answer can take it first
+            I::AcceptEnablePrompt(choice) => {
+                if let Some(accepted) = manager.accept_enable_prompt(choice) {
+                    match enable_of(accepted) {
+                        (EnableIntent::Standard, context) => self.begin_enable_operation(context),
+                        (EnableIntent::ForceNew, context) => {
+                            self.begin_enable_force_new_operation(context);
+                        }
+                        (EnableIntent::NoDiscovery, context) => {
+                            self.begin_enable_no_discovery_operation(context);
+                        }
+                    }
+                }
+            }
             // these answer their caller, so their own handlers admit them and reply
             I::SwitchDriveAccount
             | I::CancelDriveAccountSwitch
@@ -270,5 +300,18 @@ impl CloudBackupSupervisor {
         }
 
         Produces::ok(())
+    }
+}
+
+/// The Enable an accepted prompt answer starts, and the context it starts with
+fn enable_of(
+    accepted: CloudBackupAcceptedEnablePrompt,
+) -> (EnableIntent, CloudBackupEnableContext) {
+    match accepted {
+        CloudBackupAcceptedEnablePrompt::Enable(context) => (EnableIntent::Standard, context),
+        CloudBackupAcceptedEnablePrompt::ForceNew(context) => (EnableIntent::ForceNew, context),
+        CloudBackupAcceptedEnablePrompt::NoDiscovery(context) => {
+            (EnableIntent::NoDiscovery, context)
+        }
     }
 }

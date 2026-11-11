@@ -169,6 +169,12 @@ Enable behavior depends on what discovery proved:
 - an explicit Create New Backup path stages a fresh master key, new namespace,
   and passkey material without replacing the current active material
 
+Every way into Enable, onboarding's included, is an intent that admission
+decides against the runtime body, so an Enable can't start beside a running
+Restore. An answer to an Enable prompt is decided as the Enable it starts, and
+the supervisor clears the prompt and starts that Enable in the same turn. When
+the Enable can't start, the prompt stays.
+
 Fresh enable material is tracked by a durable pending-enable journal through
 passkey registration, remote writes, and local promotion. A newly saved passkey
 is targeted and confirmed before upload continues. Accepted provider writes are

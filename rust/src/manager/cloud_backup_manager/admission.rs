@@ -65,6 +65,17 @@ pub(crate) enum EnableIntent {
     NoDiscovery,
 }
 
+impl EnableIntent {
+    /// The operation this Enable runs as
+    pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
+        match self {
+            Self::Standard => CloudBackupExclusiveOperation::Enable,
+            Self::ForceNew => CloudBackupExclusiveOperation::EnableForceNew,
+            Self::NoDiscovery => CloudBackupExclusiveOperation::EnableNoDiscovery,
+        }
+    }
+}
+
 impl From<CloudBackupManagerAction> for UserIntent {
     // exhaustive on purpose: a new action is a compile error until it has an intent, and the
     // lint keeps a catch-all arm from ever making it compile unmapped
@@ -234,6 +245,25 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) restore_all: RestoreAllAdmission,
     /// An Enable or reinitialize that stopped before it finished, if one is waiting
     pub(crate) continuation: Option<PausedContinuation>,
+    /// What each answer to the Enable prompt on screen starts
+    pub(crate) enable_prompt: EnablePromptAnswers,
+}
+
+/// The Enable each answer to the Enable prompt on screen starts; both are `None` with no prompt
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct EnablePromptAnswers {
+    pub(crate) use_existing: Option<EnableIntent>,
+    pub(crate) create_new: Option<EnableIntent>,
+}
+
+impl EnablePromptAnswers {
+    /// The Enable `choice` starts, if the prompt on screen offers it
+    fn starts(self, choice: CloudBackupEnablePromptChoice) -> Option<EnableIntent> {
+        match choice {
+            CloudBackupEnablePromptChoice::UseExisting => self.use_existing,
+            CloudBackupEnablePromptChoice::CreateNew => self.create_new,
+        }
+    }
 }
 
 /// An Enable or reinitialize that stopped before it finished, as admission sees it
@@ -395,18 +425,17 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         | I::DismissMissingPasskeyReminder
         | I::DismissVerificationPrompt
         | I::PromptEnablePasskeyChoice(_)
-        | I::AcceptEnablePrompt(_)
         | I::EnterDetail
         | I::RefreshDetail => Accepted,
 
-        I::Enable(kind, _) => {
-            let operation = match kind {
-                EnableIntent::Standard => Op::Enable,
-                EnableIntent::ForceNew => Op::EnableForceNew,
-                EnableIntent::NoDiscovery => Op::EnableNoDiscovery,
-            };
-            starts_while_off(snapshot, operation)
-        }
+        I::Enable(kind, _) => starts_while_off(snapshot, kind.operation()),
+
+        // an answer to the Enable prompt is the Enable it starts, decided as that Enable, so the
+        // prompt stays on screen when that Enable can't start
+        I::AcceptEnablePrompt(choice) => match snapshot.enable_prompt.starts(*choice) {
+            Some(kind) => starts_while_off(snapshot, kind.operation()),
+            None => Rejected(Rejection::NothingToContinue),
+        },
         I::RestoreFromCloudBackup => starts_while_off(snapshot, Op::Restore),
 
         I::CancelRestore => match snapshot.running {

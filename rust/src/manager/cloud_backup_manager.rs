@@ -735,26 +735,21 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::PasskeyChoicePromptCleared);
     }
 
-    pub(crate) fn accept_enable_prompt(&self, choice: CloudBackupEnablePromptChoice) {
+    /// Consumes the Enable prompt with `choice` and returns the Enable it starts
+    ///
+    /// The supervisor starts that Enable in the same turn, so the prompt is never consumed by an
+    /// Enable that does not start
+    pub(crate) fn accept_enable_prompt(
+        &self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
         let (accepted, effects) = {
             let mut state = self.state.write();
             state.accept_enable_prompt(choice)
         };
 
         self.send_model_effects(effects);
-
-        match accepted {
-            Some(CloudBackupAcceptedEnablePrompt::Enable(context)) => {
-                self.enable_cloud_backup(context);
-            }
-            Some(CloudBackupAcceptedEnablePrompt::ForceNew(context)) => {
-                self.enable_cloud_backup_force_new(context);
-            }
-            Some(CloudBackupAcceptedEnablePrompt::NoDiscovery(context)) => {
-                self.enable_cloud_backup_no_discovery(context);
-            }
-            None => {}
-        }
+        accepted
     }
 
     pub(crate) fn dismiss_missing_passkey_prompt(&self) {
@@ -1267,18 +1262,6 @@ impl RustCloudBackupManager {
 
         send!(self.supervisor.clear_stale_restore_all_marker(marker.namespace_id.clone()));
         self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllReset);
-    }
-
-    pub(crate) fn enable_cloud_backup(&self, context: CloudBackupEnableContext) {
-        send!(self.supervisor.start_enable_operation(context));
-    }
-
-    pub(crate) fn enable_cloud_backup_force_new(&self, context: CloudBackupEnableContext) {
-        send!(self.supervisor.start_enable_force_new_operation(context));
-    }
-
-    pub(crate) fn enable_cloud_backup_no_discovery(&self, context: CloudBackupEnableContext) {
-        send!(self.supervisor.start_enable_no_discovery_operation(context));
     }
 
     pub(crate) fn disable_cloud_backup(&self) {
