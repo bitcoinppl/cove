@@ -1,21 +1,25 @@
 # Cloud Backup
 
-Cloud Backup is split between a UI-facing manager, a reducer-backed state
-projection, and a set of actors that own long-running work. The Rust core is
-the source of truth for lifecycle state, inventory completeness and generations,
-passkey policy, cloud writes, local database updates, and Restore All. Swift and
-Kotlin consume `CloudBackupScreen` and send actions through the manager instead
-of rebuilding cloud backup rules in UI code.
+Cloud Backup is split between a UI-facing manager, a screen projection built
+from the supervisor's runtime and admission, and a set of actors that own
+long-running work. The Rust core is the source of truth for lifecycle state,
+inventory completeness and generations, passkey policy, cloud writes, local
+database updates, and Restore All. Swift and Kotlin draw `CloudBackupScreen`
+and send actions through the manager instead of rebuilding cloud backup rules
+in UI code.
 
 ## Ownership Model
 
-`RustCloudBackupManager` is the FFI facade. It owns the reducer, exposes
-snapshots and reconcile messages, and forwards long-running work to
-`CloudBackupSupervisor`.
+`RustCloudBackupManager` is the FFI facade. It owns the reducer, the
+`InventoryOwner` and the last published screen, exposes snapshots and reconcile
+messages, and forwards long-running work to `CloudBackupSupervisor`.
 
-`CloudBackupStateReducer` keeps the private lifecycle model. It also filters
-stale exclusive-operation completions so an older async path cannot erase a
-newer operation.
+`CloudBackupStateReducer` holds presentation state: the Enable and restore
+flows, passkey, verification and sync state, the root prompt and row-operation
+progress. The supervisor's runtime holds the lifecycle body, and
+`Runtime::accepts_completion` discards a completion whose claim no longer owns
+the running operation, so an older async path can't finish or clear newer work.
+The reducer's copy of the claim follows the same rule.
 
 ## Screen Contract
 
@@ -71,9 +75,11 @@ the configuration, cloud-only listing and local wallet changes it was read
 under. The platforms treat it as opaque: a
 confirmation keeps the consent of the delete it opened for and sends it back
 unchanged, as `DeleteCloudWallet(consent)` or
-`DeleteUndecryptableWalletBackups(consent)`. Dispatch mints the same delete
-again from the inventory at that moment, in the namespace the keychain holds
-then, and starts it only when the two are equal. A consent confirmed on evidence
+`DeleteUndecryptableWalletBackups(consent)`. For a row, dispatch builds the
+delete's authorization from the consent and checks it against the rows a delete
+in the namespace the keychain holds would see at that moment. For the batch, it
+mints the batch again from the inventory at that moment and starts it only when
+the two are equal. A consent confirmed on evidence
 that has since moved, such as an extra copy that is now the only copy, a new
 listing, a wallet change on this device, a new configuration or another
 namespace, is rejected as `ReviewStale` next to its control, and the
@@ -84,31 +90,35 @@ because a reinitialize replaces the namespace inside one configuration
 generation.
 
 The batch is frozen when it is offered: it names the undecryptable rows the
-inventory listed then, and its run reads only those records, so a backup found
-after the confirmation is never deleted under it. It needs the inventory loaded,
+inventory listed then, and its run reads only those records and deletes only
+those the read still finds undecryptable, so a backup found after the
+confirmation is never deleted under it. It needs the inventory loaded,
 since the rows are what it names, and the control is drawn only once the
 cloud-only records are listed.
 
 Every action is an entry with its availability, decided by the same admission
 dispatch uses. A platform draws a control only for an action in the list and
 enables it only when it is available; an unavailable action carries the reason
-to show as its caption. Rust marks the Google Drive actions as Android only.
-A recorded Google Drive account switch is its own admission body: it admits
-only the switch's own controls, and rejects everything else, Turn Off included,
-as the switch running. A second Switch during one answers `Busy`. Try Again is
-available once a step of the switch failed, or once the switch stopped with
-nothing running. Cancel is available as well until the switch's reinitialize
-starts. A switch paused for its saved passkey offers only Confirm Saved Passkey.
+to show as its caption. The one exception is the Turn Off dialogs' Cancel,
+which always shows so the dialog can close; a rejected Cancel comes back as the
+last outcome. Rust marks the Google Drive actions as Android only.
+A recorded Google Drive account switch is its own admission body: it admits the
+switch's own controls, navigation and dismissals, and rejects anything that
+needs a configured backup, Turn Off included, as the switch running. A second
+Switch during one answers `Busy`. Try Again is available once a step of the
+switch failed, or once the switch stopped with nothing running. Cancel is
+available as well until the switch's reinitialize starts. A switch paused for
+its saved passkey offers only Confirm Saved Passkey.
 
-`just qa-check` enforces this in the Cloud Backup views: every Kotlin
-`enabled =` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an
-action's or row action's `isAvailable`. The Cloud Backup views are the files in
-Android's `cloudbackup` package and the iOS files named for Cloud Backup, plus
-any other top-level view that reads the screen's actions or body, such as the
-onboarding Cloud Backup step. The onboarding Continue next to that step follows
-the onboarding flow's own state and isn't checked. The only other flags allowed are a few
-per-view local facts, such as the setup checkboxes or a Cancel that waits on an
-Enable with no cancel action, listed with their reasons in
+`just qa-check` enforces this in the Cloud Backup views: every Kotlin `enabled
+=` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an action's
+or row action's `isAvailable`. The Cloud Backup views are the files in Android's
+`cloudbackup` package and the iOS files named for Cloud Backup, plus any other
+top-level view that reads the screen's actions or body, such as the onboarding
+Cloud Backup step. The onboarding Continue next to that step follows the
+onboarding flow's own state and isn't checked. The only other flags allowed are
+a few per-view local facts, such as the setup checkboxes or a Cancel that waits
+on an Enable with no cancel action, listed with their reasons in
 `rust/xtask/src/qa/availability_gates.rs`.
 
 Each section names the controls it draws: the verification, wallets,
@@ -152,14 +162,26 @@ every screen to it. In particular:
   provider is unsupported, or it needs repair.
 
 The supervisor owns the last outcome. It comes from dispatch rejections,
-operation failures and a Turn Off that ended before its commit, which shows
-next to Turn Off. A later accepted tap replaces it, and
-`DismissNotice(LastOutcome)` clears it.
+operation failures, work a control did without an operation (such as Try Again
+on a failed load), and a Turn Off that ended before its commit, which shows
+next to Turn Off. A passkey prompt the user cancelled shows as not completed
+rather than failed. A later accepted tap on any control clears it, and
+`DismissNotice(LastOutcome)` clears it too.
 
-The Settings row shows `TurnOffIncomplete` while a committed Turn Off still has
-to finish, `TurnedOnAgain` while the heal notice is on a configured backup, and
-an error row while the record failed to load or is corrupted. Dismissing the
-notice dispatches `DismissNotice(Heal)`, which clears it from the stored record.
+The Enable step, in onboarding and in Settings, shows the outcome of any
+control it can show: Enable, the existing-backup prompt's choices, Confirm
+Passkey on its saved-passkey pause, and the pending-enable Discard and
+cleanup. The step can move between those controls before an outcome comes
+back, as when a failed setup upload returns Enable to its saved-passkey pause,
+so its footer doesn't tie the outcome to the control on screen.
+
+The Settings row shows `SettingUp` during an Enable, `Restoring` during a
+restore, `Disabling` while Turn Off drains before its commit,
+`TurnOffIncomplete` while a committed Turn Off still has to finish,
+`TurnedOnAgain` while the heal notice is on a configured backup,
+`RecoveryRequired` for pending-enable recovery and for an account switch that
+needs Retry, and an error row while the record failed to load or is corrupted.
+Otherwise a configured backup shows its passkey, verification and sync status.
 
 A record that failed to load shows `LoadFailed` with `RetryLoad`, which loads
 it again in place; a successful retry resumes as a launch would, including an
@@ -168,13 +190,17 @@ record shows `Corrupted` with `ResetOnThisDevice`, which runs the local reset
 and then stores Disabled, so Cloud Backup can be turned on again without
 reinstalling.
 
-Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
-body and the main configured states, which the platform contract tests render.
-Release builds return none. The iOS test requires an enabled control on the
-detail for each available action unless every control Rust names for it is
-Android's or iOS draws it off the detail form. The Android test reaches each
-available control on its own surface, opening the overflow menu only for a
-control Rust puts in the menu.
+Every build exports `cloud_backup_screen_fixtures()`. Debug builds return a
+named screen for each body and the main configured states, which the platform
+contract tests render; release builds return an empty list. The iOS test
+(`CloudBackupIOSSafetyHelpersTests.testEveryScreenFixtureDrawsItsAvailableActionsOnTheDetail`)
+requires an enabled control on the detail for each available action unless
+every control Rust names for it is Android's or iOS draws it off the detail
+form. The Android test reaches each available control on its own surface,
+opening the overflow menu only for a control Rust puts in the menu.
+
+The heal notice offers `DismissHealNotice` as a global action, which dispatches
+`DismissNotice(Heal)` and clears the notice from the stored record.
 
 `PendingEnableCoordinator` owns the local keychain transaction for fresh and
 recovered enables. It keeps CSPP staging and promotion ordered with the durable
@@ -261,8 +287,8 @@ actor, such as the write lane, upload confirmation, wallet changes and the
 integrity check, sends the supervisor a typed result message, and the supervisor
 applies the write and reconciles. Verification evidence is tied to the wallet set
 it read, so a wallet change that lands while a verification runs makes that
-verification's result stale. A stale result neither overwrites the reset nor
-shows on screen.
+verification's result stale. A stale result neither overwrites the
+verification requirement the wallet change recorded nor shows on screen.
 
 Waits go one way only. The write supervisor and other workers may `call!` the
 supervisor, but the supervisor never waits on them. It sends the write
@@ -274,14 +300,17 @@ can't hold a reset or a lifecycle completion behind its mailbox.
 Workers that prove a passkey or a master key off the actor don't write the
 keychain themselves. They hand the writes to the write lane with the authority
 they read before their work started: the running operation's claim, or the
-background configuration generation, and the namespace the keys were proven
-for. The lane decides the save at its queue head like any other command, so a
-save from an operation that ended or a configuration that was replaced is
-refused, and background saves wait while Turn Off, an account switch or a reset
-runs. The save then runs on a blocking thread as the lane's in-flight command and
-is refused if the keychain holds another namespace by then. Turn Off's drain and
-a reset's wait for an idle lane both wait for a save that already started, so a
-late proof can't restore wiped keys or replace the next backup's keys. An effect that can't be cancelled once it starts, such as Turn Off's local
+background configuration generation, and the namespace the keys were proven for.
+The lane decides the save at its queue head like any other command, so a save
+from an operation that ended or a configuration that was replaced is refused,
+and background saves are refused as paused while Turn Off, an account switch, a
+reset or backup-off holds the lane, and run again when ordinary writes resume.
+The save then runs on a blocking thread as the lane's in-flight command and is
+refused if the keychain holds another namespace by then. Turn Off's drain and a
+reset's wait for an idle lane both wait for a save that already started, so a
+late proof can't restore wiped keys or replace the next backup's keys.
+
+An effect that can't be cancelled once it starts, such as Turn Off's local
 cleanup or a passkey registration, puts its operation in an `Effecting` stage,
 and the operation keeps the slot until the effect reports. A local reset, which
 a full wipe uses, closes admission, cancels running operations, waits for any
@@ -298,7 +327,7 @@ Cloud Backup manager exists, so the namespace has one owner at a time.
 A finished reinitialize, including one at the end of a Google Drive account
 switch, hands its slot straight to a verification of the new backup under a new
 claim. That verification reports the backup as enabled, so it reads the cloud,
-while the reinitialize stays on screen until it ends.
+while the reinitialize stays on screen until that verification ends.
 
 Swift and Kotlin own provider mechanics and native presentation classification.
 They return typed cloud-storage and passkey outcomes to Rust; they do not decide
@@ -306,13 +335,15 @@ whether inventory is complete, whether an enable path is safe, or which wallets
 belong in a batch. Android's generated UniFFI manager handle stays private to
 `CloudBackupManager` and is accessed through its guarded wrapper methods.
 
-The child actors under `cloud_backup_manager::actors` own narrower work:
+The child modules under `cloud_backup_manager::actors` own narrower work:
 
-- `restore` owns restore progress and restore event delivery
+- `restore` holds restore work, which the supervisor runs off its mailbox, and
+  restore event delivery
 - `uploads` owns dirty wallet upload scheduling and pending-upload verification
 - `CloudBackupSyncHealthWorker` owns background sync health refreshes
 - `cleanup` owns namespace cleanup after merge or recovery flows
-- `write` owns serialized cloud writes and post-write local completion
+- `write` owns serialized cloud writes, proven-key keychain saves and
+  post-write local completion
 
 ### Accessibility Identifiers
 
@@ -412,37 +443,43 @@ Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
 `LifecycleCapability`, whose private field only `owner/lifecycle.rs` can
 construct. Bootstrap creates it once, inside the exclusive bootstrap phase that
 normalizes the stored record, and moves it into the supervisor. The database has
-no other production route that writes the Cloud Backup tables.
+no other production route that writes the lifecycle record; restore activation,
+which writes the record with its dirty rows, needs the capability too.
 
 The writer also keeps the record it last read or committed, and the supervisor
 derives its body, write policy and status from that record. A failed read gives
 the writer's copy instead of a default, so a transient database error can't turn
 a configured backup into an off one. A full wipe tells the writer the record is
 the default one. If no read has succeeded since the load, the body is
-`LoadFailed`, which admits nothing.
+`LoadFailed`, which admits only Retry (`RetryLoad`).
 
 ## Inventory
 
 The detail inventory is explicitly progressive:
 
 - `NotLoaded` has no inventory attempt yet
-- `Checking` may retain the last known detail and wallet rows while a newer
-  generation is in flight
-- `Complete` is the only state that proves the current provider inventory is
-  complete
+- `Checking` appears only while no complete inventory is loaded; it keeps the
+  rows of a failed load or a provisional snapshot. A refresh over a `Complete`
+  inventory leaves it `Complete` and runs silently
+- `Complete` the provider confirmed is the only state that proves the
+  inventory is complete; iOS's trusted local snapshot is `Complete` but enables
+  only row actions
 - `Failed` carries a typed incomplete reason and may retain the last known rows
 
 A timeout, authorization failure, offline result, or provider failure is
-incomplete, not a confirmed empty inventory. Restore All and the actions that
-depend on a record's absence stay disabled until the inventory is complete.
-Turn Off doesn't wait for it: an incomplete inventory makes its review warn and
-ask for a second confirmation, as described under Turn Off.
+incomplete, not a confirmed empty inventory. Restore All, Recreate Manifest and
+Reinitialize stay unavailable until the inventory is `Complete` and confirmed
+by the provider. A row's own Restore or Delete needs a trusted inventory:
+`Complete`, or `Failed` with its rows kept for a reason other than being
+offline. Turn Off doesn't wait for the inventory: an incomplete one makes its
+review warn and ask for a second confirmation (see [Turn Off](#turn-off)).
 
-The inventory loads silently. Entering the detail screen only requests a
-refresh; it never asks for the passkey. The cloud-only fetch reads records
-with the master key already on this device, and with no local key for the
-active namespace it lists every record as Unchecked, which the screen answers
-with a Verify card. Only a user's Verify asks for the passkey.
+The inventory loads silently. Entering the detail screen requests a refresh and
+starts the silent cloud-only and other-backups reads; it never asks for the
+passkey. The cloud-only fetch reads records with the master key already on this
+device, and with no local key for the active namespace it lists every record as
+Unchecked, and each Unchecked row offers Verify. Loading never asks for the
+passkey; Verify does, and so does a restore when the local key is gone.
 
 The supervisor embeds a `DetailWorkflow` that owns refresh scheduling. It
 permits one screen refresh in flight and coalesces further requests into one
@@ -450,23 +487,23 @@ trailing refresh. A Check Again tapped while the inventory shows Checking joins
 that load (`CoalescibleIntent::RefreshDetail`) and starts no second one, and
 the load after it carries the tap's authority. One tapped under a loaded
 inventory, whose refresh runs silently, is accepted and queues the next load.
-Rust starts refresh generations no more than once every five seconds and
-admits results by start order, so an older screen or operation refresh cannot
-overwrite a newer one. Closing the detail screen invalidates its refresh owner
-without cancelling manager-owned operations. A local reset suspends the cycle
-and drops its queued work, and a completed reset leaves it closed. A failed
-reset that resumes the backup reopens a cycle that was open before or opened
-during the reset, with a new owner and nobody tapping, so the inventory the
-reset cleared loads again silently.
+Rust starts refresh generations no more than once every five seconds and admits
+results by start order, so an older screen or operation refresh cannot overwrite
+a newer one. Leaving the detail screen ends a Turn Off review on screen and
+cancels nothing; refreshes keep running and their results still apply. A local
+reset suspends the cycle and drops its queued work, and a completed reset
+leaves it closed. A failed reset that resumes the backup reopens a cycle that
+was open before or opened during the reset, with a new owner and nobody
+tapping, so the inventory the reset cleared loads again silently.
 
 A local wallet change doesn't wait for that refresh to correct the local rows.
-The inventory owner drops rows for wallets that are no longer on this device at once,
-and counts a deleted wallet's confirmed backup as cloud-only, so a deleted
+The inventory owner drops rows for wallets that are no longer on this device at
+once, and counts a deleted wallet's confirmed backup as cloud-only, so a deleted
 wallet shows only under Not on This Device once the cloud-only rows are read
-again, even when the refresh fails. Everything else waits for the refresh.
-A detail result that read the local wallets before the deletion, from a refresh
-or a verification, gets the same check against the current local wallets when
-it lands, so it can't list the wallet as local again. The owner also counts the
+again, even when the refresh fails. Everything else waits for the refresh. A
+detail result that read the local wallets before the deletion, from a refresh or
+a verification, gets the same check against the current local wallets when it
+lands, so it can't list the wallet as local again. The owner also counts the
 local wallet changes it applies. A backup integrity check's detail, and a deep
 verification's or an upload confirmation's, carries the count from before it
 read the local wallets: one read before a wallet was added, restored or deleted
@@ -506,29 +543,31 @@ mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.
 The platform result feeds the same Rust inventory owner on both platforms.
 
-Rust projects the progress section from verification and inventory state.
-Verification progress takes priority over inventory progress: a standalone card
-when no wallet rows are listed, an inline row when they are. The verification
-section draws no second running indicator.
+Rust projects the progress section from verification and inventory state. A
+running verification's progress comes first: a card when no wallet rows are
+listed, an inline row when they are. Inventory progress still shows below it.
+The verification section draws no second running indicator.
 
 Each listed record is one typed row: Not on This Device, Extra Copy,
 Unsupported, Unreadable (with why: the download, the provider, parsing or
 decryption failed) or Unchecked (no local master key). Only a listing whose
 every record was read completes, so Unreadable and Unchecked rows keep Restore
 All off. Turn Off doesn't block on them: since either may be the only copy, its
-review warns about them and asks for a second confirmation.
+review counts them as unreadable or unchecked and asks for a second
+confirmation.
 
 An Extra Copy is another backup record of a wallet this device already holds.
 Coverage names every local wallet that holds the record's identity by wallet
 ID, never by name, so a renamed wallet still covers its old copy and a
 same-name wallet never covers another's. The copy can be deleted once one of
 those wallets has its own current backup (matched by its own record ID);
-until then it offers Back up first.
+until then it offers Back up first and Check Again.
 
 Rust also splits the cloud rows into sections: Extra Copies under Extra Copies,
-and every other cloud row under Not on This Device, with Restore All and the
-incomplete list's Check Again. The platforms draw the sections in the order
-Rust lists them and derive none of them.
+and every other cloud row under Not on This Device, with Restore All. The
+incomplete inventory's Check Again is in its own progress section above the
+rows. The platforms draw the sections in the order Rust lists them and derive
+none of them.
 
 ## Passkeys And Enable
 
@@ -702,13 +741,15 @@ abandoned before its wipe returns to the recovery while its evidence remains.
 
 Automatic passkey retry is shared and bounded. It applies only to a typed
 platform-authorization failure that occurred before native presentation.
-Presented failures, user cancellation, credential mismatch, unsupported
-providers, and invalid results are returned to the owning flow without
-automatic retry or registration fallback. Only a typed no-credential result
-may continue into the owning enable or repair flow's explicit registration
-step. Interactive passkey and Drive sheets are not wrapped in a global
-watchdog. Every request, and every automatic retry, needs the live permit of
-the tap that started the operation; see `docs/passkeys.md`.
+Presented failures, requests that didn't complete (`NotCompleted`), requests
+with no ready presenter (`NotReady`), credential mismatch, unsupported
+providers, invalid results, and Rust's own refusals (`NeedsPasskey`,
+`PasskeyBusy`) go back to the owning flow without automatic retry or
+registration fallback. Only a typed no-credential result may continue into the
+owning enable or repair flow's explicit registration step. Rust puts no timeout
+around interactive passkey and Drive sheets; each platform bounds a passkey
+request at five minutes. Every request, and every automatic retry, needs the
+live permit of the tap that started the operation; see `docs/passkeys.md`.
 
 ## Restore All
 
@@ -763,28 +804,32 @@ they were queued.
 The lane does not keep its own record of who may write. The supervisor derives a
 `WritePolicy` from its runtime body (`Runtime::write_policy`) and sends a newer
 versioned policy to the lane each time the body changes. The policy is never
-stored. When the lane reaches a queued write, it decides that write against the
-latest policy, at that moment. Each write carries a command class, and the
-decision is one of four:
+persisted, and nothing sets or clears it: the lane keeps only the latest copy.
+When the lane reaches a queued write, it decides that write against the latest
+policy, at that moment. Each write carries a command class, and the decision is
+one of four:
 
 - `Run`: the write starts
 - `Paused(PauseReason)`: the write answers `CloudBackupError::WritesPaused`. A
-  paused upload stays `Dirty` and sets no retry timer. Only a lost connection
-  defers an upload with a retry timer. A wallet batch paused part-way answers
+  paused upload stays `Dirty` and sets no retry timer. A lost connection
+  defers the upload with a retry timer, and a retryable failure retries on a
+  backoff; a pause sets neither. A wallet batch paused part-way answers
   the pause too, even when recording the uploads it finished is paused as well.
 - `Stale`: the write belongs to an operation that ended, or to an older
-  configuration. It is dropped with a debug log.
+  configuration. It is dropped with a debug log. A stale operation write
+  answers `Cancelled`; a stale background write answers
+  `WritesPaused(ConfigurationChanged)`, so its row stays `Dirty` like a pause.
 - `StaleTarget(StaleTarget)`: a row delete the policy would run, but whose
   authorization no longer matches the inventory. Nothing is deleted. See
   [Row Deletes](#row-deletes).
 
 | Class | Sent by | Runs when | Paused when |
 |---|---|---|---|
-| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset |
+| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset, a failed load |
 | `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
 | `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
-| `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running and its authorization still matches the inventory | never |
+| `RowDelete { claim, .. }` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running and its authorization still matches the inventory | never |
 | `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
 | `EnableDiscard(claim)` | discarding the namespace of an interrupted Enable or a stopped reinitialize | that discard is running | never |
 
@@ -798,21 +843,22 @@ The same rules by runtime body:
 | `Configured`, no operation | `Configured` | `Ordinary` and `SourceCleanup` of the current generation | stale |
 | `Configured`, Turn Off before its commit | `Configured` (Turn Off writer) | Turn Off's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`TurnOff`), the rest stale |
 | `Configured`, a reinitialize | `Configured` (reinitialize writer) | the reinitialize's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`Reinitialize`), the rest stale |
-| `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` | stale |
-| `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` | stale |
-| `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` | stale |
-| `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` | stale |
-| `Disabled`, `Corrupted`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
+| `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
+| `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
+| `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
+| `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
+| `Disabled`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
+| `Corrupted` | `Off` | nothing | `Ordinary` paused (`BackupOff`), the rest stale |
 | `FinishingDisable` | `FinishingDisable` | `TurnOffDelete` of the committed namespace and `Operation`, both of the running claim | `Ordinary` paused (`TurnOff`), the rest stale |
 | `DriveAccountSwitch` | `AccountSwitch` | `Operation` of the running claim | `Ordinary` paused (`AccountSwitch`), the rest stale |
 | `LoadFailed` | `Closed(LoadFailed)` | nothing | `Ordinary` paused, the rest stale |
 | `Resetting` | `Closed(LocalReset)` | nothing | `Ordinary` paused, the rest stale |
 
 A configuration generation is a process-local number. The supervisor starts a
-new one when the body changes kind, for example when backup turns on or off, or
-when a reinitialize ends. `Ordinary` and `SourceCleanup` writes from an older
-generation are stale. That covers cleanup jobs already queued or being prepared
-for a configuration that was replaced.
+new one when the policy body changes kind, for example when backup turns on or
+off, or when a reinitialize ends. `Ordinary` and `SourceCleanup` writes from an
+older generation are stale. That covers cleanup jobs already queued or being
+prepared for a configuration that was replaced.
 
 When a new policy lets ordinary writes run again, the lane tells the supervisor
 (`ordinary_writes_resumed`). The supervisor then resumes uploads from the
@@ -827,12 +873,12 @@ class carries the operation claim. Background writes take a ticket for the
 current generation.
 
 `CloudBackupWriteWorker` is intentionally small. It executes the remote storage
-command and reports the result back to the write supervisor. The supervisor then
-applies any local completion, such as marking uploaded blobs pending
-confirmation. It asks the supervisor to persist the enabled state after a final
-upload and waits for that answer before it marks the wallets uploaded. It
-re-decides the class before it applies the completion, so a write whose
-operation ended meanwhile is reported cancelled.
+command and reports the result back to the write supervisor. The write
+supervisor then applies any local completion, such as marking uploaded blobs
+pending confirmation. It asks the lifecycle supervisor to persist the enabled
+state after a final upload and waits for that answer before it marks the wallets
+uploaded. It re-decides the class before it applies the completion, so a write
+whose operation ended meanwhile is reported cancelled.
 
 A reinitialize owns the namespaces from its start, the same way. Its policy
 pauses ordinary writes and source cleanup, so a cleanup whose proof was read
@@ -932,9 +978,14 @@ asks for consent instead.
    twice even when every listed record is this device's own. Other records are
    classified by the detail inventory as not on this device, extra copies,
    unreadable, unsupported or unchecked. A record the inventory hasn't
-   classified counts as unchecked. The screen shows `Preparing`, then
-   `Reviewing` with a `CloudBackupDisableImpact`, or `Offline` when the
-   provider can't be reached.
+   classified counts as unchecked and makes the assessment partial. The screen
+   shows `Preparing`, then `Reviewing` with a `CloudBackupDisableImpact`, or
+   `Offline` when the connectivity check or the listing fails as offline. Any
+   other listing failure, authorization included, gives a review whose
+   assessment is unknown. A failed read of this device's own namespace shows no
+   review; it records a failure next to Turn Off. A Turn Off tap while the
+   review is `Preparing`, or while a confirmed Turn Off drains (`Draining`),
+   joins it.
 
    Gathering this evidence is bounded. A listing that hasn't answered within 20
    seconds is dropped and makes the impact unknown, which asks twice. The count
@@ -949,6 +1000,11 @@ asks for consent instead.
    running. The review is built once that refresh lands or fails, or at the
    same 20-second deadline, with the assessment the inventory reached. A
    result dropped as from an earlier configuration doesn't count as landing.
+
+   The `Offline` dialog says Cove can't reach iCloud or Google Drive right now
+   and that turning off Cloud Backup needs a connection. Its Try Again sends
+   `DisableCloudBackup` again and follows Turn Off's availability; its Cancel
+   sends `CancelDisable`.
 2. **Confirmation.** The impact asks once only with a known safe set: the
    assessment is complete, the namespace lists at least one record, and every
    listed record is this device's own backup or an extra copy, known safe by
@@ -965,10 +1021,13 @@ asks for consent instead.
    device since the review, or a wallet covering an extra copy lost its secret,
    or a wallet whose own backup is listed left this device while that backup is
    at risk or unchecked, or its assessment is worse, the operation ends and a
-   new review replaces the old one with `changed_since_confirmation`. Otherwise
-   Turn Off commits: the runtime writes the commit and moves the body to
-   `FinishingDisable` in one step, so a commit always comes with the run that
-   finishes it, and a Turn Off that has already ended writes nothing.
+   new review replaces the old one with `changed_since_confirmation`. If the
+   recheck finds the provider offline or needing authorization, Turn Off ends
+   with `DisableNotStarted`; if the configuration changed, it is rejected as
+   `ReviewStale`. Otherwise Turn Off commits: the runtime writes the commit and
+   moves the body to `FinishingDisable` in one step, so a commit always comes
+   with the run that finishes it, and a Turn Off that has already ended writes
+   nothing.
 4. **Leaving for the risk.** A review that names wallets not on this device
    offers `RestoreFirst`, and one with backups Cove couldn't check offers
    `VerifyFirst`. Each sends one intent bound to the review, like Confirm:
@@ -982,8 +1041,9 @@ asks for consent instead.
    turn, and a failure is drawn next to that work's own control. A rejected one
    starts nothing and the review stays open. Nothing continues into Turn Off
    afterwards; the user taps Turn Off again.
-5. **Before the commit** nothing is persisted. `CancelDisable` ends the review
-   or the drain. A failure ends it with a `DisableNotStarted` last outcome and
+5. **Before the commit** nothing is persisted. `CancelDisable` ends the review,
+   the drain or the recheck. A failure ends it with a `DisableNotStarted` last
+   outcome (or `Rejected(ReviewStale)` when the configuration changed) and
    leaves backup on.
 6. **After the commit** the body is `FinishingDisable` and only goes forward: it
    deletes the namespace (already gone counts as deleted), clears this device's
@@ -999,51 +1059,73 @@ asks for consent instead.
      `AuthorizationRequired`.
    - That failure offers `ReconnectDrive` on Android, which resumes the same
      committed Turn Off with consent. Switch Google Account stays unavailable.
-   - Once a Try Again has failed, `StopUsingOnThisDevice` finishes on this
-     device alone and leaves the remote backup. The record keeps both facts:
-     a failed Try Again keeps Stop Using offered after a relaunch, and Stop
-     Using saves a local-only disposition before its cleanup starts, so no
-     later resume, retry or relaunch deletes the remote backup.
+   - `StopUsingOnThisDevice` is always drawn on this body, but it is enabled
+     only once a Try Again (or an earlier Stop Using) has failed; until then it
+     shows "Try again first". It finishes on this device alone and leaves the
+     remote backup. Android asks for confirmation first; iOS shows the same
+     warning as the section's footer. The record keeps both facts: a failed
+     Try Again keeps Stop Using offered after a relaunch, and Stop Using saves
+     a local-only disposition before its cleanup starts, so no later resume,
+     retry or relaunch deletes the remote backup.
+
+### Heal notice
+
+A Turn Off from an older build could leave a `Disabling` record that never
+deleted anything (it has no `delete_started_at`). Loading the record, at
+bootstrap or on `RetryLoad`, turns it back into the configured backup it was,
+with a heal notice, in one write. If that write fails, the body is
+`LoadFailed`. The screen exports the notice as
+`CloudBackupHealNotice::StuckTurnOffHealed`, the Settings row shows
+`TurnedOnAgain`, and the detail screen shows a notice that Cloud Backup is on
+again because an earlier Turn Off didn't finish. The notice offers Turn Off,
+which sends `DisableCloudBackup` and opens the normal review, and Dismiss,
+which sends `DismissNotice(Heal)` and takes the notice off the stored record.
 
 ## Row Deletes
 
 A row delete removes one listed backup record: Delete Cloud Wallet removes one
 row, and Delete Undecryptable removes the records the configured key couldn't
-decrypt. Each delete runs under a `DeleteAuthorization`. Only `DeleteAuthority`
-can create one, the supervisor holds the only authority, created at bootstrap,
-and the lane checks the authorization again right before the delete runs.
+decrypt. Each delete runs under a `DeleteAuthorization` built from the consent
+the user confirmed. Only `RowDeleteAuthority` can build one, the supervisor
+holds the only authority, created at bootstrap, and the lane checks the
+authorization again right before the delete runs.
 
 ### What each row may delete
 
-Each listed record has a `RowEvidence`, and its `delete_rule` decides whether
-the row can be deleted. The screen draws each row's controls from the same rule
-the lane enforces:
+A row offers Delete only when `CloudBackupDeleteCategory::of` gives its record a
+category, and the consent its Delete carries names that category. The screen
+draws each row's controls from that rule, and the authorization checks against
+the same rule, so a row the screen offers is a row the lane deletes:
 
 | Row | Rule |
 |---|---|
 | Extra copy, a local wallet holds everything it can recover, and the latest read found that wallet's current revision in the cloud | delete, standard confirmation |
-| Extra copy, but the latest read didn't find the covering wallet's current backup | refused: back up first |
-| Not on this device, including a seed backup that only a watch-only wallet matches | delete, may-be-the-only-copy confirmation |
+| Extra copy, but the latest read didn't find the covering wallet's current backup | no Delete: back up first (the row offers Back Up First and Check Again) |
+| Not on this device, including a seed backup that only a watch-only or cold wallet matches | delete, may-be-the-only-copy confirmation |
 | Unsupported version | delete, may-be-the-only-copy confirmation |
 | Unreadable (decrypt or parse), with the key this configuration verified | delete, may-be-the-only-copy confirmation |
-| Unreadable (decrypt or parse), any other key trust | refused: verify first |
-| Unreadable (not downloadable or provider failure) | refused: check again |
-| Not checked yet | refused: verify first |
+| Unreadable (decrypt or parse), any other key trust | no Delete: verify first |
+| Unreadable (not downloadable or provider failure) | no Delete: check again |
+| Not checked yet | no Delete: verify first |
+
+A decrypt failure counts as one of the verified key when the verified read of
+this configuration, the one Delete Undecryptable makes, holds the record.
 
 A public-only wallet never covers a seed backup. Until a read finds the covering
 wallet's own backup current, deleting the copy could delete the only backup of
 the seed. For example, after Restore adds a seed to a watch-only wallet, its
 earlier backup holds only public keys. The covering wallets are matched by their
-own record IDs, and an own row counts as current only when the read found the
-wallet's current revision in the cloud. A sync row that says Confirmed is not
-enough, because another device may have removed or replaced that backup since.
+own record IDs, so a renamed wallet or one with the same name never stands in,
+and an own row counts as current only when the read found the wallet's current
+revision in the cloud. A sync row that says Confirmed is not enough, because
+another device may have removed or replaced that backup since.
 
 ### Authorization
 
-Delete Cloud Wallet's authorization is minted in the supervisor turn that starts
-the delete operation. Delete Undecryptable's is minted in the turn that receives
-the batch's read, before anything is deleted. Both come from a `DeleteView` that
-the inventory owner gives under one lock. The view holds:
+The authorization is the consent, field by field: the records it names, the
+namespace they were listed in, the listing generation, where the inventory was
+read, the configuration generation, and the category. It is checked against a
+`DeleteView` that the inventory owner gives under one lock. The view holds:
 
 - the active namespace
 - the listing generation, which a listing with a different set of records, an
@@ -1051,19 +1133,19 @@ the inventory owner gives under one lock. The view holds:
 - where the inventory was read (`InventoryReadAt`): its configuration scope,
   and the local wallets epoch, which every local wallet change bumps
 - the configuration generation
-- each row's evidence, from the rows the screen draws, but only while they were
+- the category each row listed in the active namespace would be deleted as now,
+  read through the same rule the screen draws with, but only while the rows were
   read under the latest listing
+- the verified read of undecryptable records the owner holds, under this
+  configuration only
 
-Every record must be deletable, and all of them must fall into one category. A
-refusal finishes the operation and sends nothing to the lane. Its message is the
-row's remedy (back up first, verify, or check again), or, for a record the
-inventory no longer lists, that the backup changed and to check again. Rows that
-an invalidation left on screen authorize nothing until a fetch reads them again.
-
-The screen draws each row's Delete from the same view, read through the same
-rule, in the supervisor turn that projects it. A row offers Delete only where
-the authority would mint one. A row the view doesn't hold, such as one an
-invalidation left on screen, shows Check Again instead.
+Delete Cloud Wallet's dispatch builds the authorization from the row's consent
+and checks it against the view. If the namespace, the listing, where the
+inventory was read, the configuration, or the record's category moved, the
+delete is rejected as `ReviewStale` next to its control and nothing starts. The
+turn that starts the delete operation builds the authorization again from the
+same consent. Rows an invalidation left on screen offer no Delete, and a
+consent from before it authorizes nothing, until a fetch reads them again.
 
 ### Execution check
 
@@ -1071,9 +1153,9 @@ When a row delete reaches the head of the lane and the policy runs it, the lane
 reads the view again and checks the authorization against it. The namespace,
 the listing generation, where the inventory was read, and the configuration
 must be unchanged, and the record must still be deletable in the same category.
-Otherwise the command answers `StaleTarget` and deletes nothing. The row says
-the backup changed and asks to check again, and the inventory is invalidated,
-so it's read again.
+Otherwise the command answers `StaleTarget` and deletes nothing; a view the
+lane can't read counts as stale too. The row says the backup changed and asks
+to check again, and the inventory is invalidated, so it's read again.
 
 A record that's already gone counts as deleted. The relist that follows a
 delete is reported apart from the delete: when the relist fails, the record is
@@ -1081,23 +1163,33 @@ still gone, the row is still removed, and only the backup count stays as it was.
 
 ### Frozen batches
 
-Delete Undecryptable needs a verification report that found records the key
-couldn't decrypt. Before it reads anything, it takes the listing generation and
-the configuration. Then it reads the local wallets and the cloud records. The
-inventory owner keeps what it read only if the listing hasn't changed since, so
-a wallet imported during the read can't leave its own backup named as
-unreadable. The view trusts the read only under the configuration it was made
-under. The authority then mints one authorization for exactly those records,
-and only from that read: a read the owner dropped, or a record a later fetch
-classified as anything but undecryptable, authorizes nothing. A fetch's parse
-failure keeps its class, since the read found only decrypt failures. The batch
-deletes only those records, in record order, and reads each one again first,
-skipping a record that now decrypts. Each delete is checked at the lane like any
-row delete. The batch stops at the first stale target or failure: the records
-it already removed stay removed, and the records it hadn't reached stay. A stale target shows that the backup changed and asks to
-check again. A finished batch, or one that found nothing to delete, verifies
-again. A batch never grows: a record found after its authorization needs a new
-one.
+Delete Undecryptable is offered with a verification report that found records
+the key couldn't decrypt, and its consent names the undecryptable rows listed
+then. Dispatch starts it only when that consent equals the batch the inventory
+offers at that moment. Before it reads anything, it takes the listing
+generation and the configuration. Then it reads the local wallets and only the
+records the consent names. The inventory owner keeps what it read only if the
+listing hasn't changed since, so a wallet imported during the read can't leave
+its own backup named as unreadable. The view trusts the read only under the
+configuration it was made under.
+
+The authority then builds the authorization from the consent, keeping only the
+confirmed records that read holds and that the view still deletes as
+undecryptable. A confirmed record that reads again, that a later fetch
+classified as anything but a decrypt failure, or that a read the owner dropped
+named, is skipped, and the log counts the skipped records without naming them.
+Deleting part of what the user confirmed never deletes anything they didn't. When
+nothing is left, nothing is deleted and the batch ends as a finished one does.
+
+The batch deletes the authorized records in record order, and reads each one
+again first, skipping a record that now decrypts or whose read fails for a
+reason other than decryption. A read that finds the provider unreachable or
+needing authorization stops the batch instead. Each delete is checked at the
+lane like any row delete. The batch stops at the first stale target or failure:
+the records it already removed stay removed, and the records it hadn't reached
+stay. A stale target shows that the backup changed and asks to check again. A
+finished batch, or one that found nothing to delete, verifies again. A batch
+never grows: a record found after the confirmation needs a new consent.
 
 ## Verification And Recovery
 
@@ -1124,18 +1216,18 @@ confirms nothing in the backup that replaced it, even when both hold the same
 wallet revision.
 
 Deep verification checks the cloud master-key wrapper, local keychain state,
-wallet blobs, and pending uploads. A verification the user starts, from Verify,
-detail entry or a retry after the connection returns, is an exclusive operation
-like any other: it holds the slot from its admission until its result lands, so
-Turn Off and other operations wait for it, and a second Verify joins the one
-running. Verify only joins the pending upload confirmation when uploads already
-wait for it. Some verification results prepare follow-up work, such as
-repairing the passkey wrapper or uploading missing wallet blobs. The supervisor
-owns those continuations so each follow-up remains tied to the same
-exclusive-operation claim. Each run carries the configuration and wallet-set
-generation it read, including across a retry after lost connectivity, so its
-evidence is judged against its own read, never another run's or another
-configuration's.
+wallet blobs, and pending uploads. A verification the user starts (Verify,
+Verify First in the Turn Off review, or Reconnect Drive) is an exclusive
+operation like any other: it holds the slot from its admission until its result
+lands, so Turn Off and other operations are refused until it finishes, and a
+second Verify joins the one running. Entering the detail screen and a reconnect
+never start one. A non-discoverable Verify only joins the pending upload
+confirmation when uploads already wait for it. Some verification results prepare
+follow-up work, such as repairing the passkey wrapper or uploading missing
+wallet blobs. The supervisor owns those continuations so each follow-up remains
+tied to the same exclusive-operation claim. Each run carries the configuration
+and wallet-set generation it read, so its evidence is judged against its own
+read, never another run's or another configuration's.
 
 Verification rebuilds the cloud wrapper from the local master key in three
 cases: the wrapper is missing, neither the stored credential nor discovery
@@ -1143,10 +1235,11 @@ finds a passkey, or the passkey answers but no longer opens the wrapper. It
 asks for a new passkey in the first two and reuses the one that answered in
 the third. How that request ends decides what the screen offers next:
 
-- If the user dismisses the sheet, or no window can present it yet (as in a
-  background verification), the verification ends `NotCompleted`. Neither says
-  anything about the passkey, so it is never marked missing, no repair card or
-  missing-passkey reminder shows, and the outcome shows beside Verify.
+- If the request doesn't complete (the sheet is dismissed or the platform
+  cancels it), or no window can present it yet, the verification ends
+  `NotCompleted`. Neither says anything about the passkey, so it is never
+  marked missing, no repair card or missing-passkey reminder shows, and the
+  outcome shows beside Verify.
 - If the provider can't create or use a passkey and no passkey was found, the
   verification ends `PasskeyMissing`. Only that failure of the stored passkey
   proves it missing. The passkey is marked missing, and the passkey card shows
