@@ -37,6 +37,9 @@ pub(crate) struct OwnedRuntime {
     /// The running reinitialize at the last publish, which replaces the configuration when it ends
     replacing: Option<CloudBackupExclusiveOperationClaim>,
     published: VersionedPolicy,
+    /// Every operation start and end since the harness last read them
+    #[cfg(test)]
+    transitions: Vec<OpTransition>,
 }
 
 impl Deref for OwnedRuntime {
@@ -63,6 +66,8 @@ impl OwnedRuntime {
             write,
             manager,
             generation,
+            #[cfg(test)]
+            transitions: Vec::new(),
         };
 
         owned.publish_policy();
@@ -80,7 +85,14 @@ impl OwnedRuntime {
     }
 
     fn mutate<T>(&mut self, change: impl FnOnce(&mut Runtime) -> T) -> T {
+        #[cfg(test)]
+        let before = self.runtime.claim();
+
         let result = change(&mut self.runtime);
+
+        #[cfg(test)]
+        self.record_transition(before);
+
         self.publish();
         result
     }
@@ -264,6 +276,64 @@ impl OwnedRuntime {
     #[cfg(test)]
     pub(crate) fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
         self.mutate(Runtime::take_claim)
+    }
+}
+
+/// An operation starting or ending in the runtime, as the harness invariants read it
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpTransition {
+    Started(CloudBackupExclusiveOperationClaim),
+    Ended(CloudBackupExclusiveOperationClaim),
+}
+
+/// What the harness invariants read from the owner at a settled boundary
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub(crate) struct OwnerView {
+    pub(crate) claim: Option<CloudBackupExclusiveOperationClaim>,
+    /// The committed disable the body holds
+    pub(crate) committed: Option<CommittedDisable>,
+    pub(crate) load_failed: bool,
+    pub(crate) published: VersionedPolicy,
+    /// The policy the body gives now
+    pub(crate) body_policy: WritePolicy,
+    /// For an idle body, the policy of the body a rebase on the owner's record would give
+    pub(crate) record_policy: Option<WritePolicy>,
+    pub(crate) transitions: Vec<OpTransition>,
+}
+
+#[cfg(test)]
+impl OwnedRuntime {
+    fn record_transition(&mut self, before: Option<CloudBackupExclusiveOperationClaim>) {
+        let after = self.runtime.claim();
+        if before == after {
+            return;
+        }
+
+        self.transitions.extend(before.map(OpTransition::Ended));
+        self.transitions.extend(after.map(OpTransition::Started));
+    }
+
+    /// Reads the owner for the harness invariants, taking the transitions recorded since the
+    /// last read
+    pub(crate) fn take_view(&mut self) -> OwnerView {
+        let record = RustCloudBackupManager::load_persisted_state();
+        let pending_enable_recovery = self.held_pending_enable_recovery();
+        let facts = IdleFacts { record: &record, pending_enable_recovery };
+
+        OwnerView {
+            claim: self.runtime.claim(),
+            committed: match &self.runtime {
+                Runtime::FinishingDisable { committed, .. } => Some(committed.clone()),
+                _ => None,
+            },
+            load_failed: matches!(self.runtime, Runtime::LoadFailed { .. }),
+            published: self.published.clone(),
+            body_policy: self.runtime.write_policy(self.generation),
+            record_policy: self.runtime.idle_policy_on(facts, self.generation),
+            transitions: std::mem::take(&mut self.transitions),
+        }
     }
 }
 

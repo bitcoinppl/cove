@@ -8,37 +8,27 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use act_zero::call;
 use cove_device::cloud_storage::CloudStorageError;
 
 use super::process::child_root;
 use super::{
     CallId, CloudCall, CloudFault, FakeAccount, HarnessCloud, Hold, NextAction as N, PasskeyMode,
-    PhaseEnd, TestApp, open_durable_state, run_case, seed_legacy_stuck_disabling,
+    PhaseEnd, TestApp, keychain_namespace, load_detail, open_durable_state, persisted, run_case,
+    seed_legacy_stuck_disabling,
 };
-use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
-use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
+use crate::manager::cloud_backup_manager::actors::write::Decision;
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, PauseReason, Rejection, UserIntent,
+};
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupVerificationSource,
+    CloudBackupManagerAction, CloudBackupVerificationSource,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
-
-fn persisted() -> PersistedCloudBackupState {
-    Database::global().cloud_backup_state.get().expect("read cloud backup state")
-}
-
-fn keychain_namespace() -> Option<String> {
-    CloudBackupKeychain::global().namespace_id().expect("read namespace")
-}
-
-/// Load the detail inventory the way the detail screen does
-fn load_detail(app: &mut TestApp) {
-    app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
-    app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
-}
 
 #[test]
 fn paused_clock_moves_only_when_the_test_advances_it() {
@@ -81,6 +71,53 @@ fn soft_relaunch_keeps_durable_state_without_prompting() {
         assert_eq!(keychain_namespace().as_deref(), Some(namespace.as_str()));
         assert!(app.cloud.inner.has_namespace(&namespace));
         assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// A soft relaunch replaces the manager the way a new process would: the replaced manager's write
+/// lane stays closed, so a timer or queued write it still holds can't act beside the new one
+#[test]
+fn soft_relaunch_fences_the_manager_it_replaces() {
+    let test = concat!(module_path!(), "::soft_relaunch_fences_the_manager_it_replaces");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        let replaced = app.manager().clone();
+
+        app.relaunch().then_can(&[N::Verify]).then_cannot(&[N::Enable]);
+
+        let writes = replaced.cloud_writes.clone();
+        let old =
+            app.block_on("the replaced lane's ticket", async move { call!(writes.ticket()).await });
+        assert_eq!(old.expect("ticket").ordinary, Decision::Paused(PauseReason::LocalReset));
+
+        let writes = app.manager().cloud_writes.clone();
+        let new =
+            app.block_on("the new lane's ticket", async move { call!(writes.ticket()).await });
+        assert_eq!(new.expect("ticket").ordinary, Decision::Run);
+    });
+}
+
+/// A hold the test releases before its call starts lets that call straight through, instead of
+/// stranding it with nothing left to release it
+#[test]
+fn a_hold_released_before_its_call_starts_lets_the_call_through() {
+    let test =
+        concat!(module_path!(), "::a_hold_released_before_its_call_starts_lets_the_call_through");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::Hold(hold.clone()));
+        hold.release();
+
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        app.block_on("the released call to return", hold.finished());
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 1);
     });
 }
 

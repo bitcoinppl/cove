@@ -14,9 +14,11 @@ use tokio::runtime::Handle;
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
 use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
+use super::invariants::Invariants;
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::actors::CloudBackupWriteSupervisor;
 use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
 use crate::manager::cloud_backup_manager::admission::{Admission, EnableIntent, UserIntent};
 use crate::manager::cloud_backup_manager::ops::test_support::{
@@ -25,10 +27,10 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RustCloudBackupManager,
-    initialize_cloud_backup_manager_with,
+    CloudBackupResetPermit, CloudBackupRuntimeOwnership, CloudBackupVerificationSource,
+    RustCloudBackupManager, initialize_cloud_backup_manager_with,
 };
-use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
+use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 /// A user-visible next action, written as a literal in tests
 ///
@@ -117,6 +119,10 @@ pub(crate) struct TestApp {
     pub(crate) clock: HarnessClock,
     last_event: String,
     unasserted: Option<String>,
+    invariants: Invariants,
+    /// The managers soft relaunches replaced, fenced like a local reset fences them for as long
+    /// as the app runs, so like the process a relaunch ends they can do nothing more
+    retired: Vec<CloudBackupResetPermit>,
 }
 
 const SETTLE_ROUNDS: usize = 500;
@@ -154,7 +160,7 @@ impl TestApp {
         let manager = bounded_block_on("launch: the manager to start", async { manager() });
         register_test_supervisor(manager.supervisor.downgrade());
 
-        let app = Self {
+        let mut app = Self {
             manager,
             keychain: env.keychain.clone(),
             cloud: env.cloud.clone(),
@@ -162,9 +168,11 @@ impl TestApp {
             clock,
             last_event: "launch".into(),
             unasserted: None,
+            invariants: Invariants::default(),
+            retired: Vec::new(),
         };
 
-        app.settle();
+        app.settle_and_check();
         app
     }
 
@@ -187,8 +195,9 @@ impl TestApp {
     /// A user tap or platform call
     pub(crate) fn dispatch(&mut self, action: CloudBackupManagerAction) -> Step<'_> {
         self.begin_event(format!("dispatch {action:?}"));
+        self.invariants.expect_dispatch(action.clone().into());
         self.manager.dispatch(action);
-        self.settle();
+        self.settle_and_check();
         Step(self)
     }
 
@@ -199,23 +208,51 @@ impl TestApp {
     /// claims use [`super::run_case`] with [`super::PhaseEnd::KillAt`], and a full relaunch is a
     /// new case phase, which reopens the database file in a new process. `dispatch` runs on the
     /// instance it is called on, so the new manager can be dispatched to
+    ///
+    /// This models quitting at rest. The manager it replaces must run no operation, and it is
+    /// fenced the way a local reset fences it, for as long as the app runs, so its queued writes
+    /// and timers cannot act beside the new manager, which no real relaunch allows. A relaunch
+    /// mid-operation is a process kill through [`super::run_case`]
     pub(crate) fn relaunch(&mut self) -> Step<'_> {
         self.begin_event("relaunch".into());
+        assert!(
+            !self.runs_operation(),
+            "a soft relaunch while an operation runs; kill the process through run_case instead\n{}",
+            self.describe()
+        );
+
+        let replaced = self.manager.clone();
+        let fenced = self.block_on("relaunch: fence the replaced manager", async move {
+            replaced.prepare_local_reset().await
+        });
+        self.retired.push(fenced.expect("the replaced manager fences its writes"));
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
-        CONNECTIVITY_MANAGER.set_connection_state(true);
+
+        // a relaunch starts connected without a change event, as the platform does at launch
+        CONNECTIVITY_MANAGER.set_status_without_broadcast(ConnectivityStatus::Connected);
         self.manager = self.block_on("relaunch: a new manager", async {
             crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
         });
         register_test_supervisor(self.manager.supervisor.downgrade());
-        self.settle();
+        self.invariants.relaunched();
+        self.settle_and_check();
         Step(self)
+    }
+
+    /// Whether an operation holds the Cloud Backup runtime now
+    pub(crate) fn runs_operation(&self) -> bool {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("whether an operation runs", async move {
+            call!(supervisor.harness_runs_operation()).await
+        })
+        .expect("the supervisor answers")
     }
 
     /// Move timers and wall-clock time forward
     pub(crate) fn advance_clock(&mut self, by: Duration) -> Step<'_> {
         self.begin_event(format!("advance clock {by:?}"));
         self.block_on("the paused clock to advance", self.clock.advance(by));
-        self.settle();
+        self.settle_and_check();
         Step(self)
     }
 
@@ -227,8 +264,37 @@ impl TestApp {
             event(self);
         }
 
-        self.settle();
+        self.settle_and_check();
         Step(self)
+    }
+
+    /// Settles, then checks the invariants at that boundary
+    fn settle_and_check(&mut self) {
+        self.settle();
+        self.check_invariants();
+    }
+
+    /// Checks the harness invariants now; every event does this after it settles
+    pub(crate) fn check_invariants(&mut self) {
+        let mut invariants = std::mem::take(&mut self.invariants);
+        let checked = invariants.check(self);
+        self.invariants = invariants;
+
+        if let Err(violation) = checked {
+            panic!(
+                "invariant {:?} ({}) broken after {}: {}\n{}",
+                violation.invariant,
+                violation.invariant as u8,
+                self.last_event,
+                violation.detail,
+                self.describe()
+            );
+        }
+    }
+
+    /// The write lane, for the invariants' view of it
+    pub(crate) fn writes(&self) -> act_zero::Addr<CloudBackupWriteSupervisor> {
+        self.manager.cloud_writes.clone()
     }
 
     fn begin_event(&mut self, name: String) {

@@ -172,6 +172,26 @@ pub(crate) struct CloudBackupWriteSupervisor {
     /// Told once no write is in flight
     idle_waiters: Vec<oneshot::Sender<()>>,
     next_command_id: u64,
+    /// Every queue-head decision since the harness last read them
+    #[cfg(test)]
+    decisions: Vec<LaneDecision>,
+}
+
+/// One decision the lane made at the queue head, with the policy it decided under
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub(crate) struct LaneDecision {
+    pub(crate) class: CommandClass,
+    pub(crate) policy: VersionedPolicy,
+    pub(crate) decision: Decision,
+}
+
+/// What the harness invariants read from the lane at a settled boundary
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub(crate) struct LaneView {
+    pub(crate) applied: VersionedPolicy,
+    pub(crate) decisions: Vec<LaneDecision>,
 }
 
 impl Default for CloudBackupWriteSupervisor {
@@ -200,6 +220,8 @@ impl CloudBackupWriteSupervisor {
             pending_writes: VecDeque::new(),
             idle_waiters: Vec::new(),
             next_command_id: 0,
+            #[cfg(test)]
+            decisions: Vec::new(),
         }
     }
 
@@ -228,6 +250,15 @@ impl CloudBackupWriteSupervisor {
         }
 
         Produces::ok(())
+    }
+
+    /// Reads the lane for the harness invariants, taking the decisions made since the last read
+    #[cfg(test)]
+    pub(crate) async fn harness_lane_view(&mut self) -> ActorResult<LaneView> {
+        Produces::ok(LaneView {
+            applied: self.policy.clone(),
+            decisions: std::mem::take(&mut self.decisions),
+        })
     }
 
     /// The generation and ordinary decision a producer with no operation reads first
@@ -287,7 +318,16 @@ impl CloudBackupWriteSupervisor {
         }
 
         while let Some(write) = self.pending_writes.pop_front() {
-            match self.policy.policy.decide(&write.class) {
+            let decision = self.policy.policy.decide(&write.class);
+
+            #[cfg(test)]
+            self.decisions.push(LaneDecision {
+                class: write.class.clone(),
+                policy: self.policy.clone(),
+                decision,
+            });
+
+            match decision {
                 Decision::Run => {
                     self.start_pending_write(write);
                     return;

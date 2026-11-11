@@ -121,6 +121,18 @@ impl RustConnectivityManager {
 }
 
 #[cfg(test)]
+impl RustConnectivityManager {
+    /// Sets the status without waking subscribers
+    ///
+    /// Subscribers learn of a change on their own threads, outside anything a sequence test can
+    /// wait on. The Cloud Backup harness sets the status this way and delivers the change to the
+    /// manager inside the event that settles on it
+    pub(crate) fn set_status_without_broadcast(&self, status: ConnectivityStatus) {
+        self.status.store(status.as_u8(), Ordering::Release);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

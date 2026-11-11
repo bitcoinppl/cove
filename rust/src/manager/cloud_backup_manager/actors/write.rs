@@ -11,10 +11,14 @@ mod types;
 mod worker;
 
 pub(crate) use self::client::CloudBackupWriteClient;
+#[cfg(test)]
+pub(crate) use self::policy::CommandClass;
 pub(crate) use self::policy::{
     ConfigGeneration, ConfiguredWriter, ConfiguredWrites, Decision, OffWrites, PolicyBody,
     VersionedPolicy, WritePolicy,
 };
+#[cfg(test)]
+pub(crate) use self::supervisor::LaneDecision;
 pub(crate) use self::supervisor::{CloudBackupWriteSupervisor, WriteTicket};
 pub(crate) use self::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,

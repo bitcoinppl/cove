@@ -94,6 +94,8 @@ mod restore_all;
 mod runtime;
 
 use owned_runtime::OwnedRuntime;
+#[cfg(test)]
+pub(crate) use owned_runtime::{OpTransition, OwnerView};
 use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
 mod undecryptable_wallets;
 mod verification;
@@ -277,6 +279,9 @@ pub(crate) struct CloudBackupSupervisor {
     /// The wallet set the running verification read when it started
     verification_basis: WalletSetGeneration,
     last_outcome: Option<DispatchOutcome>,
+    /// What the harness invariants read about dispatch since their last check
+    #[cfg(test)]
+    invariant_log: test_support::DispatchLog,
 }
 
 #[async_trait::async_trait]
@@ -362,6 +367,8 @@ impl CloudBackupSupervisor {
             wallet_set: WalletSetGeneration::default(),
             verification_basis: WalletSetGeneration::default(),
             last_outcome: None,
+            #[cfg(test)]
+            invariant_log: test_support::DispatchLog::default(),
         }
     }
 
@@ -1548,7 +1555,60 @@ pub(crate) mod test_support {
         Ended { orphaned: bool },
     }
 
+    /// One dispatched intent and how many admissions its handler made
+    #[derive(Debug, Clone)]
+    pub(crate) struct DispatchRecord {
+        pub(crate) intent: UserIntent,
+        pub(crate) admissions: u32,
+    }
+
+    /// Admissions counted across every caller of `admit`, and the dispatches since the last read
+    #[derive(Debug, Default)]
+    pub(crate) struct DispatchLog {
+        pub(crate) admissions: u32,
+        dispatches: Vec<DispatchRecord>,
+    }
+
+    /// Dispatch in progress: the intent and the admission count when its handler began
+    pub(crate) struct OpenDispatch(DispatchRecord);
+
+    /// What the harness invariants read from the supervisor at a settled boundary
+    #[derive(Debug)]
+    pub(crate) struct SupervisorView {
+        pub(crate) owner: OwnerView,
+        pub(crate) dispatches: Vec<DispatchRecord>,
+        /// The operation the reducer shows as running
+        pub(crate) shown_operation: Option<CloudBackupExclusiveOperationClaim>,
+        pub(crate) uploads: Addr<CloudBackupUploadWorker>,
+    }
+
     impl CloudBackupSupervisor {
+        pub(crate) fn begin_dispatch_record(&self, intent: &UserIntent) -> OpenDispatch {
+            OpenDispatch(DispatchRecord {
+                intent: intent.clone(),
+                admissions: self.invariant_log.admissions,
+            })
+        }
+
+        pub(crate) fn finish_dispatch_record(&mut self, OpenDispatch(mut record): OpenDispatch) {
+            record.admissions = self.invariant_log.admissions - record.admissions;
+            self.invariant_log.dispatches.push(record);
+        }
+
+        /// Reads the supervisor for the harness invariants, taking what it logged since the
+        /// last read
+        pub(crate) async fn harness_invariant_view(&mut self) -> ActorResult<SupervisorView> {
+            let shown_operation =
+                self.manager().and_then(|manager| manager.state.read().active_operation());
+
+            Produces::ok(SupervisorView {
+                owner: self.runtime.take_view(),
+                dispatches: std::mem::take(&mut self.invariant_log.dispatches),
+                shown_operation,
+                uploads: self.uploads.clone(),
+            })
+        }
+
         /// What dispatch would do with `intent` now, without doing it
         pub(crate) async fn harness_admission(
             &mut self,
@@ -1581,6 +1641,11 @@ pub(crate) mod test_support {
         /// The exclusive slot, for harness failure messages only
         pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
             Produces::ok(format!("{:?}", *self.runtime))
+        }
+
+        /// Whether an operation holds the runtime now
+        pub(crate) async fn harness_runs_operation(&mut self) -> ActorResult<bool> {
+            Produces::ok(self.runtime.claim().is_some())
         }
 
         pub async fn run_wallet_upload_inline_for_test(

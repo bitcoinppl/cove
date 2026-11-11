@@ -319,6 +319,25 @@ impl Runtime {
         *self = Self::idle(facts);
     }
 
+    /// For a body a rebase would move, the policy of the body it would move to
+    ///
+    /// The harness invariants compare it with the body's own policy: an idle body behind its
+    /// record would publish a stale policy
+    #[cfg(test)]
+    pub(crate) fn idle_policy_on(
+        &self,
+        facts: IdleFacts<'_>,
+        generation: ConfigGeneration,
+    ) -> Option<WritePolicy> {
+        if self.claim().is_some()
+            || matches!(self, Self::LoadFailed { .. } | Self::Resetting { .. })
+        {
+            return None;
+        }
+
+        Some(Self::idle(facts).write_policy(generation))
+    }
+
     /// The interrupted Enable this body holds, running operation or not
     pub(crate) fn pending_enable_recovery(&self) -> Option<&CloudBackupPendingEnableRecovery> {
         match self {

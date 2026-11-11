@@ -104,7 +104,16 @@ impl Hold {
 
     async fn enter_and_wait(&self) {
         HELD_CALLS.send_modify(|held| *held += 1);
-        self.0.stage.send_modify(|stage| *stage = HoldStage::Entered);
+
+        // a hold the test released before its call started lets that call through: overwriting
+        // the release would strand the call with nothing left to release it
+        self.0.stage.send_if_modified(|stage| {
+            let armed = *stage == HoldStage::Armed;
+            if armed {
+                *stage = HoldStage::Entered;
+            }
+            armed
+        });
         self.wait_for(HoldStage::Released, "to be released by the test").await;
         HELD_CALLS.send_modify(|held| *held -= 1);
     }

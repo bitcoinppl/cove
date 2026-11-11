@@ -1,17 +1,22 @@
 //! Small per-case accounts, plus the lived-in account for the incident replay
 
+use std::time::Duration;
+
 use cove_cspp::Cspp;
 use cove_cspp::backup_data::{wallet_filename_from_record_id, wallet_record_id};
 use cove_device::keychain::Keychain;
 
-use super::app::TestApp;
+use super::app::{NextAction, TestApp};
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
-use crate::manager::cloud_backup_manager::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
     wallet_entry_with_labels, xpub_only_wallet_metadata,
 };
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupStore,
+};
+use crate::wallet::metadata::WalletId;
 
 /// The records an account has in its active namespace
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,4 +112,43 @@ pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
             retry_after: None,
         }))
         .expect("persist legacy disabling record");
+}
+
+/// Changes the first local wallet's backed-up metadata the way the wallet screens report it, and
+/// returns it, or `None` when the device has no wallet
+pub(crate) fn change_a_wallet(app: &TestApp) -> Option<WalletId> {
+    let before = CloudBackupStore::global().all_wallets().ok()?.into_iter().next()?;
+    let mut after = before.clone();
+    after.name.push('+');
+
+    // save_all_wallets replaces every wallet of the network and mode, so the rest are saved
+    // back unchanged; dropping them would delete wallets without the wallet-set change that
+    // tells the inventory
+    let wallets = Database::global().wallets();
+    let all = wallets.get_all(after.network, after.wallet_mode).expect("read the wallets");
+    let all = all
+        .into_iter()
+        .map(|wallet| if wallet.id == after.id { after.clone() } else { wallet })
+        .collect();
+    wallets
+        .save_all_wallets(after.network, after.wallet_mode, all)
+        .expect("save the changed wallet");
+    app.manager().handle_wallet_metadata_update(&before, &after);
+    Some(after.id)
+}
+
+/// The lifecycle record as the database holds it now
+pub(crate) fn persisted() -> PersistedCloudBackupState {
+    Database::global().cloud_backup_state.get().expect("read cloud backup state")
+}
+
+/// The namespace the keychain holds now
+pub(crate) fn keychain_namespace() -> Option<String> {
+    CloudBackupKeychain::global().namespace_id().expect("read namespace")
+}
+
+/// Load the detail inventory the way the detail screen does
+pub(crate) fn load_detail(app: &mut TestApp) {
+    app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[NextAction::Enable]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[NextAction::TurnOff]);
 }

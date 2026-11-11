@@ -9,6 +9,8 @@ mod clock;
 mod deadline;
 mod fakes;
 mod fixtures;
+mod invariants;
+mod model_tests;
 mod process;
 mod reset_tests;
 mod runtime;
@@ -18,5 +20,8 @@ pub(crate) use self::app::{NextAction, TestApp, open_durable_state};
 pub(crate) use self::fakes::{
     CallId, CloudCall, CloudFault, HarnessCloud, HarnessPasskey, Hold, PasskeyCall, PasskeyMode,
 };
-pub(crate) use self::fixtures::{FakeAccount, seed_legacy_stuck_disabling};
+pub(crate) use self::fixtures::{
+    FakeAccount, change_a_wallet, keychain_namespace, load_detail, persisted,
+    seed_legacy_stuck_disabling,
+};
 pub(crate) use self::process::{PhaseEnd, run_case};

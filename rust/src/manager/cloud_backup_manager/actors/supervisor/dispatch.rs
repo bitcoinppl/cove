@@ -23,10 +23,18 @@ impl CloudBackupSupervisor {
     pub async fn dispatch(&mut self, intent: UserIntent) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        if self.admit(&manager, &intent) == Admission::Accepted {
-            self.start_admitted(manager, intent).await?;
-        }
+        #[cfg(test)]
+        let record = self.begin_dispatch_record(&intent);
 
+        let started = match self.admit(&manager, &intent) {
+            Admission::Accepted => self.start_admitted(manager, intent).await,
+            Admission::Coalesced(_) | Admission::Rejected(_) => Produces::ok(()),
+        };
+
+        #[cfg(test)]
+        self.finish_dispatch_record(record);
+
+        started?;
         Produces::ok(())
     }
 
@@ -51,6 +59,12 @@ impl CloudBackupSupervisor {
         }
 
         self.last_outcome = Some(DispatchOutcome { intent: intent.clone(), admission });
+
+        #[cfg(test)]
+        {
+            self.invariant_log.admissions += 1;
+        }
+
         admission
     }
 

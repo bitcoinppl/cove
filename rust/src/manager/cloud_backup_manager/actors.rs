@@ -15,6 +15,8 @@ pub(crate) use self::cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespa
 pub(crate) use self::restore::CloudBackupRestoreEvent;
 pub(crate) use self::supervisor::CloudBackupSupervisor;
 pub(crate) use self::sync_health_worker::CloudBackupSyncHealthWorker;
+#[cfg(test)]
+pub(crate) use self::uploads::UploadFinish;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor, Decision,

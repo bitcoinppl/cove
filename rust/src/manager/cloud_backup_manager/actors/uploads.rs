@@ -77,6 +77,21 @@ pub(crate) struct CloudBackupUploadWorker {
     /// A schedule for a wallet already uploading is coalesced into it, so a wake that arrives
     /// while that upload is being paused still runs the wallet once more
     active_wallet_uploads: HashMap<WalletId, bool>,
+    /// Every finished upload since the harness last read them
+    #[cfg(test)]
+    finishes: Vec<UploadFinish>,
+    /// Backoff timers armed so far, so a finish can tell whether it armed one
+    #[cfg(test)]
+    armed_timers: u64,
+}
+
+/// How one wallet upload ended, and whether its finish armed a retry
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub(crate) struct UploadFinish {
+    pub(crate) wallet_id: WalletId,
+    pub(crate) paused: bool,
+    pub(crate) armed_retry: bool,
 }
 
 #[async_trait::async_trait]
@@ -98,6 +113,10 @@ impl CloudBackupUploadWorker {
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
             active_wallet_uploads: HashMap::new(),
+            #[cfg(test)]
+            finishes: Vec::new(),
+            #[cfg(test)]
+            armed_timers: 0,
         }
     }
 
@@ -158,6 +177,11 @@ impl CloudBackupUploadWorker {
     }
 
     fn schedule_wallet_upload_after(&mut self, wallet_id: WalletId, delay: Duration) {
+        #[cfg(test)]
+        {
+            self.armed_timers += 1;
+        }
+
         let task = DebouncedTask::new("cloud_wallet_backup_upload", delay);
         self.wallet_upload_debouncers.insert(wallet_id.clone(), task.clone());
 
@@ -286,6 +310,21 @@ impl CloudBackupUploadWorker {
     }
 
     fn finish_wallet_upload(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        wallet_id: WalletId,
+        outcome: WalletUploadOutcome,
+    ) {
+        #[cfg(test)]
+        let finish = self.begin_upload_finish(&wallet_id, &outcome);
+
+        self.apply_wallet_upload_outcome(manager, wallet_id, outcome);
+
+        #[cfg(test)]
+        self.end_upload_finish(finish);
+    }
+
+    fn apply_wallet_upload_outcome(
         &mut self,
         manager: &RustCloudBackupManager,
         wallet_id: WalletId,
@@ -507,6 +546,38 @@ mod tests {
                 WalletUploadOutcome::from(manager.do_upload_wallet_if_dirty(&wallet_id).await);
             self.finish_wallet_upload(&manager, wallet_id, outcome);
             Produces::ok(())
+        }
+
+        /// Reads the finished uploads for the harness invariants, taking them
+        pub(crate) async fn harness_upload_finishes(&mut self) -> ActorResult<Vec<UploadFinish>> {
+            Produces::ok(std::mem::take(&mut self.finishes))
+        }
+
+        /// Opens the record of one finish: its outcome and the retry state before it
+        pub(crate) fn begin_upload_finish(
+            &self,
+            wallet_id: &WalletId,
+            outcome: &WalletUploadOutcome,
+        ) -> (UploadFinish, u64, u32) {
+            let retries = self.wallet_upload_retry_counts.get(wallet_id).copied().unwrap_or(0);
+            let finish = UploadFinish {
+                wallet_id: wallet_id.clone(),
+                paused: matches!(outcome, WalletUploadOutcome::Paused(_)),
+                armed_retry: false,
+            };
+
+            (finish, self.armed_timers, retries)
+        }
+
+        /// Closes the record: the finish armed a retry if it armed a timer or counted a backoff
+        pub(crate) fn end_upload_finish(
+            &mut self,
+            (mut finish, timers, retries): (UploadFinish, u64, u32),
+        ) {
+            let retries_after =
+                self.wallet_upload_retry_counts.get(&finish.wallet_id).copied().unwrap_or(0);
+            finish.armed_retry = self.armed_timers > timers || retries_after > retries;
+            self.finishes.push(finish);
         }
 
         /// How many backoff retries the worker armed for the wallet since its last success

@@ -10,26 +10,19 @@ use cove_device::keychain::Keychain;
 use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::{
-    FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp, run_case,
+    CloudCall, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp,
+    change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext,
+    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
     CloudBackupVerificationSource, DriveAccountSwitchPlatformState,
     DriveAccountSwitchReconcileAction,
 };
-
-fn persisted() -> PersistedCloudBackupState {
-    Database::global().cloud_backup_state.get().expect("read cloud backup state")
-}
-
-fn keychain_namespace() -> Option<String> {
-    CloudBackupKeychain::global().namespace_id().expect("read namespace")
-}
 
 fn local_master_key_present() -> bool {
     cove_cspp::Cspp::new(Keychain::global().clone())
@@ -62,12 +55,6 @@ fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
         credential_id: vec![1, 2, 3],
     }));
     app.passkey.inner.set_authenticate_result(Ok(prf_key.to_vec()));
-}
-
-/// Load the detail inventory the way the detail screen does
-fn load_detail(app: &mut TestApp) {
-    app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
-    app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
 }
 
 /// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset
@@ -168,6 +155,7 @@ fn reset_waits_for_a_held_passkey_registration() {
         app.block_on("the passkey registration to start", hold.entered());
         let calls = app.passkey.interactive_calls();
         assert_eq!(calls.last().map(|call| call.kind), Some(PasskeyCall::Create), "{calls:?}");
+        assert_ne!(app.manager().model_snapshot().enable_state, CloudBackupEnableState::Idle);
 
         let manager = app.manager().clone();
         let reset = cove_tokio::task::spawn(async move { manager.prepare_local_reset().await });
@@ -182,7 +170,9 @@ fn reset_waits_for_a_held_passkey_registration() {
             .expect("reset permit");
         finish_wipe(&app, permit);
 
+        // the wipe ends the interrupted Enable's progress along with its keys
         app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        assert_eq!(app.manager().model_snapshot().enable_state, CloudBackupEnableState::Idle);
         assert_eq!(CloudBackupKeychain::global().load_credential_id().expect("read"), None);
         assert_eq!(keychain_namespace(), None);
     });
@@ -309,5 +299,65 @@ fn catastrophic_recovery_cannot_clear_the_namespace_while_its_owner_runs() {
         assert!(reset_local_data_for_catastrophic_recovery().is_err());
         assert_eq!(keychain_namespace(), Some(namespace));
         app.current().then_can(&[N::TurnOff]);
+    });
+}
+
+/// A wipe that fails before its commit leaves the record as it was, and ending the reset wakes
+/// the uploads it paused: the wallet changed during the reset uploads once, right away, and the
+/// change's own debounce adds no second upload
+#[test]
+fn abandoned_reset_wakes_the_uploads_it_paused_exactly_once() {
+    let test =
+        concat!(module_path!(), "::abandoned_reset_wakes_the_uploads_it_paused_exactly_once");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+
+        let manager = app.manager().clone();
+        let permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+
+        let mut changed = None;
+        app.event("a local wallet changes during the reset", |app| {
+            changed = change_a_wallet(app);
+        })
+        .then_cannot(&[N::TurnOff, N::Enable]);
+
+        let wallet_id = changed.expect("the seeded wallet");
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+        let row = || {
+            Database::global()
+                .cloud_blob_sync_states
+                .get(&record_id)
+                .expect("read the wallet's sync row")
+                .expect("the wallet has a sync row")
+        };
+
+        let uploads = app.cloud.count(CloudCall::UploadWallet);
+        assert!(row().is_dirty(), "the change was not recorded: {:?}", row());
+
+        // the upload's debounce ends while the reset holds the lane, so the lane pauses it
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::TurnOff, N::Enable]);
+        assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads, "an upload ran in the reset");
+        assert!(row().is_dirty(), "the paused upload cleared the row: {:?}", row());
+
+        app.event("the wipe fails before its commit", |app| {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::Enable]);
+
+        assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
+        assert_eq!(
+            app.cloud.count(CloudCall::UploadWallet),
+            uploads + 1,
+            "the wake did not upload"
+        );
+        assert!(!row().is_dirty(), "the upload left the row dirty: {:?}", row());
+
+        app.advance_clock(Duration::from_secs(600)).then_can(&[N::TurnOff]);
+        assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads + 1, "a second upload ran");
     });
 }
