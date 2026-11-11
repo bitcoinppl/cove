@@ -924,6 +924,9 @@ async fn fresh_start_new_keeps_prior_active_until_durable_success() {
         CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery
     );
 
+    // the cloud still reports the new master key as syncing, so the upload confirmation Enable
+    // records stays pending instead of being settled by the pending upload worker mid-assertions
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
