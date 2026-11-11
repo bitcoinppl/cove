@@ -52,15 +52,6 @@ pub(crate) enum DisableAttempt {
     Committed(CommittedDisable),
 }
 
-impl DisableAttempt {
-    pub(crate) fn attempt_id(&self) -> u64 {
-        match self {
-            Self::Uncommitted { attempt_id, .. } => *attempt_id,
-            Self::Committed(committed) => committed.attempt_id,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum CloudBackupKeepEnabledPreparation {
     AlreadyConfigured,

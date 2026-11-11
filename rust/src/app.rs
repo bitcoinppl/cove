@@ -1165,7 +1165,7 @@ mod tests {
         let wipe_error = local_reset_error(LocalDataResetStage::WalletArtifacts, "disk error");
 
         let error =
-            failed_wipe_error(wipe_error, Err(CloudBackupError::Deferred("resume failed".into())));
+            failed_wipe_error(wipe_error, Err(CloudBackupError::Internal("resume failed".into())));
 
         assert_eq!(
             error,

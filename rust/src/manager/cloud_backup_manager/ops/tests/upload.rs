@@ -49,7 +49,7 @@ async fn backup_wallets_uploads_when_cloud_backup_is_enabled() {
     let xpub = sample_xpub(&metadata);
     Keychain::global().save_wallet_xpub(&metadata.id, xpub.parse().unwrap()).unwrap();
 
-    manager.do_backup_wallets(&[metadata]).await.unwrap();
+    backup_wallets_for_test(&manager, &[metadata]).await.unwrap();
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(4));
@@ -72,8 +72,9 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
         .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
         .unwrap();
 
-    let error =
-        manager.do_backup_wallets(&[first_wallet.clone(), second_wallet]).await.unwrap_err();
+    let error = backup_wallets_for_test(&manager, &[first_wallet.clone(), second_wallet])
+        .await
+        .unwrap_err();
 
     let record_id = wallet_record_id(first_wallet.id.as_ref());
     assert!(error.to_string().contains("has no private key"), "{error}");
@@ -87,44 +88,6 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
             ..
         })
     ));
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn backup_wallets_defers_remaining_writes_when_disable_starts_after_upload() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 3);
-
-    let metadata = xpub_only_wallet_metadata();
-    let xpub = sample_xpub(&metadata);
-    Keychain::global().save_wallet_xpub(&metadata.id, xpub.parse().unwrap()).unwrap();
-
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let PersistedCloudBackupState::Configured(previous_configured) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected configured cloud backup state");
-    };
-
-    globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
-        previous_configured,
-        namespace_id,
-        disable_generation: 42,
-        started_at: 100,
-        delete_started_at: None,
-        last_error: None,
-        retry_after: None,
-    });
-
-    let error = manager.do_backup_wallets(&[metadata]).await.unwrap_err();
-
-    assert!(matches!(error, CloudBackupError::Deferred(_)));
-    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(Database::global().cloud_backup_state.get().unwrap().is_disabling());
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(3));
-    assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
-    manager.debug_reset_cloud_backup_state();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -195,7 +158,8 @@ async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace(
         CloudBackupExclusiveOperation::RecreateManifest,
         operation_id(1),
     );
-    let writes = operation_write_client_for_test(&manager, claim);
+    // the recovery check fails before any write reaches the lane, so no operation is begun
+    let writes = CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim);
     let error = manager.prepare_reupload_all_wallets(writes).await.unwrap_err();
 
     assert!(matches!(
@@ -243,7 +207,7 @@ async fn backup_wallets_does_not_create_master_key_or_upload_when_missing() {
     let mut metadata = WalletMetadata::preview_new();
     metadata.wallet_type = crate::wallet::metadata::WalletType::WatchOnly;
 
-    let error = manager.do_backup_wallets(&[metadata]).await.unwrap_err();
+    let error = backup_wallets_for_test(&manager, &[metadata]).await.unwrap_err();
 
     match error {
         CloudBackupError::RecoveryRequired(message) => {
@@ -524,50 +488,6 @@ async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn upload_wallet_if_dirty_completes_inside_disable_transition_when_already_started() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let metadata = xpub_only_wallet_metadata();
-    persist_xpub_wallets(vec![metadata.clone()]);
-    persist_dirty_blob_state(metadata.id.clone());
-
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let record_id = wallet_record_id(metadata.id.as_ref());
-    let PersistedCloudBackupState::Configured(previous_configured) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected configured cloud backup state");
-    };
-
-    globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
-        previous_configured,
-        namespace_id,
-        disable_generation: 42,
-        started_at: 100,
-        delete_started_at: None,
-        last_error: None,
-        retry_after: None,
-    });
-
-    manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap();
-
-    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(Database::global().cloud_backup_state.get().unwrap().is_disabling());
-    assert!(matches!(
-        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-        Some(PersistedCloudBlobSyncState {
-            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                | PersistedCloudBlobState::Confirmed(_),
-            ..
-        })
-    ));
-    manager.debug_reset_cloud_backup_state();
-}
-
-#[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_retries_stale_uploading_state() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
@@ -658,7 +578,7 @@ async fn backup_wallets_preserves_newer_dirty_state() {
         .unwrap();
     globals.cloud.change_wallet_on_next_upload(metadata.id.clone());
 
-    manager.do_backup_wallets(&[metadata.clone()]).await.unwrap();
+    backup_wallets_for_test(&manager, &[metadata.clone()]).await.unwrap();
 
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
@@ -877,4 +797,62 @@ fn heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(
 
     loaded.expect("the wallet reloads from the replacement store");
     (stored.expect("the wallet row exists"), sync_state)
+}
+
+/// A Turn Off in progress pauses ordinary uploads: the dirty wallet stays Dirty with no retry
+/// timer, and once the pause ends the lane's wake uploads it, with the change made meanwhile
+#[tokio::test(flavor = "current_thread")]
+async fn paused_upload_stays_dirty_and_the_lane_wake_uploads_it_once() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata.clone()]);
+    persist_dirty_blob_state(metadata.id.clone());
+    let attempts_before = globals.cloud.wallet_backup_upload_attempt_count();
+
+    // a Turn Off holds the configured body, so the lane pauses ordinary writes behind it
+    let (claim, _writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Disable).await;
+    call!(manager.supervisor.run_wallet_upload_inline_for_test(metadata.id.clone())).await.unwrap();
+    mutate_wallet_and_persist_dirty(metadata.id.clone());
+
+    let blob_state = || Database::global().cloud_blob_sync_states.get(&record_id).unwrap();
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), attempts_before);
+    assert!(matches!(
+        blob_state(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+    ));
+    assert_eq!(
+        call!(manager.supervisor.wallet_upload_retry_count_for_test(metadata.id.clone()))
+            .await
+            .unwrap(),
+        0,
+        "a pause arms no retry timer"
+    );
+
+    finish_operation_for_test(&manager, claim).await;
+
+    wait_for_test_condition(
+        Duration::from_secs(5),
+        "the lane wakes the scheduler once ordinary writes run again",
+        || {
+            matches!(
+                blob_state(),
+                Some(PersistedCloudBlobSyncState {
+                    state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                        | PersistedCloudBlobState::Confirmed(_),
+                    ..
+                })
+            )
+        },
+    )
+    .await;
+
+    // the paused attempt and the change made meanwhile coalesce into one remote upload
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), attempts_before + 1);
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

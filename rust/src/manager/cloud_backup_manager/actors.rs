@@ -17,6 +17,6 @@ pub(crate) use self::supervisor::CloudBackupSupervisor;
 pub(crate) use self::sync_health_worker::CloudBackupSyncHealthWorker;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
-    CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
-    CloudBackupWriteSupervisor,
+    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor, Decision,
+    WriteTicket,
 };

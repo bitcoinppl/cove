@@ -134,11 +134,9 @@ impl RustCloudBackupManager {
         send!(self.supervisor.local_wallets_did_change());
     }
 
+    /// Schedules an upload; the write lane decides whether it runs, and a paused upload stays
+    /// Dirty until the lane wakes the scheduler
     pub(crate) fn schedule_wallet_upload(&self, wallet_id: WalletId, immediate: bool) {
-        if self.cloud_backup_writes_blocked() {
-            return;
-        }
-
         send!(self.supervisor.schedule_wallet_upload(wallet_id, immediate));
     }
 

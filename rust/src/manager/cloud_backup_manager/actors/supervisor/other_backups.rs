@@ -13,8 +13,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_recover_other_backups().await;
+            let result = manager.do_recover_other_backups(&writes).await;
             send!(addr.complete_recover_other_backups(claim, result));
         });
     }
@@ -31,8 +32,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_delete_other_backups().await;
+            let result = manager.do_delete_other_backups(&writes).await;
             send!(addr.complete_delete_other_backups(claim, result));
         });
     }
@@ -75,8 +77,9 @@ impl CloudBackupSupervisor {
                     failed_wallet_errors: report.failed_wallet_errors,
                 });
                 manager.apply_sync_state(SyncState::Syncing);
+                let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.do_sync_unsynced_wallets().await;
+                    let result = manager.sync_unsynced_wallets_with(&writes).await;
                     send!(addr.complete_operation_sync(claim, result));
                 });
             }

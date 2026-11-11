@@ -7,6 +7,9 @@ use cove_device::cloud_storage::CloudStorageClient;
 use tracing::{info, warn};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use crate::manager::cloud_backup_manager::actors::write::{
+    CloudBackupWriteClient, ConfigGeneration,
+};
 use crate::manager::cloud_backup_manager::wallets::{WalletBackupLookup, WalletBackupReader};
 use crate::manager::cloud_backup_manager::{CloudBackupError, RustCloudBackupManager};
 
@@ -22,8 +25,14 @@ pub(crate) struct CleanupSourceNamespace {
     pub(crate) expected_wallets: Vec<CleanupExpectedWalletRecord>,
 }
 
+/// Deletes merge sources once the active namespace provably holds their wallets
+///
+/// The job is proven under one configuration: its deletes carry `generation`, so the write lane
+/// drops them, queued or preparing, once the configuration changes
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct CloudBackupCleanupJob {
+    #[zeroize(skip)]
+    pub(crate) generation: ConfigGeneration,
     #[zeroize(skip)]
     pub(crate) cloud: CloudStorageClient,
     #[zeroize(skip)]
@@ -78,13 +87,16 @@ impl CloudBackupCleanupWorker {
             return;
         }
 
+        let Some(manager) = self.manager.upgrade() else { return };
         let Some(job) = self.queue.pop_front() else {
             return;
         };
 
+        let writes =
+            CloudBackupWriteClient::background(manager.cloud_writes.clone(), job.generation);
         self.running = true;
         self.addr.send_fut_with(move |addr| async move {
-            let result = run_cleanup_job(job).await;
+            let result = run_cleanup_job(job, &writes).await;
             send!(addr.complete_cleanup(result));
         });
     }
@@ -112,7 +124,10 @@ impl CloudBackupCleanupWorker {
     }
 }
 
-async fn run_cleanup_job(mut job: CloudBackupCleanupJob) -> Result<(), CloudBackupError> {
+async fn run_cleanup_job(
+    mut job: CloudBackupCleanupJob,
+    writes: &CloudBackupWriteClient,
+) -> Result<(), CloudBackupError> {
     let cloud = job.cloud.clone();
     let active_reader = WalletBackupReader::new(
         cloud.clone(),
@@ -137,13 +152,21 @@ async fn run_cleanup_job(mut job: CloudBackupCleanupJob) -> Result<(), CloudBack
             continue;
         }
 
-        match cloud.delete_namespace(source.namespace_id.clone()).await {
+        match writes.delete_source_namespace(cloud.clone(), source.namespace_id.clone()).await {
             Ok(()) => info!("Deleted merged cloud backup namespace {}", source.namespace_id),
+
+            // the proof was made under a configuration that changed, or deletes are paused;
+            // the sources stay, which is always safe
+            Err(CloudBackupError::WritesPaused(reason)) => {
+                info!("Skipping cloud backup namespace cleanup reason={reason:?}");
+                return Ok(());
+            }
+
             Err(error) => {
-                return Err(CloudBackupError::cloud_storage_context(
-                    format!("delete merged cloud backup namespace {}", source.namespace_id),
-                    error,
-                ));
+                return Err(error.with_cloud_storage_context(format!(
+                    "delete merged cloud backup namespace {}",
+                    source.namespace_id
+                )));
             }
         }
     }

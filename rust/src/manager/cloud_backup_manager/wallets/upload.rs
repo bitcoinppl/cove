@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
-    CloudBackupWriteCompletion,
+    CloudBackupWriteCompletion, Decision,
 };
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
@@ -111,11 +111,15 @@ impl DirtyWalletUploadPreparationError {
 
 impl RustCloudBackupManager {
     /// Upload wallets to cloud and update local cache
+    ///
+    /// `writes` decides when the lane runs these uploads: a background client's generation
+    /// must be read before this reads the namespace, and an operation's client runs them only
+    /// while that operation does
     pub(crate) async fn do_backup_wallets(
         &self,
+        writes: &CloudBackupWriteClient,
         wallets: &[crate::wallet::metadata::WalletMetadata],
     ) -> Result<(), CloudBackupError> {
-        self.ensure_cloud_backup_writes_allowed()?;
         if wallets.is_empty() {
             return Ok(());
         }
@@ -189,6 +193,7 @@ impl RustCloudBackupManager {
                 Err(error) => {
                     return self
                         .finish_partial_cloud_wallet_upload_batch(
+                            writes,
                             batch,
                             uploaded_wallets,
                             uploaded_record_ids,
@@ -199,8 +204,8 @@ impl RustCloudBackupManager {
             };
 
             let PreparedCloudWalletUpload { prepared, wallet_json } = prepared_upload;
-            if let Err(error) = self
-                .upload_cloud_wallet_backup(
+            if let Err(error) = writes
+                .upload_wallet_backup(
                     batch.cloud.clone(),
                     batch.namespace.clone(),
                     prepared.record_id.clone(),
@@ -210,6 +215,7 @@ impl RustCloudBackupManager {
             {
                 return self
                     .finish_partial_cloud_wallet_upload_batch(
+                        writes,
                         batch,
                         uploaded_wallets,
                         uploaded_record_ids,
@@ -228,6 +234,7 @@ impl RustCloudBackupManager {
         }
 
         self.complete_cloud_wallet_upload_batch_for_records(
+            writes,
             batch,
             uploaded_wallets,
             uploaded_record_ids,
@@ -287,23 +294,26 @@ impl RustCloudBackupManager {
 
     async fn complete_cloud_wallet_upload_batch_for_records(
         &self,
+        writes: &CloudBackupWriteClient,
         batch: CloudWalletUploadBatch,
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         uploaded_record_ids: Vec<String>,
     ) -> Result<(), CloudBackupError> {
         let count_refresh = batch.count_refresh(&uploaded_record_ids);
 
-        self.complete_cloud_wallet_upload_batch(
-            batch.cloud,
-            batch.namespace,
-            uploaded_wallets,
-            count_refresh,
-        )
-        .await
+        writes
+            .complete_uploaded_wallet_batch(
+                batch.cloud,
+                batch.namespace,
+                uploaded_wallets,
+                count_refresh,
+            )
+            .await
     }
 
     async fn finish_partial_cloud_wallet_upload_batch(
         &self,
+        writes: &CloudBackupWriteClient,
         batch: CloudWalletUploadBatch,
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         uploaded_record_ids: Vec<String>,
@@ -315,6 +325,7 @@ impl RustCloudBackupManager {
 
         match self
             .complete_cloud_wallet_upload_batch_for_records(
+                writes,
                 batch,
                 uploaded_wallets,
                 uploaded_record_ids,
@@ -333,7 +344,18 @@ impl RustCloudBackupManager {
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
-        self.ensure_cloud_backup_writes_allowed()?;
+        // the generation is read before the namespace, so a configuration change after this
+        // leaves the upload with an older generation, which the write lane drops
+        let ticket = self.write_ticket().await?;
+        let writes =
+            CloudBackupWriteClient::background(self.cloud_writes.clone(), ticket.generation);
+
+        // the lane would answer paused anyway; asking first skips loading keys and encrypting
+        // while the backup is turning off, switching accounts or resetting
+        if let Decision::Paused(reason) = ticket.ordinary {
+            return Err(CloudBackupError::WritesPaused(reason));
+        }
+
         let record_id = wallet_record_id(wallet_id.as_ref());
         let Some(current_state) =
             Database::global().cloud_blob_sync_states.get(&record_id).map_err(|source| {
@@ -415,8 +437,8 @@ impl RustCloudBackupManager {
             prepared.revision_hash.clone(),
             uploaded_at,
         );
-        let upload_result = self
-            .upload_cloud_wallet_backup_with_completion(
+        let upload_result = writes
+            .upload_wallet_backup_with_completion(
                 cloud.clone(),
                 namespace.clone(),
                 record_id.clone(),
@@ -427,6 +449,13 @@ impl RustCloudBackupManager {
 
         match upload_result {
             Ok(()) => Ok(()),
+
+            // pausing is not failing: the row goes back to Dirty with no retry timer, and the
+            // write lane wakes the scheduler when ordinary writes run again
+            Err(CloudBackupError::WritesPaused(reason)) => {
+                self.mark_blob_dirty_state(&uploading_state)?;
+                Err(CloudBackupError::WritesPaused(reason))
+            }
             Err(CloudBackupError::CloudStorage(error)) => self
                 .handle_dirty_wallet_upload_cloud_error(
                     &uploading_state,
@@ -631,13 +660,15 @@ impl RustCloudBackupManager {
             | CloudBackupError::CloudStorage(_)
             | CloudBackupError::CloudStorageContext { .. }
             | CloudBackupError::Offline(_)
-            | CloudBackupError::Deferred(_) => true,
+            | CloudBackupError::Deferred(_)
+            | CloudBackupError::WritesPaused(_) => true,
             CloudBackupError::NotSupported(_)
             | CloudBackupError::UnsupportedPasskeyProvider
             | CloudBackupError::RecoveryRequired(_)
             | CloudBackupError::Passkey(_)
             | CloudBackupError::Crypto(_)
             | CloudBackupError::Internal(_)
+            | CloudBackupError::NotAdmitted(_)
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound

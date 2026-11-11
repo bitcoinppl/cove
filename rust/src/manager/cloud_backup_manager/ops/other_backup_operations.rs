@@ -3,6 +3,7 @@ use cove_device::passkey::PasskeyAccess;
 use tracing::info;
 
 use super::blocking_cloud_error;
+use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher,
 };
@@ -11,8 +12,11 @@ use crate::manager::cloud_backup_manager::{
 };
 
 impl RustCloudBackupManager {
+    /// Recovers wallets from other backups and deletes each namespace it fully moved, through
+    /// the write lane under the Recover Other Backups operation that `writes` writes for
     pub(crate) async fn do_recover_other_backups(
         &self,
+        writes: &CloudBackupWriteClient,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RecoverOtherBackups)?;
 
@@ -48,10 +52,15 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.restore_wallets_from_namespaces(&cloud, matches).await
+        self.restore_wallets_from_namespaces(&cloud, matches, writes).await
     }
 
-    pub(crate) async fn do_delete_other_backups(&self) -> Result<(), CloudBackupError> {
+    /// Deletes every other backup namespace through the write lane, under the Delete Other
+    /// Backups operation that `writes` writes for
+    pub(crate) async fn do_delete_other_backups(
+        &self,
+        writes: &CloudBackupWriteClient,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteOtherBackups)?;
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
@@ -64,12 +73,14 @@ impl RustCloudBackupManager {
             .await?;
 
         for namespace in namespaces {
-            cloud.delete_namespace(namespace.clone()).await.map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::DeleteOtherBackups,
-                    CloudBackupError::cloud_storage_context("delete cloud backup namespace", error),
-                )
-            })?;
+            writes.delete_other_namespace(cloud.clone(), namespace.clone()).await.map_err(
+                |error| {
+                    blocking_cloud_error(
+                        BlockingCloudStep::DeleteOtherBackups,
+                        error.with_cloud_storage_context("delete cloud backup namespace"),
+                    )
+                },
+            )?;
             info!("Deleted other cloud backup namespace {namespace}");
         }
 

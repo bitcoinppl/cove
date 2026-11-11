@@ -19,6 +19,7 @@ use crate::database::cloud_backup::{
     CloudBlobUploadedPendingConfirmationState, CloudStorageIssue, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
+use crate::manager::cloud_backup_manager::verify::PendingVerificationSettlement;
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
 use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
@@ -134,7 +135,7 @@ impl PendingUploadVerifier {
         }
 
         if !blocked_on_authorization
-            && let Some(settlement) = self.0.ready_pending_verification_settlement().await
+            && let Some(settlement) = self.ready_pending_verification_settlement().await
         {
             // a worker may wait on the lifecycle owner, and waiting here means the pending state
             // read below already reflects the settle
@@ -178,6 +179,21 @@ impl PendingUploadVerifier {
             | PendingUploadRunOutcome::Confirmed
             | PendingUploadRunOutcome::Failed => PendingUploadVerificationState::Idle,
         }
+    }
+
+    /// Reads the owner's wallet set first, then the upload evidence under it, so a wallet change
+    /// after the read makes the settlement stale instead of recording old evidence
+    async fn ready_pending_verification_settlement(&self) -> Option<PendingVerificationSettlement> {
+        // a worker may wait on the lifecycle owner
+        let basis = match call!(self.0.supervisor.wallet_set_basis()).await {
+            Ok(basis) => basis,
+            Err(error) => {
+                warn!("Pending upload verification: lifecycle owner stopped: {error}");
+                return None;
+            }
+        };
+
+        self.0.ready_pending_verification_settlement(basis).await
     }
 
     fn run_outcome(

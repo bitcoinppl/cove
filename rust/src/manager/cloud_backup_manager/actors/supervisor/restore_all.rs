@@ -62,7 +62,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        let Some(claim) = self.begin_restore_all_exclusive_operation(&manager) else {
+        let Some(claim) = self.begin_restore_all_exclusive_operation() else {
             return;
         };
 

@@ -186,7 +186,24 @@ impl CloudBackupSupervisor {
             credential_id,
             prf_salt,
         });
+        self.pending_enable_session = None;
+        manager.clear_enable_progress(CloudBackupStatus::Enabled);
+        manager.refresh_persisted_flags();
+        // this handler runs on the lifecycle owner, so it settles in place rather than messaging
+        if should_finalize_now
+            && let Some(settlement) =
+                manager.ready_pending_verification_settlement(self.wallet_set).await
+        {
+            self.apply_pending_verification_settlement(&manager, settlement);
+        }
+
+        info!("Cloud backup enabled (recovered existing namespace)");
+        self.finish_enable_operation(manager, claim);
+
+        // queued after Enable ends, so the job carries the generation of the configuration it
+        // proved its sources under, and the lane drops its deletes once that changes
         if let Err(error) = call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
+            generation: self.runtime.generation(),
             cloud: CloudStorage::global_explicit_client(),
             active_namespace_id: namespace_id.clone(),
             active_critical_key: *active_critical_key,
@@ -198,19 +215,6 @@ impl CloudBackupSupervisor {
                 "Recovered enable committed, but merge-source cleanup could not be scheduled; retaining source backups: {error}"
             );
         }
-
-        self.pending_enable_session = None;
-        manager.clear_enable_progress(CloudBackupStatus::Enabled);
-        manager.refresh_persisted_flags();
-        // this handler runs on the lifecycle owner, so it settles in place rather than messaging
-        if should_finalize_now
-            && let Some(settlement) = manager.ready_pending_verification_settlement().await
-        {
-            self.apply_pending_verification_settlement(&manager, settlement);
-        }
-
-        info!("Cloud backup enabled (recovered existing namespace)");
-        self.finish_enable_operation(manager, claim);
 
         Produces::ok(())
     }

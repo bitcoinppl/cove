@@ -254,7 +254,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
-    let report = manager.do_recover_other_backups().await.unwrap();
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
 
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
@@ -319,7 +319,7 @@ async fn recover_other_backups_current_namespace_not_found_fails_closed_without_
     );
     let delete_attempt_count = globals.cloud.delete_namespace_attempt_count();
 
-    let error = manager.do_recover_other_backups().await.unwrap_err();
+    let error = recover_other_backups_for_test(&manager).await.unwrap_err();
 
     assert!(error.to_string().contains("current wallet files missing"), "{error}");
     assert!(globals.cloud.has_namespace(&other_namespace));
@@ -376,7 +376,7 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
         ],
     );
 
-    let report = manager.do_recover_other_backups().await.unwrap();
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
 
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 1);
@@ -424,7 +424,7 @@ async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
-    let result = manager.do_recover_other_backups().await;
+    let result = recover_other_backups_for_test(&manager).await;
 
     assert!(result.is_err());
     assert!(globals.cloud.has_namespace(&other_namespace));
@@ -464,7 +464,7 @@ async fn recover_other_backups_returns_offline_when_wallet_download_is_offline()
         "offline while downloading wallet",
     );
 
-    let result = manager.do_recover_other_backups().await;
+    let result = recover_other_backups_for_test(&manager).await;
 
     match result {
         Err(CloudBackupError::Offline(message)) => {
@@ -501,7 +501,7 @@ async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offl
         .cloud
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
-    let result = manager.do_recover_other_backups().await;
+    let result = recover_other_backups_for_test(&manager).await;
 
     match result {
         Err(CloudBackupError::Offline(message)) => {
@@ -546,7 +546,7 @@ async fn delete_other_backups_removes_only_non_current_namespaces() {
         vec![wallet_filename_from_record_id("other-wallet")],
     );
 
-    manager.do_delete_other_backups().await.unwrap();
+    delete_other_backups_for_test(&manager).await.unwrap();
 
     assert!(globals.cloud.has_namespace(&current_namespace));
     assert!(!globals.cloud.has_namespace(&other_namespace));
@@ -577,7 +577,7 @@ async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offli
         "offline while inspecting namespace",
     );
 
-    let result = manager.do_delete_other_backups().await;
+    let result = delete_other_backups_for_test(&manager).await;
 
     match result {
         Err(CloudBackupError::Offline(message)) => {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::database::cloud_backup::CloudBlobConfirmedState;
+use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedBackupVerificationState};
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
@@ -827,4 +827,53 @@ async fn terminally_failed_pending_upload_finishes_verification_without_waiting_
         }
         other => panic!("expected terminal upload verification failure, got {other:?}"),
     }
+}
+
+/// An upload confirmation read before a wallet change no longer covers the wallet set, so the
+/// settle is dropped: the backup stays required to verify and the marker stays for a new read
+#[tokio::test(flavor = "current_thread")]
+async fn pending_upload_settle_read_before_a_wallet_change_is_dropped() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+
+    let basis = call!(manager.supervisor.wallet_set_basis()).await.unwrap();
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    // the wallet set changes while the confirmation is on its way to the supervisor
+    call!(manager.supervisor.require_verification_after_wallet_change(1)).await.unwrap();
+    call!(manager.supervisor.settle_pending_verification(settlement)).await.unwrap();
+
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    assert!(
+        matches!(configured.verification, PersistedBackupVerificationState::Required { .. }),
+        "the stale settle verified the changed wallet set: {:?}",
+        configured.verification
+    );
+    assert!(manager.pending_verification_completion().is_some());
 }

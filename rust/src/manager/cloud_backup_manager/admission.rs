@@ -158,6 +158,26 @@ pub(crate) enum Rejection {
     Resetting,
 }
 
+/// Why the write lane is not running a command class right now
+///
+/// An admission fact, not a storage issue: it is never persisted in a failed blob row, and a
+/// paused command keeps its local state as it was, so it runs again once the pause ends
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PauseReason {
+    /// Turn Off is running or finishing
+    TurnOff,
+    /// A Google Drive account switch holds the backup
+    AccountSwitch,
+    /// A local reset is wiping Cloud Backup's local state
+    LocalReset,
+    /// Cloud Backup is not configured on this device
+    BackupOff,
+    /// The stored record could not be loaded
+    LoadFailed,
+    /// The command was read under an older configuration; its work is redone under the new one
+    ConfigurationChanged,
+}
+
 /// The lifecycle body admission decides on
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AdmissionBody {

@@ -46,7 +46,7 @@ impl CloudBackupSupervisor {
 
         let transition_id = DriveAccountSwitchId::new(rand::random());
         let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
-        self.rebase_idle_runtime(&manager);
+        self.rebase_idle_runtime();
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not start {unstartable:?}");
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Busy));
@@ -64,22 +64,14 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(error));
         }
 
-        let blocker =
-            CloudBackupWriteBlocker::DriveAccountSwitch { transition_id: transition.transition_id };
-        // the supervisor never waits on the write supervisor; a stopped write lane drops
-        // `drained`, which the completion handles like a fence that never drained
-        let (drained, receiver) = tokio::sync::oneshot::channel();
-        send!(self.write.block_until_drained_notify(blocker, drained));
+        // the switch body already pauses background writes through the published policy; this
+        // barrier waits out the writes queued or in flight before it. The supervisor never waits
+        // on the write supervisor, so the barrier's reply comes back as a completion
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         let (ready_sender, ready_receiver) = tokio::sync::oneshot::channel();
-        let addr = self.addr();
-        addr.send_fut_with(move |addr| async move {
-            let drained = receiver.await.is_ok();
-            send!(addr.complete_drive_account_switch_write_drain(
-                claim,
-                blocker,
-                drained,
-                ready_sender
-            ));
+        self.addr.send_fut_with(move |addr| async move {
+            let drained = writes.drain().await.is_ok();
+            send!(addr.complete_drive_account_switch_write_drain(claim, drained, ready_sender));
         });
 
         Produces::ok(Ok((transition.transition_id, ready_receiver)))
@@ -88,7 +80,6 @@ impl CloudBackupSupervisor {
     pub async fn complete_drive_account_switch_write_drain(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        blocker: CloudBackupWriteBlocker,
         drained: bool,
         ready_sender: tokio::sync::oneshot::Sender<Result<(), CloudBackupDriveAccountSwitchError>>,
     ) -> ActorResult<()> {
@@ -112,16 +103,15 @@ impl CloudBackupSupervisor {
             && let Err(error) = self.clear_drive_account_switch(transition_id)
         {
             error!(
-                "Failed to clear Google Drive account switch after write fence stopped: {error}"
+                "Failed to clear Google Drive account switch after write drain stopped: {error}"
             );
         }
-        send!(self.write.unblock(blocker));
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
         }
         self.runtime.clear();
         let _ = ready_sender.send(Err(CloudBackupDriveAccountSwitchError::Internal(
-            "cloud backup write fence stopped before draining".into(),
+            "cloud backup write lane stopped before draining".into(),
         )));
         Produces::ok(())
     }
@@ -221,7 +211,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(error));
         }
 
-        self.resume_cloud_backup_work_after_drive_account_switch(&manager, transition_id).await;
+        // ending the switch publishes the configured policy, and the write lane wakes uploads
+        manager.refresh_sync_health();
 
         // the switch record is gone, so finish_enable_operation would take this claim for a stale
         // switch and leave it held with the recovery spinner up
@@ -261,8 +252,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(error));
         }
 
-        self.resume_cloud_backup_work_after_drive_account_switch(&manager, transition_id).await;
-
+        // ending the switch publishes the configured policy, and the write lane wakes uploads
+        manager.refresh_sync_health();
         self.runtime.clear();
         manager.apply_recovery_state(RecoveryState::Idle);
         manager.project_exclusive_operation_finished(claim);
@@ -271,31 +262,6 @@ impl CloudBackupSupervisor {
         ));
 
         Produces::ok(Ok(()))
-    }
-
-    async fn resume_cloud_backup_work_after_drive_account_switch(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        transition_id: DriveAccountSwitchId,
-    ) {
-        // queued before the upload resume below, so the write lane sees the unblock first
-        send!(self.write.unblock(CloudBackupWriteBlocker::DriveAccountSwitch { transition_id }));
-
-        if let Err(error) = call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await {
-            error!(
-                "Failed to resume cloud backup uploads after Google Drive account switch: {error}"
-            );
-            manager.apply_sync_state(SyncState::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()));
-        }
-
-        if let Err(error) = call!(self.uploads.ensure_pending_upload_verification_loop()).await {
-            error!(
-                "Failed to resume pending cloud backup verification after Google Drive account switch: {error}"
-            );
-            manager.apply_sync_state(SyncState::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()));
-        }
-
-        manager.refresh_sync_health();
     }
 
     pub async fn reconcile_drive_account_switch(
@@ -332,9 +298,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(Ok(action));
         };
 
-        send!(self.write.block(CloudBackupWriteBlocker::DriveAccountSwitch {
-            transition_id: transition.transition_id,
-        }));
+        // the switch record gives the switch body, whose policy pauses background writes
+        self.rebase_idle_runtime();
 
         let action = match (transition.phase, platform_state) {
             (
@@ -529,7 +494,7 @@ impl CloudBackupSupervisor {
         }
 
         let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
-        self.rebase_idle_runtime(manager);
+        self.rebase_idle_runtime();
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not resume {unstartable:?}");
             return Err(CloudBackupDriveAccountSwitchError::Busy);

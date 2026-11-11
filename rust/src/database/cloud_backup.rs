@@ -316,7 +316,7 @@ mod tests {
 
         assert!(state.record_successful_sync(30, 3));
 
-        assert!(state.is_disabling());
+        assert!(state.disabling().is_some());
         assert_eq!(state.last_sync(), Some(30));
         assert_eq!(state.wallet_count(), Some(3));
         assert_eq!(state.disabling().map(|disabling| disabling.disable_generation), Some(7));

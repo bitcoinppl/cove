@@ -184,24 +184,67 @@ or persistent per-wallet batch history.
 
 ## Write Lane
 
-All cloud writes go through `CloudBackupWriteSupervisor`. The write supervisor
-queues one remote write at a time, rejects writes while disable is active, and
-checks persisted disabling state so restart recovery keeps the write fence.
+All cloud writes go through `CloudBackupWriteSupervisor`, remote deletes
+included. The write supervisor runs one remote write at a time, in the order
+they were queued.
 
-Operation-owned writes use `CloudBackupWriteClient::for_operation`. Their
-command context includes the active operation claim, which is checked before the
-write starts and again before local completion is applied. Background writes use
-`CloudBackupWriteClient::new` and are not tied to an exclusive operation.
+The lane does not keep its own record of who may write. The supervisor derives a
+`WritePolicy` from its runtime body (`Runtime::write_policy`) and sends a newer
+versioned policy to the lane each time the body changes. The policy is never
+stored. When the lane reaches a queued write, it decides that write against the
+latest policy, at that moment. Each write carries a command class, and the
+decision is one of three:
+
+- `Run`: the write starts
+- `Paused(PauseReason)`: the write answers `CloudBackupError::WritesPaused`. A
+  paused upload stays `Dirty` and sets no retry timer. Only a lost connection
+  defers an upload with a retry timer.
+- `Stale`: the write belongs to an operation that ended, or to an older
+  configuration. It is dropped with a debug log.
+
+| Class | Sent by | Runs when | Paused when |
+|---|---|---|---|
+| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off running | Turn Off, backup off, account switch, reset |
+| `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
+| `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
+| `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
+| `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running | never |
+| `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
+| `EnableDiscard(claim)` | discarding an interrupted Enable's namespace | that discard is running | never |
+
+For every class without a pause, a write that does not meet the "Runs when"
+condition is stale.
+
+A configuration generation is a process-local number. The supervisor starts a
+new one when the body changes kind, for example when backup turns on or off, or
+when a reinitialize ends. `Ordinary` and `SourceCleanup` writes from an older
+generation are stale. That covers cleanup jobs already queued or being prepared
+for a configuration that was replaced.
+
+When a new policy lets ordinary writes run again, the lane tells the supervisor
+(`ordinary_writes_resumed`). The supervisor then resumes uploads from the
+persisted dirty state and restarts the pending-upload verifier, so a paused
+upload runs exactly once. Upload confirmations carry the wallet-set generation
+they read, and the supervisor drops one that a wallet change outdated.
+
+Operation-owned writes use `CloudBackupWriteClient::for_operation`, so their
+class carries the operation claim. Background writes take a ticket for the
+current generation.
 
 `CloudBackupWriteWorker` is intentionally small. It executes the remote storage
 command and reports the result back to the write supervisor. The supervisor then
 applies any local completion, such as marking uploaded blobs pending
 confirmation. It asks the supervisor to persist the enabled state after a final
-upload and waits for that answer before it marks the wallets uploaded.
+upload and waits for that answer before it marks the wallets uploaded. It
+re-decides the class before it applies the completion, so a write whose
+operation ended meanwhile is reported cancelled.
 
-Disable uses `block_until_drained` before deleting the namespace. That prevents
-an already-started upload from recreating remote data after disable removes the
-backup namespace.
+Turn Off pauses ordinary writes through the policy, then queues a drain barrier
+of its own. The barrier comes back only after the write in flight and those
+queued ahead of it have finished. Only then does Turn Off commit and delete the
+namespace, so an upload that already started can't recreate remote data after
+the delete. A Google Drive account switch drains the same way. A local reset
+publishes a closed policy first, then waits for the lane to go idle.
 
 ## Verification And Recovery
 

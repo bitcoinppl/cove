@@ -5,6 +5,7 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::blocking_cloud_error;
+use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
     WalletRestoreSession,
@@ -20,6 +21,7 @@ impl RustCloudBackupManager {
         &self,
         cloud: &CloudStorageClient,
         namespaces: Vec<NamespaceMatch>,
+        writes: &CloudBackupWriteClient,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
@@ -133,7 +135,7 @@ impl RustCloudBackupManager {
             }
 
             if !restored_wallets.is_empty() {
-                self.do_backup_wallets(&restored_wallets).await.map_err(|error| {
+                self.do_backup_wallets(writes, &restored_wallets).await.map_err(|error| {
                     blocking_cloud_error(BlockingCloudStep::RecoverOtherBackups, error)
                 })?;
                 current_wallet_record_ids.extend(restored_wallets.iter().map(|metadata| {
@@ -146,15 +148,17 @@ impl RustCloudBackupManager {
                     .iter()
                     .all(|record_id| current_wallet_record_ids.contains(record_id))
             {
-                cloud.delete_namespace(namespace.namespace_id.clone()).await.map_err(|error| {
-                    blocking_cloud_error(
-                        BlockingCloudStep::RecoverOtherBackups,
-                        CloudBackupError::cloud_storage_context(
-                            "delete recovered cloud backup namespace",
-                            error,
-                        ),
-                    )
-                })?;
+                writes
+                    .delete_other_namespace(cloud.clone(), namespace.namespace_id.clone())
+                    .await
+                    .map_err(|error| {
+                        blocking_cloud_error(
+                            BlockingCloudStep::RecoverOtherBackups,
+                            error.with_cloud_storage_context(
+                                "delete recovered cloud backup namespace",
+                            ),
+                        )
+                    })?;
                 info!("Deleted recovered cloud backup namespace {}", namespace.namespace_id);
                 moved_namespace_count += 1;
             }

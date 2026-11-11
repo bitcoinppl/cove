@@ -60,7 +60,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         intent: &UserIntent,
     ) -> Admission {
-        self.rebase_idle_runtime(manager);
+        self.rebase_idle_runtime();
         evaluate_admission(intent, &self.admission_snapshot(manager))
     }
 

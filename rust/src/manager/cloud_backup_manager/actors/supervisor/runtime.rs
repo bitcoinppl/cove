@@ -25,7 +25,12 @@ use tracing::debug;
 
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupTransition};
 use crate::database::error::DatabaseError;
-use crate::manager::cloud_backup_manager::admission::{AdmissionBody, ConfiguredAdmission};
+use crate::manager::cloud_backup_manager::actors::write::{
+    ConfigGeneration, ConfiguredWriter, ConfiguredWrites, OffWrites, PolicyBody, WritePolicy,
+};
+use crate::manager::cloud_backup_manager::admission::{
+    AdmissionBody, ConfiguredAdmission, PauseReason,
+};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDisableOutcome, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupStatus,
@@ -331,7 +336,7 @@ impl Runtime {
             Self::Configured { op } => op.as_ref().map(ConfiguredOp::claim),
             Self::FinishingDisable { op, .. } => op.as_ref().map(|op| op.0.claim),
             Self::DriveAccountSwitch { op } => op.as_ref().map(|op| op.0.claim),
-            Self::PendingEnableRecovery { op } => op.as_ref().map(RecoveryOp::claim),
+            Self::PendingEnableRecovery { op, .. } => op.as_ref().map(RecoveryOp::claim),
             // the held effect answers only through `accepts_completion`; nothing else may use it
             Self::LoadFailed { .. } | Self::Resetting { .. } => None,
         }
@@ -351,6 +356,7 @@ impl Runtime {
             | Self::DriveAccountSwitch { op: Some(SwitchOp(run)) }
             | Self::PendingEnableRecovery {
                 op: Some(RecoveryOp::Continue(run) | RecoveryOp::Discard(run)),
+                ..
             }
             | Self::Configured {
                 op:
@@ -493,6 +499,13 @@ impl Runtime {
             {
                 *op = Some(ConfiguredOp::RestoreAll(run));
             }
+            // an account switch's reinitialize runs in the switch body, which holds background
+            // writes until the switch ends
+            (Self::Configured { .. }, NewOp::Standard(run))
+                if run.claim.drive_account_switch_id().is_some() =>
+            {
+                *self = Self::DriveAccountSwitch { op: Some(SwitchOp(run)) };
+            }
             (Self::Configured { op }, NewOp::Standard(run)) => {
                 let configured = match operation {
                     Op::Disable => ConfiguredOp::TurnOff(run),
@@ -527,7 +540,7 @@ impl Runtime {
             {
                 *op = Some(SwitchOp(run));
             }
-            (Self::PendingEnableRecovery { op }, NewOp::Standard(run)) => {
+            (Self::PendingEnableRecovery { op, .. }, NewOp::Standard(run)) => {
                 *op = Some(match operation {
                     Op::Enable | Op::EnableForceNew | Op::EnableNoDiscovery => {
                         RecoveryOp::Continue(run)
@@ -548,7 +561,7 @@ impl Runtime {
                     | Op::DeleteUndecryptableWalletBackups => return Err(unstartable(self)),
                 });
             }
-            (Self::PendingEnableRecovery { op }, NewOp::Restore(run))
+            (Self::PendingEnableRecovery { op, .. }, NewOp::Restore(run))
                 if operation == Op::Restore =>
             {
                 *op = Some(RecoveryOp::Restore(run));
@@ -611,7 +624,7 @@ impl Runtime {
         match self {
             Self::Disabled { op: Some(DisabledOp::Restore(run)) }
             | Self::Corrupted { op: Some(DisabledOp::Restore(run)), .. }
-            | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)) }
+            | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)), .. }
                 if run.claim == claim =>
             {
                 Some(run)
@@ -707,7 +720,7 @@ impl Runtime {
             }),
             Self::FinishingDisable { op, .. } => op.take().map(|op| TakenOp::Standard(op.0)),
             Self::DriveAccountSwitch { op } => op.take().map(|op| TakenOp::Standard(op.0)),
-            Self::PendingEnableRecovery { op } => op.take().map(|op| match op {
+            Self::PendingEnableRecovery { op, .. } => op.take().map(|op| match op {
                 RecoveryOp::Continue(run) | RecoveryOp::Discard(run) => TakenOp::Standard(run),
                 RecoveryOp::Restore(run) => TakenOp::Restore(run),
             }),
@@ -723,7 +736,7 @@ impl Runtime {
             Self::Configured { op } => *op = None,
             Self::FinishingDisable { op, .. } => *op = None,
             Self::DriveAccountSwitch { op } => *op = None,
-            Self::PendingEnableRecovery { op } => *op = None,
+            Self::PendingEnableRecovery { op, .. } => *op = None,
             Self::Resetting { held } => {
                 if let Some(mut run) = held.take() {
                     run.effect_reported();
@@ -738,6 +751,55 @@ impl Runtime {
         let claim = self.claim();
         self.clear();
         claim
+    }
+}
+
+impl Runtime {
+    /// The write policy this runtime gives, per command class; see `actors/write/policy.rs`
+    ///
+    /// Derived, never stored: the supervisor publishes it after every runtime change
+    pub(crate) fn write_policy(&self, generation: ConfigGeneration) -> WritePolicy {
+        let body = match self {
+            Self::Disabled { op } | Self::Corrupted { op, .. } => PolicyBody::Off {
+                op: op.as_ref().map(|op| match op {
+                    DisabledOp::Enable(run) => OffWrites::Enable(run.claim),
+                    DisabledOp::DiscardEnable(run) => OffWrites::Discard(run.claim),
+                    DisabledOp::Restore(run) => OffWrites::Restore(run.claim),
+                }),
+            },
+            Self::PendingEnableRecovery { op, .. } => PolicyBody::Off {
+                op: op.as_ref().map(|op| match op {
+                    RecoveryOp::Continue(run) => OffWrites::Enable(run.claim),
+                    RecoveryOp::Discard(run) => OffWrites::Discard(run.claim),
+                    RecoveryOp::Restore(run) => OffWrites::Restore(run.claim),
+                }),
+            },
+            Self::Configured { op } => PolicyBody::Configured {
+                op: op.as_ref().map(|op| ConfiguredWrites { claim: op.claim(), kind: op.writer() }),
+            },
+            Self::FinishingDisable { committed, op } => PolicyBody::FinishingDisable {
+                namespace_id: committed.namespace_id.clone(),
+                op: op.as_ref().map(|op| op.0.claim),
+            },
+            Self::DriveAccountSwitch { op } => {
+                PolicyBody::AccountSwitch { op: op.as_ref().map(|op| op.0.claim) }
+            }
+            Self::LoadFailed { .. } => PolicyBody::Closed(PauseReason::LoadFailed),
+            Self::Resetting { .. } => PolicyBody::Closed(PauseReason::LocalReset),
+        };
+
+        WritePolicy { generation, body }
+    }
+
+    /// The claim of a running operation that replaces the configuration in place
+    ///
+    /// A reinitialize writes a new master key and namespace while the body stays configured, so
+    /// the configuration generation changes when it ends
+    pub(crate) fn replacing_configuration(&self) -> Option<CloudBackupExclusiveOperationClaim> {
+        match self {
+            Self::Configured { op: Some(ConfiguredOp::Reinitialize(run)) } => Some(run.claim),
+            _ => None,
+        }
     }
 }
 
@@ -815,6 +877,23 @@ impl DisabledOp {
 }
 
 impl ConfiguredOp {
+    /// How the operation writes through the lane
+    fn writer(&self) -> ConfiguredWriter {
+        match self {
+            Self::TurnOff(_) => ConfiguredWriter::TurnOff,
+            Self::DeleteRecords(_) => ConfiguredWriter::RowDelete,
+            Self::RecoverOtherBackups(_) | Self::DeleteOtherBackups(_) => {
+                ConfiguredWriter::OtherBackups
+            }
+            Self::Verify(_)
+            | Self::RepairPasskey(_)
+            | Self::RestoreCloudWallet(_)
+            | Self::RestoreAll(_)
+            | Self::Reinitialize(_)
+            | Self::RecreateManifest(_) => ConfiguredWriter::Other,
+        }
+    }
+
     fn claim(&self) -> CloudBackupExclusiveOperationClaim {
         match self {
             Self::TurnOff(run)

@@ -99,7 +99,7 @@ impl CloudBackupSupervisor {
         // the delete is a write-lane command, and the supervisor never waits on the write
         // supervisor, so the delete runs off the mailbox as an operation of its own: Enable meets
         // it running and is rejected as busy, and its completion must still be current
-        self.rebase_idle_runtime(&manager);
+        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::DiscardPendingEnable,
             OperationId::next(),
@@ -114,7 +114,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let writes = CloudBackupWriteClient::new(self.write.clone());
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr().send_fut_with(move |addr| async move {
             let result = Self::delete_pending_enable_remote_namespace(writes, &journal).await;
             send!(addr.complete_pending_enable_remote_discard(claim, pending, journal, result));
@@ -189,7 +189,7 @@ impl CloudBackupSupervisor {
         journal: &PendingEnableJournal,
     ) -> Result<(), CloudBackupError> {
         writes
-            .delete_namespace_background(
+            .delete_discarded_namespace(
                 CloudStorage::global_explicit_client(),
                 journal.namespace_id().to_owned(),
             )

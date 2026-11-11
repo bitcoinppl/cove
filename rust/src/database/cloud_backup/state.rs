@@ -67,10 +67,6 @@ impl PersistedCloudBackupState {
         self.configured().is_some()
     }
 
-    pub fn is_disabling(&self) -> bool {
-        matches!(self, Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)))
-    }
-
     pub fn disabling(&self) -> Option<&PersistedDisablingCloudBackup> {
         match self {
             Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) => {

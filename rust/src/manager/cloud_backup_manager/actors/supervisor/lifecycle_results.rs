@@ -41,12 +41,12 @@ impl CloudBackupSupervisor {
         &mut self,
         writes: Vec<OwnedKeychainWrite>,
     ) -> ActorResult<Result<(), CloudBackupError>> {
-        let Some(manager) = self.manager() else {
+        if self.manager().is_none() {
             return Produces::ok(Err(CloudBackupError::Cancelled));
-        };
+        }
 
-        self.rebase_idle_runtime(&manager);
-        if !matches!(self.runtime, Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. })
+        self.rebase_idle_runtime();
+        if !matches!(*self.runtime, Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. })
         {
             debug!("Cloud Backup refused keychain writes {writes:?} outside a configured backup");
             return Produces::ok(Err(CloudBackupError::Cancelled));
@@ -198,13 +198,27 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// Settles an upload confirmation, accepted only while it is still the stored marker
+    /// The local wallet set an upload confirmation reads its evidence under
+    ///
+    /// The pending upload worker asks before it reads, so a wallet change after this answer makes
+    /// its settlement stale
+    pub async fn wallet_set_basis(&mut self) -> ActorResult<WalletSetGeneration> {
+        Produces::ok(self.wallet_set)
+    }
+
+    /// Settles an upload confirmation, accepted only while it is still the stored marker and the
+    /// wallet set it read is still current
     pub(crate) fn apply_pending_verification_settlement(
         &mut self,
         manager: &RustCloudBackupManager,
         settlement: PendingVerificationSettlement,
     ) {
-        let PendingVerificationSettlement { completion, result } = settlement;
+        let PendingVerificationSettlement { basis, completion, result } = settlement;
+        if basis != self.wallet_set {
+            debug!("Dropped an upload confirmation read before a wallet change");
+            return;
+        }
+
         let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
         let settled = manager.reconcile_committed(
             "settle pending verification completion",

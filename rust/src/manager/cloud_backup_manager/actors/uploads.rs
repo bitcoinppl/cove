@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -10,6 +10,8 @@ use tracing::{error, info, warn};
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobFailedState, CloudStorageIssue, PersistedCloudBlobState,
 };
+use crate::manager::cloud_backup_manager::actors::Decision;
+use crate::manager::cloud_backup_manager::admission::PauseReason;
 use crate::manager::cloud_backup_manager::pending::{
     MAX_PENDING_UPLOAD_VERIFICATION_DELAY, build_pending_upload_backoff,
 };
@@ -17,6 +19,49 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupError, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingUploadVerificationState,
     RustCloudBackupManager, SyncState, WalletId, live_upload_retry_delay_for_attempt,
 };
+
+/// How one dirty wallet upload ended, which decides what the scheduler does next
+#[derive(Debug)]
+pub(crate) enum WalletUploadOutcome {
+    Uploaded,
+    /// The write lane paused ordinary writes: the row stays Dirty with no retry timer, and the
+    /// lane wakes the scheduler when the pause ends
+    Paused(PauseReason),
+    /// Waiting for a connection, retried on a timer
+    Deferred(String),
+    AuthorizationRequired(String),
+    Failed(String),
+}
+
+impl From<Result<(), CloudBackupError>> for WalletUploadOutcome {
+    fn from(result: Result<(), CloudBackupError>) -> Self {
+        let error = match result {
+            Ok(()) => return Self::Uploaded,
+            Err(CloudBackupError::WritesPaused(reason)) => return Self::Paused(reason),
+            Err(error) => error,
+        };
+
+        let message = error.to_string();
+        if matches!(error, CloudBackupError::Deferred(_)) {
+            return Self::Deferred(message);
+        }
+
+        match CloudStorageIssue::from(&error) {
+            CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired(message),
+            _ => Self::Failed(message),
+        }
+    }
+}
+
+/// Why the pending upload verifier loop stopped
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VerifierStop {
+    /// Nothing is waiting for confirmation, or the manager is gone
+    Idle,
+    BlockedOnAuthorization,
+    /// Ordinary writes are paused; the write lane restarts the loop when they run again
+    WritesPaused,
+}
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupUploadWorker {
@@ -27,7 +72,11 @@ pub(crate) struct CloudBackupUploadWorker {
     pending_upload_verifier_wakeup: Arc<Notify>,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
     wallet_upload_retry_counts: HashMap<WalletId, u32>,
-    active_wallet_uploads: HashSet<WalletId>,
+    /// Uploads in flight, with whether a schedule arrived for the same wallet meanwhile
+    ///
+    /// A schedule for a wallet already uploading is coalesced into it, so a wake that arrives
+    /// while that upload is being paused still runs the wallet once more
+    active_wallet_uploads: HashMap<WalletId, bool>,
 }
 
 #[async_trait::async_trait]
@@ -48,7 +97,7 @@ impl CloudBackupUploadWorker {
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
-            active_wallet_uploads: HashSet::new(),
+            active_wallet_uploads: HashMap::new(),
         }
     }
 
@@ -71,22 +120,28 @@ impl CloudBackupUploadWorker {
         self.addr.send_fut_with(move |addr| async move {
             info!("Pending upload verification: started");
             let mut backoff = PendingUploadRetryBackoff::new();
-            let mut blocked_on_authorization = false;
 
-            loop {
+            let stop = loop {
                 let verification = {
-                    let Some(manager) = manager.upgrade() else { break };
-                    if manager.cloud_backup_writes_blocked() {
-                        break;
+                    let Some(manager) = manager.upgrade() else { break VerifierStop::Idle };
+
+                    // the verifier records confirmations, not lane commands, so it asks the lane
+                    // whether ordinary writes run before each pass
+                    match manager.write_ticket().await {
+                        Ok(ticket) if ticket.ordinary == Decision::Run => {}
+                        Ok(_) => break VerifierStop::WritesPaused,
+                        Err(error) => {
+                            warn!("Pending upload verification: write lane unavailable: {error}");
+                            break VerifierStop::Idle;
+                        }
                     }
 
                     manager.verify_pending_uploads_once().await
                 };
                 match verification {
-                    PendingUploadVerificationState::Idle => break,
+                    PendingUploadVerificationState::Idle => break VerifierStop::Idle,
                     PendingUploadVerificationState::BlockedOnAuthorization => {
-                        blocked_on_authorization = true;
-                        break;
+                        break VerifierStop::BlockedOnAuthorization;
                     }
                     PendingUploadVerificationState::Confirming => {}
                 }
@@ -96,9 +151,9 @@ impl CloudBackupUploadWorker {
                     _ = tokio::time::sleep(delay) => {}
                     _ = wakeup.notified() => backoff.reset(),
                 }
-            }
+            };
 
-            send!(addr.pending_upload_verifier_finished(blocked_on_authorization));
+            send!(addr.pending_upload_verifier_finished(stop));
         });
     }
 
@@ -125,9 +180,6 @@ impl CloudBackupUploadWorker {
 
     fn schedule_wallet_upload_follow_up(&mut self, wallet_id: WalletId) {
         let Some(manager) = self.manager() else { return };
-        if manager.cloud_backup_writes_blocked() {
-            return;
-        };
 
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
         let sync_state =
@@ -178,10 +230,6 @@ impl CloudBackupUploadWorker {
         wallet_id: WalletId,
         immediate: bool,
     ) -> ActorResult<()> {
-        if self.manager().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
-            return Produces::ok(());
-        }
-
         if immediate {
             let addr = self.addr();
             send!(addr.run_wallet_upload(wallet_id));
@@ -195,8 +243,19 @@ impl CloudBackupUploadWorker {
         Produces::ok(())
     }
 
+    /// Starts one upload for `wallet_id`, or coalesces into the one already running
+    fn begin_wallet_upload(&mut self, wallet_id: &WalletId) -> bool {
+        if let Some(rerun) = self.active_wallet_uploads.get_mut(wallet_id) {
+            *rerun = true;
+            return false;
+        }
+
+        self.active_wallet_uploads.insert(wallet_id.clone(), false);
+        true
+    }
+
     pub(crate) async fn run_wallet_upload(&mut self, wallet_id: WalletId) -> ActorResult<()> {
-        if !self.active_wallet_uploads.insert(wallet_id.clone()) {
+        if !self.begin_wallet_upload(&wallet_id) {
             return Produces::ok(());
         }
 
@@ -205,31 +264,11 @@ impl CloudBackupUploadWorker {
             return Produces::ok(());
         };
 
-        if manager.cloud_backup_writes_blocked() {
-            self.active_wallet_uploads.remove(&wallet_id);
-            return Produces::ok(());
-        }
-
+        // the write lane decides whether this upload runs, so the scheduler never checks a pause
         self.addr.send_fut_with(move |addr| async move {
-            let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
-            let deferred = matches!(
-                upload_result,
-                Err(crate::manager::cloud_backup_manager::CloudBackupError::Deferred(_))
-            );
-            let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
-                matches!(
-                    crate::manager::cloud_backup_manager::CloudStorageIssue::from(error),
-                    crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
-                )
-            });
-            let error_message = upload_result.as_ref().err().map(ToString::to_string);
-            send!(addr.complete_wallet_upload(
-                wallet_id,
-                upload_result.is_ok(),
-                error_message,
-                deferred,
-                authorization_required
-            ));
+            let outcome =
+                WalletUploadOutcome::from(manager.do_upload_wallet_if_dirty(&wallet_id).await);
+            send!(addr.complete_wallet_upload(wallet_id, outcome));
         });
 
         Produces::ok(())
@@ -238,21 +277,11 @@ impl CloudBackupUploadWorker {
     pub(crate) async fn complete_wallet_upload(
         &mut self,
         wallet_id: WalletId,
-        succeeded: bool,
-        error_message: Option<String>,
-        deferred: bool,
-        authorization_required: bool,
+        outcome: WalletUploadOutcome,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.finish_wallet_upload(
-            &manager,
-            wallet_id,
-            succeeded,
-            error_message,
-            deferred,
-            authorization_required,
-        );
+        self.finish_wallet_upload(&manager, wallet_id, outcome);
         Produces::ok(())
     }
 
@@ -260,34 +289,42 @@ impl CloudBackupUploadWorker {
         &mut self,
         manager: &RustCloudBackupManager,
         wallet_id: WalletId,
-        succeeded: bool,
-        error_message: Option<String>,
-        deferred: bool,
-        authorization_required: bool,
+        outcome: WalletUploadOutcome,
     ) {
-        self.active_wallet_uploads.remove(&wallet_id);
+        let rerun = self.active_wallet_uploads.remove(&wallet_id).unwrap_or(false);
 
-        if let Some(error_message) = error_message {
-            if deferred {
-                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
+        match outcome {
+            WalletUploadOutcome::Uploaded => self.reset_wallet_upload_retry_count(&wallet_id),
+
+            // no timer and no follow-up: the write lane wakes the scheduler when the pause ends,
+            // and a wake that arrived during this upload was coalesced into it
+            WalletUploadOutcome::Paused(reason) => {
+                info!("Cloud backup upload paused for wallet_id={wallet_id}: {reason:?}");
+                if rerun {
+                    let addr = self.addr();
+                    send!(addr.run_wallet_upload(wallet_id));
+                }
+                return;
+            }
+
+            WalletUploadOutcome::Deferred(message) => {
+                info!("Cloud backup upload deferred for wallet_id={wallet_id}: {message}");
                 manager.refresh_pending_upload_verification_state();
                 let delay = self.next_wallet_upload_retry_delay(&wallet_id);
                 self.schedule_wallet_upload_after(wallet_id, delay);
                 return;
             }
 
-            if authorization_required {
-                warn!(
-                    "Cloud backup upload paused until authorization is restored: {error_message}"
-                );
+            WalletUploadOutcome::AuthorizationRequired(message) => {
+                warn!("Cloud backup upload paused until authorization is restored: {message}");
                 self.reset_wallet_upload_retry_count(&wallet_id);
                 manager.refresh_sync_health();
                 return;
             }
 
-            error!("Cloud backup upload failed: {error_message}");
-        } else if succeeded {
-            self.reset_wallet_upload_retry_count(&wallet_id);
+            WalletUploadOutcome::Failed(message) => {
+                error!("Cloud backup upload failed: {message}");
+            }
         }
 
         manager.refresh_sync_health();
@@ -311,9 +348,6 @@ impl CloudBackupUploadWorker {
 
         let addr = self.addr();
         let manager = self.manager();
-        if manager.as_ref().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
-            return Produces::ok(());
-        }
 
         for sync_state in states {
             let wallet_id = match sync_state.record_key() {
@@ -359,10 +393,8 @@ impl CloudBackupUploadWorker {
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        if manager.cloud_backup_writes_blocked() {
-            return Produces::ok(());
-        }
 
+        // the loop asks the write lane before each pass, so a paused lane stops it right away
         self.spawn_pending_upload_verification_loop_task(manager);
 
         Produces::ok(())
@@ -378,20 +410,25 @@ impl CloudBackupUploadWorker {
 
     pub(crate) async fn pending_upload_verifier_finished(
         &mut self,
-        blocked_on_authorization: bool,
+        stop: VerifierStop,
     ) -> ActorResult<()> {
         self.pending_upload_verifier_running = false;
-        self.pending_upload_verifier_blocked_on_authorization = blocked_on_authorization;
+        self.pending_upload_verifier_blocked_on_authorization =
+            stop == VerifierStop::BlockedOnAuthorization;
 
-        if blocked_on_authorization {
-            info!("Pending upload verification: paused until cloud authorization is restored");
-            return Produces::ok(());
+        match stop {
+            VerifierStop::BlockedOnAuthorization => {
+                info!("Pending upload verification: paused until cloud authorization is restored");
+                return Produces::ok(());
+            }
+            VerifierStop::WritesPaused => {
+                info!("Pending upload verification: paused until cloud backup writes run again");
+                return Produces::ok(());
+            }
+            VerifierStop::Idle => {}
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        if manager.cloud_backup_writes_blocked() {
-            return Produces::ok(());
-        }
 
         if manager.has_pending_cloud_upload_verification() {
             self.spawn_pending_upload_verification_loop_task(manager);
@@ -457,7 +494,7 @@ mod tests {
             &mut self,
             wallet_id: WalletId,
         ) -> ActorResult<()> {
-            if !self.active_wallet_uploads.insert(wallet_id.clone()) {
+            if !self.begin_wallet_upload(&wallet_id) {
                 return Produces::ok(());
             }
 
@@ -466,32 +503,23 @@ mod tests {
                 return Produces::ok(());
             };
 
-            let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
-            let deferred = matches!(
-                upload_result,
-                Err(crate::manager::cloud_backup_manager::CloudBackupError::Deferred(_))
-            );
-            let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
-                matches!(
-                    crate::manager::cloud_backup_manager::CloudStorageIssue::from(error),
-                    crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
-                )
-            });
-            let error_message = upload_result.err().map(|error| error.to_string());
-            self.finish_wallet_upload(
-                &manager,
-                wallet_id,
-                error_message.is_none(),
-                error_message,
-                deferred,
-                authorization_required,
-            );
+            let outcome =
+                WalletUploadOutcome::from(manager.do_upload_wallet_if_dirty(&wallet_id).await);
+            self.finish_wallet_upload(&manager, wallet_id, outcome);
             Produces::ok(())
+        }
+
+        /// How many backoff retries the worker armed for the wallet since its last success
+        pub(crate) async fn wallet_upload_retry_count_for_test(
+            &mut self,
+            wallet_id: WalletId,
+        ) -> ActorResult<u32> {
+            Produces::ok(self.wallet_upload_retry_counts.get(&wallet_id).copied().unwrap_or(0))
         }
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
+    async fn pending_upload_verifier_paused_by_the_lane_waits_for_its_wake() {
         let _guard = async_test_lock().lock().await;
         ensure_cloud_backup_test_tokio_runtime();
         let globals = test_globals();
@@ -540,7 +568,9 @@ mod tests {
         let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
         worker.pending_upload_verifier_running = true;
 
-        worker.pending_upload_verifier_finished(false).await.unwrap();
+        // pending evidence is still stored, but a loop the lane paused is restarted by the lane's
+        // wake, not respawned here
+        worker.pending_upload_verifier_finished(VerifierStop::WritesPaused).await.unwrap();
 
         assert!(!worker.pending_upload_verifier_running);
     }

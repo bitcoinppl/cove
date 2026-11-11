@@ -537,3 +537,44 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
     );
     assert!(current_disable_generation().is_none());
 }
+
+/// Turn Off's drain and namespace delete are lane commands: while an upload is the write in
+/// flight, the disable neither commits nor deletes, and it finishes once the upload returns
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_waits_for_the_write_in_flight_before_it_commits_and_deletes() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let (upload_gate, upload) =
+        hold_wallet_upload_in_flight(&manager, globals, metadata.id.clone()).await;
+
+    call!(manager.supervisor.start_disable_operation()).await.unwrap();
+    wait_for_queued_lane_write(&manager).await;
+
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Configured(_)
+    ));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+
+    upload_gate.release();
+    upload.await.unwrap().unwrap();
+    wait_for_test_condition(
+        Duration::from_secs(5),
+        "the disable finishes after the upload",
+        || manager.projected_exclusive_operation().is_none(),
+    )
+    .await;
+
+    assert!(!globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+}

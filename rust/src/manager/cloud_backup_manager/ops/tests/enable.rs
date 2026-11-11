@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
@@ -127,16 +126,12 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             preparation.recovered_passkey_metadata(),
         )
         .unwrap();
-    let claim = CloudBackupExclusiveOperationClaim::new(
-        CloudBackupExclusiveOperation::Enable,
-        operation_id(42),
-    );
-    manager.project_exclusive_operation_started(claim);
-    let writes = operation_write_client_for_test(&manager, claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     let error = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap_err();
     let progress = manager.model_snapshot().progress.unwrap();
     assert_eq!((progress.completed, progress.total), (0, 1));
-    manager.project_exclusive_operation_finished(claim);
+    finish_operation_for_test(&manager, claim).await;
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(
         journal.phase(),
@@ -176,16 +171,13 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     let CloudBackupEnablePasskeyPreparation::Ready(ready) = preparation else {
         panic!("expected authenticated passkey material");
     };
-    let claim = CloudBackupExclusiveOperationClaim::new(
-        CloudBackupExclusiveOperation::Enable,
-        operation_id(42),
-    );
-    manager.project_exclusive_operation_started(claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
-    let writes = operation_write_client_for_test(&manager, claim);
 
     let uploaded = manager.upload_ready_enable_backup(ready, writes).await.unwrap();
     let progress = manager.model_snapshot().progress.unwrap();
+    finish_operation_for_test(&manager, claim).await;
 
     assert_eq!(uploaded.uploaded_wallets.len(), 2);
     assert_eq!((progress.completed, progress.total), (3, 3));
@@ -241,14 +233,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         PendingEnableNamespaceOwnership::RecoveredExisting
     );
     assert!(matches!(staged_journal.phase(), PendingEnableJournalPhase::PasskeyRegistered(_)));
-    let claim = CloudBackupExclusiveOperationClaim::new(
-        CloudBackupExclusiveOperation::Enable,
-        operation_id(42),
-    );
-    manager.project_exclusive_operation_started(claim);
-    let writes = operation_write_client_for_test(&manager, claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     let completion = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap();
-    manager.project_exclusive_operation_finished(claim);
+    finish_operation_for_test(&manager, claim).await;
     globals.keychain.fail_save_at(7);
     let error = manager
         .pending_enable

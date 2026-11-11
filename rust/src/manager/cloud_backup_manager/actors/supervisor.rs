@@ -22,8 +22,8 @@ use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupC
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNamespaceCommit};
 use super::uploads::CloudBackupUploadWorker;
 use super::write::{
-    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteBlocker,
-    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
+    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
+    CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -69,7 +69,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
     CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation,
+    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
     EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
@@ -89,9 +89,11 @@ mod dispatch;
 mod enable;
 mod lifecycle_results;
 mod other_backups;
+mod owned_runtime;
 mod restore_all;
 mod runtime;
 
+use owned_runtime::OwnedRuntime;
 use runtime::{Effect, IdleFacts, ResetStart, RestoreRun, Runtime};
 mod undecryptable_wallets;
 mod verification;
@@ -227,20 +229,12 @@ fn verification_needs_connectivity_retry(
         && should_retry_connectivity_failure(manager.connection_status())
 }
 
-/// Pending disable state held while the write lane drains before namespace delete
-#[derive(Debug)]
-struct PendingDisableWriteDrain {
-    claim: CloudBackupExclusiveOperationClaim,
-    blocker: CloudBackupWriteBlocker,
-    attempt: crate::manager::cloud_backup_manager::ops::DisableAttempt,
-}
-
 /// Which local wallet set a verification checked
 ///
 /// Process-local, like `OperationId`: verification evidence is only valid for the wallet set it
 /// read, and a wallet change that lands while a verification runs makes that evidence stale
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct WalletSetGeneration(u64);
+pub(crate) struct WalletSetGeneration(u64);
 
 impl WalletSetGeneration {
     fn next(self) -> Self {
@@ -270,15 +264,14 @@ pub(crate) struct CloudBackupSupervisor {
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
     write: Addr<CloudBackupWriteSupervisor>,
-    /// The lifecycle body with the running operation nested in it
-    runtime: Runtime,
+    /// The lifecycle body with the running operation nested in it, published to the write lane
+    runtime: OwnedRuntime,
     pending_enable_session: Option<PendingEnableSession>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
-    pending_disable_write_drain: Option<PendingDisableWriteDrain>,
     /// Counts local wallet-set changes this process has seen
     wallet_set: WalletSetGeneration,
     /// The wallet set the running verification read when it started
@@ -350,6 +343,8 @@ impl CloudBackupSupervisor {
             },
         );
 
+        let runtime = OwnedRuntime::new(runtime, cloud_writes.clone(), manager.clone());
+
         Self {
             addr: WeakAddr::default(),
             lifecycle,
@@ -365,7 +360,6 @@ impl CloudBackupSupervisor {
             active_cloud_only_fetch_request: None,
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
-            pending_disable_write_drain: None,
             wallet_set: WalletSetGeneration::default(),
             verification_basis: WalletSetGeneration::default(),
             last_outcome: None,
@@ -428,16 +422,6 @@ impl CloudBackupSupervisor {
         Ok(())
     }
 
-    async fn delete_cloud_backup_namespace_for_operation(
-        write: Addr<CloudBackupWriteSupervisor>,
-        namespace: String,
-        origin: CloudBackupExclusiveOperationClaim,
-    ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::for_operation(write, origin)
-            .delete_namespace(CloudStorage::global_explicit_client(), namespace)
-            .await
-    }
-
     async fn apply_cloud_backup_write_completion_for_operation(
         write: Addr<CloudBackupWriteSupervisor>,
         completion: CloudBackupWriteCompletion,
@@ -455,7 +439,7 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        self.rebase_idle_runtime(manager);
+        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
         let started = if operation == CloudBackupExclusiveOperation::Restore {
             self.runtime.start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
@@ -486,12 +470,7 @@ impl CloudBackupSupervisor {
         }
 
         let to = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
-        let record = RustCloudBackupManager::load_persisted_state();
-        let facts = IdleFacts {
-            record: &record,
-            pending_enable_recovery: manager.state.read().shows_pending_enable_recovery(),
-        };
-        if let Err(unstartable) = self.runtime.hand_off(from, to, facts) {
+        if let Err(unstartable) = self.runtime.hand_off(from, to) {
             warn!("Cloud Backup could not hand off to {unstartable:?}");
             return None;
         }
@@ -502,13 +481,12 @@ impl CloudBackupSupervisor {
 
     fn begin_restore_all_exclusive_operation(
         &mut self,
-        manager: &RustCloudBackupManager,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
         if self.runtime.is_some() {
             return None;
         }
 
-        self.rebase_idle_runtime(manager);
+        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
             OperationId::next(),
@@ -530,7 +508,7 @@ impl CloudBackupSupervisor {
     pub async fn project_runtime(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.rebase_idle_runtime(&manager);
+        self.rebase_idle_runtime();
         let exported = self.runtime.exported();
         if let Some(status) = exported.status {
             manager.reconcile_runtime_status(status);
@@ -546,12 +524,8 @@ impl CloudBackupSupervisor {
     ///
     /// The supervisor holds the only writer, so the record is the owner's state, not a mirror;
     /// a running operation holds its body and is not moved
-    fn rebase_idle_runtime(&mut self, manager: &RustCloudBackupManager) {
-        let record = RustCloudBackupManager::load_persisted_state();
-        self.runtime.rebase_idle(IdleFacts {
-            record: &record,
-            pending_enable_recovery: manager.state.read().shows_pending_enable_recovery(),
-        });
+    fn rebase_idle_runtime(&mut self) {
+        self.runtime.rebase_idle();
     }
 
     fn next_request_id(&mut self) -> u64 {
@@ -568,15 +542,11 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
+        // a finished restore configures the backup, and the write lane wakes uploads when the
+        // published policy lets them run
         self.runtime.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
-            if claim.operation() == CloudBackupExclusiveOperation::Restore
-                && let Err(error) =
-                    call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
-            {
-                warn!("Failed to resume wallet uploads after restore: {error}");
-            }
         }
 
         Produces::ok(())
@@ -1282,6 +1252,41 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    /// Restarts background work after the cloud may be reachable again, as the runtime allows
+    ///
+    /// A committed Turn Off that nothing is finishing resumes; any other background work
+    /// restarts only while the published policy runs ordinary writes
+    pub async fn cloud_reachable(&mut self, cause: CloudReachable) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        self.rebase_idle_runtime();
+        if matches!(*self.runtime, Runtime::FinishingDisable { op: None, .. }) {
+            if cause != CloudReachable::PendingVerification {
+                manager.resume_persisted_disable_if_needed();
+            }
+            return Produces::ok(());
+        }
+
+        if !self.runtime.published_policy().policy.runs_ordinary() {
+            debug!("Cloud Backup left background work paused after {cause:?}");
+            return Produces::ok(());
+        }
+
+        manager.restart_background_work(cause);
+        Produces::ok(())
+    }
+
+    /// The write lane runs ordinary writes again, under this or a new configuration
+    ///
+    /// Paused uploads kept their rows Dirty with no retry timer, so one scheduler pass picks
+    /// every one of them up, and the pending upload verifier restarts with them. Both are sent,
+    /// not awaited, so this handler never waits on a worker
+    pub async fn ordinary_writes_resumed(&mut self) -> ActorResult<()> {
+        send!(self.uploads.resume_wallet_uploads_from_persisted_state());
+        send!(self.uploads.ensure_pending_upload_verification_loop());
+        Produces::ok(())
+    }
+
     pub async fn resume_wallet_uploads_from_persisted_state(&mut self) -> ActorResult<()> {
         call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await?;
         Produces::ok(())
@@ -1465,7 +1470,6 @@ impl CloudBackupSupervisor {
 
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
-        self.pending_disable_write_drain = None;
         self.clear_upload_runtime_state().await?;
         Produces::ok(Ok(receiver))
     }
@@ -1474,7 +1478,7 @@ impl CloudBackupSupervisor {
     pub async fn clear_local_state_for_reset(
         &mut self,
     ) -> ActorResult<Result<(), CloudBackupError>> {
-        if !matches!(self.runtime, Runtime::Resetting { held: None, .. }) {
+        if !matches!(*self.runtime, Runtime::Resetting { held: None, .. }) {
             return Produces::ok(Err(CloudBackupError::Internal(
                 "cloud backup local state can only be cleared by a ready reset".into(),
             )));
@@ -1498,7 +1502,7 @@ impl CloudBackupSupervisor {
     /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
     /// here so an idle body never waits for the next admission to catch up with the wipe
     pub async fn finish_local_reset(&mut self, outcome: LocalResetOutcome) -> ActorResult<()> {
-        if !matches!(self.runtime, Runtime::Resetting { .. }) {
+        if !matches!(*self.runtime, Runtime::Resetting { .. }) {
             return Produces::ok(());
         }
 
@@ -1575,7 +1579,7 @@ pub(crate) mod test_support {
 
         /// The exclusive slot, for harness failure messages only
         pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
-            Produces::ok(format!("{:?}", self.runtime))
+            Produces::ok(format!("{:?}", *self.runtime))
         }
 
         pub async fn run_wallet_upload_inline_for_test(
@@ -1584,6 +1588,14 @@ pub(crate) mod test_support {
         ) -> ActorResult<()> {
             call!(self.uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
             Produces::ok(())
+        }
+
+        pub async fn wallet_upload_retry_count_for_test(
+            &mut self,
+            wallet_id: WalletId,
+        ) -> ActorResult<u32> {
+            let count = call!(self.uploads.wallet_upload_retry_count_for_test(wallet_id)).await?;
+            Produces::ok(count)
         }
 
         pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
@@ -1625,6 +1637,31 @@ pub(crate) mod test_support {
                     .as_ref()
                     .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
             )
+        }
+
+        /// Starts an exclusive operation and hands back its write client, for tests that run the
+        /// operation's body directly
+        pub async fn begin_operation_writes_for_test(
+            &mut self,
+            operation: CloudBackupExclusiveOperation,
+        ) -> ActorResult<(CloudBackupExclusiveOperationClaim, CloudBackupWriteClient)> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            let claim = self
+                .begin_exclusive_operation(&manager, operation)
+                .expect("begin exclusive operation");
+
+            Produces::ok((claim, CloudBackupWriteClient::for_operation(self.write.clone(), claim)))
+        }
+
+        /// Ends any operation a previous test left running and rebases on the reset record
+        pub async fn reset_runtime_for_test(&mut self) -> ActorResult<()> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            if let Some(claim) = self.runtime.take_claim() {
+                manager.project_exclusive_operation_finished(claim);
+            }
+
+            self.rebase_idle_runtime();
+            Produces::ok(())
         }
 
         pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {

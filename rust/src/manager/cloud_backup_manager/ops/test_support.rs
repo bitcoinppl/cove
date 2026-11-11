@@ -32,14 +32,16 @@ use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
-    PersistedDisablingCloudBackup, PersistedPasskeyState,
+    PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
-    CloudBackupKeychain, CloudBackupListedDetail, CloudBackupStore, CloudBackupWalletItem,
-    CloudOnlyFetch, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    actors::restore::RestoreOperation, master_key_wrapper_revision_hash,
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupKeychain,
+    CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStore, CloudBackupWalletItem,
+    CloudBackupWriteClient, CloudOnlyFetch, PendingEnableJournal,
+    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
+    PendingUploadVerificationState, actors::restore::RestoreOperation,
+    master_key_wrapper_revision_hash,
 };
 
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
@@ -167,6 +169,7 @@ struct MockCloudState {
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     delete_namespace_attempts: usize,
     next_delete_namespace_gate: Option<Arc<MockCloudDownloadGate>>,
+    next_wallet_upload_gate: Option<Arc<MockCloudDownloadGate>>,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     list_wallet_files_snapshot_attempts: usize,
@@ -176,7 +179,6 @@ struct MockCloudState {
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
     dirty_wallet_on_next_backup_check: Option<WalletId>,
-    disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
     download_requests: Vec<MockCloudDownloadRequest>,
     uploads: Vec<MockCloudUpload>,
 }
@@ -430,6 +432,13 @@ impl MockCloudStorage {
         gate
     }
 
+    /// Holds the next wallet upload until the test releases it
+    pub(crate) fn gate_next_wallet_upload(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().next_wallet_upload_gate = Some(gate.clone());
+        gate
+    }
+
     pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
         self.state.lock().list_wallet_files_non_interactive_error = None;
     }
@@ -630,13 +639,6 @@ impl MockCloudStorage {
     pub(crate) fn dirty_wallet_on_next_backup_check(&self, wallet_id: WalletId) {
         self.state.lock().dirty_wallet_on_next_backup_check = Some(wallet_id);
     }
-
-    pub(crate) fn persist_disabling_on_next_upload(
-        &self,
-        disabling: PersistedDisablingCloudBackup,
-    ) {
-        self.state.lock().disabling_on_next_upload = Some(disabling);
-    }
 }
 
 #[async_trait::async_trait]
@@ -672,7 +674,12 @@ impl CloudStorageAccess for MockCloudStorage {
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let (dirty_wallet, changed_wallet, disabling) = {
+        let gate = self.state.lock().next_wallet_upload_gate.take();
+        if let Some(gate) = gate {
+            gate.block().await;
+        }
+
+        let (dirty_wallet, changed_wallet) = {
             let mut state = self.state.lock();
             state.wallet_backup_upload_attempts += 1;
             if let Some(error) = state.next_upload_wallet_backup_error.take() {
@@ -692,7 +699,6 @@ impl CloudStorageAccess for MockCloudStorage {
 
             let dirty_wallet = state.dirty_wallet_on_next_upload.take();
             let changed_wallet = state.changed_wallet_on_next_upload.take();
-            let disabling = state.disabling_on_next_upload.take();
             state.uploads.push(MockCloudUpload {
                 namespace: namespace.clone(),
                 record_id: record_id.clone(),
@@ -703,7 +709,7 @@ impl CloudStorageAccess for MockCloudStorage {
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
             state.wallet_backup_success_count += 1;
-            (dirty_wallet, changed_wallet, disabling)
+            (dirty_wallet, changed_wallet)
         };
 
         if let Some(wallet_id) = dirty_wallet {
@@ -711,12 +717,6 @@ impl CloudStorageAccess for MockCloudStorage {
         }
         if let Some(wallet_id) = changed_wallet {
             mutate_wallet_and_persist_dirty(wallet_id);
-        }
-        if let Some(disabling) = disabling {
-            Database::global()
-                .cloud_backup_state
-                .set(&PersistedCloudBackupState::disabling_transition(disabling))
-                .unwrap();
         }
         Ok(())
     }
@@ -1343,7 +1343,7 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
         .unwrap();
 }
 
-fn mutate_wallet_and_persist_dirty(wallet_id: WalletId) {
+pub(crate) fn mutate_wallet_and_persist_dirty(wallet_id: WalletId) {
     let mut wallet = CloudBackupStore::global()
         .all_wallets()
         .unwrap()
@@ -1430,7 +1430,10 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     let supervisor = manager.supervisor.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let _task = cove_tokio::task::spawn(async move {
-        let result = call!(supervisor.clear_upload_runtime_state()).await;
+        let result = match call!(supervisor.clear_upload_runtime_state()).await {
+            Ok(()) => call!(supervisor.reset_runtime_for_test()).await,
+            Err(error) => Err(error),
+        };
         sender.send(result).expect("send clear upload runtime state result");
     });
 
@@ -1601,6 +1604,108 @@ pub(crate) fn enable_cloud_backup_without_reset(
     Database::global().cloud_backup_state.set(&state).unwrap();
     manager.reconcile_persisted_state(&state);
     manager.sync_persisted_state();
+
+    // the supervisor publishes the Configured write policy while it projects the record, so
+    // a write a test starts next is decided against it
+    block_on_supervisor_checkpoint(manager);
+}
+
+/// Blocks sync test code until the supervisor handled every message sent before this call
+pub(crate) fn block_on_supervisor_checkpoint(manager: &RustCloudBackupManager) {
+    let supervisor = manager.supervisor.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let _task = cove_tokio::task::spawn(async move {
+        let result = call!(supervisor.harness_checkpoint()).await;
+        sender.send(result).expect("send supervisor checkpoint result");
+    });
+
+    receiver.recv().expect("receive supervisor checkpoint result").expect("supervisor checkpoint");
+}
+
+/// Starts an upload of the dirty wallet and holds it at the provider, so it stays the lane's
+/// write in flight until the test releases the returned gate
+pub(crate) async fn hold_wallet_upload_in_flight(
+    manager: &Arc<RustCloudBackupManager>,
+    globals: &TestGlobals,
+    wallet_id: WalletId,
+) -> (Arc<MockCloudDownloadGate>, tokio::task::JoinHandle<Result<(), CloudBackupError>>) {
+    persist_dirty_blob_state(wallet_id.clone());
+    let gate = globals.cloud.gate_next_wallet_upload();
+    let uploading = manager.clone();
+    let upload = tokio::spawn(async move { uploading.do_upload_wallet_if_dirty(&wallet_id).await });
+    gate.wait_until_blocked().await;
+    (gate, upload)
+}
+
+/// Waits until a command queues behind the lane's write in flight
+pub(crate) async fn wait_for_queued_lane_write(manager: &RustCloudBackupManager) {
+    let deadline = tokio::time::Instant::now() + loaded_host_wait(Duration::from_secs(5));
+    loop {
+        let queued = call!(manager.cloud_writes.queued_writes_for_test()).await.expect("lane");
+        if queued > 0 {
+            return;
+        }
+
+        assert!(tokio::time::Instant::now() < deadline, "no write queued behind the held one");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Runs Recover Other Backups under its own operation claim, the way the supervisor does
+pub(crate) async fn recover_other_backups_for_test(
+    manager: &RustCloudBackupManager,
+) -> Result<CloudBackupRestoreReport, CloudBackupError> {
+    let (claim, writes) = begin_operation_writes_for_test(
+        manager,
+        CloudBackupExclusiveOperation::RecoverOtherBackups,
+    )
+    .await;
+
+    let result = manager.do_recover_other_backups(&writes).await;
+    finish_operation_for_test(manager, claim).await;
+    result
+}
+
+/// Runs Delete Other Backups under its own operation claim, the way the supervisor does
+pub(crate) async fn delete_other_backups_for_test(
+    manager: &RustCloudBackupManager,
+) -> Result<(), CloudBackupError> {
+    let (claim, writes) =
+        begin_operation_writes_for_test(manager, CloudBackupExclusiveOperation::DeleteOtherBackups)
+            .await;
+
+    let result = manager.do_delete_other_backups(&writes).await;
+    finish_operation_for_test(manager, claim).await;
+    result
+}
+
+/// Begins an exclusive operation on the supervisor and hands back its write client
+pub(crate) async fn begin_operation_writes_for_test(
+    manager: &RustCloudBackupManager,
+    operation: CloudBackupExclusiveOperation,
+) -> (CloudBackupExclusiveOperationClaim, CloudBackupWriteClient) {
+    call!(manager.supervisor.begin_operation_writes_for_test(operation))
+        .await
+        .expect("begin operation writes")
+}
+
+/// Completes an operation begun with [`begin_operation_writes_for_test`]
+pub(crate) async fn finish_operation_for_test(
+    manager: &RustCloudBackupManager,
+    claim: CloudBackupExclusiveOperationClaim,
+) {
+    call!(manager.supervisor.complete_exclusive_operation(claim))
+        .await
+        .expect("complete exclusive operation");
+}
+
+/// Backs up wallets through a background write ticket, the way the upload worker does
+pub(crate) async fn backup_wallets_for_test(
+    manager: &RustCloudBackupManager,
+    wallets: &[crate::wallet::metadata::WalletMetadata],
+) -> Result<(), CloudBackupError> {
+    let writes = manager.background_writes().await?;
+    manager.do_backup_wallets(&writes, wallets).await
 }
 
 pub(crate) fn persisted_enabled_cloud_backup_state(
@@ -1865,7 +1970,8 @@ pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
 
 /// Runs the pending upload confirmation the way the verifier does, waiting for the settle
 pub(crate) async fn finalize_pending_verification_for_test(manager: &RustCloudBackupManager) {
-    if let Some(settlement) = manager.ready_pending_verification_settlement().await {
+    let basis = call!(manager.supervisor.wallet_set_basis()).await.expect("wallet set basis");
+    if let Some(settlement) = manager.ready_pending_verification_settlement(basis).await {
         call!(manager.supervisor.settle_pending_verification(settlement))
             .await
             .expect("settle pending verification");

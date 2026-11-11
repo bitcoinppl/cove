@@ -29,12 +29,12 @@ mod wallets;
 
 use std::sync::{
     Arc, LazyLock,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, Ordering},
 };
 
 use act_zero::{Addr, call, send};
 use cove_cspp::MasterKeyPromotionStatus;
-use cove_device::cloud_storage::{CloudStorageClient, CloudSyncHealth};
+use cove_device::cloud_storage::CloudSyncHealth;
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
@@ -51,10 +51,9 @@ use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode};
 pub(crate) use self::actors::CloudBackupRestoreEvent;
 use self::actors::supervisor::LocalResetOutcome;
 use self::actors::{
-    CloudBackupSupervisor, CloudBackupUploadedWallet, CloudBackupWalletCountRefresh,
-    CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
-    CloudBackupWriteSupervisor,
+    CloudBackupSupervisor, CloudBackupWriteClient, CloudBackupWriteSupervisor, WriteTicket,
 };
+use self::admission::Rejection;
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupOtherBackupsOutcome,
@@ -206,7 +205,8 @@ pub(crate) fn begin_recovery_cleanup() -> Result<CloudBackupRecoveryCleanupPermi
 {
     let mut ownership = CLOUD_BACKUP_RUNTIME_OWNERSHIP.lock();
     if ownership.manager_initialized || ownership.recovery_cleanup_active {
-        return Err(CloudBackupError::Deferred("cloud backup local writers are not absent".into()));
+        // a precondition of catastrophic cleanup, not a wait: no manager may exist beside it
+        return Err(CloudBackupError::Internal("cloud backup local writers are not absent".into()));
     }
 
     ownership.recovery_cleanup_active = true;
@@ -307,13 +307,21 @@ pub struct RustCloudBackupManager {
     pending_sync_states_unreadable: Arc<AtomicBool>,
 }
 
-static NEXT_LOCAL_RESET_ID: AtomicU64 = AtomicU64::new(0);
+/// Why background work may be able to restart, as reported to the supervisor
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloudReachable {
+    /// The device reconnected
+    Connected,
+    /// The platform reported a cloud storage change
+    StorageChanged,
+    /// The app asked to resume pending upload verification
+    PendingVerification,
+}
 
 /// Proof that Cloud Backup local writers are fenced and drained
 #[derive(Debug)]
 pub(crate) struct CloudBackupResetPermit {
     manager: Arc<RustCloudBackupManager>,
-    blocker: CloudBackupWriteBlocker,
     previous_status: CloudBackupStatus,
     resume_allowed: bool,
     completed: bool,
@@ -346,9 +354,6 @@ impl CloudBackupResetPermit {
             .await
             .map_err(CloudBackupError::internal)?;
         self.manager.apply_local_reset_projection();
-        call!(self.manager.cloud_writes.unblock(self.blocker))
-            .await
-            .map_err(CloudBackupError::internal)?;
         self.manager.local_reset_in_progress.store(false, Ordering::Release);
         self.completed = true;
         Ok(())
@@ -357,10 +362,9 @@ impl CloudBackupResetPermit {
     pub(crate) async fn resume_after_failed_reset(
         mut self,
     ) -> Result<CloudBackupResetRecovery, CloudBackupError> {
+        // ending the reset publishes the stored record's policy, and the write lane wakes
+        // uploads if it runs them
         call!(self.manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
-            .await
-            .map_err(CloudBackupError::internal)?;
-        call!(self.manager.cloud_writes.unblock(self.blocker))
             .await
             .map_err(CloudBackupError::internal)?;
         if !self.resume_allowed {
@@ -371,12 +375,6 @@ impl CloudBackupResetPermit {
             return Ok(CloudBackupResetRecovery::SafelyDisabled);
         }
 
-        call!(self.manager.supervisor.resume_wallet_uploads_from_persisted_state())
-            .await
-            .map_err(CloudBackupError::internal)?;
-        call!(self.manager.supervisor.ensure_pending_upload_verification_loop())
-            .await
-            .map_err(CloudBackupError::internal)?;
         self.manager.reconcile_runtime_status(self.previous_status.clone());
         self.manager.local_reset_in_progress.store(false, Ordering::Release);
         self.completed = true;
@@ -391,21 +389,14 @@ impl Drop for CloudBackupResetPermit {
         }
 
         let manager = self.manager.clone();
-        let blocker = self.blocker;
         let status = self.previous_status.clone();
         let resume_allowed = self.resume_allowed;
         cove_tokio::task::spawn(async move {
-            let _ =
-                call!(manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await;
-            let _ = call!(manager.cloud_writes.unblock(blocker)).await;
-            let resumed = if resume_allowed {
-                call!(manager.supervisor.resume_wallet_uploads_from_persisted_state()).await.is_ok()
-                    && call!(manager.supervisor.ensure_pending_upload_verification_loop())
-                        .await
-                        .is_ok()
-            } else {
-                false
-            };
+            let resumed =
+                call!(manager.supervisor.finish_local_reset(LocalResetOutcome::Abandoned))
+                    .await
+                    .is_ok()
+                    && resume_allowed;
             manager.reconcile_runtime_status(if resumed {
                 status
             } else {
@@ -417,21 +408,10 @@ impl Drop for CloudBackupResetPermit {
 }
 
 impl RustCloudBackupManager {
-    async fn recover_failed_local_reset_preparation(
-        &self,
-        previous_status: CloudBackupStatus,
-        blocker: Option<CloudBackupWriteBlocker>,
-    ) {
-        let _ = call!(self.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await;
-        let unblocked = match blocker {
-            Some(blocker) => call!(self.cloud_writes.unblock(blocker)).await.is_ok(),
-            None => true,
-        };
-        let uploads_resumed =
-            call!(self.supervisor.resume_wallet_uploads_from_persisted_state()).await.is_ok();
-        let verification_resumed =
-            call!(self.supervisor.ensure_pending_upload_verification_loop()).await.is_ok();
-        self.reconcile_runtime_status(if unblocked && uploads_resumed && verification_resumed {
+    async fn recover_failed_local_reset_preparation(&self, previous_status: CloudBackupStatus) {
+        let finished =
+            call!(self.supervisor.finish_local_reset(LocalResetOutcome::Abandoned)).await.is_ok();
+        self.reconcile_runtime_status(if finished {
             previous_status
         } else {
             CloudBackupStatus::Disabled
@@ -577,69 +557,20 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn cloud_backup_writes_blocked(&self) -> bool {
-        if self.local_reset_in_progress.load(Ordering::Acquire) {
-            return true;
-        }
-
-        let disable_active = self
-            .projected_exclusive_operation()
-            .is_some_and(|claim| claim.operation() == CloudBackupExclusiveOperation::Disable);
-
-        if disable_active {
-            return true;
-        }
-
-        // keep this DB read so restarts preserve destructive-operation write fences
-        let persisted = Self::load_persisted_state();
-        persisted.is_disabling() || persisted.drive_account_switch().is_some()
-    }
-
-    pub(crate) fn ensure_cloud_backup_writes_allowed(&self) -> Result<(), CloudBackupError> {
-        if self.cloud_backup_writes_blocked() {
-            return Err(CloudBackupError::Deferred(
-                "cloud backup writes are paused during an exclusive operation".into(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    pub(crate) async fn upload_cloud_wallet_backup(
+    /// A write client for background work under the configuration the write lane runs now
+    ///
+    /// Call it before reading the namespace or anything else the configuration decides: a
+    /// change after this read leaves the commands with an older generation, which the lane drops
+    pub(crate) async fn background_writes(
         &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        record_id: String,
-        data: Vec<u8>,
-    ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::new(self.cloud_writes.clone())
-            .upload_wallet_backup(cloud, namespace, record_id, data)
-            .await
+    ) -> Result<CloudBackupWriteClient, CloudBackupError> {
+        let ticket = self.write_ticket().await?;
+        Ok(CloudBackupWriteClient::background(self.cloud_writes.clone(), ticket.generation))
     }
 
-    pub(crate) async fn upload_cloud_wallet_backup_with_completion(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        record_id: String,
-        data: Vec<u8>,
-        completion: CloudBackupWriteCompletion,
-    ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::new(self.cloud_writes.clone())
-            .upload_wallet_backup_with_completion(cloud, namespace, record_id, data, completion)
-            .await
-    }
-
-    pub(crate) async fn complete_cloud_wallet_upload_batch(
-        &self,
-        cloud: CloudStorageClient,
-        namespace_id: String,
-        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
-        count_refresh: CloudBackupWalletCountRefresh,
-    ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::new(self.cloud_writes.clone())
-            .complete_uploaded_wallet_batch(cloud, namespace_id, uploaded_wallets, count_refresh)
-            .await
+    /// The write lane's current generation and its decision for an ordinary write
+    pub(crate) async fn write_ticket(&self) -> Result<WriteTicket, CloudBackupError> {
+        call!(self.cloud_writes.ticket()).await.map_err(CloudBackupError::internal)
     }
 
     pub(crate) fn persistable_cloud_storage_issue(
@@ -730,8 +661,16 @@ impl RustCloudBackupManager {
             return;
         }
 
-        if self.cloud_backup_writes_blocked() {
-            self.resume_persisted_disable_if_needed();
+        send!(self.supervisor.cloud_reachable(CloudReachable::Connected));
+    }
+
+    /// Restarts the background work `cause` calls for; the supervisor calls this only while
+    /// its published policy runs ordinary writes
+    pub(crate) fn restart_background_work(&self, cause: CloudReachable) {
+        if cause == CloudReachable::PendingVerification {
+            self.sync_persisted_state();
+            send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
+            self.start_pending_upload_verification_loop();
             return;
         }
 
@@ -739,7 +678,11 @@ impl RustCloudBackupManager {
         send!(self.supervisor.wake_pending_upload_verifier());
         send!(self.supervisor.provider_inventory_did_change());
         self.start_pending_upload_verification_loop();
-        self.resume_failed_connectivity_verification();
+        match cause {
+            CloudReachable::Connected => self.resume_failed_connectivity_verification(),
+            CloudReachable::StorageChanged => self.refresh_sync_health(),
+            CloudReachable::PendingVerification => {}
+        }
     }
 
     fn resume_failed_connectivity_verification(&self) {
@@ -877,9 +820,7 @@ impl RustCloudBackupManager {
         self: &Arc<Self>,
     ) -> Result<CloudBackupResetPermit, CloudBackupError> {
         if self.local_reset_in_progress.swap(true, Ordering::AcqRel) {
-            return Err(CloudBackupError::Deferred(
-                "cloud backup local reset is already running".into(),
-            ));
+            return Err(CloudBackupError::NotAdmitted(Rejection::Resetting));
         }
 
         let previous_status = self.current_status();
@@ -887,12 +828,10 @@ impl RustCloudBackupManager {
             Ok(Ok(effects_settled)) => effects_settled,
             Ok(Err(rejection)) => {
                 self.local_reset_in_progress.store(false, Ordering::Release);
-                return Err(CloudBackupError::Deferred(format!(
-                    "cloud backup local reset was not admitted: {rejection:?}"
-                )));
+                return Err(CloudBackupError::NotAdmitted(rejection));
             }
             Err(error) => {
-                self.recover_failed_local_reset_preparation(previous_status, None).await;
+                self.recover_failed_local_reset_preparation(previous_status).await;
                 return Err(CloudBackupError::internal(error));
             }
         };
@@ -900,31 +839,30 @@ impl RustCloudBackupManager {
         // the supervisor answers once an effect that was in flight reports; waiting here, not in
         // its handler, keeps its mailbox free to receive that completion
         if effects_settled.await.is_err() {
-            self.recover_failed_local_reset_preparation(previous_status, None).await;
+            self.recover_failed_local_reset_preparation(previous_status).await;
             return Err(CloudBackupError::Internal(
                 "cloud backup reset stopped before its effects reported".into(),
             ));
         }
 
-        let reset_id = NEXT_LOCAL_RESET_ID.fetch_add(1, Ordering::Relaxed);
-        let blocker = CloudBackupWriteBlocker::LocalReset { reset_id };
-        let receiver = match call!(self.cloud_writes.block_until_drained_receiver(blocker)).await {
-            Ok(receiver) => receiver,
+        // the supervisor published the resetting policy before it answered, so the lane already
+        // pauses every queued command; this waits out the write that was in flight
+        let idle = match call!(self.cloud_writes.when_idle()).await {
+            Ok(idle) => idle,
             Err(error) => {
-                self.recover_failed_local_reset_preparation(previous_status, Some(blocker)).await;
+                self.recover_failed_local_reset_preparation(previous_status).await;
                 return Err(CloudBackupError::internal(error));
             }
         };
-        if receiver.await.is_err() {
-            self.recover_failed_local_reset_preparation(previous_status, Some(blocker)).await;
+        if idle.await.is_err() {
+            self.recover_failed_local_reset_preparation(previous_status).await;
             return Err(CloudBackupError::Internal(
-                "cloud backup write fence stopped before draining".into(),
+                "cloud backup write lane stopped before going idle".into(),
             ));
         }
 
         Ok(CloudBackupResetPermit {
             manager: self.clone(),
-            blocker,
             previous_status,
             resume_allowed: true,
             completed: false,
@@ -1113,6 +1051,7 @@ mod manager_test_support {
             self.reconcile_runtime_status(CloudBackupStatus::Disabled);
             self.refresh_sync_health();
             send!(self.supervisor.clear_upload_runtime_state());
+            send!(self.supervisor.reset_runtime_for_test());
         }
     }
 }
@@ -1156,16 +1095,6 @@ impl RustCloudBackupManager {
     /// even before the reconciler has delivered its first message
     pub fn sync_persisted_state(&self) {
         let db_state = Self::load_persisted_state();
-        if let Some(disabling) = db_state.disabling() {
-            send!(self.cloud_writes.block(CloudBackupWriteBlocker::Disabling {
-                operation_id: disabling.disable_generation,
-            }));
-        }
-        if let Some(account_switch) = db_state.drive_account_switch() {
-            send!(self.cloud_writes.block(CloudBackupWriteBlocker::DriveAccountSwitch {
-                transition_id: account_switch.transition_id,
-            }));
-        }
         if !self.has_in_flight_operation() {
             self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
             self.reconcile_persisted_restore_all(&db_state);
@@ -1186,16 +1115,7 @@ impl RustCloudBackupManager {
     }
 
     pub fn cloud_storage_did_change(&self) {
-        if self.cloud_backup_writes_blocked() {
-            self.resume_persisted_disable_if_needed();
-            return;
-        }
-
-        send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
-        send!(self.supervisor.wake_pending_upload_verifier());
-        send!(self.supervisor.provider_inventory_did_change());
-        self.start_pending_upload_verification_loop();
-        self.refresh_sync_health();
+        send!(self.supervisor.cloud_reachable(CloudReachable::StorageChanged));
     }
 
     /// Claim the exclusive operation and return after all prior cloud writes drain
@@ -1301,13 +1221,7 @@ impl RustCloudBackupManager {
     }
 
     pub fn resume_pending_cloud_upload_verification(&self) {
-        if self.cloud_backup_writes_blocked() {
-            return;
-        }
-
-        self.sync_persisted_state();
-        send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
-        self.start_pending_upload_verification_loop();
+        send!(self.supervisor.cloud_reachable(CloudReachable::PendingVerification));
     }
 
     /// Background startup health check for cloud backup integrity

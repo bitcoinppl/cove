@@ -396,13 +396,6 @@ async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBa
     supervisor_checkpoint(manager).await;
 }
 
-fn operation_write_client_for_test(
-    manager: &RustCloudBackupManager,
-    claim: CloudBackupExclusiveOperationClaim,
-) -> CloudBackupWriteClient {
-    CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim)
-}
-
 fn global_manager() -> Arc<RustCloudBackupManager> {
     ensure_cloud_backup_test_tokio_runtime();
     CLOUD_BACKUP_MANAGER.clone()
