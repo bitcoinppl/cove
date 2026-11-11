@@ -283,6 +283,11 @@ mod tests {
 
     #[test]
     fn manual_backup_allows_missing_descriptor_mirrors() {
+        // the descriptor lookup opens a persistence operation on the process-global lifecycle
+        // coordinator, which reports busy while another cargo test holds it for a full wipe; those
+        // tests hold this lock for the length of the wipe
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+
         crate::test_support::init_test_keychain();
         let metadata = crate::wallet::metadata::WalletMetadata::preview_new();
 
