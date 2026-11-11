@@ -246,8 +246,8 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         control.waitForAppState("Settings should say Turn Off didn't finish") { $0.settingsRow == "turnOffIncomplete" }
 
         robot.openCloudBackupDetail(rowTitle: "Cloud Backup Is Being Turned Off")
-        XCTAssertTrue(app.descendants(matching: .any)["cloudBackup.finishingDisable"].waitForExistence(timeout: 10))
-        let tryAgain = app.buttons["cloudBackup.action.resumeDisable"]
+        XCTAssertTrue(app.descendants(matching: .any)[CloudBackupUIIdentifier.finishingDisable].waitForExistence(timeout: 10))
+        let tryAgain = app.buttons[CloudBackupUIIdentifier.action("resumeDisable")]
         robot.scrollToHittable(tryAgain)
         try control.stopFailingNamespaceDeletes()
         tryAgain.tap()
@@ -263,7 +263,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         let control = try restoreWalletOneAndOpenDetail()
         try control.answerNextPasskeyAssertions([.userCancelled])
 
-        let verify = app.buttons["cloudBackup.action.verify"]
+        let verify = app.buttons[CloudBackupUIIdentifier.action("verify")]
         robot.scrollToHittable(verify)
         verify.tap()
         control.waitForAppState("a dismissed passkey prompt should leave verification not completed") {
@@ -279,9 +279,12 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         XCTAssertEqual(passkeyCalls(control.state), passkeyCallsBeforeRelaunch, "the relaunch asked for a passkey")
     }
 
-    /// A running row operation makes Turn Off unavailable with its reason; once it finishes, Turn
+    /// A running row restore makes Turn Off unavailable with its reason; once it finishes, Turn
     /// Off is offered again
-    func testRunningRowOperationHoldsTurnOffUntilItFinishes() throws {
+    ///
+    /// A row restore stands in for a row delete, which the host can't hold yet: its wallet delete
+    /// records no call and has no hold point
+    func testRunningRowRestoreHoldsTurnOffUntilItFinishes() throws {
         let control = try restoreWalletOneAndOpenDetail()
         let recordId = Self.notOnDeviceRecordIds[0]
         try control.holdWalletDownload(id: Self.heldDownload, recordId: recordId)
@@ -293,13 +296,13 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
 
         control.assertNextActions("a running restore should hold Turn Off", unavailable: ["turnOff"])
         XCTAssertNotNil(control.appState?.screen.unavailable["turnOff"], "Turn Off is hidden, not unavailable")
-        let caption = app.descendants(matching: .any)["cloudBackup.action.turnOff.unavailable"]
+        let caption = app.descendants(matching: .any)[CloudBackupUIIdentifier.unavailable("turnOff")]
         robot.scrollToHittable(caption)
         XCTAssertTrue(caption.exists, "unavailable Turn Off shows no reason")
 
         control.release(Self.heldDownload)
         control.assertNextActions("Turn Off should come back once the restore finishes", available: ["turnOff"], timeout: 60)
-        let turnOff = app.buttons["cloudBackup.action.turnOff"]
+        let turnOff = app.buttons[CloudBackupUIIdentifier.action("turnOff")]
         robot.scrollToHittable(turnOff)
         XCTAssertTrue(turnOff.isEnabled, "Turn Off stayed disabled after the restore finished")
     }
@@ -321,10 +324,10 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         control.assertNextActions("the healed backup should offer Turn Off", available: ["turnOff", "dismissHealNotice"])
 
         robot.openCloudBackupDetail(rowTitle: "Cloud Backup Turned On Again")
-        XCTAssertTrue(app.descendants(matching: .any)["cloudBackup.healNotice"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)[CloudBackupUIIdentifier.healNotice].waitForExistence(timeout: 10))
         XCTAssertEqual(passkeyCalls(control.state), passkeyCallsBefore, "healing asked for a passkey")
 
-        let turnOff = app.buttons["cloudBackup.healNotice.turnOff"]
+        let turnOff = app.buttons[CloudBackupUIIdentifier.healNoticeTurnOff]
         robot.scrollToHittable(turnOff)
         turnOff.tap()
         confirmOnce()
@@ -408,7 +411,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
     // MARK: - Steps
 
     private func tapTurnOff(_: CloudBackupHostControl) {
-        let turnOff = app.buttons["cloudBackup.action.turnOff"]
+        let turnOff = app.buttons[CloudBackupUIIdentifier.action("turnOff")]
         robot.scrollToHittable(turnOff)
         XCTAssertTrue(turnOff.isEnabled, "Turn Off is not available")
         turnOff.tap()
