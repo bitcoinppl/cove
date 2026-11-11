@@ -12,10 +12,8 @@ use super::types::{
 };
 
 /// Who a write client writes for, which gives every command it sends its class
-///
-/// It is also the authority a producer's prepared keychain writes carry to the lifecycle owner
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WriteOwner {
+enum WriteOwner {
     /// Background work, read under this configuration generation
     Background(ConfigGeneration),
     /// The running exclusive operation with this claim
@@ -46,11 +44,6 @@ impl CloudBackupWriteClient {
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Self {
         Self { supervisor, owner: WriteOwner::Operation(origin) }
-    }
-
-    /// Who this client writes for
-    pub(crate) fn owner(&self) -> WriteOwner {
-        self.owner
     }
 
     fn origin(&self) -> Option<CloudBackupExclusiveOperationClaim> {

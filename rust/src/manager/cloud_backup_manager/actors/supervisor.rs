@@ -20,7 +20,7 @@ use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob};
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNamespaceCommit};
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteSupervisor, WriteOwner,
+    CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{

@@ -12,7 +12,6 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::actors::WriteOwner;
 use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader,
@@ -102,11 +101,9 @@ impl CloudBackupPreparedRestoreAll {
 impl RustCloudBackupManager {
     pub(crate) async fn do_fetch_cloud_only_wallets(
         &self,
-        owner: WriteOwner,
         listing_generation: u64,
     ) -> Result<CloudOnlyFetch, CloudBackupError> {
         self.do_fetch_cloud_only_wallets_with_client(
-            owner,
             CloudStorage::global_explicit_client(),
             listing_generation,
         )
@@ -119,7 +116,6 @@ impl RustCloudBackupManager {
     /// result can be rejected if the listing changed while the downloads were in flight
     pub(crate) async fn do_fetch_cloud_only_wallets_with_client(
         &self,
-        owner: WriteOwner,
         cloud: CloudStorageClient,
         listing_generation: u64,
     ) -> Result<CloudOnlyFetch, CloudBackupError> {
@@ -157,7 +153,6 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
-                owner,
                 &namespace,
                 CLOUD_ONLY_FETCH_RECOVERY_MESSAGE,
             )
@@ -255,10 +250,9 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn do_restore_cloud_wallet(
         &self,
-        owner: WriteOwner,
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
-        let prepared = self.prepare_active_namespace_wallet_restore(owner).await?;
+        let prepared = self.prepare_active_namespace_wallet_restore().await?;
         let result = prepared.restore_record(record_id).await;
         self.handle_cloud_only_restore_committed(&result);
 
@@ -279,12 +273,10 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn prepare_restore_all_cloud_wallets(
         &self,
-        owner: WriteOwner,
         frozen_wallets: Vec<CloudBackupWalletItem>,
         listing_generation: u64,
     ) -> Result<CloudBackupPreparedRestoreAll, CloudBackupError> {
-        let authoritative_fetch =
-            self.do_fetch_cloud_only_wallets(owner, listing_generation).await?;
+        let authoritative_fetch = self.do_fetch_cloud_only_wallets(listing_generation).await?;
         let eligible_record_ids: HashSet<_> = authoritative_fetch
             .wallets
             .iter()
@@ -302,7 +294,7 @@ impl RustCloudBackupManager {
         let wallet_restore = if ordered_queue.is_empty() {
             None
         } else {
-            Some(self.prepare_active_namespace_wallet_restore(owner).await?)
+            Some(self.prepare_active_namespace_wallet_restore().await?)
         };
 
         Ok(CloudBackupPreparedRestoreAll { authoritative_fetch, ordered_queue, wallet_restore })
@@ -310,7 +302,6 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn prepare_active_namespace_wallet_restore(
         &self,
-        owner: WriteOwner,
     ) -> Result<CloudBackupPreparedWalletRestore, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RestoreCloudWallet)?;
 
@@ -319,7 +310,6 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
             self.recover_local_master_key_from_cloud(
-                owner,
                 &namespace,
                 CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE,
             )

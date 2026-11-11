@@ -19,5 +19,5 @@ pub(crate) use self::uploads::UploadFinish;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor, Decision,
-    WriteOwner, WriteTicket,
+    WriteTicket,
 };

@@ -5,9 +5,7 @@
 //! so no producer persists the lifecycle record itself
 
 use super::*;
-use crate::manager::cloud_backup_manager::actors::write::{
-    CloudBackupUploadedWalletsStateMode, WriteOwner,
-};
+use crate::manager::cloud_backup_manager::actors::write::CloudBackupUploadedWalletsStateMode;
 use crate::manager::cloud_backup_manager::verify::{
     IntegrityDowngrade, PendingVerificationSettlement,
 };
@@ -34,23 +32,22 @@ impl std::fmt::Debug for OwnedKeychainWrite {
 }
 
 impl CloudBackupSupervisor {
-    /// Applies keychain writes a worker prepared for `owner`, while `owner` still holds the
-    /// configuration the keys belong to
+    /// Applies keychain writes a worker prepared, while a configured backup owns them
     ///
-    /// A write whose operation ended, or whose configuration was turned off, reset or replaced
-    /// since the worker read it, is refused as `Cancelled` and the worker stops, so a late worker
-    /// can't put an older configuration's keys over the current one's
+    /// The keys belong to the configured namespace, so only a configured body has a place for
+    /// them. After a Turn Off committed, during a reset, or with backup off, the write is
+    /// refused as `Cancelled` and the worker stops, so a late worker leaves no stale key behind
     pub async fn apply_keychain_writes(
         &mut self,
-        owner: WriteOwner,
         writes: Vec<OwnedKeychainWrite>,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if self.manager().is_none() {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        if !self.owns_configuration_keys(owner) {
-            debug!("Cloud Backup refused keychain writes {writes:?} from {owner:?}");
+        if !matches!(*self.runtime, Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. })
+        {
+            debug!("Cloud Backup refused keychain writes {writes:?} outside a configured backup");
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
@@ -76,26 +73,6 @@ impl CloudBackupSupervisor {
         }
 
         Produces::ok(Ok(()))
-    }
-
-    fn owns_configuration_keys(&self, owner: WriteOwner) -> bool {
-        match owner {
-            // an operation's writes are its own while it runs on a configured backup
-            WriteOwner::Operation(claim) => {
-                self.runtime.is_current(claim)
-                    && matches!(
-                        *self.runtime,
-                        Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. }
-                    )
-            }
-            // background work read one configuration; a reinitialize replacing it owns the keys
-            // until it ends, when the generation moves on
-            WriteOwner::Background(generation) => {
-                generation == self.runtime.generation()
-                    && matches!(*self.runtime, Runtime::Configured { .. })
-                    && self.runtime.replacing_configuration().is_none()
-            }
-        }
     }
 
     /// The cloud lists `wallet_count` wallet backups for the active namespace

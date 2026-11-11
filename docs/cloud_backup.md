@@ -55,12 +55,9 @@ upload, sync-health and cleanup workers what to do with `send!` and never
 awaits them. So no actor can deadlock waiting on another, and a busy worker
 can't hold a reset or a lifecycle completion behind its mailbox.
 
-Workers prepare keychain writes and the supervisor applies them. Each write
-carries its producer's authority: the running operation's claim, or the
-configuration generation that background work read. The supervisor applies it
-only while that authority is current, so a write that arrives after a reset, a
-Turn Off, a new configuration or a reinitialize is refused instead of restoring
-wiped or older keys. An effect that can't be cancelled once it starts, such as Turn Off's local
+Workers prepare keychain writes and the supervisor applies them, so a write that
+arrives after a reset or Turn Off began is refused instead of restoring wiped
+state. An effect that can't be cancelled once it starts, such as Turn Off's local
 cleanup or a passkey registration, puts its operation in an `Effecting` stage,
 and the operation keeps the slot until the effect reports. A local reset, which
 a full wipe uses, closes admission, cancels running operations, waits for any
