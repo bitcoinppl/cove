@@ -20,7 +20,8 @@ impl RustSendFlowManager {
         old: String,
         new: String,
     ) -> Option<()> {
-        trace!("btc_field_changed {old} --> {new}");
+        // field text is raw user input and can hold a pasted PIN, so only its length is logged
+        trace!("btc_field_changed len {} --> {}", old.len(), new.len());
         if old == new {
             return None;
         }
@@ -41,7 +42,6 @@ impl RustSendFlowManager {
 
         let handler = BtcOnChangeHandler::new(state);
         let changes = handler.on_change(&old, &new);
-        trace!("btc_on_change_handler changes: {changes:?}");
 
         let btc_on_change::Changeset {
             entering_amount_btc,
@@ -88,7 +88,8 @@ impl RustSendFlowManager {
         old_value: String,
         new_value: String,
     ) -> Option<()> {
-        trace!("fiat_field_changed {old_value} --> {new_value}");
+        // field text is raw user input and can hold a pasted PIN, so only its length is logged
+        trace!("fiat_field_changed len {} --> {}", old_value.len(), new_value.len());
         if old_value == new_value {
             return None;
         }
@@ -108,7 +109,6 @@ impl RustSendFlowManager {
             return None;
         };
 
-        trace!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
         let fiat_on_change::Changeset {
             entering_fiat_amount,
             fiat_value,
@@ -168,7 +168,8 @@ impl RustSendFlowManager {
 
     /// When amount is changed, we will need to update the entering and fiat amounts
     pub(crate) fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
-        debug!("handle_amount_changed: {amount:?}");
+        // the amount can be a pasted PIN parsed as sats, so it stays out of the log
+        debug!("handle_amount_changed");
 
         let mut sender = self.reconciler.deferred_sender();
         let amount_changed = apply_amount(&mut self.state.lock(), amount, &mut sender);

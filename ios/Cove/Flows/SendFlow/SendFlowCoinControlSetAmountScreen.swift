@@ -231,9 +231,8 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
-        Log.debug(
-            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))"
-        )
+        // scanned text can be a seed or an xpub, so only its length is logged
+        Log.debug("scannedCodeChanged len \(old?.item.count ?? 0) -> \(newValue?.item.count ?? 0)")
         guard let newValue else { return }
         presenter.sheetState = nil
         sendFlowManager.dispatch(

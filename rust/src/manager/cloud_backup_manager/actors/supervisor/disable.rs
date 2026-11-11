@@ -98,7 +98,9 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.logged_reader_message("Failed to drain cloud backup writes before disable"),
+                error.logged_reader_message(
+                    "Failed to clear cloud backup runtime state before disable",
+                ),
             );
             return Produces::ok(());
         }
@@ -346,7 +348,8 @@ impl CloudBackupSupervisor {
         message: String,
         can_keep_enabled: bool,
     ) {
-        error!("disable_cloud_backup failed: {message}");
+        // callers log the cause before building the reader message, so logging it here again
+        // would add a second line with less detail
         manager
             .apply_disable_outcome(CloudBackupDisableOutcome::Failed { message, can_keep_enabled });
         self.finish_disable_operation(manager, claim);

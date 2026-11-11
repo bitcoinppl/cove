@@ -59,6 +59,7 @@ import org.bitcoinppl.cove_core.UnsignedTransaction
 import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.TxId
+import org.bitcoinppl.cove.Log
 
 private const val SCROLL_THRESHOLD_INDEX = 5
 private const val TAG = "TransactionsRows"
@@ -638,7 +639,7 @@ internal fun UnsignedTransactionWidget(
                     try {
                         manager.deleteUnsignedTransaction(txn.id())
                     } catch (e: Exception) {
-                        android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
+                        Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(

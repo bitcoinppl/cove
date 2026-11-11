@@ -122,7 +122,8 @@ class RouterManager internal constructor(
     }
 
     internal fun pushRouteWithoutNavigationGeneration(route: Route): Boolean {
-        Log.d(tag, "pushRoute: $route")
+        // routes can carry TAPSIGNER PINs, so log only the kind
+        Log.d(tag, "pushRoute: ${route::class.simpleName}")
         isSidebarVisible = false
         var didPush = false
 

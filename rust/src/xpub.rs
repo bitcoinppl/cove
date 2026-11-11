@@ -123,7 +123,33 @@ impl From<pubport::Error> for XpubError {
             pubport::Error::MissingJsonDescriptorData => Self::JsonNoDecriptor,
             pubport::Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
             pubport::Error::UnsupportedFormat(error) => {
-                warn!("unsupported wallet export format: {error:?}");
+                // only the formats that failed: each detection error can quote the input,
+                // and a mistaken paste can be a recovery phrase or private key
+                let pubport::formats::FormatDetectionErrors {
+                    generic_json,
+                    wasabi_json,
+                    electrum_json,
+                    descriptor,
+                    child_xpub,
+                    key_expression,
+                } = error.as_ref();
+
+                let formats = [
+                    ("generic_json", generic_json.is_some()),
+                    ("wasabi_json", wasabi_json.is_some()),
+                    ("electrum_json", electrum_json.is_some()),
+                    ("descriptor", descriptor.is_some()),
+                    ("child_xpub", child_xpub.is_some()),
+                    ("key_expression", key_expression.is_some()),
+                ];
+
+                let failed: Vec<&str> = formats
+                    .into_iter()
+                    .filter(|(_, failed)| *failed)
+                    .map(|(name, _)| name)
+                    .collect();
+
+                warn!("unsupported wallet export format, failed formats: {failed:?}");
                 Self::InvalidDescriptor(DescriptorError::InvalidDescriptor(error.to_string()))
             }
         }

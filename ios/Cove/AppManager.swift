@@ -709,7 +709,9 @@ struct CorruptedWalletDeletionRetry: Equatable {
     func reconcile(message: AppStateReconcileMessage) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            logger.debug("Update: \(message)")
+            // only the case name: route messages can carry UTXO labels, TAPSIGNER PINs and signed
+            // transactions
+            logger.debug("Update: \(String(describing: message).prefix { $0 != "(" })")
 
             apply(message)
         }
@@ -765,11 +767,14 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     public func dispatch(action: AppAction) {
-        logger.debug("dispatch \(action)")
+        // only the case name: routes can carry TAPSIGNER PINs and signed transactions
+        let actionKind = String(describing: action).prefix { $0 != "(" }
+        logger.debug("dispatch \(actionKind)")
+
         do {
             try rust.dispatch(action: action)
         } catch {
-            logger.error("Unable to dispatch app action \(action), error: \(error)")
+            logger.error("Unable to dispatch app action \(actionKind), error: \(error)")
         }
     }
 }

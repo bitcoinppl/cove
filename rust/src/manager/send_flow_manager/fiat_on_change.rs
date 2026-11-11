@@ -43,7 +43,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum SendFlowFiatOnChangeError {
-    #[error("invalid fiat amount: {error} ({input})")]
+    /// Display leaves out the raw input, which can be pasted text
+    #[error("invalid fiat amount: {error}")]
     InvalidFiatAmount { error: String, input: String },
 
     #[error("converter error: {0}")]

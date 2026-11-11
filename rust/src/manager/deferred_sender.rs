@@ -15,6 +15,22 @@ pub enum SingleOrMany<T> {
     Many(Vec<T>),
 }
 
+impl<T> SingleOrMany<T> {
+    /// The message type and count, for logs
+    ///
+    /// Payloads carry wallet names, UTXO labels, routes and typed text, so logs print this
+    /// instead of the messages
+    pub fn log_summary(&self) -> String {
+        let type_name = std::any::type_name::<T>();
+        let kind = type_name.rsplit("::").next().unwrap_or(type_name);
+
+        match self {
+            Self::Single(_) => kind.to_string(),
+            Self::Many(messages) => format!("{} x {kind}", messages.len()),
+        }
+    }
+}
+
 impl<T> From<T> for SingleOrMany<T> {
     fn from(msg: T) -> Self {
         Self::Single(msg)
@@ -94,7 +110,7 @@ impl<T: DebugSend> MessageSender<T> {
         message: impl Into<SingleOrMany<T>>,
     ) -> Result<(), SendError<SingleOrMany<T>>> {
         let message = message.into();
-        trace!("send: {message:?}");
+        trace!("send: {}", message.log_summary());
 
         let mut overflow = self.overflow.lock();
         if !overflow.is_idle() {
@@ -127,7 +143,7 @@ impl<T: DebugSend> MessageSender<T> {
     /// Needs no tokio runtime unless [`send`](Self::send) already queued an overflow
     pub fn send_blocking(&self, message: impl Into<SingleOrMany<T>>) {
         let message = message.into();
-        trace!("send_blocking: {message:?}");
+        trace!("send_blocking: {}", message.log_summary());
 
         {
             let mut overflow = self.overflow.lock();
@@ -146,7 +162,7 @@ impl<T: DebugSend> MessageSender<T> {
     /// the message joins them and is sent after them
     pub async fn send_async(&self, message: impl Into<SingleOrMany<T>>) {
         let message = message.into();
-        trace!("send_async: {message:?}");
+        trace!("send_async: {}", message.log_summary());
 
         {
             let mut overflow = self.overflow.lock();
@@ -195,5 +211,19 @@ impl<T: DebugSend> Drop for DeferredSender<T> {
             1 => self.sender.send(SingleOrMany::Single(msgs.pop().expect("just checked len"))),
             _ => self.sender.send(SingleOrMany::Many(msgs)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SingleOrMany;
+
+    #[test]
+    fn log_summary_names_the_type_and_count_without_payloads() {
+        let single = SingleOrMany::Single("abandon ability able".to_string());
+        let many = SingleOrMany::Many(vec!["abandon".to_string(), "ability".to_string()]);
+
+        assert_eq!(single.log_summary(), "String");
+        assert_eq!(many.log_summary(), "2 x String");
     }
 }

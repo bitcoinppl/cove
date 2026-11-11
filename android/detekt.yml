@@ -46,5 +46,31 @@ style:
         reason: 'Use org.bitcoinppl.cove.views.lockaware.Dialog, which hides while the app is locked'
       - value: 'androidx.compose.ui.window.Popup'
         reason: 'Add a wrapper in org.bitcoinppl.cove.views.lockaware so it hides or closes while the app is locked'
+  # release builds keep android.util.Log output in logcat, which diagnostics reports read, so app code
+  # goes through org.bitcoinppl.cove.Log, which drops debug lines outside debug builds
+  ForbiddenMethodCall:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/androidTestUiTest/**'
+      - '**/src/testUiTest/**'
+      - '**/src/screenshotTest/**'
+      - '**/src/main/java/org/bitcoinppl/cove/Log.kt'
+    methods:
+      - value: 'android.util.Log.v'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.d'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.i'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.w'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.e'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.wtf'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
+      - value: 'android.util.Log.println'
+        reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
   UnusedPrivateFunction:
     allowedNames: '.*Preview.*'

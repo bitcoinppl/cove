@@ -747,12 +747,13 @@ enum WalletManagerPreview {
         notifyInitialScanLifecycleChanged()
     }
 
+    /// Logs only the case name and count, since messages carry the user-entered wallet name
     func logReconcile(message: Message) {
-        logger.debug("reconcile \(message)")
+        logger.debug("reconcile \(String(describing: message).prefix { $0 != "(" })")
     }
 
     func logReconcileMany(messages: [Message]) {
-        logger.debug("reconcile_messages: \(messages)")
+        logger.debug("reconcile_messages: \(messages.count) messages")
     }
 
     func dispatch(action: Action) {
@@ -771,7 +772,7 @@ enum WalletManagerPreview {
         rustBridge.async { [weak self] in
             guard let self, let rust = self.rust else { return }
 
-            self.logger.debug("dispatch: \(action)")
+            self.logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
             try? rust.dispatch(action: action)
         }
     }
@@ -888,9 +889,13 @@ extension WalletManager {
             recomputeLedgerStateForMetadataChange()
 
         case let .walletScannerResponse(scannerResponse):
-            logger.debug("walletScannerResponse: \(scannerResponse)")
-            if case let .foundAddresses(addressTypes) = scannerResponse {
+            // only the kind and count: the response carries each type's first address
+            switch scannerResponse {
+            case let .foundAddresses(addressTypes):
+                logger.debug("walletScannerResponse: foundAddresses, \(addressTypes.count) address types")
                 foundAddresses = addressTypes
+            case .noneFound:
+                logger.debug("walletScannerResponse: noneFound")
             }
 
         case let .nodeConnectionFailed(error):

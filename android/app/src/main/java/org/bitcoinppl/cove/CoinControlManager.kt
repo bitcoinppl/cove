@@ -36,7 +36,7 @@ class CoinControlManager internal constructor(
             handleName = "RustCoinControlManager",
             isClosed = isClosed,
         ) {
-            android.util.Log.w(tag, it)
+            Log.w(tag, it)
         }
 
     val id: WalletId = rust.id()
@@ -73,7 +73,7 @@ class CoinControlManager internal constructor(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     private fun <T> withRust(
@@ -227,7 +227,8 @@ class CoinControlManager internal constructor(
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         if (isClosed.get()) return
 
-        logDebug("reconcile: $message")
+        // only the kind: messages carry UTXO labels and typed search text
+        logDebug("reconcile: ${message::class.simpleName}")
         mainScope.launch { apply(message) }
     }
 
@@ -239,7 +240,8 @@ class CoinControlManager internal constructor(
     }
 
     fun dispatch(action: CoinControlManagerAction) {
-        logDebug("dispatch: $action")
+        // log only the kind: search actions carry typed text
+        logDebug("dispatch: ${action::class.simpleName}")
         mainScope.launch(Dispatchers.IO) {
             withRustOr(Unit) {
                 dispatch(action)

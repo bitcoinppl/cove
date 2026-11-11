@@ -31,8 +31,9 @@ pub enum MnemonicError {
     #[error("mnemonic is not available available for wallet id: {0}")]
     NotAvailable(WalletId),
 
-    #[error("unknown word in mnemonic: {0}")]
-    UnknownWord(String),
+    /// Carries the word's position, never the word itself
+    #[error("unknown word in mnemonic at position {0}")]
+    UnknownWord(u32),
 }
 
 impl Mnemonic {
@@ -140,12 +141,13 @@ impl Mnemonic {
 
         self.0
             .words()
-            .map(|word| {
+            .enumerate()
+            .map(|(position, word)| {
                 word_list
                     .iter()
                     .position(|&w| w == word)
                     .map(|index| format!("{index:04}"))
-                    .ok_or_else(|| MnemonicError::UnknownWord(word.to_string()))
+                    .ok_or(MnemonicError::UnknownWord(position as u32))
             })
             .collect()
     }

@@ -18,6 +18,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import org.bitcoinppl.cove.Log
 
 /**
  * send flow manager - manages send transaction flow state
@@ -107,11 +108,20 @@ class SendFlowManager internal constructor(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
+    // the error's toString is the Rust Display text, which leaves out entered text; its generated
+    // message and the other alerts' fields can carry it, so they stay out
+    private fun alertKind(alert: SendFlowAlertState): String =
+        when (alert) {
+            is SendFlowAlertState.Error -> "error: ${alert.v1}"
+            is SendFlowAlertState.General -> "general"
+            is SendFlowAlertState.Warning -> "warning: ${alert.kind}"
+        }
+
     private fun logWarn(message: String) {
-        android.util.Log.w(tag, message)
+        Log.w(tag, message)
     }
 
     private suspend fun <T> withRustSuspend(
@@ -318,7 +328,7 @@ class SendFlowManager internal constructor(
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${message.v1}")
+                logWarn("setAlert: ${alertKind(message.v1)}")
 
                 val hadSheet = presenter.sheetState != null
                 val hadAlert = presenter.alertState != null
@@ -355,7 +365,8 @@ class SendFlowManager internal constructor(
     }
 
     override fun reconcile(message: SendFlowManagerReconcileMessage) {
-        logDebug("reconcile: $message")
+        // log only the kind: messages carry typed amounts and addresses
+        logDebug("reconcile: ${message::class.simpleName}")
         mainScope.launch { apply(message) }
     }
 
@@ -366,7 +377,9 @@ class SendFlowManager internal constructor(
 
     fun dispatch(action: SendFlowManagerAction) {
         if (isClosed.get()) return
-        logDebug("dispatch: $action")
+
+        // log only the kind: actions carry typed or scanned text, which can be a pasted seed
+        logDebug("dispatch: ${action::class.simpleName}")
         mainScope.launch {
             withRustOr(Unit) {
                 dispatch(action)

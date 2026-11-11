@@ -56,6 +56,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.Log
 
 /**
  * Whether the recovery words are loaded
@@ -350,6 +351,6 @@ private fun loadWords(
             sensitiveContentGeneration = auth.sensitiveContentGeneration,
         )
     } catch (e: Exception) {
-        android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
+        Log.e("SecretWordsScreen", "error loading mnemonic", e)
         SecretWordsState.Failed(e.message ?: "failed to load recovery words")
     }

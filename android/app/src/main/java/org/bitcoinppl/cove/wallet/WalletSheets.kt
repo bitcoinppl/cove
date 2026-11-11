@@ -42,6 +42,7 @@ import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.LabelManager
 import java.io.File
+import org.bitcoinppl.cove.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,7 +101,7 @@ internal fun WalletSheetsHost(
                     try {
                         shareTransactionsFile(context, manager)
                     } catch (e: Exception) {
-                        android.util.Log.e(tag, "Failed to share transactions", e)
+                        Log.e(tag, "Failed to share transactions", e)
                         snackbarHostState.showSnackbar("Unable to share transactions: ${e.localizedMessage ?: e.message}")
                     }
                 }
@@ -143,7 +144,7 @@ internal fun WalletSheetsHost(
                                 try {
                                     shareLabelsFile(context, manager)
                                 } catch (e: Exception) {
-                                    android.util.Log.e(tag, "Failed to share labels", e)
+                                    Log.e(tag, "Failed to share labels", e)
                                     snackbarHostState.showSnackbar("Unable to share labels: ${e.localizedMessage ?: e.message}")
                                 }
                             }
@@ -203,7 +204,7 @@ internal fun WalletSheetsHost(
                     try {
                         shareXpubFile(context, manager)
                     } catch (e: Exception) {
-                        android.util.Log.e(tag, "Failed to share xpub", e)
+                        Log.e(tag, "Failed to share xpub", e)
                         snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
                     }
                 }
@@ -230,7 +231,7 @@ internal fun WalletSheetsHost(
             try {
                 nfcLabelManager = manager.labelManager()
             } catch (e: Exception) {
-                android.util.Log.e(tag, "Failed to get label manager")
+                Log.e(tag, "Failed to get label manager")
                 nfcLabelManager = null
                 onDismissNfcScanner()
                 snackbarHostState.showSnackbar("Unable to access label manager")

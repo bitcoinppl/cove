@@ -256,7 +256,7 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
-            Log.error("Failed to handle scanned transaction: \(error), txn: \(txn)")
+            Log.error("Failed to handle scanned transaction: \(error)")
             presentationCoordinator.present(.alert(.nfcError(error.localizedDescription)))
         }
     }

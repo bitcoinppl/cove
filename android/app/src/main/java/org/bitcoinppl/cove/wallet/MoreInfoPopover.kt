@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
+import org.bitcoinppl.cove.Log
 
 // what a wallet file export writes
 sealed class ExportType {
@@ -76,7 +77,7 @@ fun rememberWalletExportLaunchers(
 
                         snackbarHostState.showSnackbar("Labels imported successfully")
                     } catch (e: Exception) {
-                        android.util.Log.e(tag, "error importing labels", e)
+                        Log.e(tag, "error importing labels", e)
                         snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
                     } finally {
                         exportState.isImporting = false
@@ -144,7 +145,7 @@ private fun rememberExportFileLauncher(
 
                 snackbarHostState.showSnackbar(successMessage)
             } catch (e: Exception) {
-                android.util.Log.e(tag, "error exporting file", e)
+                Log.e(tag, "error exporting file", e)
                 snackbarHostState.showSnackbar("Unable to export $exportName: ${e.localizedMessage ?: e.message}")
             } finally {
                 exportState.isExporting = false

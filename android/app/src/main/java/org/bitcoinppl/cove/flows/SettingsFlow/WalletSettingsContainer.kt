@@ -33,6 +33,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
 import kotlin.coroutines.cancellation.CancellationException
+import org.bitcoinppl.cove.Log
 
 /**
  * Wallet settings container - lazy loads WalletManager for wallet settings
@@ -74,16 +75,16 @@ fun WalletSettingsContainer(
                 loadState = WalletSettingsLoadState.Loading
             }
             is WalletSelectionRecoveryResult.PoppedRoute -> {
-                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+                Log.e(tag, "failed to recover wallet selection", result.recoveryError)
             }
             is WalletSelectionRecoveryResult.NoRouteToPop -> {
-                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
-                android.util.Log.e(tag, "no route available to leave wallet settings after recovery failure")
+                Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+                Log.e(tag, "no route available to leave wallet settings after recovery failure")
                 loadState = WalletSettingsLoadState.Failed(message)
             }
             is WalletSelectionRecoveryResult.FailedToPopRoute -> {
-                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
-                android.util.Log.e(tag, "failed to leave wallet settings after recovery failure", result.navigationError)
+                Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+                Log.e(tag, "failed to leave wallet settings after recovery failure", result.navigationError)
                 loadState = WalletSettingsLoadState.Failed(message)
             }
         }
@@ -106,7 +107,7 @@ fun WalletSettingsContainer(
         loadState = WalletSettingsLoadState.Loading
 
         try {
-            android.util.Log.d(tag, "getting wallet $id")
+            Log.d(tag, "getting wallet $id")
             val manager = app.getWalletManagerLoaded(id)
             if (manager.id == id) {
                 loadState = WalletSettingsLoadState.Ready(manager)
@@ -116,7 +117,7 @@ fun WalletSettingsContainer(
         } catch (e: Exception) {
             val message = e.message ?: "Unknown error"
 
-            android.util.Log.e(tag, "failed to load wallet", e)
+            Log.e(tag, "failed to load wallet", e)
             recoveryGeneration += 1
             val failureGeneration = recoveryGeneration
             loadState = WalletSettingsLoadState.Failed(message)

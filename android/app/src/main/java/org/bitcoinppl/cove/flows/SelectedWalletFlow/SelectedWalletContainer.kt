@@ -65,6 +65,7 @@ import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.balancePresentationProvisional
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.Log
 
 // delay to allow UI to settle before updating balance
 private const val BALANCE_UPDATE_DELAY_MS = 500L
@@ -92,7 +93,7 @@ fun SelectedWalletContainer(
         manager = app.cachedWalletManager(requestedId)
 
         try {
-            android.util.Log.d(tag, "getting wallet $requestedId")
+            Log.d(tag, "getting wallet $requestedId")
             val preparation = app.prepareWalletRoute(requestedId, generation)
             val wm = (preparation as? WalletRoutePreparation.Ready)?.manager ?: return@LaunchedEffect
 
@@ -102,12 +103,12 @@ fun SelectedWalletContainer(
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
-                android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
+                Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e(tag, "unable to prepare wallet route", e)
+            Log.e(tag, "unable to prepare wallet route", e)
         }
     }
 
@@ -119,7 +120,7 @@ fun SelectedWalletContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
+            Log.e(tag, "wallet scan failed: ${e.message}", e)
         }
     }
 
@@ -209,7 +210,11 @@ fun SelectedWalletContainer(
         }
         else -> {
             val canGoBack = app.canGoBack()
-            android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
+            Log.d(
+                "SelectedWalletContainer",
+                "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}",
+            )
+
             val handleSend = send@{
                 if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
                     app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)

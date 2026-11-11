@@ -83,7 +83,7 @@ class AuthManager internal constructor(
             handleName = "RustAuthManager",
             isClosed = isRustClosed,
         ) {
-            android.util.Log.w(tag, it)
+            Log.w(tag, it)
         }
 
     var type by mutableStateOf<AuthType>(Database().globalConfig().authType())
@@ -174,7 +174,7 @@ class AuthManager internal constructor(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     /**
@@ -261,7 +261,7 @@ class AuthManager internal constructor(
             credentialUnlockGeneration += 1
             isLocked = false
         } catch (e: Exception) {
-            android.util.Log.e(tag, "failed to unlock", e)
+            Log.e(tag, "failed to unlock", e)
         }
     }
 
@@ -350,7 +350,7 @@ class AuthManager internal constructor(
                 }
                 resetAppAndSelectWallet()
             } catch (e: Exception) {
-                android.util.Log.e(tag, "failed to switch to decoy mode", e)
+                Log.e(tag, "failed to switch to decoy mode", e)
                 return UnlockMode.LOCKED
             }
         }
@@ -398,7 +398,7 @@ class AuthManager internal constructor(
             if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
                 wipePresentationState = WipePresentationState.ShutdownBlocked(lifecycle.attemptId)
             } else {
-                android.util.Log.e(tag, "failed to wipe all data", wipeError)
+                Log.e(tag, "failed to wipe all data", wipeError)
                 wipePresentationState = WipePresentationState.Failed
             }
 
@@ -439,7 +439,7 @@ class AuthManager internal constructor(
             resetAppAndSelectWallet()
             true
         } catch (e: Exception) {
-            android.util.Log.e(tag, "failed to switch to main mode", e)
+            Log.e(tag, "failed to switch to main mode", e)
             false
         }
 
@@ -463,7 +463,8 @@ class AuthManager internal constructor(
     }
 
     fun dispatch(action: AuthManagerAction) {
-        logDebug("dispatch: $action")
+        // log only the kind: SetPin carries the PIN
+        logDebug("dispatch: ${action::class.simpleName}")
         withRustOr(Unit) {
             dispatch(action)
         }

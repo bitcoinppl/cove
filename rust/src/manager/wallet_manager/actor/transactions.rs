@@ -170,7 +170,8 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        debug!("build_manual_tx: {total_amount:?}");
+        // the amount can be a pasted PIN parsed as sats, so only the input count is logged
+        debug!("build_manual_tx: {} utxos", utxos.len());
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
@@ -758,10 +759,10 @@ impl WalletActor {
             return Err(Error::PsbtFinalizeError("Failed to finalize PSBT".to_string()));
         }
 
-        let tx = psbt.extract_tx().map_err(|e| {
-            let err = format!("Failed to extract tx from PSBT: {e:?}");
-            Error::PsbtFinalizeError(err)
-        })?;
+        // use Display, since the Debug form embeds the whole PSBT or transaction
+        let tx = psbt
+            .extract_tx()
+            .map_err_prefix("Failed to extract tx from PSBT", Error::PsbtFinalizeError)?;
 
         Ok(tx)
     }

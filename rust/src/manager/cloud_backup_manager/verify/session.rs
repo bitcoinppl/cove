@@ -240,6 +240,29 @@ pub(crate) struct VerificationSession {
     pub(crate) force_discoverable: bool,
 }
 
+/// Why a wallet backup read pass stopped before it could judge every wallet
+enum WalletBackupReadError {
+    /// The local wallet record IDs could not be read
+    LocalInventory(CloudBackupError),
+    /// The cloud provider failed in a way that affects every download, such as going offline
+    ProviderInterrupted(CloudBackupError),
+}
+
+impl WalletBackupReadError {
+    fn context(&self) -> &'static str {
+        match self {
+            Self::LocalInventory(_) => "failed to load local wallet inventory",
+            Self::ProviderInterrupted(_) => "failed to download wallet backups",
+        }
+    }
+
+    fn cloud_error(&self) -> &CloudBackupError {
+        match self {
+            Self::LocalInventory(error) | Self::ProviderInterrupted(error) => error,
+        }
+    }
+}
+
 struct WalletBackupReadPass {
     remote_wallet_truth: RemoteWalletTruth,
     verified: u32,
@@ -290,13 +313,16 @@ impl WalletBackupReadPass {
             }
             Err(error) => {
                 if is_listed {
-                    warn!("Verify: failed to download listed wallet backup: {error}");
+                    // a provider-wide failure hits every wallet, so it is logged once where the
+                    // read pass fails instead of once per wallet
                     if is_provider_wide_interruption(&error) {
                         if self.provider_failure.is_none() {
                             self.provider_failure = Some(error);
                         }
                         return;
                     }
+
+                    warn!("Verify: failed to download listed wallet backup: {error}");
 
                     match &error {
                         CloudBackupError::Crypto(_) => self.issues.decryption_failed += 1,
@@ -310,7 +336,11 @@ impl WalletBackupReadPass {
                 }
 
                 if is_local {
-                    warn!("Cloud backup remote truth failed for wallet backup: {error}");
+                    // a listed wallet's failure was logged above
+                    if !is_listed {
+                        warn!("Cloud backup remote truth failed for wallet backup: {error}");
+                    }
+
                     self.remote_wallet_truth.unknown_record_ids.insert(record_id);
                 }
             }
@@ -679,7 +709,7 @@ impl VerificationSession {
             Ok(read_pass) => read_pass,
             Err(error) => {
                 return CloudBackupDeepVerificationStep::Complete(
-                    self.cloud_backup_retry_result("failed to load local wallet inventory", &error),
+                    self.cloud_backup_retry_result(error.context(), error.cloud_error()),
                 );
             }
         };
@@ -852,14 +882,17 @@ impl VerificationSession {
         &self,
         wallet_record_ids: &[String],
         critical_key: &[u8; 32],
-    ) -> Result<WalletBackupReadPass, CloudBackupError> {
+    ) -> Result<WalletBackupReadPass, WalletBackupReadError> {
         let reader = WalletBackupReader::new(
             self.cloud.clone(),
             self.namespace.clone(),
             Zeroizing::new(*critical_key),
         );
         let listed_record_ids: HashSet<String> = wallet_record_ids.iter().cloned().collect();
-        let local_record_ids = CloudBackupStore::global().local_wallet_record_ids()?;
+        let local_record_ids = CloudBackupStore::global()
+            .local_wallet_record_ids()
+            .map_err(WalletBackupReadError::LocalInventory)?;
+
         let mut record_ids = listed_record_ids.iter().cloned().collect::<Vec<_>>();
 
         for record_id in &local_record_ids {
@@ -895,7 +928,7 @@ impl VerificationSession {
         }
 
         if let Some(error) = read_pass.provider_failure {
-            return Err(error);
+            return Err(WalletBackupReadError::ProviderInterrupted(error));
         }
 
         Ok(read_pass)
@@ -944,12 +977,15 @@ impl VerificationSession {
         error: CloudStorageError,
     ) -> DeepVerificationResult {
         let error = CloudBackupError::cloud_storage_context(context, error);
+
+        // log before the offline conversion, which replaces the storage cause with a generic error
+        warn!("Verify failed: {error}");
         let error = blocking_cloud_error(BlockingCloudStep::Verify, error);
 
         let retry_action =
             is_connectivity_related_issue(&error).then_some(self.connectivity_retry_action());
 
-        self.retry_result_with_context(error.logged_reader_message("Verify failed"), retry_action)
+        self.retry_result_with_context(error.reader_message(), retry_action)
     }
 
     fn cloud_backup_retry_result(

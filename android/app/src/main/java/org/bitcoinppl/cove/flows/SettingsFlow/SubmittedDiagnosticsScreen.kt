@@ -3,7 +3,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -58,6 +57,7 @@ import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DatabaseException
 import org.bitcoinppl.cove_core.DiagnosticsReportRecord
+import org.bitcoinppl.cove.Log
 
 private const val TAG = "SubmittedDiagnostics"
 

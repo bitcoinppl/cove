@@ -299,18 +299,8 @@ fn cleanup_owned_marker_artifacts(
     let mut failures = Vec::new();
 
     rollback_keychain(id.as_wallet_id(), &initial_snapshot, &mut failures);
-    rollback_bdk_artifacts(
-        id.as_wallet_id(),
-        &initial_snapshot,
-        id.as_wallet_id().as_str(),
-        &mut failures,
-    );
-    rollback_wallet_data_while_gated(
-        id.as_wallet_id(),
-        &initial_snapshot,
-        id.as_wallet_id().as_str(),
-        &mut failures,
-    );
+    rollback_bdk_artifacts(id.as_wallet_id(), &initial_snapshot, &mut failures);
+    rollback_wallet_data_while_gated(id.as_wallet_id(), &initial_snapshot, &mut failures);
 
     if failures.is_empty() { Ok(()) } else { Err(failures.join("; ")) }
 }

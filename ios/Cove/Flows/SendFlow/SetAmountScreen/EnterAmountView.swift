@@ -60,7 +60,8 @@ struct EnterAmountView: View {
     }
 
     private func handleBtcAmountChange(oldValue: String, newValue: String) {
-        Log.debug("onChangeBTC \(oldValue) -> \(newValue) (\(sendFlowManager.enteringBtcAmount))")
+        // the field text is raw user input and can hold a pasted PIN, so only its length is logged
+        Log.debug("onChangeBTC len \(oldValue.count) -> \(newValue.count)")
 
         let newEnteringAmount = sendFlowManager.sanitizeBtcEnteringAmount(
             oldValue: oldValue,
@@ -79,7 +80,8 @@ struct EnterAmountView: View {
     }
 
     private func handleFiatAmountChange(oldValue: String, newValue: String) {
-        Log.debug("onChangeFiat \(oldValue) -> \(newValue) (\(sendFlowManager.enteringFiatAmount))")
+        // the field text is raw user input and can hold a pasted PIN, so only its length is logged
+        Log.debug("onChangeFiat len \(oldValue.count) -> \(newValue.count)")
 
         let newEnteringAmount = sendFlowManager.sanitizeFiatEnteringAmount(
             oldValue: oldValue,
@@ -170,14 +172,14 @@ struct EnterAmountView: View {
     }
 
     private func syncEnteringBtcAmount(_ oldValue: String, _ newValue: String) {
-        Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount))")
+        Log.debug("enteringBtcAmount len \(oldValue.count) -> \(newValue.count)")
         guard enteringBtcAmount != newValue else { return }
 
         enteringBtcAmount = newValue
     }
 
     private func syncEnteringFiatAmount(_ oldValue: String, _ newValue: String) {
-        Log.debug("enteringFiatAmount \(oldValue) -> \(newValue) (\(enteringFiatAmount))")
+        Log.debug("enteringFiatAmount len \(oldValue.count) -> \(newValue.count)")
         guard enteringFiatAmount != newValue else { return }
 
         enteringFiatAmount = newValue

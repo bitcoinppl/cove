@@ -75,6 +75,7 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
+import org.bitcoinppl.cove.Log
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
@@ -126,7 +127,7 @@ fun NewWalletSelectScreen(
         try {
             Wallet.newFromXpub(xpub = content.trim()).use { wallet ->
                 val id = wallet.id()
-                android.util.Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
+                Log.d("NewWalletSelectScreen", "Imported Wallet: $id")
 
                 app.selectWalletOrThrow(id)
                 app.popRoute()
@@ -144,7 +145,7 @@ fun NewWalletSelectScreen(
             app.popRoute()
             app.alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
         } catch (e: Exception) {
-            android.util.Log.w("NewWalletSelectScreen", "Error importing hardware wallet: $e")
+            Log.w("NewWalletSelectScreen", "Error importing hardware wallet: $e")
             app.popRoute()
             app.alertState =
                 TaggedItem(

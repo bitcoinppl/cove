@@ -872,7 +872,8 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     override fun reconcile(message: AppStateReconcileMessage) {
-        Log.d(tag, "Reconcile: $message")
+        // only the kind: route messages can carry UTXO labels, TAPSIGNER PINs and signed transactions
+        Log.d(tag, "Reconcile: ${message::class.simpleName}")
         mainScope.launch {
             when (message) {
                 is AppStateReconcileMessage.RouteUpdated -> {
@@ -952,13 +953,15 @@ class AppManager private constructor() : FfiReconcile {
         dispatchResult(action).isSuccess
 
     private fun dispatchResult(action: AppAction): Result<Unit> {
-        Log.d(tag, "dispatch $action")
+        // only the kind: routes can carry TAPSIGNER PINs and signed transactions
+        val actionKind = action::class.simpleName
+        Log.d(tag, "dispatch $actionKind")
 
         return runCatching {
             withRust {
                 dispatch(action)
             }
-        }.onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+        }.onFailure { Log.e(tag, "Unable to dispatch app action $actionKind", it) }
     }
 
     companion object {

@@ -11,10 +11,12 @@ pub enum SendFlowError {
     #[error("invalid number")]
     InvalidNumber,
 
-    #[error("invalid address: {0}")]
+    /// The entered text is kept for the alert but left out of Display, since a mistaken paste
+    /// can be a recovery phrase and Display text reaches logs
+    #[error("invalid address")]
     InvalidAddress(String),
 
-    #[error("wrong network {address} is for network: {valid_for}, current network: {current}")]
+    #[error("wrong network: address is for {valid_for}, current network: {current}")]
     WrongNetwork { address: String, valid_for: Network, current: Network },
 
     #[error("no balance")]

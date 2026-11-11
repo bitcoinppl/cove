@@ -10,13 +10,13 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
 import android.os.SystemClock
-import android.util.Log
 import org.bitcoinppl.cove.CoveApplication
 import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.StringOrData
 import java.util.UUID
+import org.bitcoinppl.cove.Log
 
 private const val SENSITIVE_CLIPBOARD_TOKEN = "org.bitcoinppl.cove.keyteleport.CLIP_TOKEN"
 

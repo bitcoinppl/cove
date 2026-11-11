@@ -113,12 +113,15 @@ struct SendFlowCustomFeeRateView: View {
             } catch {
                 if Task.isCancelled { return }
 
+                // the Rust Display text, since interpolating SendFlowError reflects its payload
+                let errorText = (error as? SendFlowError)?.description ?? "\(error)"
+
                 guard isTooHighCustomFeeError(error) else {
-                    Log.error("Unable to get accurate total sats \(error)")
+                    Log.error("Unable to get accurate total sats \(errorText)")
                     return
                 }
 
-                Log.error("Unable to get accurate total sats \(error), setting max fee rate to \(feeRate.satPerVb())")
+                Log.error("Unable to get accurate total sats \(errorText), setting max fee rate to \(feeRate.satPerVb())")
                 let feeRate = feeRate.satPerVb()
 
                 await MainActor.run { presenter.erroredFeeRate = feeRate }

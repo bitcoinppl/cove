@@ -200,8 +200,7 @@ pub(crate) fn restore_cloud_descriptor_wallet(
     metadata: &WalletMetadata,
     backup: &WalletBackup,
 ) -> Result<(), CloudRestoreError> {
-    let prepared =
-        prepare_public_wallet(backup, metadata, matches!(&backup.secret, WalletSecret::Unknown))?;
+    let prepared = prepare_public_wallet(backup, matches!(&backup.secret, WalletSecret::Unknown))?;
     let plan = VerifiedCloudRestorePlan::<PublicWalletWrites>::prepare(metadata, prepared)?;
 
     report_cloud_restore(metadata, plan.execute(metadata))
@@ -217,9 +216,10 @@ fn report_cloud_restore(
         Err((error, warnings)) => (Err(error.into()), warnings),
     };
 
-    let name = &metadata.name;
+    // the wallet id, not the name: names are raw user input
+    let wallet_id = &metadata.id;
     for warning in warnings {
-        warn!("cloud restore cleanup warning for {name}: {warning}");
+        warn!("cloud restore cleanup warning for wallet id={wallet_id}: {warning}");
     }
 
     result

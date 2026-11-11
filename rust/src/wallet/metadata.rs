@@ -130,7 +130,18 @@ impl WalletBirthday {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    Serialize,
+    Deserialize,
+    Hash,
+    Eq,
+    PartialEq,
+    strum::IntoStaticStr,
+    uniffi::Enum,
+)]
 #[uniffi::export(Eq, Hash)]
 pub enum DiscoveryState {
     #[default]

@@ -44,6 +44,7 @@ import org.bitcoinppl.cove_core.types.feeSpeedToCircleColor
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.round
+import org.bitcoinppl.cove.Log
 
 private object CustomFeeRateConstants {
     // small adjustment to fee rate for error handling
@@ -212,9 +213,10 @@ fun CustomFeeRateSheet(
                         }
                     } catch (e: SendFlowException) {
                         if (!isTooHighCustomFeeError(e)) {
-                            android.util.Log.e(
+                            // toString is the Rust Display text; the generated message lists raw fields
+                            Log.e(
                                 "CustomFeeRateSheet",
-                                "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}",
+                                "Unexpected error calculating fee: ${e.javaClass.simpleName} - $e",
                                 e,
                             )
                             return@withContext
@@ -229,7 +231,7 @@ fun CustomFeeRateSheet(
                         )
                     } catch (e: Exception) {
                         // unexpected error during fee calculation
-                        android.util.Log.e(
+                        Log.e(
                             "CustomFeeRateSheet",
                             "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}",
                             e,

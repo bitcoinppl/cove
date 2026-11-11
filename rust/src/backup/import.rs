@@ -150,6 +150,7 @@ pub(crate) async fn import_prepared(
     let wallet_backups = std::mem::take(&mut payload.wallets);
 
     for (wallet_backup, prepared_wallet) in wallet_backups.into_iter().zip(preparation.wallets) {
+        let prepared_id = prepared_wallet.metadata.id.clone();
         let prepared_name = prepared_wallet.metadata.name.clone();
         let approval_snapshot = approval
             .as_mut()
@@ -159,7 +160,7 @@ pub(crate) async fn import_prepared(
 
         if prepared_wallet.snapshot.has_markerless_conflict() && approval_snapshot.is_none() {
             let error = BackupError::ImportApprovalRequired(prepared_wallet.metadata.id.clone());
-            progress.record_failure(prepared_name, RestoreError::from(error));
+            progress.record_failure(&prepared_id, prepared_name, RestoreError::from(error));
             continue;
         }
 
@@ -171,7 +172,7 @@ pub(crate) async fn import_prepared(
         )
         .await;
 
-        progress.record_restore_result(prepared_name, restore_result);
+        progress.record_restore_result(&prepared_id, prepared_name, restore_result);
     }
 
     let mut report = progress.report;
@@ -220,11 +221,7 @@ fn preflight_wallets(payload: &BackupPayload) -> Result<Vec<PreparedImportWallet
             )));
         }
 
-        let validation = validate_wallet_type_secret(
-            &metadata.wallet_type,
-            &wallet_backup.secret,
-            &metadata.name,
-        )?;
+        let validation = validate_wallet_type_secret(&metadata.wallet_type, &wallet_backup.secret)?;
 
         let kind = prepare_wallet_kind(&metadata, wallet_backup, validation)?;
         let identity =
@@ -244,30 +241,22 @@ fn prepare_wallet_kind(
 ) -> Result<PreparedWalletKind, BackupError> {
     let kind = match &backup.secret {
         WalletSecret::Mnemonic(words) => {
-            let mnemonic = Mnemonic::from_str(words).map_err_prefix(
-                &format!("invalid mnemonic for {}", metadata.name),
-                BackupError::Restore,
-            )?;
+            let mnemonic = Mnemonic::from_str(words)
+                .map_err_prefix("invalid mnemonic", BackupError::Restore)?;
 
             let secret = KeychainWalletSecret::Mnemonic(mnemonic);
             Ok(PreparedWalletKind::Hot(PreparedHotWallet::from_secret(secret, metadata)))
         }
         WalletSecret::Xprv(value) => {
-            let xprv = WalletXprv::parse(value.as_str()).map_err_prefix(
-                &format!("invalid extended private key for {}", metadata.name),
-                BackupError::Restore,
-            )?;
+            let xprv = WalletXprv::parse(value.as_str())
+                .map_err_prefix("invalid extended private key", BackupError::Restore)?;
 
             let secret = KeychainWalletSecret::Xpriv(xprv);
             Ok(PreparedWalletKind::Hot(PreparedHotWallet::from_secret(secret, metadata)))
         }
         WalletSecret::TapSignerBackup(_) | WalletSecret::None | WalletSecret::Unknown => {
-            prepare_public_wallet(
-                backup,
-                metadata,
-                validation == WalletTypeSecretValidation::Degraded,
-            )
-            .map(PreparedWalletKind::Public)
+            prepare_public_wallet(backup, validation == WalletTypeSecretValidation::Degraded)
+                .map(PreparedWalletKind::Public)
         }
     }?;
 
@@ -309,42 +298,33 @@ fn validate_prepared_wallet_storage(
 
 fn prepare_public_wallet(
     backup: &WalletBackup,
-    metadata: &WalletMetadata,
     degraded: bool,
 ) -> Result<PreparedPublicWallet, BackupError> {
-    let xpub = backup.xpub.as_deref().map(Xpub::from_str).transpose().map_err(|error| {
-        BackupError::Restore(format!("invalid xpub for {}: {error}", metadata.name))
-    })?;
+    let xpub = backup
+        .xpub
+        .as_deref()
+        .map(Xpub::from_str)
+        .transpose()
+        .map_err_prefix("invalid xpub", BackupError::Restore)?;
 
     let descriptors = backup
         .descriptors
         .as_ref()
         .map(|descriptors| {
-            let external =
-                ExtendedDescriptor::from_str(&descriptors.external).map_err(|error| {
-                    BackupError::Restore(format!(
-                        "invalid external descriptor for {}: {error}",
-                        metadata.name
-                    ))
-                })?;
+            let external = ExtendedDescriptor::from_str(&descriptors.external)
+                .map_err_prefix("invalid external descriptor", BackupError::Restore)?;
 
-            let internal =
-                ExtendedDescriptor::from_str(&descriptors.internal).map_err(|error| {
-                    BackupError::Restore(format!(
-                        "invalid internal descriptor for {}: {error}",
-                        metadata.name
-                    ))
-                })?;
+            let internal = ExtendedDescriptor::from_str(&descriptors.internal)
+                .map_err_prefix("invalid internal descriptor", BackupError::Restore)?;
 
             Ok::<_, BackupError>((external, internal))
         })
         .transpose()?;
 
     if xpub.is_none() && descriptors.is_none() {
-        return Err(BackupError::Restore(format!(
-            "wallet {} has no xpub or descriptors, cannot restore",
-            metadata.name
-        )));
+        return Err(BackupError::Restore(
+            "wallet has no xpub or descriptors, cannot restore".to_string(),
+        ));
     }
 
     let tap_signer_backup = match &backup.secret {
@@ -412,6 +392,7 @@ struct WalletImportProgress {
 impl WalletImportProgress {
     fn record_restore_result(
         &mut self,
+        wallet_id: &WalletId,
         prepared_name: String,
         result: Result<RestoreResult, RestoreError>,
     ) {
@@ -441,16 +422,17 @@ impl WalletImportProgress {
             }
 
             Ok(RestoreResult::Skipped { name }) => self.report.skipped_wallet_names.push(name),
-            Err(error) => self.record_failure(prepared_name, error),
+            Err(error) => self.record_failure(wallet_id, prepared_name, error),
         }
     }
 
-    fn record_failure(&mut self, name: String, failure: RestoreError) {
+    // names are raw user input, so logs carry the wallet id and the name stays in the report
+    fn record_failure(&mut self, wallet_id: &WalletId, name: String, failure: RestoreError) {
         let error = &failure.error;
-        error!("Failed to restore wallet {name}: {error}");
+        error!("Failed to restore wallet id={wallet_id}: {error}");
 
         for warning in &failure.cleanup_warnings {
-            error!("Cleanup failure for {name}: {warning}");
+            error!("Cleanup failure for wallet id={wallet_id}: {warning}");
         }
 
         self.report.failed_wallet_names.push(name);
@@ -492,7 +474,6 @@ pub(crate) enum WalletTypeSecretValidation {
 pub(crate) fn validate_wallet_type_secret(
     wallet_type: &WalletType,
     secret: &WalletSecret,
-    name: &str,
 ) -> Result<WalletTypeSecretValidation, BackupError> {
     match (wallet_type, secret) {
         (WalletType::Hot, WalletSecret::Mnemonic(_) | WalletSecret::Xprv(_))
@@ -505,16 +486,17 @@ pub(crate) fn validate_wallet_type_secret(
         (WalletType::Cold, WalletSecret::None) => Ok(WalletTypeSecretValidation::Valid),
 
         // hot wallet with unknown secret — newer backup format, hard error
-        (WalletType::Hot, WalletSecret::Unknown) => Err(BackupError::Restore(format!(
-            "wallet {name} is a hot wallet with an unrecognized secret type, update the app to import this wallet"
-        ))),
+        (WalletType::Hot, WalletSecret::Unknown) => Err(BackupError::Restore(
+            "hot wallet has an unrecognized secret type, update the app to import this wallet"
+                .to_string(),
+        )),
 
         // non-hot with unknown secret — degraded
         (_, WalletSecret::Unknown) => Ok(WalletTypeSecretValidation::Degraded),
 
         // genuine type/secret mismatch
         (wt, s) => Err(BackupError::Restore(format!(
-            "wallet {name} has mismatched type ({wt:?}) and secret ({s:?})"
+            "wallet has mismatched type ({wt:?}) and secret ({s:?})"
         ))),
     }
 }
@@ -527,12 +509,12 @@ impl RestoredWalletMetadataStore {
         Self(db.clone())
     }
 
-    fn save(&self, metadata: &WalletMetadata, name: &str) -> Result<(), BackupError> {
+    fn save(&self, metadata: &WalletMetadata) -> Result<(), BackupError> {
         let metadata = metadata.clone_without_local_scan_state();
 
         let save = self.0.wallets.save_restored_wallet_metadata(metadata);
 
-        save.map_err(|e| BackupError::Database(format!("metadata for {name}: {e}")))
+        save.map_err_prefix("wallet metadata", BackupError::Database)
     }
 }
 
@@ -572,7 +554,7 @@ async fn restore_prepared_wallet(
     let duplicate_key = identity;
 
     if existing_identities.contains(&duplicate_key) {
-        info!("Skipping wallet {name} - already exists on device");
+        info!("Skipping wallet id={wallet_id}, already exists on device");
         return Ok(RestoreResult::Skipped { name });
     }
 
@@ -592,7 +574,7 @@ async fn restore_prepared_wallet(
         PreparedWalletKind::Public(prepared_public) => {
             if degraded {
                 warn!(
-                    "wallet {name} has an unrecognized secret type, importing as descriptor-only"
+                    "wallet id={wallet_id} has an unrecognized secret type, importing as descriptor-only"
                 );
             }
             restore_descriptor_wallet_prepared_with_context(&metadata, prepared_public, cleanup)
@@ -609,7 +591,7 @@ async fn restore_prepared_wallet(
     let labels_imported = labels_outcome.imported;
     if let Some(warning) = labels_outcome.warning {
         let error = &warning.error;
-        warn!("failed to import labels for wallet {name}: {error}");
+        warn!("failed to import labels for wallet id={wallet_id}: {error}");
         labels_failure = Some((warning.wallet_name, warning.error));
     }
 
@@ -771,7 +753,6 @@ fn restore_descriptor_wallet_prepared_with_context(
 
 impl WalletWrites for HotWalletWrites {
     fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
-        let name = &metadata.name;
         let Self { bdk_descriptors, secret, xpub, descriptors } = self;
 
         // create BDK wallet first — if this fails we haven't touched the keychain yet
@@ -784,11 +765,11 @@ impl WalletWrites for HotWalletWrites {
         if let Some(secret) = secret {
             Keychain::global()
                 .save_wallet_secret(&metadata.id, secret)
-                .map_err_prefix(&format!("private key for {name}"), BackupError::Keychain)?;
+                .map_err_prefix("private key", BackupError::Keychain)?;
         }
 
         save_public_keychain_items(metadata, xpub, descriptors)?;
-        RestoredWalletMetadataStore::new(&Database::global()).save(metadata, name)?;
+        RestoredWalletMetadataStore::new(&Database::global()).save(metadata)?;
 
         Ok(())
     }
@@ -796,7 +777,6 @@ impl WalletWrites for HotWalletWrites {
 
 impl WalletWrites for PublicWalletWrites {
     fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
-        let name = &metadata.name;
         let Self { bdk_descriptors, xpub, descriptors, tap_signer_backup } = self;
 
         save_public_keychain_items(metadata, xpub, descriptors)?;
@@ -810,10 +790,10 @@ impl WalletWrites for PublicWalletWrites {
         if let Some(backup) = tap_signer_backup {
             Keychain::global()
                 .save_tap_signer_backup(&metadata.id, &backup)
-                .map_err_prefix(&format!("tap signer backup for {name}"), BackupError::Keychain)?;
+                .map_err_prefix("tap signer backup", BackupError::Keychain)?;
         }
 
-        RestoredWalletMetadataStore::new(&Database::global()).save(metadata, name)?;
+        RestoredWalletMetadataStore::new(&Database::global()).save(metadata)?;
 
         Ok(())
     }
@@ -828,14 +808,13 @@ fn create_bdk_wallet<D>(
 where
     D: IntoWalletDescriptor + Send + Clone + 'static,
 {
-    let name = &metadata.name;
     let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, metadata.network)
-        .map_err_prefix(&format!("BDK store for {name}"), BackupError::Restore)?;
+        .map_err_prefix("BDK store", BackupError::Restore)?;
 
     bdk_wallet::Wallet::create(external, internal)
         .network(metadata.network.into())
         .create_wallet(&mut store.conn)
-        .map_err_prefix(&format!("BDK wallet for {name}"), BackupError::Restore)?;
+        .map_err_prefix("BDK wallet", BackupError::Restore)?;
 
     Ok(())
 }
@@ -847,18 +826,17 @@ fn save_public_keychain_items(
     descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
 ) -> Result<(), BackupError> {
     let keychain = Keychain::global();
-    let name = &metadata.name;
 
     if let Some(xpub) = xpub {
         keychain
             .save_wallet_xpub(&metadata.id, xpub)
-            .map_err_prefix(&format!("xpub for {name}"), BackupError::Keychain)?;
+            .map_err_prefix("xpub", BackupError::Keychain)?;
     }
 
     if let Some((external, internal)) = descriptors {
         keychain
             .save_public_descriptor(&metadata.id, external, internal)
-            .map_err_prefix(&format!("descriptors for {name}"), BackupError::Keychain)?;
+            .map_err_prefix("descriptors", BackupError::Keychain)?;
     }
 
     Ok(())
@@ -921,7 +899,7 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
 
     for (network_str, node_json) in &settings.selected_nodes {
         let Ok(network) = Network::try_from(network_str.as_str()) else {
-            warn!("skipping unknown network in selected_nodes: {network_str}");
+            warn!("skipping unknown network in selected_nodes, {} chars", network_str.len());
             continue;
         };
 
@@ -952,7 +930,10 @@ fn restore_custom_block_explorers(
 
     for (network_str, template) in custom_block_explorers {
         let Ok(network) = Network::try_from(network_str.as_str()) else {
-            warn!("skipping unknown network in custom_block_explorers: {network_str}");
+            warn!(
+                "skipping unknown network in custom_block_explorers, {} chars",
+                network_str.len()
+            );
             continue;
         };
 
@@ -1010,8 +991,7 @@ mod tests {
 
     #[test]
     fn unknown_hot_wallet_secret_is_a_hard_failure() {
-        let result =
-            validate_wallet_type_secret(&WalletType::Hot, &WalletSecret::Unknown, "Hot wallet");
+        let result = validate_wallet_type_secret(&WalletType::Hot, &WalletSecret::Unknown);
 
         assert!(
             matches!(result, Err(BackupError::Restore(message)) if message.contains("hot wallet"))
@@ -1021,8 +1001,7 @@ mod tests {
     #[test]
     fn unknown_non_hot_wallet_secrets_are_degraded() {
         for wallet_type in [WalletType::Cold, WalletType::XpubOnly, WalletType::WatchOnly] {
-            let result =
-                validate_wallet_type_secret(&wallet_type, &WalletSecret::Unknown, "Public wallet");
+            let result = validate_wallet_type_secret(&wallet_type, &WalletSecret::Unknown);
 
             assert_eq!(result.unwrap(), WalletTypeSecretValidation::Degraded);
         }
@@ -1149,7 +1128,7 @@ mod tests {
         metadata.internal.performed_full_scan_at = Some(30);
         metadata.internal.store_type = StoreType::FileStore;
 
-        RestoredWalletMetadataStore::new(&db).save(&metadata, &metadata.name).unwrap();
+        RestoredWalletMetadataStore::new(&db).save(&metadata).unwrap();
 
         let restored =
             db.wallets.get(&metadata.id, metadata.network, metadata.wallet_mode).unwrap().unwrap();
@@ -1179,8 +1158,7 @@ mod tests {
         let mut existing_identities = ExistingWalletIdentitySet::default();
         existing_identities.insert(duplicate_key);
         let validation =
-            validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &metadata.name)
-                .unwrap();
+            validate_wallet_type_secret(&metadata.wallet_type, &backup.secret).unwrap();
         let prepared_kind = prepare_wallet_kind(&metadata, &backup, validation).unwrap();
         let prepared = PreparedImportWallet {
             metadata: metadata.clone(),
@@ -1201,13 +1179,15 @@ mod tests {
         let metadata = cold_metadata("Existing malformed public wallet");
         let backup = invalid_descriptor_wallet(&metadata);
         let validation =
-            validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &metadata.name)
-                .unwrap();
+            validate_wallet_type_secret(&metadata.wallet_type, &backup.secret).unwrap();
         let result = prepare_wallet_kind(&metadata, &backup, validation);
 
-        assert!(
-            matches!(result, Err(BackupError::Restore(message)) if message.contains("descriptor"))
-        );
+        // error text reaches logs, so it must not carry the user-entered wallet name
+        assert!(matches!(
+            result,
+            Err(BackupError::Restore(message))
+                if message.contains("descriptor") && !message.contains(&metadata.name)
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -4,7 +4,7 @@ use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{
     cloud_storage::CloudStorageError, keychain::KeychainError, passkey::PasskeyError,
 };
-use tracing::warn;
+use tracing::{error, info, warn};
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
@@ -515,12 +515,45 @@ impl CloudBackupError {
         }
     }
 
-    /// Logs the full error under `operation`, then returns the message shown to the reader
+    /// Logs the full error under `operation` at a level that matches its kind, then returns the
+    /// message shown to the reader
     ///
     /// The reader message drops the underlying cause, so a failure that reaches the UI without
     /// a log leaves nothing in a diagnostics report to explain it
     pub(crate) fn logged_reader_message(&self, operation: impl fmt::Display) -> String {
-        warn!("{operation}: {self}");
+        match self {
+            // a locked device keeps the keychain unreadable until unlock, and callers retry
+            Self::Internal(_) if self.is_keychain_unreadable() => warn!("{operation}: {self}"),
+
+            // local storage or app bugs, which retrying will not fix
+            Self::Internal(_) => error!("{operation}: {self}"),
+
+            // the passkey sheet was dismissed, which is an expected outcome
+            Self::Passkey(error)
+                if matches!(error.passkey_error(), Some(PasskeyError::UserCancelled)) =>
+            {
+                info!("{operation}: {self}");
+            }
+
+            // the reader stopped the operation, so it is an expected outcome
+            Self::Cancelled | Self::PasskeyDiscoveryCancelled => info!("{operation}: {self}"),
+
+            Self::NotSupported(_)
+            | Self::UnsupportedPasskeyProvider
+            | Self::RecoveryRequired(_)
+            | Self::Passkey(_)
+            | Self::Compatibility(_)
+            | Self::LocalWalletConflict(_)
+            | Self::Crypto(_)
+            | Self::Cloud(_)
+            | Self::CloudStorage(_)
+            | Self::CloudStorageContext { .. }
+            | Self::Offline(_)
+            | Self::Deferred(_)
+            | Self::PasskeyMismatch
+            | Self::NoBackupFound => warn!("{operation}: {self}"),
+        }
+
         self.reader_message()
     }
 }

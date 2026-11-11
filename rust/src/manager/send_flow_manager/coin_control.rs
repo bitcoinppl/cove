@@ -14,7 +14,8 @@ impl RustSendFlowManager {
         self: &Arc<Self>,
         amount: Amount,
     ) -> Option<()> {
-        debug!("handle_coin_control_amount_changed: {amount:?}");
+        // the amount can be a pasted PIN parsed as sats, so it stays out of the log
+        debug!("handle_coin_control_amount_changed");
 
         let mut coin_control_mode = match self.state.lock().mode.clone() {
             EnterMode::CoinControl(coin_control_mode) => coin_control_mode,
@@ -33,13 +34,10 @@ impl RustSendFlowManager {
         };
 
         if should_select_max {
-            let amount_sats = amount.as_sats();
             let max_send_threshold =
                 soft_max_send.or(max_send_without_fees).map(|amount| amount.as_sats());
 
-            debug!(
-                "setting coin control to max amount close to max {amount_sats} {max_send_threshold:?}"
-            );
+            debug!("setting coin control to max amount above threshold {max_send_threshold:?}");
 
             let max_send_amount =
                 max_send_without_fees.unwrap_or_else(|| coin_control_mode.max_send());
@@ -113,7 +111,8 @@ impl RustSendFlowManager {
         amount: String,
         _is_focused: bool,
     ) -> Option<()> {
-        debug!("handle_coin_control_entered_amount_changed: {amount}");
+        // the text is raw user input and can hold a pasted PIN, so only its length is logged
+        debug!("handle_coin_control_entered_amount_changed: {} chars", amount.len());
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
         let unit = self.state.lock().metadata.selected_unit;
         let amount = match unit {

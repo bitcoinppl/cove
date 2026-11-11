@@ -1011,8 +1011,7 @@ enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
 
 
 
-    case InvalidUrl(String
-    )
+    case InvalidUrl
     case NotUrlEncoded(String
     )
     case MissingField(Field
@@ -1054,9 +1053,7 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
 
 
 
-        case 1: return .InvalidUrl(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 1: return .InvalidUrl
         case 2: return .NotUrlEncoded(
             try FfiConverterString.read(from: &buf)
             )
@@ -1086,9 +1083,8 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
 
 
 
-        case let .InvalidUrl(v1):
+        case .InvalidUrl:
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case let .NotUrlEncoded(v1):

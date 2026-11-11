@@ -379,7 +379,8 @@ private enum WipeCallResult: Sendable {
     }
 
     public func dispatch(action: AuthManagerAction) {
-        logger.debug("dispatch: \(action)")
+        // log only the case name: setPin carries the PIN
+        logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
         rust.dispatch(action: action)
     }
 }

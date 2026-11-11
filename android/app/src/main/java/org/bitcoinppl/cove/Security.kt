@@ -3,7 +3,6 @@ package org.bitcoinppl.cove
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.bitcoinppl.cove_core.device.DeviceAccess

@@ -189,12 +189,13 @@ private enum CoinControlManagerError: LocalizedError {
         try await rust.setUtxoSpendability(outpoint: outpoint, spendable: spendable)
     }
 
+    /// Logs only the case name and count, since messages carry UTXO labels and typed search text
     func logReconcile(message: Message) {
-        logger.debug("reconcile: \(message)")
+        logger.debug("reconcile: \(String(describing: message).prefix { $0 != "(" })")
     }
 
     func logReconcileMany(messages: [Message]) {
-        logger.debug("reconcile_messages: \(messages)")
+        logger.debug("reconcile_messages: \(messages.count) messages")
     }
 
     public func dispatch(action: Action) {
@@ -205,7 +206,8 @@ private enum CoinControlManagerError: LocalizedError {
         rustBridge.async { [weak self] in
             guard let self, let rust = self.rust else { return }
 
-            self.logger.debug("dispatch: \(action)")
+            // only the case name: search actions carry typed text
+            self.logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
             rust.dispatch(action: action)
         }
     }

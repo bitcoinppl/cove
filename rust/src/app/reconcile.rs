@@ -15,7 +15,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMode},
 };
 
-#[derive(Debug, uniffi::Enum)]
+#[derive(Debug, strum::IntoStaticStr, uniffi::Enum)]
 pub enum AppStateReconcileMessage {
     DefaultRouteChanged(Route, Vec<Route>),
     RouteUpdated(Vec<Route>),
@@ -48,9 +48,10 @@ impl Updater {
 
     pub fn send_update(message: AppStateReconcileMessage) {
         let Some(updater) = UPDATER.get() else {
-            tracing::warn!(
-                "Dropping app reconcile update before updater initialization: {message:?}"
-            );
+            // only the variant name: routes can carry UTXO labels, TAPSIGNER PINs and signed
+            // transactions
+            let kind: &'static str = (&message).into();
+            tracing::warn!("Dropping app reconcile update before updater initialization: {kind}");
             return;
         };
 

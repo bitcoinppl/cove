@@ -133,7 +133,7 @@ pub enum SendFlowManagerReconcileMessage {
     ClearAlert,
 }
 
-#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, strum::IntoStaticStr, uniffi::Enum)]
 pub enum SendFlowManagerAction {
     ChangeEnteringAddress(String),
 
@@ -498,7 +498,8 @@ impl RustSendFlowManager {
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
-        trace!("dispatch: {action:?}");
+        // only the variant name: actions carry typed or scanned text, which can be a pasted seed
+        trace!("dispatch: {}", <&'static str>::from(&action));
 
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {

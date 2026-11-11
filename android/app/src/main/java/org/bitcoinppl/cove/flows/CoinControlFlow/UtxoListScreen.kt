@@ -78,6 +78,7 @@ import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.utxoDate
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.Log
 
 // extension properties on Utxo to match Swift implementation
 val org.bitcoinppl.cove_core.types.Utxo.id: ULong
@@ -146,7 +147,7 @@ fun UtxoListScreen(
                 try {
                     manager.setSpendability(utxo.outpoint, spendable)
                 } catch (e: Exception) {
-                    android.util.Log.e("UtxoListScreen", "Unable to update UTXO spendability", e)
+                    Log.e("UtxoListScreen", "Unable to update UTXO spendability", e)
                     snackbarHostState.showSnackbar(updateUtxoLockErrorMessage)
                 }
             }
