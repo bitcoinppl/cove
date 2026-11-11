@@ -32,7 +32,7 @@ pub(crate) use self::fakes::{
 pub(crate) use self::fixtures::{
     FakeAccount, SeededRecord, assert_uploads_confirmed_in, change_a_wallet, finish_wipe,
     keychain_namespace, load_detail, persisted, seed_an_uploaded_wallet, seed_corrupted_record,
-    seed_legacy_stuck_disabling, seed_verifiable_master_key, seed_wallet_backup_elsewhere,
-    verifiable_wrapper,
+    seed_legacy_stuck_disabling, seed_other_namespace, seed_verifiable_master_key,
+    seed_wallet_backup_elsewhere, verifiable_wrapper,
 };
 pub(crate) use self::process::{PhaseEnd, run_case};
