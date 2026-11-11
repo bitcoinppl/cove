@@ -1952,7 +1952,7 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     /**
      * A stored value could not be parsed
      */
-    case ParseSavedValue(String
+    case ParseSavedValue(SavedValueParseError
     )
     /**
      * A value could not be encrypted
@@ -2018,7 +2018,7 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
             )
         case 3: return .Delete
         case 4: return .ParseSavedValue(
-            try FfiConverterString.read(from: &buf)
+            try FfiConverterTypeSavedValueParseError.read(from: &buf)
             )
         case 5: return .Encrypt(
             try FfiConverterString.read(from: &buf)
@@ -2055,7 +2055,7 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
 
         case let .ParseSavedValue(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeSavedValueParseError.write(v1, into: &buf)
 
 
         case let .Encrypt(v1):
@@ -2587,6 +2587,134 @@ public func FfiConverterTypePasskeyRegistrationPlatform_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypePasskeyRegistrationPlatform_lower(_ value: PasskeyRegistrationPlatform) -> RustBuffer {
     return FfiConverterTypePasskeyRegistrationPlatform.lower(value)
+}
+
+
+
+/**
+ * Which saved keychain value could not be parsed
+ *
+ * The parser errors quote the saved text, which is key material or a descriptor, so only the
+ * value's role is kept
+ */
+
+public enum SavedValueParseError: Equatable, Hashable {
+
+    case xpub
+    case missingExternalDescriptor
+    case missingInternalDescriptor
+    case externalDescriptor
+    case internalDescriptor
+    case mnemonic
+    case xpriv
+    case unknownWalletSecretType
+    case localEncryptionKey
+    case tapSignerBackup
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SavedValueParseError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSavedValueParseError: FfiConverterRustBuffer {
+    typealias SwiftType = SavedValueParseError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SavedValueParseError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .xpub
+
+        case 2: return .missingExternalDescriptor
+
+        case 3: return .missingInternalDescriptor
+
+        case 4: return .externalDescriptor
+
+        case 5: return .internalDescriptor
+
+        case 6: return .mnemonic
+
+        case 7: return .xpriv
+
+        case 8: return .unknownWalletSecretType
+
+        case 9: return .localEncryptionKey
+
+        case 10: return .tapSignerBackup
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SavedValueParseError, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .xpub:
+            writeInt(&buf, Int32(1))
+
+
+        case .missingExternalDescriptor:
+            writeInt(&buf, Int32(2))
+
+
+        case .missingInternalDescriptor:
+            writeInt(&buf, Int32(3))
+
+
+        case .externalDescriptor:
+            writeInt(&buf, Int32(4))
+
+
+        case .internalDescriptor:
+            writeInt(&buf, Int32(5))
+
+
+        case .mnemonic:
+            writeInt(&buf, Int32(6))
+
+
+        case .xpriv:
+            writeInt(&buf, Int32(7))
+
+
+        case .unknownWalletSecretType:
+            writeInt(&buf, Int32(8))
+
+
+        case .localEncryptionKey:
+            writeInt(&buf, Int32(9))
+
+
+        case .tapSignerBackup:
+            writeInt(&buf, Int32(10))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSavedValueParseError_lift(_ buf: RustBuffer) throws -> SavedValueParseError {
+    return try FfiConverterTypeSavedValueParseError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSavedValueParseError_lower(_ value: SavedValueParseError) -> RustBuffer {
+    return FfiConverterTypeSavedValueParseError.lower(value)
 }
 
 

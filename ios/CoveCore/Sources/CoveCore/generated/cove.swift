@@ -37741,6 +37741,11 @@ public func FfiConverterTypeShutdownDeadlineTier_lower(_ value: ShutdownDeadline
 
 
 
+/**
+ * Why a signed transaction import could not be parsed
+ *
+ * Its text reaches logs and the import alert, so no variant quotes the input
+ */
 public
 enum SignedImportError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 

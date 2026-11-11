@@ -58806,6 +58806,11 @@ public object FfiConverterTypeShutdownDeadlineTier: FfiConverterRustBuffer<Shutd
 
 
 
+/**
+ * Why a signed transaction import could not be parsed
+ *
+ * Its text reaches logs and the import alert, so no variant quotes the input
+ */
 sealed class SignedImportException(message: String): kotlin.Exception(message) {
 
         class HexDecodeException(message: String) : SignedImportException(message)

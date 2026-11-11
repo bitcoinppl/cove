@@ -3381,7 +3381,7 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
      * Creates a new PSBT from serialized bytes
      *
      * # Errors
-     * Returns `PsbtError::Other` if deserialization fails
+     * Returns `PsbtError::Other` with a payload-free reason if deserialization fails
      */
 public convenience init(data: Data)throws  {
     let handle =
@@ -6833,7 +6833,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_psbt_new() != 34599) {
+    if (uniffi_cove_types_checksum_constructor_psbt_new() != 14021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440) {
