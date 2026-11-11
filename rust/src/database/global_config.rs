@@ -19,6 +19,7 @@ use crate::{
 
 use super::{Error, error::SerdeError, read_health};
 use crate::string_config_accessor;
+use cove_util::json::JsonDecodeError;
 use cove_util::result_ext::ResultExt as _;
 
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");
@@ -280,10 +281,11 @@ impl GlobalConfigTable {
             return Node::default(network);
         };
 
-        // a separate label, so a readable but unparseable node does not flap between states
+        // a separate label, so a readable but unparseable node does not flap between states. the
+        // JSON holds a user-entered node URL, so a parse failure keeps only its position
         let parse = format!("selected node JSON for {network}");
-        let Some(node) = read_health::observe(parse, serde_json::from_str::<Node>(&node_json))
-        else {
+        let node = serde_json::from_str::<Node>(&node_json).map_err(JsonDecodeError::from);
+        let Some(node) = read_health::observe(parse, node) else {
             return Node::default(network);
         };
 

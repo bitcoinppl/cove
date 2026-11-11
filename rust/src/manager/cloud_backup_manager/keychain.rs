@@ -1,5 +1,6 @@
 use cove_cspp::{ActiveMasterKeySnapshot, Cspp, CsppStore as _};
 use cove_device::keychain::{Keychain, KeychainError};
+use cove_util::json::JsonDecodeError;
 use tracing::warn;
 
 use super::{
@@ -47,8 +48,9 @@ pub(crate) enum CloudBackupKeychainError {
     #[error("could not encode pending Cloud Backup enable state: {0}")]
     EncodePendingEnable(serde_json::Error),
 
+    /// The journal holds passkey data, so only the parse position is kept
     #[error("could not decode pending Cloud Backup enable state: {0}")]
-    DecodePendingEnable(serde_json::Error),
+    DecodePendingEnable(JsonDecodeError),
 
     #[error("unsupported pending Cloud Backup enable state version {0}")]
     UnsupportedPendingEnableVersion(u8),
@@ -187,7 +189,7 @@ impl CloudBackupKeychain {
         };
 
         let journal: PendingEnableJournal = serde_json::from_str(&encoded)
-            .map_err(CloudBackupKeychainError::DecodePendingEnable)?;
+            .map_err(|error| CloudBackupKeychainError::DecodePendingEnable(error.into()))?;
         if journal.version() != PENDING_ENABLE_JOURNAL_VERSION {
             return Err(CloudBackupKeychainError::UnsupportedPendingEnableVersion(
                 journal.version(),

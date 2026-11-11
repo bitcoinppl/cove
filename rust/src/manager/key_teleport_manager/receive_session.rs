@@ -5,6 +5,7 @@ use std::{
 };
 
 use cove_device::keychain::{Keychain, KeychainError};
+use cove_util::json::JsonDecodeError;
 use keyteleport::ReceiverSession;
 use parking_lot::{Mutex, MutexGuard};
 use rand::RngExt as _;
@@ -391,9 +392,10 @@ impl PersistedReceiveSession {
     }
 
     fn receiver_session(&self) -> Result<ReceiverSession, KeyTeleportAlert> {
-        let bytes = Zeroizing::new(
-            hex::decode(&self.private_key_hex).map_err_str(KeyTeleportAlert::Keychain)?,
-        );
+        // hex's error names the offending character, which here is private key material
+        let bytes = Zeroizing::new(hex::decode(&self.private_key_hex).map_err(|_| {
+            KeyTeleportAlert::Keychain("receive private key is not valid hex".into())
+        })?);
         let mut private_key: [u8; 32] = bytes
             .as_slice()
             .try_into()
@@ -422,9 +424,11 @@ fn load_receive_session_unlocked()
         return Ok(None);
     };
 
+    // the session holds the receive private key, so a parse failure keeps only its position
     let mut session: PersistedReceiveSession = serde_json::from_str(&value).map_err(|error| {
         ReceiveSessionLoadError::Invalid(KeyTeleportAlert::Keychain(format!(
-            "unable to parse receive session: {error}"
+            "unable to parse receive session: {}",
+            JsonDecodeError::from(error)
         )))
     })?;
 
