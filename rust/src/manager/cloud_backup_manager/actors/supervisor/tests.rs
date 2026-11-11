@@ -2225,7 +2225,7 @@ async fn supervisor_accepts_registered_enable_passkey_confirmation() {
     assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
     let pending = supervisor.pending_enable_session.take().unwrap();
-    let (pending_master_key, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (pending_master_key, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_master_key.namespace_id(), expected_namespace);
     assert_eq!(pending_passkey.credential_id, expected_credential_id);
 }

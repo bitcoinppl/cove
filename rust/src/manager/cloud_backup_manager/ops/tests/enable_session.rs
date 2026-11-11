@@ -51,7 +51,7 @@ async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -81,7 +81,7 @@ async fn normal_enable_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -111,8 +111,57 @@ async fn reinitialize_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
+}
+
+/// A Reinitialize of a configured backup that paused for the user to confirm its new passkey
+/// continues as that Reinitialize: the confirmation authenticates the new credential, uploads,
+/// and the backup stays configured, now on the new namespace
+#[tokio::test(flavor = "current_thread")]
+async fn confirming_a_paused_reinitialize_passkey_finishes_the_reinitialize() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    let replaced = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+
+    globals.passkey.set_create_result(Ok(vec![4, 5, 6]));
+    run_reinitialize_backup_operation(&manager).await.unwrap();
+    assert_eq!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
+    );
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), replaced);
+
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+    dispatch_and_wait(&manager, CloudBackupManagerAction::ConfirmSavedPasskey).await;
+    wait_for_test_condition(Duration::from_secs(5), "the reinitialize finishes", || {
+        manager.projected_exclusive_operation().is_none()
+            && manager.model_snapshot().enable_state == CloudBackupEnableState::Idle
+    })
+    .await;
+
+    // the confirmation authenticates the new credential, and so does the verification of the
+    // backup it replaced; nothing authenticates the old one or creates another
+    let authenticated = globals.passkey.authenticated_credential_ids();
+    assert!(!authenticated.is_empty());
+    assert!(authenticated.iter().all(|id| id == &vec![4, 5, 6]), "{authenticated:?}");
+    assert_eq!(globals.passkey.create_count(), 1);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    assert_ne!(namespace, replaced, "the reinitialize did not replace the namespace");
+    assert!(globals.cloud.has_namespace(&namespace));
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -141,7 +190,7 @@ async fn force_new_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -168,7 +217,7 @@ async fn registered_passkey_stages_confirmation_without_duplicate_create() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey, _) = pending.into_staged_confirmation().unwrap();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -288,6 +337,7 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
                 provider_hint: None,
             }),
             CloudBackupEnableContext::settings_manual(),
+            PendingEnableRun::Enable,
         ),
     )
     .await;
@@ -368,6 +418,7 @@ async fn unsupported_provider_saved_passkey_confirmation_fails_without_retry() {
                 provider_hint: None,
             }),
             CloudBackupEnableContext::settings_manual(),
+            PendingEnableRun::Enable,
         ),
     )
     .await;

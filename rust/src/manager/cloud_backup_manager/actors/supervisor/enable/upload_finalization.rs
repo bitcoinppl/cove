@@ -199,15 +199,10 @@ impl CloudBackupSupervisor {
                 registered.master_key,
                 registered.passkey,
                 registered.context,
+                PendingEnableRun::of(claim.operation()),
             ));
         manager.apply_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
-        if !self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation) {
-            manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                SavedPasskeyConfirmationMode::Manual,
-            ));
-            self.runtime.clear();
-            manager.project_exclusive_operation_finished(claim);
-        }
+        self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation);
     }
 
     pub(crate) fn start_ready_enable_upload_if_present(

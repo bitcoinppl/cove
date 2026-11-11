@@ -55,9 +55,9 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
     DeepVerificationReport, DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
+    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata, PendingEnableRun,
+    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
