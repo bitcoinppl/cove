@@ -80,6 +80,24 @@ pub(crate) struct CloudBackupListedDetail {
     pub(crate) detail: CloudBackupDetail,
     /// Wallet record IDs the listing found that are not local wallets
     pub(crate) cloud_only_record_ids: HashSet<String>,
+    pub(crate) own_secrets: OwnSecretFacts,
+}
+
+/// What the local wallets' own records say about secrets only the cloud may hold
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct OwnSecretFacts {
+    /// Own record IDs whose cloud copy holds a secret this device doesn't
+    pub(crate) missing_locally: HashSet<String>,
+    /// Own record IDs of wallets holding no secret here whose cloud copy couldn't be read, so
+    /// whether it holds one isn't known
+    pub(crate) unchecked: HashSet<String>,
+}
+
+impl OwnSecretFacts {
+    pub(crate) fn retain_local_wallets(&mut self, local_record_ids: &HashSet<String>) {
+        self.missing_locally.retain(|record_id| local_record_ids.contains(record_id));
+        self.unchecked.retain(|record_id| local_record_ids.contains(record_id));
+    }
 }
 
 impl CloudBackupListedDetail {
@@ -88,6 +106,7 @@ impl CloudBackupListedDetail {
     pub(crate) fn retain_local_wallets(&mut self, local_record_ids: &HashSet<String>) {
         let removed_confirmed = self.detail.retain_local_wallets(local_record_ids);
         self.cloud_only_record_ids.extend(removed_confirmed);
+        self.own_secrets.retain_local_wallets(local_record_ids);
     }
 }
 

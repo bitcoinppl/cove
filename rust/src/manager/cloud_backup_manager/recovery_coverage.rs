@@ -250,6 +250,7 @@ mod tests {
                 cloud_only: super::super::CloudOnlyState::NotFetched,
                 cloud_only_operation: super::super::CloudOnlyOperation::Idle,
                 other_backups_operation: super::super::OtherBackupsOperation::Idle,
+                own_secrets: super::super::OwnSecretFacts::default(),
             },
         }
     }

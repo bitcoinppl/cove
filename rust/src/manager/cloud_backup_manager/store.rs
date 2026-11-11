@@ -9,7 +9,7 @@ use strum::IntoEnumIterator as _;
 
 use super::actors::CloudBackupWriteClient;
 use super::cloud_inventory::LocalWalletSnapshot;
-use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
+use super::wallets::{BackupSecret, PreparedWalletBackup, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBlobSyncState;
@@ -130,6 +130,9 @@ impl CloudBackupStore {
                     record_id: prepared.record_id,
                     revision_hash: prepared.revision_hash,
                     local_label_count: prepared.entry.labels_count,
+                    // what an upload from this device would carry, so watch-only means the
+                    // device holds no secret for the wallet
+                    local_secret: BackupSecret::from(&prepared.entry.secret),
                 })
             })
             .buffered(CLOUD_BACKUP_IO_CONCURRENCY)

@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use super::wallets::RemoteWalletBackupSummary;
+use super::wallets::{BackupSecret, RemoteWalletBackupSummary};
 use super::{
     CloudBackupDetail, CloudBackupError, CloudBackupListedDetail, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWalletStatus,
+    CloudBackupWalletItem, CloudBackupWalletStatus, OwnSecretFacts,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -24,6 +24,8 @@ pub(crate) struct LocalWalletSnapshot {
     pub(crate) record_id: String,
     pub(crate) revision_hash: String,
     pub(crate) local_label_count: u32,
+    /// Whether this device holds the wallet's secret, as an upload from it would carry
+    pub(crate) local_secret: BackupSecret,
 }
 
 enum WalletItemBucket {
@@ -117,7 +119,41 @@ impl CloudWalletInventory {
         CloudBackupListedDetail {
             detail: CloudBackupDetail { last_sync: self.last_sync, up_to_date, needs_sync },
             cloud_only_record_ids,
+            own_secrets: self.own_secret_facts(),
         }
+    }
+
+    /// Which own records hold a secret this device lacks, read from the records the remote
+    /// truth already decrypted with the local master key
+    ///
+    /// A wallet that holds no secret here and whose cloud copy is watch-only too, such as an
+    /// imported xpub, risks nothing. When the copy couldn't be read, whether it holds a secret is
+    /// unchecked rather than assumed either way
+    fn own_secret_facts(&self) -> OwnSecretFacts {
+        let mut facts = OwnSecretFacts::default();
+        let lacking_secret = self
+            .local_wallets
+            .iter()
+            .filter(|wallet| wallet.local_secret == BackupSecret::WatchOnly);
+
+        for wallet in lacking_secret {
+            let record_id = wallet.record_id.clone();
+            match self.remote_wallet_state(wallet) {
+                RemoteWalletState::Matching(summary) | RemoteWalletState::Stale(summary)
+                    if summary.secret == BackupSecret::Held =>
+                {
+                    facts.missing_locally.insert(record_id);
+                }
+                RemoteWalletState::Unknown | RemoteWalletState::Unsupported => {
+                    facts.unchecked.insert(record_id);
+                }
+                RemoteWalletState::Matching(_)
+                | RemoteWalletState::Stale(_)
+                | RemoteWalletState::Missing => {}
+            }
+        }
+
+        facts
     }
 
     pub(crate) fn has_unknown_remote_wallets(&self) -> bool {
@@ -283,6 +319,8 @@ fn has_local_upload_candidate(sync_state: Option<&PersistedCloudBlobSyncState>) 
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::database::cloud_backup::{
         CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
@@ -310,6 +348,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 3,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -323,6 +362,7 @@ mod tests {
                         revision_hash: "rev-1".into(),
                         label_count: 2,
                         updated_at: Some(50),
+                        secret: BackupSecret::Held,
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -346,6 +386,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 3,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -359,6 +400,7 @@ mod tests {
                         revision_hash: "rev-1".into(),
                         label_count: 2,
                         updated_at: None,
+                        secret: BackupSecret::Held,
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -385,6 +427,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-2".into(),
             local_label_count: 1,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -398,6 +441,7 @@ mod tests {
                         revision_hash: "rev-1".into(),
                         label_count: 1,
                         updated_at: Some(10),
+                        secret: BackupSecret::Held,
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -419,6 +463,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -448,6 +493,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -477,6 +523,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -511,12 +558,14 @@ mod tests {
             record_id: "record-a".into(),
             revision_hash: "rev-a".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let wallet_b = LocalWalletSnapshot {
             metadata: WalletMetadata::preview_new(),
             record_id: "record-b".into(),
             revision_hash: "rev-b".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -540,12 +589,14 @@ mod tests {
             record_id: "record-uploading".into(),
             revision_hash: "rev-uploading".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let pending_wallet = LocalWalletSnapshot {
             metadata: WalletMetadata::preview_new(),
             record_id: "record-pending".into(),
             revision_hash: "rev-pending".into(),
             local_label_count: 0,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -589,6 +640,7 @@ mod tests {
                             revision_hash: "stale-uploading".into(),
                             label_count: 0,
                             updated_at: Some(5),
+                            secret: BackupSecret::Held,
                         },
                     ),
                     (
@@ -597,6 +649,7 @@ mod tests {
                             revision_hash: "stale-pending".into(),
                             label_count: 0,
                             updated_at: Some(6),
+                            secret: BackupSecret::Held,
                         },
                     ),
                 ]),
@@ -630,6 +683,7 @@ mod tests {
             record_id: "record-1".into(),
             revision_hash: "rev-1".into(),
             local_label_count: 3,
+            local_secret: BackupSecret::Held,
         };
         let inventory = CloudWalletInventory {
             last_sync: None,
@@ -655,5 +709,119 @@ mod tests {
         assert_eq!(detail.needs_sync.len(), 1);
         assert_eq!(detail.needs_sync[0].record_id, wallet.record_id);
         assert_eq!(detail.needs_sync[0].sync_status, CloudBackupWalletStatus::UnsupportedVersion);
+    }
+
+    /// Loads an inventory of these local wallets and the cloud copies the remote truth read,
+    /// with every listed record its own, and returns what a Turn Off impact reads from it
+    fn impact_inputs_for(
+        wallets: &[(&str, BackupSecret, Option<BackupSecret>)],
+    ) -> crate::manager::cloud_backup_manager::inventory::InventoryImpactInputs {
+        use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
+        use crate::manager::cloud_backup_manager::{
+            CloudBackupInventoryAuthority, CloudBackupStateReducer, CloudOnlyListingUpdate,
+            CloudOnlyState, InventoryInput, InventoryOwner, OwnSecretUpdate,
+        };
+
+        let mut remote_wallet_truth = RemoteWalletTruth::default();
+        let local_wallets = wallets
+            .iter()
+            .map(|(name, local_secret, cloud_secret)| {
+                let mut metadata = WalletMetadata::preview_new();
+                metadata.name = (*name).into();
+
+                let record_id = format!("record-{name}");
+                match cloud_secret {
+                    Some(secret) => {
+                        let summary = RemoteWalletBackupSummary {
+                            revision_hash: format!("cloud-rev-{name}"),
+                            label_count: 0,
+                            updated_at: Some(10),
+                            secret: *secret,
+                        };
+                        remote_wallet_truth
+                            .summaries_by_record_id
+                            .insert(record_id.clone(), summary);
+                    }
+                    None => {
+                        remote_wallet_truth.unknown_record_ids.insert(record_id.clone());
+                    }
+                }
+
+                LocalWalletSnapshot {
+                    metadata,
+                    record_id,
+                    revision_hash: format!("local-rev-{name}"),
+                    local_label_count: 0,
+                    local_secret: *local_secret,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let cloud_wallet_record_ids =
+            local_wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
+        let inventory = CloudWalletInventory {
+            last_sync: Some(10),
+            local_wallets,
+            cloud_wallet_record_ids,
+            sync_states_by_record_id: HashMap::new(),
+            remote_wallet_truth,
+            strict_cloud_presence: false,
+        };
+
+        let listed = inventory.build_detail();
+        let mut owner = InventoryOwner::default();
+        owner.apply(InventoryInput::DetailRefreshApplied {
+            detail: listed.detail,
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
+            own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
+        });
+        owner.apply(InventoryInput::CloudOnlyStateResolved(CloudOnlyState::Loaded {
+            rows: Vec::new(),
+            incomplete: false,
+        }));
+
+        InventoryFacts::new(&owner, &CloudBackupStateReducer::default()).view().impact_inputs()
+    }
+
+    #[test]
+    fn own_record_with_its_secret_only_in_the_cloud_is_at_risk() {
+        use crate::manager::cloud_backup_manager::CloudBackupInventoryIncompleteReason;
+        use crate::manager::cloud_backup_manager::screen::CloudBackupInventoryAssessment;
+
+        let names = |entries: &[&str]| -> BTreeMap<String, String> {
+            entries.iter().map(|name| (format!("record-{name}"), (*name).to_string())).collect()
+        };
+
+        // a wallet downgraded to watch-only here whose backup still holds its seed, an imported
+        // xpub backed up as watch-only, and a hot wallet holding its own seed
+        let checked = impact_inputs_for(&[
+            ("Downgraded", BackupSecret::WatchOnly, Some(BackupSecret::Held)),
+            ("Imported Xpub", BackupSecret::WatchOnly, Some(BackupSecret::WatchOnly)),
+            ("Hot", BackupSecret::Held, Some(BackupSecret::Held)),
+        ]);
+
+        assert_eq!(checked.secret_missing_locally, names(&["Downgraded"]));
+        assert_eq!(checked.secret_unchecked, BTreeMap::new());
+        assert_eq!(checked.assessment, CloudBackupInventoryAssessment::Complete);
+        assert_eq!(
+            checked.own,
+            ["Downgraded", "Hot", "Imported Xpub"].map(|name| format!("record-{name}")).into()
+        );
+
+        // a watch-only wallet whose backup couldn't be read might have its seed only there
+        let unread = impact_inputs_for(&[
+            ("Unread", BackupSecret::WatchOnly, None),
+            ("Hot Unread", BackupSecret::Held, None),
+        ]);
+
+        assert_eq!(unread.secret_missing_locally, BTreeMap::new());
+        assert_eq!(unread.secret_unchecked, names(&["Unread"]));
+        assert_eq!(
+            unread.assessment,
+            CloudBackupInventoryAssessment::Partial {
+                reason: CloudBackupInventoryIncompleteReason::Unknown
+            }
+        );
     }
 }

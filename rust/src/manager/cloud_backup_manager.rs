@@ -98,7 +98,7 @@ pub(crate) use self::model::{
     CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
     CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupListedDetail, CloudBackupStateReducer, CloudBackupStateReducerEvent,
-    CloudBackupStatus,
+    CloudBackupStatus, OwnSecretFacts,
 };
 pub use self::model::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupEnableFlow,
@@ -122,6 +122,7 @@ pub(crate) use self::ops::{
 pub(crate) use self::owner::inventory::{
     CloudBackupDetailState, CloudBackupInventoryAuthority, CloudOnlyFetch, CloudOnlyListingUpdate,
     CloudOnlyRow, CloudOnlyState, InventoryInput, InventoryOwner, LoadedCloudBackupDetail,
+    OwnSecretUpdate,
 };
 pub(crate) use self::owner::lifecycle::LifecycleCapability;
 use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};

@@ -40,9 +40,10 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupKeychain,
     CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStateReducer, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWriteClient, CloudOnlyFetch, PendingEnableCoordinator,
-    PendingEnableJournal, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnableSession, PendingUploadVerificationState,
+    CloudBackupWalletItem, CloudBackupWriteClient, CloudOnlyFetch, InventoryOwner,
+    PendingEnableCoordinator, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PublishedScreen,
     actors::restore::RestoreOperation,
     actors::supervisor::{CloudBackupSupervisor, test_support::LeftoverOperationForTest},
     master_key_wrapper_revision_hash,
@@ -63,7 +64,9 @@ use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
 pub(crate) fn manager_without_actors() -> Arc<RustCloudBackupManager> {
     Arc::new(RustCloudBackupManager {
         state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
+        inventory: Arc::new(RwLock::new(InventoryOwner::default())),
         reconciler: ReconcileChannel::new(1000),
+        published_screen: Arc::new(PublishedScreen::default()),
         pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
         cloud_writes: Addr::detached(),
         supervisor: Addr::detached(),
@@ -148,6 +151,7 @@ pub(crate) fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListed
             .iter()
             .map(|record_id| (*record_id).to_owned())
             .collect(),
+        own_secrets: Default::default(),
     }
 }
 

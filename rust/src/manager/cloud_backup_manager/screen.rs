@@ -19,9 +19,9 @@ use tracing::error;
 use self::notices::Notices;
 use self::types::CloudBackupActions;
 pub(crate) use self::types::{
-    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupKeyTrust,
-    CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection,
-    CloudBackupTurnOffFailure, CloudBackupUnreadableKind,
+    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupInventoryAssessment,
+    CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupOwnRecord, CloudBackupOwnRow,
+    CloudBackupProgressSection, CloudBackupTurnOffFailure, CloudBackupUnreadableKind,
 };
 pub use self::types::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,

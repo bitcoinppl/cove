@@ -3,7 +3,7 @@ mod payload;
 mod restore;
 mod upload;
 
-use cove_cspp::backup_data::WalletEntry;
+use cove_cspp::backup_data::{WalletEntry, WalletSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::wallet::metadata::WalletMetadata;
@@ -65,6 +65,7 @@ pub(crate) struct RemoteWalletBackupSummary {
     pub(crate) revision_hash: String,
     pub(crate) label_count: u32,
     pub(crate) updated_at: Option<u64>,
+    pub(crate) secret: BackupSecret,
 }
 
 impl RemoteWalletBackupSummary {
@@ -73,6 +74,26 @@ impl RemoteWalletBackupSummary {
             revision_hash: entry.content_revision_hash.clone(),
             label_count: entry.labels_count,
             updated_at: (entry.updated_at != 0).then_some(entry.updated_at),
+            secret: BackupSecret::from(&entry.secret),
+        }
+    }
+}
+
+/// Whether a wallet backup carries key material that can sign, or only public keys
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BackupSecret {
+    Held,
+    WatchOnly,
+}
+
+impl From<&WalletSecret> for BackupSecret {
+    fn from(secret: &WalletSecret) -> Self {
+        match secret {
+            WalletSecret::WatchOnly => Self::WatchOnly,
+            WalletSecret::Mnemonic(_)
+            | WalletSecret::Xprv(_)
+            | WalletSecret::TapSignerBackup(_)
+            | WalletSecret::Descriptor(_) => Self::Held,
         }
     }
 }

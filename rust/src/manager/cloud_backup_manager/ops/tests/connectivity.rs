@@ -361,6 +361,7 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
         listed: crate::manager::cloud_backup_manager::CloudBackupListedDetail {
             detail: complete_detail,
             cloud_only_record_ids: Default::default(),
+            own_secrets: Default::default(),
         },
         authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
     });

@@ -12,7 +12,7 @@ use super::{
     CloudBackupInventoryIncompleteReason, CloudBackupListedDetail, CloudBackupManagerAction,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
     CloudBackupStore, CloudOnlyFetch, CloudOnlyListingUpdate, CloudOnlyState,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OwnSecretUpdate,
     RustCloudBackupManager,
 };
 
@@ -328,7 +328,7 @@ impl RustCloudBackupManager {
     pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
         let outcome = Self::retain_local_wallets(outcome);
 
-        let (detail, authority, cloud_only_listing) = match outcome {
+        let (detail, authority, cloud_only_listing, own_secrets) = match outcome {
             CloudBackupDetailOutcome::Checking => {
                 self.apply_inventory(InventoryInput::DetailRefreshStarted);
                 return;
@@ -352,6 +352,7 @@ impl RustCloudBackupManager {
                     cloud_only_listing: CloudOnlyListingUpdate::Listed(
                         listed.cloud_only_record_ids,
                     ),
+                    own_secrets: OwnSecretUpdate::Read(listed.own_secrets),
                 });
                 return;
             }
@@ -359,11 +360,13 @@ impl RustCloudBackupManager {
                 listed.detail,
                 authority,
                 CloudOnlyListingUpdate::Listed(listed.cloud_only_record_ids),
+                OwnSecretUpdate::Read(listed.own_secrets),
             ),
             CloudBackupDetailOutcome::RefreshedWithoutListing(detail) => (
                 detail,
                 CloudBackupInventoryAuthority::ProviderConfirmed,
                 CloudOnlyListingUpdate::Unlisted,
+                OwnSecretUpdate::Unread,
             ),
         };
 
@@ -372,6 +375,7 @@ impl RustCloudBackupManager {
             detail,
             authority,
             cloud_only_listing,
+            own_secrets,
         });
     }
 

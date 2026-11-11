@@ -18,7 +18,7 @@ use crate::manager::cloud_backup_manager::model::CloudBackupRestoreAllRuntimeSta
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupRestoreAllState, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
-    CloudOnlyOperation, OtherBackupsOperation,
+    CloudOnlyOperation, OtherBackupsOperation, OwnSecretFacts,
 };
 use crate::wallet_identity::CoveringWallets;
 use tracing::debug;
@@ -32,6 +32,16 @@ pub(crate) struct LoadedCloudBackupDetail {
     pub(crate) cloud_only: CloudOnlyState,
     pub(crate) cloud_only_operation: CloudOnlyOperation,
     pub(crate) other_backups_operation: OtherBackupsOperation,
+    pub(crate) own_secrets: OwnSecretFacts,
+}
+
+/// What a detail result says about the own records' secrets
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OwnSecretUpdate {
+    /// The result read the own records, so these facts replace the loaded ones
+    Read(OwnSecretFacts),
+    /// The result carries no own-record reads, so the loaded facts stay
+    Unread,
 }
 
 /// Evidence used to accept wallet inventory for the active backup namespace
@@ -98,6 +108,7 @@ pub(crate) enum InventoryInput {
         detail: CloudBackupDetail,
         authority: CloudBackupInventoryAuthority,
         cloud_only_listing: CloudOnlyListingUpdate,
+        own_secrets: OwnSecretUpdate,
     },
     /// A detail a verification built from the local wallets it read at `read_at`; applied like a
     /// refresh only if no local wallet change landed since
@@ -105,6 +116,7 @@ pub(crate) enum InventoryInput {
         read_at: LocalWalletsEpoch,
         detail: CloudBackupDetail,
         cloud_only_listing: CloudOnlyListingUpdate,
+        own_secrets: OwnSecretUpdate,
     },
     DetailRefreshFailed {
         reason: CloudBackupInventoryIncompleteReason,
@@ -219,10 +231,25 @@ impl InventoryOwner {
             InventoryInput::DetailRefreshProvisional(detail) => {
                 self.apply_detail_refresh_provisional(detail);
             }
-            InventoryInput::DetailRefreshApplied { detail, authority, cloud_only_listing } => {
-                return self.apply_detail_refresh(detail, authority, cloud_only_listing);
+            InventoryInput::DetailRefreshApplied {
+                detail,
+                authority,
+                cloud_only_listing,
+                own_secrets,
+            } => {
+                return self.apply_detail_refresh(
+                    detail,
+                    authority,
+                    cloud_only_listing,
+                    own_secrets,
+                );
             }
-            InventoryInput::VerifiedDetailApplied { read_at, detail, cloud_only_listing } => {
+            InventoryInput::VerifiedDetailApplied {
+                read_at,
+                detail,
+                cloud_only_listing,
+                own_secrets,
+            } => {
                 // the detail lacks or still lists a wallet the change added or removed, and the
                 // change already asked for the refresh that replaces it
                 if read_at != self.local_wallets_epoch {
@@ -231,7 +258,12 @@ impl InventoryOwner {
                 }
 
                 let authority = CloudBackupInventoryAuthority::ProviderConfirmed;
-                return self.apply_detail_refresh(detail, authority, cloud_only_listing);
+                return self.apply_detail_refresh(
+                    detail,
+                    authority,
+                    cloud_only_listing,
+                    own_secrets,
+                );
             }
             InventoryInput::DetailCleared => self.apply_detail_cleared(),
             InventoryInput::DetailRefreshFailed { reason, error } => {
@@ -491,9 +523,17 @@ impl InventoryOwner {
         detail: CloudBackupDetail,
         inventory_authority: CloudBackupInventoryAuthority,
         cloud_only_listing: CloudOnlyListingUpdate,
+        own_secrets: OwnSecretUpdate,
     ) -> bool {
         let previous_loaded = self.loaded_detail().cloned();
         self.detail_refresh = DetailRefreshActivity::Idle;
+
+        let own_secrets = match own_secrets {
+            OwnSecretUpdate::Read(facts) => facts,
+            OwnSecretUpdate::Unread => {
+                previous_loaded.as_ref().map(|state| state.own_secrets.clone()).unwrap_or_default()
+            }
+        };
 
         if let CloudOnlyListingUpdate::Listed(record_ids) = &cloud_only_listing {
             self.cloud_only_inventory.record_listing(record_ids);
@@ -532,6 +572,7 @@ impl InventoryOwner {
                     .as_ref()
                     .map(|state| state.other_backups_operation.clone())
                     .unwrap_or(OtherBackupsOperation::Idle),
+                own_secrets,
             },
         };
 
@@ -667,6 +708,7 @@ impl InventoryOwner {
             && let Some(state) = self.loaded_detail_mut()
         {
             state.detail.retain_local_wallets(local_record_ids);
+            state.own_secrets.retain_local_wallets(local_record_ids);
         }
 
         self.cloud_only_inventory.invalidate();
@@ -712,6 +754,7 @@ impl InventoryOwner {
                 cloud_only: CloudOnlyState::NotFetched,
                 cloud_only_operation: CloudOnlyOperation::Idle,
                 other_backups_operation: OtherBackupsOperation::Idle,
+                own_secrets: OwnSecretFacts::default(),
             }),
         };
     }
@@ -938,6 +981,7 @@ mod tests {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(row_ids(&rows)),
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows,
@@ -1163,6 +1207,7 @@ mod tests {
             detail: test_detail(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: Vec::new(),
@@ -1375,6 +1420,7 @@ mod tests {
             detail,
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
+            own_secrets: OwnSecretUpdate::Unread,
         });
         assert_eq!(
             retry_state(&owner),
@@ -1391,6 +1437,7 @@ mod tests {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
@@ -1417,6 +1464,7 @@ mod tests {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
         assert!(owner.listing_is_provider_confirmed());
 
@@ -1458,6 +1506,7 @@ mod tests {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::Offline,
@@ -1486,6 +1535,7 @@ mod tests {
             detail: test_detail(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
 
         assert!(!owner.listing_is_provider_confirmed());
@@ -1505,6 +1555,7 @@ mod tests {
             detail: detail.clone(),
             authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&wallets),
@@ -1520,6 +1571,7 @@ mod tests {
             detail,
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
+            own_secrets: OwnSecretUpdate::Unread,
         });
         let CloudBackupDetailState::Complete { state } = owner.detail_state().clone() else {
             panic!("expected complete detail");
@@ -1544,6 +1596,7 @@ mod tests {
             detail: retained.clone(),
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
         owner.apply(InventoryInput::DetailRefreshProvisional(test_detail()));
 
@@ -1601,6 +1654,7 @@ mod tests {
             detail: CloudBackupDetail { last_sync: None, up_to_date, needs_sync },
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
         });
 
         let rows = copies
@@ -1683,6 +1737,7 @@ mod tests {
                     needs_sync: Vec::new(),
                 },
                 cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+                own_secrets: OwnSecretUpdate::Unread,
             };
 
         let mut owner = InventoryOwner::default();
@@ -1698,6 +1753,7 @@ mod tests {
             },
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             cloud_only_listing: CloudOnlyListingUpdate::Listed(HashSet::new()),
+            own_secrets: OwnSecretUpdate::Unread,
         });
 
         let effects = owner.apply(verified(vec![kept.clone()], read_before_change));
