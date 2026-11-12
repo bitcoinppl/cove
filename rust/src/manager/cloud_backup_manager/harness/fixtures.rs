@@ -250,6 +250,17 @@ pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
     app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
 }
 
+/// Saves `credential_id` as this device's passkey with the salt the verifiable wrapper uses, and
+/// where it was created when `hint` is given
+pub(crate) fn save_device_passkey(
+    credential_id: &[u8],
+    hint: Option<&cove_cspp::backup_data::PasskeyProviderHint>,
+) {
+    CloudBackupKeychain::global()
+        .save_passkey_and_hint(credential_id, VERIFIABLE_PRF_SALT, hint)
+        .expect("save passkey");
+}
+
 /// A watch-only wallet with its own key, so no two seeded wallets share an identity
 struct DistinctWallet {
     metadata: WalletMetadata,

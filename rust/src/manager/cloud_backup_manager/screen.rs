@@ -57,7 +57,9 @@ use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
 use super::admission::{AdmissionBody, AdmissionSnapshot};
 use super::inventory::InventoryFacts;
-use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
+use super::{
+    CloudBackupPasskeyHint, CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager,
+};
 
 /// The screen last sent to the platform, which the next projection is diffed against
 #[derive(Debug)]
@@ -81,6 +83,9 @@ pub(crate) struct ScreenInputs {
     pub(crate) admission: AdmissionSnapshot,
     pub(crate) inventory: InventoryFacts,
     pub(crate) notices: Notices,
+    /// Where this device's passkey was created, read from the keychain only while a card that
+    /// shows it is drawn
+    pub(crate) passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
 /// What the platform was last sent: the screen, and whether the owner rested off
@@ -192,8 +197,16 @@ impl RustCloudBackupManager {
         runtime: &Runtime,
         inputs: &ScreenInputs,
     ) -> CloudBackupScreen {
-        let ScreenInputs { configuration, admission, inventory, notices } = inputs;
-        project::project(runtime, *configuration, admission, &self.state.read(), inventory, notices)
+        let ScreenInputs { configuration, admission, inventory, notices, passkey_hint } = inputs;
+        project::project(
+            runtime,
+            *configuration,
+            admission,
+            &self.state.read(),
+            inventory,
+            notices,
+            passkey_hint.as_ref(),
+        )
     }
 
     /// Dismisses the persisted heal notice; the commit around it publishes the screen without it

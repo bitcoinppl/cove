@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use act_zero::call;
+use cove_cspp::backup_data::{PasskeyProviderHint, PasskeyRegistrationPlatform};
 use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorageError};
 use cove_device::passkey::{PasskeyError, PasskeyFailureReason, PasskeyOperation};
 
@@ -16,7 +17,8 @@ use super::process::child_root;
 use super::{
     CallId, CloudCall, CloudFault, FakeAccount, HarnessCloud, Hold, NextAction as N, PasskeyMode,
     PhaseEnd, TestApp, keychain_namespace, load_detail, open_durable_state, persisted, run_case,
-    seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
+    save_device_passkey, seed_corrupted_record, seed_legacy_stuck_disabling,
+    seed_verifiable_master_key,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -43,7 +45,7 @@ use crate::manager::cloud_backup_manager::screen::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupInventoryIncompleteReason, CloudBackupManagerAction,
-    CloudBackupNoticeKind, CloudBackupPasskeyState, CloudBackupRootPrompt,
+    CloudBackupNoticeKind, CloudBackupPasskeyHint, CloudBackupPasskeyState, CloudBackupRootPrompt,
     CloudBackupSettingsRowStatus, CloudBackupVerificationSource, CloudBackupVerificationState,
     DeepVerificationFailure, RecordId,
 };
@@ -1707,6 +1709,14 @@ fn passkey_card(app: &TestApp) -> Option<CloudBackupPasskeyState> {
     })
 }
 
+/// Where the passkey the published screen's passkey card asks for was created, if it says
+fn passkey_hint(app: &TestApp) -> Option<CloudBackupPasskeyHint> {
+    match app.manager().published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.passkey_hint,
+        _ => None,
+    }
+}
+
 /// The published screen's progress section, which draws the inventory loading or incomplete
 fn inventory_progress(app: &TestApp) -> Option<CloudBackupProgressSection> {
     configured_sections(app).into_iter().find_map(|section| match section {
@@ -1796,6 +1806,51 @@ fn a_verification_that_fails_on_the_passkey_offers_a_repair() {
             Some(CloudBackupActionAvailability::Available)
         );
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::PasskeyMissing);
+    });
+}
+
+/// The missing passkey's card says where that passkey was created, and never names a hint
+/// stored for another credential
+#[test]
+fn the_missing_passkey_card_says_where_its_passkey_was_created() {
+    let test =
+        concat!(module_path!(), "::the_missing_passkey_card_says_where_its_passkey_was_created");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
+        let one_password = PasskeyProviderHint {
+            aaguid: "bada5566-a7aa-401f-bd96-45619a55120d".into(),
+            registered_platform: PasskeyRegistrationPlatform::Ios,
+            registered_at: 1_700_000_000,
+            name_suffix: "09IX".into(),
+        };
+        save_device_passkey(&[1, 2, 3], Some(&one_password));
+
+        script_missing_passkey(
+            &app,
+            PasskeyError::RequestFailed {
+                operation: PasskeyOperation::Registration,
+                reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+            },
+        );
+
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert!(matches!(passkey_card(&app), Some(CloudBackupPasskeyState::NeedsRepair { .. })));
+        assert_eq!(
+            passkey_hint(&app),
+            Some(CloudBackupPasskeyHint {
+                provider_name: Some("1Password".into()),
+                name_suffix: "09IX".into(),
+                registered_at: 1_700_000_000,
+            })
+        );
+
+        // a passkey saved without a hint leaves the earlier passkey's hint stored, naming that one
+        save_device_passkey(&[4, 5, 6], None);
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert!(matches!(passkey_card(&app), Some(CloudBackupPasskeyState::NeedsRepair { .. })));
+        assert_eq!(passkey_hint(&app), None);
     });
 }
 

@@ -225,6 +225,22 @@ impl CloudBackupKeychain {
             .flatten()
     }
 
+    /// Where this device's passkey was created, when this device stored that
+    ///
+    /// Read from the credential the keychain holds now, so it never describes a replaced one. An
+    /// unreadable entry reads as no hint, since the hint is only shown to the user
+    pub(crate) fn active_provider_hint(&self) -> Option<PasskeyProviderHint> {
+        let credential_id = self
+            .0
+            .get(CSPP_CREDENTIAL_ID_KEY.into())
+            .inspect_err(|error| warn!("Failed to read the passkey credential: {error}"))
+            .ok()
+            .flatten()?;
+
+        let credential_id = hex::decode(credential_id).ok()?;
+        self.known_provider_hint(&credential_id)
+    }
+
     /// Captures the entries a failed restore activation must put back
     ///
     /// Fails when any entry cannot be read, since restoring an unread entry would delete it

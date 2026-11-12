@@ -16,6 +16,17 @@ pub enum CloudBackupPasskeyState {
     NeedsRepair { state: CloudBackupPasskeyRepairState },
 }
 
+impl CloudBackupPasskeyState {
+    /// Whether this state's passkey card says where the passkey was created
+    ///
+    /// Only a missing passkey's card does, since the user has to find that passkey. An unsupported
+    /// provider's card is about the provider that refused, not the one holding this device's
+    /// passkey
+    pub(crate) fn shows_provider_hint(&self) -> bool {
+        matches!(self, Self::Missing | Self::NeedsRepair { .. })
+    }
+}
+
 /// Public repair status for a missing or stale backup passkey
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupPasskeyRepairState {

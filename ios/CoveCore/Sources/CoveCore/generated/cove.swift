@@ -15997,6 +15997,13 @@ public struct CloudBackupConfiguredScreen: Equatable, Hashable {
      * Turn Off's presentation state, which drives its dialogs
      */
     public var disable: CloudBackupDisableScreen
+    /**
+     * Where the passkey the passkey card asks for was created, drawn on that card
+     *
+     * Set only while the card shows a missing passkey and this device stored where that passkey
+     * was created
+     */
+    public var passkeyHint: CloudBackupPasskeyHint?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -16010,12 +16017,19 @@ public struct CloudBackupConfiguredScreen: Equatable, Hashable {
          */menu: [CloudBackupMenuControl], lastSync: UInt64?, syncHealth: CloudSyncHealth,
         /**
          * Turn Off's presentation state, which drives its dialogs
-         */disable: CloudBackupDisableScreen) {
+         */disable: CloudBackupDisableScreen,
+        /**
+         * Where the passkey the passkey card asks for was created, drawn on that card
+         *
+         * Set only while the card shows a missing passkey and this device stored where that passkey
+         * was created
+         */passkeyHint: CloudBackupPasskeyHint?) {
         self.sections = sections
         self.menu = menu
         self.lastSync = lastSync
         self.syncHealth = syncHealth
         self.disable = disable
+        self.passkeyHint = passkeyHint
     }
 
 
@@ -16038,7 +16052,8 @@ public struct FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
                 menu: FfiConverterSequenceTypeCloudBackupMenuControl.read(from: &buf),
                 lastSync: FfiConverterOptionUInt64.read(from: &buf),
                 syncHealth: FfiConverterTypeCloudSyncHealth.read(from: &buf),
-                disable: FfiConverterTypeCloudBackupDisableScreen.read(from: &buf)
+                disable: FfiConverterTypeCloudBackupDisableScreen.read(from: &buf),
+                passkeyHint: FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
         )
     }
 
@@ -16048,6 +16063,7 @@ public struct FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
         FfiConverterOptionUInt64.write(value.lastSync, into: &buf)
         FfiConverterTypeCloudSyncHealth.write(value.syncHealth, into: &buf)
         FfiConverterTypeCloudBackupDisableScreen.write(value.disable, into: &buf)
+        FfiConverterOptionTypeCloudBackupPasskeyHint.write(value.passkeyHint, into: &buf)
     }
 }
 

@@ -32896,6 +32896,14 @@ data class CloudBackupConfiguredScreen (
      * Turn Off's presentation state, which drives its dialogs
      */
     var `disable`: CloudBackupDisableScreen
+    ,
+    /**
+     * Where the passkey the passkey card asks for was created, drawn on that card
+     *
+     * Set only while the card shows a missing passkey and this device stored where that passkey
+     * was created
+     */
+    var `passkeyHint`: CloudBackupPasskeyHint?
 
 ){
 
@@ -32917,6 +32925,7 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
             FfiConverterOptionalULong.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
             FfiConverterTypeCloudBackupDisableScreen.read(buf),
+            FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
         )
     }
 
@@ -32925,7 +32934,8 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
             FfiConverterSequenceTypeCloudBackupMenuControl.allocationSize(value.`menu`) +
             FfiConverterOptionalULong.allocationSize(value.`lastSync`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
-            FfiConverterTypeCloudBackupDisableScreen.allocationSize(value.`disable`)
+            FfiConverterTypeCloudBackupDisableScreen.allocationSize(value.`disable`) +
+            FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.`passkeyHint`)
     )
 
     override fun write(value: CloudBackupConfiguredScreen, buf: ByteBuffer) {
@@ -32934,6 +32944,7 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
             FfiConverterOptionalULong.write(value.`lastSync`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupDisableScreen.write(value.`disable`, buf)
+            FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.`passkeyHint`, buf)
     }
 }
 

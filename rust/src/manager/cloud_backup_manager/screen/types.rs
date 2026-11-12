@@ -11,11 +11,11 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableFlow, CloudBackupEnablePromptChoice, CloudBackupInventoryIncompleteReason,
-    CloudBackupOtherBackupsState, CloudBackupPasskeyState, CloudBackupPendingEnableRecovery,
-    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupRootPrompt,
-    CloudBackupSettingsRowStatus, CloudBackupSyncState, CloudBackupVerificationPresentation,
-    CloudBackupVerificationState, CloudBackupWalletItem, CloudOnlyOperation, OtherBackupsOperation,
-    RecordId,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyHint, CloudBackupPasskeyState,
+    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
+    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupSyncState,
+    CloudBackupVerificationPresentation, CloudBackupVerificationState, CloudBackupWalletItem,
+    CloudOnlyOperation, OtherBackupsOperation, RecordId,
 };
 
 /// Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
@@ -69,6 +69,11 @@ pub struct CloudBackupConfiguredScreen {
     pub sync_health: CloudSyncHealth,
     /// Turn Off's presentation state, which drives its dialogs
     pub disable: CloudBackupDisableScreen,
+    /// Where the passkey the passkey card asks for was created, drawn on that card
+    ///
+    /// Set only while the card shows a missing passkey and this device stored where that passkey
+    /// was created
+    pub passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
 /// One section of the configured screen

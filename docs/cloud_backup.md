@@ -732,6 +732,16 @@ removes it. An unreadable hint reads as no hint, so it never fails the passkey
 request that reuses the credential, and it never blocks recovery of an
 interrupted Enable.
 
+The missing passkey's card says where that passkey was created. While the card
+shows a missing passkey, each projection reads the hint stored for the
+credential the keychain holds now and sends it as the configured screen's
+`passkey_hint`, so a hint stored for an earlier credential is never shown. The
+card for an unsupported provider shows none, since that card is about the
+provider that refused. Both platforms draw one line on the card: "Created in
+{provider} as Cove Cloud Backup ({suffix})", or "Created as Cove Cloud Backup
+({suffix})" when the provider isn't one Cove recognizes. No provider gets an
+unlock step. With no stored hint, the card has no line.
+
 When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery
 operation at a time. The screen only shows this body. The body ends when the

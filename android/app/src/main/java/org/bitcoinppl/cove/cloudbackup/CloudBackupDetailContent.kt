@@ -28,6 +28,7 @@ import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupNoticeKind
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
+import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupProgressSection
@@ -93,7 +94,7 @@ private fun CloudBackupSectionContent(
     onReinitialize: () -> Unit,
 ) {
     when (section) {
-        is CloudBackupSection.PasskeyCard -> PasskeyCardSection(manager, screen, section.v1)
+        is CloudBackupSection.PasskeyCard -> PasskeyCardSection(manager, screen, section.v1, configured.passkeyHint)
         is CloudBackupSection.Progress -> ProgressSection(manager, screen, section.v1)
         is CloudBackupSection.Verification ->
             VerificationSection(
@@ -175,6 +176,7 @@ private fun PasskeyCardSection(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
     passkey: CloudBackupPasskeyState,
+    passkeyHint: CloudBackupPasskeyHint?,
 ) {
     val (title, body) =
         when (passkey) {
@@ -204,6 +206,7 @@ private fun PasskeyCardSection(
                 },
             title = title,
             body = body,
+            detail = passkeyHint?.let(::passkeyOriginLine),
         )
 
         CloudBackupActionButton(
@@ -230,6 +233,12 @@ private fun PasskeyCardSection(
             onDispatch = manager::dispatch,
         )
     }
+}
+
+/** Where the passkey was created, by the name the user finds it under in their password manager */
+internal fun passkeyOriginLine(hint: CloudBackupPasskeyHint): String {
+    val name = "Cove Cloud Backup (${hint.nameSuffix})"
+    return hint.providerName?.let { "Created in $it as $name" } ?: "Created as $name"
 }
 
 @Composable

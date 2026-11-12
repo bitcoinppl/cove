@@ -70,7 +70,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnableState, CloudBackupError, CloudBackupInventoryAuthority,
     CloudBackupInventoryIncompleteReason, CloudBackupNoDiscoveryEnablePreparation,
     CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
+    CloudBackupPasskeyHint, CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
     CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
     CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupReuploadedWallets,
@@ -583,7 +583,22 @@ impl CloudBackupSupervisor {
         let notices =
             Notices::new(&RustCloudBackupManager::load_persisted_state(), &self.screen_outcome);
 
-        ScreenInputs { configuration: self.runtime.generation(), admission, inventory, notices }
+        // only a missing passkey's card shows where it was created, so the keychain is read only
+        // while the reducer holds a missing passkey, not on every publish
+        let shows_hint =
+            manager.state.read().configured_presentation().passkey.shows_provider_hint();
+        let passkey_hint = shows_hint
+            .then(|| CloudBackupKeychain::global().active_provider_hint())
+            .flatten()
+            .map(|hint| CloudBackupPasskeyHint::from_provider_hint(&hint));
+
+        ScreenInputs {
+            configuration: self.runtime.generation(),
+            admission,
+            inventory,
+            notices,
+            passkey_hint,
+        }
     }
 
     /// Shows the runtime through the read-only adapter onto today's exported types
