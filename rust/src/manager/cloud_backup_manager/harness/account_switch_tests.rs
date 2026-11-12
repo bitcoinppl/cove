@@ -25,7 +25,8 @@ use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::pending_enable::PendingEnableJournal;
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDriveAccountSwitchStage, CloudBackupRejection,
-    CloudBackupScreenAction as A, CloudBackupScreenBody,
+    CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle, CloudBackupScreenAction as A,
+    CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupManagerAction, DriveAccountSwitchPlatformResult as Platform,
@@ -60,6 +61,13 @@ fn switch_stage(app: &TestApp) -> Option<CloudBackupDriveAccountSwitchStage> {
         CloudBackupScreenBody::DriveAccountSwitch(switch) => Some(switch.stage),
         _ => None,
     }
+}
+
+/// The switch paused on its saved passkey, as the controls its confirmation draws
+fn paused_switch_controls(app: &TestApp) -> Option<Vec<CloudBackupSavedPasskeyControl>> {
+    app.saved_passkey_confirmation()
+        .filter(|paused| paused.lifecycle == CloudBackupSavedPasskeyLifecycle::DriveAccountSwitch)
+        .map(|paused| paused.controls)
 }
 
 fn availability(app: &TestApp, action: A) -> Option<CloudBackupActionAvailability> {
@@ -280,8 +288,8 @@ fn a_switch_paused_for_its_saved_passkey_holds_until_confirmed() {
         assert_eq!(requested_steps(&app), vec![]);
         assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
         assert_eq!(
-            switch_stage(&app),
-            Some(CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation)
+            paused_switch_controls(&app),
+            Some(vec![CloudBackupSavedPasskeyControl::Confirm])
         );
         assert_eq!(
             availability(&app, A::ConfirmSavedPasskey),
@@ -417,8 +425,8 @@ fn a_failed_switch_reinitialize_finishes_after_a_relaunch() {
                 app.describe()
             );
             assert_eq!(
-                switch_stage(app),
-                Some(CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation),
+                paused_switch_controls(app),
+                Some(vec![CloudBackupSavedPasskeyControl::Confirm]),
                 "{}",
                 app.describe()
             );
@@ -769,8 +777,8 @@ fn a_switch_whose_pause_was_not_saved_goes_on_through_try_again() {
         .then_cannot(&[N::Enable]);
         assert_eq!(requested_steps(&app), vec![]);
         assert_eq!(
-            switch_stage(&app),
-            Some(CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation),
+            paused_switch_controls(&app),
+            Some(vec![CloudBackupSavedPasskeyControl::Confirm]),
             "{}",
             app.describe()
         );

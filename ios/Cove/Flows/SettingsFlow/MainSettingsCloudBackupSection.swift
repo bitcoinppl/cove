@@ -58,6 +58,13 @@ private struct MainSettingsCloudBackupBodyContent: View {
                 status: status,
                 onOpenDetail: onOpenDetail
             ))
+        // a paused Enable goes on from the Enable sheet, which finishes it; other paused work
+        // belongs to the configured backup, whose detail screen draws the confirmation
+        case let .savedPasskeyConfirmation(paused):
+            AnyView(MainSettingsCloudBackupEnabledRow(
+                status: status,
+                onOpenDetail: paused.lifecycle == .enable ? onEnable : onOpenDetail
+            ))
         }
     }
 

@@ -34,7 +34,8 @@ mod debug {
         CloudBackupOtherBackupsControl, CloudBackupOtherBackupsSection, CloudBackupOwnRecord,
         CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupRecoveryKind,
         CloudBackupRecoveryOperation, CloudBackupRejection, CloudBackupRowAction,
-        CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
+        CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
+        CloudBackupSavedPasskeyScreen, CloudBackupScreen, CloudBackupScreenAction,
         CloudBackupScreenBody, CloudBackupScreenFixture, CloudBackupSection,
         CloudBackupTurnOffFailure, CloudBackupUnreadableKind, CloudBackupVerificationControl,
         CloudBackupVerificationSection, CloudBackupVerificationView, CloudBackupWalletsControl,
@@ -105,9 +106,14 @@ mod debug {
                 finishing_disable_authorization_required(),
             ),
             fixture("drive-account-switch", drive_account_switch()),
+            fixture("saved-passkey-confirmation-enable", saved_passkey_confirmation_enable()),
             fixture(
-                "drive-account-switch-awaiting-saved-passkey",
-                drive_account_switch_awaiting_saved_passkey(),
+                "saved-passkey-confirmation-reinitialize",
+                saved_passkey_confirmation_reinitialize(),
+            ),
+            fixture(
+                "saved-passkey-confirmation-drive-account-switch",
+                saved_passkey_confirmation_drive_account_switch(),
             ),
             fixture("pending-enable-recovery", pending_enable_recovery()),
             fixture("load-failed", load_failed()),
@@ -973,13 +979,47 @@ mod debug {
         )
     }
 
-    fn drive_account_switch_awaiting_saved_passkey() -> CloudBackupScreen {
+    fn saved_passkey_confirmation(
+        lifecycle: CloudBackupSavedPasskeyLifecycle,
+        controls: &[CloudBackupSavedPasskeyControl],
+        settings_row: CloudBackupSettingsRowStatus,
+    ) -> CloudBackupScreen {
+        let actions: Vec<_> = controls.iter().map(|control| control.action()).collect();
+
         screen(
-            CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-                stage: CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation,
+            CloudBackupScreenBody::SavedPasskeyConfirmation(CloudBackupSavedPasskeyScreen {
+                lifecycle,
+                title: "Confirm your passkey".into(),
+                message: "Your passkey was saved. Confirm it once to go on.".into(),
+                controls: controls.to_vec(),
             }),
+            settings_row,
+            available(&actions),
+        )
+    }
+
+    fn saved_passkey_confirmation_enable() -> CloudBackupScreen {
+        saved_passkey_confirmation(
+            CloudBackupSavedPasskeyLifecycle::Enable,
+            &[CloudBackupSavedPasskeyControl::Confirm, CloudBackupSavedPasskeyControl::Discard],
+            CloudBackupSettingsRowStatus::SettingUp,
+        )
+    }
+
+    fn saved_passkey_confirmation_reinitialize() -> CloudBackupScreen {
+        saved_passkey_confirmation(
+            CloudBackupSavedPasskeyLifecycle::Reinitialize,
+            &[CloudBackupSavedPasskeyControl::Confirm, CloudBackupSavedPasskeyControl::Discard],
             CloudBackupSettingsRowStatus::Active,
-            available(&[A::ConfirmSavedPasskey]),
+        )
+    }
+
+    /// A switch's reinitialize can't be discarded, so Confirm is its only control
+    fn saved_passkey_confirmation_drive_account_switch() -> CloudBackupScreen {
+        saved_passkey_confirmation(
+            CloudBackupSavedPasskeyLifecycle::DriveAccountSwitch,
+            &[CloudBackupSavedPasskeyControl::Confirm],
+            CloudBackupSettingsRowStatus::Active,
         )
     }
 

@@ -45,12 +45,12 @@ import org.bitcoinppl.cove.cloudbackup.verification
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
-import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
+import org.bitcoinppl.cove_core.CloudBackupSavedPasskeyLifecycle
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
@@ -59,7 +59,6 @@ import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.OnboardingBranch
-import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 internal fun shouldCompleteOnboardingCloudBackupFromPersistedState(
     readiness: CloudBackupOnboardingCompletionReadiness,
@@ -332,10 +331,12 @@ private fun OnboardingCloudBackupDetailsStepView(
             else -> null
         }
     val enableFlow = (screen.body as? CloudBackupScreenBody.Enabling)?.v1
-    val savedPasskeyConfirmationMode =
-        (enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
+
+    // an Enable paused on its saved passkey owns the body while nothing runs, so this step keeps
+    // drawing and offers Confirm Passkey as its primary button
     val needsManualPasskeyConfirmation =
-        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
+        (screen.body as? CloudBackupScreenBody.SavedPasskeyConfirmation)?.v1?.lifecycle ==
+            CloudBackupSavedPasskeyLifecycle.ENABLE
 
     // Try Again verifies, Confirm Passkey continues a paused enable, otherwise the button enables
     val primaryAction =
@@ -357,7 +358,7 @@ private fun OnboardingCloudBackupDetailsStepView(
     val showsBusyOverlay =
         !isPromptingForEnableChoice &&
             (
-                (enableFlow != null && !needsManualPasskeyConfirmation) ||
+                enableFlow != null ||
                     verificationState is CloudBackupVerificationState.Running ||
                     verificationState is CloudBackupVerificationState.AwaitingUploadConfirmation
             )

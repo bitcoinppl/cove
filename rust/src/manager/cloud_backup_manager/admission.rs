@@ -80,6 +80,58 @@ pub(crate) enum UserIntent {
     LocalReset,
 }
 
+impl UserIntent {
+    /// Whether this intent may reach work paused on its saved passkey: the pause's own exits, a
+    /// local reset, and the prompts and screen lifecycle that start no work
+    // exhaustive on purpose: a new intent is decided here before it can reach a pause
+    #[deny(clippy::wildcard_enum_match_arm)]
+    fn answers_saved_passkey_pause(&self) -> bool {
+        match self {
+            Self::ConfirmSavedPasskey
+            | Self::DiscardPendingEnable
+            | Self::LocalReset
+            | Self::DismissPasskeyChoicePrompt
+            | Self::DismissMissingPasskeyReminder
+            | Self::DismissVerificationPrompt
+            | Self::DismissNotice(_)
+            | Self::EnterDetail
+            | Self::LeaveDetail => true,
+            Self::Enable(..)
+            | Self::ConfirmPendingEnableCleanup
+            | Self::RestoreFromCloudBackup
+            | Self::CancelRestore
+            | Self::StartVerification { .. }
+            | Self::RecreateManifest
+            | Self::ReinitializeBackup
+            | Self::RepairPasskey { .. }
+            | Self::SyncUnsynced
+            | Self::RestoreCloudWallet(_)
+            | Self::StartRestoreAll
+            | Self::RetryRestoreAllRemaining
+            | Self::CancelRestoreAll
+            | Self::DeleteCloudWallet(_)
+            | Self::DeleteUndecryptableWalletBackups(_)
+            | Self::RecoverOtherBackups
+            | Self::DeleteOtherBackups
+            | Self::TurnOff
+            | Self::ConfirmDisable { .. }
+            | Self::CancelDisable
+            | Self::LeaveReview { .. }
+            | Self::ResumeDisable
+            | Self::StopUsingOnThisDevice
+            | Self::ReconnectDrive
+            | Self::RefreshDetail
+            | Self::RetryLoad
+            | Self::ResetOnThisDevice
+            | Self::PromptEnablePasskeyChoice(_)
+            | Self::AcceptEnablePrompt(_)
+            | Self::SwitchDriveAccount
+            | Self::CancelDriveAccountSwitch
+            | Self::RetryDriveAccountSwitchRecovery => false,
+        }
+    }
+}
+
 /// The work a Turn Off review button leaves the review for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReviewExit {
@@ -487,6 +539,28 @@ impl PausedContinuation {
     }
 }
 
+impl AdmissionSnapshot {
+    /// The owner of work paused on its saved passkey that the current body continues, while
+    /// nothing runs: Confirm Saved Passkey is then the way that work goes on
+    ///
+    /// A switch whose step failed, such as saving the pause itself, needs the user's Try Again
+    /// first, so its pause doesn't own the screen or close admission to that step
+    pub(crate) fn paused_on_saved_passkey(&self) -> Option<ContinuationOwner> {
+        if self.running.is_some() {
+            return None;
+        }
+
+        // a failed switch leads with its own recovery: its pause may not have been saved
+        if matches!(self.drive_account_switch, SwitchAdmission::NeedsAttention { .. }) {
+            return None;
+        }
+
+        PausedContinuation::in_body(self)
+            .filter(|paused| paused.stage == ContinuationStage::AwaitingSavedPasskey)
+            .map(|paused| paused.owner)
+    }
+}
+
 /// Decides what happens to `intent` in `snapshot`
 ///
 /// Pure: it does not log or allocate, so projections can call it as often as they like
@@ -544,6 +618,14 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
 
         // a full wipe is admitted from every body; only another reset closes it, above
         I::LocalReset => Accepted,
+
+        // work paused on its saved passkey owns the screen until its Confirm or Discard, above:
+        // nothing else starts on the backup that work is replacing
+        _ if !intent.answers_saved_passkey_pause()
+            && let Some(owner) = snapshot.paused_on_saved_passkey() =>
+        {
+            Rejected(Rejection::OperationRunning(owner.operation()))
+        }
 
         // a switch's Try Again and Cancel answer the step that failed; a switch that moves on
         // its own needs neither

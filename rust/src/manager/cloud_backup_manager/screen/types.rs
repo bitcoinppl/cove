@@ -47,6 +47,9 @@ pub enum CloudBackupScreenBody {
     FinishingDisable(CloudBackupFinishingDisableScreen),
     /// A Google Drive account switch is recorded; Android only
     DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen),
+    /// Work that registered a passkey waits for the user to confirm they saved it, whichever
+    /// work it is; nothing runs until the user answers
+    SavedPasskeyConfirmation(CloudBackupSavedPasskeyScreen),
     PendingEnableRecovery(CloudBackupPendingEnableRecovery),
     /// The stored record could not be loaded; Try Again runs the load again
     LoadFailed,
@@ -398,16 +401,49 @@ pub struct CloudBackupDriveAccountSwitchScreen {
 }
 
 /// Where a Google Drive account switch stands for the user
+///
+/// A switch paused on the passkey its new backup registered is not a stage: the paused work owns
+/// the screen as [`CloudBackupScreenBody::SavedPasskeyConfirmation`]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupDriveAccountSwitchStage {
     /// Cove is moving Cloud Backup to the selected account; nothing waits on the user
     Switching,
-    /// The new account's backup registered a passkey the user must confirm was saved before
-    /// the switch goes on; the screen offers Confirm Saved Passkey
-    AwaitingSavedPasskeyConfirmation,
     /// A step of the switch failed and the user must try again, or cancel while the previous
     /// account can still come back
     NeedsAttention(CloudBackupDriveAccountSwitchRecovery),
+}
+
+/// A registered passkey waiting for the user to confirm they saved it, and the work it continues
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupSavedPasskeyScreen {
+    /// The work that registered the passkey and goes on once it is confirmed
+    pub lifecycle: CloudBackupSavedPasskeyLifecycle,
+    /// Written for the reader, for this lifecycle
+    pub title: String,
+    /// Written for the reader: what confirming does, and what leaving does where it can
+    pub message: String,
+    /// In the order they are drawn: the exits admission takes for the paused work
+    pub controls: Vec<CloudBackupSavedPasskeyControl>,
+}
+
+/// The work a saved-passkey confirmation continues
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupSavedPasskeyLifecycle {
+    /// Turning Cloud Backup on
+    Enable,
+    /// Replacing the configured backup with a new one under the new passkey
+    Reinitialize,
+    /// Moving Cloud Backup to a new Google account; Android only
+    DriveAccountSwitch,
+}
+
+/// A control the saved-passkey confirmation draws
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupSavedPasskeyControl {
+    /// The passkey was saved: the paused work goes on
+    Confirm,
+    /// Ends the paused work; a switch's reinitialize has none
+    Discard,
 }
 
 /// A Google Drive account switch that needs the user to retry or cancel it

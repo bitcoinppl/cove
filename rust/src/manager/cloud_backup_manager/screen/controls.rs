@@ -9,9 +9,11 @@ use super::types::{
     CloudBackupDrawnControl, CloudBackupDriveAccountSwitchStage, CloudBackupFinishingDisableStage,
     CloudBackupHealNotice, CloudBackupInventoryControl, CloudBackupMenuControl,
     CloudBackupOtherBackupsControl, CloudBackupProgressSection, CloudBackupRecoveryKind,
-    CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
-    CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupWalletsControl,
+    CloudBackupSavedPasskeyControl, CloudBackupScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
+    CloudBackupVerificationControl, CloudBackupWalletsControl,
 };
+use crate::manager::cloud_backup_manager::admission::UserIntent;
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableFlow, CloudBackupPasskeyChoiceIntent, CloudBackupPendingEnableCleanupState,
     CloudBackupRestoreAllState, CloudBackupRootPrompt,
@@ -45,6 +47,10 @@ pub(crate) fn drawn_controls(
     let mut drawn = Drawn::default();
     match body {
         CloudBackupScreenBody::Configured(configured) => drawn.configured(configured),
+        CloudBackupScreenBody::SavedPasskeyConfirmation(paused) => {
+            let actions = paused.controls.iter().map(|control| control.action());
+            drawn.extend(CloudBackupControlSurface::Body, actions);
+        }
         body => drawn.body_exits(body),
     }
 
@@ -108,15 +114,12 @@ impl Drawn {
         }
     }
 
-    /// The exits of each body other than a configured one (PLAN §3.6)
+    /// The fixed exits of each body that doesn't carry its own controls
     fn body_exits(&mut self, body: &CloudBackupScreenBody) {
         use CloudBackupScreenAction as A;
 
         let exits: &[A] = match body {
             CloudBackupScreenBody::Disabled => &[A::Enable, A::RestoreFromCloudBackup],
-            CloudBackupScreenBody::Enabling(
-                CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(_),
-            ) => &[A::ConfirmSavedPasskey, A::DiscardPendingEnable],
             CloudBackupScreenBody::Enabling(
                 CloudBackupEnableFlow::AwaitingForceNewConfirmation(..)
                 | CloudBackupEnableFlow::AwaitingPasskeyChoice(_),
@@ -136,10 +139,6 @@ impl Drawn {
             },
             CloudBackupScreenBody::DriveAccountSwitch(switch) => match switch.stage {
                 CloudBackupDriveAccountSwitchStage::Switching => &[],
-                // a switch's reinitialize has no Discard: once it started, the switch only goes on
-                CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation => {
-                    &[A::ConfirmSavedPasskey]
-                }
                 // Cancel stays drawn after the commit, unavailable, so the user sees why
                 CloudBackupDriveAccountSwitchStage::NeedsAttention(_) => {
                     &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
@@ -157,7 +156,9 @@ impl Drawn {
             },
             CloudBackupScreenBody::LoadFailed => &[A::RetryLoad],
             CloudBackupScreenBody::Corrupted => &[A::ResetOnThisDevice],
-            CloudBackupScreenBody::Configured(_) => &[],
+            // each draws the controls it carries, in `drawn_controls`
+            CloudBackupScreenBody::Configured(_)
+            | CloudBackupScreenBody::SavedPasskeyConfirmation(_) => &[],
         };
 
         self.extend(CloudBackupControlSurface::Body, exits.iter().copied());
@@ -241,6 +242,24 @@ impl Drawn {
             CloudBackupDisableScreen::Preparing
             | CloudBackupDisableScreen::Offline
             | CloudBackupDisableScreen::Draining => self.push(surface, A::CancelDisable),
+        }
+    }
+}
+
+impl CloudBackupSavedPasskeyControl {
+    /// The action this control sends
+    pub(crate) fn action(self) -> CloudBackupScreenAction {
+        match self {
+            Self::Confirm => CloudBackupScreenAction::ConfirmSavedPasskey,
+            Self::Discard => CloudBackupScreenAction::DiscardPendingEnable,
+        }
+    }
+
+    /// The intent this control dispatches, as admission sees it
+    pub(crate) fn intent(self) -> UserIntent {
+        match self {
+            Self::Confirm => UserIntent::ConfirmSavedPasskey,
+            Self::Discard => UserIntent::DiscardPendingEnable,
         }
     }
 }

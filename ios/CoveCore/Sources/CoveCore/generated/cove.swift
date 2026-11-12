@@ -17823,6 +17823,95 @@ public func FfiConverterTypeCloudBackupRowTarget_lower(_ value: CloudBackupRowTa
 
 
 /**
+ * A registered passkey waiting for the user to confirm they saved it, and the work it continues
+ */
+public struct CloudBackupSavedPasskeyScreen: Equatable, Hashable {
+    /**
+     * The work that registered the passkey and goes on once it is confirmed
+     */
+    public var lifecycle: CloudBackupSavedPasskeyLifecycle
+    /**
+     * Written for the reader, for this lifecycle
+     */
+    public var title: String
+    /**
+     * Written for the reader: what confirming does, and what leaving does where it can
+     */
+    public var message: String
+    /**
+     * In the order they are drawn: the exits admission takes for the paused work
+     */
+    public var controls: [CloudBackupSavedPasskeyControl]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The work that registered the passkey and goes on once it is confirmed
+         */lifecycle: CloudBackupSavedPasskeyLifecycle,
+        /**
+         * Written for the reader, for this lifecycle
+         */title: String,
+        /**
+         * Written for the reader: what confirming does, and what leaving does where it can
+         */message: String,
+        /**
+         * In the order they are drawn: the exits admission takes for the paused work
+         */controls: [CloudBackupSavedPasskeyControl]) {
+        self.lifecycle = lifecycle
+        self.title = title
+        self.message = message
+        self.controls = controls
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupSavedPasskeyScreen: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupSavedPasskeyScreen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupSavedPasskeyScreen {
+        return
+            try CloudBackupSavedPasskeyScreen(
+                lifecycle: FfiConverterTypeCloudBackupSavedPasskeyLifecycle.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                message: FfiConverterString.read(from: &buf),
+                controls: FfiConverterSequenceTypeCloudBackupSavedPasskeyControl.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupSavedPasskeyScreen, into buf: inout [UInt8]) {
+        FfiConverterTypeCloudBackupSavedPasskeyLifecycle.write(value.lifecycle, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterSequenceTypeCloudBackupSavedPasskeyControl.write(value.controls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyScreen_lift(_ buf: RustBuffer) throws -> CloudBackupSavedPasskeyScreen {
+    return try FfiConverterTypeCloudBackupSavedPasskeyScreen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyScreen_lower(_ value: CloudBackupSavedPasskeyScreen) -> RustBuffer {
+    return FfiConverterTypeCloudBackupSavedPasskeyScreen.lower(value)
+}
+
+
+/**
  * Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
  *
  * `state()` returns the one last published as a [`CloudBackupPublishedScreen`]; every later
@@ -26042,6 +26131,9 @@ public func FfiConverterTypeCloudBackupDisableScreen_lower(_ value: CloudBackupD
 
 /**
  * Where a Google Drive account switch stands for the user
+ *
+ * A switch paused on the passkey its new backup registered is not a stage: the paused work owns
+ * the screen as [`CloudBackupScreenBody::SavedPasskeyConfirmation`]
  */
 
 public enum CloudBackupDriveAccountSwitchStage: Equatable, Hashable {
@@ -26050,11 +26142,6 @@ public enum CloudBackupDriveAccountSwitchStage: Equatable, Hashable {
      * Cove is moving Cloud Backup to the selected account; nothing waits on the user
      */
     case switching
-    /**
-     * The new account's backup registered a passkey the user must confirm was saved before
-     * the switch goes on; the screen offers Confirm Saved Passkey
-     */
-    case awaitingSavedPasskeyConfirmation
     /**
      * A step of the switch failed and the user must try again, or cancel while the previous
      * account can still come back
@@ -26084,9 +26171,7 @@ public struct FfiConverterTypeCloudBackupDriveAccountSwitchStage: FfiConverterRu
 
         case 1: return .switching
 
-        case 2: return .awaitingSavedPasskeyConfirmation
-
-        case 3: return .needsAttention(try FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(from: &buf)
+        case 2: return .needsAttention(try FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -26101,12 +26186,8 @@ public struct FfiConverterTypeCloudBackupDriveAccountSwitchStage: FfiConverterRu
             writeInt(&buf, Int32(1))
 
 
-        case .awaitingSavedPasskeyConfirmation:
-            writeInt(&buf, Int32(2))
-
-
         case let .needsAttention(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(v1, into: &buf)
 
         }
@@ -29644,6 +29725,166 @@ public func FfiConverterTypeCloudBackupRowControl_lower(_ value: CloudBackupRowC
 
 
 /**
+ * A control the saved-passkey confirmation draws
+ */
+
+public enum CloudBackupSavedPasskeyControl: Equatable, Hashable {
+
+    /**
+     * The passkey was saved: the paused work goes on
+     */
+    case confirm
+    /**
+     * Ends the paused work; a switch's reinitialize has none
+     */
+    case discard
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupSavedPasskeyControl: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupSavedPasskeyControl: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupSavedPasskeyControl
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupSavedPasskeyControl {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .confirm
+
+        case 2: return .discard
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupSavedPasskeyControl, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .confirm:
+            writeInt(&buf, Int32(1))
+
+
+        case .discard:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyControl_lift(_ buf: RustBuffer) throws -> CloudBackupSavedPasskeyControl {
+    return try FfiConverterTypeCloudBackupSavedPasskeyControl.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyControl_lower(_ value: CloudBackupSavedPasskeyControl) -> RustBuffer {
+    return FfiConverterTypeCloudBackupSavedPasskeyControl.lower(value)
+}
+
+
+
+/**
+ * The work a saved-passkey confirmation continues
+ */
+
+public enum CloudBackupSavedPasskeyLifecycle: Equatable, Hashable {
+
+    /**
+     * Turning Cloud Backup on
+     */
+    case enable
+    /**
+     * Replacing the configured backup with a new one under the new passkey
+     */
+    case reinitialize
+    /**
+     * Moving Cloud Backup to a new Google account; Android only
+     */
+    case driveAccountSwitch
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupSavedPasskeyLifecycle: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupSavedPasskeyLifecycle: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupSavedPasskeyLifecycle
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupSavedPasskeyLifecycle {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .enable
+
+        case 2: return .reinitialize
+
+        case 3: return .driveAccountSwitch
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupSavedPasskeyLifecycle, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .enable:
+            writeInt(&buf, Int32(1))
+
+
+        case .reinitialize:
+            writeInt(&buf, Int32(2))
+
+
+        case .driveAccountSwitch:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyLifecycle_lift(_ buf: RustBuffer) throws -> CloudBackupSavedPasskeyLifecycle {
+    return try FfiConverterTypeCloudBackupSavedPasskeyLifecycle.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupSavedPasskeyLifecycle_lower(_ value: CloudBackupSavedPasskeyLifecycle) -> RustBuffer {
+    return FfiConverterTypeCloudBackupSavedPasskeyLifecycle.lower(value)
+}
+
+
+
+/**
  * A control that dispatches one intent; the platform maps each to its `CloudBackupManagerAction`
  *
  * Its name in lower camel case is its part of the control's accessibility identifier
@@ -30022,6 +30263,12 @@ public enum CloudBackupScreenBody: Equatable, Hashable {
      */
     case driveAccountSwitch(CloudBackupDriveAccountSwitchScreen
     )
+    /**
+     * Work that registered a passkey waits for the user to confirm they saved it, whichever
+     * work it is; nothing runs until the user answers
+     */
+    case savedPasskeyConfirmation(CloudBackupSavedPasskeyScreen
+    )
     case pendingEnableRecovery(CloudBackupPendingEnableRecovery
     )
     /**
@@ -30070,12 +30317,15 @@ public struct FfiConverterTypeCloudBackupScreenBody: FfiConverterRustBuffer {
         case 6: return .driveAccountSwitch(try FfiConverterTypeCloudBackupDriveAccountSwitchScreen.read(from: &buf)
         )
 
-        case 7: return .pendingEnableRecovery(try FfiConverterTypeCloudBackupPendingEnableRecovery.read(from: &buf)
+        case 7: return .savedPasskeyConfirmation(try FfiConverterTypeCloudBackupSavedPasskeyScreen.read(from: &buf)
         )
 
-        case 8: return .loadFailed
+        case 8: return .pendingEnableRecovery(try FfiConverterTypeCloudBackupPendingEnableRecovery.read(from: &buf)
+        )
 
-        case 9: return .corrupted
+        case 9: return .loadFailed
+
+        case 10: return .corrupted
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30114,17 +30364,22 @@ public struct FfiConverterTypeCloudBackupScreenBody: FfiConverterRustBuffer {
             FfiConverterTypeCloudBackupDriveAccountSwitchScreen.write(v1, into: &buf)
 
 
-        case let .pendingEnableRecovery(v1):
+        case let .savedPasskeyConfirmation(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterTypeCloudBackupSavedPasskeyScreen.write(v1, into: &buf)
+
+
+        case let .pendingEnableRecovery(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterTypeCloudBackupPendingEnableRecovery.write(v1, into: &buf)
 
 
         case .loadFailed:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
 
 
         case .corrupted:
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
 
         }
     }
@@ -51993,6 +52248,31 @@ fileprivate struct FfiConverterSequenceTypeCloudBackupOtherBackupsControl: FfiCo
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCloudBackupOtherBackupsControl.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupSavedPasskeyControl: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupSavedPasskeyControl]
+
+    public static func write(_ value: [CloudBackupSavedPasskeyControl], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupSavedPasskeyControl.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupSavedPasskeyControl] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupSavedPasskeyControl]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupSavedPasskeyControl.read(from: &buf))
         }
         return seq
     }

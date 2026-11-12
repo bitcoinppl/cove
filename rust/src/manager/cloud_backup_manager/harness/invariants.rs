@@ -610,20 +610,19 @@ fn check_exits(
 
     let exits: &[CloudBackupScreenAction] = match &screen.body {
         Body::Disabled => &[A::Enable, A::RestoreFromCloudBackup],
-        // with nothing live an Enable waits on one of its prompts or its saved passkey; a prompt's
-        // choices go on with it, so only Confirm Saved Passkey and Discard leave it
-        Body::Enabling(_) => &[A::ConfirmSavedPasskey, A::DiscardPendingEnable],
+        // with nothing live an Enable waits on one of its prompts, and the prompt's choices go
+        // on with it; only Discard leaves it
+        Body::Enabling(_) => &[A::DiscardPendingEnable],
+        // the paused work goes on through Confirm, or ends through Discard where it may
+        Body::SavedPasskeyConfirmation(_) => &[A::ConfirmSavedPasskey, A::DiscardPendingEnable],
         Body::Restoring(_) => &[A::CancelRestore],
         // a Turn Off review that is preparing or shown holds Turn Off, and its Cancel leaves it
         Body::Configured(_) => &[A::TurnOff, A::CancelDisable],
         Body::FinishingDisable(_) => &[A::ResumeDisable, A::StopUsingOnThisDevice],
-        // a switch paused on its saved passkey goes on through Confirm; one that failed or
-        // stopped through Try Again or Cancel
-        Body::DriveAccountSwitch(_) => &[
-            A::ConfirmSavedPasskey,
-            A::RetryDriveAccountSwitchRecovery,
-            A::CancelDriveAccountSwitch,
-        ],
+        // a switch that failed or stopped goes on through Try Again or Cancel
+        Body::DriveAccountSwitch(_) => {
+            &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
+        }
         // allowlisted: support-only cleanup has no safe automatic exit, so the user contacts
         // support with the code the body shows
         Body::PendingEnableRecovery(recovery)

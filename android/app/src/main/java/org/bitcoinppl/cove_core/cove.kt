@@ -34221,6 +34221,69 @@ public object FfiConverterTypeCloudBackupRowTarget: FfiConverterRustBuffer<Cloud
 
 
 /**
+ * A registered passkey waiting for the user to confirm they saved it, and the work it continues
+ */
+data class CloudBackupSavedPasskeyScreen (
+    /**
+     * The work that registered the passkey and goes on once it is confirmed
+     */
+    var `lifecycle`: CloudBackupSavedPasskeyLifecycle
+    ,
+    /**
+     * Written for the reader, for this lifecycle
+     */
+    var `title`: kotlin.String
+    ,
+    /**
+     * Written for the reader: what confirming does, and what leaving does where it can
+     */
+    var `message`: kotlin.String
+    ,
+    /**
+     * In the order they are drawn: the exits admission takes for the paused work
+     */
+    var `controls`: List<CloudBackupSavedPasskeyControl>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupSavedPasskeyScreen: FfiConverterRustBuffer<CloudBackupSavedPasskeyScreen> {
+    override fun read(buf: ByteBuffer): CloudBackupSavedPasskeyScreen {
+        return CloudBackupSavedPasskeyScreen(
+            FfiConverterTypeCloudBackupSavedPasskeyLifecycle.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeCloudBackupSavedPasskeyControl.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupSavedPasskeyScreen) = (
+            FfiConverterTypeCloudBackupSavedPasskeyLifecycle.allocationSize(value.`lifecycle`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterString.allocationSize(value.`message`) +
+            FfiConverterSequenceTypeCloudBackupSavedPasskeyControl.allocationSize(value.`controls`)
+    )
+
+    override fun write(value: CloudBackupSavedPasskeyScreen, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupSavedPasskeyLifecycle.write(value.`lifecycle`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterString.write(value.`message`, buf)
+            FfiConverterSequenceTypeCloudBackupSavedPasskeyControl.write(value.`controls`, buf)
+    }
+}
+
+
+
+/**
  * Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
  *
  * `state()` returns the one last published as a [`CloudBackupPublishedScreen`]; every later
@@ -42547,6 +42610,9 @@ public object FfiConverterTypeCloudBackupDisableScreen : FfiConverterRustBuffer<
 
 /**
  * Where a Google Drive account switch stands for the user
+ *
+ * A switch paused on the passkey its new backup registered is not a stage: the paused work owns
+ * the screen as [`CloudBackupScreenBody::SavedPasskeyConfirmation`]
  */
 sealed class CloudBackupDriveAccountSwitchStage {
 
@@ -42554,13 +42620,6 @@ sealed class CloudBackupDriveAccountSwitchStage {
      * Cove is moving Cloud Backup to the selected account; nothing waits on the user
      */
     object Switching : CloudBackupDriveAccountSwitchStage()
-
-
-    /**
-     * The new account's backup registered a passkey the user must confirm was saved before
-     * the switch goes on; the screen offers Confirm Saved Passkey
-     */
-    object AwaitingSavedPasskeyConfirmation : CloudBackupDriveAccountSwitchStage()
 
 
     /**
@@ -42593,8 +42652,7 @@ public object FfiConverterTypeCloudBackupDriveAccountSwitchStage : FfiConverterR
     override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchStage {
         return when(buf.getInt()) {
             1 -> CloudBackupDriveAccountSwitchStage.Switching
-            2 -> CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation
-            3 -> CloudBackupDriveAccountSwitchStage.NeedsAttention(
+            2 -> CloudBackupDriveAccountSwitchStage.NeedsAttention(
                 FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -42603,12 +42661,6 @@ public object FfiConverterTypeCloudBackupDriveAccountSwitchStage : FfiConverterR
 
     override fun allocationSize(value: CloudBackupDriveAccountSwitchStage): ULong = when(value) {
         is CloudBackupDriveAccountSwitchStage.Switching -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -42629,12 +42681,8 @@ public object FfiConverterTypeCloudBackupDriveAccountSwitchStage : FfiConverterR
                 buf.putInt(1)
                 Unit
             }
-            is CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation -> {
-                buf.putInt(2)
-                Unit
-            }
             is CloudBackupDriveAccountSwitchStage.NeedsAttention -> {
-                buf.putInt(3)
+                buf.putInt(2)
                 FfiConverterTypeCloudBackupDriveAccountSwitchRecovery.write(value.v1, buf)
                 Unit
             }
@@ -46543,6 +46591,96 @@ public object FfiConverterTypeCloudBackupRowControl: FfiConverterRustBuffer<Clou
 
 
 /**
+ * A control the saved-passkey confirmation draws
+ */
+
+enum class CloudBackupSavedPasskeyControl {
+
+    /**
+     * The passkey was saved: the paused work goes on
+     */
+    CONFIRM,
+    /**
+     * Ends the paused work; a switch's reinitialize has none
+     */
+    DISCARD;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupSavedPasskeyControl: FfiConverterRustBuffer<CloudBackupSavedPasskeyControl> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupSavedPasskeyControl.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupSavedPasskeyControl) = 4UL
+
+    override fun write(value: CloudBackupSavedPasskeyControl, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * The work a saved-passkey confirmation continues
+ */
+
+enum class CloudBackupSavedPasskeyLifecycle {
+
+    /**
+     * Turning Cloud Backup on
+     */
+    ENABLE,
+    /**
+     * Replacing the configured backup with a new one under the new passkey
+     */
+    REINITIALIZE,
+    /**
+     * Moving Cloud Backup to a new Google account; Android only
+     */
+    DRIVE_ACCOUNT_SWITCH;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupSavedPasskeyLifecycle: FfiConverterRustBuffer<CloudBackupSavedPasskeyLifecycle> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupSavedPasskeyLifecycle.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupSavedPasskeyLifecycle) = 4UL
+
+    override fun write(value: CloudBackupSavedPasskeyLifecycle, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * A control that dispatches one intent; the platform maps each to its `CloudBackupManagerAction`
  *
  * Its name in lower camel case is its part of the control's accessibility identifier
@@ -46735,6 +46873,19 @@ sealed class CloudBackupScreenBody {
         companion object
     }
 
+    /**
+     * Work that registered a passkey waits for the user to confirm they saved it, whichever
+     * work it is; nothing runs until the user answers
+     */
+    data class SavedPasskeyConfirmation(
+        val v1: org.bitcoinppl.cove_core.CloudBackupSavedPasskeyScreen) : CloudBackupScreenBody()
+
+    {
+
+
+        companion object
+    }
+
     data class PendingEnableRecovery(
         val v1: org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery) : CloudBackupScreenBody()
 
@@ -46788,11 +46939,14 @@ public object FfiConverterTypeCloudBackupScreenBody : FfiConverterRustBuffer<Clo
             6 -> CloudBackupScreenBody.DriveAccountSwitch(
                 FfiConverterTypeCloudBackupDriveAccountSwitchScreen.read(buf),
                 )
-            7 -> CloudBackupScreenBody.PendingEnableRecovery(
+            7 -> CloudBackupScreenBody.SavedPasskeyConfirmation(
+                FfiConverterTypeCloudBackupSavedPasskeyScreen.read(buf),
+                )
+            8 -> CloudBackupScreenBody.PendingEnableRecovery(
                 FfiConverterTypeCloudBackupPendingEnableRecovery.read(buf),
                 )
-            8 -> CloudBackupScreenBody.LoadFailed
-            9 -> CloudBackupScreenBody.Corrupted
+            9 -> CloudBackupScreenBody.LoadFailed
+            10 -> CloudBackupScreenBody.Corrupted
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -46837,6 +46991,13 @@ public object FfiConverterTypeCloudBackupScreenBody : FfiConverterRustBuffer<Clo
             (
                 4UL
                 + FfiConverterTypeCloudBackupDriveAccountSwitchScreen.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupScreenBody.SavedPasskeyConfirmation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupSavedPasskeyScreen.allocationSize(value.v1)
             )
         }
         is CloudBackupScreenBody.PendingEnableRecovery -> {
@@ -46891,17 +47052,22 @@ public object FfiConverterTypeCloudBackupScreenBody : FfiConverterRustBuffer<Clo
                 FfiConverterTypeCloudBackupDriveAccountSwitchScreen.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupScreenBody.PendingEnableRecovery -> {
+            is CloudBackupScreenBody.SavedPasskeyConfirmation -> {
                 buf.putInt(7)
+                FfiConverterTypeCloudBackupSavedPasskeyScreen.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupScreenBody.PendingEnableRecovery -> {
+                buf.putInt(8)
                 FfiConverterTypeCloudBackupPendingEnableRecovery.write(value.v1, buf)
                 Unit
             }
             is CloudBackupScreenBody.LoadFailed -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 Unit
             }
             is CloudBackupScreenBody.Corrupted -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -74052,6 +74218,34 @@ public object FfiConverterSequenceTypeCloudBackupOtherBackupsControl: FfiConvert
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeCloudBackupOtherBackupsControl.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupSavedPasskeyControl: FfiConverterRustBuffer<List<CloudBackupSavedPasskeyControl>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupSavedPasskeyControl> {
+        val len = buf.getInt()
+        return List<CloudBackupSavedPasskeyControl>(len) {
+            FfiConverterTypeCloudBackupSavedPasskeyControl.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupSavedPasskeyControl>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupSavedPasskeyControl.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupSavedPasskeyControl>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupSavedPasskeyControl.write(it, buf)
         }
     }
 }

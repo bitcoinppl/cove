@@ -259,11 +259,12 @@ private struct CloudBackupEnableFlowContent: View {
                 onRemoveIncompleteSetup: onRemoveIncompleteSetup,
                 onCancel: onCancel
             ))
-        } else if case .awaitingSavedPasskeyConfirmation(.manual) = screen.enableFlow {
+        } else if let paused = screen.pausedEnable {
             content = AnyView(CloudBackupEnableConfirmationView(
-                continueAvailability: screen.actions.availability(action: .confirmSavedPasskey),
-                onContinue: onConfirmSavedPasskey,
-                onCancel: onCancelConfirmation
+                paused: paused,
+                actions: screen.actions,
+                onConfirm: onConfirmSavedPasskey,
+                onDiscard: onCancelConfirmation
             ))
         } else {
             content = AnyView(CloudBackupEnableOnboardingView(

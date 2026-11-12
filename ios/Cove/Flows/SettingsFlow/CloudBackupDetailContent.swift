@@ -25,6 +25,9 @@ struct CloudBackupDetailBody: View {
                 manager: manager
             )
 
+        case let .savedPasskeyConfirmation(paused):
+            CloudBackupSavedPasskeySection(paused: paused, actions: screen.actions, manager: manager)
+
         case .loadFailed:
             CloudBackupLoadFailedSection(actions: screen.actions, manager: manager)
 
@@ -352,6 +355,49 @@ private struct CloudBackupHealNoticeSection: View {
                 perform: { manager.dispatch(action: .dismissNotice(.heal)) }
             ) {
                 Text("Dismiss").uiTestTruncationProbe()
+            }
+        }
+    }
+}
+
+/// Work paused on the passkey it registered, whichever work it is, with Rust's copy for it and
+/// the controls admission takes for it, in Rust's order
+private struct CloudBackupSavedPasskeySection: View {
+    let paused: CloudBackupSavedPasskeyScreen
+    let actions: CloudBackupActions
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Section {
+            ProbedLabel(paused.title, systemImage: "key.fill")
+                .foregroundStyle(Color.statusWarning)
+
+            Text(paused.message)
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(paused.controls, id: \.self) { control in
+                switch control {
+                case .confirm:
+                    CloudBackupActionControl(
+                        action: .confirmSavedPasskey,
+                        actions: actions,
+                        perform: { manager.dispatch(action: .confirmSavedPasskey) }
+                    ) {
+                        ProbedLabel("Confirm Passkey", systemImage: "checkmark.circle")
+                    }
+
+                case .discard:
+                    CloudBackupActionControl(
+                        action: .discardPendingEnable,
+                        actions: actions,
+                        perform: { manager.dispatch(action: .discardPendingEnableCloudBackup) }
+                    ) {
+                        ProbedLabel("Cancel", systemImage: "xmark")
+                    }
+                }
             }
         }
     }

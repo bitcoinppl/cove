@@ -93,7 +93,7 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Cloud Backup enabled"].exists)
         control.assertNextActions(
             "the relaunch should wait for the saved passkey's confirmation",
-            body: "enabling",
+            body: "savedPasskeyConfirmation",
             available: ["confirmSavedPasskey"]
         )
 

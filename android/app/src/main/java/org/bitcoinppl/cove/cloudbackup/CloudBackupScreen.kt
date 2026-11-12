@@ -50,6 +50,9 @@ import org.bitcoinppl.cove_core.CloudBackupDriveAccountSwitchStage
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupMenuControl
 import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
+import org.bitcoinppl.cove_core.CloudBackupSavedPasskeyControl
+import org.bitcoinppl.cove_core.CloudBackupSavedPasskeyLifecycle
+import org.bitcoinppl.cove_core.CloudBackupSavedPasskeyScreen
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
@@ -240,6 +243,7 @@ private fun CloudBackupBody(
             )
         is CloudBackupScreenBody.FinishingDisable -> CloudBackupFinishingDisableContent(manager, screen, body.v1)
         is CloudBackupScreenBody.DriveAccountSwitch -> CloudBackupDriveAccountSwitchContent(manager, screen, body.v1)
+        is CloudBackupScreenBody.SavedPasskeyConfirmation -> CloudBackupSavedPasskeyContent(manager, screen, body.v1)
         CloudBackupScreenBody.LoadFailed -> CloudBackupLoadFailedContent(manager, screen)
         CloudBackupScreenBody.Corrupted -> CloudBackupCorruptedContent(manager, screen)
 
@@ -466,45 +470,62 @@ private fun CloudBackupDriveAccountSwitchContent(
                 title = "Switching Google account",
                 message = "Choose a Google account, then Cove sets up Cloud Backup in it",
             )
-        CloudBackupDriveAccountSwitchStage.AwaitingSavedPasskeyConfirmation ->
-            DriveAccountSwitchSavedPasskeyContent(manager, screen)
         is CloudBackupDriveAccountSwitchStage.NeedsAttention ->
             DriveAccountSwitchNeedsAttentionContent(manager, screen, stage.v1.message)
     }
 }
 
-/** The new account's backup registered a passkey, which the user confirms they saved */
+/**
+ * Work paused on the passkey it registered, for any lifecycle: Rust writes the copy and sends only
+ * the exits admission takes for that work, in drawing order
+ */
 @Composable
-private fun DriveAccountSwitchSavedPasskeyContent(
+private fun CloudBackupSavedPasskeyContent(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
+    paused: CloudBackupSavedPasskeyScreen,
 ) {
+    // a switch's pause keeps the switch panel identifier, which only Android's switch draws
+    val panelTag =
+        if (paused.lifecycle == CloudBackupSavedPasskeyLifecycle.DRIVE_ACCOUNT_SWITCH) {
+            Modifier.testTag(CloudBackupTags.DRIVE_ACCOUNT_SWITCH)
+        } else {
+            Modifier
+        }
+
     Column(
         modifier =
             Modifier
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag(CloudBackupTags.DRIVE_ACCOUNT_SWITCH),
+                .then(panelTag),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Confirm your new passkey", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Cove created a passkey for Cloud Backup in the selected Google account. Confirm it " +
-                "was saved to finish switching accounts.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        CloudBackupActionButton(
-            screen = screen,
-            action = CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY,
-            title = "Confirm Saved Passkey",
-            onDispatch = manager::dispatch,
-            onClick = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
-        )
-        CloudBackupLastOutcomeNote(
-            outcome = screen.lastOutcome,
-            target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY),
-            onDispatch = manager::dispatch,
-        )
+        Text(paused.title, style = MaterialTheme.typography.titleMedium)
+        Text(paused.message, style = MaterialTheme.typography.bodyMedium)
+
+        paused.controls.forEach { control ->
+            when (control) {
+                CloudBackupSavedPasskeyControl.CONFIRM ->
+                    CloudBackupActionButton(
+                        screen = screen,
+                        action = CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY,
+                        title = "Confirm Saved Passkey",
+                        onDispatch = manager::dispatch,
+                        onClick = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
+                    )
+
+                CloudBackupSavedPasskeyControl.DISCARD ->
+                    CloudBackupActionButton(
+                        screen = screen,
+                        action = CloudBackupScreenAction.DISCARD_PENDING_ENABLE,
+                        title = "Cancel",
+                        style = CloudBackupActionStyle.TEXT,
+                        onDispatch = manager::dispatch,
+                        onClick = { manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup) },
+                    )
+            }
+        }
     }
 }
 

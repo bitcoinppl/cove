@@ -1764,7 +1764,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     /// available action and row action, and no enabled control for anything else
     ///
     /// An action is skipped only when every control Rust names for it is Android's, or when iOS
-    /// draws it off the detail form (`drawnOffDetail`)
+    /// draws it off the detail form (`isDrawnOffDetail`)
     func testEveryScreenFixtureDrawsItsAvailableActionsOnTheDetail() async throws {
         let fixtures = cloudBackupScreenFixtures()
         XCTAssertFalse(fixtures.isEmpty, "debug builds must ship the screen fixtures")
@@ -1778,7 +1778,7 @@ extension CloudBackupIOSSafetyHelpersTests {
                 let drawnEnabled = recorder.actions[entry.action]
                 switch entry.availability {
                 case .available:
-                    guard Self.drawnOffDetail[entry.action] == nil else { continue }
+                    guard !Self.isDrawnOffDetail(entry.action, on: fixture.screen) else { continue }
                     XCTAssertEqual(drawnEnabled, true, "\(fixture.name): \(entry.action) is available with no enabled control")
                 case .unavailable:
                     XCTAssertNotEqual(drawnEnabled, true, "\(fixture.name): unavailable \(entry.action) is enabled")
@@ -1952,16 +1952,29 @@ extension CloudBackupIOSSafetyHelpersTests {
         .enable: "the Settings row and the Enable sheet",
         .restoreFromCloudBackup: "onboarding",
         .cancelRestore: "the onboarding restore screen",
-        .confirmSavedPasskey: "the Enable sheet",
         .acceptEnablePromptUseExisting: "the root prompts",
         .acceptEnablePromptCreateNew: "the root prompts",
-        .discardPendingEnable: "the root prompts' Cancel",
         .confirmPendingEnableCleanup: "the Enable sheet",
         .confirmDisable: "the Turn Off dialogs",
         .cancelDisable: "the Turn Off dialogs, and the detail only while Turn Off prepares or drains",
         .restoreFirst: "the Turn Off review dialog",
         .verifyFirst: "the Turn Off review dialog",
     ]
+
+    /// Whether iOS draws an available action's control somewhere other than the detail form
+    ///
+    /// Discard is off the form only while Enable waits on the Existing Backup Found prompt or the
+    /// passkey choice, where the root prompts' Cancel draws it. Saved Passkey Confirmation draws its
+    /// Cancel on the form, so that one stays checked
+    private static func isDrawnOffDetail(_ action: CloudBackupScreenAction, on screen: CloudBackupScreen) -> Bool {
+        guard action == .discardPendingEnable else { return drawnOffDetail[action] != nil }
+        guard case let .enabling(flow) = screen.body else { return false }
+
+        switch flow {
+        case .awaitingForceNewConfirmation, .awaitingPasskeyChoice: return true
+        default: return false
+        }
+    }
 
     private func renderDetail(_ screen: CloudBackupScreen) async throws -> CloudBackupControlRecorder {
         try await render(Form {

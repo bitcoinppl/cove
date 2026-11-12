@@ -23,9 +23,11 @@ import org.bitcoinppl.cove_core.CloudBackupControlSurface
 import org.bitcoinppl.cove_core.CloudBackupDisableConfirmation
 import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupDrawnControl
+import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupSection
 import org.bitcoinppl.cove_core.cloudBackupScreenFixtures
 import org.junit.Assert.assertEquals
@@ -75,7 +77,7 @@ class CloudBackupScreenContractTest {
                 unplaced +
                     drawn
                         .filter { screen.actions.lookup(it.action) is CloudBackupActionAvailability.Available }
-                        .filterNot { it.action in DRAWN_OFF_FRAME }
+                        .filterNot { isDrawnOffFrame(screen, it) }
                         .mapNotNull { control ->
                             show(screen)
                             reach(screen, control)
@@ -184,9 +186,8 @@ class CloudBackupScreenContractTest {
                     compose.onNodeWithTag(CloudBackupTags.TURN_OFF_REVIEW_CONTINUE).performClick()
                 }
             }
-            CloudBackupScreenAction.ENABLE,
-            CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY,
-            -> ACKNOWLEDGEMENTS.forEach { checkRow(it).performScrollTo().performClick() }
+            CloudBackupScreenAction.ENABLE ->
+                ACKNOWLEDGEMENTS.forEach { checkRow(it).performScrollTo().performClick() }
             else -> Unit
         }
 
@@ -234,19 +235,25 @@ class CloudBackupScreenContractTest {
 
     private companion object {
         /**
-         * Available actions whose control this test can't find in what it renders, and where the
-         * app draws them instead
+         * Whether an available control is one this test can't find in what it renders, because the
+         * app draws it elsewhere
          *
-         * iOS keeps the same map for its detail screen (`drawnOffDetail` in
-         * `CloudBackupIOSSafetyHelpersTests`). Android's is smaller because this test also renders
+         * The only one is Discard while Enable waits on the Existing Backup Found prompt or the
+         * passkey choice: the prompt's dismiss, or the Enable step's Cancel at the passkey choice,
+         * has no control to tag. Saved Passkey Confirmation draws its Discard as a tagged Cancel in
+         * this frame, so that one stays checked
+         *
+         * iOS skips more on its detail screen (`drawnOffDetail` in
+         * `CloudBackupIOSSafetyHelpersTests`). Android skips less because this test also renders
          * the root prompts and opens the Turn Off dialogs, so the controls drawn there are checked
          */
-        val DRAWN_OFF_FRAME: Map<CloudBackupScreenAction, String> =
-            mapOf(
-                CloudBackupScreenAction.DISCARD_PENDING_ENABLE to
-                    "the Existing Backup Found prompt's dismiss, or the Enable step's Cancel at the " +
-                    "passkey choice, while Enable waits on one of its prompts; neither has a control to tag",
-            )
+        fun isDrawnOffFrame(screen: CloudBackupScreen, control: CloudBackupDrawnControl): Boolean {
+            if (control.action != CloudBackupScreenAction.DISCARD_PENDING_ENABLE) return false
+
+            val flow = (screen.body as? CloudBackupScreenBody.Enabling)?.v1
+            return flow is CloudBackupEnableFlow.AwaitingForceNewConfirmation ||
+                flow is CloudBackupEnableFlow.AwaitingPasskeyChoice
+        }
 
         val PROMPT_HOST =
             CloudBackupRootPromptHost(

@@ -423,20 +423,11 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var needsManualPasskeyConfirmation: Bool {
-        guard case .awaitingSavedPasskeyConfirmation(.manual) = screen.enableFlow else { return false }
-        return true
+        screen.pausedEnable != nil
     }
 
-    private var verificationFailed: Bool {
-        guard case .failed = verificationState else { return false }
-        return true
-    }
-
-    /// The intent the primary button sends at this step
     private var primaryAction: CloudBackupScreenAction {
-        if verificationFailed { return .verify }
-        if needsManualPasskeyConfirmation { return .confirmSavedPasskey }
-        return .enable
+        onboardingCloudBackupPrimaryAction(screen: screen)
     }
 
     private var primaryButtonTitle: String {
@@ -459,7 +450,9 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func handleSkipTap() {
-        if needsManualPasskeyConfirmation {
+        // Cancel here skips Cloud Backup, so it ends a paused Enable when Rust offers its Discard;
+        // otherwise it only leaves
+        if needsManualPasskeyConfirmation, screen.actions.isAvailable(action: .discardPendingEnable) {
             backupManager.dispatch(action: .discardPendingEnableCloudBackup)
         }
 
@@ -486,6 +479,16 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             }
         }
     }
+}
+
+/// The intent the Cloud Backup step's primary button sends for `screen`
+///
+/// An Enable paused on its saved passkey goes on only once the user confirms that passkey, so the
+/// button confirms it instead of starting another Enable
+func onboardingCloudBackupPrimaryAction(screen: CloudBackupScreen) -> CloudBackupScreenAction {
+    if case .failed = screen.verification?.state { return .verify }
+    if screen.pausedEnable != nil { return .confirmSavedPasskey }
+    return .enable
 }
 
 func isOnboardingCloudBackupEnableCompletion(_ context: CloudBackupEnableContext) -> Bool {

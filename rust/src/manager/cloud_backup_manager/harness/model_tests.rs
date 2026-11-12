@@ -48,7 +48,8 @@ use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupScreenAction, CloudBackupScreenBody,
+    CloudBackupSavedPasskeyLifecycle, CloudBackupSavedPasskeyScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupVerificationSource,
@@ -806,17 +807,14 @@ impl Case {
     fn switch_under_way(&self) -> bool {
         self.platform != DrivePlatform::Idle
             || persisted().drive_account_switch().is_some()
-            || matches!(
-                self.app.manager().published_screen().body,
-                CloudBackupScreenBody::DriveAccountSwitch(_)
-            )
+            || shows_switch(&self.app.manager().published_screen().body)
     }
 
     /// The exit the switch on screen offers that goes on with it: Confirm Saved Passkey on a
     /// switch paused for its saved passkey, Try Again on one that needs attention
     fn switch_exit(&self) -> Option<CloudBackupManagerAction> {
         let screen = self.app.manager().published_screen();
-        if !matches!(screen.body, CloudBackupScreenBody::DriveAccountSwitch(_)) {
+        if !shows_switch(&screen.body) {
             return None;
         }
 
@@ -881,7 +879,7 @@ impl Case {
     /// Drives the app out of the state it starts from, so it runs once per process: at the end
     /// of a sequence case, or at the step a probe replayed to. A running Enable or restore takes
     /// its cooperative exit while the app quiesces: it finishes, and an Enable that stops for
-    /// the user is left by its Discard. A Drive switch is finished first by the cooperative
+    /// the user, or work paused on its saved passkey, is left by its Discard. A Drive switch is finished first by the cooperative
     /// platform and the user's Confirm Saved Passkey or Try Again. A body with no Turn Off (a recovery, an account switch, a failed load or a
     /// corrupted record) has its own exits, which 4a checks at quiescence
     fn escape(&mut self, steps: usize) {
@@ -908,6 +906,7 @@ impl Case {
             quiesced,
             CloudBackupScreenBody::Disabled
                 | CloudBackupScreenBody::Enabling(_)
+                | CloudBackupScreenBody::SavedPasskeyConfirmation(_)
                 | CloudBackupScreenBody::Configured(_)
                 | CloudBackupScreenBody::FinishingDisable(_)
         ) {
@@ -930,8 +929,11 @@ impl Case {
                 CloudBackupScreenBody::FinishingDisable(_) => {
                     app.dispatch(CloudBackupManagerAction::ResumeDisable)
                 }
-                // with no operation live an Enable waits on the user, and Discard leaves it
-                CloudBackupScreenBody::Enabling(_) => {
+                // with no operation live an Enable, or work paused on its saved passkey, waits on
+                // the user, and Discard leaves it; a switch's pause has none, and the platform
+                // finished that switch above
+                CloudBackupScreenBody::Enabling(_)
+                | CloudBackupScreenBody::SavedPasskeyConfirmation(_) => {
                     app.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup)
                 }
                 other => panic!(
@@ -1158,6 +1160,18 @@ fn model_escapes_from_every_reached_state() {
 }
 
 /// The body's variant name, for the trace
+/// The body is the Drive switch: under way, needing attention, or paused on its saved passkey
+fn shows_switch(body: &CloudBackupScreenBody) -> bool {
+    matches!(
+        body,
+        CloudBackupScreenBody::DriveAccountSwitch(_)
+            | CloudBackupScreenBody::SavedPasskeyConfirmation(CloudBackupSavedPasskeyScreen {
+                lifecycle: CloudBackupSavedPasskeyLifecycle::DriveAccountSwitch,
+                ..
+            })
+    )
+}
+
 fn body_name(body: &CloudBackupScreenBody) -> &'static str {
     match body {
         CloudBackupScreenBody::Disabled => "Disabled",
@@ -1167,6 +1181,7 @@ fn body_name(body: &CloudBackupScreenBody) -> &'static str {
         CloudBackupScreenBody::FinishingDisable(_) => "FinishingDisable",
         CloudBackupScreenBody::PendingEnableRecovery(_) => "PendingEnableRecovery",
         CloudBackupScreenBody::DriveAccountSwitch(_) => "DriveAccountSwitch",
+        CloudBackupScreenBody::SavedPasskeyConfirmation(_) => "SavedPasskeyConfirmation",
         CloudBackupScreenBody::LoadFailed => "LoadFailed",
         CloudBackupScreenBody::Corrupted => "Corrupted",
     }

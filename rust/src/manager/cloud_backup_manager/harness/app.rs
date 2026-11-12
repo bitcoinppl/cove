@@ -29,7 +29,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
-    CloudBackupRowActionKind, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyScreen,
+    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
@@ -613,6 +614,84 @@ impl TestApp {
         self.block_on("the supervisor's admission answer", async move {
             call!(supervisor.harness_admission(intent)).await.expect("admission")
         })
+    }
+
+    /// The confirmation of work paused on its saved passkey, when it owns the screen
+    ///
+    /// Its controls must be exactly the ones admission accepts now, each drawn available: the
+    /// screen carries no list of its own that could offer a dead control or hide the way on
+    pub(crate) fn saved_passkey_confirmation(&self) -> Option<CloudBackupSavedPasskeyScreen> {
+        let screen = self.manager.published_screen();
+        let CloudBackupScreenBody::SavedPasskeyConfirmation(paused) = screen.body else {
+            return None;
+        };
+
+        let accepted: Vec<_> =
+            [CloudBackupSavedPasskeyControl::Confirm, CloudBackupSavedPasskeyControl::Discard]
+                .into_iter()
+                .filter(|control| self.admission_of(control.intent()) == Admission::Accepted)
+                .collect();
+        assert_eq!(paused.controls, accepted, "{}", self.describe());
+
+        for control in &paused.controls {
+            assert_eq!(
+                screen.actions.availability(control.action()),
+                Some(CloudBackupActionAvailability::Available),
+                "{control:?}\n{}",
+                self.describe()
+            );
+        }
+
+        // the pause owns the backup until its Confirm or Discard, so admission refuses every
+        // other intent that starts work, as the screen draws none of them
+        let starts_work = [
+            NextAction::Enable,
+            NextAction::RestoreFromCloudBackup,
+            NextAction::TurnOff,
+            NextAction::ResumeDisable,
+            NextAction::ReconnectDrive,
+            NextAction::Verify,
+            NextAction::SyncUnsynced,
+        ]
+        .map(|action| action.intent(None))
+        .into_iter()
+        .chain([
+            UserIntent::ReinitializeBackup,
+            UserIntent::RecreateManifest,
+            UserIntent::RepairPasskey { no_discovery: false },
+            UserIntent::RefreshDetail,
+            UserIntent::StartRestoreAll,
+            UserIntent::RecoverOtherBackups,
+            UserIntent::DeleteOtherBackups,
+            UserIntent::SwitchDriveAccount,
+        ]);
+        for intent in starts_work {
+            let admission = self.admission_of(intent.clone());
+            assert!(
+                matches!(admission, Admission::Rejected(_)),
+                "{intent:?} was {admission:?} while paused\n{}",
+                self.describe()
+            );
+        }
+
+        Some(paused)
+    }
+
+    /// Taps a control of the saved-passkey confirmation, as a platform sends it
+    pub(crate) fn tap_saved_passkey(
+        &mut self,
+        control: CloudBackupSavedPasskeyControl,
+    ) -> Step<'_> {
+        let action = match control {
+            CloudBackupSavedPasskeyControl::Confirm => {
+                CloudBackupManagerAction::ConfirmSavedPasskey
+            }
+            CloudBackupSavedPasskeyControl::Discard => {
+                CloudBackupManagerAction::DiscardPendingEnableCloudBackup
+            }
+        };
+
+        self.dispatch(action)
     }
 
     /// The last dispatched intent and what admission said

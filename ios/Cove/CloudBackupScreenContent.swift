@@ -18,6 +18,15 @@ extension CloudBackupScreen {
         return flow
     }
 
+    /// The Enable paused on the passkey it registered, when that pause owns the screen
+    var pausedEnable: CloudBackupSavedPasskeyScreen? {
+        guard case let .savedPasskeyConfirmation(paused) = body, paused.lifecycle == .enable else {
+            return nil
+        }
+
+        return paused
+    }
+
     /// The interrupted Enable, when the body is the pending-enable recovery
     var pendingEnableRecovery: CloudBackupPendingEnableRecovery? {
         guard case let .pendingEnableRecovery(recovery) = body else { return nil }

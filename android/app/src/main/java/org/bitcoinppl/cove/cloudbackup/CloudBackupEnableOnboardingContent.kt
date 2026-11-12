@@ -428,40 +428,18 @@ internal fun CloudBackupSettingsEnableOnboarding(
     screen: CloudBackupScreen,
     onCancel: () -> Unit,
 ) {
+    // an Enable paused on its saved passkey is its own body, drawn by the Cloud Backup screen, so
+    // an enable flow here is one that runs or waits on the root prompt
     val enableFlow = (screen.body as? CloudBackupScreenBody.Enabling)?.v1
-    val savedPasskeyConfirmationMode =
-        (enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
-    val needsManualPasskeyConfirmation =
-        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
-
-    // Confirm Passkey continues a paused enable; otherwise the primary button starts one
-    val primaryAction =
-        if (needsManualPasskeyConfirmation) {
-            CloudBackupScreenAction.CONFIRM_SAVED_PASSKEY
-        } else {
-            CloudBackupScreenAction.ENABLE
-        }
-    val primary = screen.actions.lookup(primaryAction)
+    val primary = screen.actions.lookup(CloudBackupScreenAction.ENABLE)
 
     // the root prompt answers an enable that asks for a passkey choice, so no overlay covers it
     val awaitsPrompt = screen.actions.draws(CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING)
     val showsBusyOverlay = enableFlow != null && primary == null && !awaitsPrompt
-    val primaryButtonTitle =
-        if (needsManualPasskeyConfirmation) {
-            "Confirm Passkey"
-        } else {
-            "Enable Cloud Backup"
-        }
 
     Box(modifier = Modifier.fillMaxSize()) {
         CloudBackupEnableOnboardingView(
-            onEnable = {
-                if (needsManualPasskeyConfirmation) {
-                    manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
-                } else {
-                    manager.dispatch(settingsEnableCloudBackupPrompt())
-                }
-            },
+            onEnable = { manager.dispatch(settingsEnableCloudBackupPrompt()) },
             onCancel = {
                 if (screen.actions.lookup(CloudBackupScreenAction.DISCARD_PENDING_ENABLE)?.isAvailable == true) {
                     manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
@@ -472,11 +450,11 @@ internal fun CloudBackupSettingsEnableOnboarding(
             message = null,
             primaryAvailability = primary,
             context = CloudBackupEnableOnboardingContext.STANDARD,
-            primaryButtonTitle = primaryButtonTitle,
-            primaryTestTag = CloudBackupTags.action(primaryAction),
+            primaryButtonTitle = "Enable Cloud Backup",
+            primaryTestTag = CloudBackupTags.action(CloudBackupScreenAction.ENABLE),
             // Enable has no cancel action, so Cancel waits while it runs or a prompt answers it
             cancelEnabled = !showsBusyOverlay && !awaitsPrompt,
-            footer = { CloudBackupSettingsEnableFooter(manager, screen, primaryAction) },
+            footer = { CloudBackupSettingsEnableFooter(manager, screen) },
         )
 
         if (showsBusyOverlay) {
@@ -493,11 +471,10 @@ internal fun CloudBackupSettingsEnableOnboarding(
 private fun CloudBackupSettingsEnableFooter(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
-    primaryAction: CloudBackupScreenAction,
 ) {
     CloudBackupLastOutcomeNote(
         outcome = screen.lastOutcome,
-        target = CloudBackupOutcomeTarget.Action(primaryAction),
+        target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.ENABLE),
         onDispatch = manager::dispatch,
     )
     CloudBackupActionButton(

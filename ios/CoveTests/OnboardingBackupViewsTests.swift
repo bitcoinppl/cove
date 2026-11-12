@@ -184,6 +184,25 @@ final class OnboardingBackupViewsTests: XCTestCase {
         )
     }
 
+    /// An Enable paused on its saved passkey keeps onboarding on Confirm Passkey, and only an
+    /// Enable's pause does: other paused work isn't onboarding's to continue
+    func testPausedEnableMakesTheOnboardingPrimaryButtonConfirmThePasskey() throws {
+        let fixtures = cloudBackupScreenFixtures()
+        let screen = { (name: String) in
+            try XCTUnwrap(fixtures.first { $0.name.hasSuffix(":\(name)") }?.screen)
+        }
+
+        let pausedEnable = try screen("saved-passkey-confirmation-enable")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: pausedEnable), .confirmSavedPasskey)
+        XCTAssertTrue(pausedEnable.actions.isAvailable(action: .confirmSavedPasskey))
+
+        let pausedReinitialize = try screen("saved-passkey-confirmation-reinitialize")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: pausedReinitialize), .enable)
+
+        let disabled = try screen("disabled")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: disabled), .enable)
+    }
+
     func testPendingEnableRecoveryRoutesCleanupToManagerAndCancelToSkip() {
         var dispatched: CloudBackupManagerAction?
         var didSkip = false

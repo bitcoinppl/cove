@@ -21,17 +21,17 @@ use super::types::{
     CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOtherBackupsControl,
     CloudBackupOtherBackupsSection, CloudBackupProgressSection, CloudBackupRecoveryKind,
     CloudBackupRecoveryOperation, CloudBackupRejection, CloudBackupRowAction,
-    CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody,
-    CloudBackupSection, CloudBackupUnreadableKind, CloudBackupVerificationControl,
-    CloudBackupVerificationSection, CloudBackupVerificationView, CloudBackupWalletsControl,
-    CloudBackupWalletsSection,
+    CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
+    CloudBackupSavedPasskeyScreen, CloudBackupScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, CloudBackupUnreadableKind,
+    CloudBackupVerificationControl, CloudBackupVerificationSection, CloudBackupVerificationView,
+    CloudBackupWalletsControl, CloudBackupWalletsSection,
 };
 use crate::manager::cloud_backup_manager::actors::supervisor::Runtime;
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
-    ContinuationStage, EnableIntent, Rejection, ReviewExit, SwitchAdmission, UserIntent,
-    evaluate_admission,
+    EnableIntent, Rejection, ReviewExit, SwitchAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::delete_consent::DeleteConsents;
 use crate::manager::cloud_backup_manager::inventory::{
@@ -104,9 +104,17 @@ fn body(
         });
     }
 
+    // whichever work registered it, a passkey waiting to be confirmed owns the screen while
+    // nothing runs: confirming it is the only way that work goes on
+    if let Some(owner) = admission.paused_on_saved_passkey() {
+        return CloudBackupScreenBody::SavedPasskeyConfirmation(saved_passkey_screen(
+            owner, admission,
+        ));
+    }
+
     match admission.body {
         B::Disabled => match presentation.enable_flow() {
-            Some(flow) if enable_waits_on_user(flow, admission) => {
+            Some(flow) if enable_waits_on_user(flow) => {
                 CloudBackupScreenBody::Enabling(flow.clone())
             }
             _ => CloudBackupScreenBody::Disabled,
@@ -146,16 +154,15 @@ fn body(
     }
 }
 
-/// An Enable that stopped for the user with no operation running: a prompt the reducer holds,
-/// or a saved passkey the supervisor's paused Enable waits to have confirmed
-fn enable_waits_on_user(flow: &CloudBackupEnableFlow, admission: &AdmissionSnapshot) -> bool {
+/// An Enable that stopped on a prompt the reducer holds, with no operation running
+///
+/// One paused on its saved passkey is not here: the paused work owns the screen, in `body`
+fn enable_waits_on_user(flow: &CloudBackupEnableFlow) -> bool {
     match flow {
         CloudBackupEnableFlow::AwaitingForceNewConfirmation(..)
         | CloudBackupEnableFlow::AwaitingPasskeyChoice(_) => true,
-        CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(_) => admission
-            .continuation
-            .is_some_and(|paused| paused.stage == ContinuationStage::AwaitingSavedPasskey),
-        CloudBackupEnableFlow::DiscoveringExistingBackup
+        CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(_)
+        | CloudBackupEnableFlow::DiscoveringExistingBackup
         | CloudBackupEnableFlow::CreatingPasskey
         | CloudBackupEnableFlow::ConfirmingSavedPasskey
         | CloudBackupEnableFlow::UploadingInitialBackup { .. }
@@ -164,19 +171,9 @@ fn enable_waits_on_user(flow: &CloudBackupEnableFlow, admission: &AdmissionSnaps
     }
 }
 
-/// A recorded switch with no failed step: paused on its saved passkey while its reinitialize
-/// holds a continuation and nothing runs, stopped when admission says it needs the user anyway,
-/// otherwise moving on its own
+/// A recorded switch with no failed step that isn't paused on its saved passkey: stopped when
+/// admission says it needs the user anyway, otherwise moving on its own
 fn drive_account_switch_stage(admission: &AdmissionSnapshot) -> CloudBackupDriveAccountSwitchStage {
-    let paused = admission.running.is_none()
-        && admission.continuation.is_some_and(|paused| {
-            matches!(paused.owner, ContinuationOwner::DriveAccountSwitch(_))
-                && paused.stage == ContinuationStage::AwaitingSavedPasskey
-        });
-    if paused {
-        return CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation;
-    }
-
     match admission.drive_account_switch {
         SwitchAdmission::NeedsAttention { .. } => {
             CloudBackupDriveAccountSwitchStage::NeedsAttention(
@@ -191,6 +188,60 @@ fn drive_account_switch_stage(admission: &AdmissionSnapshot) -> CloudBackupDrive
 
 const DRIVE_ACCOUNT_SWITCH_STOPPED_MESSAGE: &str =
     "Cloud Backup stopped while changing Google accounts. Try again to finish.";
+
+/// The confirmation of work paused on the passkey it registered, with the exits admission takes
+/// for that work and no other: Confirm continues any of them, and Discard ends any but a switch's
+/// reinitialize
+fn saved_passkey_screen(
+    owner: ContinuationOwner,
+    admission: &AdmissionSnapshot,
+) -> CloudBackupSavedPasskeyScreen {
+    use CloudBackupSavedPasskeyControl as C;
+    use CloudBackupSavedPasskeyLifecycle as L;
+
+    let lifecycle = match owner {
+        ContinuationOwner::Enable => L::Enable,
+        ContinuationOwner::Reinitialize => L::Reinitialize,
+        ContinuationOwner::DriveAccountSwitch(_) => L::DriveAccountSwitch,
+    };
+
+    let (title, message) = match lifecycle {
+        L::Enable => (SAVED_PASSKEY_TITLE, ENABLE_SAVED_PASSKEY_MESSAGE),
+        L::Reinitialize => (NEW_SAVED_PASSKEY_TITLE, REINITIALIZE_SAVED_PASSKEY_MESSAGE),
+        L::DriveAccountSwitch => {
+            (NEW_SAVED_PASSKEY_TITLE, DRIVE_ACCOUNT_SWITCH_SAVED_PASSKEY_MESSAGE)
+        }
+    };
+
+    // every control the confirmation has, kept where admission takes its intent
+    let controls = [C::Confirm, C::Discard]
+        .into_iter()
+        .filter(|control| evaluate_admission(&control.intent(), admission) == Admission::Accepted)
+        .collect();
+
+    CloudBackupSavedPasskeyScreen {
+        lifecycle,
+        title: title.into(),
+        message: message.into(),
+        controls,
+    }
+}
+
+const SAVED_PASSKEY_TITLE: &str = "Confirm your passkey";
+const NEW_SAVED_PASSKEY_TITLE: &str = "Confirm your new passkey";
+
+const ENABLE_SAVED_PASSKEY_MESSAGE: &str = "Your passkey was saved. Cove needs to confirm it once \
+     before turning on Cloud Backup. If it doesn't appear right away, search for it in your \
+     passkey or password manager app.";
+
+// confirming uploads the new backup and switches to it, so nothing is replaced before then, and
+// Discard deletes only what the reinitialize wrote
+const REINITIALIZE_SAVED_PASSKEY_MESSAGE: &str = "Your new passkey was saved. Once Cove confirms \
+     it, a new cloud backup protected by this passkey replaces your current one. If you cancel, \
+     your current backup stays as it is.";
+
+const DRIVE_ACCOUNT_SWITCH_SAVED_PASSKEY_MESSAGE: &str = "Cove created a passkey for Cloud \
+     Backup in the selected Google account. Confirm it was saved to finish switching accounts.";
 
 fn is_enable(operation: CloudBackupExclusiveOperation) -> bool {
     use CloudBackupExclusiveOperation as Op;
@@ -625,7 +676,11 @@ fn settings_row(
 
     match body {
         CloudBackupScreenBody::Disabled => Row::Disabled,
-        CloudBackupScreenBody::Enabling(_) => Row::SettingUp,
+        CloudBackupScreenBody::Enabling(_)
+        | CloudBackupScreenBody::SavedPasskeyConfirmation(CloudBackupSavedPasskeyScreen {
+            lifecycle: CloudBackupSavedPasskeyLifecycle::Enable,
+            ..
+        }) => Row::SettingUp,
         CloudBackupScreenBody::Restoring(_) => Row::Restoring,
         CloudBackupScreenBody::Configured(_) if notices.heal.is_some() => Row::TurnedOnAgain,
         CloudBackupScreenBody::Configured(screen)
@@ -633,11 +688,16 @@ fn settings_row(
         {
             Row::Disabling
         }
+        // the backup stays configured while a reinitialize or a switch waits on its new passkey
         CloudBackupScreenBody::Configured(_)
+        | CloudBackupScreenBody::SavedPasskeyConfirmation(CloudBackupSavedPasskeyScreen {
+            lifecycle:
+                CloudBackupSavedPasskeyLifecycle::Reinitialize
+                | CloudBackupSavedPasskeyLifecycle::DriveAccountSwitch,
+            ..
+        })
         | CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
-            stage:
-                CloudBackupDriveAccountSwitchStage::Switching
-                | CloudBackupDriveAccountSwitchStage::AwaitingSavedPasskeyConfirmation,
+            stage: CloudBackupDriveAccountSwitchStage::Switching,
         }) => presentation.configured_settings_row(),
         CloudBackupScreenBody::DriveAccountSwitch(_)
         | CloudBackupScreenBody::PendingEnableRecovery(_) => Row::RecoveryRequired,

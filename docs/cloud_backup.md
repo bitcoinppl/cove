@@ -132,8 +132,8 @@ every screen to it. In particular:
   `EnterDetail`, which loads inventory without a control, and a row's Check
   Again is a row action.
 - `DiscardPendingEnable` is the Cancel of the force-new and passkey-choice
-  prompts and of the saved-passkey wait. Pending-enable recovery offers only
-  its cleanup, when cleanup is available.
+  prompts and of the saved-passkey confirmation, where admission accepts it.
+  Pending-enable recovery offers only its cleanup, when cleanup is available.
 - Restore All's start, retry and cancel follow the Not On Device section's
   Restore All state.
 - `RepairPasskey` (Add New Passkey) is offered with the passkey card, and every
@@ -186,8 +186,8 @@ account, report the platform's state, commit, finalize, roll back), and Android
 answers each with a typed `DriveAccountSwitchPlatformResult` through
 `report_drive_account_switch_platform_result`. The supervisor records the
 switch's phase, decides the next step, and projects the switch's stage:
-switching, waiting on its saved passkey, or needing attention with a message
-for the reader. Android reports its state once at launch, so the supervisor
+switching, or needing attention with a message for the reader. A switch
+paused on its saved passkey shows the saved-passkey confirmation instead. Android reports its state once at launch, so the supervisor
 picks up a switch a relaunch interrupted. A failed reinitialize is rerun only
 on Try Again, never at launch, because it may ask for a passkey; Try Again is
 its way out, and Cancel stays unavailable, since the reinitialize may already
@@ -531,6 +531,18 @@ prompt or the passkey choice. A Discard that arrives after Enable finished is
 rejected and changes nothing. Discarding a stopped
 reinitialize deletes only the namespace it wrote, and the configured backup
 stays on its own.
+
+Work paused on its saved passkey owns the screen while nothing runs, whichever
+work it is: the body is `SavedPasskeyConfirmation`, with Rust's title and
+message for that work (an Enable, a reinitialize, or a Google Drive account
+switch) and the controls admission accepts for it, computed when the screen
+is projected. A paused Enable and a paused reinitialize offer Confirm and
+Discard; a switch's paused reinitialize offers only Confirm. Until one of them
+ends the pause, admission refuses every other intent that starts work, Turn
+Off and Verify included, as the operation the paused work continues; prompts,
+notices, the detail screen's lifecycle and a local reset still answer. The settings row
+reads as setting up for a paused Enable, and as the configured backup for the
+other two, since nothing is replaced until the new passkey is confirmed.
 
 When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery

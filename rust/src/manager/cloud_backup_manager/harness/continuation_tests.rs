@@ -19,7 +19,8 @@ use crate::manager::cloud_backup_manager::actors::write::Decision;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupScreenAction as A,
+    CloudBackupActionAvailability, CloudBackupSavedPasskeyControl as Control,
+    CloudBackupSavedPasskeyLifecycle, CloudBackupScreenAction as A, CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupEnableState,
@@ -32,43 +33,61 @@ const NEW_CREDENTIAL: [u8; 3] = [4, 5, 6];
 /// How long a newly registered passkey is given before Cove asks the user to confirm it
 const PASSKEY_AVAILABILITY_WAIT: Duration = Duration::from_secs(3);
 
-/// A reinitialize that registers a new passkey pauses for the user to confirm it. Confirm Saved
-/// Passkey continues it as the reinitialize of the configured backup, which uploads the new
-/// backup, switches to it and verifies it
+/// Configures a backup, then runs a reinitialize that registers a new passkey to its pause for
+/// the user to confirm it, and returns the configured namespace and credential it would replace
+fn pause_a_configured_reinitialize(app: &mut TestApp) -> (String, Option<Vec<u8>>) {
+    let old_namespace = FakeAccount::new(1, 0).seed(app);
+    let old_credential =
+        CloudBackupKeychain::global().load_credential_id().expect("read credential");
+    load_detail(app);
+
+    // no passkey is discoverable, so the reinitialize registers one
+    app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+    app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
+
+    app.dispatch(CloudBackupManagerAction::ReinitializeBackup)
+        .then_cannot(&[N::TurnOff, N::Verify]);
+    app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[N::Enable, N::TurnOff, N::Verify]);
+
+    // paused: nothing was replaced, no reinitialize shows running, and the confirmation waits
+    assert_eq!(app.passkey.inner.create_count(), 1);
+    assert_eq!(app.passkey.inner.authenticate_count(), 0);
+    assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
+    assert_eq!(
+        app.manager().model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual
+        )
+    );
+    assert!(!app.runs_operation(), "{}", app.describe());
+
+    // the pause owns the screen, and offers both ways out of it
+    let paused = app
+        .saved_passkey_confirmation()
+        .unwrap_or_else(|| panic!("the paused reinitialize is not on screen\n{}", app.describe()));
+    assert_eq!(paused.lifecycle, CloudBackupSavedPasskeyLifecycle::Reinitialize);
+    assert_eq!(paused.controls, vec![Control::Confirm, Control::Discard]);
+
+    (old_namespace, old_credential)
+}
+
+/// A reinitialize that registers a new passkey pauses for the user to confirm it, and the pause
+/// owns the screen with its Confirm and Discard. Confirm, tapped there, continues it as the
+/// reinitialize of the configured backup, which uploads the new backup, switches to it and
+/// verifies it
 #[test]
 fn saved_passkey_confirmation_continues_a_configured_reinitialize() {
     let test =
         concat!(module_path!(), "::saved_passkey_confirmation_continues_a_configured_reinitialize");
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
-        let old_namespace = FakeAccount::new(1, 0).seed(&app);
-        load_detail(&mut app);
-
-        // no passkey is discoverable, so the reinitialize registers one
-        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
-        app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
-
-        app.dispatch(CloudBackupManagerAction::ReinitializeBackup)
-            .then_cannot(&[N::TurnOff, N::Verify]);
-        app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_can(&[N::TurnOff, N::Verify]);
-
-        // paused: nothing was replaced, no reinitialize shows running, and the confirmation waits
-        assert_eq!(app.passkey.inner.create_count(), 1);
-        assert_eq!(app.passkey.inner.authenticate_count(), 0);
-        assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
-        assert_eq!(
-            app.manager().model_snapshot().enable_state,
-            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                SavedPasskeyConfirmationMode::Manual
-            )
-        );
-        assert!(!app.runs_operation(), "{}", app.describe());
-        assert_eq!(app.admission_of(UserIntent::ConfirmSavedPasskey), Admission::Accepted);
+        let (old_namespace, _) = pause_a_configured_reinitialize(&mut app);
 
         app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
-        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey)
+        app.tap_saved_passkey(Control::Confirm)
             .then_can(&[N::TurnOff, N::Verify])
             .then_cannot(&[N::Enable]);
+        assert_eq!(app.saved_passkey_confirmation(), None, "{}", app.describe());
 
         let new_namespace = keychain_namespace().expect("a configured namespace");
         assert_ne!(new_namespace, old_namespace, "{}", app.describe());
@@ -93,6 +112,43 @@ fn saved_passkey_confirmation_continues_a_configured_reinitialize() {
             "{}",
             app.describe()
         );
+        assert_eq!(
+            app.admission_of(UserIntent::ConfirmSavedPasskey),
+            Admission::Rejected(Rejection::NothingToContinue)
+        );
+    });
+}
+
+/// Discard, tapped on a paused reinitialize, ends only the reinitialize: the backup stays
+/// configured on its namespace and passkey, as stored, and nothing confirms the new passkey
+#[test]
+fn discard_of_a_paused_reinitialize_keeps_the_current_backup() {
+    let test =
+        concat!(module_path!(), "::discard_of_a_paused_reinitialize_keeps_the_current_backup");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let (old_namespace, old_credential) = pause_a_configured_reinitialize(&mut app);
+        let record = persisted();
+
+        app.tap_saved_passkey(Control::Discard)
+            .then_can(&[N::TurnOff, N::Verify])
+            .then_cannot(&[N::Enable]);
+
+        assert_eq!(app.saved_passkey_confirmation(), None, "{}", app.describe());
+        assert!(
+            matches!(app.manager().published_screen().body, CloudBackupScreenBody::Configured(_)),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
+        assert!(app.cloud.inner.has_namespace(&old_namespace));
+        assert_eq!(
+            CloudBackupKeychain::global().load_credential_id().expect("read credential"),
+            old_credential
+        );
+        assert_eq!(persisted(), record);
+        assert_eq!(app.manager().current_status(), CloudBackupStatus::Enabled);
+        assert_eq!(app.passkey.inner.authenticate_count(), 0);
         assert_eq!(
             app.admission_of(UserIntent::ConfirmSavedPasskey),
             Admission::Rejected(Rejection::NothingToContinue)
@@ -149,11 +205,14 @@ fn discard_after_a_confirmed_enable_is_rejected_and_changes_nothing() {
             "{}",
             app.describe()
         );
+        let paused = app
+            .saved_passkey_confirmation()
+            .unwrap_or_else(|| panic!("the paused Enable is not on screen\n{}", app.describe()));
+        assert_eq!(paused.lifecycle, CloudBackupSavedPasskeyLifecycle::Enable);
+        assert_eq!(paused.controls, vec![Control::Confirm, Control::Discard]);
 
         app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
-        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey)
-            .then_can(&[N::TurnOff])
-            .then_cannot(&[N::Enable]);
+        app.tap_saved_passkey(Control::Confirm).then_can(&[N::TurnOff]).then_cannot(&[N::Enable]);
 
         assert_late_discard_changes_nothing(&mut app);
     });
