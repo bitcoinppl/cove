@@ -19,7 +19,7 @@ class SendFlowRouteLifecycleTest {
 
         assertTrue(
             routeStackContainsSendWallet(
-                default = Route.Send(SendRoute.SetAmount(walletId, null, null)),
+                default = Route.Send(SendRoute.SetAmount(walletId, null)),
                 routes = emptyList(),
                 walletId = walletId,
             ),
@@ -35,7 +35,7 @@ class SendFlowRouteLifecycleTest {
                 default = Route.SelectedWallet(walletId),
                 routes =
                     listOf(
-                        Route.Send(SendRoute.SetAmount(walletId, null, null)),
+                        Route.Send(SendRoute.SetAmount(walletId, null)),
                         Route.Send(SendRoute.CoinControlSetAmount(walletId, emptyList())),
                     ),
                 walletId = walletId,
@@ -50,7 +50,7 @@ class SendFlowRouteLifecycleTest {
         assertTrue(
             routeStackContainsSendWallet(
                 default = Route.Settings(SettingsRoute.Main),
-                routes = listOf(Route.Send(SendRoute.SetAmount(walletId, null, null))),
+                routes = listOf(Route.Send(SendRoute.SetAmount(walletId, null))),
                 walletId = walletId,
             ),
         )
@@ -74,7 +74,7 @@ class SendFlowRouteLifecycleTest {
         assertFalse(
             routeStackContainsSendWallet(
                 default = Route.SelectedWallet("wallet-a"),
-                routes = listOf(Route.Send(SendRoute.SetAmount("wallet-b", null, null))),
+                routes = listOf(Route.Send(SendRoute.SetAmount("wallet-b", null))),
                 walletId = "wallet-a",
             ),
         )
@@ -84,7 +84,7 @@ class SendFlowRouteLifecycleTest {
     fun zeroBalanceIsRejectedWhenEnteringAmountSelection() {
         assertTrue(
             shouldShowNoBalanceAlertOnEntry(
-                sendRoute = SendRoute.SetAmount("wallet-a", null, null),
+                sendRoute = SendRoute.SetAmount("wallet-a", null),
                 spendableSats = 0uL,
             ),
         )
@@ -94,7 +94,7 @@ class SendFlowRouteLifecycleTest {
     fun positiveBalanceIsAllowedWhenEnteringAmountSelection() {
         assertFalse(
             shouldShowNoBalanceAlertOnEntry(
-                sendRoute = SendRoute.SetAmount("wallet-a", null, null),
+                sendRoute = SendRoute.SetAmount("wallet-a", null),
                 spendableSats = 1uL,
             ),
         )
