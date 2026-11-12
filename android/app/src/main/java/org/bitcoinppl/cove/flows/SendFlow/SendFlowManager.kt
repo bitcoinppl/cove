@@ -58,6 +58,16 @@ class SendFlowManager internal constructor(
     // validated state
     var address by mutableStateOf<Address?>(null)
 
+    private var addressOwnership by mutableStateOf<SendFlowAddressOwnership?>(null)
+
+    // which of the user's wallets owns the address being sent to, while the note is still about it;
+    // the field's text changes before rust confirms the new address, so the note must match both
+    val addressOwnershipMessage: String?
+        get() =
+            addressOwnership
+                ?.takeIf { it.address == address && it.address.unformatted() == _enteringAddress }
+                ?.message
+
     var amount by mutableStateOf<Amount?>(null)
 
     var fiatAmount by mutableStateOf<Double?>(null)
@@ -309,6 +319,10 @@ class SendFlowManager internal constructor(
 
             is SendFlowManagerReconcileMessage.UpdateAddress -> {
                 address = message.v1
+            }
+
+            is SendFlowManagerReconcileMessage.UpdateAddressOwnership -> {
+                addressOwnership = message.v1
             }
 
             is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> {

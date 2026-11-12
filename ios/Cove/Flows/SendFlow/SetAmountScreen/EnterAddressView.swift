@@ -15,6 +15,7 @@ struct EnterAddressView: View {
 
     /// args
     @Binding var address: String
+    var ownershipMessage: String? = nil
 
     /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
@@ -38,6 +39,16 @@ struct EnterAddressView: View {
                     .foregroundStyle(.primary.opacity(0.9))
                     .autocorrectionDisabled(true)
                     .keyboardType(.asciiCapable)
+            }
+
+            if let ownershipMessage {
+                HStack {
+                    Label(ownershipMessage, systemImage: "person.crop.circle.badge.checkmark")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
             }
         }
         .contentShape(Rectangle())

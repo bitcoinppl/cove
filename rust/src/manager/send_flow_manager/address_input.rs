@@ -1,11 +1,37 @@
 use std::sync::Arc;
 
-use cove_types::address::AddressWithNetwork;
+use cove_types::address::{Address, AddressWithNetwork};
 use tracing::debug;
 
 use super::{Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
 
 impl RustSendFlowManager {
+    /// Point the send at `address`; every change to the send's address goes through here
+    ///
+    /// A different address clears the warnings the user acknowledged for the old one and starts
+    /// checking whether the new one is the user's own
+    pub(crate) fn replace_address(
+        self: &Arc<Self>,
+        address: Option<Arc<Address>>,
+        payjoin_endpoint: Option<String>,
+    ) {
+        let changed = {
+            let mut state = self.state.lock();
+            let changed = state.address != address;
+            if changed {
+                state.clear_warning_acknowledgements();
+            }
+
+            state.address = address.clone();
+            state.payjoin_endpoint = payjoin_endpoint;
+            changed
+        };
+
+        if let Some(address) = address.filter(|_| changed) {
+            self.check_address_ownership(address);
+        }
+    }
+
     /// Called when the user types or pastes into the address field.
     /// Handles plain addresses and full bitcoin: URIs (extracts amount if present).
     pub(crate) fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
@@ -47,14 +73,7 @@ impl RustSendFlowManager {
             .and_then(|address_with_network| address_with_network.payjoin.as_ref())
             .map(|payjoin| payjoin.endpoint.clone());
         let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
-        {
-            let mut state = self.state.lock();
-            if state.address != address {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = address.clone();
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
+        self.replace_address(address.clone(), payjoin_endpoint);
         sender.queue(Message::UpdateAddress(address));
 
         // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
@@ -112,14 +131,7 @@ impl RustSendFlowManager {
 
     pub(crate) fn clear_address(self: &Arc<Self>) {
         let mut sender = self.reconciler.deferred_sender();
-        {
-            let mut state = self.state.lock();
-            if state.address.is_some() {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = None;
-            state.payjoin_endpoint = None;
-        }
+        self.replace_address(None, None);
         sender.queue(Message::UpdateAddress(None));
 
         self.state.lock().entering_address = String::new();
@@ -159,15 +171,7 @@ impl RustSendFlowManager {
         let payjoin_endpoint =
             address_with_network.payjoin.as_ref().map(|payjoin| payjoin.endpoint.clone());
         let address = Arc::new(address_with_network.address);
-
-        {
-            let mut state = self.state.lock();
-            if state.address.as_ref() != Some(&address) {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = Some(address.clone());
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
+        self.replace_address(Some(address.clone()), payjoin_endpoint);
         sender.queue(Message::UpdateAddress(Some(address.clone())));
 
         self.state.lock().entering_address = address.to_string();
@@ -220,23 +224,36 @@ impl RustSendFlowManager {
 mod tests {
     use std::{sync::Arc, time::Duration};
 
+    use bdk_wallet::KeychainKind;
     use cove_tokio::FutureTimeoutExt as _;
-    use cove_types::{address::AddressWithNetwork, fees::FeeRateOptions};
+    use cove_types::{
+        address::{Address, AddressWithNetwork},
+        fees::FeeRateOptions,
+    };
 
     use crate::{
         app::{App, AppAction},
+        manager::import_wallet_manager::import_mnemonic_with_target,
         manager::{
             deferred_sender::SingleOrMany,
             wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         },
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
-        test_support::hardware_signing::external_address,
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        test_support::{
+            bip84_keys::{address_at, random_mnemonic},
+            hardware_signing::external_address,
+            wallet_target::WalletTargetGuard,
+        },
+        wallet::{
+            balance::Balance,
+            metadata::{WalletMetadata, WalletMode},
+        },
     };
 
     use super::super::{
         Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
+        address_ownership::SendFlowAddressOwnership,
     };
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
@@ -250,7 +267,11 @@ mod tests {
     fn funded_send_flow(network: Network) -> Arc<RustSendFlowManager> {
         let mut metadata = WalletMetadata::preview_new();
         metadata.network = network;
+        funded_send_flow_for(metadata)
+    }
 
+    /// A funded send flow, as in [`funded_send_flow`], sending from the wallet `metadata` names
+    fn funded_send_flow_for(metadata: WalletMetadata) -> Arc<RustSendFlowManager> {
         let wallet_manager =
             Arc::new(funded_preview_wallet_manager_with_metadata(metadata.clone(), &[100_000]));
 
@@ -427,5 +448,99 @@ mod tests {
         }
 
         App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+    }
+
+    /// Typed, scanned and handed-in addresses are all checked against the user's wallets, and the
+    /// apps get a note naming the wallet that owns the address, or nothing when none does
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_apps_are_told_which_of_the_users_wallets_owns_the_address() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let _target = WalletTargetGuard::new(Network::Bitcoin, WalletMode::Main);
+
+        let sending_keys = random_mnemonic();
+        let sending =
+            import_mnemonic_with_target(sending_keys.clone(), Network::Bitcoin, WalletMode::Main)
+                .unwrap();
+        let savings_keys = random_mnemonic();
+        let savings =
+            import_mnemonic_with_target(savings_keys.clone(), Network::Bitcoin, WalletMode::Main)
+                .unwrap();
+
+        let own = address_at(&sending_keys, Network::Bitcoin, KeychainKind::External, 3).address;
+        let other = address_at(&savings_keys, Network::Bitcoin, KeychainKind::Internal, 2).address;
+
+        // each owned address stays entered until its note arrives, as it would while the user
+        // reads the screen; a note for an address that was already replaced is never sent
+        let manager = funded_send_flow_for(sending);
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(MAINNET_ADDRESS.into()));
+        manager
+            .clone()
+            .dispatch(Action::NotifyScanCodeChanged { old: String::new(), new: own.to_string() });
+
+        // a note for the address no wallet owns would arrive here first
+        assert_eq!(
+            next_ownership_note(&manager).await,
+            (own.to_string(), "This is an address in this wallet (receive, index 3)".to_string())
+        );
+
+        manager.clone().dispatch(Action::NotifyAddressChanged(Arc::new(other.clone())));
+        assert_eq!(
+            next_ownership_note(&manager).await,
+            (
+                other.to_string(),
+                format!("This is your address in “{}” (change, index 2)", savings.name)
+            )
+        );
+    }
+
+    /// The address and message of the next ownership note sent to the apps
+    async fn next_ownership_note(manager: &RustSendFlowManager) -> (String, String) {
+        let mut note = None;
+        wait_for("an address ownership note", || {
+            note = note.take().or_else(|| {
+                drain_reconcile_messages(manager).into_iter().find_map(|message| match message {
+                    Message::UpdateAddressOwnership(note) => {
+                        Some((note.address.to_string(), note.message))
+                    }
+                    _ => None,
+                })
+            });
+
+            note.is_some()
+        })
+        .await;
+
+        note.expect("a note arrived")
+    }
+
+    /// A lookup for an address the user has since replaced finishes after the new address's
+    /// note, and must not send its note over the newer one
+    #[test]
+    fn a_note_for_a_replaced_address_is_never_sent() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+
+        let manager = funded_send_flow(Network::Bitcoin);
+        let replaced = Arc::new(Address::preview_new());
+        let current =
+            Arc::new(AddressWithNetwork::try_new(MAINNET_ADDRESS).expect("address parses").address);
+        manager.state.lock().address = Some(current.clone());
+
+        let note = |address: &Arc<Address>| SendFlowAddressOwnership {
+            address: address.clone(),
+            message: address.to_string(),
+        };
+        manager.send_address_ownership(note(&current));
+        manager.send_address_ownership(note(&replaced));
+
+        let sent = drain_reconcile_messages(&manager);
+        assert_eq!(sent, vec![Message::UpdateAddressOwnership(note(&current))]);
     }
 }
