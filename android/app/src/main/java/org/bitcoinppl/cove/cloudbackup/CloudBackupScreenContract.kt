@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupConfiguredScreen
+import org.bitcoinppl.cove_core.CloudBackupControlSurface
 import org.bitcoinppl.cove_core.CloudBackupLastOutcome
 import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -417,6 +418,16 @@ internal fun CloudBackupActionCard(
  */
 internal fun CloudBackupActions.lookup(action: CloudBackupScreenAction): CloudBackupActionAvailability? =
     entries.firstOrNull { it.action == action }?.availability
+
+/**
+ * Whether Rust names a control for [action] on [surface]
+ *
+ * An FFI call, unlike [lookup], so only surfaces that previews never show may ask it
+ */
+internal fun CloudBackupScreen.draws(
+    action: CloudBackupScreenAction,
+    surface: CloudBackupControlSurface,
+): Boolean = drawnControls().any { it.action == action && it.surface == surface }
 
 /**
  * Which control a row action is drawn as

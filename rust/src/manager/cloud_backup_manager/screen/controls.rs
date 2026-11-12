@@ -7,10 +7,10 @@
 use super::types::{
     CloudBackupConfiguredScreen, CloudBackupControlSurface, CloudBackupDisableScreen,
     CloudBackupDrawnControl, CloudBackupDriveAccountSwitchStage, CloudBackupFinishingDisableStage,
-    CloudBackupHealNotice, CloudBackupInventoryControl, CloudBackupMenuControl,
-    CloudBackupOtherBackupsControl, CloudBackupProgressSection, CloudBackupRecoveryKind,
-    CloudBackupSavedPasskeyControl, CloudBackupScreen, CloudBackupScreenAction,
-    CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
+    CloudBackupHealNotice, CloudBackupInventoryAssessment, CloudBackupInventoryControl,
+    CloudBackupMenuControl, CloudBackupOtherBackupsControl, CloudBackupProgressSection,
+    CloudBackupRecoveryKind, CloudBackupSavedPasskeyControl, CloudBackupScreen,
+    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
     CloudBackupVerificationControl, CloudBackupWalletsControl,
 };
 use crate::manager::cloud_backup_manager::admission::UserIntent;
@@ -221,8 +221,8 @@ impl Drawn {
         }
     }
 
-    /// Confirm only on a review, with its leave buttons for the risks it names, and Cancel while
-    /// any Turn Off dialog is open
+    /// Confirm only on a review, with its leave buttons for the risks it names and Check Again
+    /// when it couldn't check everything, and Cancel while any Turn Off dialog is open
     fn turn_off_dialogs(&mut self, disable: &CloudBackupDisableScreen) {
         use CloudBackupScreenAction as A;
 
@@ -237,6 +237,12 @@ impl Drawn {
 
                 if review.impact.unchecked > 0 {
                     self.push(surface, A::VerifyFirst);
+                }
+
+                // Check Again is Turn Off sent a second time, which asks the inventory for a
+                // fresh classification and prepares a new review from it
+                if review.impact.assessment != CloudBackupInventoryAssessment::Complete {
+                    self.push(surface, A::TurnOff);
                 }
             }
             CloudBackupDisableScreen::Preparing

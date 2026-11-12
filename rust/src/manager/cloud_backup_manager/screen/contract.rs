@@ -500,6 +500,26 @@ mod tests {
         assert_eq!(unlisted, vec![drawn(CloudBackupControlSurface::Verification, A::Verify)]);
     }
 
+    /// The Turn Off review offers Check Again, a second Turn Off on its dialogs, exactly when it
+    /// couldn't check everything; the platforms draw it only where Rust names it
+    #[test]
+    fn the_turn_off_review_offers_check_again_only_while_it_could_not_check_everything() {
+        let check_again = drawn(CloudBackupControlSurface::TurnOffDialogs, A::TurnOff);
+        let cases = [
+            ("turn-off-review", true),
+            ("turn-off-review-restore-unavailable", true),
+            ("turn-off-review-restore-all", false),
+            ("turn-off-review-restore-one", false),
+            ("turn-off-review-verify-first", false),
+            ("configured-clean", false),
+        ];
+
+        for (name, offered) in cases {
+            let drawn = named(name).drawn_controls();
+            assert_eq!(drawn.contains(&check_again), offered, "{name}: {drawn:?}");
+        }
+    }
+
     /// A rebuild drawn on a backup that verifies, or Sync Now with every wallet up to date, has
     /// a surface but not one whose content allows it, so it counts as undrawn
     #[test]

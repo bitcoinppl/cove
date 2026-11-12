@@ -300,6 +300,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 dialog: dialog,
                 review: review,
                 actions: actions,
+                offersCheckAgain: screen.draws(.turnOff, on: .turnOffDialogs),
                 manager: manager,
                 coordinator: coordinator
             )
@@ -449,6 +450,7 @@ private struct CloudBackupTurnOffDialogActions: View {
     let dialog: CloudBackupTurnOffDialog
     let review: CloudBackupDisableReview?
     let actions: CloudBackupActions
+    let offersCheckAgain: Bool
     let manager: CloudBackupManager
     let coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
@@ -466,6 +468,7 @@ private struct CloudBackupTurnOffDialogActions: View {
                 CloudBackupTurnOffReviewActions(
                     review: review,
                     actions: actions,
+                    offersCheckAgain: offersCheckAgain,
                     manager: manager,
                     coordinator: coordinator
                 )
@@ -505,6 +508,7 @@ private struct CloudBackupTurnOffDialogActions: View {
 private struct CloudBackupTurnOffReviewActions: View {
     let review: CloudBackupDisableReview
     let actions: CloudBackupActions
+    let offersCheckAgain: Bool
     let manager: CloudBackupManager
     let coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
@@ -522,7 +526,12 @@ private struct CloudBackupTurnOffReviewActions: View {
             .accessibilityIdentifier(CloudBackupScreenAction.confirmDisable.accessibilityIdentifier)
 
         case .two:
-            CloudBackupTurnOffLeaveActions(review: review, actions: actions, manager: manager)
+            CloudBackupTurnOffLeaveActions(
+                review: review,
+                actions: actions,
+                offersCheckAgain: offersCheckAgain,
+                manager: manager
+            )
 
             Button("Continue", role: .destructive) {
                 coordinator.transition(to: .alert(.turnOff(.confirm(reviewId: review.reviewId))))
@@ -537,13 +546,9 @@ private struct CloudBackupTurnOffReviewActions: View {
 private struct CloudBackupTurnOffLeaveActions: View {
     let review: CloudBackupDisableReview
     let actions: CloudBackupActions
+    /// Rust names Check Again on the Turn Off dialogs while the review couldn't check everything
+    let offersCheckAgain: Bool
     let manager: CloudBackupManager
-
-    /// Rust couldn't finish counting what Turn Off would remove
-    private var couldNotCheck: Bool {
-        if case .complete = review.impact.assessment { return false }
-        return true
-    }
 
     /// Rust offers Restore Them First and Verify First only for what this review found, picks the
     /// work each starts, and ends the review in the same turn
@@ -565,7 +570,7 @@ private struct CloudBackupTurnOffLeaveActions: View {
         }
 
         // a second Turn Off re-prepares the review Rust holds, so Check Again stays in Turn Off
-        if couldNotCheck {
+        if offersCheckAgain {
             Button("Check Again") {
                 manager.dispatch(action: .disableCloudBackup)
             }

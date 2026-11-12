@@ -62,6 +62,11 @@ extension CloudBackupScreen {
         drawnControls().contains { $0.action == action && !$0.isAndroidOnly() }
     }
 
+    /// Whether Rust names a control for `action` on `surface`
+    func draws(_ action: CloudBackupScreenAction, on surface: CloudBackupControlSurface) -> Bool {
+        drawnControls().contains { $0.action == action && $0.surface == surface }
+    }
+
     /// The last outcome when no drawn control answers it, so it is drawn at the top instead
     var unplacedOutcome: CloudBackupOutcome? {
         guard let lastOutcome else { return nil }

@@ -81,7 +81,7 @@ class CloudBackupScreenContractTest {
                         .mapNotNull { control ->
                             show(screen)
                             reach(screen, control)
-                            enabledControlFailure(CloudBackupTags.action(control.action))
+                            enabledControlFailure(tag(control))
                                 ?.let { "${fixture.shortName}: ${control.action} on ${control.surface} $it" }
                         }
             }
@@ -103,7 +103,7 @@ class CloudBackupScreenContractTest {
                         show(screen)
                         reach(screen, control)
 
-                        val enabled = enabledNodes(CloudBackupTags.action(control.action))
+                        val enabled = enabledNodes(tag(control))
                         "${fixture.shortName}: ${control.action} has an enabled control".takeIf { enabled > 0 }
                     }
             }
@@ -193,6 +193,15 @@ class CloudBackupScreenContractTest {
 
         compose.waitForIdle()
     }
+
+    // the review's Check Again is the Turn Off it sends again, tagged as itself so the check finds
+    // the dialog's button rather than the Turn Off section's
+    private fun tag(control: CloudBackupDrawnControl): String =
+        when {
+            control.surface == CloudBackupControlSurface.TURN_OFF_DIALOGS &&
+                control.action == CloudBackupScreenAction.TURN_OFF -> CloudBackupTags.TURN_OFF_REVIEW_CHECK_AGAIN
+            else -> CloudBackupTags.action(control.action)
+        }
 
     private fun enabledControlFailure(tag: String): String? {
         val nodes = compose.onAllNodesWithTag(tag).fetchSemanticsNodes()

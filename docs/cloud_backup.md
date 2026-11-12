@@ -746,7 +746,9 @@ asks for consent instead.
    the time the listing is. This device's wallets are read last, after the
    listing, so their secrets are as close to a commit as the evidence gets.
 
-   Tapping Turn Off again is the dialogs' Check Again. It asks the inventory
+   Tapping Turn Off again is the dialogs' Check Again. Rust offers it by naming
+   `TurnOff` on the `TurnOffDialogs` surface while the review's assessment
+   isn't complete, and both apps draw it only there. It asks the inventory
    owner for a fresh classification and joins a refresh that is already
    running. The review is built once that refresh lands or fails, or at the
    same 20-second deadline, with the assessment the inventory reached. A

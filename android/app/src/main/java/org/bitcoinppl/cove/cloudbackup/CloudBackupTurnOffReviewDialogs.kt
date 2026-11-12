@@ -17,9 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.CloudBackupControlSurface
 import org.bitcoinppl.cove_core.CloudBackupDisableConfirmation
 import org.bitcoinppl.cove_core.CloudBackupDisableReview
-import org.bitcoinppl.cove_core.CloudBackupInventoryAssessment
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
@@ -89,10 +89,13 @@ private fun TurnOffFirstReviewDialog(
     // afterwards, nothing continues into Turn Off by itself
     val restoreFirst = screen.actions.lookup(CloudBackupScreenAction.RESTORE_FIRST)
     val verifyFirst = screen.actions.lookup(CloudBackupScreenAction.VERIFY_FIRST)
-    // checking again is Turn Off sent a second time, which Rust answers by preparing a new review
+    // checking again is Turn Off sent a second time, which Rust answers by preparing a new review;
+    // Rust names it on these dialogs while the review couldn't check everything
     val checkAgain =
-        screen.actions.lookup(CloudBackupScreenAction.TURN_OFF)
-            ?.takeIf { review.impact.assessment !is CloudBackupInventoryAssessment.Complete }
+        remember(screen) {
+            screen.actions.lookup(CloudBackupScreenAction.TURN_OFF)
+                ?.takeIf { screen.draws(CloudBackupScreenAction.TURN_OFF, CloudBackupControlSurface.TURN_OFF_DIALOGS) }
+        }
 
     AlertDialog(
         onDismissRequest = onCancel,
