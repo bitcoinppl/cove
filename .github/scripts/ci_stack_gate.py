@@ -130,16 +130,23 @@ class RunState(StrEnum):
     FAILED = "failed"
 
 
-def ci_run_state(run: Run) -> tuple[RunState, str]:
-    """What a CI run says about its commit's merge tier, and which job decided it"""
+def ci_run_state(run: Run, legacy_counts: bool) -> tuple[RunState, str]:
+    """What a CI run says about its commit's merge tier, and which job decided it; a run from
+    before the tiers counts only when `legacy_counts`"""
     changes = run.job(MARKER_JOB)
     if changes is None or not changes.completed:
         return RunState.PENDING, "CI is planning"
 
-    # a run from before the tiers had no marker step and ran every tier; test_ci_stack_gate.py
-    # checks ci.yml still names the step, so a rename can't make every run look like that
-    if MARKER_STEP in changes.steps and changes.steps[MARKER_STEP] != "success":
-        return RunState.NOT_MERGE, "CI ran a slice's tiers"
+    # a run from before the tiers has no marker step. It ran every tier, but on a stacked pull
+    # request it diffed only that pull request's own changes, so it vouches only for a head that
+    # merges straight into the trunk. test_ci_stack.py checks ci.yml still names the step, so a
+    # rename can't make every run look like one from before
+    if MARKER_STEP not in changes.steps:
+        if not legacy_counts:
+            return RunState.NOT_MERGE, "CI ran before the tiers"
+
+    elif changes.steps[MARKER_STEP] != "success":
+        return RunState.NOT_MERGE, "CI didn't test the merge tier for the whole head"
 
     for name in CI_MERGE_JOBS:
         job = run.job(name)
@@ -195,9 +202,12 @@ class StateOf(Protocol):
     def __call__(self, run: Run, /) -> tuple[RunState, str]: ...
 
 
-def newest_decision(runs: Sequence[Run], state_of: StateOf) -> tuple[RunState, str, str] | None:
+def newest_decision(
+    runs: Sequence[Run], state_of: StateOf, newest_decides: bool = False
+) -> tuple[RunState, str, str] | None:
     """The newest run that finished deciding, or else the newest still deciding, or None when no
-    run tested the merge tier; `runs` is newest first, as the API lists them"""
+    run tested the merge tier; `runs` is newest first, as the API lists them. With
+    `newest_decides`, a newer run still deciding outranks an older finished one"""
     pending: tuple[RunState, str, str] | None = None
 
     for run in runs:
@@ -208,6 +218,9 @@ def newest_decision(runs: Sequence[Run], state_of: StateOf) -> tuple[RunState, s
 
         match state:
             case RunState.PASSED | RunState.FAILED:
+                return state, reason, run.url
+
+            case RunState.PENDING if newest_decides:
                 return state, reason, run.url
 
             case RunState.PENDING:
@@ -240,10 +253,16 @@ class GitHub(Protocol):
     def post(self, sha: str, verdict: Verdict) -> None: ...
 
 
-def verdict_for(github: GitHub, sha: str, owner: str) -> Verdict:
+def verdict_for(github: GitHub, sha: str, owner: str, legacy_counts: bool) -> Verdict:
     """Whether `sha` is green on the merge tier, worded for `owner`, the pull request it heads"""
-    ci = newest_decision(github.runs(CI_WORKFLOW, sha), ci_run_state)
-    ui = newest_decision(github.runs(UI_TESTS_WORKFLOW, sha), ui_tests_run_state)
+    ci = newest_decision(
+        github.runs(CI_WORKFLOW, sha), lambda run: ci_run_state(run, legacy_counts)
+    )
+    # a newer UI tests run is one someone asked for with the ui-tests label after an older run
+    # skipped the Android tests, so it outranks that one even while it runs
+    ui = newest_decision(
+        github.runs(UI_TESTS_WORKFLOW, sha), ui_tests_run_state, newest_decides=True
+    )
     short = sha[:7]
 
     if ci is None:
@@ -263,15 +282,20 @@ def verdict_for(github: GitHub, sha: str, owner: str) -> Verdict:
     return Green(f"{owner} at {short} passed the merge tier", ci[2])
 
 
-def gate(github: GitHub, pr: PullRequest, position: Position, cache: dict[str, Verdict]) -> Verdict:
-    """The stack-top status for `pr` at `position`"""
+type Cache = dict[tuple[str, bool], Verdict]
 
-    def cached(sha: str, owner: str) -> Verdict:
-        if sha not in cache:
-            cache[sha] = verdict_for(github, sha, owner)
 
-        return cache[sha]
+def cached(github: GitHub, cache: Cache, sha: str, owner: str, legacy_counts: bool) -> Verdict:
+    key = (sha, legacy_counts)
+    if key not in cache:
+        cache[key] = verdict_for(github, sha, owner, legacy_counts)
 
+    return cache[key]
+
+
+def gate(github: GitHub, pr: PullRequest, position: Position, trunk: str, cache: Cache) -> Verdict:
+    """The stack-top status for `pr` at `position`, in a repository whose default branch is
+    `trunk`"""
     match position:
         case Slice(top=top):
             # a slice pushed after the slices above it were last rebased isn't in the top's head,
@@ -279,10 +303,16 @@ def gate(github: GitHub, pr: PullRequest, position: Position, cache: dict[str, V
             if not github.contains(top.head_sha, pr.head_sha):
                 return Red(f"#{top.number} doesn't hold this commit; rebase the slices above", "")
 
-            return cached(top.head_sha, f"#{top.number}")
+            return cached(github, cache, top.head_sha, f"#{top.number}", False)
 
-        case Unstacked() | Bottom() | Top() | Unplaced():
-            return cached(pr.head_sha, f"#{pr.number}")
+        case Top():
+            return cached(github, cache, pr.head_sha, f"#{pr.number}", False)
+
+        case Bottom():
+            return cached(github, cache, pr.head_sha, f"#{pr.number}", True)
+
+        case Unstacked() | Unplaced():
+            return cached(github, cache, pr.head_sha, f"#{pr.number}", pr.base_ref == trunk)
 
         case _:
             assert_never(position)
@@ -353,14 +383,16 @@ class Posted:
     verdict: Verdict
 
 
-def evaluate(github: GitHub, seeds: Seeds) -> list[Posted]:
+def evaluate(github: GitHub, seeds: Seeds, trunk: str = "master") -> list[Posted]:
     """The stack-top status of every open pull request in the seeds' stacks, and of each fork head"""
-    cache: dict[str, Verdict] = {}
+    cache: Cache = {}
     seen: set[int] = set()
     posted: list[Posted] = []
 
     for sha in seeds.fork_heads:
-        posted.append(Posted(sha, f"fork head {sha[:7]}", gate_fork(github, sha, cache)))
+        # a fork's pull request starts CI only against master, outside any stack
+        verdict = cached(github, cache, sha, "this pull request", True)
+        posted.append(Posted(sha, f"fork head {sha[:7]}", verdict))
 
     for number in seeds.pulls:
         if number in seen:
@@ -374,17 +406,10 @@ def evaluate(github: GitHub, seeds: Seeds) -> list[Posted]:
                 continue
 
             seen.add(member.number)
-            verdict = gate(github, member, position_of(member, stack), cache)
+            verdict = gate(github, member, position_of(member, stack), trunk, cache)
             posted.append(Posted(member.head_sha, f"#{member.number}", verdict))
 
     return posted
-
-
-def gate_fork(github: GitHub, sha: str, cache: dict[str, Verdict]) -> Verdict:
-    if sha not in cache:
-        cache[sha] = verdict_for(github, sha, "this pull request")
-
-    return cache[sha]
 
 
 def state_name(verdict: Verdict) -> str:
@@ -490,6 +515,7 @@ class GhCli:
 
 def main(env: Mapping[str, str], argv: Sequence[str]) -> int:
     github = GhCli(env["GITHUB_REPOSITORY"], dry_run=bool(argv))
+    trunk = "master"
 
     if argv:
         if argv[0] != "--dry-run" or not all(arg.isdigit() for arg in argv[1:]):
@@ -503,9 +529,12 @@ def main(env: Mapping[str, str], argv: Sequence[str]) -> int:
             raise GateError("the event payload isn't an object")
 
         seeds = seeds_for(env.get("GITHUB_EVENT_NAME", ""), event, github)
+        repository = event.get("repository")
+        default_branch = repository.get("default_branch") if isinstance(repository, dict) else None
+        trunk = default_branch if isinstance(default_branch, str) else trunk
 
     try:
-        posted = evaluate(github, seeds)
+        posted = evaluate(github, seeds, trunk)
     except NoStack as error:
         raise GateError(str(error)) from error
 

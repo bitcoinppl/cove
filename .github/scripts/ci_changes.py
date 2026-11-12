@@ -10,17 +10,19 @@ dispatch without a base, any change under .github, and a diff that can't be comp
 job. test_ci_changes.py tests the rules and these fallbacks
 
 A pull request's place in a GitHub stack then caps the tiers that run, see Tier and Position: a
-slice below a stack's top runs tiers 0 and 1, and the top runs the merge tier for the whole stack.
-A pull request that can't be placed runs every tier. It also writes `merge_tiers`, which runs CI's
-marker step, the record stack-gate.yml reads to tell a run of the merge tier from a slice's run
+slice below a stack's top runs tiers 0 and 1, and the top runs the merge tier for the whole stack,
+diffing against the stack's base so its plan sees every slice. A pull request that can't be placed
+runs every tier. `merge_tiers` says whether the run tested the merge tier for everything its head
+adds to the branch it merges into; it runs CI's marker step, which stack-gate.yml reads
 
 Environment:
     GITHUB_EVENT_NAME  pull_request diffs the merge commit actions/checkout made against its first
                        parent, the base branch; workflow_dispatch diffs against BASE_REF
     BASE_REF           for workflow_dispatch, the branch to diff against, fetched as
                        origin/<BASE_REF>, such as a stacked branch's parent
-    GITHUB_EVENT_PATH  for pull_request, the event payload that names the pull request to place
-    GITHUB_REPOSITORY  owner/name, the repository whose stacks gh reads with $GH_TOKEN
+    GITHUB_EVENT_PATH  the event payload, naming the pull request to place and its base
+    GITHUB_REPOSITORY  owner/name, the repository whose stacks gh reads
+    GH_TOKEN           the token gh reads stacks with; without it nothing is placed
     GITHUB_OUTPUT      the file the job lines are appended to
 """
 
@@ -48,7 +50,8 @@ class Tier(IntEnum):
     # builds and the Linux tests, which every slice of a stack still passes so bisect works
     EVERY_PUSH = 1
     # the macOS Rust tests, the iOS unit tests and the Android emulator tests, run once per stack
-    # on its top since the whole stack merges at once
+    # on its top since the whole stack merges at once; a pull request runs the Android tests only
+    # with the ui-tests label, which the UI tests workflow honors on a slice too
     MERGE = 2
     # the iOS UI tests, which their workflow runs only nightly and on demand
     NIGHTLY = 3
@@ -251,6 +254,22 @@ class Git:
 
         return True
 
+    def fetch_tip(self, branch: str) -> str:
+        """Fetches `branch`'s newest commit, trees only, and returns its remote ref"""
+        if not self.succeeds("check-ref-format", "--branch", branch):
+            raise NoDiff(f"{branch!r} isn't a branch name")
+
+        ref = f"refs/remotes/origin/{branch}"
+        self.run(
+            "fetch",
+            "--no-tags",
+            "--depth=1",
+            "--filter=blob:none",
+            "origin",
+            f"+refs/heads/{branch}:{ref}",
+        )
+        return ref
+
     def changed_names(self, base: str, head: str) -> tuple[str, ...]:
         # without renames a moved file lists both its old and new path, and -z keeps paths with
         # unusual characters unquoted so the globs see them as written
@@ -258,13 +277,19 @@ class Git:
         return tuple(name for name in out.split("\0") if name)
 
 
-def changed_paths(git: Git, event: str, base_ref: str) -> tuple[str, ...]:
-    """The paths the triggering `event` changed, raising NoDiff when they can't be computed"""
+def changed_paths(git: Git, event: str, base_ref: str, stack_base: str = "") -> tuple[str, ...]:
+    """The paths the triggering `event` changed, raising NoDiff when they can't be computed;
+    a pull request with `stack_base` diffs against that branch rather than its own base"""
     match event:
         case "pull_request":
             # without a second parent HEAD isn't the merge commit, so its first parent isn't the base
             if not git.succeeds("rev-parse", "--verify", "--quiet", "HEAD^2"):
                 raise NoDiff("HEAD isn't the pull request's merge commit")
+
+            # a stacked pull request's merge commit has the slices below it merged into its first
+            # parent, so only a diff from the stack's base sees every slice the top's run vouches for
+            if stack_base:
+                return git.changed_names(git.fetch_tip(stack_base), "HEAD")
 
             return git.changed_names("HEAD^1", "HEAD")
 
@@ -282,10 +307,10 @@ def changed_paths(git: Git, event: str, base_ref: str) -> tuple[str, ...]:
             raise NoDiff(f"a {event or 'local'} run has no diff to filter")
 
 
-def plan(git: Git, event: str, base_ref: str) -> Plan:
+def plan(git: Git, event: str, base_ref: str, stack_base: str = "") -> Plan:
     """The jobs the triggering event needs, or every job when its diff can't be computed"""
     try:
-        paths = changed_paths(git, event, base_ref)
+        paths = changed_paths(git, event, base_ref, stack_base)
     except NoDiff as error:
         return RunAll(str(error))
 
@@ -366,6 +391,8 @@ class Top:
     """The highest open pull request of a stack, the one whose head holds the whole stack"""
 
     stack: int
+    # the branch the stack merges into, which the top's run diffs against
+    stack_base: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,7 +424,7 @@ def position_of(pr: PullRequest, stack: Stack | None) -> Position:
         return Unplaced(f"stack {stack.number} has no open pull request")
 
     if top.number == pr.number:
-        return Top(stack.number)
+        return Top(stack.number, stack.base_ref)
 
     # a slice retargeted at the base, as GitHub does once the slices below it merge, runs as a
     # pull request straight to that base
@@ -429,8 +456,8 @@ def describe(position: Position) -> str:
         case Bottom(stack=stack):
             return f"the bottom of stack {stack}, targeting its base"
 
-        case Top(stack=stack):
-            return f"the top of stack {stack}"
+        case Top(stack=stack, stack_base=base):
+            return f"the top of stack {stack}, so it diffs against {base}"
 
         case Slice(stack=stack, top=top):
             return f"a slice of stack {stack}, whose top #{top.number} runs the merge tier"
@@ -534,28 +561,84 @@ def fetch_stack(repo: str, number: int) -> str:
         raise NoStack(f"gh api graphql failed: {error} {stderr.strip()}") from error
 
 
-def locate(env: Mapping[str, str], fetch: FetchStack = fetch_stack) -> Position:
+@dataclass(frozen=True, slots=True)
+class Event:
+    """What the triggering event says about the run's base"""
+
+    name: str
+    # the pull request's number and base branch, for a pull_request event
+    number: int | None
+    pr_base: str
+    # the repository's default branch, which pull requests merge into
+    trunk: str
+
+    @classmethod
+    def read(cls, env: Mapping[str, str]) -> Self:
+        name = env.get("GITHUB_EVENT_NAME", "")
+
+        try:
+            payload: object = json.loads(Path(env["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+        except (KeyError, OSError, json.JSONDecodeError):
+            payload = {}
+
+        def text(*keys: str) -> str:
+            try:
+                value = dig(payload, *keys)
+            except NoStack:
+                return ""
+
+            return value if isinstance(value, str) else ""
+
+        try:
+            number = dig(payload, "pull_request", "number")
+        except NoStack:
+            number = None
+
+        return cls(
+            name,
+            number if isinstance(number, int) else None,
+            text("pull_request", "base", "ref"),
+            text("repository", "default_branch") or "master",
+        )
+
+
+def locate(env: Mapping[str, str], event: Event, fetch: FetchStack = fetch_stack) -> Position:
     """The triggering pull request's position, read fresh from GitHub rather than from the event
     payload, so a re-run sees the stack as it is now"""
-    if env.get("GITHUB_EVENT_NAME") != "pull_request":
-        return Unplaced(f"a {env.get('GITHUB_EVENT_NAME') or 'local'} run isn't a pull request")
+    if event.name != "pull_request":
+        return Unplaced(f"a {event.name or 'local'} run isn't a pull request")
+
+    if event.number is None:
+        return Unplaced("the event names no pull request")
+
+    # the UI tests workflow passes no token: its Android jobs run on a pull request only when
+    # someone asks with the ui-tests label, and a slice's label still counts
+    if not env.get("GH_TOKEN") or not env.get("GITHUB_REPOSITORY"):
+        return Unplaced("no token or repository to read the stack with")
 
     try:
-        event: object = json.loads(Path(env["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-        number = dig(event, "pull_request", "number")
-        repo = env["GITHUB_REPOSITORY"]
-    except (KeyError, OSError, json.JSONDecodeError, NoStack) as error:
-        return Unplaced(f"the event names no pull request: {error!r}")
-
-    if not isinstance(number, int):
-        return Unplaced(f"the event's pull request number isn't a number: {number!r}")
-
-    try:
-        pr, stack = parse_stack(fetch(repo, number))
+        pr, stack = parse_stack(fetch(env["GITHUB_REPOSITORY"], event.number))
     except NoStack as error:
         return Unplaced(str(error))
 
     return position_of(pr, stack)
+
+
+def spans_trunk(event: Event, dispatch_base: str, position: Position) -> bool:
+    """Whether the run's diff covers everything its head adds to the branch it merges into, so a
+    pass of its merge tier can vouch for the whole head"""
+    match event.name, position:
+        case "pull_request", Top():
+            return True
+
+        case "pull_request", _:
+            return event.pr_base == event.trunk or isinstance(position, Bottom)
+
+        case "workflow_dispatch", _:
+            return dispatch_base in ("", event.trunk)
+
+        case _:
+            return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -564,6 +647,7 @@ class Selection:
 
     plan: Plan
     position: Position
+    spans_trunk: bool
 
     @property
     def jobs(self) -> frozenset[Job]:
@@ -572,8 +656,9 @@ class Selection:
 
     @property
     def merge_tiers(self) -> bool:
-        """Whether this run tests the merge tier, which a slice leaves to its stack's top"""
-        return ceiling(self.position) >= Tier.MERGE
+        """Whether this run tests the merge tier for its whole head, which a slice leaves to its
+        stack's top and a manual run against a parent branch can't"""
+        return self.spans_trunk and ceiling(self.position) >= Tier.MERGE
 
 
 def output_lines(selection: Selection) -> list[str]:
@@ -584,7 +669,13 @@ def output_lines(selection: Selection) -> list[str]:
 
 
 def main(env: Mapping[str, str], fetch: FetchStack = fetch_stack) -> None:
-    result = plan(Git(Path.cwd()), env.get("GITHUB_EVENT_NAME", ""), env.get("BASE_REF", ""))
+    event = Event.read(env)
+    dispatch_base = env.get("BASE_REF", "")
+    position = locate(env, event, fetch)
+    print(f"this pull request is {describe(position)}, so tiers up to {ceiling(position)} run")
+
+    stack_base = position.stack_base if isinstance(position, Top) else ""
+    result = plan(Git(Path.cwd()), event.name, dispatch_base, stack_base)
 
     match result:
         case Filtered(paths=paths):
@@ -597,10 +688,7 @@ def main(env: Mapping[str, str], fetch: FetchStack = fetch_stack) -> None:
         case _:
             assert_never(result)
 
-    position = locate(env, fetch)
-    print(f"this pull request is {describe(position)}, so tiers up to {ceiling(position)} run")
-
-    lines = output_lines(Selection(result, position))
+    lines = output_lines(Selection(result, position, spans_trunk(event, dispatch_base, position)))
     print("\n".join(lines))
 
     if output := env.get("GITHUB_OUTPUT"):

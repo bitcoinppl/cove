@@ -219,17 +219,19 @@ class PlanTests(unittest.TestCase):
         return {job: value for job, _, value in (line.partition("=") for line in lines)}
 
     def test_the_script_writes_every_job_to_the_actions_output(self) -> None:
+        # without an event payload the pull request's base is unknown, so its run can't vouch
+        # for the merge tier, though it still runs those jobs
         cases = {
-            "a filtered pull_request": ("pr-merge", "pull_request", ANDROID | IOS),
-            "a push": ("pr-merge", "push", ALL_JOBS),
+            "a filtered pull_request": ("pr-merge", "pull_request", ANDROID | IOS, "false"),
+            "a push": ("pr-merge", "push", ALL_JOBS, "true"),
         }
 
-        for name, (branch, event, selected) in cases.items():
+        for name, (branch, event, selected, merge_tiers) in cases.items():
             with self.subTest(name):
                 self.assertEqual(
                     self.run_script(branch, event),
                     {job.value: "true" if job in selected else "false" for job in Job}
-                    | {"merge_tiers": "true"},
+                    | {"merge_tiers": merge_tiers},
                 )
 
 

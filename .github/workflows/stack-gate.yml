@@ -5,8 +5,8 @@ name: Stack gate
 # every other pull request's passes once its own head is. Since the whole stack merges at once, the
 # merge tier then runs once per stack rather than on every slice and every rebase of it.
 # workflow_run runs this from master with a token that can post statuses, for forks' pull requests
-# too, and re-evaluates a stack when a CI run on any of its heads starts or a CI or UI tests run
-# ends, so a status follows its stack's top without a job waiting or polling
+# too, and re-evaluates a stack when a CI or UI tests run on any of its heads starts or ends, so a
+# status follows its stack's top without a job waiting or polling
 on:
   workflow_run:
     workflows: [CI, UI tests]
@@ -18,21 +18,19 @@ on:
 
 permissions: {}
 
-# the newest evaluation of a head reads the newest runs, so it replaces an older one still going
-concurrency:
-  group: stack-gate-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
-  cancel-in-progress: true
-
 jobs:
   stack-top:
-    # a UI tests run only ends a merge-tier job, never starts one, and an edit matters only when it
-    # moves the base
+    # an edit matters only when it moves the base
     if: >-
       (github.event_name == 'workflow_run'
-        && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'workflow_dispatch')
-        && (github.event.action == 'completed' || github.event.workflow_run.name == 'CI'))
+        && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'workflow_dispatch'))
       || (github.event_name == 'pull_request_target'
         && (github.event.action == 'closed' || github.event.changes.base))
+    # the newest evaluation of a head reads the newest runs, so it replaces an older one still
+    # going; on the job rather than the workflow, so an event the if above drops can't cancel one
+    concurrency:
+      group: stack-gate-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

@@ -40,9 +40,9 @@ jobs:
   # changes job runs everything
   # It also skips a macOS job a trusted maintainer's cove-local-ci run already passed on this
   # commit, see .github/scripts/ci_local_results.py, since GitHub runs only a few macOS jobs at once
-  # A slice below the top of a GitHub stack skips the merge-tier jobs too, test (macos-latest), the
-  # iOS unit tests and the Android emulator tests, which the stack's top runs for the whole stack;
-  # stack-gate.yml holds the slice until the top passes them
+  # A slice below the top of a GitHub stack skips the merge-tier jobs too, test (macos-latest) and
+  # the iOS unit tests, which the stack's top runs for the whole stack, diffing against the stack's
+  # base; stack-gate.yml holds the slice until the top passes them
   changes:
     runs-on: ubuntu-24.04
     # statuses: read lets the local results step list the commit's statuses, and pull-requests: read

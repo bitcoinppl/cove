@@ -6,7 +6,9 @@ master and a fork's, as the GitHub API reports them
 """
 
 import json
+import os
 import re
+import subprocess
 import tempfile
 import unittest
 from collections.abc import Mapping, Sequence
@@ -16,7 +18,9 @@ from pathlib import Path
 from ci_changes import (
     ALL_JOBS,
     Bottom,
+    Event,
     Filtered,
+    Git,
     Job,
     NoStack,
     Position,
@@ -28,9 +32,11 @@ from ci_changes import (
     Top,
     Unplaced,
     Unstacked,
+    changed_paths,
     locate,
     output_lines,
     parse_stack,
+    spans_trunk,
 )
 from ci_stack_gate import (
     CI_MERGE_JOBS,
@@ -105,18 +111,19 @@ def place(pr: PullRequest, stack: Stack | None, event: str = "pull_request") -> 
             "GITHUB_EVENT_NAME": event,
             "GITHUB_EVENT_PATH": str(path),
             "GITHUB_REPOSITORY": "bitcoinppl/cove",
+            "GH_TOKEN": "token",
         }
 
         def fetch(repo: str, number: int) -> str:
             assert (repo, number) == ("bitcoinppl/cove", pr.number)
             return response(pr, stack)
 
-        return locate(env, fetch)
+        return locate(env, Event.read(env), fetch)
 
 
 def selected(position: Position) -> frozenset[Job]:
     """The jobs a change under rust/, which every job reads, runs at `position`"""
-    return Selection(Filtered(("rust/src/lib.rs",), ALL_JOBS), position).jobs
+    return Selection(Filtered(("rust/src/lib.rs",), ALL_JOBS), position, True).jobs
 
 
 class PositionTests(unittest.TestCase):
@@ -141,7 +148,7 @@ class PositionTests(unittest.TestCase):
     def test_the_top_of_a_stack_runs_every_tier(self) -> None:
         position = place(TOP, STACK)
 
-        self.assertEqual(position, Top(1114))
+        self.assertEqual(position, Top(1114, "master"))
         self.assertEqual(selected(position), ALL_JOBS)
 
     def test_an_integration_branch_runs_every_tier(self) -> None:
@@ -164,7 +171,7 @@ class PositionTests(unittest.TestCase):
     def test_closing_the_top_makes_the_slice_below_it_the_top(self) -> None:
         stack = stack_of(BOTTOM, MIDDLE, replace(TOP, is_open=False))
 
-        self.assertEqual(place(MIDDLE, stack), Top(1114))
+        self.assertEqual(place(MIDDLE, stack), Top(1114, "master"))
         self.assertEqual(selected(place(MIDDLE, stack)), ALL_JOBS)
 
     def test_a_slice_retargeted_at_master_runs_every_tier(self) -> None:
@@ -182,6 +189,7 @@ class PositionTests(unittest.TestCase):
                 "GITHUB_EVENT_NAME": "pull_request",
                 "GITHUB_EVENT_PATH": str(path),
                 "GITHUB_REPOSITORY": "bitcoinppl/cove",
+                "GH_TOKEN": "token",
             }
 
             def fail(repo: str, number: int) -> str:
@@ -189,7 +197,7 @@ class PositionTests(unittest.TestCase):
 
             for fetch in (fail, lambda repo, number: '{"errors": [{"message": "no stack"}]}'):
                 with self.subTest(fetch=fetch):
-                    position = locate(env, fetch)
+                    position = locate(env, Event.read(env), fetch)
                     self.assertIsInstance(position, Unplaced)
                     self.assertEqual(selected(position), ALL_JOBS)
 
@@ -197,20 +205,35 @@ class PositionTests(unittest.TestCase):
         def fetch(repo: str, number: int) -> str:
             raise AssertionError("a push has no pull request to look up")
 
-        position = locate({"GITHUB_EVENT_NAME": "push"}, fetch)
+        env = {"GITHUB_EVENT_NAME": "push", "GH_TOKEN": "token"}
+        position = locate(env, Event.read(env), fetch)
 
         self.assertIsInstance(position, Unplaced)
-        self.assertEqual(Selection(RunAll("a push"), position).jobs, ALL_JOBS)
+        self.assertEqual(Selection(RunAll("a push"), position, True).jobs, ALL_JOBS)
+
+    def test_without_a_token_nothing_is_placed_so_a_labeled_slice_runs_android(self) -> None:
+        # the UI tests workflow passes no token, so its ui-tests label still runs Android on a slice
+        def fetch(repo: str, number: int) -> str:
+            raise AssertionError("no token, no lookup")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "event.json"
+            path.write_text('{"pull_request": {"number": 102}}', encoding="utf-8")
+            env = {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(path)}
+            position = locate(env, Event.read(env), fetch)
+
+        self.assertIsInstance(position, Unplaced)
+        self.assertIn(Job.ANDROID_INSTRUMENTED, selected(position))
 
     def test_a_docs_only_change_runs_nothing_at_any_position(self) -> None:
         docs = Filtered(("docs/testing.md",), frozenset())
 
-        for position in (Unstacked(), Slice(1114, TOP), Top(1114)):
+        for position in (Unstacked(), Slice(1114, TOP), Top(1114, "master")):
             with self.subTest(position=position):
-                self.assertEqual(Selection(docs, position).jobs, frozenset())
+                self.assertEqual(Selection(docs, position, True).jobs, frozenset())
 
     def test_a_slices_outputs_turn_off_the_merge_tier_and_say_so(self) -> None:
-        lines = output_lines(Selection(RunAll("a test"), Slice(1114, TOP)))
+        lines = output_lines(Selection(RunAll("a test"), Slice(1114, TOP), False))
         outputs = dict(line.split("=") for line in lines)
 
         self.assertEqual(
@@ -219,10 +242,90 @@ class PositionTests(unittest.TestCase):
             | {"merge_tiers": "false"},
         )
 
+    def test_only_a_run_whose_diff_spans_the_trunk_vouches_for_the_merge_tier(self) -> None:
+        def event(name: str, pr_base: str = "") -> Event:
+            return Event(name, 1 if name == "pull_request" else None, pr_base, "master")
+
+        cases: dict[str, tuple[Event, str, Position, bool]] = {
+            "a pull request to master": (event("pull_request", "master"), "", Unstacked(), True),
+            "a stack's bottom": (event("pull_request", "master"), "", Bottom(1114), True),
+            # its plan diffs against the stack's base, see the top diff test below
+            "a stack's top": (event("pull_request", "backup/pr2"), "", Top(1114, "master"), True),
+            "a slice": (event("pull_request", "backup/pr1"), "", Slice(1114, TOP), False),
+            # a stacked pull request whose stack couldn't be read diffed only its own changes
+            "an unplaced slice": (event("pull_request", "backup/pr1"), "", Unplaced("502"), False),
+            "a manual run of everything": (event("workflow_dispatch"), "", Unplaced("m"), True),
+            "a manual run against master": (
+                event("workflow_dispatch"),
+                "master",
+                Unplaced("m"),
+                True,
+            ),
+            "a manual run against a parent": (
+                event("workflow_dispatch"),
+                "backup/pr2",
+                Unplaced("m"),
+                False,
+            ),
+            "a push": (event("push"), "", Unplaced("p"), True),
+        }
+
+        for name, (ev, dispatch_base, position, expected) in cases.items():
+            with self.subTest(name):
+                spans = spans_trunk(ev, dispatch_base, position)
+                self.assertEqual(spans, expected)
+                self.assertEqual(Selection(RunAll(name), position, spans).merge_tiers, expected)
+
     def test_the_real_response_shape_parses(self) -> None:
         pr, stack = parse_stack(response(MIDDLE, STACK))
 
         self.assertEqual((pr, stack), (MIDDLE, STACK))
+
+
+GIT_ENV: Mapping[str, str] = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@example.com",
+}
+
+
+class TopDiffTests(unittest.TestCase):
+    def test_the_top_diffs_against_the_stack_base_to_see_every_slice(self) -> None:
+        # the lower slice changes Rust and the top only docs, and the top's merge commit has the
+        # lower slice merged into its first parent, as GitHub builds a stacked pull request's
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args: str) -> None:
+                subprocess.run(
+                    ["git", *args], cwd=repo, env=GIT_ENV, check=True, capture_output=True
+                )
+
+            def commit(path: str, message: str) -> None:
+                (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                (repo / path).write_text(message, encoding="utf-8")
+                git("add", "-A")
+                git("commit", "-q", "-m", message)
+
+            git("init", "-q", "-b", "master")
+            commit("README.md", "base")
+            git("checkout", "-q", "-b", "slice")
+            commit("rust/src/lib.rs", "slice")
+            git("checkout", "-q", "-b", "top")
+            commit("docs/top.md", "top")
+            git("checkout", "-q", "-b", "merge", "slice")
+            git("merge", "-q", "--no-ff", "-m", "merge", "top")
+            git("remote", "add", "origin", str(repo))
+
+            self.assertEqual(changed_paths(Git(repo), "pull_request", ""), ("docs/top.md",))
+            self.assertEqual(
+                changed_paths(Git(repo), "pull_request", "", stack_base="master"),
+                ("docs/top.md", "rust/src/lib.rs"),
+            )
 
 
 def ci_run(
@@ -376,10 +479,27 @@ class GateTests(unittest.TestCase):
 
         self.assertEqual(statuses(github, Seeds((MIDDLE.number,)))["#102"], Waiting)
 
-    def test_a_run_from_before_the_tiers_counts_as_testing_every_tier(self) -> None:
-        github = stacked({**self.SLICE_RUNS, TOP.head_sha: [ci_run("top", merge=None)]})
+    def test_a_run_from_before_the_tiers_counts_only_for_a_head_straight_to_master(self) -> None:
+        # it ran every tier, but on the top it diffed only the top's own changes
+        github = stacked(
+            {
+                **self.SLICE_RUNS,
+                TOP.head_sha: [ci_run("top", merge=None)],
+                SINGLE.head_sha: [ci_run("single", merge=None)],
+            }
+        )
 
-        self.assertEqual(statuses(github, Seeds((MIDDLE.number,)))["#102"], Green)
+        self.assertEqual(statuses(github, Seeds((MIDDLE.number,)))["#102"], Red)
+        self.assertEqual(statuses(github, Seeds((SINGLE.number,))), {"#300": Green})
+
+    def test_a_newer_ui_tests_run_outranks_an_older_one_that_skipped_android(self) -> None:
+        # the top was labeled after its first UI tests run skipped the Android tests
+        github = stacked(
+            {**self.SLICE_RUNS, TOP.head_sha: [ci_run("top")]},
+            ui={TOP.head_sha: [ui_run("labeled", None), ui_run("unlabeled", "skipped")]},
+        )
+
+        self.assertEqual(statuses(github, Seeds((TOP.number,)))["#102"], Waiting)
 
     def test_a_single_pull_request_to_master_follows_its_own_run(self) -> None:
         for run, verdict in ((ci_run("one"), Green), (ci_run("one", macos="failure"), Red)):
