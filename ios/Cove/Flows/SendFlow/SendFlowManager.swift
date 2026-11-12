@@ -340,6 +340,10 @@ private enum SendFlowManagerAccessError: LocalizedError {
     func apply(_ message: Message) {
         guard canApplyReconcileMessages else { return }
 
+        applyMessage(message)
+    }
+
+    private func applyMessage(_ message: Message) {
         switch message {
         case let .updateAmountFiat(fiat):
             self.fiatAmount = fiat

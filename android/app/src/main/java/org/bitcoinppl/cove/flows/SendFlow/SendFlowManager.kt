@@ -342,22 +342,7 @@ class SendFlowManager internal constructor(
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${alertKind(message.v1)}")
-
-                val hadSheet = presenter.sheetState != null
-                val hadAlert = presenter.alertState != null
-                val isDismissingAlert = presenter.isDisappearing
-
-                if (hadSheet || hadAlert || isDismissingAlert) {
-                    presenter.clearAlert()
-                    presenter.sheetState = null
-                    mainScope.launch {
-                        delay(ALERT_PRESENTATION_DELAY_MS)
-                        presenter.alertState = TaggedItem(message.v1)
-                    }
-                } else {
-                    presenter.alertState = TaggedItem(message.v1)
-                }
+                applySetAlert(message.v1)
             }
 
             is SendFlowManagerReconcileMessage.ClearAlert -> {
@@ -375,6 +360,25 @@ class SendFlowManager internal constructor(
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
                 refreshPresenters()
             }
+        }
+    }
+
+    private fun applySetAlert(alertState: SendFlowAlertState) {
+        logWarn("setAlert: ${alertKind(alertState)}")
+
+        val hadSheet = presenter.sheetState != null
+        val hadAlert = presenter.alertState != null
+        val isDismissingAlert = presenter.isDisappearing
+
+        if (hadSheet || hadAlert || isDismissingAlert) {
+            presenter.clearAlert()
+            presenter.sheetState = null
+            mainScope.launch {
+                delay(ALERT_PRESENTATION_DELAY_MS)
+                presenter.alertState = TaggedItem(alertState)
+            }
+        } else {
+            presenter.alertState = TaggedItem(alertState)
         }
     }
 
