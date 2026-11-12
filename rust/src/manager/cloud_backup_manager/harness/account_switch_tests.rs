@@ -17,7 +17,7 @@ use super::app::Step;
 use super::process::checkpoint;
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PhaseEnd, TestApp,
-    assert_uploads_confirmed_in, keychain_namespace, load_detail, persisted, run_case,
+    assert_uploads_confirmed_in, finish_wipe, keychain_namespace, load_detail, persisted, run_case,
     seed_an_uploaded_wallet, seed_verifiable_master_key,
 };
 use crate::database::Database;
@@ -1000,6 +1000,37 @@ fn a_failed_reset_gives_back_the_paused_reinitialize() {
         assert_ne!(keychain_namespace(), Some(old_namespace), "{}", app.describe());
         assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
         assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    });
+}
+
+/// Model seed 777818, minimized: a local reset that completes ends a switch whose reinitialize
+/// failed, so the screen shows Cloud Backup off instead of the switch's recovery and its Try Again
+///
+/// The wipe clears the switch's record with the rest of the lifecycle; the platform's half is
+/// reconciled from its next state report, which finalizes or rolls back a switch Rust no longer
+/// records
+#[test]
+fn a_completed_reset_ends_a_switch_whose_step_failed() {
+    let test = concat!(module_path!(), "::a_completed_reset_ends_a_switch_whose_step_failed");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        switch_whose_reinitialize_fails(&mut app);
+
+        let manager = app.manager().clone();
+        let permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+        app.event("the wipe completes", |app| finish_wipe(app, permit))
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+
+        assert_eq!(switch_phase(), None);
+        assert_eq!(switch_stage(&app), None, "{}", app.describe());
+        assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::Disabled);
+        assert_eq!(
+            app.admission_of(UserIntent::RetryDriveAccountSwitchRecovery),
+            Admission::Rejected(Rejection::NothingToContinue)
+        );
     });
 }
 

@@ -893,6 +893,17 @@ impl CloudBackupSupervisor {
         cleared.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
     }
 
+    /// Retires what this process still held of a switch once a local reset left Cloud Backup off
+    ///
+    /// The reset cleared the switch's record with the rest of the lifecycle, so a step that
+    /// failed before it has no switch left to retry on this screen. Whatever the platform still
+    /// holds is reconciled from its next state report, which finalizes or rolls back a switch
+    /// Rust no longer records
+    pub(crate) fn drive_account_switch_ended_by_reset(&mut self, manager: &RustCloudBackupManager) {
+        self.drive_account_switch_unsaved = None;
+        Self::clear_drive_account_switch_recovery(manager);
+    }
+
     fn request_platform_step(manager: &RustCloudBackupManager, step: PlatformStep) {
         manager.send(step.into());
     }

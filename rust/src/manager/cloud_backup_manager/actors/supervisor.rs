@@ -1689,6 +1689,14 @@ impl CloudBackupSupervisor {
         let end = self.runtime.finish_reset(outcome);
         debug!("Cloud Backup local reset finished: {outcome:?}, {end:?}");
 
+        // a reset that left Cloud Backup off ended any switch with the record, so a step that
+        // failed before it no longer needs the user; one that resumed the backup keeps its switch
+        let turned_off =
+            matches!(end, Some(ResetEnd::Wiped | ResetEnd::Abandoned(AbandonedReset::Disabled)));
+        if turned_off && let Some(manager) = self.manager() {
+            self.drive_account_switch_ended_by_reset(&manager);
+        }
+
         // the reset dropped the cycle's queued work, and a scope reload it queued found the cycle
         // suspended, so a resumed backup loads its inventory again, with nobody tapping
         let resumed = end == Some(ResetEnd::Abandoned(AbandonedReset::Resumed));

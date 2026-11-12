@@ -199,6 +199,11 @@ Android reports anything. A switch with nothing running always shows a way
 out: Confirm Saved Passkey while paused, otherwise Try Again. A switch that rolls back also
 discards the key material its stopped reinitialize kept on this device, so it
 can't come back at the next launch as a reinitialize of the previous backup.
+A local reset that leaves Cloud Backup off ends the switch with its record, a
+step that failed included, so the screen shows Cloud Backup off rather than the
+switch's Try Again. Android's next state report then finalizes or rolls back
+whatever it still holds of a switch Rust no longer records. A reset that
+resumes the backup keeps the switch as it was.
 
 A run of the switch's reinitialize ends one of three ways: succeeded, failed,
 or paused for its saved passkey. Each moves the switch to its next phase, and
