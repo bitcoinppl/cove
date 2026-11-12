@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use act_zero::call;
 use bitcoin::{Amount, FeeRate as BdkFeeRate};
+use cove_fake_node::Protocol;
 use cove_types::{address::AddressWithNetwork, fees::FeeRate};
 
 use super::fake_node_tests::{Fixture, fresh_mnemonic, receive_script};
@@ -100,9 +101,19 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
 
     assert!(session_cleared().await, "the session record is deleted after the broadcast");
 
+    // the chain keeps each txid once, so a repeated send of the same proposal shows only in the
+    // request log, where only a broadcast's POST has the bare /tx path
+    let broadcast_requests = fx
+        .node
+        .requests()
+        .into_iter()
+        .filter(|request| request.protocol == Protocol::Esplora && request.name == "/tx")
+        .count();
+    assert_eq!(broadcast_requests, 1, "the wallet sent exactly one broadcast");
+
     // the fake node records a broadcast only after every input's script verifies
     let broadcasts = fx.node.chain().broadcasts();
-    assert_eq!(broadcasts.len(), 1, "the node received exactly one broadcast");
+    assert_eq!(broadcasts.len(), 1, "the node accepted exactly one transaction");
 
     let payjoin = &broadcasts[0];
     let receiver_coin = receiver.coin_outpoint();

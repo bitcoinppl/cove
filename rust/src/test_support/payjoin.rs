@@ -23,7 +23,8 @@ use payjoin::{
     },
 };
 use rustls::{RootCertStore, pki_types::CertificateDer};
-use tokio::task::JoinHandle;
+use tempfile::TempDir;
+use tokio::task::AbortHandle;
 use url::Url;
 
 use crate::manager::wallet_manager::payjoin::{OhttpRelays, PayjoinConfig};
@@ -33,10 +34,9 @@ const DIRECTORY_LONG_POLL: Duration = Duration::from_secs(2);
 
 /// A running directory and its relays, stopped when dropped
 pub(crate) struct PayjoinServices {
-    directory_port: u16,
-    relay_ports: Vec<u16>,
+    directory: Mailroom,
+    relays: Vec<Mailroom>,
     certificate: CertificateDer<'static>,
-    handles: Vec<JoinHandle<()>>,
 }
 
 impl PayjoinServices {
@@ -57,28 +57,25 @@ impl PayjoinServices {
         .await
         .expect("the directory TLS config builds");
 
-        let mut handles = Vec::with_capacity(relay_count + 1);
-        let (directory_port, handle) = serve(Some(tls), roots.clone()).await;
-        handles.push(handle);
-
-        let mut relay_ports = Vec::with_capacity(relay_count);
+        let directory = Mailroom::start(Some(tls), roots.clone()).await;
+        let mut relays = Vec::with_capacity(relay_count);
         for _ in 0..relay_count {
-            let (port, handle) = serve(None, roots.clone()).await;
-            relay_ports.push(port);
-            handles.push(handle);
+            relays.push(Mailroom::start(None, roots.clone()).await);
         }
 
-        Self { directory_port, relay_ports, certificate, handles }
+        Self { directory, relays, certificate }
     }
 
     pub(crate) fn directory_url(&self) -> Url {
-        Url::parse(&format!("https://localhost:{}", self.directory_port)).expect("a valid URL")
+        Url::parse(&format!("https://localhost:{}", self.directory.port)).expect("a valid URL")
     }
 
     pub(crate) fn relay_urls(&self) -> Vec<Url> {
-        self.relay_ports
+        self.relays
             .iter()
-            .map(|port| Url::parse(&format!("http://localhost:{port}")).expect("a valid URL"))
+            .map(|relay| {
+                Url::parse(&format!("http://localhost:{}", relay.port)).expect("a valid URL")
+            })
             .collect()
     }
 
@@ -122,38 +119,44 @@ impl PayjoinServices {
     }
 }
 
-impl Drop for PayjoinServices {
-    fn drop(&mut self) {
-        for handle in &self.handles {
-            handle.abort();
-        }
+/// One payjoin-mailroom instance, which serves as a directory or an OHTTP relay
+struct Mailroom {
+    port: u16,
+    server: AbortHandle,
+
+    // the server's storage, deleted when the instance drops, after its server is aborted
+    _storage: TempDir,
+}
+
+impl Mailroom {
+    /// Starts an instance with its own storage, serving TLS when `tls` is given
+    ///
+    /// It listens on IPv4 loopback only, so nothing off this machine can reach it. URLs still
+    /// name `localhost`, which the directory's certificate is issued for
+    async fn start(
+        tls: Option<axum_server::tls_rustls::RustlsConfig>,
+        roots: RootCertStore,
+    ) -> Self {
+        let storage = tempfile::tempdir().expect("a mailroom storage directory");
+        let config = payjoin_mailroom::config::Config::new(
+            "127.0.0.1:0".parse().expect("a valid listener address"),
+            storage.path().to_path_buf(),
+            DIRECTORY_LONG_POLL,
+            None,
+        );
+
+        let (port, server) = payjoin_mailroom::serve_manual_tls(config, tls, roots, None)
+            .await
+            .expect("the mailroom instance starts");
+
+        Self { port, server: server.abort_handle(), _storage: storage }
     }
 }
 
-/// Starts one mailroom instance with its own storage, serving TLS when `tls` is given
-async fn serve(
-    tls: Option<axum_server::tls_rustls::RustlsConfig>,
-    roots: RootCertStore,
-) -> (u16, JoinHandle<()>) {
-    let storage = tempfile::tempdir().expect("a mailroom storage directory");
-    let config = payjoin_mailroom::config::Config::new(
-        "[::]:0".parse().expect("a valid listener address"),
-        storage.path().to_path_buf(),
-        DIRECTORY_LONG_POLL,
-        None,
-    );
-
-    let (port, served) = payjoin_mailroom::serve_manual_tls(config, tls, roots, None)
-        .await
-        .expect("the mailroom instance starts");
-
-    // the storage directory lives as long as the server task
-    let handle = tokio::spawn(async move {
-        let _storage = storage;
-        let _ = served.await;
-    });
-
-    (port, handle)
+impl Drop for Mailroom {
+    fn drop(&mut self) {
+        self.server.abort();
+    }
 }
 
 /// A BIP 77 receiver whose one coin is on the fake node, signed for by a BDK wallet
