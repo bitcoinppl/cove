@@ -7,6 +7,7 @@ use bitcoin::{
     ecdsa,
     hashes::{Hash as _, sha256},
     key::{Keypair, TapTweak as _},
+    opcodes::all::{OP_CHECKMULTISIG, OP_PUSHNUM_1},
     secp256k1::{Message, Secp256k1, SecretKey},
     sighash::{Prevouts, SighashCache},
     taproot,
@@ -14,7 +15,7 @@ use bitcoin::{
 };
 use serde_json::Value;
 
-use crate::{BroadcastError, FakeNode, Protocol, TxLocation};
+use crate::{BroadcastError, FakeNode, Protocol, ReplacementError, TxLocation};
 
 fn test_script(tag: u8) -> ScriptBuf {
     ScriptBuf::from_bytes(vec![
@@ -255,9 +256,22 @@ fn p2wpkh_script(key: &SecretKey) -> ScriptBuf {
 /// A spend of `funding`'s output 0, which pays to [`p2wpkh_script`] of `key`,
 /// signed with `key`
 fn p2wpkh_spend(funding: &Transaction, key: &SecretKey, amount: Amount) -> Transaction {
-    let prevout = &funding.output[0];
-    let mut tx = spend(funding.compute_txid(), test_script(20), amount);
+    p2wpkh_spend_to(funding, key, test_script(20), amount)
+}
 
+/// Like [`p2wpkh_spend`], paying to `script`
+fn p2wpkh_spend_to(
+    funding: &Transaction,
+    key: &SecretKey,
+    script: ScriptBuf,
+    amount: Amount,
+) -> Transaction {
+    p2wpkh_sign(spend(funding.compute_txid(), script, amount), funding, key)
+}
+
+/// Signs input 0 of `tx`, which spends `funding`'s output 0, with `key`
+fn p2wpkh_sign(mut tx: Transaction, funding: &Transaction, key: &SecretKey) -> Transaction {
+    let prevout = &funding.output[0];
     let sighash = SighashCache::new(&tx)
         .p2wpkh_signature_hash(0, &prevout.script_pubkey, prevout.value, EcdsaSighashType::All)
         .expect("output 0 is P2WPKH");
@@ -333,4 +347,173 @@ async fn broadcasts_must_spend_known_outputs_with_valid_signatures() {
 
     let electrum_error = electrum.transaction_broadcast(&orphan).unwrap_err().to_string();
     assert!(electrum_error.contains("bad-txns-inputs-missingorspent"), "{electrum_error}");
+}
+
+#[tokio::test]
+async fn a_replacement_evicts_the_original_and_its_descendants() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let chain = node.chain();
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let funding = chain.tx(chain.pay(&p2wpkh_script(&key), Amount::from_sat(10_000))).unwrap().tx;
+
+    // the original pays 1,000 sats without signaling RBF, and a child of it pays 500 more;
+    // the funding confirms first, so the original can't inherit its signal
+    chain.confirm(funding.compute_txid());
+    let mut original = spend(funding.compute_txid(), test_script(19), Amount::from_sat(9_000));
+    original.input[0].sequence = Sequence::MAX;
+    let original_txid = chain.broadcast(p2wpkh_sign(original, &funding, &key)).unwrap();
+    let child =
+        chain.add_to_mempool(spend(original_txid, test_script(21), Amount::from_sat(8_500)));
+
+    // 3,000 sats covers both and the incremental relay fee, and full RBF ignores the signal
+    let replacement = p2wpkh_spend_to(&funding, &key, test_script(20), Amount::from_sat(7_000));
+
+    let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
+    esplora.broadcast(&replacement).await.expect("the replacement pays enough");
+
+    assert_eq!(chain.location(original_txid), None);
+    assert_eq!(chain.location(child), None);
+    assert_eq!(chain.location(replacement.compute_txid()), Some(TxLocation::Mempool));
+    assert_eq!(
+        chain.broadcasts().iter().map(Transaction::compute_txid).collect::<Vec<_>>(),
+        [replacement.compute_txid()]
+    );
+
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let history = electrum.script_get_history(&p2wpkh_script(&key)).unwrap();
+    let txids = history.iter().map(|entry| entry.tx_hash).collect::<Vec<_>>();
+    assert_eq!(txids, [funding.compute_txid(), replacement.compute_txid()]);
+}
+
+#[tokio::test]
+async fn replacements_that_underpay_are_refused_with_core_reasons() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let chain = node.chain();
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let funding = chain.tx(chain.pay(&p2wpkh_script(&key), Amount::from_sat(10_000))).unwrap().tx;
+
+    let original = p2wpkh_spend(&funding, &key, Amount::from_sat(9_000));
+    let original_txid = chain.broadcast(original).unwrap();
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+
+    // a lower fee rate than the transaction it double-spends
+    let cheaper = p2wpkh_spend_to(&funding, &key, test_script(22), Amount::from_sat(9_500));
+    assert_eq!(
+        chain.broadcast(cheaper),
+        Err(BroadcastError::Replacement(ReplacementError::FeeRateNotHigher {
+            conflict: original_txid
+        }))
+    );
+
+    // twice the fee is a higher rate per byte, but a bare multisig output counts 20 signature
+    // operations, which Core sizes at 400 vB
+    let bare_multisig = ScriptBuf::builder()
+        .push_opcode(OP_PUSHNUM_1)
+        .push_slice(compressed_public(&key).to_bytes())
+        .push_opcode(OP_PUSHNUM_1)
+        .push_opcode(OP_CHECKMULTISIG)
+        .into_script();
+
+    let sigop_heavy = p2wpkh_spend_to(&funding, &key, bare_multisig, Amount::from_sat(8_000));
+    assert_eq!(
+        chain.broadcast(sigop_heavy),
+        Err(BroadcastError::Replacement(ReplacementError::FeeRateNotHigher {
+            conflict: original_txid
+        }))
+    );
+
+    // 50 more sats is a higher rate but does not pay to relay a ~110 vB replacement
+    let barely_more = p2wpkh_spend_to(&funding, &key, test_script(22), Amount::from_sat(8_950));
+    let required = Amount::from_sat(barely_more.vsize() as u64);
+    assert_eq!(
+        chain.broadcast(barely_more.clone()),
+        Err(BroadcastError::Replacement(ReplacementError::NotEnoughToRelay {
+            additional_fee: Amount::from_sat(50),
+            required,
+        }))
+    );
+
+    let error = electrum.transaction_broadcast(&barely_more).unwrap_err().to_string();
+    assert!(error.contains("insufficient fee, not enough additional fees to relay"), "{error}");
+
+    // a child's fee counts too: 1,500 beats the original's rate but not 1,000 + 1,000
+    chain.add_to_mempool(spend(original_txid, test_script(21), Amount::from_sat(8_000)));
+    let below_package = p2wpkh_spend_to(&funding, &key, test_script(22), Amount::from_sat(8_500));
+    assert_eq!(
+        chain.broadcast(below_package),
+        Err(BroadcastError::Replacement(ReplacementError::LessFeeThanReplaced {
+            fee: Amount::from_sat(1_500),
+            replaced_fees: Amount::from_sat(2_000),
+        }))
+    );
+
+    // spending more than its inputs is refused before any fee comparison
+    let overspends = p2wpkh_spend_to(&funding, &key, test_script(22), Amount::from_sat(20_000));
+    assert_eq!(chain.broadcast(overspends), Err(BroadcastError::OutputsExceedInputs));
+
+    // nor may it spend an output of a transaction it would evict
+    let mut spends_original = p2wpkh_spend(&funding, &key, Amount::from_sat(5_000));
+    spends_original
+        .input
+        .push(spend(original_txid, test_script(23), Amount::ZERO).input[0].clone());
+    assert_eq!(
+        chain.broadcast(spends_original),
+        Err(BroadcastError::Replacement(ReplacementError::SpendsConflictingTx(original_txid)))
+    );
+
+    // a pending output the original never spent from can't be added
+    let other_funding = chain.pay(&p2wpkh_script(&key), Amount::from_sat(10_000));
+    let mut adds_pending = p2wpkh_spend(&funding, &key, Amount::from_sat(5_000));
+    adds_pending.input.push(spend(other_funding, test_script(23), Amount::ZERO).input[0].clone());
+    let added = OutPoint { txid: other_funding, vout: 0 };
+    assert_eq!(
+        chain.broadcast(adds_pending),
+        Err(BroadcastError::Replacement(ReplacementError::AddsUnconfirmedInput(added)))
+    );
+
+    // nothing above touched the mempool, and once the original confirms its input is spent
+    assert_eq!(chain.location(original_txid), Some(TxLocation::Mempool));
+    chain.confirm(original_txid);
+
+    let late = p2wpkh_spend_to(&funding, &key, test_script(22), Amount::from_sat(5_000));
+    let spent = OutPoint { txid: funding.compute_txid(), vout: 0 };
+    assert_eq!(chain.broadcast(late.clone()), Err(BroadcastError::SpentInput(spent)));
+
+    let error = electrum.transaction_broadcast(&late).unwrap_err().to_string();
+    assert!(error.contains("bad-txns-inputs-missingorspent"), "{error}");
+}
+
+#[tokio::test]
+async fn a_replacement_may_evict_at_most_100_transactions() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let chain = node.chain();
+
+    // 101 pending payments, each spending a coin of its own
+    let coins = (0..=100)
+        .map(|_| chain.pay(&test_script(30), Amount::from_sat(10_000)))
+        .collect::<Vec<_>>();
+
+    for coin in &coins {
+        chain.add_to_mempool(spend(*coin, test_script(31), Amount::from_sat(9_000)));
+    }
+
+    // one transaction double-spending them all, paying far more than they do together
+    let replacing = |coins: &[Txid]| {
+        let mut replacement = spend(coins[0], test_script(32), Amount::from_sat(10_000));
+        replacement.input = coins
+            .iter()
+            .map(|coin| spend(*coin, ScriptBuf::new(), Amount::ZERO).input[0].clone())
+            .collect();
+
+        replacement
+    };
+
+    assert_eq!(
+        chain.broadcast(replacing(&coins)),
+        Err(BroadcastError::Replacement(ReplacementError::TooManyReplacements { count: 101 }))
+    );
+
+    // 100 is allowed, and the unsigned replacement only fails its script checks
+    let error = chain.broadcast(replacing(&coins[..100])).unwrap_err();
+    assert!(matches!(error, BroadcastError::InvalidScript { index: 0, .. }), "{error:?}");
 }
