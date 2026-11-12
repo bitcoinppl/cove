@@ -229,7 +229,6 @@ mod tests {
             wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         },
         network::Network,
-        payjoin_setting::test_support::PayjoinChoiceGuard,
         router::{
             Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs, UnsignedPaymentMode,
         },
@@ -295,8 +294,8 @@ mod tests {
 
     /// Payjoin URIs pasted into the address field become a one-recipient send: the field shows
     /// the bare address, even after the app writes it back, and the amount comes from the URI.
-    /// With Payjoin switched on, only a v2 endpoint reaches the confirm screen as a Payjoin; a
-    /// BIP 78 endpoint or a stray pjos is paid as a normal payment
+    /// Only a v2 endpoint reaches the confirm screen as a Payjoin; a BIP 78 endpoint or a stray
+    /// pjos is paid as a normal payment
     #[tokio::test(flavor = "current_thread")]
     async fn payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
@@ -304,8 +303,6 @@ mod tests {
         crate::test_support::init_test_keychain();
         crate::database::test_support::init_test_database();
         crate::app::reconcile::test_support::init_noop_updater();
-
-        let _choice = PayjoinChoiceGuard::set(true);
 
         let signet_address = external_address(bitcoin::Network::Signet).to_string();
         let wallets =
@@ -446,7 +443,6 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::app::reconcile::test_support::init_noop_updater();
 
-        let _choice = PayjoinChoiceGuard::set(true);
         App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
 
         let manager = funded_send_flow(Network::Bitcoin);

@@ -61,7 +61,6 @@ mod mnemonic;
 mod multi_format;
 mod node;
 mod node_connect;
-mod payjoin_setting;
 mod pending_wallet;
 mod push_tx;
 mod qr_scanner;

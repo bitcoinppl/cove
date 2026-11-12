@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     app::AppAction,
-    manager::deferred_dispatch::DeferredDispatch,
-    payjoin_setting::PayjoinSetting,
-    router::RouteFactory,
+    manager::{deferred_dispatch::DeferredDispatch, wallet_manager::payjoin::PayjoinIntent},
+    router::{RouteFactory, UnsignedPaymentMode},
     wallet::{Address, metadata::WalletType},
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
@@ -227,9 +226,16 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                // only a hot wallet signs in the app, so only it can answer a receiver's proposal
+                // only a hot wallet signs in the app, so only it can answer a receiver's proposal;
+                // parsing keeps only a BIP 77 v2 endpoint, so a BIP 78 request is paid normally
                 WalletType::Hot => {
-                    let mode = PayjoinSetting::current().payment_mode(payjoin.as_ref());
+                    let mode = match payjoin {
+                        Some(payjoin) => UnsignedPaymentMode::Payjoin {
+                            intent: PayjoinIntent::new(payjoin.endpoint),
+                        },
+                        None => UnsignedPaymentMode::Standard,
+                    };
+
                     RouteFactory::new().send_confirm(wallet_id, details, mode)
                 }
                 WalletType::Cold | WalletType::XpubOnly => {
