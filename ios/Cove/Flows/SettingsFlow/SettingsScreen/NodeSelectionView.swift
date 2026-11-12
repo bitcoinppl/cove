@@ -23,6 +23,8 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
+    @State private var lanSearch: LanSearch = .notStarted
+
     init() {
         let savedNode = nodeSelector.selectedNode()
         selectedRow = NodeRowSelection(savedNode)
@@ -45,12 +47,24 @@ struct NodeSelectionView: View {
         customNodeApiType != nil
     }
 
+    /// The saved custom node's url, which a server found on the network is saved as once picked
+    private var selectedCustomUrl: String? {
+        guard case let .custom(node) = nodeSelector.selectedNode() else { return nil }
+        return node.url
+    }
+
     /// Whether the custom form holds something other than the saved custom node
     private var customFormHasUnsavedChanges: Bool {
         guard let apiType = customNodeApiType else { return false }
         guard case let .custom(savedNode) = nodeSelector.selectedNode() else { return true }
 
         return savedNode.apiType != apiType || savedNode.url != customUrl || savedNode.name != customNodeName
+    }
+
+    /// Whether a selection is still being checked, which lasts until the check itself ends:
+    /// closing the loading popup cancels only the Swift task, never the Rust check and save
+    private var isCheckingSelection: Bool {
+        checkUrlTask != nil
     }
 
     func cancelCheckUrlTask() {
@@ -115,8 +129,8 @@ struct NodeSelectionView: View {
         }
 
         if let node {
-            Task {
-                showLoadingPopup()
+            showLoadingPopup()
+            checkUrlTask = Task {
                 let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                 switch result {
@@ -133,22 +147,71 @@ struct NodeSelectionView: View {
         }
     }
 
+    private func searchLocalNetwork() {
+        guard lanSearch != .searching else { return }
+
+        lanSearch = .searching
+
+        // the search always runs to the end and records its result: the Rust search can't be
+        // cancelled from Swift, and the view also disappears under the privacy cover, after which
+        // a dropped result would leave the section searching forever
+        Task {
+            let search: LanSearch
+            do {
+                let nodes = try await LanNodeDiscovery.discover(nodeSelector: nodeSelector)
+                search = .finished(nodes)
+            } catch NodeDiscoveryError.NoLocalNetwork {
+                search = .noLocalNetwork
+            } catch NodeDiscoveryError.LocalNetworkBlocked {
+                search = .localNetworkBlocked
+            } catch {
+                Log.warn("Local network node search failed: \(error.localizedDescription)")
+                search = .finished([])
+            }
+
+            lanSearch = search
+        }
+    }
+
+    /// Nothing reaches a discovered server until it is picked here, when the check talks to it
+    private func selectDiscoveredNode(_ found: DiscoveredNode) {
+        showLoadingPopup()
+        checkUrlTask = Task {
+            do {
+                try await nodeSelector.checkAndSaveNode(node: found.node)
+
+                // a picked server is saved as a custom node, which the custom form shows
+                customUrl = found.node.url
+                customNodeName = found.node.name
+                refreshNodeState()
+                completeLoading(.success("Connected to node successfully"))
+            } catch {
+                completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
+            }
+        }
+    }
+
     var body: some View {
         NodeSelectionForm(
             presetNodes: presetNodes,
             selectedRow: $selectedRow,
+            lanSection: NodeSelectionLanSection(
+                search: lanSearch,
+                selectedUrl: selectedCustomUrl,
+                onSearch: searchLocalNetwork,
+                onSelect: selectDiscoveredNode
+            ),
             customUrl: $customUrl,
             customNodeName: $customNodeName,
             saveCustomNode: checkAndSaveNode
         )
+        // one selection is checked at a time, so an older check can't save over a newer choice
+        .disabled(isCheckingSelection)
         .scrollContentBackground(.hidden)
         .onChange(of: selectedRow) { _, newSelectedRow in
             nodeSelectionChanged(to: newSelectedRow)
         }
-        .onDisappear {
-            // save what was typed into the custom form, but do not re-check an unchanged saved node
-            if customFormHasUnsavedChanges { checkAndSaveNode() }
-        }
+        .onDisappear(perform: saveCustomFormOnLeaving)
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
                 title: Text("Unable to parse URL"),
@@ -160,6 +223,17 @@ struct NodeSelectionView: View {
                 }
             )
         }
+    }
+
+    /// Saves what was typed into the custom form when the screen goes away, which includes the
+    /// privacy cover when the app is backgrounded
+    private func saveCustomFormOnLeaving() {
+        // one selection is checked at a time: older form values must not replace a preset or a
+        // found server whose check is still running
+        guard !isCheckingSelection else { return }
+
+        // an unchanged saved node is not re-checked
+        if customFormHasUnsavedChanges { checkAndSaveNode() }
     }
 
     private func nodeSelectionChanged(to newSelectedRow: NodeRowSelection) {
@@ -209,6 +283,7 @@ struct NodeSelectionView: View {
 private struct NodeSelectionForm: View {
     let presetNodes: [Node]
     @Binding var selectedRow: NodeRowSelection
+    let lanSection: NodeSelectionLanSection
     @Binding var customUrl: String
     @Binding var customNodeName: String
     let saveCustomNode: () -> Void
@@ -219,6 +294,7 @@ private struct NodeSelectionForm: View {
                 presetNodes: presetNodes,
                 selectedRow: $selectedRow
             )
+            lanSection
             NodeSelectionCustomFields(
                 customRow: CustomNodeRow(selectedRow),
                 customUrl: $customUrl,
@@ -250,6 +326,124 @@ private struct NodeSelectionPresetSection: View {
                 )
             }
         }
+    }
+}
+
+/// Where a search of the local network for nodes stands
+private enum LanSearch: Equatable {
+    case notStarted
+    case searching
+    case noLocalNetwork
+    case localNetworkBlocked
+    case finished([DiscoveredNode])
+}
+
+private struct NodeSelectionLanSection: View {
+    let search: LanSearch
+    let selectedUrl: String?
+    let onSearch: () -> Void
+    let onSelect: (DiscoveredNode) -> Void
+
+    private var message: String? {
+        switch search {
+        case .notStarted: nil
+        case .searching: "Searching this network…"
+        case .noLocalNetwork: "Connect to Wi-Fi to find nodes on your network"
+        case .localNetworkBlocked:
+            "A VPN is blocking this network. Allow local network access in your VPN, or turn it off, to search."
+        case let .finished(nodes): nodes.isEmpty ? "No Electrum servers found on this network" : nil
+        }
+    }
+
+    var body: some View {
+        Section {
+            if case let .finished(nodes) = search {
+                ForEach(nodes, id: \.node.url) { found in
+                    DiscoveredNodeRow(
+                        found: found,
+                        isSelected: found.node.url == selectedUrl,
+                        select: { onSelect(found) }
+                    )
+                }
+            }
+
+            if let message {
+                LanSearchStatusRow(message: message, isSearching: search == .searching)
+            }
+
+            Button(search == .notStarted ? "Find Nodes on This Network" : "Search Again", action: onSearch)
+                .font(.subheadline)
+                .disabled(search == .searching)
+        } header: {
+            Text("On This Network")
+        } footer: {
+            if search == .finished([]) { LocalNetworkAccessHelp() }
+        }
+    }
+}
+
+private struct LanSearchStatusRow: View {
+    let message: String
+    let isSearching: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if isSearching { ProgressView() }
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Shown when a search finds nothing
+///
+/// iOS doesn't say whether Local Network access was granted, and can refuse the first search's
+/// connections while it asks, so this covers both cases. A denied prompt never comes back, so
+/// only Settings can undo it
+private struct LocalNetworkAccessHelp: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("If you just allowed local network access, search again.")
+            Text("If you didn't, turn on Local Network for Cove in Settings.")
+            Button("Open Settings", action: openSettings)
+        }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+private struct DiscoveredNodeRow: View {
+    let found: DiscoveredNode
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(found.host)
+                    .font(.subheadline)
+                Text(found.software.map { "\($0) · \(found.address)" } ?? found.address)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

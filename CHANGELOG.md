@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added a search for Electrum servers on your local network, such as an Umbrel or a self-hosted electrs, in node settings
 - Improved app lock handling so finishing or leaving a send never clears a lock that needs authentication
 
 ## [1.3.0] - 2026-07-16
