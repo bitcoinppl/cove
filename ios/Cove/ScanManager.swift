@@ -272,16 +272,16 @@ import SwiftUI
 
         let scan = UUID()
         latestAddressScan = scan
-        let alertBefore = app.alertState?.id
+        let alertChangesBefore = app.alertChanges
 
         Task { @MainActor in
             let alert = await foundAddressAlert(address: addressWithNetwork)
 
             // anything that happened while the lookup ran makes this alert stale: a newer address,
-            // another alert from any scan or error path, or a wallet or mode switch
+            // another alert shown or dismissed from any path, or a wallet or mode switch
             let selectedNow = Database().globalConfig().selectedWallet()
             guard latestAddressScan == scan,
-                  app.alertState?.id == alertBefore,
+                  app.alertChanges == alertChangesBefore,
                   selectedNow == selectedWallet
             else { return }
 

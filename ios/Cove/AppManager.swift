@@ -70,7 +70,13 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     var asyncRuntimeReady = false
 
-    var alertState: TaggedItem<AppAlertState>? = .none
+    var alertState: TaggedItem<AppAlertState>? = .none {
+        didSet { alertChanges &+= 1 }
+    }
+
+    /// Counts every alert change, dismissals included, so async work can tell an alert came and went
+    @ObservationIgnored private(set) var alertChanges = 0
+
     var sheetState: TaggedItem<AppSheetState>? = .none
     var corruptedWalletDeletionRetry: CorruptedWalletDeletionRetry?
 

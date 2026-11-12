@@ -29,6 +29,7 @@ import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 import org.bitcoinppl.cove_core.util.GenerationToken
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * central app state manager (singleton)
@@ -115,7 +116,21 @@ class AppManager private constructor() : FfiReconcile {
 
     var isLoading by mutableStateOf(false)
 
-    var alertState by mutableStateOf<TaggedItem<AppAlertState>?>(null)
+    private var alertStateValue by mutableStateOf<TaggedItem<AppAlertState>?>(null)
+
+    /** Counts every alert change, dismissals included, so async work can tell an alert came and went */
+    private val alertChangeCount = AtomicLong()
+
+    val alertChanges: Long
+        get() = alertChangeCount.get()
+
+    var alertState: TaggedItem<AppAlertState>?
+        get() = alertStateValue
+        set(value) {
+            alertChangeCount.incrementAndGet()
+            alertStateValue = value
+        }
+
     var sheetState by mutableStateOf<TaggedItem<AppSheetState>?>(null)
 
     /** TAPSIGNER backup saves, kept here so they finish after the requesting sheet closes */
