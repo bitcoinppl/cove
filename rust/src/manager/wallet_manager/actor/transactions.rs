@@ -929,7 +929,14 @@ impl WalletActor {
         let node = Database::global().global_config.selected_node();
         let node_client = self.node_client().ok().cloned();
 
-        broadcast_payjoin_terminal_with_client(node_client, node, tx).await
+        broadcast_payjoin_terminal_with_client(node_client, node, tx.clone()).await?;
+
+        // the actor is shutting down, so nothing refreshes and the labels are read when the
+        // wallets next load. A wallet being deleted refuses the label's persistence operation
+        let sender = self.wallet.metadata.clone();
+        drop(cove_tokio::task::spawn_blocking(move || label_transfer(&sender, &tx)));
+
+        Ok(())
     }
 
     fn start_payjoin_proposal_broadcast(&mut self, proposal_tx: BdkTransaction) {
