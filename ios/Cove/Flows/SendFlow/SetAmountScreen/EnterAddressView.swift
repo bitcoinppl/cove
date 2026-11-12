@@ -28,7 +28,7 @@ struct EnterAddressView: View {
                 // wallet to send to
                 showWalletPicker: app.wallets.count > 1 ? showWalletPicker : nil
             )
-                .id(FocusField.address)
+            .id(FocusField.address)
 
             HStack {
                 Text("Where do you want to send to?")
