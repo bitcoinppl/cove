@@ -71,8 +71,5 @@ hex = { workspace = true }
 ahash = { workspace = true }
 tap = { workspace = true }
 
-[build-dependencies]
-uniffi = { workspace = true, features = ["build"] }
-
 [lints]
 workspace = true

@@ -198,7 +198,7 @@ impl RustCloudBackupManager {
                         backup_updated_at: None,
                         sync_status: CloudBackupWalletStatus::UnsupportedVersion,
                         restore_failure: None,
-                        record_id: record_id.clone(),
+                        record_id,
                     });
                     continue;
                 }
@@ -241,7 +241,7 @@ impl RustCloudBackupManager {
                     .then_some(wallet.entry.updated_at),
                 sync_status,
                 restore_failure: None,
-                record_id: record_id.clone(),
+                record_id,
             });
         }
 
