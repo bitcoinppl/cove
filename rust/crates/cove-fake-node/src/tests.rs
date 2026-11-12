@@ -517,3 +517,38 @@ async fn a_replacement_may_evict_at_most_100_transactions() {
     let error = chain.broadcast(replacing(&coins[..100])).unwrap_err();
     assert!(matches!(error, BroadcastError::InvalidScript { index: 0, .. }), "{error:?}");
 }
+
+#[tokio::test]
+async fn a_replacement_may_spend_from_a_pending_parent_of_a_child_it_evicts() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let chain = node.chain();
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let funding = chain.tx(chain.pay(&p2wpkh_script(&key), Amount::from_sat(10_000))).unwrap().tx;
+
+    // a pending parent with two outputs anyone can spend, so only input 0 needs a signature
+    let anyone = ScriptBuf::from(vec![OP_PUSHNUM_1.to_u8()]);
+    let parent_funding = chain.pay(&test_script(40), Amount::from_sat(10_000));
+    let mut parent = spend(parent_funding, anyone.clone(), Amount::from_sat(4_000));
+    parent.output.push(TxOut { value: Amount::from_sat(4_000), script_pubkey: anyone });
+    let parent = chain.add_to_mempool(parent);
+
+    // the original pays 1,000 sats, and its child spends the parent's first output
+    let original_txid =
+        chain.broadcast(p2wpkh_spend(&funding, &key, Amount::from_sat(9_000))).unwrap();
+    let mut child = spend(original_txid, test_script(41), Amount::from_sat(12_000));
+    child.input.push(spend(parent, ScriptBuf::new(), Amount::ZERO).input[0].clone());
+    let child = chain.add_to_mempool(child);
+
+    // the replacement spends the parent's other output: the parent is pending, but an evicted
+    // transaction already spent from it, so rule 2 allows it
+    let mut replacement = spend(funding.compute_txid(), test_script(42), Amount::from_sat(11_500));
+    let mut other_output = spend(parent, ScriptBuf::new(), Amount::ZERO).input[0].clone();
+    other_output.previous_output.vout = 1;
+    replacement.input.push(other_output);
+    let replacement = p2wpkh_sign(replacement, &funding, &key);
+
+    assert_eq!(chain.broadcast(replacement.clone()), Ok(replacement.compute_txid()));
+    assert_eq!(chain.location(original_txid), None);
+    assert_eq!(chain.location(child), None);
+    assert_eq!(chain.location(parent), Some(TxLocation::Mempool));
+}
