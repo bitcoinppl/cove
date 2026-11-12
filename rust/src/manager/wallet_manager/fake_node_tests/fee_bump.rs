@@ -344,6 +344,43 @@ async fn a_replacement_a_sync_finds_first_still_takes_over_from_the_original() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_double_spend_paying_someone_else_keeps_no_label() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+    let details = manager.transaction_details(tx_id(sent)).await.unwrap().details();
+    manager
+        .label_manager()
+        .insert_or_update_labels_for_txn(details, "Rent".into(), None)
+        .expect("the label saves");
+
+    // another device spends the same coin at a higher fee, but pays someone else
+    let target = manager.fee_bump_target(sent).await.expect("the payment can be sped up");
+    let confirm = manager
+        .confirm_fee_bump_txn(sent, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .expect("the replacement builds");
+
+    let mut psbt = confirm.psbt().0;
+    let someone_else = outside_address(fx.network).script_pubkey();
+    let recipient = psbt
+        .unsigned_tx
+        .output
+        .iter_mut()
+        .find(|output| !signer.is_mine(output.script_pubkey.clone()))
+        .expect("the payment has a recipient");
+    recipient.script_pubkey = someone_else;
+
+    let double_spend = broadcast(&manager, &mut screen, sign(&signer, psbt)).await;
+    assert_eq!(listed_label(&manager, double_spend).await, None);
+    assert_eq!(blocker(&manager, sent).await, FeeBumpBlocker::Replaced);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_hardware_wallet_signs_the_replacement_it_exports() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
