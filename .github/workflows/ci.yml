@@ -312,6 +312,9 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
     runs-on: ubuntu-24.04
+    # the job took at most 15 minutes over 37 runs, a cold build included; nextest's ci profile
+    # bounds each test, so this catches a hung build or step
+    timeout-minutes: 20
     env:
       RUSTFLAGS: -D warnings
     steps: &rust-test-steps
@@ -329,14 +332,26 @@ jobs:
           prefix-key: v1-rust
           shared-key: test
 
+      - name: Set up cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # the ci profile in rust/.config/nextest.toml kills a hung test after a few minutes
       - name: Run tests
-        run: cd rust && cargo test --locked --workspace
+        run: cd rust && cargo nextest run --locked --workspace --profile ci
+
+      # nextest can't run doctests, so libtest runs them under a step limit instead
+      - name: Run doctests
+        timeout-minutes: 10
+        run: cd rust && cargo test --locked --workspace --doc
 
   test-macos:
     name: test (macos-latest)
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') && needs.changes.outputs.test_macos_local != 'true' }}
     runs-on: macos-latest
+    timeout-minutes: 20
     env:
       RUSTFLAGS: -D warnings
     steps: *rust-test-steps
@@ -347,8 +362,11 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.tapsigner_emulator != 'false') }}
     runs-on: ubuntu-24.04
+    # at most 7 minutes over 37 runs, a cold build included
+    timeout-minutes: 12
     env:
       RUSTFLAGS: -D warnings
+      NEXTEST_PROFILE: ci
     steps:
       - uses: actions/checkout@v6
 

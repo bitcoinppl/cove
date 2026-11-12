@@ -1,6 +1,22 @@
-[test-groups]
-shared-root-data = { max-threads = 1 }
+# Hard per-test limits, so a hung test fails in minutes instead of holding a machine or a runner
+# for an hour. nextest reports a test as SLOW after each period and, after terminate-after periods,
+# sends SIGTERM to the test's process group and SIGKILL 10 seconds later
+#
+# Measured on a 24-core Linux machine on 2026-11-11 over six full runs of 2,449 tests: p99 was 5 to
+# 7 seconds and every test but the full-scan restores below finished within 24 seconds. The slow
+# tests wait on timers and the fake node more than on the CPU, so a run at load 70 with every core
+# busy stretched them by at most a quarter, the slowest to 26 seconds. Two minutes is over 4 times
+# that, so a test only reaches it when it is stuck
+[profile.default]
+slow-timeout = { period = "30s", terminate-after = 4 }
 
+# CI reports every failure rather than stopping at the first, and keeps the default profile's
+# limits: GitHub's runners are dedicated, so they are less loaded than a shared dev machine
+[profile.ci]
+fail-fast = false
+
+# these scan whole wallet histories from the fake node and took 25 to 58 seconds, loaded or not,
+# so they get five minutes; an override in the default profile applies to every profile
 [[profile.default.overrides]]
-filter = 'package(cove) & (test(manager::cloud_backup_manager::ops::tests::) | test(backup::) | test(address_type_switch) | test(app::tests::dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted))'
-test-group = 'shared-root-data'
+filter = 'package(cove) & test(/^manager::cloud_backup_manager::ops::tests::restored_history::/)'
+slow-timeout = { period = "60s", terminate-after = 5 }

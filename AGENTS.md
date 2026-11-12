@@ -43,6 +43,11 @@
   - One-line `let phase = ...;` then `if` that uses it → no blank
   - Short body ending in `Ok(...)` → no blank whose only job is to separate that final line
 
+### Time-box Debugging
+
+- Give each hypothesis about a flaky or hanging test at most 45 minutes; when one runs out, quarantine the test with an issue as [docs/testing.md](docs/testing.md#time-box-debugging) describes instead of starting another
+- Wrap every repro command in a hard timeout, such as `timeout 10m cargo nextest run ...`, and never loop a repro without one; nextest's profiles already kill a single test that hangs
+
 ### Verification and Side Effects
 
 - After local UniFFI changes, run `just build-ios` for affected iOS bindings and call sites and `just build-android` for affected Android bindings and call sites; run both when the exported API affects both platforms

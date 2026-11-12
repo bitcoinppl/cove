@@ -6,6 +6,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 
 - [Layers](#layers)
 - [Hardware signer tests](#hardware-signer-tests)
+- [Running the Rust tests](#running-the-rust-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Features left out of release passes](#features-left-out-of-release-passes)
 - [Fixtures](#fixtures)
@@ -80,6 +81,40 @@ These Rust tests run the PSBT signing loops that a release pass would otherwise 
 - **TAPSIGNER against the card emulator** (`rust/src/tap_card/tap_signer_reader/emulator_tests.rs`). Each test starts its own factory-fresh emulated card and drives Cove's `TapSignerReader` through the `TapcardTransportProtocol` callback that the iOS and Android NFC layers implement. The tests cover setup with the default and an advanced chain code, the factory PIN being replaced, a wrong PIN during setup, derive, backup and signing followed by a successful retry, import of the card's account as a wallet whose addresses must match the card's own xpub, and signing and finalizing a saved draft. The emulator's certificate chain doesn't lead to Coinkite's factory root, so the tests skip only that check after asserting that `create_tap_signer_reader` rejects the card. The emulator implements neither the rate limit nor `wait`, so mock-card tests in `tap_signer_reader.rs` cover the auth delay instead: a card whose delay counts down gets one `wait` per second, with the countdown message shown before each, both when the reader connects and while it probes a CVC, and a card that answers 429 reports a rate limit instead of a wrong CVC
 
 `just test-tapsigner-emulator` runs the emulator tests. It finds `ecard.py` in the `coinkite-tap-proto` submodule of the pinned rust-cktap checkout, installs the emulator's Python dependencies with uv into `~/.cache/cove/tapsigner-emulator-venv`, and runs the tests under cargo-nextest with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set. The run fails when its filter selects no emulator test, so a renamed module cannot pass without running them. `just test` and `cargo test` list these tests as ignored, and when they are run without the emulator they fail with a message naming the recipe.
+
+## Running the Rust tests
+
+`just test` runs the workspace's tests with [cargo-nextest](https://nexte.st), which runs each test in a process of its own, as many at once as the machine has cores. CI's `test (ubuntu-24.04)` and `test (macos-latest)` jobs run `cargo nextest run --locked --workspace --profile ci`, then the doctests with `cargo test --locked --workspace --doc`, since nextest can't run doctests. `just test-gh` runs the same two commands. `just ctest` runs the suite under libtest, which puts every test of a crate in one process; use it only to check something libtest does differently.
+
+### Time limits
+
+Every Rust test run has a hard limit, so a test that hangs fails within minutes instead of holding a machine or a runner for an hour:
+
+| Run | Limit |
+| --- | --- |
+| One test under nextest, in either profile | 2 minutes. nextest marks a test SLOW every 30 seconds and kills it after the fourth period, with SIGTERM to its process group and SIGKILL 10 seconds later |
+| The full-scan tests in `ops::tests::restored_history` | 5 minutes, in periods of 60 seconds |
+| Doctests | 10 minutes, as a step limit in CI and with GNU `timeout` in `just test-gh` |
+| `just ctest` | 20 minutes for the whole run, with GNU `timeout`, since libtest has no per-test limit |
+| CI's `test` jobs | 20 minutes each, and 12 for `tapsigner-emulator`, a cold build included |
+
+The per-test limits live in [`rust/.config/nextest.toml`](../rust/.config/nextest.toml), with the measurements behind them. On 2026-11-11, p99 was 5 to 7 seconds, and the slowest test outside `restored_history` took 26 seconds even with every core of a 24-core machine busy. Those tests wait on timers and the fake node more than on the CPU, so load stretched them by at most a quarter. The `ci` profile keeps the default profile's limits and doesn't stop at the first failure. When a test needs longer, give it an override with its measured time, as `restored_history` has, rather than raising the default. nextest prints each test's time, so `cargo nextest run --workspace 2>&1 | grep -E 'PASS|SLOW' | sort -t'[' -k2 -r | head` lists the slowest.
+
+### Tests and shared state
+
+Under nextest no two tests share a process. Each test process gets a temporary data root of its own (`database::test_support`), and the keychain, cloud storage and passkey fakes are in-memory globals of that process, so tests don't need to take turns. The in-process locks such as `test_lock()` and `global_state_test_lock()` still matter under `just ctest`, where every test of a crate shares those globals.
+
+Until 2026-11-11 a `shared-root-data` test group ran 442 tests one at a time. It predates the per-process data root, and the full suite took 226 to 232 seconds with it and 56 to 64 seconds without it on the same machine. Without it, three runs alongside other work at load 32 to 57, and a run at load 70 with every core busy beside a second copy of the suite, found no test that depends on another.
+
+A test that must use something outside its process, such as a fixed port or a fixed path under `/tmp`, should take a free port or a temporary directory instead. If it can't, put just that test in a nextest [test group](https://nexte.st/docs/configuration/test-groups/) with `max-threads = 1`, and explain in a comment what it shares.
+
+### Time-box debugging
+
+A flaky or hanging test can absorb hours. Debug it under these rules:
+
+1. Give each hypothesis at most 45 minutes. Write the hypothesis down first, then stop when the time runs out, whether or not it is settled.
+2. When a hypothesis runs out without a fix, quarantine the test rather than starting another. Open an issue labeled `rust` (`ios` or `ui-tests` for UI tests) with the failure message, the runs it failed and passed in, and the hypotheses tried, then mark the test `#[ignore = "quarantined until YYYY-MM-DD: https://github.com/bitcoinppl/cove/issues/<n>"]` with an expiry at most 60 days ahead. `just test` and CI then skip it, and `cargo nextest run --run-ignored only <name>` still runs it. Fix it, delete it or extend the date, saying why in the issue, before it expires.
+3. Wrap every repro command in a hard timeout, and never loop a repro without one. nextest already kills a single hung test, so bound the loop: `timeout 20m cargo nextest run -p cove --stress-count 50 -E 'test(<name>)'` runs a test 50 times and stops after 20 minutes either way. Bound `cargo test` and scripts the same way, with `timeout <limit> <command>`.
 
 ## Planning a release pass
 

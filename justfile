@@ -299,17 +299,21 @@ test test="" flags="":
 test-tapsigner-emulator:
     just xtask test-tapsigner-emulator
 
+# Needs GNU timeout, from coreutils on macOS
 # [bounded] Run tests the same way as GitHub Actions
 [group('test')]
 [working-directory('rust')]
 test-gh test="" flags="":
-    cargo test --locked {{ test }} --workspace {{ flags }}
+    cargo nextest run --locked --profile ci {{ test }} --workspace {{ flags }}
+    timeout --kill-after=30s 10m cargo test --locked --workspace --doc {{ test }}
 
-# [bounded] Run tests with cargo test
+# libtest runs every test of a crate in one process with no per-test limit, so the whole run gets one
+# Needs GNU timeout, from coreutils on macOS
+# [bounded] Run tests with cargo test, killed after 20 minutes
 [group('test')]
 [working-directory('rust')]
 ctest test="" flags="":
-    cargo test --locked {{ test }} --workspace -- {{ flags }}
+    timeout --kill-after=30s 20m cargo test --locked {{ test }} --workspace -- {{ flags }}
 
 # [indefinite] Run tests with bacon
 [group('test')]

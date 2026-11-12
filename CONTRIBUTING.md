@@ -13,6 +13,7 @@ Prefer direct, structurally correct fixes over temporary workarounds. The right 
 - [Rust](https://rustup.rs)
 - [Just](https://github.com/casey/just) (`cargo install just`)
 - `cargo-nextest` (`cargo install cargo-nextest`)
+- GNU `timeout`, which `just test-gh` and `just ctest` use to stop a hung run (`brew install coreutils` on macOS)
 - **iOS**: Xcode 16.0+, plus `brew install swiftformat swiftlint` for editor integration (see [Swift lint tools](#swift-lint-tools))
 - **Android**: Android Studio + NDK, Java 17/JDK
 - **Optional**: bacon, watchexec
