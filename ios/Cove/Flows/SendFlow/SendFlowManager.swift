@@ -36,6 +36,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     func maxSendMinusFees() -> Amount?
     func maxSendMinusFeesAndSmallUtxo() -> Amount?
     func amount() -> Amount
+    func transferDestinations() -> [TransferDestination]
     func dispatch(action: SendFlowManagerAction)
 }
 
@@ -252,6 +253,16 @@ private enum SendFlowManagerAccessError: LocalizedError {
         self._enteringAddress = address.unformatted()
         self.address = address
         self.dispatch(action: .notifyAddressChanged(address))
+    }
+
+    /// The user's other wallets this send can pay directly, for the wallet picker
+    func transferDestinations() -> [TransferDestination] {
+        withRustOr([]) { $0.transferDestinations() }
+    }
+
+    /// Fill the address with another wallet's next receive address
+    func selectTransferDestination(_ walletId: WalletId) {
+        dispatch(action: .selectTransferDestination(walletId))
     }
 
     public func setAmount(_ amount: Amount) {

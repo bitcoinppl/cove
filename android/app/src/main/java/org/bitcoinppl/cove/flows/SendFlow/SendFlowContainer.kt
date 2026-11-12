@@ -31,6 +31,7 @@ import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
 import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.SendFlowSetAmountScreen
+import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.TransferDestinationSheet
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
@@ -241,6 +242,11 @@ private fun SendFlowRouteToScreen(
     presenter: SendFlowPresenter,
     modifier: Modifier = Modifier,
 ) {
+    // app.wallets holds only this network and mode, so more than one means another destination
+    val showTransferDestinations = {
+        presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.TransferDestination)
+    }
+
     when (sendRoute) {
         is SendRoute.SetAmount -> {
             val exceedsBalance = sendFlowManager.amountExceedsBalance()
@@ -301,6 +307,8 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
+                onPickWallet =
+                    showTransferDestinations.takeIf { app.wallets.size > 1 },
             )
 
             // handle sheets for SendFlowSetAmountScreen
@@ -346,6 +354,17 @@ private fun SendFlowRouteToScreen(
                             )
                         }
                     }
+                    is SendFlowPresenter.SheetState.TransferDestination -> {
+                        TransferDestinationSheet(
+                            destinations = sendFlowManager.transferDestinations(),
+                            onSelect = { walletId ->
+                                presenter.sheetState = null
+                                presenter.focusField = null
+                                sendFlowManager.selectTransferDestination(walletId)
+                            },
+                            onDismiss = { presenter.sheetState = null },
+                        )
+                    }
                     is SendFlowPresenter.SheetState.Fee -> {
                         sendFlowManager.feeSelection?.let { feeSelection ->
                                 FeeRateSelectorSheet(
@@ -387,6 +406,8 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
+                onPickWallet =
+                    showTransferDestinations.takeIf { app.wallets.size > 1 },
                 onToggleBalanceVisibility = {
                     walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },

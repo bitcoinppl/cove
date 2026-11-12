@@ -11,6 +11,7 @@ import SwiftUI
 private typealias FocusField = SendFlowPresenter.FocusField
 
 struct EnterAddressView: View {
+    @Environment(AppManager.self) private var app
     @Environment(SendFlowPresenter.self) private var presenter
 
     /// args
@@ -21,7 +22,12 @@ struct EnterAddressView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            EnterAddressHeader(showQrScanner: showQrScanner)
+            EnterAddressHeader(
+                showQrScanner: showQrScanner,
+                // app.wallets holds only this network and mode, so more than one means another
+                // wallet to send to
+                showWalletPicker: app.wallets.count > 1 ? showWalletPicker : nil
+            )
                 .id(FocusField.address)
 
             HStack {
@@ -62,10 +68,15 @@ struct EnterAddressView: View {
     private func showQrScanner() {
         presenter.sheetState = TaggedItem(.qr)
     }
+
+    private func showWalletPicker() {
+        presenter.sheetState = TaggedItem(.transferDestination)
+    }
 }
 
 private struct EnterAddressHeader: View {
     let showQrScanner: () -> Void
+    let showWalletPicker: (() -> Void)?
 
     var body: some View {
         HStack {
@@ -74,6 +85,16 @@ private struct EnterAddressHeader: View {
                 .fontWeight(.bold)
 
             Spacer()
+
+            if let showWalletPicker {
+                Button(action: showWalletPicker) {
+                    Image(systemName: "wallet.bifold")
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Send to one of my wallets")
+                .accessibilityIdentifier("sendFlow.sendToMyWallet")
+                .padding(.trailing, 8)
+            }
 
             Button(action: showQrScanner) {
                 Image(systemName: "qrcode")
