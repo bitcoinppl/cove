@@ -159,9 +159,11 @@ pub struct PayjoinSenderSession {
     pub fallback_tx: TransactionBytes,
     pub created_at_secs: Option<u64>,
     pub pending_action: Option<PendingAction>,
-    /// The OHTTP relay the session adopted, so a resumed session keeps sending through it
+    /// The OHTTP relay that carried the session's accepted POST, so a resumed session keeps
+    /// sending through it
     ///
-    /// `None` until a request through some relay passes `process_response`
+    /// Saved in the same write as the event that records the POST as accepted, so it is `None`
+    /// only before that
     pub ohttp_relay: Option<url::Url>,
 }
 
