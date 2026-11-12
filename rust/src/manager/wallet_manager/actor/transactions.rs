@@ -597,64 +597,8 @@ impl WalletActor {
             return Produces::ok(Err(error));
         }
 
-        if !self.payjoin_phase.is_idle() {
-            return Produces::ok(Err(payjoin_in_progress_error()));
-        }
-
-        match self.db.get_payjoin_sender_session() {
-            Ok(None) => {}
-
-            Ok(Some(_)) => {
-                // If the session has a terminal marker and the tx is already in the local
-                // wallet, the only remaining work is session cleanup — no network needed.
-                // Attempt it here so this send can proceed without requiring a restart.
-                let persister = PayjoinSessionPersister::new(self.db.clone());
-                let can_cleanup = persister
-                    .pending_txid()
-                    .is_some_and(|txid| self.wallet.bdk.get_tx(txid).is_some());
-
-                if !can_cleanup {
-                    // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
-                    send!(self.addr.resume_payjoin_session());
-                    return Produces::ok(Err(Error::PayjoinSessionError(
-                        "retrying a previous payjoin broadcast; please try again in a moment"
-                            .to_string(),
-                    )));
-                }
-
-                // Retry persistence before cleanup — a prior broadcast may have applied the tx
-                // in memory without flushing to disk; only drop the session once it is durable.
-                if let Err(error) = self.wallet.persist() {
-                    warn!("failed to persist wallet at send gate before payjoin cleanup: {error}");
-                    return Produces::ok(Err(Error::PayjoinSessionError(
-                        "a previous payjoin session is pending cleanup; please try again later"
-                            .to_string(),
-                    )));
-                }
-
-                if let Err(error) = self.db.delete_payjoin_sender_session() {
-                    warn!("payjoin session cleanup at send gate failed: {error}");
-                    return Produces::ok(Err(Error::PayjoinSessionError(
-                        "a previous payjoin session is pending cleanup; please try again later"
-                            .to_string(),
-                    )));
-                }
-
-                // The completed tx may have been the payjoin proposal, so reusing the
-                // supplied PSBT (which is still the fallback) could cause a conflict.
-                // Ask the user to confirm again now that the record is cleared.
-                return Produces::ok(Err(Error::PayjoinSessionError(
-                    "previous payjoin session cleared; please confirm your payment again"
-                        .to_string(),
-                )));
-            }
-
-            Err(error) => {
-                error!("failed to check for pending payjoin session: {error}");
-                return Produces::ok(Err(Error::PayjoinSessionError(
-                    "unable to verify payjoin session state; please try again later".to_string(),
-                )));
-            }
+        if let Err(error) = self.payjoin_send_gate() {
+            return Produces::ok(Err(error));
         }
 
         let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
@@ -663,6 +607,74 @@ impl WalletActor {
         };
 
         Ok(self.start_broadcast_transaction(transaction))
+    }
+
+    /// Whether a new payment may start, given the last Payjoin session
+    ///
+    /// A stored session record blocks sending until its terminal transaction is saved in the
+    /// wallet and the record is cleared. When the transaction is already saved this clears the
+    /// record itself, otherwise it restarts the record's recovery, so a retained record never
+    /// needs an app restart to unblock sending
+    fn payjoin_send_gate(&mut self) -> Result<(), Error> {
+        if !self.payjoin_phase.is_idle() {
+            return Err(payjoin_in_progress_error());
+        }
+
+        match self.payjoin_store.session() {
+            Ok(None) => Ok(()),
+
+            Ok(Some(_)) => {
+                // If the session has a terminal marker and the tx is already in the local
+                // wallet, the only remaining work is session cleanup — no network needed.
+                // Attempt it here so this send can proceed without requiring a restart.
+                let can_cleanup = self
+                    .payjoin_store
+                    .pending_txid()
+                    .is_some_and(|txid| self.wallet.bdk.get_tx(txid).is_some());
+
+                if !can_cleanup {
+                    // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
+                    send!(self.addr.resume_payjoin_session());
+                    return Err(Error::PayjoinSessionError(
+                        "retrying a previous payjoin broadcast; please try again in a moment"
+                            .to_string(),
+                    ));
+                }
+
+                // Retry persistence before cleanup — a prior broadcast may have applied the tx
+                // in memory without flushing to disk; only drop the session once it is durable.
+                if let Err(error) = self.wallet.persist() {
+                    warn!("failed to persist wallet at send gate before payjoin cleanup: {error}");
+                    return Err(Error::PayjoinSessionError(
+                        "a previous payjoin session is pending cleanup; please try again later"
+                            .to_string(),
+                    ));
+                }
+
+                if let Err(error) = self.payjoin_store.delete_session() {
+                    warn!("payjoin session cleanup at send gate failed: {error}");
+                    return Err(Error::PayjoinSessionError(
+                        "a previous payjoin session is pending cleanup; please try again later"
+                            .to_string(),
+                    ));
+                }
+
+                // The completed tx may have been the payjoin proposal, so reusing the
+                // supplied PSBT (which is still the fallback) could cause a conflict.
+                // Ask the user to confirm again now that the record is cleared.
+                Err(Error::PayjoinSessionError(
+                    "previous payjoin session cleared; please confirm your payment again"
+                        .to_string(),
+                ))
+            }
+
+            Err(error) => {
+                error!("failed to check for pending payjoin session: {error}");
+                Err(Error::PayjoinSessionError(
+                    "unable to verify payjoin session state; please try again later".to_string(),
+                ))
+            }
+        }
     }
 
     /// Start a Payjoin send, falling back to the signed original when negotiation cannot start
@@ -684,7 +696,7 @@ impl WalletActor {
 
         // persist the session before the first network request so it survives app restarts
         let created_at_secs = unix_now_secs();
-        let persister = PayjoinSessionPersister::new(self.db.clone());
+        let persister = self.payjoin_store.clone();
         if let Err(error) =
             persister.create_session(session_id.clone(), &fallback_tx, created_at_secs)
         {
@@ -947,12 +959,11 @@ impl WalletActor {
             return;
         }
 
-        match self.db.get_payjoin_sender_session() {
+        match self.payjoin_store.session() {
             Ok(None) => {}
 
             Ok(Some(_)) => {
-                let persister = PayjoinSessionPersister::new(self.db.clone());
-                if let Err(error) = persister.set_pending_fallback() {
+                if let Err(error) = self.payjoin_store.set_pending_fallback() {
                     error!("failed to persist fallback intent before broadcast, aborting: {error}");
                     self.send(WalletManagerReconcileMessage::SendFlowError(
                         SendFlowErrorAlert::SignAndBroadcast(
@@ -1014,8 +1025,7 @@ impl WalletActor {
             return;
         }
 
-        let persister = PayjoinSessionPersister::new(self.db.clone());
-        if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
+        if let Err(error) = self.payjoin_store.set_pending_proposal(&proposal_tx) {
             error!("failed to persist proposal broadcast intent, aborting: {error}");
             self.send(WalletManagerReconcileMessage::SendFlowError(
                 SendFlowErrorAlert::SignAndBroadcast(
@@ -1061,7 +1071,7 @@ impl WalletActor {
             )));
         }
 
-        let session_cleared = match self.db.delete_payjoin_sender_session() {
+        let session_cleared = match self.payjoin_store.delete_session() {
             Ok(()) => true,
             Err(error) => {
                 warn!("failed to clear payjoin session record: {error}");
@@ -1186,8 +1196,7 @@ impl WalletActor {
             }
         };
 
-        let persister = PayjoinSessionPersister::new(self.db.clone());
-        if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
+        if let Err(error) = self.payjoin_store.set_pending_proposal(&proposal_tx) {
             error!("failed to persist recovered proposal intent, falling back: {error}");
             // no terminal marker was written yet; safe to fall back to the original tx
             self.start_payjoin_fallback_broadcast(session_id, fallback_tx);
@@ -1553,6 +1562,8 @@ async fn broadcast_to_node_with_connection(
 
 #[cfg(test)]
 pub(crate) mod test_support {
+    use std::sync::Arc;
+
     use act_zero::{ActorResult, AddrLike as _, Produces};
     use bdk_wallet::chain::bitcoin::Psbt;
 
@@ -1562,7 +1573,7 @@ pub(crate) mod test_support {
             Error,
             actor::{PayjoinPhase, WalletActor},
             payjoin::{
-                self, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinSessionPersister,
+                self, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinSessionStore,
                 unix_now_secs,
             },
         },
@@ -1597,7 +1608,7 @@ pub(crate) mod test_support {
             let (signed_psbt, fallback_tx) =
                 self.do_sign_original_psbt(psbt).await.map_err(|error| error.to_string())?;
 
-            let persister = PayjoinSessionPersister::new(self.db.clone());
+            let persister = self.payjoin_store.clone();
             persister
                 .create_session(PayjoinSessionId::generate(), &fallback_tx, unix_now_secs())
                 .map_err(|error| error.to_string())?;
@@ -1629,12 +1640,36 @@ pub(crate) mod test_support {
         pub(crate) async fn payjoin_session_for_test(
             &mut self,
         ) -> ActorResult<Option<PayjoinSenderSession>> {
-            Produces::ok(self.db.get_payjoin_sender_session().expect("payjoin session reads"))
+            Produces::ok(self.payjoin_store.session().expect("payjoin session reads"))
         }
 
         /// Whether the stored Payjoin session has reached polling for the receiver's proposal
         pub(crate) async fn payjoin_session_is_polling_for_test(&mut self) -> ActorResult<bool> {
-            Produces::ok(payjoin::test_support::session_is_polling(&self.db))
+            Produces::ok(payjoin::test_support::session_is_polling(&self.payjoin_store))
+        }
+
+        /// Runs the send gate a new payment passes first, without building a payment
+        pub(crate) async fn check_payjoin_send_gate_for_test(
+            &mut self,
+        ) -> ActorResult<Result<(), Error>> {
+            Produces::ok(self.payjoin_send_gate())
+        }
+
+        /// Sends this wallet's Payjoin sessions through `config`, set before the actor starts so
+        /// its startup resume uses the same relays and timeout as the run that saved the session
+        pub(crate) fn with_payjoin_config_for_test(mut self, config: PayjoinConfig) -> Self {
+            self.payjoin_config = config;
+            self
+        }
+
+        /// Keeps this wallet's Payjoin session record in `store` instead of the wallet's
+        /// database, set before the actor starts so its startup resume reads it too
+        pub(crate) fn with_payjoin_store_for_test(
+            mut self,
+            store: Arc<dyn PayjoinSessionStore>,
+        ) -> Self {
+            self.payjoin_store = payjoin::test_support::persister_with_store(store);
+            self
         }
 
         /// Stops the running Payjoin session without ending it, as quitting the app does, then
