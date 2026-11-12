@@ -209,7 +209,12 @@ private fun CloudBackupListedRowItem(
         }
 
     if (wallet != null) {
-        WalletItemRow(item = wallet, onClick = onClick, isOperating = isOperating, enabled = enabled)
+        WalletItemRow(
+            item = wallet,
+            action = WalletRowAction(onClick = onClick),
+            isOperating = isOperating,
+            enabled = enabled,
+        )
         return
     }
 

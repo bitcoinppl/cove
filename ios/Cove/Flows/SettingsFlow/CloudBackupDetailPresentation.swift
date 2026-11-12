@@ -638,7 +638,7 @@ enum CloudBackupTurnOffCopy {
 
         if impact.ownSecretMissingLocally.total > 0 {
             lines.append(
-                "The recovery words for these wallets aren't on this device: \(impact.ownSecretMissingLocally.listText). Turning off Cloud Backup deletes their backups."
+                "This device no longer has what it needs to restore these wallets: \(impact.ownSecretMissingLocally.listText). Turning off Cloud Backup deletes their backups."
             )
         }
 

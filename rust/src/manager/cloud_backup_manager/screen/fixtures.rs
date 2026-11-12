@@ -75,6 +75,7 @@ mod debug {
             fixture("restoring", restoring()),
             fixture("configured", configured(CloudBackupDisableScreen::Idle, None)),
             fixture("configured-clean", clean()),
+            fixture("configured-secret-missing-locally", secret_missing_locally()),
             fixture("configured-empty-inventory", empty_inventory()),
             fixture("configured-passkey-missing", passkey_missing()),
             fixture("configured-passkey-needs-repair", passkey_needs_repair()),
@@ -396,6 +397,11 @@ mod debug {
     /// A verified backup whose wallets are all up to date and that holds nothing else: Verify
     /// Again and Turn Off, with no Sync Now and no rebuild
     fn clean() -> CloudBackupScreen {
+        verified_with_one_wallet(CloudBackupOwnRecord::Current)
+    }
+
+    /// A verified backup holding one up-to-date wallet, with this device's record of it
+    fn verified_with_one_wallet(record: CloudBackupOwnRecord) -> CloudBackupScreen {
         let sections = vec![
             verification_section(
                 CloudBackupVerificationState::Verified {
@@ -411,7 +417,7 @@ mod debug {
                         "record-spending",
                         CloudBackupWalletStatus::Confirmed,
                     ),
-                    record: CloudBackupOwnRecord::Current,
+                    record,
                 }],
                 needs_sync: Vec::new(),
                 sync: CloudBackupSyncState::Idle,
@@ -425,6 +431,12 @@ mod debug {
             CloudBackupSettingsRowStatus::Active,
             minimal_actions(&[A::Verify]),
         )
+    }
+
+    /// A wallet up to date in Cloud Backup whose secret this device no longer holds, so its row
+    /// says the cloud copy is what restores it
+    fn secret_missing_locally() -> CloudBackupScreen {
+        verified_with_one_wallet(CloudBackupOwnRecord::SecretMissingLocally)
     }
 
     /// A loaded inventory with no wallets in it: no rows, so nothing to sync

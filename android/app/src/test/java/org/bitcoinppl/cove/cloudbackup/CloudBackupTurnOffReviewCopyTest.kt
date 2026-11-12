@@ -68,9 +68,8 @@ class CloudBackupTurnOffReviewCopyTest {
             listOf(
                 "Cove couldn't check what's in Cloud Backup. Wallets that aren't on this device may be " +
                     "deleted.",
-                "These wallets can't spend on this device without Cloud Backup: Cold Storage. Turning " +
-                    "off Cloud Backup deletes their backups. Without their recovery words, they can't be " +
-                    "recovered.",
+                "This device no longer has what it needs to restore these wallets: Cold Storage. " +
+                    "Turning off Cloud Backup deletes their backups.",
             ),
             copy.risks,
         )

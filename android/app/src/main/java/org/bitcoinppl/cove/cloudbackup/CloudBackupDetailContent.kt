@@ -327,11 +327,11 @@ private fun WalletsSection(
         CloudBackupHeaderSection(lastSync = configured.lastSync, syncHealth = configured.syncHealth)
 
         if (wallets.upToDate.isNotEmpty()) {
-            WalletSections(title = "Up to Date", wallets = wallets.upToDate.map { it.wallet })
+            WalletSections(title = "Up to Date", rows = wallets.upToDate)
         }
 
         if (wallets.needsSync.isNotEmpty()) {
-            WalletSections(title = "Needs Sync", wallets = wallets.needsSync.map { it.wallet })
+            WalletSections(title = "Needs Sync", rows = wallets.needsSync)
         }
 
         when (val sync = wallets.sync) {

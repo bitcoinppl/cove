@@ -119,6 +119,29 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertTrue(label.contains("Try again"))
     }
 
+    /// A wallet whose secret left this device says so, so its row doesn't read as fully backed up
+    func testSecretMissingLocallyRowSaysTheCloudCopyRestoresIt() throws {
+        let fixture = try XCTUnwrap(
+            cloudBackupScreenFixtures().first { $0.name.hasSuffix(":configured-secret-missing-locally") }
+        )
+        guard case let .configured(configured) = fixture.screen.body else {
+            return XCTFail("the fixture is configured")
+        }
+        let rows = configured.sections.flatMap { section -> [CloudBackupOwnRow] in
+            guard case let .wallets(wallets) = section else { return [] }
+            return wallets.upToDate + wallets.needsSync
+        }
+        let row = try XCTUnwrap(rows.first)
+        XCTAssertEqual(row.record, .secretMissingLocally)
+
+        let label = cloudBackupWalletAccessibilityLabel(item: row.wallet, record: row.record)
+        XCTAssertTrue(label.contains(cloudBackupSecretMissingLocallyMessage), label)
+        XCTAssertFalse(
+            cloudBackupWalletAccessibilityLabel(item: row.wallet, record: .current)
+                .contains(cloudBackupSecretMissingLocallyMessage)
+        )
+    }
+
     /// Restore All titles carry Rust's wallet count whether or not the action can run now, since
     /// availability comes from the screen's actions and draws as a disabled control with its reason
     func testRestoreAllPresentationTitlesCarryRustsCount() {

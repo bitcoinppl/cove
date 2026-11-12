@@ -54,9 +54,9 @@ private fun turnOffReviewRisks(impact: CloudBackupDisableImpact): List<String> =
 
         if (impact.ownSecretMissingLocally.isNotEmpty()) {
             add(
-                "These wallets can't spend on this device without Cloud Backup: " +
+                "This device no longer has what it needs to restore these wallets: " +
                     "${impact.ownSecretMissingLocally.listed()}. Turning off Cloud Backup " +
-                    "deletes their backups. Without their recovery words, they can't be recovered.",
+                    "deletes their backups.",
             )
         }
 

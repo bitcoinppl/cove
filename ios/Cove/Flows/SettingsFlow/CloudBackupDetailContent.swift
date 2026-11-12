@@ -163,9 +163,9 @@ private struct CloudBackupWalletsContent: View {
     var body: some View {
         HeaderSection(lastSync: configured.lastSync, syncHealth: configured.syncHealth)
 
-        let items = (wallets.upToDate + wallets.needsSync).map(\.wallet)
-        if !items.isEmpty {
-            WalletSections(wallets: items)
+        let rows = wallets.upToDate + wallets.needsSync
+        if !rows.isEmpty {
+            WalletSections(rows: rows)
         }
 
         ForEach(wallets.controls, id: \.self) { control in
