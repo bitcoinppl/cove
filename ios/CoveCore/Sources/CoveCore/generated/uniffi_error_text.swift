@@ -116,6 +116,8 @@ extension NfcMessageError: CustomStringConvertible {}
 
 extension NfcReaderError: CustomStringConvertible {}
 
+extension NodeDiscoveryError: CustomStringConvertible {}
+
 extension NodeSelectorError: CustomStringConvertible {}
 
 extension PasskeyError: CustomStringConvertible {}

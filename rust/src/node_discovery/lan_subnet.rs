@@ -1,0 +1,172 @@
+use std::net::{IpAddr, Ipv4Addr};
+
+use ipnet::Ipv4Net;
+
+use super::lan_binding::LanBinding;
+
+/// The widest prefix discovery sweeps, so a /16 home network still costs at most 254 probes
+/// per port
+const WIDEST_SWEPT_PREFIX: u8 = 24;
+
+/// A Wi-Fi or Ethernet interface address the app reports, the only network discovery sweeps
+///
+/// The platform picks the interfaces, since only it knows which one is Wi-Fi or Ethernet rather
+/// than cellular or a VPN, which can also carry private addresses
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+pub struct LanInterface {
+    /// The interface's IPv4 address, such as `192.168.1.18`
+    pub ipv4_address: String,
+    /// The interface's network prefix length, such as 24 for a `255.255.255.0` netmask
+    pub prefix_length: u8,
+    /// The network every socket searching this interface's subnet is bound to
+    pub binding: LanBinding,
+}
+
+/// Why an interface the platform reported can't be swept
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum LanSubnetError {
+    #[error("{0} is not an IPv4 address")]
+    NotIpv4(String),
+
+    #[error("prefix length {0} is longer than 32")]
+    InvalidPrefix(u8),
+
+    #[error("{0} is not a local network address")]
+    NotLocal(Ipv4Addr),
+}
+
+/// The local IPv4 subnet discovery sweeps, at most a /24 around the device's own address
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LanSubnet {
+    own_address: Ipv4Addr,
+    network: Ipv4Net,
+    binding: LanBinding,
+}
+
+impl LanSubnet {
+    /// The addresses to probe, every host in the subnet except the device itself
+    pub fn hosts(&self) -> impl Iterator<Item = Ipv4Addr> + '_ {
+        self.network.hosts().filter(|host| *host != self.own_address)
+    }
+
+    /// The device's own address on this subnet, which mDNS queries are sent from
+    pub const fn own_address(&self) -> Ipv4Addr {
+        self.own_address
+    }
+
+    /// The network the subnet's sockets are bound to
+    pub const fn binding(&self) -> LanBinding {
+        self.binding
+    }
+}
+
+impl TryFrom<&LanInterface> for LanSubnet {
+    type Error = LanSubnetError;
+
+    fn try_from(interface: &LanInterface) -> Result<Self, Self::Error> {
+        let own_address: Ipv4Addr = interface
+            .ipv4_address
+            .parse()
+            .map_err(|_| LanSubnetError::NotIpv4(interface.ipv4_address.clone()))?;
+
+        if !is_lan_ipv4(own_address) {
+            return Err(LanSubnetError::NotLocal(own_address));
+        }
+
+        // a wider network is narrowed to the /24 holding the device, the block most nodes on a
+        // home network share with the phone
+        let prefix = interface.prefix_length.max(WIDEST_SWEPT_PREFIX);
+        let network = Ipv4Net::new(own_address, prefix)
+            .map_err(|_| LanSubnetError::InvalidPrefix(interface.prefix_length))?
+            .trunc();
+
+        Ok(Self { own_address, network, binding: interface.binding })
+    }
+}
+
+/// Whether an address belongs to a local network: RFC 1918 private or link-local
+///
+/// Carrier-grade NAT space (100.64.0.0/10) is left out, since it is the carrier's network rather
+/// than the user's, and so are loopback and every public address
+pub fn is_lan_ipv4(address: Ipv4Addr) -> bool {
+    address.is_private() || address.is_link_local()
+}
+
+/// Whether an address, of either family, belongs to a local network
+///
+/// IPv6 counts unique local (fc00::/7) and link-local (fe80::/10) addresses
+pub fn is_lan_address(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_lan_ipv4(address),
+        IpAddr::V6(address) => address.is_unique_local() || address.is_unicast_link_local(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn interface(address: &str, prefix_length: u8) -> LanInterface {
+        LanInterface {
+            ipv4_address: address.to_string(),
+            prefix_length,
+            binding: LanBinding::InterfaceIndex { index: 1 },
+        }
+    }
+
+    #[test]
+    fn a_home_subnet_sweeps_every_other_host() {
+        let subnet = LanSubnet::try_from(&interface("192.168.1.18", 24)).unwrap();
+        let hosts: Vec<_> = subnet.hosts().collect();
+
+        assert_eq!(hosts.len(), 253);
+        assert_eq!(hosts.first(), Some(&Ipv4Addr::new(192, 168, 1, 1)));
+        assert_eq!(hosts.last(), Some(&Ipv4Addr::new(192, 168, 1, 254)));
+        assert!(!hosts.contains(&Ipv4Addr::new(192, 168, 1, 18)));
+    }
+
+    #[test]
+    fn a_wide_subnet_is_narrowed_to_the_devices_slash_24() {
+        let subnet = LanSubnet::try_from(&interface("10.20.30.40", 8)).unwrap();
+        let hosts: Vec<_> = subnet.hosts().collect();
+
+        assert_eq!(hosts.len(), 253);
+        assert!(hosts.iter().all(|host| host.octets()[..3] == [10, 20, 30]));
+    }
+
+    #[test]
+    fn a_narrow_subnet_keeps_its_own_size() {
+        let subnet = LanSubnet::try_from(&interface("192.168.1.18", 30)).unwrap();
+
+        assert_eq!(subnet.hosts().collect::<Vec<_>>(), vec![Ipv4Addr::new(192, 168, 1, 17)]);
+    }
+
+    #[test]
+    fn only_local_interfaces_can_be_swept() {
+        for (address, expected) in [
+            ("8.8.8.8", LanSubnetError::NotLocal(Ipv4Addr::new(8, 8, 8, 8))),
+            ("100.72.1.2", LanSubnetError::NotLocal(Ipv4Addr::new(100, 72, 1, 2))),
+            ("127.0.0.1", LanSubnetError::NotLocal(Ipv4Addr::LOCALHOST)),
+            ("fe80::1", LanSubnetError::NotIpv4("fe80::1".to_string())),
+        ] {
+            assert_eq!(LanSubnet::try_from(&interface(address, 24)), Err(expected));
+        }
+
+        assert_eq!(
+            LanSubnet::try_from(&interface("192.168.1.18", 33)),
+            Err(LanSubnetError::InvalidPrefix(33))
+        );
+    }
+
+    #[test]
+    fn lan_addresses_cover_private_and_link_local_ranges_of_both_families() {
+        for local in ["10.0.0.1", "172.16.5.4", "192.168.1.10", "169.254.1.1", "fd00::1", "fe80::1"]
+        {
+            assert!(is_lan_address(local.parse().unwrap()), "{local} is local");
+        }
+
+        for remote in ["1.1.1.1", "100.64.0.1", "127.0.0.1", "2606:4700::1111", "::1"] {
+            assert!(!is_lan_address(remote.parse().unwrap()), "{remote} is not local");
+        }
+    }
+}

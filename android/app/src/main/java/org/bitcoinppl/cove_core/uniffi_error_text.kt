@@ -45,6 +45,7 @@ fun Throwable.uniffiErrorText(): String? =
         is org.bitcoinppl.cove_core.MultiFormatException -> toString()
         is org.bitcoinppl.cove_core.MultiQrException -> toString()
         is org.bitcoinppl.cove_core.NewPinException -> toString()
+        is org.bitcoinppl.cove_core.NodeDiscoveryException -> toString()
         is org.bitcoinppl.cove_core.NodeSelectorException -> toString()
         is org.bitcoinppl.cove_core.PendingWalletManagerException -> toString()
         is org.bitcoinppl.cove_core.SeedQrException -> toString()
