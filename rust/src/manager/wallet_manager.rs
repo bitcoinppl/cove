@@ -6,7 +6,9 @@ mod exports;
 #[cfg(test)]
 mod fake_node_tests;
 pub mod ledger_state;
-mod payjoin;
+pub(crate) mod payjoin;
+#[cfg(test)]
+mod payjoin_e2e_tests;
 pub mod receive_address;
 mod send_transactions;
 mod transaction_locks;
