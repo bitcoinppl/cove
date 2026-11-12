@@ -243,18 +243,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
         managerCache.clearSendFlowManager(id: id)
     }
 
-    public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
-        rust.findTapSignerWallet(tapSigner: ts)
-    }
-
-    public func getTapSignerBackup(_ ts: TapSigner) throws -> Data? {
-        try rust.getTapSignerBackup(tapSigner: ts)
-    }
-
-    public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
-        rust.saveTapSignerBackup(tapSigner: ts, backup: backup)
-    }
-
     /// Reset the manager state
     @MainActor
     public func reset() {
@@ -946,6 +934,21 @@ extension AppManager {
         routeId = UUID()
 
         await PopupStack.dismissAllPopups()
+    }
+}
+
+/// TAPSIGNER lookups, kept out of the class body because that body is at the SwiftLint length limit
+extension AppManager {
+    public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
+        rust.findTapSignerWallet(tapSigner: ts)
+    }
+
+    public func getTapSignerBackup(_ ts: TapSigner) throws -> Data? {
+        try rust.getTapSignerBackup(tapSigner: ts)
+    }
+
+    public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
+        rust.saveTapSignerBackup(tapSigner: ts, backup: backup)
     }
 }
 
