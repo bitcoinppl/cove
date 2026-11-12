@@ -389,20 +389,16 @@ mod tests {
                     NfcMessage::Both(base64_psbt.clone(), signed_psbt.to_vec()),
                     true,
                 ),
-                (
-                    "both forms of a transaction",
-                    NfcMessage::Both(hex_tx.clone(), binary_tx.clone()),
-                    false,
-                ),
+                ("both forms of a transaction", NfcMessage::Both(hex_tx.clone(), binary_tx), false),
                 // a binary payload that doesn't parse falls back to the text record
                 (
                     "text psbt beside unreadable data",
-                    NfcMessage::Both(base64_psbt.clone(), vec![0xde, 0xad, 0xbe, 0xef]),
+                    NfcMessage::Both(base64_psbt, vec![0xde, 0xad, 0xbe, 0xef]),
                     true,
                 ),
                 (
                     "text transaction beside unreadable data",
-                    NfcMessage::Both(hex_tx.clone(), vec![0xde, 0xad, 0xbe, 0xef]),
+                    NfcMessage::Both(hex_tx, vec![0xde, 0xad, 0xbe, 0xef]),
                     false,
                 ),
             ];

@@ -1474,9 +1474,8 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
 
         // text handed straight to the manager is refused too, so its state below is the state
         // after it saw the PSBT and not only after the apps filtered it out
-        let ingested = manager.ingest(KeyTeleportInput::MultiFormat(
-            crate::multi_format::StringOrData::String(text.clone()),
-        ));
+        let ingested = manager
+            .ingest(KeyTeleportInput::MultiFormat(crate::multi_format::StringOrData::String(text)));
 
         assert!(
             matches!(
