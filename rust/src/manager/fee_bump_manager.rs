@@ -26,7 +26,7 @@ use crate::{
     router::RouteFactory,
     transaction::{
         FeeRate,
-        fee_bump::{FeeBumpBlocker, FeeBumpError},
+        fee_bump::{FeeBumpBlocker, FeeBumpError, INSUFFICIENT_FUNDS_MESSAGE},
     },
     wallet::metadata::WalletType,
 };
@@ -61,8 +61,14 @@ pub enum FeeBumpManagerReconcileMessage {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum FeeBumpManagerAction {
+    /// Select a preset, or a custom option from [`RustFeeBumpManager::custom_fee_option`],
+    /// which then joins the options as their custom row
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
     Continue,
+
+    /// The screen is showing again, such as after the user came back from the confirm screen,
+    /// so continue can build a new replacement
+    ScreenAppeared,
 }
 
 /// Whether the transaction can be sped up, and at which rates
@@ -84,7 +90,8 @@ pub struct FeeBumpOptions {
     pub minimum_fee_rate: Arc<FeeRate>,
 
     /// Network rates raised to at least [`Self::minimum_fee_rate`], with the replacement's total
-    /// fee at each when the wallet can pay it
+    /// fee at each the wallet can pay. When it can pay none of them, the custom row holds the
+    /// minimum rate instead
     pub fee_options: Arc<FeeRateOptionsWithTotalFee>,
 }
 
@@ -99,7 +106,14 @@ pub enum FeeBumpUnavailable {
         available: Arc<Amount>,
     },
 
-    Failed(String),
+    /// The fee server can't be reached, and the confirm screens need its rates as a new send
+    /// does
+    FeeRatesUnavailable,
+
+    /// Anything else, with a message safe to show the user
+    Failed {
+        message: String,
+    },
 }
 
 impl From<FeeBumpError> for FeeBumpUnavailable {
@@ -110,7 +124,7 @@ impl From<FeeBumpError> for FeeBumpUnavailable {
                 needed: Arc::new(needed.into()),
                 available: Arc::new(available.into()),
             },
-            error => Self::Failed(error.to_string()),
+            error => Self::Failed { message: error.user_message() },
         }
     }
 }
@@ -119,10 +133,12 @@ impl FeeBumpUnavailable {
     pub fn user_message(&self) -> String {
         match self {
             Self::Blocked(blocker) => blocker.user_message(),
-            Self::InsufficientFunds { .. } => "This wallet has no confirmed funds left to pay \
-                the higher fee. Wait for a pending payment to confirm, then try again."
-                .to_string(),
-            Self::Failed(error) => format!("Unable to speed up this transaction: {error}"),
+            Self::InsufficientFunds { .. } => INSUFFICIENT_FUNDS_MESSAGE.to_string(),
+            Self::FeeRatesUnavailable => {
+                "Unable to load the current network fees. Check your connection and try again."
+                    .to_string()
+            }
+            Self::Failed { message } => message.clone(),
         }
     }
 }
@@ -135,13 +151,21 @@ impl FeeBumpUnavailable {
     }
 }
 
+/// Where continue is, so a second tap can't build or push a second replacement
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContinueState {
+    Idle,
+    Building,
+
+    /// The confirm screen was pushed, and stays the only one until this screen shows again
+    Pushed,
+}
+
 #[derive(Debug)]
 struct State {
     status: FeeBumpStatus,
     selected: Option<Arc<FeeRateOptionWithTotalFee>>,
-
-    /// Set while the replacement is being built, so a second tap doesn't build another
-    continuing: bool,
+    continue_state: ContinueState,
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -189,6 +213,7 @@ impl RustFeeBumpManager {
         match action {
             Action::SelectFeeRate(fee_rate) => self.select_fee_rate(fee_rate),
             Action::Continue => self.continue_with_selected_fee_rate(),
+            Action::ScreenAppeared => self.screen_appeared(),
         }
     }
 
@@ -215,7 +240,11 @@ impl RustFeeBumpManager {
 
 impl RustFeeBumpManager {
     fn new(wallet_manager: Arc<RustWalletManager>, txid: bitcoin::Txid) -> Self {
-        let state = State { status: FeeBumpStatus::Loading, selected: None, continuing: false };
+        let state = State {
+            status: FeeBumpStatus::Loading,
+            selected: None,
+            continue_state: ContinueState::Idle,
+        };
 
         Self {
             txid,
@@ -235,14 +264,11 @@ impl RustFeeBumpManager {
     async fn load(self: Arc<Self>) {
         let (status, selected) = match self.ready_options().await {
             Ok(options) => {
-                let selected = Arc::new(options.fee_options.medium);
+                let selected = default_selection(&options.fee_options);
                 (FeeBumpStatus::Ready(options), Some(selected))
             }
 
-            Err(error) => {
-                warn!("unable to speed up {}: {error}", self.txid);
-                (FeeBumpStatus::Unavailable(error.into()), None)
-            }
+            Err(unavailable) => (FeeBumpStatus::Unavailable(unavailable), None),
         };
 
         {
@@ -256,17 +282,37 @@ impl RustFeeBumpManager {
         self.reconciler.send_async(messages).await;
     }
 
-    async fn ready_options(&self) -> Result<FeeBumpOptions, FeeBumpError> {
-        let target = self.wallet_manager.fee_bump_target(self.txid).await?;
-        let minimum = FeeRate::from(target.minimum_fee_rate);
-        let base = raised_to(network_fee_rate_options().await, minimum);
+    async fn ready_options(&self) -> Result<FeeBumpOptions, FeeBumpUnavailable> {
+        let target = self.wallet_manager.fee_bump_target(self.txid).await.inspect_err(|error| {
+            warn!("unable to speed up {}: {error}", self.txid);
+        })?;
 
-        // the slow option pays the least, so a failure there means no rate can be paid
-        let slow = self.with_total_fee(base.slow).await?;
+        // the minimum is the cheapest a replacement can be, so only failing there blocks the
+        // screen; a network rate the wallet can't pay just shows no total
+        let minimum = FeeRate::from(target.minimum_fee_rate);
+        let minimum_total = self.total_fee(minimum).await?;
+
+        let Some(base) = network_fee_rate_options().await else {
+            return Err(FeeBumpUnavailable::FeeRatesUnavailable);
+        };
+
+        let base = raised_to(base, minimum);
+        let slow = self.with_total_fee_if_payable(base.slow).await;
         let medium = self.with_total_fee_if_payable(base.medium).await;
         let fast = self.with_total_fee_if_payable(base.fast).await;
 
-        let fee_options = FeeRateOptionsWithTotalFee { fast, medium, slow, custom: None };
+        let mut fee_options = FeeRateOptionsWithTotalFee { fast, medium, slow, custom: None };
+
+        // with no network rate payable, the minimum is the one rate offered
+        if slow.total_fee.is_none() {
+            let fee_speed = fee_options.calculate_custom_fee_speed(minimum.sat_per_vb());
+            let at_minimum = FeeRateOptionWithTotalFee {
+                fee_speed,
+                fee_rate: minimum,
+                total_fee: Some(minimum_total),
+            };
+            fee_options = fee_options.add_custom_fee_rate(Arc::new(at_minimum));
+        }
 
         Ok(FeeBumpOptions {
             original_fee: Arc::new(target.original.fee.into()),
@@ -276,19 +322,14 @@ impl RustFeeBumpManager {
         })
     }
 
-    async fn with_total_fee(
-        &self,
-        option: FeeRateOption,
-    ) -> Result<FeeRateOptionWithTotalFee, FeeBumpError> {
-        let total_fee = self.wallet_manager.fee_bump_total_fee(self.txid, option.fee_rate).await?;
-
-        Ok(FeeRateOptionWithTotalFee::new(option, total_fee))
+    async fn total_fee(&self, fee_rate: FeeRate) -> Result<Amount, FeeBumpError> {
+        self.wallet_manager.fee_bump_total_fee(self.txid, fee_rate).await
     }
 
     /// Leaves the total out when the wallet can't pay this rate, continuing at it then explains
     async fn with_total_fee_if_payable(&self, option: FeeRateOption) -> FeeRateOptionWithTotalFee {
-        match self.with_total_fee(option).await {
-            Ok(option) => option,
+        match self.total_fee(option.fee_rate).await {
+            Ok(total_fee) => FeeRateOptionWithTotalFee::new(option, total_fee),
             Err(error) => {
                 debug!("no total fee at {} sat/vB: {error}", option.sat_per_vb());
                 FeeRateOptionWithTotalFee::without_total(option)
@@ -297,31 +338,57 @@ impl RustFeeBumpManager {
     }
 
     fn select_fee_rate(&self, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
-        self.state.lock().selected = Some(fee_rate.clone());
-        self.reconciler.send(Message::UpdateSelectedFeeRate(fee_rate));
+        let mut messages = Vec::new();
+
+        {
+            let mut state = self.state.lock();
+            state.selected = Some(fee_rate.clone());
+
+            // a custom rate becomes the options' custom row, so the picker can show it
+            if let (FeeSpeed::Custom { .. }, FeeBumpStatus::Ready(options)) =
+                (fee_rate.fee_speed, &mut state.status)
+            {
+                options.fee_options =
+                    Arc::new(options.fee_options.add_custom_fee_rate(fee_rate.clone()));
+                messages.push(Message::UpdateStatus(state.status.clone()));
+            }
+        }
+
+        messages.push(Message::UpdateSelectedFeeRate(fee_rate));
+        self.reconciler.send(messages);
+    }
+
+    fn screen_appeared(&self) {
+        let mut state = self.state.lock();
+        if state.continue_state == ContinueState::Pushed {
+            state.continue_state = ContinueState::Idle;
+        }
     }
 
     fn continue_with_selected_fee_rate(self: Arc<Self>) {
         let selected = {
             let mut state = self.state.lock();
             let Some(selected) = state.selected.clone() else { return };
-            if state.continuing {
+            if state.continue_state != ContinueState::Idle {
                 return;
             }
 
-            state.continuing = true;
+            state.continue_state = ContinueState::Building;
             selected
         };
 
         cove_tokio::task::spawn(async move {
             let result = self.push_confirm_route(selected.fee_rate).await;
-            self.state.lock().continuing = false;
+
+            let continue_state =
+                if result.is_ok() { ContinueState::Pushed } else { ContinueState::Idle };
+            self.state.lock().continue_state = continue_state;
 
             let Err(error) = result else { return };
             warn!("unable to build the replacement for {}: {error}", self.txid);
 
             // a transaction that confirmed or was replaced meanwhile can't be sped up any more
-            let mut messages = vec![Message::ContinueFailed(error.to_string())];
+            let mut messages = vec![Message::ContinueFailed(error.user_message())];
             if let FeeBumpError::Blocked(blocker) = error {
                 let status = FeeBumpStatus::Unavailable(FeeBumpUnavailable::Blocked(blocker));
                 self.state.lock().status = status.clone();
@@ -357,6 +424,15 @@ impl RustFeeBumpManager {
     }
 }
 
+/// Medium when the wallet can pay it, as a new send starts, else the cheapest rate it can pay
+fn default_selection(fee_options: &FeeRateOptionsWithTotalFee) -> Arc<FeeRateOptionWithTotalFee> {
+    [fee_options.medium, fee_options.slow]
+        .into_iter()
+        .chain(fee_options.custom)
+        .find(|option| option.total_fee.is_some())
+        .map_or_else(|| Arc::new(fee_options.medium), Arc::new)
+}
+
 /// The fee server's current rates, or none when it can't be reached
 async fn network_fee_rate_options() -> Option<FeeRateOptions> {
     let fees = FEE_CLIENT
@@ -370,23 +446,14 @@ async fn network_fee_rate_options() -> Option<FeeRateOptions> {
         .ok()
 }
 
-/// Raises every network rate to at least `minimum`, or offers only `minimum` without them
+/// Raises every network rate to at least `minimum`
 ///
 /// A replacement under the minimum would be refused, so a rate the network calls fast can still
 /// be raised when the original already paid more
-fn raised_to(base: Option<FeeRateOptions>, minimum: FeeRate) -> FeeRateOptions {
+fn raised_to(base: FeeRateOptions, minimum: FeeRate) -> FeeRateOptions {
     let raise = |option: FeeRateOption| FeeRateOption {
         fee_speed: option.fee_speed,
         fee_rate: option.fee_rate.max(minimum),
-    };
-
-    let Some(base) = base else {
-        let at_minimum = |fee_speed| FeeRateOption { fee_speed, fee_rate: minimum };
-        return FeeRateOptions {
-            fast: at_minimum(FeeSpeed::Fast),
-            medium: at_minimum(FeeSpeed::Medium),
-            slow: at_minimum(FeeSpeed::Slow),
-        };
     };
 
     FeeRateOptions { fast: raise(base.fast), medium: raise(base.medium), slow: raise(base.slow) }
