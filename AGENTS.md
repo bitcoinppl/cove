@@ -48,3 +48,8 @@
 - After local UniFFI changes, run `just build-ios` for affected iOS bindings and call sites and `just build-android` for affected Android bindings and call sites; run both when the exported API affects both platforms
 - To install and launch iOS from the CLI without Xcode, use `just build-run-ios --udid <device-udid>` and keep the phone unlocked
 - Create commits, push branches, or install and launch applications on devices only when the user request authorizes the action
+
+### Glossary
+
+Full Automation (FA) - Fully automated testing using web drive on iOS and uiAutomator on android
+AAA (Agent Assisted Automation) - The agent runs the simulator and device and uses vision to check UI for regressions and correctness
