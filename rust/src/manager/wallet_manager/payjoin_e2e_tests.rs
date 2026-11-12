@@ -137,6 +137,7 @@ async fn a_resumed_session_reports_its_status_and_completes() {
     let mut payment = PayjoinPayment::start(&mut fx, &services).await;
 
     let original = payment.receiver_gets_the_original().await;
+    payment.until_sender_is_polling().await;
 
     // the app exits with the session polling, then relaunches and runs startup's resume
     call!(payment.manager.actor.abandon_payjoin_negotiation_for_test())
@@ -368,6 +369,26 @@ impl PayjoinPayment {
         tokio::time::timeout(Duration::from_secs(30), self.receiver.wait_for_original())
             .await
             .expect("the sender posts its Original PSBT")
+    }
+
+    /// Waits until the sender has saved the directory's answer to its POST
+    ///
+    /// The directory hands the receiver the Original as soon as it stores the POST, a moment
+    /// before the sender saves that answer, and a relaunch inside that gap falls back by design
+    /// because re-posting is not retry-safe
+    async fn until_sender_is_polling(&self) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            let polling = call!(self.manager.actor.payjoin_session_is_polling_for_test())
+                .await
+                .expect("the wallet actor answers");
+            if polling {
+                return;
+            }
+
+            assert!(tokio::time::Instant::now() < deadline, "the sender saves the POST's answer");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
     }
 
     fn cancel(&self) {
