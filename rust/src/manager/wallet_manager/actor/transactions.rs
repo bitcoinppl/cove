@@ -23,14 +23,17 @@ use cove_types::{
 };
 use cove_util::result_ext::ResultExt as _;
 use tap::TapFallible as _;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
     database::{Database, unsigned_transactions::UnsignedTransactionRecord},
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
-        actor::{SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid},
+        actor::{
+            SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid,
+            fee_bump::ReplacedTransaction,
+        },
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
     node::{Node, client::NodeClient},
@@ -812,13 +815,13 @@ impl WalletActor {
 
         let txid = transaction.compute_txid();
 
-        // a replacement must be seen after the transactions it replaces, and before one that
-        // replaced it in turn, since the wallet keeps whichever double spend it saw last
-        let double_spends = self.double_spends_of(&transaction);
-        let seen_at = double_spends.seen_at(now);
+        // a replacement must be seen after the transactions it replaces, since the wallet keeps
+        // whichever of two double spends it saw last
+        let replaced = self.transactions_replaced_by(&transaction);
+        let seen_at = ReplacedTransaction::seen_at(&replaced, now);
 
         // insert the unconfirmed transaction into the local wallet
-        self.wallet.bdk.apply_unconfirmed_txs([(transaction, seen_at)]);
+        self.wallet.bdk.apply_unconfirmed_txs([(transaction.clone(), seen_at)]);
 
         // persist the wallet to save the new transaction
         let persisted = match self.wallet.persist() {
@@ -842,14 +845,8 @@ impl WalletActor {
             self.prune_settled_unsigned_transactions();
         }
 
-        // a transaction replaced before its broadcast result arrived will never confirm
-        if double_spends.superseded_at.is_some() {
-            info!("{txid} was replaced before its broadcast result arrived");
-            return;
-        }
-
-        if !double_spends.replaced.is_empty() {
-            self.hand_over_to_replacement(&double_spends.replaced, txid).await;
+        if !replaced.is_empty() {
+            self.hand_over_to_replacement(&replaced, &transaction).await;
         }
 
         send!(self.addr.start_transaction_watcher(txid));

@@ -87,7 +87,9 @@ pub enum FeeBumpError {
     )]
     InsufficientFunds { needed: Amount, available: Amount },
 
-    #[error("unable to build the replacement: {0}")]
+    /// Carries the underlying error for logs through `Debug`, while `Display`, which crosses
+    /// the FFI, stays generic
+    #[error("unable to build the replacement")]
     Build(String),
 }
 

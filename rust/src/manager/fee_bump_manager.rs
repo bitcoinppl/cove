@@ -284,7 +284,7 @@ impl RustFeeBumpManager {
 
     async fn ready_options(&self) -> Result<FeeBumpOptions, FeeBumpUnavailable> {
         let target = self.wallet_manager.fee_bump_target(self.txid).await.inspect_err(|error| {
-            warn!("unable to speed up {}: {error}", self.txid);
+            warn!("unable to speed up {}: {error:?}", self.txid);
         })?;
 
         // the minimum is the cheapest a replacement can be, so only failing there blocks the
@@ -385,7 +385,7 @@ impl RustFeeBumpManager {
             self.state.lock().continue_state = continue_state;
 
             let Err(error) = result else { return };
-            warn!("unable to build the replacement for {}: {error}", self.txid);
+            warn!("unable to build the replacement for {}: {error:?}", self.txid);
 
             // a transaction that confirmed or was replaced meanwhile can't be sped up any more
             let mut messages = vec![Message::ContinueFailed(error.user_message())];
