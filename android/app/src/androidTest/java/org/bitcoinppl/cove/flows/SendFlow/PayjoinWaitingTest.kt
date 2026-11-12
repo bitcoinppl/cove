@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -124,6 +125,35 @@ class PayjoinWaitingTest {
             WalletManagerReconcileMessage.SendFlowException(SendFlowErrorAlert.SignAndBroadcast(BROADCAST_ERROR)),
         )
         manager.reconcileOnUi(PayjoinStatus.Idle)
+        compose.onNodeWithText(BROADCAST_ERROR).assertIsDisplayed()
+    }
+
+    @Test
+    fun confirmScreenRebuiltAfterItsBroadcastFailedStillShowsTheError() {
+        val manager = WalletManager.previewNew().also(walletManagers::add)
+        var routeShown by mutableStateOf(true)
+
+        // the holder keeps the route's saved state while it is gone, as an activity recreation does
+        compose.setContent {
+            val savedState = rememberSaveableStateHolder()
+            if (routeShown) {
+                savedState.SaveableStateProvider("confirm") { PayjoinConfirmRoute(manager, dispatchWalletAction = {}) }
+            }
+        }
+
+        manager.reconcileOnUi(PayjoinStatus.Negotiating(SESSION_ID, expiresInFiveMinutes()))
+        manager.reconcileOnUi(PayjoinStatus.Broadcasting(SESSION_ID, previewTxId(), PayjoinTransactionKind.PROPOSAL))
+
+        // a rotation tears the route down while the broadcast fails, so the wallet reports the
+        // error and returns to idle, no longer naming the session, before the route is back
+        compose.runOnUiThread { routeShown = false }
+        compose.waitForIdle()
+        manager.reconcileOnUi(
+            WalletManagerReconcileMessage.SendFlowException(SendFlowErrorAlert.SignAndBroadcast(BROADCAST_ERROR)),
+        )
+        manager.reconcileOnUi(PayjoinStatus.Idle)
+        compose.runOnUiThread { routeShown = true }
+
         compose.onNodeWithText(BROADCAST_ERROR).assertIsDisplayed()
     }
 
