@@ -363,7 +363,10 @@ async fn every_relay_going_down_while_polling_sends_the_original_at_the_deadline
     let before_outage = adopted.requests();
     assert!(unix_now_secs() < payment.expires_at_secs, "the outage began before the deadline");
 
-    let completed = payment.until_completed().await;
+    // timed when the fallback starts, since completing it adds the broadcast and wallet save
+    let original_txid = payment.original_txid();
+    let fallback = payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback);
+    payment.screen.until("the fallback broadcast to start", |m| is_status(m, &fallback)).await;
     let fell_back_at = unix_now_secs();
     let deadline = payment.expires_at_secs;
     assert!(fell_back_at >= deadline, "the wallet waited for the deadline it reported");
@@ -372,7 +375,7 @@ async fn every_relay_going_down_while_polling_sends_the_original_at_the_deadline
         "the wallet stopped at its deadline {deadline}, not later: {fell_back_at}"
     );
 
-    let original_txid = payment.original_txid();
+    let completed = payment.until_completed().await;
     assert_eq!(
         payment.screen.payjoin_statuses(),
         vec![

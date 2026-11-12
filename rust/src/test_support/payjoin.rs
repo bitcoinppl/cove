@@ -258,6 +258,11 @@ impl TestRelay {
         self.state.held.load(Ordering::SeqCst)
     }
 
+    /// How the relay answers requests now
+    pub(crate) fn behavior(&self) -> TestRelayBehavior {
+        self.state.behavior.lock().clone()
+    }
+
     /// Changes how the relay answers every later request
     pub(crate) fn set_behavior(&self, behavior: TestRelayBehavior) {
         *self.state.behavior.lock() = behavior;
