@@ -139,10 +139,9 @@ final class CloudBackupDisableFullAppUITests: XCTestCase {
         XCTAssertTrue(turnOff.isEnabled, "Turn Off is not available")
         turnOff.tap()
 
-        // alert buttons are matched by label, since an alert action may not carry its identifier
-        let confirm = app.alerts.buttons["Turn Off and Delete Backups"]
+        let confirm = app.alerts.alertButton(CloudBackupUIIdentifier.action("confirmDisable"))
         XCTAssertTrue(confirm.waitForExistence(timeout: 20), "the Turn Off review never showed")
-        XCTAssertFalse(app.alerts.buttons["Continue"].exists, "a backup of this device's wallets asked twice")
+        XCTAssertFalse(app.alerts.alertButton(CloudBackupUIIdentifier.turnOffContinue).exists, "a backup of this device's wallets asked twice")
         confirm.tap()
     }
 

@@ -42,22 +42,22 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
             review.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Fixture Wallet Two")).firstMatch.exists,
             "the review should name the wallets only in the cloud"
         )
-        XCTAssertFalse(review.buttons["Turn Off and Delete Backups"].exists, "a wallet only in the cloud asked once")
+        XCTAssertFalse(review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).exists, "a wallet only in the cloud asked once")
 
         // the second dialog's Cancel leaves Turn Off as it was
-        review.buttons["Continue"].tap()
-        let confirmation = app.alerts["Delete these backups and turn off Cloud Backup?"]
+        review.alertButton(CloudBackupUIIdentifier.turnOffContinue).tap()
+        let confirmation = app.alerts["Delete These Backups and Turn Off Cloud Backup?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Continue never asked to confirm")
-        confirmation.buttons["Cancel"].tap()
+        confirmation.alertButton(CloudBackupUIIdentifier.action("cancelDisable")).tap()
         assertTurnOffIdle(control, namespaces: namespaces, after: "cancelling the second dialog")
 
         // the first dialog's Cancel too
         tapTurnOff(control)
-        reviewAlert().buttons["Cancel"].tap()
+        reviewAlert().alertButton(CloudBackupUIIdentifier.action("cancelDisable")).tap()
         assertTurnOffIdle(control, namespaces: namespaces, after: "cancelling the first dialog")
 
         tapTurnOff(control)
-        reviewAlert().buttons["Restore Them First"].tap()
+        reviewAlert().alertButton(CloudBackupUIIdentifier.action("restoreFirst")).tap()
         control.waitForAppState("Restore Them First should restore the wallets only in the cloud", timeout: 60) {
             $0.notOnDeviceRecordIds.isEmpty && $0.wallets.count == 3
         }
@@ -95,7 +95,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
             review.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "extra copy")).firstMatch.exists,
             "the review should say the extra copy is deleted too"
         )
-        XCTAssertFalse(review.buttons["Restore Them First"].exists, "extra copies alone offered Restore Them First")
+        XCTAssertFalse(review.alertButton(CloudBackupUIIdentifier.action("restoreFirst")).exists, "extra copies alone offered Restore Them First")
         confirmOnce()
         waitForTurnedOff(control)
     }
@@ -127,10 +127,10 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
             review.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "without your passkey")).firstMatch.exists,
             "the review should say what Cove couldn't check"
         )
-        XCTAssertTrue(review.buttons["Continue"].exists, "unchecked backups asked once")
-        XCTAssertFalse(review.buttons["Turn Off and Delete Backups"].exists, "unchecked backups asked once")
+        XCTAssertTrue(review.alertButton(CloudBackupUIIdentifier.turnOffContinue).exists, "unchecked backups asked once")
+        XCTAssertFalse(review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).exists, "unchecked backups asked once")
 
-        review.buttons["Verify First"].tap()
+        review.alertButton(CloudBackupUIIdentifier.action("verifyFirst")).tap()
         control.waitForAppState("the unfinished prompt should leave verification not completed") {
             $0.verification == "notCompleted" && $0.screen.disable == "idle"
         }
@@ -146,10 +146,10 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         XCTAssertEqual(control.cloudNamespaces, namespaces)
 
         tapTurnOff(control)
-        reviewAlert().buttons["Continue"].tap()
-        let confirmation = app.alerts["Delete these backups and turn off Cloud Backup?"]
+        reviewAlert().alertButton(CloudBackupUIIdentifier.turnOffContinue).tap()
+        let confirmation = app.alerts["Delete These Backups and Turn Off Cloud Backup?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Continue never asked to confirm")
-        confirmation.buttons["Delete and Turn Off"].tap()
+        confirmation.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).tap()
         waitForTurnedOff(control)
     }
 
@@ -161,11 +161,11 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
 
         tapTurnOff(control)
         let review = reviewAlert()
-        XCTAssertFalse(review.buttons["Continue"].exists, "a backup of this device's wallet asked twice")
+        XCTAssertFalse(review.alertButton(CloudBackupUIIdentifier.turnOffContinue).exists, "a backup of this device's wallet asked twice")
 
         // the recheck after the drain lists the cloud again and finds the two wallets
         try control.update { $0.listedWalletRecordIds = nil }
-        review.buttons["Turn Off and Delete Backups"].tap()
+        review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).tap()
 
         let changed = app.alerts.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "Cloud Backup changed since you checked")
@@ -178,7 +178,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
             renewed.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Cove can't check 2 backups")).firstMatch.exists,
             "the renewed review should count the wallets only in the cloud as unchecked"
         )
-        XCTAssertTrue(renewed.buttons["Continue"].exists, "the renewed review should ask twice")
+        XCTAssertTrue(renewed.alertButton(CloudBackupUIIdentifier.turnOffContinue).exists, "the renewed review should ask twice")
         control.assertNextActions(
             "the renewed review should be confirmable again",
             available: ["confirmDisable", "cancelDisable"]
@@ -186,7 +186,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         XCTAssertEqual(control.state.count(.namespaceDelete), 0, "the grown impact was deleted anyway")
         XCTAssertEqual(control.cloudNamespaces, namespaces)
 
-        renewed.buttons["Cancel"].tap()
+        renewed.alertButton(CloudBackupUIIdentifier.action("cancelDisable")).tap()
         assertTurnOffIdle(control, namespaces: namespaces, after: "cancelling the renewed review")
     }
 
@@ -207,7 +207,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
 
         try control.setNetworkConnected(true)
         control.assertNextActions("reconnecting should offer Turn Off again", available: ["turnOff"])
-        offline.buttons["Try Again"].tap()
+        offline.alertButton(CloudBackupUIIdentifier.turnOffOfflineTryAgain).tap()
 
         confirmOnce()
         waitForTurnedOff(control)
@@ -341,14 +341,14 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         let namespaces = control.cloudNamespaces
 
         tapTurnOff(control)
-        XCTAssertTrue(app.alerts.buttons["Turn Off and Delete Backups"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.alerts.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).waitForExistence(timeout: 20))
 
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10), "the app never left the foreground")
         app.activate()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "the app never came back")
 
-        let confirm = app.alerts.buttons["Turn Off and Delete Backups"]
+        let confirm = app.alerts.alertButton(CloudBackupUIIdentifier.action("confirmDisable"))
         XCTAssertTrue(confirm.waitForExistence(timeout: 10), "coming back lost the review")
         control.waitForAppState("coming back should keep the review") { $0.screen.disable == "reviewing" }
         control.assertNextActions(
@@ -357,7 +357,7 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
         )
         XCTAssertEqual(control.state.count(.namespaceDelete), 0, "backgrounding deleted a backup")
 
-        app.alerts.buttons["Cancel"].tap()
+        app.alerts.alertButton(CloudBackupUIIdentifier.action("cancelDisable")).tap()
         assertTurnOffIdle(control, namespaces: namespaces, after: "cancelling the review after coming back")
     }
 
@@ -418,10 +418,8 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
     }
 
     /// The first dialog, which Rust opens once it has checked what Turn Off deletes
-    ///
-    /// Alert buttons are matched by label, since an alert action may not carry its identifier
     private func reviewAlert() -> XCUIElement {
-        let review = app.alerts["Turn off Cloud Backup?"]
+        let review = app.alerts["Turn Off Cloud Backup?"]
         XCTAssertTrue(review.waitForExistence(timeout: 20), "the Turn Off review never showed")
         return review
     }
@@ -429,8 +427,8 @@ final class CloudBackupTurnOffFullAppUITests: XCTestCase {
     /// Confirms a review that asks once, for a backup of only this device's wallets
     private func confirmOnce() {
         let review = reviewAlert()
-        XCTAssertFalse(review.buttons["Continue"].exists, "a backup of this device's wallets asked twice")
-        review.buttons["Turn Off and Delete Backups"].tap()
+        XCTAssertFalse(review.alertButton(CloudBackupUIIdentifier.turnOffContinue).exists, "a backup of this device's wallets asked twice")
+        review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")).tap()
     }
 
     private func waitForTurnedOff(_ control: CloudBackupHostControl) {

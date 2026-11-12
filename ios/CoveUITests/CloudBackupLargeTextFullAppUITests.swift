@@ -309,26 +309,26 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
 
         let turnOff = layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off")
         turnOff.tap()
-        let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "Fixture Wallet Two", "review")
+        let review = layout.assertAlertFits(app.alerts["Turn Off Cloud Backup?"], containing: "Fixture Wallet Two", "review")
         control.assertNextActions("the review should be confirmable", available: ["confirmDisable", "cancelDisable"])
-        layout.assertAlertActionReachable(review.buttons["Restore Them First"], in: review, "review: Restore Them First")
-        layout.assertAlertActionReachable(review.buttons["Cancel"], in: review, "review: Cancel")
-        layout.assertAlertActionReachable(review.buttons["Continue"], in: review, "review: Continue").tap()
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("restoreFirst")), in: review, "review: Restore Them First")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: review, "review: Cancel")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.turnOffContinue), in: review, "review: Continue").tap()
 
         let confirmation = layout.assertAlertFits(
-            app.alerts["Delete these backups and turn off Cloud Backup?"],
+            app.alerts["Delete These Backups and Turn Off Cloud Backup?"],
             containing: "can't be undone",
             "confirmation"
         )
-        layout.assertAlertActionReachable(confirmation.buttons["Delete and Turn Off"], in: confirmation, "confirmation: Delete and Turn Off")
-        layout.assertAlertActionReachable(confirmation.buttons["Cancel"], in: confirmation, "confirmation: Cancel").tap()
+        layout.assertAlertActionReachable(confirmation.alertButton(CloudBackupUIIdentifier.action("confirmDisable")), in: confirmation, "confirmation: Delete and Turn Off")
+        layout.assertAlertActionReachable(confirmation.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: confirmation, "confirmation: Cancel").tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 10))
 
         try control.setNetworkConnected(false)
         layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off offline").tap()
         let offline = layout.assertAlertFits(app.alerts["Can't Reach iCloud"], containing: "needs a connection", "offline")
-        layout.assertAlertActionReachable(offline.buttons["Try Again"], in: offline, "offline: Try Again")
-        layout.assertAlertActionReachable(offline.buttons["Cancel"], in: offline, "offline: Cancel").tap()
+        layout.assertAlertActionReachable(offline.alertButton(CloudBackupUIIdentifier.turnOffOfflineTryAgain), in: offline, "offline: Try Again")
+        layout.assertAlertActionReachable(offline.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: offline, "offline: Cancel").tap()
         XCTAssertEqual(control.state.count(.namespaceDelete), 0, "checking the dialogs deleted a backup")
     }
 
@@ -361,8 +361,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         try control.failNamespaceDelete(attempt: 1)
 
         layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off").tap()
-        let review = layout.assertAlertFits(app.alerts["Turn off Cloud Backup?"], containing: "This deletes the backups", "review")
-        layout.assertAlertActionReachable(review.buttons["Turn Off and Delete Backups"], in: review, "review: Turn Off and Delete Backups").tap()
+        let review = layout.assertAlertFits(app.alerts["Turn Off Cloud Backup?"], containing: "This deletes the backups", "review")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")), in: review, "review: Turn Off and Delete Backups").tap()
         control.assertNextActions(
             "the failed delete should leave Turn Off unfinished",
             body: "finishingDisable",

@@ -314,8 +314,11 @@ in an identifier.
 | The repair prompt's Create New Passkey, which sends `repairPasskey` like its Use Existing Passkey | `cloudBackup.prompt.passkeyChoice.createNewPasskey` |
 
 A system alert or confirmation dialog can't carry an identifier on its container
-on iOS, and a dialog button may not carry its identifier on every OS version,
-so UI tests match dialog buttons by label too.
+on iOS, so UI tests find a dialog by its title. On iOS 27, XCUITest lists an
+alert button that carries an identifier twice, as the action and as UIKit's
+view nested in it, while VoiceOver reads it once, so iOS UI tests find an
+identified alert button by its identifier and take the first match, and match
+a button without one, such as a plain Cancel, by label.
 
 The last outcome shows next to the control its target names. When no drawn
 control answers it, because Rust names no control for the action, the screen

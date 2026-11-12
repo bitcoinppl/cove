@@ -74,7 +74,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         robot.scrollToHittable(walletRow(recordId: keptRecordId))
 
         let deleteConfirmation = openDeleteConfirmation()
-        deleteConfirmation.buttons["Delete Forever"].tap()
+        deleteConfirmation.alertButton(CloudBackupUIIdentifier.rowConfirm(selectedRecordId, "delete")).tap()
 
         XCTAssertTrue(
             waitForDeletedRecordIds(nonEmptyWithin: 20),
@@ -168,7 +168,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "this may be its only backup")
         ).firstMatch.exists)
-        XCTAssertTrue(alert.buttons["Delete Forever"].exists)
+        XCTAssertTrue(alert.alertButton(CloudBackupUIIdentifier.rowConfirm(selectedRecordId, "delete")).exists)
         XCTAssertTrue(alert.buttons["Cancel"].exists)
 
         return alert

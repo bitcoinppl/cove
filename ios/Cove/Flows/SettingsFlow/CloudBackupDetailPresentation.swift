@@ -581,8 +581,8 @@ enum CloudBackupTurnOffCopy {
 
     static func title(_ dialog: CloudBackupTurnOffDialog) -> String {
         switch dialog {
-        case .review: "Turn off Cloud Backup?"
-        case .confirm: "Delete these backups and turn off Cloud Backup?"
+        case .review: "Turn Off Cloud Backup?"
+        case .confirm: "Delete These Backups and Turn Off Cloud Backup?"
         case .offline: "Can't Reach \(provider)"
         }
     }

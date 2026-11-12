@@ -1,3 +1,5 @@
+import XCTest
+
 /// The accessibility identifiers UI tests find Cloud Backup's controls and surfaces by
 ///
 /// Rust owns the mapping (`CloudBackupUiElement.accessibilityIdentifier()`, listed in
@@ -62,4 +64,15 @@ enum CloudBackupUIIdentifier {
     static let promptPasskeyChoiceCreateNewPasskey = "cloudBackup.prompt.passkeyChoice.createNewPasskey"
     static let promptMissingPasskeyReminder = "cloudBackup.prompt.missingPasskeyReminder"
     static let promptVerification = "cloudBackup.prompt.verification"
+}
+
+extension XCUIElementTypeQueryProvider {
+    /// An alert's button found by its accessibility identifier
+    ///
+    /// On iOS 27 XCUITest lists an alert action that carries an identifier twice, as the action and as
+    /// UIKit's action view nested inside it, with the same identifier and label. VoiceOver still reads
+    /// the action once, so this takes the first match instead of requiring a single one
+    func alertButton(_ identifier: String) -> XCUIElement {
+        buttons.matching(identifier: identifier).firstMatch
+    }
 }
