@@ -32,7 +32,7 @@ use crate::{
     },
 };
 use act_zero::WeakAddr;
-use alert_state::{SendFlowAlertState, SendFlowWarningKind};
+use alert_state::{FeeShare, FeeWarningLevel, SendFlowAlertState, SendFlowWarningKind};
 use amount_or_max::AmountOrMax;
 use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
@@ -74,8 +74,6 @@ type Reconciler = dyn SendFlowManagerReconciler;
 type DeferredSender = deferred_sender::DeferredSender<Message>;
 
 const LOCK_STATE_LOAD_FAILED_ERROR_ID: &str = "send_flow_lock_state_load_failed";
-const HIGH_FEE_WARNING_PERCENT: f64 = 5.0;
-const VERY_HIGH_FEE_WARNING_PERCENT: f64 = 20.0;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {
@@ -407,39 +405,28 @@ impl RustSendFlowManager {
             });
         }
 
-        let fee_sats = fee_sats?;
-        if amount_sats == 0 {
-            return None;
-        }
+        let share = FeeShare::of(fee_sats?, amount_sats)?;
+        let display_fee_percentage = share.display_percent();
 
-        let fee_percentage = fee_sats as f64 / amount_sats as f64 * 100.0;
-        let display_fee_percentage = format!("{fee_percentage:.0}");
+        match share.warning_level()? {
+            FeeWarningLevel::VeryHigh if very_high_fee_acknowledged => None,
+            FeeWarningLevel::VeryHigh => Some(SendFlowAlertState::Warning {
+                kind: SendFlowWarningKind::VeryHighFee,
+                title: "Very High Network Fee".to_string(),
+                message: format!(
+                    "The network fee is {display_fee_percentage}% of the amount you are sending. That is unusually high for an on-chain payment. Consider sending a larger amount, lowering the fee rate if timing allows, or using an external Lightning option for small payments."
+                ),
+            }),
 
-        if fee_percentage >= VERY_HIGH_FEE_WARNING_PERCENT {
-            if !very_high_fee_acknowledged {
-                return Some(SendFlowAlertState::Warning {
-                    kind: SendFlowWarningKind::VeryHighFee,
-                    title: "Very High Network Fee".to_string(),
-                    message: format!(
-                        "The network fee is {display_fee_percentage}% of the amount you are sending. That is unusually high for an on-chain payment. Consider sending a larger amount, lowering the fee rate if timing allows, or using an external Lightning option for small payments."
-                    ),
-                });
-            }
-
-            return None;
-        }
-
-        if fee_percentage >= HIGH_FEE_WARNING_PERCENT && !high_fee_acknowledged {
-            return Some(SendFlowAlertState::Warning {
+            FeeWarningLevel::High if high_fee_acknowledged => None,
+            FeeWarningLevel::High => Some(SendFlowAlertState::Warning {
                 kind: SendFlowWarningKind::HighFee,
                 title: "High Network Fee".to_string(),
                 message: format!(
                     "The network fee is {display_fee_percentage}% of the amount you are sending. On-chain fees are per transaction, so they take a bigger bite out of small payments. Consider a larger amount or an external Lightning option."
                 ),
-            });
+            }),
         }
-
-        None
     }
 
     fn acknowledge_warning_and_finalize(self: &Arc<Self>, kind: SendFlowWarningKind) {

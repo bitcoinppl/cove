@@ -34362,6 +34362,52 @@ public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<Diag
 
 
 /**
+ * A replacement fee the user should confirm before signing, as a new send warns
+ */
+data class FeeBumpFeeWarning (
+    var `level`: FeeWarningLevel
+    ,
+    var `title`: kotlin.String
+    ,
+    var `message`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeBumpFeeWarning: FfiConverterRustBuffer<FeeBumpFeeWarning> {
+    override fun read(buf: ByteBuffer): FeeBumpFeeWarning {
+        return FeeBumpFeeWarning(
+            FfiConverterTypeFeeWarningLevel.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeBumpFeeWarning) = (
+            FfiConverterTypeFeeWarningLevel.allocationSize(value.`level`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterString.allocationSize(value.`message`)
+    )
+
+    override fun write(value: FeeBumpFeeWarning, buf: ByteBuffer) {
+            FfiConverterTypeFeeWarningLevel.write(value.`level`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterString.write(value.`message`, buf)
+    }
+}
+
+
+
+/**
  * The rates a replacement can pay
  */
 data class FeeBumpOptions (
@@ -48306,6 +48352,10 @@ sealed class FeeBumpException(message: String): kotlin.Exception(message) {
      */
         class InsufficientFunds(message: String) : FeeBumpException(message)
 
+    /**
+     * Carries the underlying error for logs through `Debug`, while `Display`, which crosses
+     * the FFI, stays generic
+     */
         class Build(message: String) : FeeBumpException(message)
 
 
@@ -48394,6 +48444,18 @@ sealed class FeeBumpManagerAction: Disposable  {
     object ScreenAppeared : FeeBumpManagerAction()
 
 
+    /**
+     * The user accepted a [`FeeBumpManagerReconcileMessage::FeeWarning`], so continue again
+     */
+    data class AcknowledgeFeeWarning(
+        val v1: org.bitcoinppl.cove_core.FeeWarningLevel) : FeeBumpManagerAction()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -48409,6 +48471,13 @@ sealed class FeeBumpManagerAction: Disposable  {
             is FeeBumpManagerAction.Continue -> {// Nothing to destroy
             }
             is FeeBumpManagerAction.ScreenAppeared -> {// Nothing to destroy
+            }
+            is FeeBumpManagerAction.AcknowledgeFeeWarning -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
@@ -48432,6 +48501,9 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
                 )
             2 -> FeeBumpManagerAction.Continue
             3 -> FeeBumpManagerAction.ScreenAppeared
+            4 -> FeeBumpManagerAction.AcknowledgeFeeWarning(
+                FfiConverterTypeFeeWarningLevel.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48456,6 +48528,13 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
                 4UL
             )
         }
+        is FeeBumpManagerAction.AcknowledgeFeeWarning -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeFeeWarningLevel.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: FeeBumpManagerAction, buf: ByteBuffer) {
@@ -48471,6 +48550,11 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
             }
             is FeeBumpManagerAction.ScreenAppeared -> {
                 buf.putInt(3)
+                Unit
+            }
+            is FeeBumpManagerAction.AcknowledgeFeeWarning -> {
+                buf.putInt(4)
+                FfiConverterTypeFeeWarningLevel.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48513,6 +48597,19 @@ sealed class FeeBumpManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    /**
+     * The replacement's fee is high for the amount it sends, continuing needs
+     * [`FeeBumpManagerAction::AcknowledgeFeeWarning`] with its level
+     */
+    data class FeeWarning(
+        val v1: org.bitcoinppl.cove_core.FeeBumpFeeWarning) : FeeBumpManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -48533,6 +48630,13 @@ sealed class FeeBumpManagerReconcileMessage: Disposable  {
 
             }
             is FeeBumpManagerReconcileMessage.ContinueFailed -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is FeeBumpManagerReconcileMessage.FeeWarning -> {
 
     Disposable.destroy(
         this.v1
@@ -48565,6 +48669,9 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
             3 -> FeeBumpManagerReconcileMessage.ContinueFailed(
                 FfiConverterString.read(buf),
                 )
+            4 -> FeeBumpManagerReconcileMessage.FeeWarning(
+                FfiConverterTypeFeeBumpFeeWarning.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48591,6 +48698,13 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
                 + FfiConverterString.allocationSize(value.v1)
             )
         }
+        is FeeBumpManagerReconcileMessage.FeeWarning -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeFeeBumpFeeWarning.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: FeeBumpManagerReconcileMessage, buf: ByteBuffer) {
@@ -48608,6 +48722,11 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
             is FeeBumpManagerReconcileMessage.ContinueFailed -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is FeeBumpManagerReconcileMessage.FeeWarning -> {
+                buf.putInt(4)
+                FfiConverterTypeFeeBumpFeeWarning.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48911,6 +49030,49 @@ public object FfiConverterTypeFeeBumpUnavailable : FfiConverterRustBuffer<FeeBum
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * How far a network fee is above normal for the amount it sends
+ */
+
+enum class FeeWarningLevel {
+
+    /**
+     * At least 5% of the amount sent
+     */
+    HIGH,
+    /**
+     * At least 20% of the amount sent
+     */
+    VERY_HIGH;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeWarningLevel: FfiConverterRustBuffer<FeeWarningLevel> {
+    override fun read(buf: ByteBuffer) = try {
+        FeeWarningLevel.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FeeWarningLevel) = 4UL
+
+    override fun write(value: FeeWarningLevel, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 

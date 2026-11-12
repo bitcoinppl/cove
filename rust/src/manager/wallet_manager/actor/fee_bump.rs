@@ -8,6 +8,7 @@ use bitcoin::{
     FeeRate as BdkFeeRate, OutPoint, ScriptBuf, Transaction as BdkTransaction, Txid, Weight,
 };
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
+use cove_util::result_ext::ResultExt as _;
 use tracing::{debug, warn};
 
 use crate::{
@@ -167,7 +168,7 @@ impl WalletActor {
         for _ in 0..MINIMUM_FEE_RATE_ATTEMPTS {
             let psbt = self.build_ephemeral_replacement(original, fee_rate)?;
             let weight = self.signed_weight_upper_bound(&psbt.unsigned_tx)?;
-            let fee = psbt.fee().map_err(|error| FeeBumpError::Build(error.to_string()))?;
+            let fee = psbt.fee().map_err_str(FeeBumpError::Build)?;
 
             if fee >= original.minimum_fee(weight) {
                 return Ok(fee_rate);
@@ -194,7 +195,7 @@ impl WalletActor {
         psbt: &Psbt,
     ) -> Result<(), FeeBumpError> {
         let weight = self.signed_weight_upper_bound(&psbt.unsigned_tx)?;
-        let fee = psbt.fee().map_err(|error| FeeBumpError::Build(error.to_string()))?;
+        let fee = psbt.fee().map_err_str(FeeBumpError::Build)?;
 
         if fee < original.minimum_fee(weight) {
             return Err(FeeBumpError::FeeRateTooLow { minimum: original.minimum_fee_rate(weight) });
@@ -271,7 +272,7 @@ impl WalletActor {
             let satisfaction = bdk
                 .public_descriptor(*keychain)
                 .max_weight_to_satisfy()
-                .map_err(|error| FeeBumpError::Build(error.to_string()))?;
+                .map_err_str(FeeBumpError::Build)?;
 
             // the witness item count, as BDK's own estimate adds it
             weight += Weight::from_wu(1) + satisfaction;

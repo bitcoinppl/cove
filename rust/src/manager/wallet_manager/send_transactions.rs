@@ -9,6 +9,7 @@ use crate::{
     wallet::Address,
 };
 use cove_types::confirm::ConfirmDetails;
+use cove_util::result_ext::ResultExt as _;
 
 use super::{Error, RustWalletManager};
 
@@ -80,7 +81,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::ActorNotFound)??;
 
-        let fee = psbt.fee().map_err(|error| FeeBumpError::Build(error.to_string()))?;
+        let fee = psbt.fee().map_err_str(FeeBumpError::Build)?;
         Ok(fee.into())
     }
 
