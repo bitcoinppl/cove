@@ -52,8 +52,8 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
+import org.bitcoinppl.cove.flows.SendFlow.Common.PayjoinWaitingCard
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
-import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -62,6 +62,8 @@ import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
+import org.bitcoinppl.cove_core.PayjoinSessionId
+import org.bitcoinppl.cove_core.PayjoinStatus
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.ConfirmDetails
@@ -84,9 +86,10 @@ private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 fun SendFlowConfirmScreen(
     app: AppManager,
     walletManager: WalletManager,
-    sendFlowManager: SendFlowManager,
     details: ConfirmDetails,
     sendState: SendState,
+    payjoinWaiting: PayjoinStatus.Negotiating?,
+    onSendWithoutPayjoin: (PayjoinSessionId) -> Unit,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
 ) {
@@ -197,6 +200,14 @@ fun SendFlowConfirmScreen(
                         }
 
                         Column {
+                            payjoinWaiting?.let { status ->
+                                PayjoinWaitingCard(
+                                    status = status,
+                                    onSendWithoutPayjoin = onSendWithoutPayjoin,
+                                    modifier = Modifier.padding(bottom = 16.dp),
+                                )
+                            }
+
                             SwipeToSendStub(
                                 text = stringResource(R.string.action_swipe_to_send),
                                 sendState = sendState,

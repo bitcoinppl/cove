@@ -235,4 +235,14 @@
     <string name="menu_manage_utxos">Manage UTXOs</string>
     <string name="menu_wallet_settings">Wallet Settings</string>
     <string name="address_unavailable">Address unavailable</string>
+
+    <!-- Payjoin -->
+    <string name="payjoin_waiting_title">Waiting for the receiver</string>
+    <string name="payjoin_waiting_message">The receiver can join this payment with Payjoin. If they don\'t in time, Cove sends it as a normal transaction.</string>
+    <string name="payjoin_pending_title">Payjoin payment waiting for the receiver</string>
+    <string name="payjoin_time_left">%1$s left</string>
+    <string name="payjoin_send_without">Send without Payjoin</string>
+    <string name="payjoin_sending_without">Sending without Payjoin…</string>
+    <string name="payjoin_sending">Sending payment…</string>
+    <string name="payjoin_sent_without">Transaction sent successfully, without Payjoin.</string>
 </resources>
