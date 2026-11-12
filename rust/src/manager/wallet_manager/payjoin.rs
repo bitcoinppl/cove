@@ -2,21 +2,20 @@
 
 use act_zero::*;
 use bdk_wallet::chain::bitcoin::Psbt;
-use bitcoin::{
-    Amount, FeeRate as BdkFeeRate, Transaction as BdkTransaction, consensus, params::Params,
-};
+use bitcoin::{FeeRate as BdkFeeRate, Transaction as BdkTransaction, consensus, params::Params};
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use payjoin::{
-    PjParam, Uri, UriExt,
+    PjParam,
     persist::{OptionalTransitionOutcome, SessionPersister},
     send::{
         ResponseError,
         v2::{
-            PollingForProposal, SendSession, Sender as V2Sender, SenderBuilder,
+            CreateRequestError, PollingForProposal, SendSession, Sender as V2Sender, SenderBuilder,
             SessionEvent as PayjoinSessionEvent, SessionOutcome, WithReplyKey, replay_event_log,
         },
     },
+    uri::v2::PjParam as V2PjParam,
 };
 use rand::seq::SliceRandom as _;
 use std::sync::{Arc, Mutex};
@@ -30,7 +29,8 @@ use crate::database::wallet_data::{
 use super::actor::WalletActor;
 
 // maximum time to wait for a receiver proposal before broadcasting the fallback transaction;
-// create_poll_request does not check session expiry, so this provides a client-side deadline
+// the receiver's own pj expiry can be much later, so this bounds how long the payment waits.
+// a poll past the receiver's expiry is rejected by create_poll_request and falls back at once
 const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 const OHTTP_RELAYS: [&str; 3] =
@@ -290,12 +290,21 @@ fn ohttp_relays() -> Vec<&'static str> {
     relays
 }
 
+/// Why a request could not be carried by any OHTTP relay
+#[derive(Debug)]
+enum RelayRoundError {
+    /// The receiver's pj expiry has passed, so no relay can carry a request for this session
+    SessionExpired,
+    /// Every relay failed to build or carry the request
+    AllRelaysFailed(eyre::Report),
+}
+
 // tries each OHTTP relay in shuffled order, returning the first successful (body, context) pair
 async fn try_ohttp_relays<C>(
     client: &reqwest::Client,
     timeout: Duration,
-    build_request: impl Fn(&str) -> Result<(payjoin::Request, C)>,
-) -> Result<(Vec<u8>, C)> {
+    build_request: impl Fn(&str) -> Result<(payjoin::Request, C), CreateRequestError>,
+) -> Result<(Vec<u8>, C), RelayRoundError> {
     // per-relay failures stay at debug because polls repeat them every tick; callers log
     // the summary returned here
     let relays = ohttp_relays();
@@ -303,12 +312,17 @@ async fn try_ohttp_relays<C>(
     for relay in &relays {
         let (req, ctx) = match build_request(relay) {
             Ok(pair) => pair,
+
+            // expiry does not depend on the relay, so trying the others cannot help
+            Err(e) if e.is_expired() => return Err(RelayRoundError::SessionExpired),
+
             Err(e) => {
                 debug!("payjoin: relay {relay} rejected: {e:?}");
-                last_err = e;
+                last_err = eyre::eyre!("{e:?}");
                 continue;
             }
         };
+
         match http_post(client, req, timeout).await {
             Ok(body) => return Ok((body, ctx)),
             Err(e) => {
@@ -318,7 +332,10 @@ async fn try_ohttp_relays<C>(
         }
     }
 
-    Err(eyre::eyre!("{} OHTTP relays failed, last error: {last_err}", relays.len()))
+    Err(RelayRoundError::AllRelaysFailed(eyre::eyre!(
+        "{} OHTTP relays failed, last error: {last_err}",
+        relays.len()
+    )))
 }
 
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
@@ -352,34 +369,13 @@ pub(crate) fn build_sender(
     // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
     // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
 
-    // SenderBuilder::new (v2) panics on non-OHTTP URIs; '#' in the endpoint signals v2
-    if !endpoint.contains('#') {
-        return Err(eyre::eyre!("not a BIP77 v2 endpoint; v1 not supported"));
-    }
-
-    // '#' must be percent-encoded as '%23' in the pj= param to survive BIP21 round-trips
-    let encoded_endpoint = endpoint.replace('#', "%23");
+    let pj_param = v2_pj_param(&endpoint)?;
 
     let idx = recipient_output_index(&signed_psbt)?;
-
     let txout = &signed_psbt.unsigned_tx.output[idx];
-    let amount_btc = Amount::from_sat(txout.value.to_sat()).to_btc();
+    let amount = txout.value;
     let address = bitcoin::Address::from_script(&txout.script_pubkey, Params::from(network))
         .map_err(|e| eyre::eyre!("could not derive address from PSBT output: {e:?}"))?;
-
-    let bip21 = format!("bitcoin:{address}?amount={amount_btc:.8}&pj={encoded_endpoint}");
-    let pj_uri = Uri::try_from(bip21.as_str())
-        .map_err(|e| eyre::eyre!("failed to parse payjoin URI: {e:?}"))?
-        .assume_checked()
-        .check_pj_supported()
-        .map_err(|_| eyre::eyre!("URI does not support payjoin (missing pj= param)"))?;
-
-    // double check a v1 URL with a '#' would pass the check above but panic in SenderBuilder
-    if !matches!(pj_uri.extras.pj_param(), PjParam::V2(_)) {
-        return Err(eyre::eyre!(
-            "payjoin endpoint is v1; only BIP77 v2 OHTTP endpoints are supported"
-        ));
-    }
 
     // use the signed tx weight (includes witness bytes) so the fee floor isn't inflated for SegWit
     let fee_rate = signed_psbt
@@ -394,7 +390,7 @@ pub(crate) fn build_sender(
         })
         .unwrap_or(BdkFeeRate::BROADCAST_MIN);
 
-    let sender = SenderBuilder::new(signed_psbt, pj_uri)
+    let sender = SenderBuilder::from_parts(signed_psbt, &pj_param, &address, Some(amount))
         .always_disable_output_substitution()
         .build_recommended(fee_rate)
         .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
@@ -402,6 +398,19 @@ pub(crate) fn build_sender(
         .map_err(|e| eyre::eyre!("failed to persist payjoin session: {e:?}"))?;
 
     Ok(sender)
+}
+
+// parses the receiver's pj endpoint, accepting only BIP77 v2 OHTTP endpoints
+fn v2_pj_param(endpoint: &str) -> Result<V2PjParam> {
+    let pj_param = PjParam::parse(endpoint)
+        .map_err(|e| eyre::eyre!("payjoin endpoint is not a BIP77 v2 endpoint: {e:?}"))?;
+
+    // PjParam is non_exhaustive and only v2 is compiled in, so any other variant is a
+    // version this sender cannot pay
+    match pj_param {
+        PjParam::V2(pj_param) => Ok(pj_param),
+        _ => Err(eyre::eyre!("only BIP77 v2 OHTTP payjoin endpoints are supported")),
+    }
 }
 
 // polls the payjoin directory for a receiver proposal; called from begin_poll via send_fut_with
@@ -424,12 +433,17 @@ async fn do_poll(
     // the server-side timeout to avoid racing it
     let (poll_response, poll_ctx) =
         match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
-            polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
+            polling_sender.create_poll_request(relay)
         })
         .await
         {
             Ok(pair) => pair,
-            Err(e) => {
+            Err(RelayRoundError::SessionExpired) => {
+                warn!("payjoin poll: receiver's session expired, broadcasting fallback");
+                send!(addr.complete_with_fallback_msg());
+                return;
+            }
+            Err(RelayRoundError::AllRelaysFailed(e)) => {
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 send!(addr.retry_poll_after_failure(PollFailure::RelaysUnreachable, e.to_string()));
                 return;
@@ -440,41 +454,48 @@ async fn do_poll(
         Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
             send!(addr.complete_with_success(proposal_psbt));
         }
+
         Ok(OptionalTransitionOutcome::Stasis(next)) => {
             debug!("payjoin poll: no proposal yet, continuing");
             send!(addr.update_polling_sender(next));
         }
-        Err(e) => {
-            // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
-            // the public API does not expose fatal/transient classification directly —
-            // other opaque response errors retry until the bounded session deadline fires
-            //
-            // receiver-provided text is untrusted, so only well-known errors, whose Display
-            // is fixed per code, are logged; everything else logs its kind
+
+        // the library has persisted Closed(Aborted), so the session cannot continue
+        Err(e) if e.is_fatal() => {
+            // receiver-provided text is untrusted: well-known errors have a fixed Display
+            // per code and validation errors are produced locally, unrecognized ones log
+            // only their kind
             match e.api_error_ref() {
                 Some(ResponseError::WellKnown(well_known)) => {
                     warn!("payjoin poll: receiver rejected session: {well_known}");
-                    send!(addr.complete_with_fallback_msg());
+                }
+                Some(ResponseError::Validation(validation)) => {
+                    warn!("payjoin poll: receiver proposal rejected: {validation}");
                 }
                 Some(ResponseError::Unrecognized { .. }) => {
                     warn!("payjoin poll: receiver rejected session with an unrecognized error");
-                    send!(addr.complete_with_fallback_msg());
                 }
-                Some(ResponseError::Validation(_)) => {
-                    send!(addr.retry_poll_after_failure(
-                        PollFailure::InvalidResponse,
-                        "malformed directory response".to_string()
-                    ));
-                }
-                None => {
-                    let (failure, detail) = match e.storage_error_ref() {
-                        Some(storage) => (PollFailure::Storage, storage.to_string()),
-                        None => (PollFailure::Other, "unclassified poll error".to_string()),
-                    };
-
-                    send!(addr.retry_poll_after_failure(failure, detail));
-                }
+                Some(_) | None => warn!("payjoin poll: session failed"),
             }
+
+            send!(addr.complete_with_fallback_msg());
+        }
+
+        // nothing was persisted, so the same polling state retries until the deadline
+        Err(e) if e.is_transient() => {
+            send!(addr.retry_poll_after_failure(
+                PollFailure::InvalidResponse,
+                "transient directory response error".to_string()
+            ));
+        }
+
+        Err(e) => {
+            let (failure, detail) = match e.storage_error_ref() {
+                Some(storage) => (PollFailure::Storage, storage.to_string()),
+                None => (PollFailure::Other, "unclassified poll error".to_string()),
+            };
+
+            send!(addr.retry_poll_after_failure(failure, detail));
         }
     }
 }
@@ -608,12 +629,17 @@ impl PayjoinActor {
 
             let (post_response, post_ctx) =
                 match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {
-                    sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
+                    sender.create_v2_post_request(relay)
                 })
                 .await
                 {
                     Ok(pair) => pair,
-                    Err(e) => {
+                    Err(RelayRoundError::SessionExpired) => {
+                        warn!("payjoin POST: receiver's session already expired");
+                        send!(addr.complete_with_fallback_msg());
+                        return;
+                    }
+                    Err(RelayRoundError::AllRelaysFailed(e)) => {
                         warn!("payjoin POST: all relays failed: {e}");
                         send!(addr.complete_with_fallback_msg());
                         return;
@@ -884,6 +910,10 @@ pub(crate) fn resume_session(
     let persister = PayjoinSessionPersister::new(db.clone());
     let (session, history) = match replay_event_log(&persister) {
         Ok(pair) => pair,
+        Err(error) if error.is_expired() => {
+            warn!("payjoin session expired before resume, broadcasting fallback");
+            return fallback_from_record(&db, record);
+        }
         Err(error) => {
             warn!("payjoin session replay failed, broadcasting fallback: {error:?}");
             return fallback_from_record(&db, record);
@@ -919,11 +949,17 @@ pub(crate) fn resume_session(
             )))
         }
 
+        // Cove never cancels through the library, but a replayed Cancelled event still means
+        // the original transaction is the one to broadcast
+        SendSession::PendingFallback(_) => SessionResumption::BroadcastFallback { fallback_tx },
+
         SendSession::Closed(SessionOutcome::Success(proposal_psbt)) => {
             SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx }
         }
 
-        SendSession::Closed(_) => SessionResumption::BroadcastFallback { fallback_tx },
+        SendSession::Closed(SessionOutcome::Aborted) => {
+            SessionResumption::BroadcastFallback { fallback_tx }
+        }
     }
 }
 
@@ -1013,7 +1049,7 @@ mod tests {
     use super::*;
     use crate::{database::wallet_data::test_support, wallet::metadata::WalletId};
     use bitcoin::{
-        ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
+        Amount, ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
     };
 
     // in-memory storage skips the process-global lifecycle coordinator, so these
@@ -1227,28 +1263,27 @@ mod tests {
         assert!(err.to_string().contains("recipient"), "expected 'recipient' in error, got: {err}");
     }
 
+    // valid BIP77 v2 endpoint from the payjoin crate's session test vectors, in the form
+    // cove_types stores it after parsing a pj= URI
+    const V2_ENDPOINT: &str = "https://payjo.in/TXJCGKTKXLUUZ#EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV";
+
     #[test]
-    fn test_endpoint_fragment_encoded() {
-        let endpoint = "https://example.com/pj#ohttp-keys".to_string();
-        let encoded = endpoint.replace('#', "%23");
-        assert_eq!(encoded, "https://example.com/pj%23ohttp-keys");
-        assert!(!encoded.contains('#'), "raw '#' must not appear in encoded endpoint");
+    fn v2_pj_param_accepts_a_bip77_endpoint() {
+        let pj_param = v2_pj_param(V2_ENDPOINT).expect("v2 endpoint parses");
+
+        assert_eq!(PjParam::V2(pj_param).endpoint(), V2_ENDPOINT);
     }
 
     #[test]
-    fn test_amount_satoshi_precision() {
-        let cases = [
-            (1u64, "0.00000001"),
-            (100, "0.00000100"),
-            (1_000_000, "0.01000000"),
-            (100_000_000, "1.00000000"),
-            (2_100_000_000_000_000u64, "21000000.00000000"),
-        ];
-        for (sats, expected) in cases {
-            let btc = Amount::from_sat(sats).to_btc();
-            let formatted = format!("{btc:.8}");
-            assert_eq!(formatted, expected, "sats={sats}");
-        }
+    fn v2_pj_param_rejects_a_bip78_endpoint() {
+        assert!(v2_pj_param("https://example.com/payjoin").is_err());
+    }
+
+    #[test]
+    fn v2_pj_param_rejects_a_stripped_fragment() {
+        let (without_fragment, _) = V2_ENDPOINT.split_once('#').unwrap();
+
+        assert!(v2_pj_param(without_fragment).is_err());
     }
 
     #[test]
@@ -1266,14 +1301,14 @@ mod tests {
         persister.create_session(&test_fallback_tx()).unwrap();
 
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
-        persister.save_event(PayjoinSessionEvent::Closed(SessionOutcome::Failure)).unwrap();
+        persister.save_event(PayjoinSessionEvent::Closed(SessionOutcome::Aborted)).unwrap();
 
         let events: Vec<_> = persister.load().unwrap().collect();
         assert_eq!(
             events,
             vec![
                 PayjoinSessionEvent::PostedOriginalPsbt(),
-                PayjoinSessionEvent::Closed(SessionOutcome::Failure)
+                PayjoinSessionEvent::Closed(SessionOutcome::Aborted)
             ]
         );
     }
