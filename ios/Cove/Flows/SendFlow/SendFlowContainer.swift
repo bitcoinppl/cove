@@ -76,9 +76,8 @@ private struct SendFlowLoadedView: View {
 
     private func applyRouteArguments(to sendFlowManager: SendFlowManager) async {
         switch sendRoute {
-        case let .setAmount(id: _, address: address, amount: amount):
-            if let address { sendFlowManager.setAddress(address) }
-            if let amount { sendFlowManager.setAmount(amount) }
+        case let .setAmount(id: _, request: request):
+            if let request { sendFlowManager.setPaymentRequest(request) }
         case let .coinControlSetAmount(id: _, utxos: utxos):
             await sendFlowManager.prepareCoinControl(utxos: utxos)
         default:
@@ -199,8 +198,8 @@ private struct SendFlowRouteView: View {
 
     var body: some View {
         switch sendRoute {
-        case let .setAmount(id: id, address: _, amount: amount):
-            SendFlowSetAmountScreen(id: id, amount: amount)
+        case let .setAmount(id: id, request: request):
+            SendFlowSetAmountScreen(id: id, amount: request?.amount())
         case let .coinControlSetAmount(id: id, utxos: utxos):
             SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
         case let .confirm(confirm):

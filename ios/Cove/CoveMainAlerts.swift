@@ -241,8 +241,8 @@ private struct AddressAlertActions: View {
         case let .addressWrongNetwork(address, _, _), let .noWalletSelected(address):
             CopyAddressActions(address: address, app: app)
 
-        case let .foundAddress(address, amount):
-            FoundAddressActions(address: address, amount: amount, app: app)
+        case let .foundAddress(request):
+            FoundAddressActions(request: request, app: app)
 
         case .noCameraPermission:
             CameraPermissionActions(app: app)
@@ -269,22 +269,19 @@ private struct CopyAddressActions: View {
 }
 
 private struct FoundAddressActions: View {
-    let address: Address
-    let amount: Amount?
+    let request: AddressWithNetwork
     let app: AppManager
 
     var body: some View {
         Button("Copy Address") {
-            UIPasteboard.general.string = String(address)
+            UIPasteboard.general.string = String(request.address())
         }
 
         if let walletId = Database().globalConfig().selectedWallet() {
             Button("Send To Address") {
-                let route = RouteFactory().sendSetAmount(
-                    id: walletId,
-                    address: address,
-                    amount: amount
-                )
+                // the whole request goes to the send flow, so its amount and Payjoin endpoint
+                // come along
+                let route = RouteFactory().sendSetAmount(id: walletId, request: request)
                 app.pushRoute(route)
                 app.alertState = .none
             }
