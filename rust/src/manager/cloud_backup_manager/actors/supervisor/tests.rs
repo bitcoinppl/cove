@@ -4553,7 +4553,13 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
 
     // nothing on the device held the second copy anymore, so it was restored rather than skipped
     assert!(local_wallet_exists(&second_wallet));
-    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+
+    // the delete reset the cloud-only cache, and a run that ends before the refetch lands keeps its
+    // marker until that fetch proves nothing is left, so on a loaded host it clears after the run
+    wait_for_test_condition(Duration::from_secs(5), "the Restore All marker should clear", || {
+        RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none()
+    })
+    .await;
 
     // the deleted wallet's record is cloud-only again, and the second wallet now covers it
     wait_for_cloud_only_statuses(&manager, &[(
