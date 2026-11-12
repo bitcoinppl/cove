@@ -1872,6 +1872,10 @@ mod tests {
             Produces::ok(())
         }
 
+        async fn payjoin_phase_is_idle_for_test(&mut self) -> ActorResult<bool> {
+            Produces::ok(self.payjoin_phase.is_idle())
+        }
+
         async fn cached_height_for_test(&mut self) -> ActorResult<Option<usize>> {
             Produces::ok(self.last_height_fetched().map(|(_, block_height)| block_height))
         }
@@ -2443,6 +2447,19 @@ mod tests {
         .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("broadcast request count is reached");
+    }
+
+    /// Wait until the actor has applied its Payjoin broadcast result and is idle again
+    async fn wait_for_payjoin_idle(addr: &Addr<super::WalletActor>) -> bool {
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(2));
+        loop {
+            let idle = call!(addr.payjoin_phase_is_idle_for_test()).await.expect("actor responds");
+            if idle || deadline.has_passed() {
+                return idle;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
     }
 
     fn restore_default_bitcoin_node() {
@@ -3326,15 +3343,10 @@ mod tests {
 
         // the send gate and failed-quiesce recovery resume the same way
         call!(addr.resume_payjoin_session()).await.expect("actor responds");
+        let idle = wait_for_payjoin_idle(&addr).await;
 
-        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(2));
-        while db.get_payjoin_sender_session().expect("payjoin session reads").is_some()
-            && !deadline.has_passed()
-        {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-
-        // a duplicate dispatch would broadcast after the first one is applied
+        // a duplicate dispatch posts to the local node right after the first, so this window
+        // is the signal on master, where it saw three posts
         tokio::time::sleep(Duration::from_millis(200)).await;
         let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
 
@@ -3344,6 +3356,7 @@ mod tests {
 
         result.expect("payjoin payment falls back");
         assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1, "fallback broadcasts");
+        assert!(idle, "the applied fallback returns the payjoin phase to idle");
         assert!(payjoin_session.is_none(), "the applied fallback clears its session record");
     }
 
@@ -3372,12 +3385,7 @@ mod tests {
         let held_broadcasts = pending_server.broadcast_requests.load(Ordering::SeqCst);
 
         pending_server.release.send(true).expect("pending broadcast request is listening");
-        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(2));
-        while db.get_payjoin_sender_session().expect("payjoin session reads").is_some()
-            && !deadline.has_passed()
-        {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        let idle = wait_for_payjoin_idle(&addr).await;
 
         let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
         pending_server.server.abort();
@@ -3385,6 +3393,7 @@ mod tests {
 
         assert_eq!(held_broadcasts, 1, "the duplicate dispatch does not post again");
         assert_eq!(pending_server.broadcast_requests.load(Ordering::SeqCst), 1);
+        assert!(idle, "the applied broadcast returns the payjoin phase to idle");
         assert!(payjoin_session.is_none(), "the applied broadcast clears its session record");
     }
 
