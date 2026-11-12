@@ -14,6 +14,7 @@ use super::{
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
 use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
+use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
@@ -352,6 +353,37 @@ impl RustCloudBackupManager {
         }
 
         Ok(report)
+    }
+}
+
+/// What `record_id` reads as with `reader`, which holds the key the configuration verified, for
+/// the inventory owner; a readable record is classified the way a fetch classifies it
+///
+/// A provider-wide interruption says nothing about the record, so it is the error that stops the
+/// caller instead of a read
+pub(crate) async fn read_record(
+    reader: &WalletBackupReader,
+    record_id: &str,
+    local_wallets: &LocalWalletIdentities,
+) -> Result<RecordRead, CloudStorageError> {
+    match reader.read(record_id).await {
+        Ok(WalletBackupLookup::Found(wallet)) => {
+            let row = listed_wallet_row(wallet, record_id.to_owned(), local_wallets);
+            Ok(RecordRead::Readable(Box::new(row)))
+        }
+        Ok(WalletBackupLookup::NotFound) => Ok(RecordRead::Absent),
+        Ok(WalletBackupLookup::UnsupportedVersion(_)) => Ok(RecordRead::Unsupported),
+        Err(WalletBackupReadError::Decrypt(_)) => Ok(RecordRead::Undecryptable),
+        Err(WalletBackupReadError::Download(source)) if is_provider_wide_interruption(&source) => {
+            Err(source)
+        }
+
+        // a parse failure may come before decryption, so it says nothing about the key
+        Err(error) => {
+            let kind = CloudBackupUnreadableKind::from(&error);
+            warn!("Read an unreadable wallet backup: {}", CloudBackupError::from(error));
+            Ok(RecordRead::Unreadable(kind))
+        }
     }
 }
 

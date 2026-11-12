@@ -10,8 +10,10 @@ mod listing;
 
 use std::collections::{HashMap, HashSet};
 
+use self::listing::CloudOnlyRecord;
 pub(crate) use self::listing::{
-    CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow, UnreadableRead,
+    CloudOnlyFetch, CloudOnlyInventory, CloudOnlyListingUpdate, CloudOnlyRow, RecordRead,
+    RecordReads,
 };
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::DetailInventory;
@@ -169,11 +171,12 @@ pub(crate) enum InventoryInput {
     },
     /// A restore started for these records, so their earlier failures are gone
     CloudOnlyRestoreFailuresCleared(Vec<String>),
-    /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
+    /// Cloud-only rows no longer belong to any known listing, such as after a delete, disable or
+    /// reset, so loaded rows are read again
     CloudOnlyInventoryInvalidated,
-    /// A read with a verified key found records it could not decrypt, applied only if its
-    /// listing is still current
-    UnreadableRecordsVerified(UnreadableRead),
+    /// Records read with the key the configuration verified, applied only if their listing and
+    /// configuration are still current
+    RecordsRead(RecordReads),
     /// The local wallet set changed, so the listing and any loaded rows may now count a record as
     /// cloud-only, restorable, or a duplicate when it no longer is, and the detail may list a
     /// wallet as local that is gone
@@ -434,17 +437,14 @@ impl InventoryOwner {
             InventoryInput::CloudOnlyRestoreFailuresCleared(record_ids) => {
                 self.clear_cloud_only_restore_failures(&record_ids);
             }
+            // the loaded rows stay drawn, without a Delete, until the fetch this asks for replaces
+            // them
             InventoryInput::CloudOnlyInventoryInvalidated => {
                 self.cloud_only_inventory.invalidate();
                 self.cloud_only_failures_awaiting_refetch.clear();
+                return true;
             }
-            InventoryInput::UnreadableRecordsVerified(read) => {
-                // a listing or local wallet change since the read moved the generation, so the
-                // read may name a record that is now a local wallet's own
-                if !self.cloud_only_inventory.record_unreadable(read) {
-                    debug!("Cloud Backup dropped an unreadable read made under an older listing");
-                }
-            }
+            InventoryInput::RecordsRead(reads) => self.apply_record_reads(reads),
             InventoryInput::LocalWalletsChanged { local_record_ids } => {
                 return self.apply_local_wallets_changed(local_record_ids.as_ref());
             }
@@ -606,11 +606,6 @@ impl InventoryOwner {
     /// Whether the loaded cloud-only rows were read under the latest listing
     pub(crate) fn loaded_rows_are_current(&self) -> bool {
         self.cloud_only_inventory.loaded_rows_are_current()
-    }
-
-    /// The last verified read of undecryptable records, while its listing is current
-    pub(crate) fn verified_unreadable(&self) -> Option<&UnreadableRead> {
-        self.cloud_only_inventory.verified_unreadable()
     }
 
     /// Whether the provider confirmed the listing the detail was built from
@@ -969,6 +964,49 @@ impl InventoryOwner {
         self.cloud_only_failures_awaiting_refetch.extend(failures);
         self.resolve_cloud_only_state(CloudOnlyState::NotFetched);
         true
+    }
+
+    /// Replaces each read record's row with what the read found, its classification and key
+    /// trust together
+    ///
+    /// A changed row changes the category a Delete offered on it named, so that consent no
+    /// longer holds; the row offers what its new record allows
+    fn apply_record_reads(&mut self, reads: RecordReads) {
+        let RecordReads { listing_generation, configuration, reads } = reads;
+
+        // the reads describe records of an older listing or another configuration's key
+        if listing_generation != self.cloud_only_inventory.generation()
+            || InventoryScope::of(configuration) != self.scope
+        {
+            debug!("Cloud Backup dropped record reads made under an older inventory");
+            return;
+        }
+
+        let CloudOnlyState::Loaded { mut rows, incomplete, namespace_id } = self.cloud_only()
+        else {
+            return;
+        };
+
+        for (record_id, read) in reads {
+            // the reads are of records the batch confirmed unreadable, so a row a later fetch
+            // read as something else is newer than the read and stays
+            let Some(index) = rows.iter().position(|row| {
+                row.record_id == record_id
+                    && matches!(row.record, CloudOnlyRecord::Unreadable { .. })
+            }) else {
+                continue;
+            };
+
+            match read.record() {
+                Some(record) => rows[index].record = record,
+                None => {
+                    rows.remove(index);
+                    self.cloud_only_inventory.forget_record(&record_id);
+                }
+            }
+        }
+
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete, namespace_id });
     }
 
     fn apply_detail_cleared(&mut self) {

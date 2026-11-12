@@ -1,17 +1,19 @@
 use cove_device::cloud_storage::CloudStorageClient;
 
 use super::*;
-use crate::manager::cloud_backup_manager::actors::{Relist, RowDeleteReport};
+use crate::manager::cloud_backup_manager::actors::RowDeleteReport;
 use crate::manager::cloud_backup_manager::owner::delete_authorization::{
     DeleteAuthorization, StaleTarget,
 };
 use crate::manager::cloud_backup_manager::owner::inventory::InventoryInput;
+use crate::manager::cloud_backup_manager::screen::CloudBackupOutcome;
 use crate::manager::cloud_backup_manager::{
     CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState, InventoryScope,
 };
 
 impl CloudBackupSupervisor {
-    /// Starts a fetch when the cache is unloaded and the detail inventory can say what to fetch
+    /// Starts a fetch when the rows aren't a read of the latest listing and the detail inventory
+    /// can say what to fetch
     pub async fn ensure_cloud_only_fetch(&mut self) -> ActorResult<()> {
         if let Some(manager) = self.manager() {
             self.begin_cloud_only_fetch_if_needed(manager);
@@ -20,22 +22,36 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    /// The fetch is the inventory owner's refresh: it lists silently, so it never waits on a
+    /// consent sheet, and holds neither the write lane nor an operation, so one that never
+    /// answers keeps nothing else waiting. A newer listing replaces it
     pub(crate) fn begin_cloud_only_fetch_if_needed(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
     ) {
-        if self.active_cloud_only_fetch_request.is_some()
-            || !manager.detail_inventory_is_ready()
-            || !matches!(
-                manager.inventory.read().cloud_only(),
-                CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
-            )
-        {
+        if !manager.detail_inventory_is_ready() {
             return;
         }
 
-        let cloud = CloudStorage::global_silent_client();
-        self.begin_cloud_only_fetch(manager, cloud);
+        let needed = {
+            let inventory = manager.inventory.read();
+            let listing_generation = inventory.cloud_only_listing_generation();
+
+            match self.active_cloud_only_fetch_request {
+                // a fetch started under an older listing can only be discarded when it lands
+                Some(active) => active.listing_generation != listing_generation,
+                None => match inventory.cloud_only() {
+                    CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. } => true,
+                    CloudOnlyState::Loaded { .. } => !inventory.loaded_rows_are_current(),
+                    CloudOnlyState::Loading => false,
+                },
+            }
+        };
+
+        if needed {
+            let cloud = CloudStorage::global_silent_client();
+            self.begin_cloud_only_fetch(manager, cloud);
+        }
     }
 
     fn begin_cloud_only_fetch(
@@ -43,15 +59,16 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         cloud: CloudStorageClient,
     ) {
-        let request_id = self.next_request_id();
-        self.active_cloud_only_fetch_request = Some(request_id);
-
         // read before the fetch is spawned so a listing or configuration change while it runs
         // makes it stale
         let (scope, listing_generation) = {
             let inventory = manager.inventory.read();
             (inventory.scope(), inventory.cloud_only_listing_generation())
         };
+
+        let request_id = self.next_request_id();
+        self.active_cloud_only_fetch_request =
+            Some(CloudOnlyFetchRequest { id: request_id, listing_generation });
         manager.apply_cloud_only_fetch_outcome(scope, CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
@@ -143,7 +160,7 @@ impl CloudBackupSupervisor {
         scope: InventoryScope,
         result: Result<CloudOnlyFetch, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_cloud_only_fetch_request != Some(request_id) {
+        if self.active_cloud_only_fetch_request.map(|active| active.id) != Some(request_id) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -187,44 +204,37 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
+        // the operation ends at the provider's answer; the rows are read again by the inventory
+        // owner's own fetch, which holds neither this operation nor the lane. A delete that
+        // deleted nothing says why next to its row's Delete, through the screen outcome, which
+        // that fetch doesn't touch
         match result {
-            Ok(RowDeleteReport::Removed { relist, .. }) => {
-                if relist == Relist::Failed {
-                    warn!("Deleted cloud wallet, but the new backup count is unknown");
-                }
-
+            Ok(RowDeleteReport::Removed { .. }) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Deleted { record_id },
                 );
+                manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
                 manager.refresh_sync_health();
             }
 
-            // nothing was deleted; the refresh below reads the rows as they are now
+            // nothing was deleted
             Ok(RowDeleteReport::StaleTarget(stale)) => {
                 info!("Cloud Backup row delete went stale before it ran: {stale:?}");
-                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    STALE_ROW_DELETE_MESSAGE.into(),
-                ));
+                let message = STALE_ROW_DELETE_MESSAGE.into();
+                self.screen_outcome.operation_ended(claim, CloudBackupOutcome::Failed { message });
+                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Stopped);
                 manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
             }
 
             Err(error) => {
-                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.logged_reader_message("Failed to delete cloud wallet"),
-                ));
-                self.runtime.finish(claim);
-                manager.project_exclusive_operation_finished(claim);
-                return Produces::ok(());
+                error.logged_reader_message("Failed to delete cloud wallet");
+                self.screen_outcome.operation_failed(claim, &error);
+                manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Stopped);
             }
         }
 
-        let detail_claim = self.detail_workflow.start_operation_result(manager.inventory_scope());
-        let config = self.runtime.generation();
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.refresh_cloud_backup_detail(config).await;
-            send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-        });
-
+        self.runtime.finish(claim);
+        manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
 
@@ -295,6 +305,13 @@ impl CloudBackupSupervisor {
 
         Produces::ok(())
     }
+}
+
+/// The cloud-only fetch in flight, and the listing it reads under
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CloudOnlyFetchRequest {
+    pub(crate) id: u64,
+    pub(crate) listing_generation: u64,
 }
 
 /// What a row says when its confirmed delete no longer matched the backup when it ran

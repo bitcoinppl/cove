@@ -13,7 +13,7 @@ mod restore;
 mod sync;
 mod undecryptable_wallets;
 
-pub(crate) use cloud_only::CloudBackupPreparedRestoreAll;
+pub(crate) use cloud_only::{CloudBackupPreparedRestoreAll, read_record};
 pub(crate) use disable::{
     CLOUD_BACKUP_LOAD_FAILED_MESSAGE, DISABLE_EVIDENCE_DEADLINE, next_disable_generation,
 };
@@ -28,6 +28,7 @@ pub(crate) use enable::{
 pub(crate) use sync::CloudBackupReuploadedWallets;
 pub(crate) use undecryptable_wallets::{
     BatchDeleteReport, BatchStop, CloudBackupPreparedUndecryptableWalletDeletion,
+    UndecryptablePreparationFailed,
 };
 
 const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =

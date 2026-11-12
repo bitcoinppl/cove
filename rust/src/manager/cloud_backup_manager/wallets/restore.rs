@@ -76,6 +76,13 @@ pub(crate) struct WalletBackupReader {
     critical_key: Zeroizing<[u8; 32]>,
 }
 
+// the key never reaches a log
+impl std::fmt::Debug for WalletBackupReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WalletBackupReader").field("namespace", &self.namespace).finish()
+    }
+}
+
 impl WalletBackupReader {
     pub(crate) fn new(
         cloud: CloudStorageClient,

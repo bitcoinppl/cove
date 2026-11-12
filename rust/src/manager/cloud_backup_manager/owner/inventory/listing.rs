@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 
@@ -177,21 +177,52 @@ pub(crate) struct CloudOnlyInventory {
     /// Listing generation the loaded rows were read or kept under, complete or not, unset when
     /// no rows are loaded
     rows_generation: Option<u64>,
-    /// The records the last verified read could not decrypt, while its listing is current
-    verified_unreadable: Option<UnreadableRead>,
 }
 
-/// Records a key this configuration verified failed to decrypt, read under one listing
+/// What reading one listed record with the key this configuration verified found
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RecordRead {
+    /// It decrypted and parsed, so it is the row the fetch's classifier made of it
+    Readable(Box<CloudOnlyRow>),
+    /// The provider no longer has it
+    Absent,
+    /// A newer Cove wrote it
+    Unsupported,
+    /// The verified key failed to decrypt it
+    Undecryptable,
+    /// It failed at a stage that says nothing about the key
+    Unreadable(CloudBackupUnreadableKind),
+}
+
+impl RecordRead {
+    /// The record a row shows for this read, or `None` when the provider no longer lists it
+    pub(crate) fn record(self) -> Option<CloudOnlyRecord> {
+        match self {
+            Self::Readable(row) => Some(row.record),
+            Self::Absent => None,
+            Self::Unsupported => Some(CloudOnlyRecord::Unsupported),
+            Self::Undecryptable => Some(CloudOnlyRecord::Unreadable {
+                kind: CloudBackupUnreadableKind::Decrypt,
+                trust: CloudBackupKeyTrust::VerifiedCurrentKey,
+            }),
+            Self::Unreadable(kind) => {
+                Some(CloudOnlyRecord::Unreadable { kind, trust: CloudBackupKeyTrust::Unverified })
+            }
+        }
+    }
+}
+
+/// Listed records read with the key a configuration verified, under one listing
 ///
 /// The reader takes the listing generation before it reads the local wallets, so a wallet
-/// change during the read moves the generation and the read is dropped instead of naming a
-/// record that became a local wallet's own
+/// change during the read moves the generation and the reads are dropped instead of describing
+/// a record that became a local wallet's own
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct UnreadableRead {
+pub(crate) struct RecordReads {
     pub(crate) listing_generation: u64,
-    /// The configuration whose verified key failed to decrypt the records
+    /// The configuration whose verified key read the records
     pub(crate) configuration: ConfigGeneration,
-    pub(crate) record_ids: BTreeSet<String>,
+    pub(crate) reads: BTreeMap<String, RecordRead>,
 }
 
 impl CloudOnlyInventory {
@@ -211,7 +242,6 @@ impl CloudOnlyInventory {
         self.generation += 1;
         self.listed_record_ids = None;
         self.complete_fetch_generation = None;
-        self.verified_unreadable = None;
     }
 
     /// Records a fetch applied under the current generation as the loaded proof, but only when
@@ -269,21 +299,6 @@ impl CloudOnlyInventory {
     /// is, but rows read under a listing since replaced or forgotten say nothing
     pub(crate) fn loaded_rows_are_current(&self) -> bool {
         self.rows_generation == Some(self.generation)
-    }
-
-    /// Keeps a verified read made under the current listing, returning whether it was kept
-    pub(crate) fn record_unreadable(&mut self, read: UnreadableRead) -> bool {
-        if read.listing_generation != self.generation {
-            return false;
-        }
-
-        self.verified_unreadable = Some(read);
-        true
-    }
-
-    /// The last verified read, while the listing it was made under is still current
-    pub(crate) fn verified_unreadable(&self) -> Option<&UnreadableRead> {
-        self.verified_unreadable.as_ref().filter(|read| read.listing_generation == self.generation)
     }
 
     /// Whether loaded rows are a complete read of exactly the latest listing

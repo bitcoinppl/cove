@@ -1,10 +1,13 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use super::cloud_only::STALE_ROW_DELETE_MESSAGE;
 use super::*;
-use crate::manager::cloud_backup_manager::ops::{BatchDeleteReport, BatchStop};
+use crate::manager::cloud_backup_manager::ops::{
+    BatchDeleteReport, BatchStop, UndecryptablePreparationFailed,
+};
 use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
-use crate::manager::cloud_backup_manager::owner::inventory::{InventoryInput, UnreadableRead};
+use crate::manager::cloud_backup_manager::owner::inventory::{InventoryInput, RecordReads};
+use crate::manager::cloud_backup_manager::screen::CloudBackupOutcome;
 
 impl CloudBackupSupervisor {
     /// Deletes those of the batch the user confirmed that still fail to decrypt
@@ -44,7 +47,10 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         consent: CloudBackupBatchDeleteConsent,
-        result: Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError>,
+        result: Result<
+            CloudBackupPreparedUndecryptableWalletDeletion,
+            UndecryptablePreparationFailed,
+        >,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
@@ -52,13 +58,16 @@ impl CloudBackupSupervisor {
 
         let prepared = match result {
             Ok(prepared) => prepared,
-            Err(error) => {
+            // what the preparation read before it stopped replaces the rows it read, so a record
+            // read readable loses its unreadable Delete; nothing is authorized
+            Err(UndecryptablePreparationFailed { reads, error }) => {
+                manager.apply_inventory(InventoryInput::RecordsRead(reads));
                 self.fail_delete_undecryptable_wallet_backups(&manager, claim, error);
                 return Produces::ok(());
             }
         };
 
-        let authorization = match self.freeze_unreadable_batch(&manager, &consent, prepared.read())
+        let authorization = match self.freeze_unreadable_batch(&manager, &consent, prepared.reads())
         {
             Ok(authorization) => authorization,
             Err(message) => {
@@ -96,20 +105,39 @@ impl CloudBackupSupervisor {
         };
 
         let BatchDeleteReport { removed, stopped } = report;
+
+        // records the batch removed, or a stale one, leave the rows behind the provider, so the
+        // inventory owner reads them again; that read holds neither this operation nor the lane
+        if removed > 0 || matches!(stopped, Some(BatchStop::StaleTarget(_))) {
+            manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
+        }
+
         match stopped {
             None => self.finish_delete_undecryptable_wallet_backups(manager, claim),
             Some(BatchStop::StaleTarget(stale)) => {
                 info!("Cloud Backup batch delete stopped after {removed} record(s): {stale:?}");
-                manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
-                self.fail_delete_undecryptable_wallet_backups_with(
-                    &manager,
-                    claim,
-                    STALE_ROW_DELETE_MESSAGE.into(),
-                );
+                let message = match removed {
+                    0 => STALE_ROW_DELETE_MESSAGE.into(),
+                    removed => format!(
+                        "{}, then stopped because your backups changed. Check again before deleting the rest.",
+                        deleted_backups(removed)
+                    ),
+                };
+
+                self.fail_delete_undecryptable_wallet_backups_with(&manager, claim, message);
             }
+            Some(BatchStop::Failed(error)) if removed == 0 => {
+                info!("Cloud Backup batch delete failed before it removed a record");
+                self.fail_delete_undecryptable_wallet_backups(&manager, claim, error);
+            }
+
+            // the records already removed stay removed, so the notice says so
             Some(BatchStop::Failed(error)) => {
                 info!("Cloud Backup batch delete failed after {removed} record(s)");
-                self.fail_delete_undecryptable_wallet_backups(&manager, claim, error);
+                let reason =
+                    error.logged_reader_message("Failed to delete undecryptable wallet backups");
+                let message = format!("{}, then stopped. {reason}", deleted_backups(removed));
+                self.fail_delete_undecryptable_wallet_backups_with(&manager, claim, message);
             }
         }
 
@@ -119,27 +147,27 @@ impl CloudBackupSupervisor {
     /// The listing and configuration a batch preparation reads under, taken before it reads the
     /// local wallets, so a wallet change while it reads makes its result stale instead of naming
     /// a record that became a wallet's own
-    pub(crate) fn start_unreadable_read(&self, manager: &RustCloudBackupManager) -> UnreadableRead {
-        UnreadableRead {
+    pub(crate) fn start_unreadable_read(&self, manager: &RustCloudBackupManager) -> RecordReads {
+        RecordReads {
             listing_generation: manager.inventory.read().cloud_only_listing_generation(),
             configuration: self.runtime.generation(),
-            record_ids: BTreeSet::new(),
+            reads: BTreeMap::new(),
         }
     }
 
     /// Hands what the preparation read to the inventory owner and freezes the batch to the
-    /// confirmed records that read still holds as undecryptable
+    /// confirmed records the owner now holds as undecryptable by the verified key
     ///
-    /// The preparation only read. The owner keeps the read only under the listing it was made
-    /// under, and the view trusts it only under the configuration it was made under, so the
-    /// authorization never rests on a read from an older inventory
+    /// The preparation only read. The owner applies the reads only under the listing and
+    /// configuration they were made under, so the authorization never rests on a read from an
+    /// older inventory
     pub(crate) fn freeze_unreadable_batch(
         &mut self,
         manager: &RustCloudBackupManager,
         consent: &CloudBackupBatchDeleteConsent,
-        read: &UnreadableRead,
+        reads: &RecordReads,
     ) -> Result<Arc<DeleteAuthorization>, String> {
-        manager.apply_inventory(InventoryInput::UnreadableRecordsVerified(read.clone()));
+        manager.apply_inventory(InventoryInput::RecordsRead(reads.clone()));
 
         let view = manager
             .delete_view(self.runtime.generation())
@@ -190,10 +218,25 @@ impl CloudBackupSupervisor {
         error: CloudBackupError,
     ) {
         let message = error.logged_reader_message("Failed to delete undecryptable wallet backups");
-        self.fail_delete_undecryptable_wallet_backups_with(manager, claim, message);
+        self.screen_outcome.operation_failed(claim, &error);
+        self.end_failed_undecryptable_batch(manager, claim, message);
     }
 
+    /// Ends the batch with `message`, shown next to the control that started it
     fn fail_delete_undecryptable_wallet_backups_with(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        message: String,
+    ) {
+        let outcome = CloudBackupOutcome::Failed { message: message.clone() };
+        self.screen_outcome.operation_ended(claim, outcome);
+        self.end_failed_undecryptable_batch(manager, claim, message);
+    }
+
+    /// Records the failed batch and finishes its operation, which publishes the screen with the
+    /// outcome already recorded
+    fn end_failed_undecryptable_batch(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
@@ -204,5 +247,13 @@ impl CloudBackupSupervisor {
         );
         self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
+    }
+}
+
+/// How many inaccessible backups a batch deleted before it stopped, in the user's words
+fn deleted_backups(removed: u32) -> String {
+    match removed {
+        1 => "Deleted 1 inaccessible wallet backup".into(),
+        removed => format!("Deleted {removed} inaccessible wallet backups"),
     }
 }

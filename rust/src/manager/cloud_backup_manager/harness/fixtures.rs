@@ -20,6 +20,7 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupStore,
+    CloudBackupWalletVerificationIssues, DeepVerificationReport, VerificationState,
 };
 use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
 use crate::network::Network;
@@ -118,6 +119,62 @@ impl FakeAccount {
 
         SeededAccount { namespace, local: local_records, not_on_device }
     }
+}
+
+/// Writes `count` backups of wallets this device doesn't have under a key it doesn't hold, lists
+/// them beside `account`'s records, and reports them the way a verification that couldn't
+/// decrypt them does
+///
+/// Returns their record ids in record order, the order a batch delete takes them in
+pub(crate) fn seed_undecryptable_records(
+    app: &TestApp,
+    account: &SeededAccount,
+    count: usize,
+) -> Vec<String> {
+    let other_key = cove_cspp::master_key::MasterKey::generate();
+    let target = Database::global().global_config.wallet_target();
+    let mut record_ids = Vec::with_capacity(count);
+    for _ in 0..count {
+        let wallet = DistinctWallet::new(target.network);
+        let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+        let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+        entry.xpub = Some(wallet.xpub.to_string());
+
+        let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &other_key, 1);
+        app.cloud.inner.set_wallet_backup(account.namespace.clone(), record_id.clone(), backup);
+        record_ids.push(record_id);
+    }
+
+    record_ids.sort();
+    let files = account
+        .local
+        .iter()
+        .map(|record| record.record_id.as_str())
+        .chain(account.not_on_device.iter().map(String::as_str))
+        .chain(record_ids.iter().map(String::as_str))
+        .map(wallet_filename_from_record_id)
+        .collect();
+
+    app.cloud.inner.set_wallet_files(account.namespace.clone(), files);
+    app.cloud.persist();
+
+    let decryption_failed = u32::try_from(count).expect("record count fits u32");
+    app.manager().apply_verification_state(VerificationState::NeedsAttention(
+        DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 0,
+            wallet_issues: CloudBackupWalletVerificationIssues {
+                decryption_failed,
+                ..CloudBackupWalletVerificationIssues::default()
+            },
+            detail: None,
+        },
+    ));
+    app.settle();
+
+    record_ids
 }
 
 /// What [`FakeAccount::seed_records`] put in the cloud

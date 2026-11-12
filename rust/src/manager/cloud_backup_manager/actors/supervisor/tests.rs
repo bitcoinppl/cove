@@ -2181,7 +2181,8 @@ async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.active_cloud_only_fetch_request = Some(7);
+    let active = fetch_in_flight(&manager, 7);
+    supervisor.active_cloud_only_fetch_request = Some(active);
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -2192,7 +2193,7 @@ async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_cloud_only_fetch_request, Some(7));
+    assert_eq!(supervisor.active_cloud_only_fetch_request, Some(active));
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -3500,7 +3501,8 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
         manager.inventory_scope(),
         CloudBackupDetailOutcome::refreshed(listed_detail(&[])),
     );
-    supervisor.active_cloud_only_fetch_request = Some(7);
+    let active = fetch_in_flight(&manager, 7);
+    supervisor.active_cloud_only_fetch_request = Some(active);
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -3525,7 +3527,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
     );
     let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     manager.apply_restore_all_started(claim, 2);
-    supervisor.active_cloud_only_fetch_request = Some(10);
+    supervisor.active_cloud_only_fetch_request = Some(fetch_in_flight(&manager, 10));
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -3553,7 +3555,7 @@ async fn cloud_only_refetch_retains_restore_all_marker_when_wallets_remain() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.active_cloud_only_fetch_request = Some(8);
+    supervisor.active_cloud_only_fetch_request = Some(fetch_in_flight(&manager, 8));
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -3576,7 +3578,7 @@ async fn cloud_only_refetch_failure_retains_restore_all_marker() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.active_cloud_only_fetch_request = Some(9);
+    supervisor.active_cloud_only_fetch_request = Some(fetch_in_flight(&manager, 9));
 
     supervisor
         .complete_cloud_only_fetch_request(
@@ -4282,7 +4284,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.active_cloud_only_fetch_request = Some(5);
+    supervisor.active_cloud_only_fetch_request = Some(fetch_in_flight(&manager, 5));
     let stale_fetch = complete_cloud_only_fetch(
         &manager,
         vec![test_cloud_only_wallet(a), test_cloud_only_wallet(b)],
@@ -4337,7 +4339,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.active_cloud_only_fetch_request = Some(3);
+    supervisor.active_cloud_only_fetch_request = Some(fetch_in_flight(&manager, 3));
     let generation = manager.inventory.read().cloud_only_listing_generation();
     let fetch = manager
         .do_fetch_cloud_only_wallets_with_client(CloudStorage::global_silent_client(), generation)
@@ -5741,4 +5743,13 @@ async fn row_delete_consent(
             CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
             _ => None,
         })
+}
+
+/// A cloud-only fetch in flight under the listing `manager` holds now
+fn fetch_in_flight(
+    manager: &RustCloudBackupManager,
+    id: u64,
+) -> super::cloud_only::CloudOnlyFetchRequest {
+    let listing_generation = manager.inventory.read().cloud_only_listing_generation();
+    super::cloud_only::CloudOnlyFetchRequest { id, listing_generation }
 }

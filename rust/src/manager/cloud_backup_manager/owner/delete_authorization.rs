@@ -21,7 +21,9 @@ use crate::manager::cloud_backup_manager::delete_consent::{
     CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupDeleteEvidence,
     CloudBackupRowDeleteConsent,
 };
-use crate::manager::cloud_backup_manager::owner::inventory::{InventoryReadAt, UnreadableRead};
+use crate::manager::cloud_backup_manager::owner::inventory::{
+    InventoryReadAt, RecordRead, RecordReads,
+};
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 
 /// Generation of the cloud-only listing a row was classified under
@@ -47,9 +49,6 @@ pub(crate) struct DeleteView {
     /// The category each listed record would be deleted as now, keyed by record ID; a row that
     /// offers no Delete, or one listed in another namespace, has no entry
     pub(crate) rows: BTreeMap<String, CloudBackupDeleteCategory>,
-    /// The verified read the owner holds under this listing and configuration, the only one a
-    /// batch may delete from
-    pub(crate) verified_read: Option<UnreadableRead>,
 }
 
 impl DeleteView {
@@ -58,13 +57,13 @@ impl DeleteView {
         self.rows.get(record_id).copied()
     }
 
-    /// Whether the verified read holds `record_id` and the view still deletes it as undecryptable
+    /// Whether the view deletes `record_id` as one the configuration's verified key failed to
+    /// decrypt, which only a read with that key can make it
     fn still_undecryptable(&self, record_id: &str) -> bool {
         let undecryptable =
             CloudBackupDeleteCategory::Unreadable { kind: CloudBackupUnreadableKind::Decrypt };
 
-        self.verified_read.as_ref().is_some_and(|read| read.record_ids.contains(record_id))
-            && self.category_of(record_id) == Some(undecryptable)
+        self.category_of(record_id) == Some(undecryptable)
     }
 }
 
@@ -123,6 +122,18 @@ impl DeleteAuthorization {
     /// The records frozen at confirmation, in a stable order
     pub(crate) fn record_ids(&self) -> impl Iterator<Item = &str> {
         self.record_ids.iter().map(String::as_str)
+    }
+
+    /// `read` of `record_id`, made after this authorization held, for the inventory owner
+    ///
+    /// Stamped with the listing and configuration it held under, so the owner drops the read
+    /// once either moved
+    pub(crate) fn read_of(&self, record_id: String, read: RecordRead) -> RecordReads {
+        RecordReads {
+            listing_generation: self.listing.0,
+            configuration: self.configuration,
+            reads: BTreeMap::from([(record_id, read)]),
+        }
     }
 
     /// Whether every record it names may be deleted now, against `current`

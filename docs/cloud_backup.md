@@ -1108,8 +1108,17 @@ the same rule, so a row the screen offers is a row the lane deletes:
 | Unreadable (not downloadable or provider failure) | no Delete: check again |
 | Not checked yet | no Delete: verify first |
 
-A decrypt failure counts as one of the verified key when the verified read of
-this configuration, the one Delete Undecryptable makes, holds the record.
+A decrypt failure counts as one of the verified key when the row itself says
+so. The inventory owner keeps one fact per record: what its latest read found,
+readable, gone, an unsupported version, or failed and at which stage, and for a
+decrypt failure whether the key it failed under is the one this configuration
+verified. Delete Undecryptable's reads arrive as `RecordReads`, and each one
+replaces the row of a record still shown as unreadable, so the row's category,
+its key trust and the consent its Delete carries all change together. A read
+that finds the record readable makes the row what it now is, such as Not on
+This Device, and the Delete offered on the unreadable row no longer holds. A
+row a later fetch already read as something else is newer than the read, and
+stays.
 
 A public-only wallet never covers a seed backup. Until a read finds the covering
 wallet's own backup current, deleting the copy could delete the only backup of
@@ -1136,8 +1145,6 @@ read, the configuration generation, and the category. It is checked against a
 - the category each row listed in the active namespace would be deleted as now,
   read through the same rule the screen draws with, but only while the rows were
   read under the latest listing
-- the verified read of undecryptable records the owner holds, under this
-  configuration only
 
 Delete Cloud Wallet's dispatch builds the authorization from the row's consent
 and checks it against the view. If the namespace, the listing, where the
@@ -1145,7 +1152,8 @@ inventory was read, the configuration, or the record's category moved, the
 delete is rejected as `ReviewStale` next to its control and nothing starts. The
 turn that starts the delete operation builds the authorization again from the
 same consent. Rows an invalidation left on screen offer no Delete, and a
-consent from before it authorizes nothing, until a fetch reads them again.
+consent from before it authorizes nothing, until a fetch reads them again. The
+invalidation has the inventory owner start that fetch itself (see below).
 
 ### Execution check
 
@@ -1154,12 +1162,24 @@ reads the view again and checks the authorization against it. The namespace,
 the listing generation, where the inventory was read, and the configuration
 must be unchanged, and the record must still be deletable in the same category.
 Otherwise the command answers `StaleTarget` and deletes nothing; a view the
-lane can't read counts as stale too. The row says the backup changed and asks
-to check again, and the inventory is invalidated, so it's read again.
+lane can't read counts as stale too. The row's Delete says the backup changed
+and asks to check again, and the inventory is invalidated, so it's read again.
+A delete the provider fails says why at the row's Delete too. The screen
+outcome holds both messages, as it holds a batch's, so reading the rows again
+doesn't clear them; the next accepted tap replaces them.
 
-A record that's already gone counts as deleted. The relist that follows a
-delete is reported apart from the delete: when the relist fails, the record is
-still gone, the row is still removed, and only the backup count stays as it was.
+A record that's already gone counts as deleted. A row delete ends when the
+provider answers it: the row is removed, the operation's claim is released, and
+the inventory is invalidated. The lane never lists the backups after a delete.
+Reading the rows again is the inventory owner's effect: any invalidation, from
+a row delete, a batch that removed a record, or a stale target, starts the
+silent cloud-only fetch. That fetch asks for no passkey, holds no lane slot and
+no operation, and a fetch still running under an older listing is replaced by
+one under the newer listing rather than waited for. So a listing that never
+answers leaves the rows without Delete and the count as it was, and never
+holds the lane, another operation or Turn Off. A delete doesn't record a new
+backup count; the count stays the last one recorded until a finished upload
+lists the backups again.
 
 ### Frozen batches
 
@@ -1170,22 +1190,27 @@ offers at that moment. Before it reads anything, it takes the listing
 generation and the configuration. Then it reads the local wallets and only the
 records the consent names. The inventory owner keeps what it read only if the
 listing hasn't changed since, so a wallet imported during the read can't leave
-its own backup named as unreadable. The view trusts the read only under the
-configuration it was made under.
+its own backup named as unreadable. The owner also drops reads made under
+another configuration. Every confirmed record not on this device is read, and
+each read, readable or not, goes to the owner as that record's fact.
 
 The authority then builds the authorization from the consent, keeping only the
-confirmed records that read holds and that the view still deletes as
-undecryptable. A confirmed record that reads again, that a later fetch
-classified as anything but a decrypt failure, or that a read the owner dropped
-named, is skipped, and the log counts the skipped records without naming them.
+confirmed records whose rows the view still deletes as undecryptable under the
+verified key. A confirmed record that reads again, that a later fetch
+classified as anything but a decrypt failure, or whose read the owner dropped,
+is skipped, and the log counts the skipped records without naming them.
 Deleting part of what the user confirmed never deletes anything they didn't. When
 nothing is left, nothing is deleted and the batch ends as a finished one does.
 
-The batch deletes the authorized records in record order, and reads each one
-again first, skipping a record that now decrypts or whose read fails for a
-reason other than decryption. A read that finds the provider unreachable or
-needing authorization stops the batch instead. Each delete is checked at the
-lane like any row delete. The batch stops at the first stale target or failure:
+The batch deletes the authorized records in record order. Each one is a lane
+command that carries the reader with the verified key, and the lane reads the
+record again when it runs it, just before the delete, so a record another
+device rewrote while the delete waited behind an upload is the one checked.
+Only a record that still fails to decrypt is deleted. Any other read keeps the
+record and goes to the inventory owner, which replaces the row, so a record
+that now decrypts shows as what it is. A read that finds the provider
+unreachable or needing authorization stops the batch instead. Each delete is
+checked at the lane like any row delete. The batch stops at the first stale target or failure:
 the records it already removed stay removed, and the records it hadn't reached
 stay. A stale target shows that the backup changed and asks to check again. A
 finished batch, or one that found nothing to delete, verifies again. A batch

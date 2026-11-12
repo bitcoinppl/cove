@@ -210,7 +210,7 @@ impl<'a> DeleteConsents<'a> {
         listed: &ListedRecord,
         copy_replaced: bool,
     ) -> Option<CloudBackupRowDeleteConsent> {
-        let category = CloudBackupDeleteCategory::of(&self.trusted(listed), copy_replaced)?;
+        let category = CloudBackupDeleteCategory::of(&listed.record, copy_replaced)?;
 
         Some(CloudBackupRowDeleteConsent {
             record_id: listed.record_id.clone(),
@@ -251,26 +251,6 @@ impl<'a> DeleteConsents<'a> {
         consent: &CloudBackupBatchDeleteConsent,
     ) -> bool {
         self.undecryptable_batch().is_some_and(|current| current == *consent)
-    }
-
-    /// The record as a delete sees it: a decrypt failure that the verified read of this
-    /// configuration holds is a failure of the verified key
-    fn trusted(&self, listed: &ListedRecord) -> CloudBackupListedRecord {
-        let verified = self.view.verified_unreadable.as_ref().is_some_and(|read| {
-            read.configuration == self.configuration
-                && read.record_ids.contains(listed.record_id.as_str())
-        });
-
-        match &listed.record {
-            CloudBackupListedRecord::Unreadable {
-                kind: CloudBackupUnreadableKind::Decrypt,
-                ..
-            } if verified => CloudBackupListedRecord::Unreadable {
-                kind: CloudBackupUnreadableKind::Decrypt,
-                trust: CloudBackupKeyTrust::VerifiedCurrentKey,
-            },
-            record => record.clone(),
-        }
     }
 
     /// The evidence a delete of `category` is offered on, or `None` when no delete can be
@@ -429,7 +409,6 @@ mod tests {
             read_at: owner.read_at(),
             listing_generation: 1,
             rows_current: true,
-            verified_unreadable: None,
             progress: None,
             rows: Some(InventoryRows {
                 up_to_date: vec![CloudBackupOwnRow { wallet: wallet(SPENDING), record: own }],

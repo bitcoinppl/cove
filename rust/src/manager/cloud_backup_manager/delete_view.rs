@@ -45,20 +45,12 @@ impl InventoryView {
             })
             .collect();
 
-        // only a read with the key the configuration in force verified proves a record is bad
-        let verified_read = self
-            .verified_unreadable
-            .as_ref()
-            .filter(|read| read.configuration == configuration)
-            .cloned();
-
         DeleteView {
             namespace,
             listing: ListingGeneration(self.listing_generation),
             read_at: self.read_at,
             configuration,
             rows,
-            verified_read,
         }
     }
 }

@@ -250,6 +250,7 @@ struct MockCloudState {
     delete_namespace_attempts: usize,
     next_delete_namespace_gate: Option<Arc<MockCloudDownloadGate>>,
     next_wallet_upload_gate: Option<Arc<MockCloudDownloadGate>>,
+    next_list_wallet_files_gate: Option<Arc<MockCloudDownloadGate>>,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     list_wallet_files_snapshot_attempts: usize,
@@ -561,6 +562,13 @@ impl MockCloudStorage {
     pub(crate) fn gate_next_wallet_upload(&self) -> Arc<MockCloudDownloadGate> {
         let gate = Arc::new(MockCloudDownloadGate::default());
         self.state.lock().next_wallet_upload_gate = Some(gate.clone());
+        gate
+    }
+
+    /// Holds the next wallet listing, silent or not, until the test releases it
+    pub(crate) fn gate_next_list_wallet_files(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().next_list_wallet_files_gate = Some(gate.clone());
         gate
     }
 
@@ -1091,6 +1099,11 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
+        let gate = self.state.lock().next_list_wallet_files_gate.take();
+        if let Some(gate) = gate {
+            gate.block().await;
+        }
+
         let mut state = self.state.lock();
         state.list_wallet_files_attempts += 1;
         *state.list_wallet_files_attempts_by_namespace.entry(namespace.clone()).or_default() += 1;

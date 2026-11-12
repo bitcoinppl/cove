@@ -15,7 +15,7 @@ use super::types::{
     CloudBackupWriteCompletion,
 };
 use super::worker::{RowDeleteReport, WalletUploadOutcome};
-use crate::manager::cloud_backup_manager::wallets::WalletUpload;
+use crate::manager::cloud_backup_manager::wallets::{WalletBackupReader, WalletUpload};
 
 /// Who a producer writes for, which gives every command or local effect it sends its class
 ///
@@ -162,7 +162,7 @@ impl CloudBackupWriteClient {
         match self.await_result(receiver).await? {
             LaneOutput::Done => Ok(WalletUploadOutcome::Uploaded),
             LaneOutput::KeptKeyMaterial => Ok(WalletUploadOutcome::KeptKeyMaterial),
-            LaneOutput::RowDelete(_) => Err(CloudBackupError::Internal(
+            LaneOutput::RowDelete(_) | LaneOutput::RecordKept => Err(CloudBackupError::Internal(
                 "cloud backup write lane answered a wallet upload with a row delete report".into(),
             )),
         }
@@ -262,8 +262,40 @@ impl CloudBackupWriteClient {
 
         match self.await_result(receiver).await? {
             LaneOutput::RowDelete(report) => Ok(report),
+            LaneOutput::Done | LaneOutput::KeptKeyMaterial | LaneOutput::RecordKept => {
+                Err(CloudBackupError::Internal(
+                    "cloud backup write lane answered a row delete without its report".into(),
+                ))
+            }
+        }
+    }
+
+    /// Deletes one record of an unreadable batch, if its authorization still holds when the lane
+    /// reaches it and `reader`, the configuration's verified key, still fails to decrypt it then
+    ///
+    /// `None` when the lane's read kept the record; the inventory owner has what it read
+    pub(crate) async fn delete_unreadable_record(
+        &self,
+        cloud: CloudStorageClient,
+        reader: WalletBackupReader,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+    ) -> Result<Option<RowDeleteReport>, CloudBackupError> {
+        let claim = self.operation("unreadable delete")?;
+        let receiver = call!(self.supervisor.delete_unreadable_record(
+            claim,
+            authorization,
+            record_id,
+            cloud,
+            reader
+        ))
+        .await;
+
+        match self.await_result(receiver).await? {
+            LaneOutput::RowDelete(report) => Ok(Some(report)),
+            LaneOutput::RecordKept => Ok(None),
             LaneOutput::Done | LaneOutput::KeptKeyMaterial => Err(CloudBackupError::Internal(
-                "cloud backup write lane answered a row delete without its report".into(),
+                "cloud backup write lane answered an unreadable delete without its report".into(),
             )),
         }
     }

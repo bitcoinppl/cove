@@ -1,10 +1,10 @@
 //! Row deletes: what each row may delete, and what a confirmed delete does once its row changes
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use super::*;
 use crate::manager::cloud_backup_manager::CloudBackupWalletVerificationIssues;
-use crate::manager::cloud_backup_manager::actors::{Relist, RowDeleteReport};
+use crate::manager::cloud_backup_manager::actors::RowDeleteReport;
 use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
 use crate::manager::cloud_backup_manager::ops::BatchStop;
 use crate::manager::cloud_backup_manager::ops::test_support::{
@@ -14,10 +14,10 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::delete_authorization::{
     DeleteAuthorization, StaleTarget,
 };
-use crate::manager::cloud_backup_manager::owner::inventory::InventoryInput;
+use crate::manager::cloud_backup_manager::owner::inventory::{InventoryInput, RecordRead};
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupDeleteConfirmation, CloudBackupRowControl, CloudBackupSection,
-    CloudBackupVerificationControl,
+    CloudBackupActionAvailability, CloudBackupDeleteConfirmation, CloudBackupRowControl,
+    CloudBackupScreenAction, CloudBackupSection, CloudBackupVerificationControl,
 };
 use cove_device::cloud_storage::CloudStorageError;
 
@@ -218,7 +218,7 @@ async fn freeze_batch(
     call!(
         manager
             .supervisor
-            .freeze_unreadable_batch_for_test(consent.clone(), prepared.read().clone())
+            .freeze_unreadable_batch_for_test(consent.clone(), prepared.reads().clone())
     )
     .await
     .unwrap()
@@ -230,6 +230,52 @@ async fn wait_for_operation_to_finish(manager: &RustCloudBackupManager) {
         manager.projected_exclusive_operation().is_none()
     })
     .await;
+}
+
+/// Waits until the rows are a read of the latest listing again, with no fetch's help from the test
+async fn wait_for_rows_read_again(manager: &RustCloudBackupManager) {
+    wait_for_test_condition(Duration::from_secs(5), "the owner should read the rows again", || {
+        let inventory = manager.inventory.read();
+        matches!(inventory.cloud_only(), CloudOnlyState::Loaded { .. })
+            && inventory.loaded_rows_are_current()
+    })
+    .await;
+}
+
+/// Whether the screen offers Turn Off now
+async fn turn_off_availability(
+    manager: &RustCloudBackupManager,
+) -> Option<CloudBackupActionAvailability> {
+    let screen = call!(manager.supervisor.projected_screen_for_test()).await.unwrap();
+    screen
+        .actions
+        .entries
+        .into_iter()
+        .find(|entry| entry.action == CloudBackupScreenAction::TurnOff)
+        .map(|entry| entry.availability)
+}
+
+/// Runs the frozen batch under its own operation, the way a confirmed batch runs it
+async fn run_batch(
+    manager: &RustCloudBackupManager,
+    prepared: CloudBackupPreparedUndecryptableWalletDeletion,
+    authorization: Arc<DeleteAuthorization>,
+) -> crate::manager::cloud_backup_manager::ops::BatchDeleteReport {
+    let (claim, writes) = begin_operation_writes_for_test(
+        manager,
+        CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+    )
+    .await;
+    let report = manager
+        .delete_authorized_undecryptable_wallet_backups(
+            prepared.into_reader(),
+            authorization,
+            writes,
+        )
+        .await;
+    finish_operation_for_test(manager, claim).await;
+
+    report
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -324,10 +370,10 @@ async fn an_extra_copy_whose_wallet_backup_went_missing_stays() {
     );
 }
 
-/// Rows left on screen by an invalidation offer no Delete, and a consent given before it no
-/// longer holds; Delete is offered again once a fetch reads the rows under the new listing
+/// An invalidated inventory offers no Delete, and a consent given before it no longer holds,
+/// until the owner's own fetch reads the rows again under the new listing
 #[tokio::test(flavor = "current_thread")]
-async fn rows_an_invalidation_left_on_screen_offer_and_authorize_no_delete() {
+async fn an_invalidation_has_the_owner_read_the_rows_again() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
@@ -340,18 +386,16 @@ async fn rows_an_invalidation_left_on_screen_offer_and_authorize_no_delete() {
         row_delete_consent(&manager, &row.record_id).await.expect("the row offers Delete");
     assert!(holds(&manager, &consent).await.is_ok());
 
-    // the rows stay on screen until a fetch reads them again, but no longer say what's true
+    // the fetch the invalidation asks for waits on the provider
+    let listing = globals.cloud.gate_next_list_wallet_files();
     manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
-    assert!(matches!(manager.inventory.read().cloud_only(), CloudOnlyState::Loaded { .. }));
+    listing.wait_until_blocked().await;
 
-    assert_eq!(
-        row_controls(&manager, &row.record_id).await,
-        Some(vec![CloudBackupRowControl::Restore])
-    );
+    assert_eq!(offered_delete(&manager, &row.record_id).await, None);
     assert_eq!(holds(&manager, &consent).await.unwrap_err(), StaleTarget::ListingChanged);
 
-    // a fetch under the new listing reads the row again, so Delete is back with a new consent
-    load_rows(&manager, &row.namespace, &[row.record_id.as_str()]).await;
+    listing.release();
+    wait_for_rows_read_again(&manager).await;
 
     assert_eq!(row_controls(&manager, &row.record_id).await, Some(read));
     let fresh = row_delete_consent(&manager, &row.record_id).await.expect("the row offers Delete");
@@ -431,31 +475,41 @@ async fn a_row_delete_of_a_record_already_gone_completes() {
 
     assert!(matches!(
         run_row_delete(&manager, authorization, &row.record_id).await,
-        Ok(RowDeleteReport::Removed { already_absent: true, relist: Relist::Count(_) })
+        Ok(RowDeleteReport::Removed { already_absent: true })
     ));
 }
 
+/// A row delete ends at the provider's answer. The listing that reads the rows again is the
+/// inventory owner's own, so one that never answers holds neither the lane nor Turn Off
 #[tokio::test(flavor = "current_thread")]
-async fn a_row_delete_whose_relist_fails_still_removes_the_row() {
+async fn a_row_delete_whose_follow_up_listing_is_held_frees_the_lane_and_turn_off() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
     let row = load_not_on_device_row(&manager).await;
-    globals.cloud.fail_list_wallet_files_for_namespace(
-        row.namespace.clone(),
-        CloudStorageError::NotAvailable("listing down".into()),
-    );
 
+    let listing = globals.cloud.gate_next_list_wallet_files();
     start_row_delete(&manager, &row.record_id).await;
+    listing.wait_until_blocked().await;
     wait_for_operation_to_finish(&manager).await;
 
-    // the record is gone, so the row is too, though the new backup count is unknown
     assert!(!globals.cloud.has_wallet_backup(&row.namespace, &row.record_id));
-    let CloudOnlyState::Loaded { rows, .. } = manager.inventory.read().cloud_only() else {
-        panic!("the deleted row's siblings stay loaded");
-    };
-    assert!(rows.iter().all(|loaded| loaded.record_id != row.record_id));
+
+    // while the listing is held, another operation starts and the lane drains for it
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::DeleteCloudWallet)
+            .await;
+    writes.drain().await.expect("the lane holds nothing");
+    finish_operation_for_test(&manager, claim).await;
+    assert_eq!(
+        turn_off_availability(&manager).await,
+        Some(CloudBackupActionAvailability::Available)
+    );
+
+    listing.release();
+    wait_for_rows_read_again(&manager).await;
+    assert_eq!(row_controls(&manager, &row.record_id).await, None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -541,6 +595,12 @@ async fn a_batch_record_that_reads_again_before_its_turn_is_kept() {
     assert!(report.stopped.is_none(), "{:?}", report.stopped);
     assert!(globals.cloud.has_wallet_backup(&rows.namespace, &rows.record_ids[0]));
     assert!(!globals.cloud.has_wallet_backup(&rows.namespace, &rows.record_ids[1]));
+
+    // the owner has the lane's read, so the row says what the record is now
+    assert_eq!(
+        offered_delete(&manager, &rows.record_ids[0]).await,
+        Some(CloudBackupDeleteCategory::NotOnDevice)
+    );
 }
 
 /// A batch whose listing changed partway stops at the next record and keeps the rest
@@ -562,12 +622,12 @@ async fn a_batch_whose_inventory_changed_partway_keeps_the_rest() {
     )
     .await;
 
-    // hold the batch's fresh read of the second record, after the first is deleted
+    // hold the lane's read of the first record, after its turn was checked
     let reads_so_far =
-        globals.cloud.wallet_backup_download_attempt_count_for_record(&rows.namespace, &second);
+        globals.cloud.wallet_backup_download_attempt_count_for_record(&rows.namespace, &first);
     let gate = globals.cloud.gate_wallet_backup_download_after_successes(
         rows.namespace.clone(),
-        second.clone(),
+        first.clone(),
         reads_so_far,
     );
     let deleting = manager.clone();
@@ -605,7 +665,10 @@ async fn a_batch_read_before_a_wallet_import_deletes_nothing() {
     let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
 
     let prepared = prepare_batch(&manager, &consent).await;
-    assert_eq!(prepared.read().record_ids, BTreeSet::from([rows.record_ids[0].clone()]));
+    assert_eq!(
+        prepared.reads().reads,
+        BTreeMap::from([(rows.record_ids[0].clone(), RecordRead::Undecryptable)])
+    );
 
     // the wallet lands after the read listed it as cloud-only, before the batch is frozen
     persist_xpub_wallets(vec![rows.wallets[0].clone()]);
@@ -621,9 +684,9 @@ async fn a_batch_read_before_a_wallet_import_deletes_nothing() {
     assert!(globals.cloud.has_wallet_backup(&rows.namespace, &rows.record_ids[0]));
 }
 
-/// A record another device replaced with a readable backup while the batch read it keeps the
-/// listing's record set, so the owner keeps the read. The fetch since reads the record as not on
-/// this device, so the batch, which deletes only what is still undecryptable, deletes nothing
+/// A record another device replaced with a readable backup after the batch read it keeps the
+/// listing's record set. The fetch since read the record as not on this device, which is newer
+/// than the batch's read, so the owner keeps that row and the batch deletes nothing
 #[tokio::test(flavor = "current_thread")]
 async fn a_batch_record_a_later_read_finds_readable_is_not_authorized() {
     let _guard = async_test_lock().lock().await;
@@ -635,7 +698,10 @@ async fn a_batch_record_a_later_read_finds_readable_is_not_authorized() {
     let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
 
     let prepared = prepare_batch(&manager, &consent).await;
-    assert_eq!(prepared.read().record_ids, BTreeSet::from([record_id.to_owned()]));
+    assert_eq!(
+        prepared.reads().reads,
+        BTreeMap::from([(record_id.to_owned(), RecordRead::Undecryptable)])
+    );
 
     // the same record now holds a backup the key reads, and a fetch reads it as a restorable row
     upload_test_wallet_backup(&rows.namespace, &rows.wallets[0]);
@@ -649,4 +715,177 @@ async fn a_batch_record_a_later_read_finds_readable_is_not_authorized() {
 
     assert_eq!(authorization.record_ids().count(), 0);
     assert!(globals.cloud.has_wallet_backup(&rows.namespace, record_id));
+}
+
+/// A record that reads again while the batch runs gives its read to the inventory owner, even
+/// when a later record stops the batch: its row says what it now is, and the Delete offered on
+/// the unreadable row no longer holds
+#[tokio::test(flavor = "current_thread")]
+async fn a_batch_record_read_readable_loses_its_unreadable_delete() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet, Network::Signet]).await;
+    let [readable, failing] = [rows.record_ids[0].as_str(), rows.record_ids[1].as_str()];
+    let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
+
+    let prepared = prepare_batch(&manager, &consent).await;
+    let authorization = freeze_batch(&manager, &consent, &prepared).await;
+    assert_eq!(authorization.record_ids().count(), 2);
+
+    // the verified read is the row's own fact, so the row draws the Delete it carries
+    let unreadable = row_delete_consent(&manager, readable).await.expect("the row offers Delete");
+    assert_eq!(
+        unreadable.evidence().category(),
+        CloudBackupDeleteCategory::Unreadable { kind: CloudBackupUnreadableKind::Decrypt }
+    );
+
+    // another device rewrites the first under the key this device holds, and the provider goes
+    // offline before the second is read
+    upload_test_wallet_backup(&rows.namespace, &rows.wallets[0]);
+    globals.cloud.fail_wallet_backup_download_offline(
+        rows.namespace.clone(),
+        failing.to_owned(),
+        "offline",
+    );
+
+    let report = run_batch(&manager, prepared, authorization).await;
+
+    assert_eq!(report.removed, 0);
+    assert!(matches!(report.stopped, Some(BatchStop::Failed(_))), "{:?}", report.stopped);
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, readable));
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, failing));
+
+    assert_eq!(
+        row_controls(&manager, readable).await,
+        Some(vec![CloudBackupRowControl::Restore, CloudBackupRowControl::Delete])
+    );
+    assert_eq!(
+        offered_delete(&manager, readable).await,
+        Some(CloudBackupDeleteCategory::NotOnDevice)
+    );
+    assert_eq!(holds(&manager, &unreadable).await.unwrap_err(), StaleTarget::CategoryChanged);
+}
+
+/// The lane reads an unreadable record just before deleting it, so one another device rewrote
+/// while the delete waited behind an upload is kept
+#[tokio::test(flavor = "current_thread")]
+async fn an_unreadable_delete_reads_the_record_when_the_lane_runs_it() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet]).await;
+    let record_id = rows.record_ids[0].as_str();
+    let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
+
+    let (upload_gate, upload) =
+        hold_wallet_upload_in_flight(&manager, globals, fixture.local_wallet.id.clone()).await;
+    call!(manager.supervisor.dispatch(UserIntent::DeleteUndecryptableWalletBackups(consent)))
+        .await
+        .unwrap();
+    wait_for_queued_lane_write(&manager).await;
+
+    // the record becomes readable while its delete waits in the lane
+    upload_test_wallet_backup(&rows.namespace, &rows.wallets[0]);
+    upload_gate.release();
+    upload.await.unwrap().unwrap();
+    wait_for_operation_to_finish(&manager).await;
+
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, record_id));
+}
+
+/// A batch that went stale has the rows read again, and a refresh still waiting on an older
+/// listing is replaced instead of waited for
+#[tokio::test(flavor = "current_thread")]
+async fn a_stale_batch_has_the_rows_read_again() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet, Network::Signet]).await;
+    let [first, second] = [rows.record_ids[0].clone(), rows.record_ids[1].clone()];
+    let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
+
+    // the preparation reads each record once; hold the lane's read of the first after that
+    let reads_so_far =
+        globals.cloud.wallet_backup_download_attempt_count_for_record(&rows.namespace, &first);
+    let lane_read = globals.cloud.gate_wallet_backup_download_after_successes(
+        rows.namespace.clone(),
+        first.clone(),
+        reads_so_far + 1,
+    );
+    call!(manager.supervisor.dispatch(UserIntent::DeleteUndecryptableWalletBackups(consent)))
+        .await
+        .unwrap();
+    lane_read.wait_until_blocked().await;
+
+    // the listing moves while the first record's delete runs, and the refresh that asks for
+    // never hears back from the provider
+    let held = globals.cloud.gate_next_list_wallet_files();
+    manager.apply_inventory(InventoryInput::CloudOnlyInventoryInvalidated);
+    held.wait_until_blocked().await;
+    lane_read.release();
+    wait_for_operation_to_finish(&manager).await;
+
+    assert!(!globals.cloud.has_wallet_backup(&rows.namespace, &first));
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, &second));
+    let batch = manager
+        .state
+        .read()
+        .configured_state()
+        .map(|configured| configured.undecryptable_wallet_deletion);
+    assert!(matches!(
+        batch,
+        Some(CloudBackupUndecryptableWalletDeletionState::Failed(message))
+            if message == "Deleted 1 inaccessible wallet backup, then stopped because your \
+                           backups changed. Check again before deleting the rest."
+    ));
+
+    wait_for_rows_read_again(&manager).await;
+    assert!(batch_consent(&manager).await.is_some(), "the second record is offered again");
+    held.release();
+}
+
+/// A batch preparation a provider failure stops still gives the inventory owner what it read
+/// before it stopped: a record read readable loses the Delete its unreadable row carried, and
+/// nothing is deleted
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_batch_preparation_still_applies_what_it_read() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet, Network::Signet]).await;
+    let [readable, failing] = [rows.record_ids[0].as_str(), rows.record_ids[1].as_str()];
+
+    // an earlier batch read both under the verified key, so each row offers its own Delete
+    let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
+    let prepared = prepare_batch(&manager, &consent).await;
+    freeze_batch(&manager, &consent, &prepared).await;
+    let unreadable = row_delete_consent(&manager, readable).await.expect("the row offers Delete");
+
+    // another device rewrites the first under the key this device holds, and the provider goes
+    // offline for the second
+    upload_test_wallet_backup(&rows.namespace, &rows.wallets[0]);
+    globals.cloud.fail_wallet_backup_download_offline(
+        rows.namespace.clone(),
+        failing.to_owned(),
+        "offline",
+    );
+
+    let consent = batch_consent(&manager).await.expect("the screen offers the batch delete");
+    call!(manager.supervisor.dispatch(UserIntent::DeleteUndecryptableWalletBackups(consent)))
+        .await
+        .unwrap();
+    wait_for_operation_to_finish(&manager).await;
+
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, readable));
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, failing));
+    assert_eq!(
+        offered_delete(&manager, readable).await,
+        Some(CloudBackupDeleteCategory::NotOnDevice)
+    );
+    assert_eq!(holds(&manager, &unreadable).await.unwrap_err(), StaleTarget::CategoryChanged);
 }

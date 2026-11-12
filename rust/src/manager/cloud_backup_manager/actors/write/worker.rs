@@ -10,14 +10,20 @@ use tracing::warn;
 use super::CloudBackupWriteError;
 use super::keychain::{KeychainSave, OwnedKeychainWrite, save_owned_keychain_writes};
 use super::supervisor::{CloudBackupWriteCommandContext, CloudBackupWriteSupervisor};
+use crate::manager::cloud_backup_manager::ops::read_record;
 use crate::manager::cloud_backup_manager::owner::delete_authorization::StaleTarget;
-use crate::manager::cloud_backup_manager::wallets::WalletUpload;
+use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
+use crate::manager::cloud_backup_manager::wallets::{WalletBackupReader, WalletUpload};
+use crate::wallet_identity::collect_local_wallet_identities;
 
 /// What one authorized row delete did
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RowDeleteReport {
     /// The record is gone: deleted now, or already absent at the provider
-    Removed { already_absent: bool, relist: Relist },
+    ///
+    /// The provider's answer to the delete is the result; the listing that refreshes the rows and
+    /// the count is the inventory owner's, so it never holds the lane or the operation
+    Removed { already_absent: bool },
     /// The authorization no longer matched the inventory at the queue head; nothing was deleted
     StaleTarget(StaleTarget),
 }
@@ -33,14 +39,6 @@ pub(crate) enum WalletUploadOutcome {
     KeptKeyMaterial,
 }
 
-/// The listing a row delete runs after the record is gone
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Relist {
-    Count(u32),
-    /// The record is still gone; only the new count is unknown
-    Failed,
-}
-
 /// Remote storage operation submitted through the serialized write lane
 #[derive(Debug)]
 pub(crate) enum CloudBackupRemoteWriteCommand {
@@ -54,9 +52,17 @@ pub(crate) enum CloudBackupRemoteWriteCommand {
         namespace: String,
         data: Vec<u8>,
     },
-    /// One authorized row delete: the record, then a listing for the new count
+    /// One authorized row delete
     DeleteWalletRecord {
         cloud: CloudStorageClient,
+        namespace: String,
+        record_id: String,
+    },
+    /// One authorized delete of a record the verified key failed to decrypt, which reads it with
+    /// that key first and deletes it only if it still fails
+    DeleteUnreadableRecord {
+        cloud: CloudStorageClient,
+        reader: WalletBackupReader,
         namespace: String,
         record_id: String,
     },
@@ -88,12 +94,13 @@ pub(crate) enum CloudBackupRemoteWriteResult {
     None,
     /// A wallet upload wrote nothing, since it would have replaced key material
     KeptKeyMaterial,
-    /// The record is gone; the listing after it is separate, so its failure doesn't undo the
-    /// delete
+    /// The record is gone
     WalletRecordRemoved {
         already_absent: bool,
-        relist: Result<Vec<String>, CloudBackupWriteError>,
     },
+    /// An unreadable delete read the record as something that still exists and no longer fails to
+    /// decrypt, so nothing was deleted
+    RecordKept(RecordRead),
     WalletCount(u32),
     ListedWalletCount(Option<u32>),
     Keychain(KeychainSave),
@@ -119,22 +126,25 @@ impl CloudBackupRemoteWriteCommand {
                 Ok(CloudBackupRemoteWriteResult::None)
             }
             Self::DeleteWalletRecord { cloud, namespace, record_id } => {
-                // a record already gone is what the delete wanted, so it completes
-                let already_absent =
-                    match cloud.delete_wallet_backup(namespace.clone(), record_id).await {
-                        Ok(()) => false,
-                        Err(CloudStorageError::NotFound(_)) => true,
-                        Err(error) => return Err(error.into()),
-                    };
+                delete_wallet_record(&cloud, namespace, record_id).await
+            }
+            Self::DeleteUnreadableRecord { cloud, reader, namespace, record_id } => {
+                // read here, just before the delete, so a record another device rewrote while
+                // this waited in the lane is the one checked
+                let local_wallets = collect_local_wallet_identities().map_err(|source| {
+                    CloudBackupWriteError::internal_context("collect wallet identities", source)
+                })?;
+                match read_record(&reader, &record_id, &local_wallets).await? {
+                    RecordRead::Undecryptable => {
+                        delete_wallet_record(&cloud, namespace, record_id).await
+                    }
 
-                let relist = cloud.list_wallet_backups(namespace).await.map_err(|error| {
-                    warn!(
-                        "Row delete: the record is gone, but listing the backups failed: {error}"
-                    );
-                    CloudBackupWriteError::cloud_storage_context("list wallet backups", error)
-                });
-
-                Ok(CloudBackupRemoteWriteResult::WalletRecordRemoved { already_absent, relist })
+                    // gone already, which is what the delete wanted
+                    RecordRead::Absent => Ok(CloudBackupRemoteWriteResult::WalletRecordRemoved {
+                        already_absent: true,
+                    }),
+                    read => Ok(CloudBackupRemoteWriteResult::RecordKept(read)),
+                }
             }
             Self::ListWalletCount { cloud, namespace_id, fallback_count } => {
                 let wallet_count = match cloud.list_wallet_backups(namespace_id.clone()).await {
@@ -178,6 +188,21 @@ impl CloudBackupRemoteWriteCommand {
     }
 }
 
+/// Deletes one wallet record; a record already gone is what the delete wanted, so it completes
+async fn delete_wallet_record(
+    cloud: &CloudStorageClient,
+    namespace: String,
+    record_id: String,
+) -> Result<CloudBackupRemoteWriteResult, CloudBackupWriteError> {
+    let already_absent = match cloud.delete_wallet_backup(namespace, record_id).await {
+        Ok(()) => false,
+        Err(CloudStorageError::NotFound(_)) => true,
+        Err(error) => return Err(error.into()),
+    };
+
+    Ok(CloudBackupRemoteWriteResult::WalletRecordRemoved { already_absent })
+}
+
 /// Actor that executes one remote write command and reports back to its parent
 #[derive(Debug, Default)]
 pub(crate) struct CloudBackupWriteWorker {
@@ -212,8 +237,10 @@ mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::ops::test_support::{async_test_lock, test_globals};
 
+    /// The delete answers once the provider removed the record; a listing that would fail or
+    /// hang is the inventory owner's to run, never the lane's
     #[tokio::test(flavor = "current_thread")]
-    async fn a_row_delete_whose_relist_fails_still_reports_the_record_gone() {
+    async fn a_row_delete_completes_without_listing_the_backups() {
         let _guard = async_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
         let globals = test_globals();
@@ -222,10 +249,7 @@ mod tests {
         let namespace = "0123456789abcdef0123456789abcdef".to_owned();
         let record_id = "wallet".to_owned();
         globals.cloud.set_wallet_backup(namespace.clone(), record_id.clone(), vec![1, 2, 3]);
-        globals.cloud.fail_list_wallet_files_for_namespace(
-            namespace.clone(),
-            CloudStorageError::NotAvailable("listing down".into()),
-        );
+        let listings = globals.cloud.list_wallet_files_attempt_count();
 
         let result = CloudBackupRemoteWriteCommand::DeleteWalletRecord {
             cloud: CloudStorage::global_explicit_client(),
@@ -236,12 +260,11 @@ mod tests {
         .await
         .expect("the delete itself succeeded");
 
-        let CloudBackupRemoteWriteResult::WalletRecordRemoved { already_absent, relist } = result
-        else {
-            panic!("a row delete reports the record removed, got {result:?}");
-        };
-        assert!(!already_absent);
-        assert!(relist.unwrap_err().to_string().contains("listing down"));
+        assert!(matches!(
+            result,
+            CloudBackupRemoteWriteResult::WalletRecordRemoved { already_absent: false }
+        ));
         assert!(!globals.cloud.has_wallet_backup(&namespace, &record_id));
+        assert_eq!(globals.cloud.list_wallet_files_attempt_count(), listings);
     }
 }

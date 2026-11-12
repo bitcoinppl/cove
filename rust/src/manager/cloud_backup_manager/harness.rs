@@ -5,6 +5,7 @@
 
 mod account_switch_tests;
 mod app;
+mod batch_delete_tests;
 mod clock;
 mod continuation_tests;
 mod crash_tests;
@@ -21,6 +22,7 @@ mod passkey_tests;
 mod process;
 mod recovered_enable_tests;
 mod reset_tests;
+mod row_delete_tests;
 mod runtime;
 mod tests;
 mod write_policy_tests;

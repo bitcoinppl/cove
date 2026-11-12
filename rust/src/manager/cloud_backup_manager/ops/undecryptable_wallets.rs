@@ -1,51 +1,61 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
-use tracing::{info, warn};
+use tracing::info;
 use zeroize::Zeroizing;
 
+use super::cloud_only::read_record;
 use super::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
 use crate::manager::cloud_backup_manager::owner::delete_authorization::{
     DeleteAuthorization, StaleTarget,
 };
-use crate::manager::cloud_backup_manager::owner::inventory::UnreadableRead;
-use crate::manager::cloud_backup_manager::wallets::{
-    PasskeyRequestAuthority, WalletBackupLookup, WalletBackupReader,
-};
+use crate::manager::cloud_backup_manager::owner::inventory::RecordReads;
+use crate::manager::cloud_backup_manager::wallets::{PasskeyRequestAuthority, WalletBackupReader};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupStateReducerEvent,
     CloudBackupStore, CloudBackupUndecryptableWalletDeletionState, RustCloudBackupManager,
-    VerificationState, blocking_cloud_error, is_provider_wide_interruption,
+    VerificationState, blocking_cloud_error,
 };
+use crate::wallet_identity::LocalWalletIdentities;
 
 const DELETE_UNDECRYPTABLE_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before inaccessible wallet backups can be deleted";
 
-/// The records of the confirmed batch the configured key failed to decrypt, read for the
+/// The records of the confirmed batch, read with the configuration's verified key for the
 /// operation
 ///
-/// The read is evidence for the inventory's owner, stamped with the listing and configuration it
-/// was made under, which records it before the confirmed records it still holds are authorized;
-/// this carries no permission to delete anything
+/// The reads are evidence for the inventory's owner, stamped with the listing and configuration
+/// they were made under, which applies them before the confirmed records still undecryptable are
+/// authorized; this carries no permission to delete anything
 pub(crate) struct CloudBackupPreparedUndecryptableWalletDeletion {
     reader: WalletBackupReader,
-    read: UnreadableRead,
+    reads: RecordReads,
 }
 
 impl CloudBackupPreparedUndecryptableWalletDeletion {
-    /// The records the configured key failed to decrypt, with what they were read under
-    pub(crate) fn read(&self) -> &UnreadableRead {
-        &self.read
+    /// What each confirmed record read as, with what the reads were made under
+    pub(crate) fn reads(&self) -> &RecordReads {
+        &self.reads
     }
 
-    /// The reader the batch rechecks each record with before deleting it
+    /// The reader the lane reads each record with again, just before deleting it
     pub(crate) fn into_reader(self) -> WalletBackupReader {
         self.reader
     }
+}
+
+/// A batch preparation that stopped, with every read it made before it did
+///
+/// The reads are facts the inventory owner applies even though nothing is authorized, so a
+/// record read readable here loses the Delete its old unreadable row carried
+#[derive(Debug)]
+pub(crate) struct UndecryptablePreparationFailed {
+    pub(crate) reads: RecordReads,
+    pub(crate) error: CloudBackupError,
 }
 
 /// Why a batch delete stopped before its last record
@@ -73,20 +83,80 @@ impl RustCloudBackupManager {
         );
     }
 
-    /// Rechecks the records of the confirmed batch, `record_ids`, keeping in `read` those that
-    /// are still not this device's own and still fail to decrypt
+    /// Reads the records of the confirmed batch, `record_ids`, that are still not this device's
+    /// own, recording in `reads` what each read as
     ///
     /// Only the confirmed records are read, so a record listed after the confirmation is never
-    /// added to the batch. `read` names the listing generation and configuration the caller took
+    /// added to the batch. `reads` names the listing generation and configuration the caller took
     /// before this reads the local wallets. The verification report this requires is what
-    /// proves the key that failed is the configuration's verified one
+    /// proves the key reading them is the configuration's verified one
     pub(crate) async fn prepare_delete_undecryptable_wallet_backups(
         &self,
         writes: &CloudBackupWriteClient,
         record_ids: Vec<String>,
         authority: PasskeyRequestAuthority,
-        mut read: UnreadableRead,
-    ) -> Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError> {
+        mut reads: RecordReads,
+    ) -> Result<CloudBackupPreparedUndecryptableWalletDeletion, UndecryptablePreparationFailed>
+    {
+        let (reader, local_record_ids, local_wallets) =
+            match self.undecryptable_read_setup(writes, authority).await {
+                Ok(setup) => setup,
+                Err(error) => return Err(UndecryptablePreparationFailed { reads, error }),
+            };
+
+        // a provider-wide failure stops the batch, but each read that lands is still a fact the
+        // owner needs, so the reads in flight are collected rather than dropped with the error
+        let mut failure = None;
+
+        // scoped so the reads' borrow of the reader ends before it moves into the result
+        {
+            let mut lookups = stream::iter(
+                record_ids
+                    .into_iter()
+                    .filter(|record_id| !local_record_ids.contains(record_id))
+                    .map(|record_id| {
+                        let reader = reader.clone();
+                        let local_wallets = &local_wallets;
+
+                        async move {
+                            let read = read_record(&reader, &record_id, local_wallets).await;
+                            (record_id, read)
+                        }
+                    }),
+            )
+            .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
+
+            while let Some((record_id, read)) = lookups.next().await {
+                match read {
+                    Ok(read) => {
+                        reads.reads.insert(record_id, read);
+                    }
+                    Err(error) => {
+                        failure.get_or_insert(error);
+                    }
+                }
+            }
+        }
+
+        if let Some(error) = failure {
+            let error = blocking_cloud_error(
+                BlockingCloudStep::DeleteUndecryptableWalletBackups,
+                CloudBackupError::cloud_storage_context("download wallet backup", error),
+            );
+            return Err(UndecryptablePreparationFailed { reads, error });
+        }
+
+        Ok(CloudBackupPreparedUndecryptableWalletDeletion { reader, reads })
+    }
+
+    /// The verified key's reader, the record IDs of this device's wallets, and the local wallet
+    /// identities a batch preparation reads with
+    async fn undecryptable_read_setup(
+        &self,
+        writes: &CloudBackupWriteClient,
+        authority: PasskeyRequestAuthority,
+    ) -> Result<(WalletBackupReader, HashSet<String>, LocalWalletIdentities), CloudBackupError>
+    {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteUndecryptableWalletBackups)?;
 
         let has_reported_failure = matches!(
@@ -122,58 +192,21 @@ impl RustCloudBackupManager {
             namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
-        read.record_ids = {
-            let mut candidates = BTreeSet::new();
-            let mut lookups = stream::iter(
-                record_ids
-                    .into_iter()
-                    .filter(|record_id| !local_record_ids.contains(record_id))
-                    .map(|record_id| {
-                        let reader = reader.clone();
+        // read after the listing generation in `reads`, so a wallet change since moves it and
+        // the owner drops these reads
+        let local_wallets =
+            crate::wallet_identity::collect_local_wallet_identities().map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
 
-                        async move {
-                            let result = reader.lookup_entry(&record_id).await;
-                            (record_id, result)
-                        }
-                    }),
-            )
-            .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
-
-            while let Some((record_id, result)) = lookups.next().await {
-                match result {
-                    Err(CloudBackupError::Crypto(_)) => {
-                        candidates.insert(record_id);
-                    }
-                    Err(error) if is_provider_wide_interruption(&error) => {
-                        return Err(blocking_cloud_error(
-                            BlockingCloudStep::DeleteUndecryptableWalletBackups,
-                            error,
-                        ));
-                    }
-                    Err(error) => {
-                        warn!(
-                            "skipping inaccessible wallet backup that did not fail decryption: {error}"
-                        );
-                    }
-                    Ok(
-                        WalletBackupLookup::Found(_)
-                        | WalletBackupLookup::NotFound
-                        | WalletBackupLookup::UnsupportedVersion(_),
-                    ) => {}
-                }
-            }
-
-            candidates
-        };
-
-        Ok(CloudBackupPreparedUndecryptableWalletDeletion { reader, read })
+        Ok((reader, local_record_ids, local_wallets))
     }
 
     /// Deletes the batch `authorization` froze, one record at a time through the write lane
     ///
-    /// Only the authorized records are tried, never one found later. A record that now decrypts
-    /// is skipped; a record whose authorization went stale stops the batch, because the
-    /// inventory changed under all of them
+    /// Only the authorized records are tried, never one found later. The lane reads each record
+    /// just before deleting it and keeps one that no longer fails to decrypt; a record whose
+    /// authorization went stale stops the batch, because the inventory changed under all of them
     pub(crate) async fn delete_authorized_undecryptable_wallet_backups(
         &self,
         reader: WalletBackupReader,
@@ -203,8 +236,7 @@ impl RustCloudBackupManager {
         BatchDeleteReport { removed, stopped: None }
     }
 
-    /// Deletes one record of the batch, or `None` when a fresh read shows it no longer fails
-    /// decryption
+    /// Deletes one record of the batch, or `None` when the lane's read kept it
     async fn delete_one_undecryptable(
         &self,
         reader: &WalletBackupReader,
@@ -214,34 +246,16 @@ impl RustCloudBackupManager {
     ) -> Result<Option<RowDeleteReport>, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteUndecryptableWalletBackups)?;
 
-        match reader.lookup_entry(&record_id).await {
-            Err(CloudBackupError::Crypto(_)) => {}
-            Err(error) if is_provider_wide_interruption(&error) => {
-                return Err(blocking_cloud_error(
-                    BlockingCloudStep::DeleteUndecryptableWalletBackups,
-                    error,
-                ));
-            }
-            Err(error) => {
-                warn!(
-                    "skipping inaccessible wallet backup that no longer fails decryption: {error}"
-                );
-                return Ok(None);
-            }
-            Ok(_) => return Ok(None),
-        }
-
-        let report = writes
-            .delete_authorized_record(
+        writes
+            .delete_unreadable_record(
                 CloudStorage::global_explicit_client(),
+                reader.clone(),
                 authorization.clone(),
                 record_id,
             )
             .await
             .map_err(|error| {
                 blocking_cloud_error(BlockingCloudStep::DeleteUndecryptableWalletBackups, error)
-            })?;
-
-        Ok(Some(report))
+            })
     }
 }

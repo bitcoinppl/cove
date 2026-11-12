@@ -90,13 +90,23 @@ impl LastOutcome {
         claim: CloudBackupExclusiveOperationClaim,
         error: &CloudBackupError,
     ) -> bool {
+        self.operation_ended(claim, failure(error))
+    }
+
+    /// The operation `claim` ended with `outcome` instead of doing all it was asked, such as a
+    /// batch delete that stopped partway; true when the shown outcome changed
+    pub(crate) fn operation_ended(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        outcome: CloudBackupOutcome,
+    ) -> bool {
         let target = match self.started_by.take() {
             Some((started, target)) if started == claim => Some(target),
             _ => operation_control(claim.operation()).map(CloudBackupOutcomeTarget::Action),
         };
         let Some(target) = target else { return false };
 
-        self.replace(Some(CloudBackupLastOutcome { target, outcome: failure(error) }))
+        self.replace(Some(CloudBackupLastOutcome { target, outcome }))
     }
 
     /// Work `action` did in the supervisor's turn, with no operation, ended with `error`; true

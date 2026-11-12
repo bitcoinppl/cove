@@ -342,7 +342,7 @@ pub(crate) struct CloudBackupSupervisor {
     delete_authority: RowDeleteAuthority,
     next_request_id: u64,
     active_sync_request: Option<u64>,
-    active_cloud_only_fetch_request: Option<u64>,
+    active_cloud_only_fetch_request: Option<cloud_only::CloudOnlyFetchRequest>,
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
     /// Counts local wallet-set changes this process has seen; each verification run carries the
@@ -2251,7 +2251,7 @@ pub(crate) mod test_support {
         pub async fn freeze_unreadable_batch_for_test(
             &mut self,
             consent: CloudBackupBatchDeleteConsent,
-            read: crate::manager::cloud_backup_manager::owner::inventory::UnreadableRead,
+            read: crate::manager::cloud_backup_manager::owner::inventory::RecordReads,
         ) -> ActorResult<Result<Arc<crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization>, String>>{
             let manager = self.manager().expect("cloud backup manager exists");
             Produces::ok(self.freeze_unreadable_batch(&manager, &consent, &read))
@@ -2260,7 +2260,7 @@ pub(crate) mod test_support {
         /// What a batch preparation started now reads under
         pub async fn start_unreadable_read_for_test(
             &mut self,
-        ) -> ActorResult<crate::manager::cloud_backup_manager::owner::inventory::UnreadableRead>
+        ) -> ActorResult<crate::manager::cloud_backup_manager::owner::inventory::RecordReads>
         {
             let manager = self.manager().expect("cloud backup manager exists");
             Produces::ok(self.start_unreadable_read(&manager))

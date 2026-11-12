@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::manager::cloud_backup_manager::CloudBackupWalletVerificationIssues;
+use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 
 fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decryption_failed: u32) {
     manager.apply_verification_state(VerificationState::NeedsAttention(DeepVerificationReport {
@@ -17,8 +18,8 @@ fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decrypt
     }));
 }
 
-/// The preparation reads only the records the user confirmed, and keeps those still not this
-/// device's own that the configured key fails to decrypt
+/// The preparation reads only the records the user confirmed and not this device's own, and
+/// reads as undecryptable only those the configured key fails to decrypt
 #[tokio::test(flavor = "current_thread")]
 async fn undecryptable_preparation_reads_only_confirmed_cloud_only_crypto_failures() {
     let _guard = async_test_lock().lock().await;
@@ -106,8 +107,14 @@ async fn undecryptable_preparation_reads_only_confirmed_cloud_only_crypto_failur
         .await
         .unwrap();
 
+    // every confirmed record not on this device is read, and only the crypto failures read as
+    // undecryptable; the rest are evidence the owner applies to its rows
+    let reads = &prepared.reads().reads;
     assert_eq!(
-        prepared.read().record_ids,
-        BTreeSet::from([bad_record_id.clone(), second_bad_record_id.clone()])
+        reads.keys().collect::<BTreeSet<_>>(),
+        BTreeSet::from([&good_record_id, &bad_record_id, &second_bad_record_id])
     );
+    assert!(matches!(reads[&good_record_id], RecordRead::Readable(_)));
+    assert_eq!(reads[&bad_record_id], RecordRead::Undecryptable);
+    assert_eq!(reads[&second_bad_record_id], RecordRead::Undecryptable);
 }
