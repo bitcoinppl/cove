@@ -486,6 +486,28 @@ impl PayjoinReceiver {
             .expect("the directory accepts the proposal")
     }
 
+    /// Rejects the Original PSBT as one it would not broadcast, and posts that well-known
+    /// error to the directory for the sender
+    pub(crate) async fn reject(&self, original: Receiver<UncheckedOriginalPayload>) {
+        let p = &self.persister;
+        let rejection = original
+            .check_broadcast_suitability(None, |_| Ok(false))
+            .save(p)
+            .expect_err("the receiver rejects the Original PSBT")
+            .fatal_state()
+            .expect("the rejection can be sent to the sender");
+
+        let (request, context) = rejection
+            .create_error_request(self.relay.as_str())
+            .expect("the rejection request builds");
+        let response = self.post(request).await;
+
+        rejection
+            .process_error_response(&response, context)
+            .save(p)
+            .expect("the directory accepts the rejection");
+    }
+
     fn sign(&self, psbt: &Psbt) -> Result<Psbt, ImplementationError> {
         let mut psbt = psbt.clone();
         let options = SignOptions { trust_witness_utxo: true, ..SignOptions::default() };
