@@ -389,6 +389,56 @@ pub(crate) fn finish_wipe(app: &TestApp, permit: CloudBackupResetPermit) {
         .expect("finish the reset");
 }
 
+/// How a record [`seed_unreadable_records`] lists fails to read with this device's key
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnreadableSeed {
+    /// A real wallet backup encrypted under another master key: a decrypt failure
+    OtherKey,
+    /// Bytes that are not a wallet backup at all, so reading fails before any key is used
+    Garbage,
+    /// Listed by the provider with nothing behind it to download
+    Missing,
+}
+
+/// Lists one record of each [`UnreadableSeed`] in `namespace`, beside what it already lists, and
+/// returns their record ids with how each fails
+pub(crate) fn seed_unreadable_records(
+    app: &TestApp,
+    namespace: &str,
+) -> Vec<(String, UnreadableSeed)> {
+    let other_key = cove_cspp::master_key::MasterKey::generate();
+    let network = Database::global().global_config.wallet_target().network;
+    let mut files =
+        app.cloud.inner.durable_contents().wallet_files.remove(namespace).unwrap_or_default();
+
+    let mut seeded = Vec::new();
+    for seed in [UnreadableSeed::OtherKey, UnreadableSeed::Garbage, UnreadableSeed::Missing] {
+        let mut wallet = xpub_only_wallet_metadata();
+        wallet.network = network;
+        let record_id = wallet_record_id(wallet.id.as_ref());
+
+        let bytes = match seed {
+            UnreadableSeed::OtherKey => {
+                let entry = wallet_entry_with_labels(&wallet, None);
+                Some(encrypted_wallet_backup_bytes_for_entry(&entry, &other_key, 1))
+            }
+            UnreadableSeed::Garbage => Some(b"not a wallet backup".to_vec()),
+            UnreadableSeed::Missing => None,
+        };
+
+        if let Some(bytes) = bytes {
+            app.cloud.inner.set_wallet_backup(namespace.to_owned(), record_id.clone(), bytes);
+        }
+
+        files.push(wallet_filename_from_record_id(&record_id));
+        seeded.push((record_id, seed));
+    }
+
+    app.cloud.inner.set_wallet_files(namespace.to_owned(), files);
+    app.cloud.persist();
+    seeded
+}
+
 /// Seed a second namespace in the cloud, as an earlier Enable on another device would leave
 /// it, holding one wallet that is not on this device
 ///

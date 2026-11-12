@@ -128,6 +128,11 @@ impl Drop for StopsWaiting<'_> {
 }
 
 impl Hold {
+    /// Whether no call reached this hold and the test hasn't released it
+    fn is_armed(&self) -> bool {
+        *self.0.stage.borrow() == HoldStage::Armed
+    }
+
     /// Resolves once the held call has started and is waiting for [`Hold::release`]
     pub(crate) async fn entered(&self) {
         self.wait_for(HoldStage::Entered, "to start").await;
@@ -263,6 +268,15 @@ pub(crate) enum CloudCall {
     SyncHealth,
 }
 
+/// What a scripted fault no call reached yet does to the call that reaches it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScriptEffect {
+    /// The call waits for the test to release it
+    Holds,
+    /// The call answers otherwise than the provider contents would, such as with a failure
+    Answers,
+}
+
 /// What a scripted cloud call does instead of, or after, the provider contents
 #[derive(Debug, Clone)]
 pub(crate) enum CloudFault {
@@ -348,6 +362,24 @@ impl HarnessCloud {
     /// Drops every script no call reached yet, so the provider cooperates from here on
     pub(crate) fn clear_scripts(&self) {
         self.calls.lock().scripts.clear();
+    }
+
+    /// The scripted faults no call has reached yet, by kind and what each does to its call
+    ///
+    /// A hold the test released before its call started lets that call through, so it is left out
+    pub(crate) fn pending_scripts(&self) -> Vec<(CloudCall, ScriptEffect)> {
+        let calls = self.calls.lock();
+        let effect = |fault: &CloudFault| match fault {
+            CloudFault::Hold(hold) if hold.is_armed() => Some(ScriptEffect::Holds),
+            CloudFault::Hold(_) => None,
+            _ => Some(ScriptEffect::Answers),
+        };
+
+        calls
+            .scripts
+            .iter()
+            .filter_map(|(id, fault)| effect(fault).map(|effect| (id.kind, effect)))
+            .collect()
     }
 
     /// Every call so far with the namespace it targeted
