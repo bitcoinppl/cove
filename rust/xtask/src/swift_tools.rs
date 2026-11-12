@@ -40,6 +40,14 @@ pub enum SwiftToolsCommand {
         args: Vec<String>,
     },
 
+    /// Print the cached binary of a pinned tool without downloading it, failing when it isn't
+    /// cached yet, so offline callers such as the pre-push hook can skip the tool instead
+    #[command(name = "path")]
+    Path {
+        /// Tool to look up
+        tool: SwiftTool,
+    },
+
     /// Pin the swiftformat and swiftlint versions installed on PATH
     #[command(name = "sync")]
     Sync,
@@ -168,6 +176,7 @@ pub fn run(command: SwiftToolsCommand) -> Result<()> {
 
     match command {
         SwiftToolsCommand::Run { tool, args } => run_tool(tool, &args),
+        SwiftToolsCommand::Path { tool } => print_cached_path(tool),
         SwiftToolsCommand::Sync => sync(),
     }
 }
@@ -182,6 +191,22 @@ fn run_tool(tool: SwiftTool, args: &[String]) -> Result<()> {
     // paths in the lint commands and configs are relative to the repository root
     let error = Command::new(&binary).args(args).current_dir(repo_root()).exec();
     Err(error).wrap_err_with(|| format!("Failed to run {}", binary.display()))
+}
+
+fn print_cached_path(tool: SwiftTool) -> Result<()> {
+    let pins = Pins::load()?;
+    let pin = pins.get(tool);
+    let binary = install_dir(tool, pin)?.join(tool.name());
+
+    ensure!(
+        binary.is_file(),
+        "{name} {version} isn't cached yet, run `just swift-tool {name} --version` to download it",
+        name = tool.name(),
+        version = pin.version
+    );
+
+    println!("{}", binary.display());
+    Ok(())
 }
 
 fn sync() -> Result<()> {
@@ -252,7 +277,7 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 /// Returns the cached binary for a pin, downloading and verifying it first if needed
 fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathBuf> {
     let name = tool.name();
-    let install_dir = cache_dir()?.join(format!("{name}-{}", pin.version));
+    let install_dir = install_dir(tool, pin)?;
     let binary = install_dir.join(name);
 
     if binary.is_file() {
@@ -291,6 +316,11 @@ fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathB
     fs::rename(&partial, &binary)?;
 
     Ok(binary)
+}
+
+/// The directory a pin's binary is cached in, whether or not it has been downloaded yet
+fn install_dir(tool: SwiftTool, pin: &Pin) -> Result<PathBuf> {
+    Ok(cache_dir()?.join(format!("{}-{}", tool.name(), pin.version)))
 }
 
 fn release_digest(client: &Client, tool: SwiftTool, version: &str) -> Result<String> {

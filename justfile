@@ -21,6 +21,50 @@ list:
 xtask *args:
     cd rust && cargo --locked xtask {{ args }}
 
+# `worktree` enables them in this worktree only; `all` enables them in every worktree of this clone,
+# including ones created later. See docs/testing.md#pre-push-checks
+# [quick] Run the quick format, lint and manifest checks before every git push
+[group('utils')]
+[script('bash')]
+install-hooks scope="worktree":
+    set -euo pipefail
+    hooks=tools/git-hooks
+    current=$(git config --get core.hooksPath || true)
+    if [ -n "$current" ] && [ "$current" != "$hooks" ]; then
+        echo "error: core.hooksPath is already $current; unset it first so its hooks aren't silently replaced" >&2
+        exit 1
+    fi
+    for hook in "$(git rev-parse --git-common-dir)"/hooks/*; do
+        case "$hook" in *.sample) continue ;; esac
+        if [ -x "$hook" ]; then echo "warning: $hook stops running once core.hooksPath is set" >&2; fi
+    done
+    case "{{ scope }}" in
+        worktree)
+            # per-worktree settings need this extension, and with it git applies a shared core.bare
+            # or core.worktree to every worktree, which breaks a bare clone's worktrees
+            if [ -n "$(git config --local --get core.worktree || true)" ] || [ "$(git config --local --get core.bare || true)" = true ]; then
+                echo "error: this clone's shared config sets core.bare or core.worktree, so use 'just install-hooks all'" >&2
+                exit 1
+            fi
+            git config extensions.worktreeConfig true
+            git config --worktree core.hooksPath "$hooks"
+            ;;
+        all) git config --local core.hooksPath "$hooks" ;;
+        *) echo "error: scope must be worktree or all" >&2; exit 1 ;;
+    esac
+    echo "pre-push checks enabled ({{ scope }}); skip them once with 'git push --no-verify'"
+
+# [quick] Stop running the pre-push checks; scope is worktree or all, as given to install-hooks
+[group('utils')]
+[script('bash')]
+uninstall-hooks scope="worktree":
+    set -euo pipefail
+    case "{{ scope }}" in
+        worktree) git config --worktree --unset core.hooksPath || true ;;
+        all) git config --local --unset core.hooksPath || true ;;
+        *) echo "error: scope must be worktree or all" >&2; exit 1 ;;
+    esac
+
 # [bounded] Rebase current branch onto new-base after choosing the old squash-merged base
 [group('utils')]
 rebase new_base="master":
@@ -344,16 +388,56 @@ lint-rust *flags="":
 [group('lint')]
 [working-directory('android')]
 lint-android *flags="":
-    ./gradlew ktlintCheck {{ flags }}
+    just ktlint {{ flags }}
     ./gradlew detekt
+
+# [quick] Run ktlint over the Android project
+[group('lint')]
+[working-directory('android')]
+ktlint *flags="":
+    ./gradlew ktlintCheck {{ flags }}
 
 # [bounded] Lint Swift code and Cove-specific SwiftUI structure
 [group('lint')]
 lint-swift *flags="":
-    just swift-tool swiftformat --lint ios --swiftversion 6 {{ flags }}
+    just lint-swift-format {{ flags }}
     just swift-tool swiftlint lint --config .swiftlint.yml
     swift test --package-path tools/cove-swift-lint
     swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
+
+# [quick] Check Swift formatting with the pinned swiftformat
+[group('lint')]
+lint-swift-format *flags="":
+    just swift-tool swiftformat --lint ios --swiftversion 6 {{ flags }}
+
+# xtask trims trailing whitespace from the bindings it writes, so the fresh ones are trimmed too.
+# CI's compile jobs regenerate the bindings from the device builds instead, and stay the authority
+# if an export ever differs between the host and a device target
+# [bounded] Check that the committed UniFFI bindings match the Rust exports, from a host build
+[group('lint')]
+[script('bash')]
+[working-directory('rust')]
+bindings-check:
+    set -euo pipefail
+    cargo build --locked --lib -p cove
+    target_dir=$(cargo metadata --format-version 1 --no-deps --locked | grep -o '"target_directory":"[^"]*"' | cut -d'"' -f4)
+    case "$(uname -s)" in
+        Darwin) dynamic_lib=libcove.dylib ;;
+        *) dynamic_lib=libcove.so ;;
+    esac
+    out="$target_dir/bindings-check"
+    rm -rf "$out"
+    mkdir -p "$out/kotlin" "$out/swift"
+    cargo run --locked -q -p uniffi_cli -- generate "$target_dir/debug/$dynamic_lib" --library --language kotlin --no-format --out-dir "$out/kotlin"
+    cargo run --locked -q -p uniffi_cli -- "$target_dir/debug/libcove.a" "$out/swift" --swift-sources --module-name cove_core_ffi
+    find "$out" \( -name '*.kt' -o -name '*.swift' \) -exec perl -pi -e 's/[ \t\r]+$//' {} +
+    status=0
+    diff -rq "$out/kotlin/org/bitcoinppl/cove_core" ../android/app/src/main/java/org/bitcoinppl/cove_core || status=1
+    diff -rq "$out/swift" ../ios/CoveCore/Sources/CoveCore/generated || status=1
+    if [ "$status" -ne 0 ]; then
+        echo "UniFFI bindings are out of date. Run 'just build-android' and 'just build-ios' and commit the regenerated bindings, or 'just regenerate-bindings' to have CI commit them." >&2
+    fi
+    exit "$status"
 
 # [quick] Run the pinned swiftformat or swiftlint release from tools/swift-tools.json
 [group('lint')]

@@ -47,4 +47,5 @@
 
 - After local UniFFI changes, run `just build-ios` for affected iOS bindings and call sites and `just build-android` for affected Android bindings and call sites; run both when the exported API affects both platforms
 - To install and launch iOS from the CLI without Xcode, use `just build-run-ios --udid <device-udid>` and keep the phone unlocked
+- Before the first push from a worktree, run `just install-hooks` so the pre-push format, lint, manifest and bindings checks run for it; never `just install-hooks all`, which changes every worktree of the clone. Fix what the hook reports rather than pushing with `--no-verify`
 - Create commits, push branches, or install and launch applications on devices only when the user request authorizes the action
