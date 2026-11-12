@@ -54,6 +54,8 @@ struct EnterAddressView: View {
                 in: .whitespaces
             )
 
+            // writing back unchanged text would send rust its own address as a new entry
+            guard noSpaces != new else { return }
             address = noSpaces
         }
         .padding(.top, 14)
