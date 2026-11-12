@@ -2,15 +2,18 @@ use bdk_wallet::{
     KeychainKind,
     bitcoin::bip32::Xpriv,
     descriptor::ExtendedDescriptor,
+    descriptor::IntoWalletDescriptor as _,
     template::{Bip84, DescriptorTemplate as _},
 };
 use bip39::Mnemonic;
+use bitcoin::secp256k1::Secp256k1;
 use cove_device::keychain::Keychain;
 use cove_types::address::AddressWithNetwork;
 
 use super::{
     ADDRESS_OWNERSHIP_LOOKUP_GAP, AddressChain, AddressOwnership, AddressOwnershipError,
     AddressOwnershipLookup, OwnedAddress, UncheckedWallet, check_address_ownership,
+    check_address_ownership_with,
 };
 use crate::{
     bdk_store::BdkStore,
@@ -58,7 +61,7 @@ fn address_at(
 }
 
 fn find_owners(address: &AddressWithNetwork) -> AddressOwnership {
-    AddressOwnershipLookup::for_active_mode().find_owners(address).unwrap()
+    AddressOwnershipLookup::for_active_mode().unwrap().find_owners(address).unwrap()
 }
 
 fn owned(metadata: &WalletMetadata, chain: AddressChain, index: u32) -> OwnedAddress {
@@ -109,9 +112,38 @@ fn reveal_through(metadata: &WalletMetadata, keychain: KeychainKind, index: u32)
     wallet.persist(&mut store.conn).unwrap();
 }
 
+/// A descriptor for any BIP 84 account, parsed the way imported descriptors are
+fn bip84_account_descriptor(
+    mnemonic: &Mnemonic,
+    network: Network,
+    account: u32,
+    keychain: KeychainKind,
+) -> ExtendedDescriptor {
+    let bitcoin_network = bitcoin::Network::from(network);
+    let xprv = Xpriv::new_master(bitcoin_network, &mnemonic.to_seed("")).unwrap();
+    let coin_type = u32::from(network != Network::Bitcoin);
+    let chain = match keychain {
+        KeychainKind::External => 0,
+        KeychainKind::Internal => 1,
+    };
+
+    let (descriptor, _) = format!("wpkh({xprv}/84'/{coin_type}'/{account}'/{chain}/*)")
+        .into_wallet_descriptor(&Secp256k1::new(), bitcoin_network.into())
+        .unwrap();
+
+    descriptor
+}
+
+fn bip84_pair(mnemonic: &Mnemonic, network: Network) -> (ExtendedDescriptor, ExtendedDescriptor) {
+    (
+        bip84_descriptor(mnemonic, network, KeychainKind::External),
+        bip84_descriptor(mnemonic, network, KeychainKind::Internal),
+    )
+}
+
 /// A watch-only wallet with only the keychain descriptor mirror and no wallet store
 fn save_store_less_watch_only(
-    mnemonic: Option<&Mnemonic>,
+    descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
     network: Network,
     mode: WalletMode,
 ) -> WalletMetadata {
@@ -123,14 +155,8 @@ fn save_store_less_watch_only(
     metadata.address_type = WalletAddressType::NativeSegwit;
     metadata.wallet_type = WalletType::WatchOnly;
 
-    if let Some(mnemonic) = mnemonic {
-        Keychain::global()
-            .save_public_descriptor(
-                &metadata.id,
-                bip84_descriptor(mnemonic, network, KeychainKind::External),
-                bip84_descriptor(mnemonic, network, KeychainKind::Internal),
-            )
-            .unwrap();
+    if let Some((external, internal)) = descriptors {
+        Keychain::global().save_public_descriptor(&metadata.id, external, internal).unwrap();
     }
 
     Database::global().wallets.save_new_wallet_metadata(metadata.clone()).unwrap();
@@ -255,8 +281,11 @@ fn every_network_sharing_the_address_format_is_searched() {
 fn wallets_without_a_store_are_searched_from_their_keychain_descriptors() {
     let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
     let mnemonic = random_mnemonic();
-    let watch_only =
-        save_store_less_watch_only(Some(&mnemonic), Network::Bitcoin, WalletMode::Main);
+    let watch_only = save_store_less_watch_only(
+        Some(bip84_pair(&mnemonic, Network::Bitcoin)),
+        Network::Bitcoin,
+        WalletMode::Main,
+    );
 
     let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::Internal, 7);
     assert_eq!(find_owners(&address), owned_by(vec![owned(&watch_only, AddressChain::Change, 7)]));
@@ -343,5 +372,136 @@ fn a_wallet_scoped_lookup_stays_on_that_wallets_network_and_active_mode() {
     assert_eq!(
         decoy_scope.find_script_owners(&script),
         Err(AddressOwnershipError::WalletModeChanged)
+    );
+}
+
+#[test]
+fn the_account_comes_from_the_chain_that_owns_the_address() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+
+    // two-line descriptor imports may give each chain its own account
+    let external = bip84_account_descriptor(&mnemonic, Network::Bitcoin, 0, KeychainKind::External);
+    let internal = bip84_account_descriptor(&mnemonic, Network::Bitcoin, 1, KeychainKind::Internal);
+    let change_address =
+        internal.at_derivation_index(2).unwrap().address(bitcoin::Network::Bitcoin).unwrap();
+
+    let wallet =
+        save_store_less_watch_only(Some((external, internal)), Network::Bitcoin, WalletMode::Main);
+
+    let address = AddressWithNetwork::try_new(&change_address.to_string()).unwrap();
+    assert_eq!(
+        find_owners(&address),
+        owned_by(vec![OwnedAddress {
+            account: Some(1),
+            ..owned(&wallet, AddressChain::Change, 2)
+        }])
+    );
+}
+
+#[test]
+fn a_lookup_leaves_the_wallet_store_untouched() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    let wallet =
+        import_mnemonic_with_target(mnemonic.clone(), Network::Bitcoin, WalletMode::Main).unwrap();
+    reveal_through(&wallet, KeychainKind::External, 10);
+
+    let [legacy_store, store, ..] = BdkStore::wallet_store_artifact_paths(&wallet.id);
+    let store_before = std::fs::read(&store).unwrap();
+
+    // past the revealed addresses, so the result proves the store, not the keychain, was read
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 105);
+    assert_eq!(find_owners(&address), owned_by(vec![owned(&wallet, AddressChain::Receive, 105)]));
+
+    assert!(std::fs::read(&store).unwrap() == store_before, "the lookup changed the wallet store");
+    assert!(!legacy_store.exists(), "the lookup created a legacy file store");
+}
+
+/// Run SQL against a wallet's store, as an older or damaged install would have left it
+fn alter_store(metadata: &WalletMetadata, sql: &str) {
+    let store = BdkStore::try_new(&metadata.id, metadata.network).unwrap();
+    store.conn.execute_batch(sql).unwrap();
+}
+
+#[test]
+fn stores_on_an_older_bdk_schema_are_still_searched_past_their_revealed_addresses() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    let wallet =
+        import_mnemonic_with_target(mnemonic.clone(), Network::Bitcoin, WalletMode::Main).unwrap();
+    reveal_through(&wallet, KeychainKind::External, 150);
+
+    // a store last opened before BDK 3 has no locked-outpoint or derived-script tables
+    alter_store(
+        &wallet,
+        "DROP TABLE bdk_wallet_locked_outpoints; \
+         DROP TABLE bdk_descriptor_derived_spks; \
+         UPDATE bdk_schemas SET version = 0 WHERE name IN ('bdk_wallet', 'bdk_keychaintxout');",
+    );
+
+    // only the store knows the chain was revealed through 150
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 240);
+    assert_eq!(find_owners(&address), owned_by(vec![owned(&wallet, AddressChain::Receive, 240)]));
+}
+
+#[test]
+fn an_unreadable_store_is_reported_as_unchecked_instead_of_searched_from_the_keychain() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    let wallet =
+        import_mnemonic_with_target(mnemonic.clone(), Network::Bitcoin, WalletMode::Main).unwrap();
+    reveal_through(&wallet, KeychainKind::External, 150);
+    alter_store(&wallet, "DROP TABLE bdk_wallet;");
+
+    // the keychain mirror would search only 0 to 99 and wrongly report index 240 as not owned
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 240);
+    assert_eq!(
+        find_owners(&address),
+        AddressOwnership::NotFound { unchecked_wallets: vec![UncheckedWallet::from(&wallet)] }
+    );
+}
+
+#[test]
+fn a_mode_switch_before_the_check_resumes_discards_the_result() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    import_mnemonic_with_target(mnemonic.clone(), Network::Bitcoin, WalletMode::Main).unwrap();
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 0);
+
+    // the search finds the main wallet, then decoy mode turns on before the check resumes
+    let check = check_address_ownership_with(address.address.to_string(), |search| async move {
+        let ownership = search();
+        assert!(matches!(ownership, Ok(AddressOwnership::Owned { .. })), "{ownership:?}");
+
+        select_target(Network::Bitcoin, WalletMode::Decoy);
+        ownership
+    });
+
+    let result = cove_tokio::task::block_on(check);
+    assert!(matches!(result, Err(AddressOwnershipError::WalletModeChanged)), "{result:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_store_path_that_cannot_be_checked_is_reported_as_unchecked() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    let wallet =
+        import_mnemonic_with_target(mnemonic.clone(), Network::Bitcoin, WalletMode::Main).unwrap();
+
+    // a symlink to itself fails every metadata check, as an unreadable directory would
+    let store_path = crate::bdk_store::sqlite_data_path(&wallet.id);
+    let _ = std::fs::remove_file(&store_path);
+    std::os::unix::fs::symlink(&store_path, &store_path).unwrap();
+
+    // the keychain mirror would find index 0, but it must not stand in for a store that may exist
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 0);
+    let ownership = find_owners(&address);
+    std::fs::remove_file(&store_path).unwrap();
+
+    assert_eq!(
+        ownership,
+        AddressOwnership::NotFound { unchecked_wallets: vec![UncheckedWallet::from(&wallet)] }
     );
 }

@@ -20,7 +20,7 @@ use crate::{
     database::Database,
     wallet::{
         WalletError,
-        addressing::{self, PublishedWalletScripts},
+        addressing::{self, PublishedAddressChains},
         metadata::{WalletMetadata, WalletMode},
     },
 };
@@ -82,6 +82,10 @@ pub enum AddressOwnershipError {
     #[error("unable to read the wallet list: {0}")]
     WalletListUnavailable(String),
 
+    /// Whether the app is in main or decoy mode could not be read, so no wallets are searched
+    #[error("unable to read the wallet mode: {0}")]
+    WalletModeUnavailable(String),
+
     /// The lookup's mode is not, or stopped being, the app's active mode, so its result would
     /// reveal the other mode's wallets and is withheld
     #[error("the wallet mode changed during the lookup")]
@@ -102,8 +106,8 @@ pub struct AddressOwnershipLookup {
 
 impl AddressOwnershipLookup {
     /// A lookup over every network's wallets in the app's active wallet mode
-    pub fn for_active_mode() -> Self {
-        Self { mode: Database::global().global_config.wallet_mode(), network: None }
+    pub fn for_active_mode() -> Result<Self, AddressOwnershipError> {
+        Ok(Self { mode: active_wallet_mode()?, network: None })
     }
 
     /// A lookup over the wallets that share this wallet's network and mode
@@ -182,8 +186,12 @@ impl AddressOwnershipLookup {
         Ok(AddressOwnership::Owned { owners })
     }
 
-    fn ensure_mode_is_active(&self) -> Result<(), AddressOwnershipError> {
-        if Database::global().global_config.wallet_mode() != self.mode {
+    /// Fails unless this lookup's mode is the app's active mode
+    ///
+    /// Run before searching, after searching, and again by async callers once the result is back
+    /// on their task, since each step can straddle a mode switch
+    pub fn ensure_mode_is_active(&self) -> Result<(), AddressOwnershipError> {
+        if active_wallet_mode()? != self.mode {
             return Err(AddressOwnershipError::WalletModeChanged);
         }
 
@@ -216,10 +224,38 @@ impl AddressOwnershipLookup {
 pub async fn check_address_ownership(
     address: String,
 ) -> Result<AddressOwnership, AddressOwnershipError> {
-    let address = AddressWithNetwork::try_new(&address)?;
-    let lookup = AddressOwnershipLookup::for_active_mode();
+    check_address_ownership_with(address, cove_tokio::unblock::run_blocking).await
+}
 
-    cove_tokio::unblock::run_blocking(move || lookup.find_owners(&address)).await
+/// The search a check hands to its blocking runner
+type OwnershipSearch = Box<dyn FnOnce() -> Result<AddressOwnership, AddressOwnershipError> + Send>;
+
+/// Check an address, running the search through `run_blocking`
+///
+/// The runner is a parameter so tests can switch the wallet mode between the search finishing and
+/// the check resuming
+async fn check_address_ownership_with<Fut>(
+    address: String,
+    run_blocking: impl FnOnce(OwnershipSearch) -> Fut,
+) -> Result<AddressOwnership, AddressOwnershipError>
+where
+    Fut: Future<Output = Result<AddressOwnership, AddressOwnershipError>>,
+{
+    let address = AddressWithNetwork::try_new(&address)?;
+    let lookup = AddressOwnershipLookup::for_active_mode()?;
+    let ownership = run_blocking(Box::new(move || lookup.find_owners(&address))).await?;
+
+    // the mode can switch while this task waits to resume
+    lookup.ensure_mode_is_active()?;
+    Ok(ownership)
+}
+
+/// The active wallet mode, failing instead of assuming main mode when it cannot be read
+fn active_wallet_mode() -> Result<WalletMode, AddressOwnershipError> {
+    Database::global()
+        .global_config
+        .try_wallet_mode()
+        .map_err_str(AddressOwnershipError::WalletModeUnavailable)
 }
 
 /// Where one wallet derives the script, or `None` when the wallet's search window lacks it
@@ -227,13 +263,12 @@ fn find_in_wallet(
     metadata: &WalletMetadata,
     script: &ScriptBuf,
 ) -> Result<Option<OwnedAddress>, WalletError> {
-    let scripts =
-        addressing::read_published_wallet_scripts(metadata)?.ok_or(WalletError::WalletNotFound)?;
+    let chains =
+        addressing::read_published_address_chains(metadata)?.ok_or(WalletError::WalletNotFound)?;
 
-    let found = scripts
-        .indexed_derivation(script)
-        .or_else(|| scripts.search_past_revealed(KeychainKind::External, script))
-        .or_else(|| scripts.search_past_revealed(KeychainKind::Internal, script));
+    let found = [KeychainKind::External, KeychainKind::Internal]
+        .into_iter()
+        .find_map(|keychain| chains.search(keychain, script).map(|index| (keychain, index)));
 
     let Some((keychain, index)) = found else {
         return Ok(None);
@@ -245,48 +280,33 @@ fn find_in_wallet(
         network: metadata.network,
         chain: keychain.into(),
         index,
-        account: scripts.descriptor(KeychainKind::External).account_index(),
+        account: chains.descriptor(keychain).account_index(),
     }))
 }
 
-impl PublishedWalletScripts {
+impl PublishedAddressChains {
     fn descriptor(&self, keychain: KeychainKind) -> &ExtendedDescriptor {
-        match (self, keychain) {
-            (Self::Store(wallet), keychain) => wallet.public_descriptor(keychain),
-            (Self::KeychainMirror(pair), KeychainKind::External) => &pair.0,
-            (Self::KeychainMirror(pair), KeychainKind::Internal) => &pair.1,
+        match keychain {
+            KeychainKind::External => &self.external,
+            KeychainKind::Internal => &self.internal,
         }
     }
 
-    /// The store's own index, which covers every revealed address plus BDK's lookahead
-    fn indexed_derivation(&self, script: &ScriptBuf) -> Option<(KeychainKind, u32)> {
-        match self {
-            Self::Store(wallet) => wallet.derivation_of_spk(script.clone()),
-            Self::KeychainMirror(_) => None,
-        }
-    }
-
-    /// Derive the unrevealed addresses up to the lookup gap
-    ///
-    /// The keychain mirror has no record of revealed addresses, so it is searched from index 0
-    fn search_past_revealed(
-        &self,
-        keychain: KeychainKind,
-        script: &ScriptBuf,
-    ) -> Option<(KeychainKind, u32)> {
-        let last_revealed = match self {
-            Self::Store(wallet) => wallet.derivation_index(keychain),
-            Self::KeychainMirror(_) => None,
+    /// The index of `script` on one chain, searching up to the lookup gap past its last revealed
+    /// address, or through the first gap's worth when none was revealed
+    fn search(&self, keychain: KeychainKind, script: &ScriptBuf) -> Option<u32> {
+        let last_revealed = match keychain {
+            KeychainKind::External => self.last_revealed_external,
+            KeychainKind::Internal => self.last_revealed_internal,
         };
 
-        let first_unrevealed = last_revealed.map_or(0, |index| index.saturating_add(1));
         let last_searched = last_revealed.map_or(ADDRESS_OWNERSHIP_LOOKUP_GAP - 1, |index| {
             index.saturating_add(ADDRESS_OWNERSHIP_LOOKUP_GAP)
         });
 
-        SpkIterator::new_with_range(self.descriptor(keychain), first_unrevealed..=last_searched)
+        SpkIterator::new_with_range(self.descriptor(keychain), 0..=last_searched)
             .find(|(_, candidate)| candidate == script)
-            .map(|(index, _)| (keychain, index))
+            .map(|(index, _)| index)
     }
 }
 
