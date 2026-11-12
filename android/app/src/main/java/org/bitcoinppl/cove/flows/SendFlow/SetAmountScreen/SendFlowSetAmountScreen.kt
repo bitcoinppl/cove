@@ -102,6 +102,7 @@ fun SendFlowSetAmountScreen(
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
+    onPickWallet: (() -> Unit)? = null,
 ) {
     var focusedField by remember { mutableStateOf(SendFocusField.None) }
     val focusManager = LocalFocusManager.current
@@ -312,6 +313,7 @@ fun SendFlowSetAmountScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                         EnterAddressView(
                             onScanQr = onScanQr,
+                            onPickWallet = onPickWallet,
                             initialAddress = initialAddress,
                             onAddressChanged = { newAddress ->
                                 sendFlowManager.enteringAddress = newAddress

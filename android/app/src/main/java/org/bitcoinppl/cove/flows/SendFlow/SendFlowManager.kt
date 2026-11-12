@@ -239,6 +239,21 @@ class SendFlowManager internal constructor(
         dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
     }
 
+    /**
+     * the user's other wallets this send can pay directly, for the wallet picker
+     */
+    fun transferDestinations(): List<TransferDestination> =
+        withRustOr(emptyList()) {
+            transferDestinations()
+        }
+
+    /**
+     * fill the address with another wallet's next receive address
+     */
+    fun selectTransferDestination(walletId: WalletId) {
+        dispatch(SendFlowManagerAction.SelectTransferDestination(walletId))
+    }
+
     fun updateAmount(amount: Amount) {
         if (isClosed.get()) return
         this.amount = amount

@@ -121,6 +121,7 @@ private final class LayoutOnlySendManager: SendFlowRustManaging {
     func maxSendMinusFees() -> Amount? { nil }
     func maxSendMinusFeesAndSmallUtxo() -> Amount? { nil }
     func amount() -> Amount { Amount.fromSat(sats: 0) }
+    func transferDestinations() -> [TransferDestination] { [] }
     func dispatch(action _: SendFlowManagerAction) {}
 
     func getCustomFeeOption(
