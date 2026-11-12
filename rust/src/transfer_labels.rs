@@ -62,25 +62,28 @@ fn transfer_recipients(
     sender: &WalletMetadata,
     transaction: &Transaction,
 ) -> Vec<TransferRecipient> {
-    let lookup = AddressOwnershipLookup::for_wallet(sender);
+    let scripts =
+        transaction.output.iter().map(|output| output.script_pubkey.clone()).collect::<Vec<_>>();
+
+    let ownerships = match AddressOwnershipLookup::for_wallet(sender).find_scripts_owners(&scripts)
+    {
+        Ok(ownerships) => ownerships,
+
+        // without the active mode, naming a wallet could reveal the other mode's wallets
+        Err(
+            AddressOwnershipError::WalletModeChanged
+            | AddressOwnershipError::WalletModeUnavailable(_),
+        ) => return Vec::new(),
+
+        Err(error) => {
+            warn!("unable to look up who owns a transfer's outputs: {error}");
+            return Vec::new();
+        }
+    };
+
     let mut recipients: Vec<TransferRecipient> = Vec::new();
-
-    for output in &transaction.output {
-        let owners = match lookup.find_script_owners(&output.script_pubkey) {
-            Ok(AddressOwnership::Owned { owners }) => owners,
-            Ok(AddressOwnership::NotFound { .. }) => continue,
-
-            // without the active mode, naming a wallet could reveal the other mode's wallets
-            Err(
-                AddressOwnershipError::WalletModeChanged
-                | AddressOwnershipError::WalletModeUnavailable(_),
-            ) => return Vec::new(),
-
-            Err(error) => {
-                warn!("unable to look up who owns a transfer output: {error}");
-                continue;
-            }
-        };
+    for ownership in ownerships {
+        let AddressOwnership::Owned { owners } = ownership else { continue };
 
         // the sender owns its change
         for owner in owners.into_iter().filter(|owner| owner.wallet_id != sender.id) {

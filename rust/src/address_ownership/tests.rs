@@ -381,21 +381,37 @@ fn a_wallet_scoped_lookup_stays_on_that_wallets_network_and_active_mode() {
 
     let signet_scope = AddressOwnershipLookup::for_wallet(&signet);
     assert_eq!(
-        signet_scope.find_script_owners(&script).unwrap(),
-        owned_by(vec![owned(&signet, AddressChain::Change, 4)]),
+        signet_scope.find_scripts_owners(std::slice::from_ref(&script)).unwrap(),
+        vec![owned_by(vec![owned(&signet, AddressChain::Change, 4)])],
         "the testnet wallet shares the script but not the network"
+    );
+
+    // a batch, such as a transaction's outputs, answers each script in the order given
+    let receive =
+        address_at(&mnemonic, Network::Signet, KeychainKind::External, 2).address.script_pubkey();
+    let stranger = address_at(&random_mnemonic(), Network::Signet, KeychainKind::External, 0)
+        .address
+        .script_pubkey();
+
+    assert_eq!(
+        signet_scope.find_scripts_owners(&[stranger, script.clone(), receive]).unwrap(),
+        vec![
+            not_found(),
+            owned_by(vec![owned(&signet, AddressChain::Change, 4)]),
+            owned_by(vec![owned(&signet, AddressChain::Receive, 2)]),
+        ]
     );
 
     let testnet_scope = AddressOwnershipLookup::for_wallet(&testnet);
     assert_eq!(
-        testnet_scope.find_script_owners(&script).unwrap(),
-        owned_by(vec![owned(&testnet, AddressChain::Change, 4)])
+        testnet_scope.find_scripts_owners(std::slice::from_ref(&script)).unwrap(),
+        vec![owned_by(vec![owned(&testnet, AddressChain::Change, 4)])]
     );
 
     // a decoy wallet's scope is refused while main mode is active, so it cannot list main wallets
     let decoy_scope = AddressOwnershipLookup::for_wallet(&decoy);
     assert_eq!(
-        decoy_scope.find_script_owners(&script),
+        decoy_scope.find_scripts_owners(std::slice::from_ref(&script)),
         Err(AddressOwnershipError::WalletModeChanged)
     );
 }
