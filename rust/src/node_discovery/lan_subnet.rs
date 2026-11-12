@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 
-use ipnet::Ipv4Net;
+use ipnet::{Ipv4AddrRange, Ipv4Net};
 
 use super::lan_binding::LanBinding;
 
@@ -38,15 +38,33 @@ pub enum LanSubnetError {
 /// The local IPv4 subnet discovery sweeps, at most a /24 around the device's own address
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LanSubnet {
-    own_address: Ipv4Addr,
-    network: Ipv4Net,
     binding: LanBinding,
+    /// The block swept, the interface's network narrowed to at most a /24
+    swept: Ipv4Net,
+    /// The interface's whole network, whose own network and broadcast addresses aren't hosts
+    network: Ipv4Net,
+    own_address: Ipv4Addr,
 }
 
 impl LanSubnet {
-    /// The addresses to probe, every host in the subnet except the device itself
+    /// The addresses to probe, every host in the swept block except the device itself
+    ///
+    /// Only the interface network's own edges are skipped: when a wider network is narrowed to
+    /// a /24, that block's first and last addresses are ordinary hosts
     pub fn hosts(&self) -> impl Iterator<Item = Ipv4Addr> + '_ {
-        self.network.hosts().filter(|host| *host != self.own_address)
+        // a /31 or /32 has no network or broadcast address to skip
+        let edges = (self.network.prefix_len() < 31)
+            .then(|| [self.network.network(), self.network.broadcast()]);
+
+        Ipv4AddrRange::new(self.swept.network(), self.swept.broadcast()).filter(move |host| {
+            *host != self.own_address && !edges.is_some_and(|edges| edges.contains(host))
+        })
+    }
+
+    /// Whether both subnets would sweep the same hosts over the same network, such as two
+    /// addresses the device holds on one Wi-Fi network
+    pub fn sweeps_same_hosts_as(&self, other: &Self) -> bool {
+        self.binding == other.binding && self.swept == other.swept && self.network == other.network
     }
 
     /// The device's own address on this subnet, which mDNS queries are sent from
@@ -73,14 +91,18 @@ impl TryFrom<&LanInterface> for LanSubnet {
             return Err(LanSubnetError::NotLocal(own_address));
         }
 
-        // a wider network is narrowed to the /24 holding the device, the block most nodes on a
-        // home network share with the phone
-        let prefix = interface.prefix_length.max(WIDEST_SWEPT_PREFIX);
-        let network = Ipv4Net::new(own_address, prefix)
+        let network = Ipv4Net::new(own_address, interface.prefix_length)
             .map_err(|_| LanSubnetError::InvalidPrefix(interface.prefix_length))?
             .trunc();
 
-        Ok(Self { own_address, network, binding: interface.binding })
+        // a wider network is narrowed to the /24 holding the device, the block most nodes on a
+        // home network share with the phone
+        let swept_prefix = interface.prefix_length.max(WIDEST_SWEPT_PREFIX);
+        let swept = Ipv4Net::new(own_address, swept_prefix)
+            .expect("a prefix no shorter than a valid one is valid")
+            .trunc();
+
+        Ok(Self { binding: interface.binding, swept, network, own_address })
     }
 }
 
@@ -127,11 +149,23 @@ mod tests {
 
     #[test]
     fn a_wide_subnet_is_narrowed_to_the_devices_slash_24() {
-        let subnet = LanSubnet::try_from(&interface("10.20.30.40", 8)).unwrap();
+        let subnet = LanSubnet::try_from(&interface("192.168.1.18", 16)).unwrap();
         let hosts: Vec<_> = subnet.hosts().collect();
 
-        assert_eq!(hosts.len(), 253);
-        assert!(hosts.iter().all(|host| host.octets()[..3] == [10, 20, 30]));
+        // the block's first and last addresses are ordinary hosts on the wider network
+        assert_eq!(hosts.len(), 255);
+        assert_eq!(hosts.first(), Some(&Ipv4Addr::new(192, 168, 1, 0)));
+        assert_eq!(hosts.last(), Some(&Ipv4Addr::new(192, 168, 1, 255)));
+        assert!(!hosts.contains(&Ipv4Addr::new(192, 168, 1, 18)));
+    }
+
+    #[test]
+    fn the_wider_networks_own_edges_are_still_skipped() {
+        let first_block = LanSubnet::try_from(&interface("10.0.0.5", 8)).unwrap();
+        let last_block = LanSubnet::try_from(&interface("10.255.255.5", 8)).unwrap();
+
+        assert_eq!(first_block.hosts().next(), Some(Ipv4Addr::new(10, 0, 0, 1)));
+        assert_eq!(last_block.hosts().last(), Some(Ipv4Addr::new(10, 255, 255, 254)));
     }
 
     #[test]
