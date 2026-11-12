@@ -9420,6 +9420,191 @@ public func FfiConverterTypeRustConnectivityManager_lower(_ value: RustConnectiv
 
 
 
+public protocol RustFeeBumpManagerProtocol: AnyObject, Sendable {
+
+    /**
+     * A custom rate with the replacement's total fee at it
+     *
+     * Fails with [`FeeBumpError::FeeRateTooLow`] below the rate a node would accept
+     */
+    func customFeeOption(feeRate: FeeRate) async throws  -> FeeRateOptionWithTotalFee
+
+    func dispatch(action: FeeBumpManagerAction)
+
+    func listenForUpdates(reconciler: FeeBumpManagerReconciler)
+
+    func selectedFeeRate()  -> FeeRateOptionWithTotalFee?
+
+    /**
+     * The status when the frontend first renders, later changes arrive as reconcile messages
+     */
+    func status()  -> FeeBumpStatus
+
+}
+open class RustFeeBumpManager: RustFeeBumpManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rustfeebumpmanager(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustfeebumpmanager(handle, $0) }
+    }
+
+
+
+
+    /**
+     * A custom rate with the replacement's total fee at it
+     *
+     * Fails with [`FeeBumpError::FeeRateTooLow`] below the rate a node would accept
+     */
+open func customFeeOption(feeRate: FeeRate)async throws  -> FeeRateOptionWithTotalFee  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustfeebumpmanager_custom_fee_option(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeFeeRate_lower(feeRate)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeFeeRateOptionWithTotalFee_lift,
+            errorHandler: FfiConverterTypeFeeBumpError_lift
+        )
+}
+
+open func dispatch(action: FeeBumpManagerAction)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustfeebumpmanager_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFeeBumpManagerAction_lower(action),uniffiCallStatus
+    )
+}
+}
+
+open func listenForUpdates(reconciler: FeeBumpManagerReconciler)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustfeebumpmanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceFeeBumpManagerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+open func selectedFeeRate() -> FeeRateOptionWithTotalFee?  {
+    return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustfeebumpmanager_selected_fee_rate(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The status when the frontend first renders, later changes arrive as reconcile messages
+     */
+open func status() -> FeeBumpStatus  {
+    return try!  FfiConverterTypeFeeBumpStatus_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustfeebumpmanager_status(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustFeeBumpManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustFeeBumpManager
+
+    public static func lift(_ handle: UInt64) throws -> RustFeeBumpManager {
+        return RustFeeBumpManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustFeeBumpManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustFeeBumpManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustFeeBumpManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustFeeBumpManager_lift(_ handle: UInt64) throws -> RustFeeBumpManager {
+    return try FfiConverterTypeRustFeeBumpManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustFeeBumpManager_lower(_ value: RustFeeBumpManager) -> UInt64 {
+    return FfiConverterTypeRustFeeBumpManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustImportWalletManagerProtocol: AnyObject, Sendable {
 
     /**
@@ -10489,6 +10674,11 @@ public func FfiConverterTypeRustSendFlowManager_lower(_ value: RustSendFlowManag
 public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     /**
+     * A manager that speeds up the pending transaction `tx_id`, loading its options right away
+     */
+    func newFeeBumpManager(txId: TxId)  -> RustFeeBumpManager
+
+    /**
      * Get address at the given index
      */
     func addressAt(index: UInt32) async throws  -> AddressInfo
@@ -10810,6 +11000,19 @@ public static func tryNewFromXpub(xpub: String)throws  -> RustWalletManager  {
 }
 
 
+
+    /**
+     * A manager that speeds up the pending transaction `tx_id`, loading its options right away
+     */
+open func newFeeBumpManager(txId: TxId) -> RustFeeBumpManager  {
+    return try!  FfiConverterTypeRustFeeBumpManager_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_new_fee_bump_manager(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTxId_lower(txId),uniffiCallStatus
+    )
+})
+}
 
     /**
      * Get address at the given index
@@ -17276,6 +17479,93 @@ public func FfiConverterTypeDiagnosticsSubmission_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeDiagnosticsSubmission_lower(_ value: DiagnosticsSubmission) -> RustBuffer {
     return FfiConverterTypeDiagnosticsSubmission.lower(value)
+}
+
+
+/**
+ * The rates a replacement can pay
+ */
+public struct FeeBumpOptions {
+    /**
+     * What the transaction being replaced pays
+     */
+    public var originalFee: Amount
+    public var originalFeeRate: FeeRate
+    /**
+     * The lowest rate a node accepts the replacement at, a custom rate can't go below it
+     */
+    public var minimumFeeRate: FeeRate
+    /**
+     * Network rates raised to at least [`Self::minimum_fee_rate`], with the replacement's total
+     * fee at each the wallet can pay. When it can pay none of them, the custom row holds the
+     * minimum rate instead
+     */
+    public var feeOptions: FeeRateOptionsWithTotalFee
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * What the transaction being replaced pays
+         */originalFee: Amount, originalFeeRate: FeeRate,
+        /**
+         * The lowest rate a node accepts the replacement at, a custom rate can't go below it
+         */minimumFeeRate: FeeRate,
+        /**
+         * Network rates raised to at least [`Self::minimum_fee_rate`], with the replacement's total
+         * fee at each the wallet can pay. When it can pay none of them, the custom row holds the
+         * minimum rate instead
+         */feeOptions: FeeRateOptionsWithTotalFee) {
+        self.originalFee = originalFee
+        self.originalFeeRate = originalFeeRate
+        self.minimumFeeRate = minimumFeeRate
+        self.feeOptions = feeOptions
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpOptions: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpOptions: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpOptions {
+        return
+            try FeeBumpOptions(
+                originalFee: FfiConverterTypeAmount.read(from: &buf),
+                originalFeeRate: FfiConverterTypeFeeRate.read(from: &buf),
+                minimumFeeRate: FfiConverterTypeFeeRate.read(from: &buf),
+                feeOptions: FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeeBumpOptions, into buf: inout [UInt8]) {
+        FfiConverterTypeAmount.write(value.originalFee, into: &buf)
+        FfiConverterTypeFeeRate.write(value.originalFeeRate, into: &buf)
+        FfiConverterTypeFeeRate.write(value.minimumFeeRate, into: &buf)
+        FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.feeOptions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpOptions_lift(_ buf: RustBuffer) throws -> FeeBumpOptions {
+    return try FfiConverterTypeFeeBumpOptions.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpOptions_lower(_ value: FeeBumpOptions) -> RustBuffer {
+    return FfiConverterTypeFeeBumpOptions.lower(value)
 }
 
 
@@ -28897,6 +29187,650 @@ public func FfiConverterTypeDriveAccountSwitchReconcileAction_lift(_ buf: RustBu
 #endif
 public func FfiConverterTypeDriveAccountSwitchReconcileAction_lower(_ value: DriveAccountSwitchReconcileAction) -> RustBuffer {
     return FfiConverterTypeDriveAccountSwitchReconcileAction.lower(value)
+}
+
+
+
+/**
+ * Why a transaction can't be fee bumped
+ */
+
+public enum FeeBumpBlocker: Equatable, Hashable {
+
+    case confirmed
+    /**
+     * Another transaction spending the same coins took its place
+     */
+    case replaced
+    /**
+     * None of its inputs belong to this wallet, such as a payment it received
+     */
+    case notSentByWallet
+    /**
+     * The wallet holds no keys, so it could not sign a replacement
+     */
+    case watchOnly
+    /**
+     * Some inputs belong to another wallet, as in a payjoin, so this wallet can't sign them
+     */
+    case foreignInputs
+    /**
+     * No input signals BIP 125, so the wallet won't replace it
+     */
+    case notReplaceable
+    /**
+     * It pays more than one address outside the wallet, which the send screens can't show
+     */
+    case multipleRecipients
+    /**
+     * A later pending transaction spends one of its outputs and would be dropped with it
+     */
+    case pendingDescendant
+    /**
+     * A previous output it spends is missing from the wallet, so its fee is unknown
+     */
+    case unknownFee
+
+
+
+public func userMessage() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_feebumpblocker_usermessage(
+            FfiConverterTypeFeeBumpBlocker_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpBlocker: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpBlocker: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpBlocker
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpBlocker {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .confirmed
+
+        case 2: return .replaced
+
+        case 3: return .notSentByWallet
+
+        case 4: return .watchOnly
+
+        case 5: return .foreignInputs
+
+        case 6: return .notReplaceable
+
+        case 7: return .multipleRecipients
+
+        case 8: return .pendingDescendant
+
+        case 9: return .unknownFee
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpBlocker, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .confirmed:
+            writeInt(&buf, Int32(1))
+
+
+        case .replaced:
+            writeInt(&buf, Int32(2))
+
+
+        case .notSentByWallet:
+            writeInt(&buf, Int32(3))
+
+
+        case .watchOnly:
+            writeInt(&buf, Int32(4))
+
+
+        case .foreignInputs:
+            writeInt(&buf, Int32(5))
+
+
+        case .notReplaceable:
+            writeInt(&buf, Int32(6))
+
+
+        case .multipleRecipients:
+            writeInt(&buf, Int32(7))
+
+
+        case .pendingDescendant:
+            writeInt(&buf, Int32(8))
+
+
+        case .unknownFee:
+            writeInt(&buf, Int32(9))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpBlocker_lift(_ buf: RustBuffer) throws -> FeeBumpBlocker {
+    return try FfiConverterTypeFeeBumpBlocker.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpBlocker_lower(_ value: FeeBumpBlocker) -> RustBuffer {
+    return FfiConverterTypeFeeBumpBlocker.lower(value)
+}
+
+
+
+/**
+ * Why a replacement could not be built
+ *
+ * Crosses the FFI as a flat error: the frontend gets the variant and its message
+ */
+public
+enum FeeBumpError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case NotFound(message: String)
+
+    case InitialScanIncomplete(message: String)
+
+    case Blocked(message: String)
+
+    /**
+     * The requested rate is under the floor a node needs to accept the replacement
+     */
+    case FeeRateTooLow(message: String)
+
+    /**
+     * The wallet has no confirmed coin left to pay the higher fee
+     */
+    case InsufficientFunds(message: String)
+
+    /**
+     * Carries the underlying error for logs through `Debug`, while `Display`, which crosses
+     * the FFI, stays generic
+     */
+    case Build(message: String)
+
+
+
+
+
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension FeeBumpError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpError: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .NotFound(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .InitialScanIncomplete(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .Blocked(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .FeeRateTooLow(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .InsufficientFunds(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 6: return .Build(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+        case .NotFound(_ /* message is ignored*/):
+            writeInt(&buf, Int32(1))
+        case .InitialScanIncomplete(_ /* message is ignored*/):
+            writeInt(&buf, Int32(2))
+        case .Blocked(_ /* message is ignored*/):
+            writeInt(&buf, Int32(3))
+        case .FeeRateTooLow(_ /* message is ignored*/):
+            writeInt(&buf, Int32(4))
+        case .InsufficientFunds(_ /* message is ignored*/):
+            writeInt(&buf, Int32(5))
+        case .Build(_ /* message is ignored*/):
+            writeInt(&buf, Int32(6))
+
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpError_lift(_ buf: RustBuffer) throws -> FeeBumpError {
+    return try FfiConverterTypeFeeBumpError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpError_lower(_ value: FeeBumpError) -> RustBuffer {
+    return FfiConverterTypeFeeBumpError.lower(value)
+}
+
+
+
+public enum FeeBumpManagerAction {
+
+    /**
+     * Select a preset, or a custom option from [`RustFeeBumpManager::custom_fee_option`],
+     * which then joins the options as their custom row
+     */
+    case selectFeeRate(FeeRateOptionWithTotalFee
+    )
+    case `continue`
+    /**
+     * The screen is showing again, such as after the user came back from the confirm screen,
+     * so continue can build a new replacement
+     */
+    case screenAppeared
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpManagerAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        )
+
+        case 2: return .`continue`
+
+        case 3: return .screenAppeared
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpManagerAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .selectFeeRate(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
+
+
+        case .`continue`:
+            writeInt(&buf, Int32(2))
+
+
+        case .screenAppeared:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpManagerAction_lift(_ buf: RustBuffer) throws -> FeeBumpManagerAction {
+    return try FfiConverterTypeFeeBumpManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpManagerAction_lower(_ value: FeeBumpManagerAction) -> RustBuffer {
+    return FfiConverterTypeFeeBumpManagerAction.lower(value)
+}
+
+
+
+
+public enum FeeBumpManagerReconcileMessage {
+
+    case updateStatus(FeeBumpStatus
+    )
+    case updateSelectedFeeRate(FeeRateOptionWithTotalFee
+    )
+    /**
+     * Building the replacement failed after the user picked a rate, the message is for an alert
+     */
+    case continueFailed(String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpManagerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .updateStatus(try FfiConverterTypeFeeBumpStatus.read(from: &buf)
+        )
+
+        case 2: return .updateSelectedFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        )
+
+        case 3: return .continueFailed(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .updateStatus(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeFeeBumpStatus.write(v1, into: &buf)
+
+
+        case let .updateSelectedFeeRate(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
+
+
+        case let .continueFailed(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> FeeBumpManagerReconcileMessage {
+    return try FfiConverterTypeFeeBumpManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpManagerReconcileMessage_lower(_ value: FeeBumpManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeFeeBumpManagerReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * Whether the transaction can be sped up, and at which rates
+ */
+
+public enum FeeBumpStatus {
+
+    case loading
+    case ready(FeeBumpOptions
+    )
+    case unavailable(FeeBumpUnavailable
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpStatus: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .loading
+
+        case 2: return .ready(try FfiConverterTypeFeeBumpOptions.read(from: &buf)
+        )
+
+        case 3: return .unavailable(try FfiConverterTypeFeeBumpUnavailable.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpStatus, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .loading:
+            writeInt(&buf, Int32(1))
+
+
+        case let .ready(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFeeBumpOptions.write(v1, into: &buf)
+
+
+        case let .unavailable(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeFeeBumpUnavailable.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpStatus_lift(_ buf: RustBuffer) throws -> FeeBumpStatus {
+    return try FfiConverterTypeFeeBumpStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpStatus_lower(_ value: FeeBumpStatus) -> RustBuffer {
+    return FfiConverterTypeFeeBumpStatus.lower(value)
+}
+
+
+
+/**
+ * Why the transaction can't be sped up
+ */
+
+public enum FeeBumpUnavailable {
+
+    case blocked(FeeBumpBlocker
+    )
+    /**
+     * No confirmed coin is left to pay even the lowest replacement rate
+     */
+    case insufficientFunds(needed: Amount, available: Amount
+    )
+    /**
+     * The fee server can't be reached, and the confirm screens need its rates as a new send
+     * does
+     */
+    case feeRatesUnavailable
+    /**
+     * Anything else, with a message safe to show the user
+     */
+    case failed(message: String
+    )
+
+
+
+public func userMessage() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_feebumpunavailable_usermessage(
+            FfiConverterTypeFeeBumpUnavailable_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension FeeBumpUnavailable: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeBumpUnavailable: FfiConverterRustBuffer {
+    typealias SwiftType = FeeBumpUnavailable
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpUnavailable {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .blocked(try FfiConverterTypeFeeBumpBlocker.read(from: &buf)
+        )
+
+        case 2: return .insufficientFunds(needed: try FfiConverterTypeAmount.read(from: &buf), available: try FfiConverterTypeAmount.read(from: &buf)
+        )
+
+        case 3: return .feeRatesUnavailable
+
+        case 4: return .failed(message: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FeeBumpUnavailable, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .blocked(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeFeeBumpBlocker.write(v1, into: &buf)
+
+
+        case let .insufficientFunds(needed,available):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeAmount.write(needed, into: &buf)
+            FfiConverterTypeAmount.write(available, into: &buf)
+
+
+        case .feeRatesUnavailable:
+            writeInt(&buf, Int32(3))
+
+
+        case let .failed(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpUnavailable_lift(_ buf: RustBuffer) throws -> FeeBumpUnavailable {
+    return try FfiConverterTypeFeeBumpUnavailable.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeBumpUnavailable_lower(_ value: FeeBumpUnavailable) -> RustBuffer {
+    return FfiConverterTypeFeeBumpUnavailable.lower(value)
 }
 
 
@@ -43739,6 +44673,166 @@ public func FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(_ v:
 
 
 
+public protocol FeeBumpManagerReconciler: AnyObject, Sendable {
+
+    /**
+     * Tells the frontend to reconcile the manager changes
+     */
+    func reconcile(message: FeeBumpManagerReconcileMessage)
+
+    func reconcileMany(messages: [FeeBumpManagerReconcileMessage])
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceFeeBumpManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFeeBumpManagerReconciler = UniffiVTableCallbackInterfaceFeeBumpManagerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceFeeBumpManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface FeeBumpManagerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceFeeBumpManagerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface FeeBumpManagerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceFeeBumpManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeFeeBumpManagerReconcileMessage_lift(message)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceFeeBumpManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeFeeBumpManagerReconcileMessage.lift(messages)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFeeBumpManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFeeBumpManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitFeeBumpManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_feebumpmanagerreconciler(UniffiCallbackInterfaceFeeBumpManagerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceFeeBumpManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<FeeBumpManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceFeeBumpManagerReconciler : FfiConverter {
+    typealias SwiftType = FeeBumpManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceFeeBumpManagerReconciler_lift(_ handle: UInt64) throws -> FeeBumpManagerReconciler {
+    return try FfiConverterCallbackInterfaceFeeBumpManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceFeeBumpManagerReconciler_lower(_ v: FeeBumpManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceFeeBumpManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol FfiReconcile: AnyObject, Sendable {
 
     /**
@@ -45210,6 +46304,30 @@ fileprivate struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptionWithTotalFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptionWithTotalFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePsbt: FfiConverterRustBuffer {
     typealias SwiftType = Psbt?
 
@@ -46348,6 +47466,31 @@ fileprivate struct FfiConverterSequenceTypeCoinControlManagerReconcileMessage: F
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCoinControlManagerReconcileMessage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFeeBumpManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [FeeBumpManagerReconcileMessage]
+
+    public static func write(_ value: [FeeBumpManagerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFeeBumpManagerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FeeBumpManagerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FeeBumpManagerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFeeBumpManagerReconcileMessage.read(from: &buf))
         }
         return seq
     }
@@ -48279,6 +49422,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustfeebumpmanager_custom_fee_option() != 63599) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustfeebumpmanager_dispatch() != 42929) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustfeebumpmanager_listen_for_updates() != 54547) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustfeebumpmanager_selected_fee_rate() != 60418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustfeebumpmanager_status() != 12224) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -48403,6 +49561,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 54313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_new_fee_bump_manager() != 49383) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845) {
@@ -49134,6 +50295,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_feebumpmanagerreconciler_reconcile() != 19610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feebumpmanagerreconciler_reconcile_many() != 64460) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile() != 42843) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -49172,6 +50339,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitAuthManagerReconciler()
     uniffiCallbackInitCloudBackupManagerReconciler()
     uniffiCallbackInitCoinControlManagerReconciler()
+    uniffiCallbackInitFeeBumpManagerReconciler()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitKeyTeleportManagerReconciler()
     uniffiCallbackInitOnboardingManagerReconciler()
