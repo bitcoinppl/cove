@@ -48,7 +48,21 @@ impl Default for PayjoinConfig {
 /// directory sees only the relay. Plain `http` loopback relays exist only in tests, through
 /// `test_support`
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OhttpRelays(Vec<Url>);
+pub(crate) struct OhttpRelays {
+    relays: Vec<Url>,
+    order: RelayOrder,
+}
+
+/// The order a session tries relays in before it adopts one
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelayOrder {
+    /// A fresh random order on every call, so no relay is every session's first choice
+    Shuffled,
+
+    /// The listed order, so a test decides which relay a session tries first
+    #[cfg(test)]
+    Listed,
+}
 
 /// Why a list of OHTTP relays was rejected
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -75,7 +89,7 @@ impl OhttpRelays {
             return Err(OhttpRelaysError::NotHttps(relay.clone()));
         }
 
-        Ok(Self(relays))
+        Ok(Self { relays, order: RelayOrder::Shuffled })
     }
 
     /// Parses and validates relay URLs, as `new` does
@@ -93,12 +107,22 @@ impl OhttpRelays {
         Self::new(relays)
     }
 
-    /// The relays in a fresh random order, so retries spread across relays and no relay sees
-    /// every session first
-    pub(crate) fn shuffled(&self) -> Vec<Url> {
-        let mut relays = self.0.clone();
-        relays.shuffle(&mut rand::rng());
+    /// The relays in the order a session that has not adopted one yet should try them
+    pub(crate) fn attempt_order(&self) -> Vec<Url> {
+        let mut relays = self.relays.clone();
+        match self.order {
+            RelayOrder::Shuffled => relays.shuffle(&mut rand::rng()),
+
+            #[cfg(test)]
+            RelayOrder::Listed => {}
+        }
+
         relays
+    }
+
+    /// Whether `relay` is one of these relays
+    pub(crate) fn contains(&self, relay: &Url) -> bool {
+        self.relays.contains(relay)
     }
 }
 
@@ -110,7 +134,7 @@ impl Default for OhttpRelays {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use super::{OhttpRelays, OhttpRelaysError, Url};
+    use super::{OhttpRelays, OhttpRelaysError, RelayOrder, Url};
 
     impl OhttpRelays {
         /// Relays for tests that run their own relay, which may be plain `http` only when it
@@ -133,7 +157,13 @@ pub(crate) mod test_support {
                 return Err(OhttpRelaysError::NotHttps(relay.clone()));
             }
 
-            Ok(Self(relays))
+            Ok(Self { relays, order: RelayOrder::Shuffled })
+        }
+
+        /// Tries the relays in the listed order instead of a random one, so a test controls
+        /// which relay a session reaches first
+        pub(crate) fn in_listed_order(self) -> Self {
+            Self { order: RelayOrder::Listed, ..self }
         }
     }
 
@@ -155,8 +185,12 @@ mod tests {
     fn default_config_uses_the_built_in_relays_and_ten_minutes() {
         let config = PayjoinConfig::default();
 
-        let mut relays =
-            config.relays().shuffled().into_iter().map(|url| url.to_string()).collect::<Vec<_>>();
+        let mut relays = config
+            .relays()
+            .attempt_order()
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
         relays.sort();
 
         assert_eq!(
