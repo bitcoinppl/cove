@@ -22,6 +22,7 @@ use crate::{
         metadata::WalletMetadata,
     },
 };
+pub(crate) mod fee_bump;
 mod node;
 mod receive_address;
 mod scan;
@@ -1649,6 +1650,16 @@ impl SpendPolicy {
             locked_outpoints: locked_outpoints.into_iter().collect(),
             unconfirmed_external_outpoints,
         }
+    }
+
+    /// The same policy with `outpoints` spendable, for inputs a replacement must keep
+    fn allowing(mut self, outpoints: &[OutPoint]) -> Self {
+        for outpoint in outpoints {
+            self.locked_outpoints.remove(outpoint);
+            self.unconfirmed_external_outpoints.remove(outpoint);
+        }
+
+        self
     }
 
     fn apply<Cs>(&self, tx_builder: &mut TxBuilder<'_, Cs>) {

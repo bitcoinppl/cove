@@ -812,8 +812,13 @@ impl WalletActor {
 
         let txid = transaction.compute_txid();
 
+        // a replacement must be seen after the transactions it replaces, since the wallet keeps
+        // whichever of two double spends it saw last
+        let replaced = self.pending_transactions_replaced_by(&transaction);
+        let seen_at = replaced.values().map(|last_seen| last_seen + 1).fold(now, u64::max);
+
         // insert the unconfirmed transaction into the local wallet
-        self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
+        self.wallet.bdk.apply_unconfirmed_txs([(transaction, seen_at)]);
 
         // persist the wallet to save the new transaction
         let persisted = match self.wallet.persist() {
@@ -835,6 +840,10 @@ impl WalletActor {
         // keep the unsigned record until the wallet state is durable, the next scan prunes it
         if persisted {
             self.prune_settled_unsigned_transactions();
+        }
+
+        if !replaced.is_empty() {
+            self.hand_over_to_replacement(&replaced, txid).await;
         }
 
         send!(self.addr.start_transaction_watcher(txid));
