@@ -38,6 +38,7 @@ use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
+    address::AddressWithNetwork,
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     unit::BitcoinUnit,
@@ -155,15 +156,26 @@ pub enum SendFlowManagerAction {
     NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
-    NotifySelectedUnitedChanged { old: BitcoinUnit, new: BitcoinUnit },
-    NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
-    NotifyScanCodeChanged { old: String, new: String },
+    NotifySelectedUnitedChanged {
+        old: BitcoinUnit,
+        new: BitcoinUnit,
+    },
+    NotifyBtcOrFiatChanged {
+        old: FiatOrBtc,
+        new: FiatOrBtc,
+    },
+    NotifyScanCodeChanged {
+        old: String,
+        new: String,
+    },
     NotifyPricesChanged(Arc<PriceResponse>),
-    NotifyFocusFieldChanged { old: Option<SetAmountFocusField>, new: Option<SetAmountFocusField> },
+    NotifyFocusFieldChanged {
+        old: Option<SetAmountFocusField>,
+        new: Option<SetAmountFocusField>,
+    },
 
-    // starting with an amount and address from scan
-    NotifyAddressChanged(Arc<Address>),
-    NotifyAmountChanged(Arc<Amount>),
+    /// Pay a scanned address or BIP 21 payment request, taking its amount and Payjoin endpoint
+    SetPaymentRequest(Arc<AddressWithNetwork>),
 
     // notify coin control custom amount changed
     NotifyCoinControlAmountChanged(Arc<Amount>),
@@ -558,17 +570,7 @@ impl RustSendFlowManager {
                 self.acknowledge_warning_and_finalize(kind);
             }
 
-            Action::NotifyAddressChanged(address) => {
-                let mut state = self.state.lock();
-                if state.address.as_ref() != Some(&address) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.address = Some(address.clone());
-                state.entering_address = address.to_string();
-                state.payjoin_endpoint = None;
-            }
-
-            Action::NotifyAmountChanged(amount) => self.handle_amount_changed(*amount),
+            Action::SetPaymentRequest(request) => self.handle_payment_request(&request),
 
             Action::NotifyFocusFieldChanged { old, new } => {
                 self.handle_focus_field_changed(old, new);
@@ -743,10 +745,52 @@ impl RustSendFlowManager {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use std::{sync::Arc, time::Duration};
+
+    use cove_tokio::DebouncedTask;
+    use cove_types::fees::FeeRateOptions;
+
+    use super::{RustSendFlowManager, State};
+    use crate::{
+        app::App,
+        manager::{reconcile_channel::ReconcileChannel, wallet_manager::RustWalletManager},
+        wallet::balance::Balance,
+    };
+
+    impl RustSendFlowManager {
+        /// The send flow over `wallet_manager` with the preview fee rates in place of the fee
+        /// server's, which tests can't reach
+        pub(crate) fn with_preview_fees(wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
+            let metadata = wallet_manager.metadata.read().clone();
+            let state = State::new(metadata, Arc::new(Balance::default()));
+            let manager = Arc::new(Self {
+                app: App::global().clone(),
+                wallet_manager,
+                state: state.into_inner(),
+                reconciler: ReconcileChannel::new(100),
+                fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+            });
+
+            let fees = Arc::new(FeeRateOptions::_ffi_preview_new());
+            manager.state.lock().fee_rate_options_base = Some(fees);
+            manager
+        }
+
+        /// Loads the wallet's balance and first address, as opening the send screen does
+        pub(crate) async fn load_wallet_for_test(self: &Arc<Self>) {
+            self.get_wallet_balance().await;
+            self.get_first_address().await.expect("the wallet's first address loads");
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use cove_types::{
+        address::AddressWithNetwork,
         fees::{
             FeeRate, FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions,
             FeeRateOptionsWithTotalFee, FeeSpeed,
@@ -1384,9 +1428,7 @@ mod tests {
             super::SendFlowWarningKind::HighFee
         )));
 
-        manager
-            .clone()
-            .dispatch(super::Action::NotifyAmountChanged(Arc::new(super::Amount::from_sat(2_000))));
+        manager.handle_amount_changed(super::Amount::from_sat(2_000));
 
         assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::SmallAmount));
     }
@@ -1421,9 +1463,9 @@ mod tests {
         let manager = manager_for_validation();
         manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::SmallAmount);
 
-        manager
-            .clone()
-            .dispatch(super::Action::NotifyAddressChanged(Arc::new(Address::preview_new())));
+        let request = AddressWithNetwork::try_new(&Address::preview_new().to_string())
+            .expect("the preview address parses");
+        manager.clone().dispatch(super::Action::SetPaymentRequest(Arc::new(request)));
 
         assert!(
             !manager.state.lock().has_acknowledged_warning(super::SendFlowWarningKind::SmallAmount)
@@ -1873,9 +1915,7 @@ mod tests {
         let fee = selected_total_fee_sats(&manager).expect("fee total is estimated");
         assert!(fee < dust_limit, "the fee alone must not be what blocks the send");
 
-        manager.clone().dispatch(super::Action::NotifyAmountChanged(Arc::new(
-            super::Amount::from_sat(dust_limit - 1),
-        )));
+        manager.handle_amount_changed(super::Amount::from_sat(dust_limit - 1));
 
         let outcome = next_past_warnings(&manager).await;
         assert!(
@@ -1890,9 +1930,7 @@ mod tests {
 
         assert!(pushed_confirm_details().is_none(), "a below-dust send reached confirm");
 
-        manager.clone().dispatch(super::Action::NotifyAmountChanged(Arc::new(
-            super::Amount::from_sat(dust_limit),
-        )));
+        manager.handle_amount_changed(super::Amount::from_sat(dust_limit));
 
         let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
             panic!("an amount at the dust limit must reach confirm");

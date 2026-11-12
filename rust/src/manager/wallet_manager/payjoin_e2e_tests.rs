@@ -23,6 +23,7 @@ use crate::{
     manager::import_wallet_manager::import_mnemonic_with_target,
     mnemonic::MnemonicExt as _,
     network::Network,
+    router::UnsignedPaymentMode,
     test_support::{
         fake_node::{unreachable_url, wait_until},
         payjoin::{PayjoinReceiver, PayjoinServices, SilentRelay, TestRelay, TestRelayBehavior},
@@ -31,6 +32,7 @@ use crate::{
 };
 
 mod crash;
+mod send_flow;
 
 /// How long these sessions wait for the receiver, long enough that no test reaches it
 const SESSION_TIMEOUT: Duration = Duration::from_secs(60);
@@ -472,7 +474,8 @@ impl PayjoinPayment {
         let intent = PayjoinIntent::new(endpoint);
         let session_id = intent.session_id.clone();
         let started_secs = unix_now_secs();
-        call!(manager.actor.start_payjoin_payment_for_test(psbt.clone(), intent))
+        let mode = UnsignedPaymentMode::Payjoin { intent };
+        call!(manager.actor.initiate_payment(psbt.clone(), mode))
             .await
             .expect("the wallet actor answers")
             .expect("the Payjoin session starts");

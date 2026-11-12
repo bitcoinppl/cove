@@ -3321,23 +3321,6 @@ mod tests {
         restore_default_bitcoin_node();
     }
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn payjoin_uri_completes_via_normal_broadcast_when_gated() {
-        let _guard = crate::test_support::global_state_test_lock().lock().await;
-
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        test_keychain();
-        crate::database::test_support::init_test_database();
-
-        // the broadcast goes to the node selected for the wallet's network, so pay on both
-        let signet_address =
-            crate::test_support::hardware_signing::external_address(bitcoin::Network::Signet);
-
-        pay_pj_v2_uri_once(CoveNetwork::Bitcoin, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm")
-            .await;
-        pay_pj_v2_uri_once(CoveNetwork::Signet, &signet_address.to_string()).await;
-    }
-
     /// A wallet on `network` with one 100,000 sat coin, and a signed-ready PSBT paying a BIP 21
     /// URI with a BIP 77 v2 pj= endpoint, so the payment has a recipient and a change output
     struct PjV2Payment {
@@ -3385,49 +3368,6 @@ mod tests {
         }
     }
 
-    /// Pays a BIP 21 URI with a BIP 77 v2 pj= endpoint from a funded wallet on `network`, and
-    /// checks it is broadcast once as an ordinary payment
-    async fn pay_pj_v2_uri_once(network: CoveNetwork, address: &str) {
-        crate::database::Database::global()
-            .global_config
-            .set_selected_network(network)
-            .expect("selected network is saved");
-
-        let server = set_broadcast_esplora_node_for(network, 200).await;
-        let PjV2Payment { actor, psbt, endpoint, metadata } =
-            PjV2Payment::new(network, address).await;
-        let db = actor.db.clone();
-        let addr = spawn_actor(actor);
-
-        let mode = UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint) };
-        let result = call!(addr.initiate_payment(psbt, mode))
-            .await
-            .expect("initiate_payment actor responds");
-
-        // a payjoin round or a fallback would broadcast later, so give either time to show up
-        tokio::time::sleep(Duration::from_millis(200)).await;
-        let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
-
-        crate::database::Database::global()
-            .global_config
-            .set_selected_node(&Node::default(network))
-            .expect("default node config is saved");
-        crate::database::Database::global()
-            .global_config
-            .set_selected_network(CoveNetwork::Bitcoin)
-            .expect("selected network is restored");
-
-        server.server.abort();
-        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
-
-        result.unwrap_or_else(|error| panic!("{network}: broadcast fails: {error:?}"));
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1, "{network}: broadcasts");
-        assert!(
-            payjoin_session.is_none(),
-            "{network}: an ordinary payment leaves no payjoin session"
-        );
-    }
-
     // regression for #1088: the fallback was dispatched once by the failed setup and again by
     // the startup resume that found its session record
     #[tokio::test(flavor = "current_thread")]
@@ -3450,12 +3390,10 @@ mod tests {
 
         // a v1 endpoint fails sender setup after the session record is saved, so the payment
         // takes the fallback without contacting a payjoin directory
-        let result = call!(addr.start_payjoin_payment_for_test(
-            psbt,
-            PayjoinIntent::new("https://payjoin.example/pj".to_string())
-        ))
-        .await
-        .expect("initiate_payjoin_payment actor responds");
+        let intent = PayjoinIntent::new("https://payjoin.example/pj".to_string());
+        let result = call!(addr.initiate_payment(psbt, UnsignedPaymentMode::Payjoin { intent }))
+            .await
+            .expect("initiate_payment actor responds");
 
         // the send gate and failed-quiesce recovery resume the same way
         call!(addr.resume_payjoin_session()).await.expect("actor responds");

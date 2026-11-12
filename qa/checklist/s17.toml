@@ -18,9 +18,9 @@ coverage = [
 # pjos without pj is stripped so the uri parses to a plain address and amount
 
 [[row]]
-id = "s17-bip21-pj-v2-ordinary-signet-payment-once"
+id = "s17-bip21-pj-v2-signet-payjoin-payment-once"
 section = "17"
-title = "BIP21 pj v2 ordinary Signet payment once"
+title = "BIP21 pj v2 Signet payment pays with Payjoin once"
 platforms = ["ios", "android"]
 target = "rust"
 paths = [
@@ -31,17 +31,19 @@ paths = [
     "rust/src/manager/wallet_manager/actor/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
+    "rust/src/payjoin_setting.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
 ]
 coverage = [
-    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
-    "rust:rust/src/manager/wallet_manager/actor.rs::payjoin_uri_completes_via_normal_broadcast_when_gated",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_pj_uri_sent_with_payjoin_on_broadcasts_the_receivers_proposal",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_pj_uri_sent_with_payjoin_off_broadcasts_the_payment_as_built",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rust gates payjoin off: on mainnet and Signet the uri becomes a confirm route with no payjoin
-# endpoint, which both apps send as an ordinary payment, and the wallet broadcasts it once and
-# keeps no payjoin session
+# with the Payjoin setting on, a v2 uri on mainnet or Signet becomes a confirm route carrying a
+# payjoin for its endpoint, and the wallet broadcasts the receiver's proposal once; with it off,
+# the wallet broadcasts the payment as built once and keeps no payjoin session
 
 [[row]]
 id = "s17-sender-rejects-psbt-text-without-secret-import"
@@ -131,9 +133,9 @@ coverage = [
 # dialog texts must also keep their laid-out size, so a parent does not clip them, stay inside the dialog and not overlap
 
 [[row]]
-id = "s17-ios-pj-uri-parses-to-ordinary-draft"
+id = "s17-ios-pj-uri-parses-to-payjoin-draft"
 section = "17"
-title = "iOS pj URI parses to ordinary draft"
+title = "iOS pj URI parses to Payjoin draft"
 platforms = ["ios"]
 target = "rust"
 paths = [
@@ -142,19 +144,20 @@ paths = [
     "rust/src/manager/wallet_manager/payjoin/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
+    "rust/src/payjoin_setting.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
 ]
 coverage = [
-    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin",
 ]
 # 1.4.0: ios PASS, android N/A
 # EnterAddressView only strips spaces before the address binding hands the text to rust, which
 # the test drives from that action to the confirm route
 
 [[row]]
-id = "s17-ios-pjos-uri-parses-to-ordinary-draft"
+id = "s17-ios-pjos-uri-parses-to-draft"
 section = "17"
-title = "iOS pjos URI parses to ordinary draft"
+title = "iOS pjos URI parses to draft"
 platforms = ["ios"]
 target = "rust"
 paths = [
@@ -167,7 +170,7 @@ paths = [
 ]
 coverage = [
     "rust:rust/crates/cove-types/src/address.rs::test_parse_bitcoin_uri_pjos_without_pj",
-    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin",
 ]
 # 1.4.0: ios PASS, android N/A
 # EnterAddressView only strips spaces before the address binding hands the text to rust, which

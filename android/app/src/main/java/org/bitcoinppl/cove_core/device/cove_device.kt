@@ -696,6 +696,9 @@ internal interface UniffiCallbackInterfaceConnectivityAccessMethod0 : com.sun.jn
 internal interface UniffiCallbackInterfaceDeviceAccessMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceDeviceAccessMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceKeychainAccessMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -791,22 +794,25 @@ internal open class UniffiVTableCallbackInterfaceConnectivityAccess(
     }
 
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "timezone")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "timezone", "buildChannel")
 internal open class UniffiVTableCallbackInterfaceDeviceAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
     @JvmField internal var `timezone`: UniffiCallbackInterfaceDeviceAccessMethod0? = null,
+    @JvmField internal var `buildChannel`: UniffiCallbackInterfaceDeviceAccessMethod1? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
         `uniffiClone`: UniffiCallbackInterfaceClone? = null,
         `timezone`: UniffiCallbackInterfaceDeviceAccessMethod0? = null,
-    ): UniffiVTableCallbackInterfaceDeviceAccess(`uniffiFree`,`uniffiClone`,`timezone`,), Structure.ByValue
+        `buildChannel`: UniffiCallbackInterfaceDeviceAccessMethod1? = null,
+    ): UniffiVTableCallbackInterfaceDeviceAccess(`uniffiFree`,`uniffiClone`,`timezone`,`buildChannel`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceDeviceAccess) {
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `timezone` = other.`timezone`
+        `buildChannel` = other.`buildChannel`
     }
 
 }
@@ -937,6 +943,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_connectivityaccess_is_connected(
     ): Short
     external fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_deviceaccess_build_channel(
     ): Short
     external fun uniffi_cove_device_checksum_method_keychainaccess_save(
     ): Short
@@ -1225,6 +1233,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_deviceaccess_build_channel() != 280.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 21295.toShort()) {
@@ -3219,6 +3230,54 @@ public object FfiConverterTypeRemoteBackupLocation: FfiConverterRustBuffer<Remot
 
 
 
+/**
+ * Who a build of the app was made for
+ */
+
+enum class BuildChannel {
+
+    /**
+     * A debug build from a developer's machine
+     */
+    DEBUG,
+    /**
+     * A release build for testers, such as one installed from TestFlight
+     */
+    BETA,
+    /**
+     * A release build from an app store; Android reports every release build as this, since
+     * it can't tell its testing tracks apart
+     */
+    RELEASE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBuildChannel: FfiConverterRustBuffer<BuildChannel> {
+    override fun read(buf: ByteBuffer) = try {
+        BuildChannel.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BuildChannel) = 4UL
+
+    override fun write(value: BuildChannel, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 enum class CloudAccessPolicy {
 
@@ -4999,6 +5058,11 @@ public interface DeviceAccess {
 
     fun `timezone`(): kotlin.String
 
+    /**
+     * Which kind of build of the app is running
+     */
+    fun `buildChannel`(): BuildChannel
+
     companion object
 }
 
@@ -5014,6 +5078,17 @@ internal object uniffiCallbackInterfaceDeviceAccess {
                 )
             }
             val writeReturn = { value: kotlin.String -> uniffiOutReturn.setValue(FfiConverterString.lower(value)) }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `buildChannel`: UniffiCallbackInterfaceDeviceAccessMethod1 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeDeviceAccess.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`buildChannel`(
+                )
+            }
+            val writeReturn = { value: BuildChannel -> uniffiOutReturn.setValue(FfiConverterTypeBuildChannel.lower(value)) }
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
@@ -5034,6 +5109,7 @@ internal object uniffiCallbackInterfaceDeviceAccess {
         uniffiFree,
         uniffiClone,
         `timezone`,
+        `buildChannel`,
     )
 
     // Registers the foreign callback with the Rust side.

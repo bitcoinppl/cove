@@ -27,6 +27,9 @@
     <string name="onboarding_restore_card_subtitle">Use your passkey to restore from Google Drive</string>
     <string name="title_settings_node">Node</string>
     <string name="title_settings_currency">Currency</string>
+    <string name="title_settings_payments">Payments</string>
+    <string name="title_settings_payjoin">Payjoin</string>
+    <string name="settings_payjoin_subtitle">Lets a receiver that supports Payjoin add a coin to your payment, for more privacy. If they don\'t, Cove sends it as a normal transaction.</string>
     <string name="block_explorer_preview">Preview</string>
     <string name="block_explorer_description_title">Description</string>
     <string name="block_explorer_description">Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction.</string>

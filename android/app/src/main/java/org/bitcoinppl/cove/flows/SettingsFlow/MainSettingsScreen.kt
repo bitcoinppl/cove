@@ -242,6 +242,8 @@ fun MainSettingsScreen(
                     }
                 }
 
+                PayjoinSection()
+
                 WalletSettingsSection(app = app)
 
                 SecuritySection(app = app)
@@ -632,32 +634,7 @@ private fun BackupSection(
 ) {
     if (!isBetaEnabled || !isBetaImportExportEnabled || Auth.isInDecoyMode()) return
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(modifier = Modifier.height(MaterialSpacing.medium))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = MaterialSpacing.medium, end = MaterialSpacing.medium, top = 12.dp, bottom = 4.dp),
-        ) {
-            Text(
-                text = "Backup",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "BETA",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                modifier = Modifier
-                    .background(color = Color(0xFFFF9800), shape = RoundedCornerShape(50))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
-    }
+    BetaSectionHeader(title = "Backup")
     MaterialSection {
         Column {
             MaterialSettingsItem(
@@ -706,6 +683,36 @@ private fun BetaToggleSection(
                 isSwitch = true,
                 switchCheckedState = isBetaImportExportEnabled,
                 onCheckChanged = onImportExportToggle,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun BetaSectionHeader(title: String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = MaterialSpacing.medium, end = MaterialSpacing.medium, top = 12.dp, bottom = 4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "BETA",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                modifier = Modifier
+                    .background(color = Color(0xFFFF9800), shape = RoundedCornerShape(50))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }

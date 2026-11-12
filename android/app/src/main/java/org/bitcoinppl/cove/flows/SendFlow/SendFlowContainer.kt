@@ -84,8 +84,7 @@ fun SendFlowContainer(
             // pre-populate address/amount based on route type
             when (sendRoute) {
                 is SendRoute.SetAmount -> {
-                    sendRoute.address?.let { sfm.updateAddress(it) }
-                    sendRoute.amount?.let { sfm.updateAmount(it) }
+                    sendRoute.request?.let { sfm.setPaymentRequest(it) }
                 }
                 is SendRoute.CoinControlSetAmount -> {
                     sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(sendRoute.utxos))
@@ -328,12 +327,9 @@ private fun SendFlowRouteToScreen(
                                     presenter.sheetState = null
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
-                                            val addressWithNetwork = multiFormat.v1
-                                            sendFlowManager.enteringAddress = addressWithNetwork.address().unformatted()
-                                            // if QR contains an amount (BIP21), set it
-                                            addressWithNetwork.amount()?.let { amount ->
-                                                sendFlowManager.updateAmount(amount)
-                                            }
+                                            // the whole request goes to rust, so a BIP 21 amount and pj endpoint
+                                            // are kept with the address
+                                            sendFlowManager.setPaymentRequest(multiFormat.v1)
                                             // focus management: if amount valid clear focus, otherwise focus amount
                                             presenter.focusField =
                                                 if (sendFlowManager.validateAmount()) {

@@ -54,6 +54,7 @@ pub struct AddressInfoWithDerivation {
     pub derivation_path: Option<String>,
 }
 
+/// A payment request's BIP 77 v2 Payjoin endpoint
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct PayJoinParams {
     pub endpoint: String,
@@ -229,14 +230,15 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         let checked = uri.assume_checked();
         let address = checked.address().to_string();
 
-        // Extract payjoin params if present
-        let payjoin = match checked.check_pj_supported() {
-            Ok(pj_uri) => {
-                let endpoint = pj_uri.extras().endpoint();
-                Some(PayJoinParams { endpoint })
+        // only a BIP 77 v2 endpoint becomes a payjoin request; a BIP 78 v1 endpoint, which
+        // Cove's sender can't speak, leaves an ordinary payment to the URI's address
+        let payjoin = checked.check_pj_supported().ok().and_then(|pj_uri| {
+            let extras = pj_uri.extras();
+            match extras.pj_param() {
+                payjoin::PjParam::V2(_) => Some(PayJoinParams { endpoint: extras.endpoint() }),
+                _ => None,
             }
-            Err(_) => None,
-        };
+        });
 
         return Ok(ParsedBitcoinUri { address, amount, payjoin });
     }

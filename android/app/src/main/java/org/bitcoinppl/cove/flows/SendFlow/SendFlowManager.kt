@@ -232,17 +232,10 @@ class SendFlowManager internal constructor(
             validateAmount(displayAlert)
         }
 
-    fun updateAddress(address: Address) {
+    /** Pay a scanned address or BIP 21 payment request, with its amount and Payjoin endpoint */
+    fun setPaymentRequest(request: AddressWithNetwork) {
         if (isClosed.get()) return
-        _enteringAddress = address.unformatted()
-        this.address = address
-        dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
-    }
-
-    fun updateAmount(amount: Amount) {
-        if (isClosed.get()) return
-        this.amount = amount
-        dispatch(SendFlowManagerAction.NotifyAmountChanged(amount))
+        dispatch(SendFlowManagerAction.SetPaymentRequest(request))
     }
 
     /** Commits the released slider amount and returns the authoritative Rust amount */

@@ -271,6 +271,10 @@ impl cove_device::device::DeviceAccess for TestDevice {
     fn timezone(&self) -> String {
         TEST_DEVICE_TIME_ZONE.to_string()
     }
+
+    fn build_channel(&self) -> cove_device::device::BuildChannel {
+        cove_device::device::BuildChannel::Debug
+    }
 }
 
 /// Installs a process-global device that reports [`TEST_DEVICE_TIME_ZONE`]

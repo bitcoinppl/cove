@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::{
     app::AppAction,
     manager::deferred_dispatch::DeferredDispatch,
-    router::{RouteFactory, UnsignedPaymentMode},
+    payjoin_setting::PayjoinSetting,
+    router::RouteFactory,
     wallet::{Address, metadata::WalletType},
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
@@ -177,9 +178,9 @@ impl RustSendFlowManager {
 
         self.reconciler.send(Message::UpdateFocusField(None));
 
-        let (wallet_type, wallet_id) = {
+        let (wallet_type, wallet_id, payjoin) = {
             let state = self.state.lock();
-            (state.metadata.wallet_type, state.metadata.id.clone())
+            (state.metadata.wallet_type, state.metadata.id.clone(), state.payjoin.clone())
         };
 
         let me = self.clone();
@@ -226,12 +227,11 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                // Payjoin stays off until it ships, so a pj URI is paid as an ordinary payment
-                WalletType::Hot => RouteFactory::new().send_confirm(
-                    wallet_id,
-                    details,
-                    UnsignedPaymentMode::Standard,
-                ),
+                // only a hot wallet signs in the app, so only it can answer a receiver's proposal
+                WalletType::Hot => {
+                    let mode = PayjoinSetting::current().payment_mode(payjoin.as_ref());
+                    RouteFactory::new().send_confirm(wallet_id, details, mode)
+                }
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }

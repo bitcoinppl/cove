@@ -3,6 +3,7 @@ use std::sync::Arc;
 use parking_lot::{Mutex, MutexGuard};
 
 use cove_types::{
+    address::PayJoinParams,
     amount::Amount,
     fees::{FeeRate, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::UtxoList,
@@ -54,7 +55,8 @@ pub struct SendFlowManagerState {
 
     pub fee_selection: Option<FeeSelection>,
 
-    pub payjoin_endpoint: Option<String>,
+    /// The Payjoin endpoint of the payment request the address came from, if it had one
+    pub payjoin: Option<PayJoinParams>,
 }
 
 /// A Max amount and the drain it was built from
@@ -170,7 +172,7 @@ impl SendFlowManagerState {
             selected_fiat_currency,
             has_base_fees: false,
             last_fee_failure: None,
-            payjoin_endpoint: None,
+            payjoin: None,
         }
     }
 
