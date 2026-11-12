@@ -166,9 +166,12 @@ impl NodeSelector {
     #[uniffi::method]
     /// Check the node url and set it as selected node if it is valid
     pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
+        // node errors leave out the URL, which can carry an access token, so the alert names
+        // the node the user entered here. Neither app logs this error, and the log here keeps
+        // only the node error
         node.check_url().await.map_err(|error| {
             tracing::warn!("error checking node: {error:?}");
-            Error::NodeAccessError(error.to_string())
+            Error::NodeAccessError(format!("{}: {error}", node.url))
         })?;
 
         Database::global()
@@ -433,6 +436,38 @@ mod tests {
             assert!(matches!(error, Error::NodeAccessError(_)), "{name}: {error:?}");
             assert_eq!(selected_node(), before, "{name} must not replace the selected node");
         }
+
+        reset_selected_node();
+    }
+
+    // the alert names the node the user entered, but the log never carries its URL, which can
+    // hold an access token
+    #[tokio::test]
+    async fn unreachable_node_url_reaches_the_alert_but_not_the_log() {
+        use crate::test_support::log_capture::LogCapture;
+
+        let _guard = global_state_test_lock().lock().await;
+        ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        reset_selected_node();
+
+        let token = "private-node-access-token";
+        let mut offline = FakeNode::start(BitcoinNetwork::Bitcoin);
+        let mut node = offline.esplora_node("dead esplora");
+        offline.go_offline();
+        node.url = format!("{}/{token}/api", node.url.trim_end_matches('/'));
+
+        let capture = LogCapture::start();
+        let error = NodeSelector::new().check_and_save_node(node.clone()).await.unwrap_err();
+        let logs = capture.text();
+
+        assert!(!logs.contains(token), "node check logs quote the node URL");
+        assert!(logs.contains("error checking node"), "node check failure was not logged");
+
+        let Error::NodeAccessError(message) = error else {
+            panic!("unreachable node returned {error:?}");
+        };
+        assert!(message.contains(&node.url), "the alert should name {}, got: {message}", node.url);
 
         reset_selected_node();
     }
