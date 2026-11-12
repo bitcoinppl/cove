@@ -14,7 +14,7 @@ struct QrCodeAddressView: View {
     @Environment(\.dismiss) private var dismiss
 
     /// passed in
-    @Binding var scannedCode: TaggedString?
+    @Binding var scannedRequest: TaggedItem<AddressWithNetwork>?
 
     // private
     @State private var scanComplete = false
@@ -100,7 +100,7 @@ struct QrCodeAddressView: View {
                 case let .complete(data, haptic):
                     haptic.trigger()
                     if case let .address(addr) = data {
-                        scannedCode = TaggedString(addr.address().unformatted())
+                        scannedRequest = TaggedItem(addr)
                         scanComplete = true
                     } else {
                         // not an address - show error and allow retry
@@ -141,7 +141,7 @@ struct QrCodeAddressView: View {
 
 #Preview {
     VStack {
-        QrCodeAddressView(scannedCode: Binding.constant(nil))
+        QrCodeAddressView(scannedRequest: Binding.constant(nil))
             .environment(AppManager.shared)
     }
     .ignoresSafeArea(.all)

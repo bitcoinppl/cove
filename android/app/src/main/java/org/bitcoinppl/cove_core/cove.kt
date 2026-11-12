@@ -3143,7 +3143,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send_hardware_export(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_send_set_amount(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`address`: RustBuffer.ByValue,`amount`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_routefactory_send_set_amount(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_wallet_settings(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -5094,7 +5094,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_send_hardware_export() != 13876.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_set_amount() != 53502.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_set_amount() != 38685.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_wallet_settings() != 16190.toShort()) {
@@ -19505,7 +19505,7 @@ public interface RouteFactoryInterface {
 
     fun `sendHardwareExport`(`id`: WalletId, `details`: ConfirmDetails): Route
 
-    fun `sendSetAmount`(`id`: WalletId, `address`: Address? = null, `amount`: Amount? = null): Route
+    fun `sendSetAmount`(`id`: WalletId, `request`: AddressWithNetwork? = null): Route
 
     fun `walletSettings`(`id`: WalletId, `route`: WalletSettingsRoute): Route
 
@@ -19907,7 +19907,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     }
 
 
-    override fun `sendSetAmount`(`id`: WalletId, `address`: Address?, `amount`: Amount?): Route {
+    override fun `sendSetAmount`(`id`: WalletId, `request`: AddressWithNetwork?): Route {
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -19915,8 +19915,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
         it,
 
         FfiConverterTypeWalletId.lower(`id`),
-        FfiConverterOptionalTypeAddress.lower(`address`),
-        FfiConverterOptionalTypeAmount.lower(`amount`),_status)
+        FfiConverterOptionalTypeAddressWithNetwork.lower(`request`),_status)
 }
     }
     )
@@ -37218,8 +37217,7 @@ sealed class AppAlertState: Disposable  {
     }
 
     data class FoundAddress(
-        val `address`: org.bitcoinppl.cove_core.types.Address,
-        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : AppAlertState()
+        val `request`: org.bitcoinppl.cove_core.types.AddressWithNetwork) : AppAlertState()
 
     {
 
@@ -37442,8 +37440,7 @@ sealed class AppAlertState: Disposable  {
             is AppAlertState.FoundAddress -> {
 
     Disposable.destroy(
-        this.`address`,
-        this.`amount`
+        this.`request`
     )
 
             }
@@ -37654,8 +37651,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeNetwork.read(buf),
                 )
             8 -> AppAlertState.FoundAddress(
-                FfiConverterTypeAddress.read(buf),
-                FfiConverterOptionalTypeAmount.read(buf),
+                FfiConverterTypeAddressWithNetwork.read(buf),
                 )
             9 -> AppAlertState.UnableToSelectWallet
             10 -> AppAlertState.ErrorImportingHardwareWallet(
@@ -37773,8 +37769,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeAddress.allocationSize(value.`address`)
-                + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
+                + FfiConverterTypeAddressWithNetwork.allocationSize(value.`request`)
             )
         }
         is AppAlertState.UnableToSelectWallet -> {
@@ -37980,8 +37975,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
             }
             is AppAlertState.FoundAddress -> {
                 buf.putInt(8)
-                FfiConverterTypeAddress.write(value.`address`, buf)
-                FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
+                FfiConverterTypeAddressWithNetwork.write(value.`request`, buf)
                 Unit
             }
             is AppAlertState.UnableToSelectWallet -> {
@@ -57515,16 +57509,6 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
-    data class NotifyScanCodeChanged(
-        val `old`: kotlin.String,
-        val `new`: kotlin.String) : SendFlowManagerAction()
-
-    {
-
-
-        companion object
-    }
-
     data class NotifyPricesChanged(
         val v1: org.bitcoinppl.cove_core.PriceResponse) : SendFlowManagerAction()
 
@@ -57544,17 +57528,12 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
-    data class NotifyAddressChanged(
-        val v1: org.bitcoinppl.cove_core.types.Address) : SendFlowManagerAction()
-
-    {
-
-
-        companion object
-    }
-
-    data class NotifyAmountChanged(
-        val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerAction()
+    /**
+     * Pay an address or BIP 21 payment request, scanned in the send screen or passed in when it
+     * opened, taking its amount and Payjoin endpoint
+     */
+    data class SetPaymentRequest(
+        val v1: org.bitcoinppl.cove_core.types.AddressWithNetwork) : SendFlowManagerAction()
 
     {
 
@@ -57682,14 +57661,6 @@ sealed class SendFlowManagerAction: Disposable  {
     )
 
             }
-            is SendFlowManagerAction.NotifyScanCodeChanged -> {
-
-    Disposable.destroy(
-        this.`old`,
-        this.`new`
-    )
-
-            }
             is SendFlowManagerAction.NotifyPricesChanged -> {
 
     Disposable.destroy(
@@ -57705,14 +57676,7 @@ sealed class SendFlowManagerAction: Disposable  {
     )
 
             }
-            is SendFlowManagerAction.NotifyAddressChanged -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is SendFlowManagerAction.NotifyAmountChanged -> {
+            is SendFlowManagerAction.SetPaymentRequest -> {
 
     Disposable.destroy(
         this.v1
@@ -57801,35 +57765,28 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFiatOrBtc.read(buf),
                 FfiConverterTypeFiatOrBtc.read(buf),
                 )
-            15 -> SendFlowManagerAction.NotifyScanCodeChanged(
-                FfiConverterString.read(buf),
-                FfiConverterString.read(buf),
-                )
-            16 -> SendFlowManagerAction.NotifyPricesChanged(
+            15 -> SendFlowManagerAction.NotifyPricesChanged(
                 FfiConverterTypePriceResponse.read(buf),
                 )
-            17 -> SendFlowManagerAction.NotifyFocusFieldChanged(
+            16 -> SendFlowManagerAction.NotifyFocusFieldChanged(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            18 -> SendFlowManagerAction.NotifyAddressChanged(
-                FfiConverterTypeAddress.read(buf),
+            17 -> SendFlowManagerAction.SetPaymentRequest(
+                FfiConverterTypeAddressWithNetwork.read(buf),
                 )
-            19 -> SendFlowManagerAction.NotifyAmountChanged(
+            18 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
                 FfiConverterTypeAmount.read(buf),
                 )
-            20 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
-                FfiConverterTypeAmount.read(buf),
-                )
-            21 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
+            19 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
                 FfiConverterBoolean.read(buf),
                 )
-            22 -> SendFlowManagerAction.ChangeFeeRateOptions(
+            20 -> SendFlowManagerAction.ChangeFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
-            23 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
-            24 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
+            21 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            22 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
                 FfiConverterTypeSendFlowWarningKind.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -57932,14 +57889,6 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 + FfiConverterTypeFiatOrBtc.allocationSize(value.`new`)
             )
         }
-        is SendFlowManagerAction.NotifyScanCodeChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`old`)
-                + FfiConverterString.allocationSize(value.`new`)
-            )
-        }
         is SendFlowManagerAction.NotifyPricesChanged -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -57955,18 +57904,11 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 + FfiConverterOptionalTypeSetAmountFocusField.allocationSize(value.`new`)
             )
         }
-        is SendFlowManagerAction.NotifyAddressChanged -> {
+        is SendFlowManagerAction.SetPaymentRequest -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeAddress.allocationSize(value.v1)
-            )
-        }
-        is SendFlowManagerAction.NotifyAmountChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeAmount.allocationSize(value.v1)
+                + FfiConverterTypeAddressWithNetwork.allocationSize(value.v1)
             )
         }
         is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
@@ -58075,55 +58017,44 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFiatOrBtc.write(value.`new`, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifyScanCodeChanged -> {
-                buf.putInt(15)
-                FfiConverterString.write(value.`old`, buf)
-                FfiConverterString.write(value.`new`, buf)
-                Unit
-            }
             is SendFlowManagerAction.NotifyPricesChanged -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterTypePriceResponse.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyFocusFieldChanged -> {
-                buf.putInt(17)
+                buf.putInt(16)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`old`, buf)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`new`, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifyAddressChanged -> {
-                buf.putInt(18)
-                FfiConverterTypeAddress.write(value.v1, buf)
-                Unit
-            }
-            is SendFlowManagerAction.NotifyAmountChanged -> {
-                buf.putInt(19)
-                FfiConverterTypeAmount.write(value.v1, buf)
+            is SendFlowManagerAction.SetPaymentRequest -> {
+                buf.putInt(17)
+                FfiConverterTypeAddressWithNetwork.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
-                buf.putInt(20)
+                buf.putInt(18)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
-                buf.putInt(21)
+                buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 FfiConverterBoolean.write(value.v2, buf)
                 Unit
             }
             is SendFlowManagerAction.ChangeFeeRateOptions -> {
-                buf.putInt(22)
+                buf.putInt(20)
                 FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
-                buf.putInt(23)
+                buf.putInt(21)
                 Unit
             }
             is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
-                buf.putInt(24)
+                buf.putInt(22)
                 FfiConverterTypeSendFlowWarningKind.write(value.v1, buf)
                 Unit
             }
@@ -58571,10 +58502,12 @@ public object FfiConverterTypeSendFlowWarningKind: FfiConverterRustBuffer<SendFl
 
 sealed class SendRoute: Disposable  {
 
+    /**
+     * Enter a payment, starting from a scanned address or BIP 21 payment request if there is one
+     */
     data class SetAmount(
         val `id`: org.bitcoinppl.cove_core.types.WalletId,
-        val `address`: org.bitcoinppl.cove_core.types.Address?,
-        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : SendRoute()
+        val `request`: org.bitcoinppl.cove_core.types.AddressWithNetwork?) : SendRoute()
 
     {
 
@@ -58620,8 +58553,7 @@ sealed class SendRoute: Disposable  {
 
     Disposable.destroy(
         this.`id`,
-        this.`address`,
-        this.`amount`
+        this.`request`
     )
 
             }
@@ -58667,8 +58599,7 @@ public object FfiConverterTypeSendRoute : FfiConverterRustBuffer<SendRoute>{
         return when(buf.getInt()) {
             1 -> SendRoute.SetAmount(
                 FfiConverterTypeWalletId.read(buf),
-                FfiConverterOptionalTypeAddress.read(buf),
-                FfiConverterOptionalTypeAmount.read(buf),
+                FfiConverterOptionalTypeAddressWithNetwork.read(buf),
                 )
             2 -> SendRoute.CoinControlSetAmount(
                 FfiConverterTypeWalletId.read(buf),
@@ -58691,8 +58622,7 @@ public object FfiConverterTypeSendRoute : FfiConverterRustBuffer<SendRoute>{
             (
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`id`)
-                + FfiConverterOptionalTypeAddress.allocationSize(value.`address`)
-                + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
+                + FfiConverterOptionalTypeAddressWithNetwork.allocationSize(value.`request`)
             )
         }
         is SendRoute.CoinControlSetAmount -> {
@@ -58725,8 +58655,7 @@ public object FfiConverterTypeSendRoute : FfiConverterRustBuffer<SendRoute>{
             is SendRoute.SetAmount -> {
                 buf.putInt(1)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
-                FfiConverterOptionalTypeAddress.write(value.`address`, buf)
-                FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
+                FfiConverterOptionalTypeAddressWithNetwork.write(value.`request`, buf)
                 Unit
             }
             is SendRoute.CoinControlSetAmount -> {
@@ -68005,6 +67934,38 @@ public object FfiConverterOptionalTypeAddress: FfiConverterRustBuffer<Address?> 
         } else {
             buf.put(1)
             FfiConverterTypeAddress.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeAddressWithNetwork: FfiConverterRustBuffer<AddressWithNetwork?> {
+    override fun read(buf: ByteBuffer): AddressWithNetwork? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeAddressWithNetwork.read(buf)
+    }
+
+    override fun allocationSize(value: AddressWithNetwork?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeAddressWithNetwork.allocationSize(value)
+        }
+    }
+
+    override fun write(value: AddressWithNetwork?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeAddressWithNetwork.write(value, buf)
         }
     }
 }

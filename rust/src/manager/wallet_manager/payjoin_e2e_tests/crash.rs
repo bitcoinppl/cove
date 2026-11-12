@@ -39,6 +39,7 @@ use crate::{
     database::wallet_data::WalletDataDb,
     keychain::Keychain,
     manager::import_wallet_manager::import_mnemonic_with_target,
+    router::UnsignedPaymentMode,
     test_support::{
         loaded_host_wait,
         payjoin::{PayjoinReceiver, PayjoinServices, TestRelay, TestRelayBehavior},
@@ -374,11 +375,10 @@ impl WalletProcess {
             .expect("the payment builds");
 
         // a stop in the first two steps fails the start, which the relaunch then recovers
-        let _started = call!(
-            self.actor.start_payjoin_payment_for_test(psbt.clone(), PayjoinIntent::new(endpoint))
-        )
-        .await
-        .expect("the wallet actor answers");
+        let mode = UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint) };
+        let _started = call!(self.actor.initiate_payment(psbt.clone(), mode))
+            .await
+            .expect("the wallet actor answers");
 
         psbt
     }

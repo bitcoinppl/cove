@@ -584,14 +584,14 @@ impl WalletActor {
         Ok(details)
     }
 
-    /// Sign and broadcast an unsigned payment
+    /// Sign an unsigned payment and send it the way `mode` asks
     ///
-    /// Payjoin is not enabled yet, so a `UnsignedPaymentMode::Payjoin` payment is sent as an
-    /// ordinary one and its endpoint is ignored
+    /// A `Standard` payment is broadcast as built. A `Payjoin` payment is offered to the receiver
+    /// first, and the signed original goes out instead when the receiver doesn't answer in time
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
-        _mode: UnsignedPaymentMode,
+        mode: UnsignedPaymentMode,
     ) -> ActorResult<Result<(), Error>> {
         if let Err(error) = self.ensure_ledger_ready_for_spend() {
             return Produces::ok(Err(error));
@@ -599,6 +599,10 @@ impl WalletActor {
 
         if let Err(error) = self.payjoin_send_gate() {
             return Produces::ok(Err(error));
+        }
+
+        if let UnsignedPaymentMode::Payjoin { intent } = mode {
+            return Produces::ok(self.initiate_payjoin_payment(psbt, intent).await);
         }
 
         let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
@@ -681,7 +685,6 @@ impl WalletActor {
     ///
     /// Each fallback starts in this handler rather than from a queued message, so the phase
     /// leaves Idle before a later resume can find the session record and dispatch it again
-    #[allow(dead_code)]
     async fn initiate_payjoin_payment(
         &mut self,
         psbt: Psbt,
@@ -1572,10 +1575,7 @@ pub(crate) mod test_support {
         manager::wallet_manager::{
             Error,
             actor::{PayjoinPhase, WalletActor},
-            payjoin::{
-                self, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinSessionStore,
-                unix_now_secs,
-            },
+            payjoin::{self, PayjoinConfig, PayjoinSessionId, PayjoinSessionStore, unix_now_secs},
         },
     };
 
@@ -1587,16 +1587,6 @@ pub(crate) mod test_support {
         ) -> ActorResult<()> {
             self.payjoin_config = config;
             Produces::ok(())
-        }
-
-        /// Starts a Payjoin payment through the sender path that `initiate_payment` skips while
-        /// Payjoin is not enabled
-        pub(crate) async fn start_payjoin_payment_for_test(
-            &mut self,
-            psbt: Psbt,
-            intent: PayjoinIntent,
-        ) -> ActorResult<Result<(), Error>> {
-            Produces::ok(self.initiate_payjoin_payment(psbt, intent).await)
         }
 
         /// Sign `psbt` and build its Payjoin sender, returning the signed PSBT it was built from

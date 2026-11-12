@@ -26,7 +26,7 @@ import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.shouldShowNoBalanceAlertOnEntry
-import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
+import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmRoute
 import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.SendFlowSetAmountScreen
@@ -84,8 +84,7 @@ fun SendFlowContainer(
             // pre-populate address/amount based on route type
             when (sendRoute) {
                 is SendRoute.SetAmount -> {
-                    sendRoute.address?.let { sfm.updateAddress(it) }
-                    sendRoute.amount?.let { sfm.updateAmount(it) }
+                    sendRoute.request?.let { sfm.setPaymentRequest(it) }
                 }
                 is SendRoute.CoinControlSetAmount -> {
                     sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(sendRoute.utxos))
@@ -328,19 +327,9 @@ private fun SendFlowRouteToScreen(
                                     presenter.sheetState = null
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
-                                            val addressWithNetwork = multiFormat.v1
-                                            sendFlowManager.enteringAddress = addressWithNetwork.address().unformatted()
-                                            // if QR contains an amount (BIP21), set it
-                                            addressWithNetwork.amount()?.let { amount ->
-                                                sendFlowManager.updateAmount(amount)
-                                            }
-                                            // focus management: if amount valid clear focus, otherwise focus amount
-                                            presenter.focusField =
-                                                if (sendFlowManager.validateAmount()) {
-                                                    null
-                                                } else {
-                                                    SetAmountFocusField.AMOUNT
-                                                }
+                                            // the whole request goes to rust, so a BIP 21 amount and pj endpoint
+                                            // are kept with the address, and rust moves the focus once it's applied
+                                            sendFlowManager.setPaymentRequest(multiFormat.v1)
                                         }
                                         else -> {
                                             app.alertState =
@@ -440,194 +429,13 @@ private fun SendFlowRouteToScreen(
             )
         }
         is SendRoute.Confirm -> {
-            val details = sendRoute.v1.details
-            val input = sendRoute.v1.input
-            val payjoinSessionId =
-                ((input as? SendConfirmationInput.Unsigned)?.mode as? UnsignedPaymentMode.Payjoin)
-                    ?.intent
-                    ?.sessionId
-
-            var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
-            var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
-            var showSuccessAlert by remember { mutableStateOf(false) }
-            var showErrorAlert by remember { mutableStateOf(false) }
-            val scope = rememberCoroutineScope()
-
-            var sendConfirmationLock by remember { mutableStateOf<SendConfirmationLock?>(null) }
-
-            // ask hot wallet users to authenticate again before sending
-            LaunchedEffect(walletManager) {
-                kotlinx.coroutines.delay(50)
-                if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
-                    sendConfirmationLock = Auth.lockForSendConfirmation()
-                }
-            }
-
-            // show success UI once this screen's own payjoin session completes
-            LaunchedEffect(walletManager.payjoinStatus) {
-                val status = walletManager.payjoinStatus
-                if (status is PayjoinStatus.Completed &&
-                    status.sessionId == payjoinSessionId &&
-                    sendState == SendState.Sending
-                ) {
-                    sendState = SendState.Sent
-                    showSuccessAlert = true
-                }
-            }
-
-            // payjoin broadcast failure arrives via sendFlowErrorAlert reconcile (not the
-            // catch block), so unblock the UI from Sending and show the error alert
-            LaunchedEffect(walletManager.sendFlowErrorAlert) {
-                if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
-                    val message =
-                        when (val alert = walletManager.sendFlowErrorAlert!!.item) {
-                            is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
-                            is SendFlowErrorAlert.ConfirmDetails -> alert.v1
-                        }
-                    sendState = SendState.Error(message)
-                    showErrorAlert = true
-                }
-            }
-
-            // give back only this screen's lock, any other lock still needs authentication
-            DisposableEffect(Unit) {
-                onDispose {
-                    sendConfirmationLock?.let(Auth::releaseSendConfirmationLock)
-                }
-            }
-
-            // finalize signed PSBT from TapSigner
-            LaunchedEffect(input) {
-                val signedPsbt = (input as? SendConfirmationInput.SignedPsbt)?.v1
-                if (signedPsbt != null && finalizedTransaction == null) {
-                    try {
-                        finalizedTransaction = walletManager.finalizePsbt(signedPsbt)
-                    } catch (e: WalletManagerException) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Unable to finalize transaction",
-                                    message = e.message ?: "Unknown error",
-                                ),
-                            )
-                        app.popRoute()
-                    } catch (e: Exception) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Unknown error",
-                                    message = e.message ?: "Unknown error",
-                                ),
-                            )
-                        app.popRoute()
-                    }
-                }
-            }
-
-            // show loading while PSBT is being finalized (matches iOS pattern)
-            // this prevents user from swiping before finalization completes
-            val needsFinalization =
-                input is SendConfirmationInput.SignedPsbt && finalizedTransaction == null
-            if (needsFinalization) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-                return@SendFlowRouteToScreen
-            }
-
-            SendFlowConfirmScreen(
+            SendFlowConfirmRoute(
                 app = app,
                 walletManager = walletManager,
-                sendFlowManager = sendFlowManager,
-                details = details,
-                sendState = sendState,
-                onBack = { app.popRoute() },
-                onSwipeToSend = {
-                    sendState = SendState.Sending
-                    scope.launch {
-                        try {
-                            when (input) {
-                                is SendConfirmationInput.SignedTransaction -> {
-                                    walletManager.broadcastTransaction(input.v1)
-                                }
-                                is SendConfirmationInput.SignedPsbt -> {
-                                    val txnToBroadcast =
-                                        finalizedTransaction
-                                            ?: error("Unable to finalize transaction")
-                                    walletManager.broadcastTransaction(txnToBroadcast)
-                                }
-                                is SendConfirmationInput.Unsigned -> {
-                                    walletManager.initiatePayment(details.psbt(), input.mode)
-                                    // for payjoin, stay in Sending until its session completes
-                                    if (input.mode is UnsignedPaymentMode.Payjoin) return@launch
-                                }
-                            }
-                            sendState = SendState.Sent
-                            showSuccessAlert = true
-                        } catch (e: WalletManagerException) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
-                            showErrorAlert = true
-                        } catch (e: Exception) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
-                            showErrorAlert = true
-                        }
-                    }
-                },
+                details = sendRoute.v1.details,
+                input = sendRoute.v1.input,
+                dispatchWalletAction = walletManager::dispatch,
             )
-
-            // send results wait for any app lock to clear, so a send that finishes while the
-            // app is away never shows its result above the lock screen
-            if (showSuccessAlert && !Auth.isLocked) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showSuccessAlert = false
-                        app.loadAndReset(Route.SelectedWallet(walletManager.id))
-                    },
-                    title = { Text("Success") },
-                    text = { Text("Transaction sent successfully!") },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showSuccessAlert = false
-                                app.loadAndReset(Route.SelectedWallet(walletManager.id))
-                            },
-                        ) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
-
-            if (showErrorAlert && !Auth.isLocked) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showErrorAlert = false
-                        sendState = SendState.Idle
-                    },
-                    title = { Text("Error") },
-                    text = {
-                        val errorMessage =
-                            when (val state = sendState) {
-                                is SendState.Error -> state.message
-                                else -> "Failed to send transaction"
-                            }
-                        Text(errorMessage)
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showErrorAlert = false
-                                sendState = SendState.Idle
-                            },
-                        ) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
         }
         is SendRoute.HardwareExport -> {
             SendFlowHardwareScreen(

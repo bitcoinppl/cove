@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use cove_tap_card::TapSigner;
-use cove_types::{Network, TxId, WalletId, address::Address, amount::Amount};
+use cove_types::{
+    Network, TxId, WalletId,
+    address::{Address, AddressWithNetwork},
+};
 
 use crate::router::AfterPinAction;
 
@@ -25,7 +28,7 @@ pub enum AppAlertState {
     InvalidWordGroup,
     ErrorImportingHotWallet { message: String },
     AddressWrongNetwork { address: Arc<Address>, network: Network, current_network: Network },
-    FoundAddress { address: Arc<Address>, amount: Option<Arc<Amount>> },
+    FoundAddress { request: Arc<AddressWithNetwork> },
     UnableToSelectWallet,
     ErrorImportingHardwareWallet { message: String },
     InvalidFileFormat { message: String },
@@ -155,7 +158,9 @@ impl AppAlertState {
             Self::NoWalletSelected { .. } => {
                 "Please select a wallet to send to this address".to_string()
             }
-            Self::FoundAddress { address, .. } => format!("Address: {}", address.spaced_out()),
+            Self::FoundAddress { request } => {
+                format!("Address: {}", request.address.spaced_out())
+            }
             Self::NoCameraPermission => {
                 "Please allow camera access in Settings to use this feature.".to_string()
             }

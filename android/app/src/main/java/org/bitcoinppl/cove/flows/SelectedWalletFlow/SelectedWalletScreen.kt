@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.flows.SendFlow.Common.PayjoinPendingBanner
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -412,9 +413,10 @@ fun SelectedWalletScreen(
                     // account for header items:
                     // index 0 = header
                     // index 1 = verify reminder (even if empty)
-                    // index 2 = txn-title
-                    // index 3 = scanning indicator (if scanning and hasTransactions)
-                    val baseOffset = 2 + 1 + (if (isScanStatusActive && hasTransactions) 1 else 0)
+                    // index 2 = payjoin pending banner (even if empty)
+                    // index 3 = txn-title
+                    // index 4 = scanning indicator (if scanning and hasTransactions)
+                    val baseOffset = 3 + 1 + (if (isScanStatusActive && hasTransactions) 1 else 0)
 
                     // find the index of the transaction with the matching ID
                     val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
@@ -496,6 +498,17 @@ fun SelectedWalletScreen(
                                     walletId = walletId,
                                     visible = shouldShowVerifyReminder,
                                     app = app,
+                                )
+                            }
+
+                            // a payjoin payment still in progress, such as one resumed after a
+                            // relaunch once its confirm screen is gone
+                            item(key = "payjoin-pending") {
+                                PayjoinPendingBanner(
+                                    status = manager.payjoinStatus,
+                                    onSendWithoutPayjoin = { sessionId ->
+                                        manager.dispatch(WalletManagerAction.CancelPayjoin(sessionId))
+                                    },
                                 )
                             }
 

@@ -214,8 +214,7 @@ class ScanManager private constructor() {
             return
         }
 
-        val amount = addressWithNetwork.amount()
-        app.alertState = TaggedItem(AppAlertState.FoundAddress(address, amount))
+        app.alertState = TaggedItem(AppAlertState.FoundAddress(addressWithNetwork))
     }
 
     private fun handleTransaction(transaction: BitcoinTransaction) {
