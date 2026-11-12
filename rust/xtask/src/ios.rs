@@ -84,6 +84,11 @@ const IOS_PROJECT_FILE: &str = "Cove.xcodeproj/project.pbxproj";
 // first app launch and Xcode finding the simulator all fail now and then, so retry those
 // environment failures on another fresh simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
+// a test running longer than this fails and the class's next test starts in a new runner, so a
+// hung test costs its run this long instead of the shard's whole timeout, as a 6-test cloud
+// backup class once did with no output for 50 minutes; the slowest passing test took about 20
+// minutes, simulator start included
+const IOS_UI_TEST_TIME_ALLOWANCE_SECS: u64 = 25 * 60;
 const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS: u64 = 5;
@@ -1463,6 +1468,7 @@ fn run_ios_ui_run(
 
     let only_testing = &run.only_testing_args();
     let xctestrun = build.xctestrun(run.suite)?;
+    let time_limit = &ios_ui_test_time_limit_args();
 
     // xcodebuild hands TEST_RUNNER_ variables to the test runner without the prefix
     let port_base_env = format!("TEST_RUNNER_{PORT_BASE_ENV}");
@@ -1477,7 +1483,7 @@ fn run_ios_ui_run(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, run.name(), 0));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {only_testing...}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
         )
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
@@ -1515,7 +1521,7 @@ fn run_ios_ui_run(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, name, attempt));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {only_testing...}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
         )
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
@@ -1555,6 +1561,21 @@ fn run_ios_ui_run(
     }
 
     unreachable!("iOS UI test retry loop should return from every branch")
+}
+
+/// The `xcodebuild` arguments that fail a test running past [`IOS_UI_TEST_TIME_ALLOWANCE_SECS`],
+/// which a test can't raise for itself
+fn ios_ui_test_time_limit_args() -> [String; 6] {
+    let allowance = IOS_UI_TEST_TIME_ALLOWANCE_SECS.to_string();
+
+    [
+        "-test-timeouts-enabled".to_string(),
+        "YES".to_string(),
+        "-default-test-execution-time-allowance".to_string(),
+        allowance.clone(),
+        "-maximum-test-execution-time-allowance".to_string(),
+        allowance,
+    ]
 }
 
 /// The UI test bundles of each scheme a run needs, built once with `build-for-testing`

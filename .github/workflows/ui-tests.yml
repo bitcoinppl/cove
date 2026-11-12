@@ -403,10 +403,11 @@ jobs:
           overwrite: true
 
       # each attempt's bundle and logs are named for its test, or its class when the class run
-      # holds several;
-      # DerivedData keeps only the newest bundles
+      # holds several; a passing attempt's bundle is deleted, so this holds only failures, and it
+      # uploads from a shard cancelled at its timeout too, whose last run's bundle shows where it
+      # stalled; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
-        if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
+        if: always() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: actions/upload-artifact@v7
         with:
           name: ios-ui-results-${{ strategy.job-index }}
