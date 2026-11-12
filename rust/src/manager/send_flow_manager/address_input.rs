@@ -316,7 +316,7 @@ mod tests {
             balance::Balance,
             metadata::{WalletMetadata, WalletMode},
         },
-        wallet_lifecycle::WalletLifecycleCoordinator,
+        wallet_lifecycle::{WalletConstructionPermit, WalletLifecycleCoordinator},
     };
     use bdk_wallet::KeychainKind;
 
@@ -367,6 +367,21 @@ mod tests {
         .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+    }
+
+    /// Take `wallet`'s store the way another loader would, once a pick that is still saving the
+    /// address it took lets go of it
+    async fn hold_store(wallet: &WalletMetadata) -> WalletConstructionPermit {
+        let coordinator = WalletLifecycleCoordinator::global();
+        let mut permit = None;
+
+        wait_for("the store to be free", || {
+            permit = coordinator.begin_construction(wallet.id.clone()).ok();
+            permit.is_some()
+        })
+        .await;
+
+        permit.expect("the store was taken")
     }
 
     fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
@@ -479,9 +494,7 @@ mod tests {
         assert_eq!(entered().1.as_deref(), Some(earlier.as_str()));
 
         // another loader holding the slow wallet's store keeps its pick retrying
-        let permit = WalletLifecycleCoordinator::global()
-            .begin_construction(slow.id.clone())
-            .expect("nothing else holds the slow wallet");
+        let permit = hold_store(&slow).await;
 
         manager.clone().dispatch(Action::SelectTransferDestination(slow.id.clone()));
         assert_eq!(entered(), (String::new(), None), "the earlier recipient is still valid");
@@ -491,6 +504,9 @@ mod tests {
         drop(permit);
 
         wait_for("the slow pick to take an address", || stored_index(&slow) == Some(0)).await;
+
+        // the pick is done saving once it lets go of the store, and lands right after
+        drop(hold_store(&slow).await);
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(
             entered().1.as_deref(),
@@ -499,9 +515,7 @@ mod tests {
         );
 
         // a slow pick that lands after a quicker one leaves the quicker one in place
-        let permit = WalletLifecycleCoordinator::global()
-            .begin_construction(slow.id.clone())
-            .expect("nothing else holds the slow wallet");
+        let permit = hold_store(&slow).await;
 
         manager.clone().dispatch(Action::SelectTransferDestination(slow.id.clone()));
         manager.clone().dispatch(Action::SelectTransferDestination(quick.id.clone()));
@@ -512,6 +526,8 @@ mod tests {
         drop(permit);
 
         wait_for("the slow pick to take an address", || stored_index(&slow) == Some(1)).await;
+
+        drop(hold_store(&slow).await);
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(entered().1.as_deref(), Some(quick_address.as_str()), "the slow pick won");
 
