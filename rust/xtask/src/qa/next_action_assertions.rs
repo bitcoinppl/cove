@@ -6,7 +6,9 @@
 //! Rust projected, in its own body. A call in a helper the test calls doesn't count, so each
 //! test names the actions its scenario is about
 //!
-//! Android has no full-app Cloud Backup UI tests yet; its Cloud Backup UI tests render screens
+//! Only the iOS classes are checked. Android's full-launch Cloud Backup UI tests in
+//! `android/app/src/androidTestUiTest/` have their own `assertNextActions(`, but not every test
+//! calls it, so they aren't tracked here. Android's `androidTest` Cloud Backup tests render screens
 //! from fixtures, which are pure projection tests and exempt
 
 use std::{fs, path::Path};
