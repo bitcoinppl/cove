@@ -18,7 +18,7 @@ use cove_types::BlockSizeLast;
 use rand::RngExt as _;
 
 use super::{
-    PayjoinStatus, RustWalletManager, TransactionLockState, WalletLedgerState,
+    PayjoinStatus, ReconcileChannel, RustWalletManager, TransactionLockState, WalletLedgerState,
     WalletManagerReconcileMessage as Msg,
 };
 use crate::{
@@ -80,7 +80,7 @@ impl Fixture {
     }
 
     /// Makes the fixture remove `id`'s wallet data when it drops
-    fn own(&mut self, id: &WalletId) {
+    pub(crate) fn own(&mut self, id: &WalletId) {
         self.wallet_id = Some(id.clone());
     }
 
@@ -121,7 +121,12 @@ pub(crate) struct ScreenUpdates {
 
 impl ScreenUpdates {
     fn listen(manager: &RustWalletManager) -> Self {
-        Self { receiver: manager.reconciler.receiver(), seen: Vec::new() }
+        Self::listen_to(&manager.reconciler)
+    }
+
+    /// Listens to a wallet actor's reconcile channel directly, for an actor with no manager
+    pub(crate) fn listen_to(channel: &ReconcileChannel<Msg>) -> Self {
+        Self { receiver: channel.receiver(), seen: Vec::new() }
     }
 
     /// Waits for a message matching `done` among those seen since the screen was last cleared,

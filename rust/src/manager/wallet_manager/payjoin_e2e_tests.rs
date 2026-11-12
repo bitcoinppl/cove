@@ -9,23 +9,28 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, Psbt, ScriptBuf, Transaction, Txid}
 use cove_fake_node::Protocol;
 use cove_types::address::AddressWithNetwork;
 use payjoin::receive::v2::{Receiver, UncheckedOriginalPayload};
+use url::Url;
 
 use super::{
     PayjoinStatus, RustWalletManager, WalletManagerAction, WalletManagerReconcileMessage as Msg,
     fake_node_tests::{Fixture, ScreenUpdates, fresh_mnemonic, receive_script},
     payjoin::{
-        PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinTransactionKind, unix_now_secs,
+        OhttpRelays, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinTransactionKind,
+        unix_now_secs,
     },
 };
 use crate::{
     manager::import_wallet_manager::import_mnemonic_with_target,
     mnemonic::MnemonicExt as _,
+    network::Network,
     test_support::{
-        fake_node::wait_until,
-        payjoin::{PayjoinReceiver, PayjoinServices, SilentRelay},
+        fake_node::{unreachable_url, wait_until},
+        payjoin::{PayjoinReceiver, PayjoinServices, SilentRelay, TestRelay, TestRelayBehavior},
     },
     wallet::{Address, WalletAddressType, metadata::WalletMode},
 };
+
+mod crash;
 
 /// How long these sessions wait for the receiver, long enough that no test reaches it
 const SESSION_TIMEOUT: Duration = Duration::from_secs(60);
@@ -255,6 +260,142 @@ async fn cancelling_after_the_broadcast_starts_changes_nothing() {
     );
 }
 
+/// The receiver checks the Original and rejects it with a well-known error: the sender
+/// broadcasts the Original once, reports the session completed with it, and is free to send
+/// again
+#[tokio::test(flavor = "current_thread")]
+async fn a_rejecting_receiver_gets_the_original_once() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let mut payment = PayjoinPayment::start(&mut fx, &services).await;
+
+    let original = payment.receiver_gets_the_original().await;
+    payment.receiver.reject(original).await;
+
+    let completed = payment.until_completed().await;
+    let original_txid = payment.original_txid();
+    assert_eq!(
+        payment.screen.payjoin_statuses(),
+        vec![
+            payment.negotiating(),
+            payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+        ],
+        "the rejection ends negotiation with the Original's broadcast"
+    );
+    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+
+    let broadcasts = only_broadcast(&fx);
+    assert_eq!(broadcasts[0].compute_txid(), original_txid, "the node got the Original");
+    payment.assert_session_cleared().await;
+    payment.assert_send_gate_open().await;
+}
+
+/// No relay carries the Original's POST: one answers 502, one redirects to a relay the wallet
+/// was never given, and one is not listening. Each is tried once, the redirect is not followed,
+/// and the Original goes out at once instead of waiting for the deadline
+#[tokio::test(flavor = "current_thread")]
+async fn every_relay_refusing_the_post_sends_the_original_at_once() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(1).await;
+    let client = services.http_client();
+    let down = TestRelay::start(TestRelayBehavior::Down, client.clone()).await;
+    let unlisted = TestRelay::forwarding_to(&services, 0).await;
+    let redirecting =
+        TestRelay::start(TestRelayBehavior::Redirect(unlisted.url().clone()), client).await;
+    let unreachable = Url::parse(&unreachable_url()).expect("a valid URL");
+
+    let relays = [down.url().clone(), redirecting.url().clone(), unreachable];
+    let relays = OhttpRelays::loopback_for_test(relays)
+        .expect("loopback relays are allowed in tests")
+        .in_listed_order();
+    let config = PayjoinConfig::new(relays, SESSION_TIMEOUT);
+    let mut payment = PayjoinPayment::start_with(&mut fx, &services, config).await;
+
+    let completed = payment.until_completed().await;
+    let original_txid = payment.original_txid();
+    assert!(
+        unix_now_secs() < payment.expires_at_secs,
+        "the Original went out without waiting for the session's deadline"
+    );
+    assert_eq!(
+        payment.screen.payjoin_statuses(),
+        vec![
+            payment.negotiating(),
+            payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+        ],
+        "the failed POST ends negotiation with the Original's broadcast"
+    );
+    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+
+    assert_eq!(down.requests(), 1, "the relay that answered 502 was tried once");
+    assert_eq!(redirecting.requests(), 1, "the redirecting relay was tried once");
+    assert_eq!(unlisted.requests(), 0, "the redirect to an unlisted relay was not followed");
+
+    let broadcasts = only_broadcast(&fx);
+    assert_eq!(broadcasts[0].compute_txid(), original_txid, "the node got the Original");
+    payment.assert_session_cleared().await;
+    payment.assert_send_gate_open().await;
+}
+
+/// Every relay goes down after the POST, so each poll fails. The session keeps polling only
+/// the relay that carried its POST, never moves to another, and sends the Original once at the
+/// deadline the screens were told
+#[tokio::test(flavor = "current_thread")]
+async fn every_relay_going_down_while_polling_sends_the_original_at_the_deadline() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let adopted = TestRelay::forwarding_to(&services, 0).await;
+    let other = TestRelay::forwarding_to(&services, 1).await;
+
+    let session_timeout = Duration::from_secs(8);
+    let config = TestRelay::sender_config(&[&adopted, &other], session_timeout);
+    let mut payment = PayjoinPayment::start_with(&mut fx, &services, config).await;
+    let _original = payment.receiver_gets_the_original().await;
+    payment.until_sender_is_polling().await;
+
+    adopted.set_behavior(TestRelayBehavior::Down);
+    other.set_behavior(TestRelayBehavior::Down);
+    let before_outage = adopted.requests();
+    assert!(unix_now_secs() < payment.expires_at_secs, "the outage began before the deadline");
+
+    let completed = payment.until_completed().await;
+    let fell_back_at = unix_now_secs();
+    let deadline = payment.expires_at_secs;
+    assert!(fell_back_at >= deadline, "the wallet waited for the deadline it reported");
+    assert!(
+        fell_back_at <= deadline + 2,
+        "the wallet stopped at its deadline {deadline}, not later: {fell_back_at}"
+    );
+
+    let original_txid = payment.original_txid();
+    assert_eq!(
+        payment.screen.payjoin_statuses(),
+        vec![
+            payment.negotiating(),
+            payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+        ],
+        "the outage ends negotiation with the Original's broadcast at the deadline"
+    );
+    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+
+    assert!(
+        adopted.requests() > before_outage,
+        "the session kept polling the relay that carried its POST during the outage"
+    );
+    assert_eq!(other.requests(), 0, "the session never moved to another relay");
+
+    let broadcasts = only_broadcast(&fx);
+    assert_eq!(broadcasts[0].compute_txid(), original_txid, "the node got the Original");
+    payment.assert_session_cleared().await;
+    payment.assert_send_gate_open().await;
+}
+
 /// A funded hot wallet paying a receiver that has opened a session, with its Payjoin started
 struct PayjoinPayment {
     manager: RustWalletManager,
@@ -288,16 +429,10 @@ impl PayjoinPayment {
         manager.start_wallet_scan().await.expect("the scan starts");
         screen.until_scan_settles().await;
 
-        let receiver_wallet = fresh_mnemonic()
-            .into_descriptors(None, fx.network, WalletAddressType::NativeSegwit)
-            .into_create_params()
-            .network(fx.network.into())
-            .create_wallet_no_persist()
-            .expect("the receiver wallet opens");
         let receiver = PayjoinReceiver::start(
             services,
             fx.node.chain(),
-            receiver_wallet,
+            fresh_receiver_wallet(fx.network),
             Amount::from_sat(50_000),
         )
         .await;
@@ -411,6 +546,14 @@ impl PayjoinPayment {
         self.screen.payjoin_statuses().pop().expect("the completed status was seen")
     }
 
+    /// Checks a new payment passes the send gate, which a stored session record would block
+    async fn assert_send_gate_open(&self) {
+        let gate = call!(self.manager.actor.check_payjoin_send_gate_for_test())
+            .await
+            .expect("the wallet actor answers");
+        assert!(gate.is_ok(), "the send gate lets a new payment start: {gate:?}");
+    }
+
     async fn assert_session_cleared(&self) {
         let session = call!(self.manager.actor.payjoin_session_for_test())
             .await
@@ -440,6 +583,16 @@ impl PayjoinPayment {
             kind,
         }
     }
+}
+
+/// A wallet for the receiver's side, which nobody has used
+fn fresh_receiver_wallet(network: Network) -> bdk_wallet::Wallet {
+    fresh_mnemonic()
+        .into_descriptors(None, network, WalletAddressType::NativeSegwit)
+        .into_create_params()
+        .network(network.into())
+        .create_wallet_no_persist()
+        .expect("the receiver wallet opens")
 }
 
 fn is_status(message: &Msg, status: &PayjoinStatus) -> bool {
