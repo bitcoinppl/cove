@@ -88,9 +88,9 @@ These Rust tests run the PSBT signing loops that a release pass would otherwise 
 
 - **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate.
 - **Receiver.** The test drives a v2 receiver step by step and signs its proposal with a BDK wallet. The receiver's coin is on the fake node, as is the sender's.
-- **Sender.** A hot wallet builds a Max payment to the receiver's pj URI and starts the session through `initiate_payjoin_payment`. Payjoin is still gated off in the send flow, so the test reaches it through a test-only entry point on the wallet actor.
+- **Sender.** A hot wallet builds a payment with change to the receiver's pj URI and starts the session through `initiate_payjoin_payment`. Payjoin is still gated off in the send flow, so the test reaches it through a test-only entry point on the wallet actor.
 
-The test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone.
+The test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone.
 
 Relays and the session timeout come from `PayjoinConfig`, which the wallet actor owns. The app uses the built-in `https` relays and a ten-minute timeout. Only tests can build a config with plain `http` relays, and only when they listen on a loopback host.
 
