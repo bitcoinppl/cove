@@ -244,9 +244,9 @@ fun CoinControlSetAmountScreen(
                             presenter.sheetState = null
                             when (multiFormat) {
                                 is MultiFormat.Address -> {
-                                    sendFlowManager.enteringAddress = multiFormat.v1.address().unformatted()
-                                    // clear focus to show formatted address
-                                    presenter.focusField = null
+                                    // the whole request goes to rust, so a pj endpoint is kept with the
+                                    // address, and rust clears the focus once it's applied
+                                    sendFlowManager.setPaymentRequest(multiFormat.v1)
                                 }
                                 else -> {
                                     app.alertState =

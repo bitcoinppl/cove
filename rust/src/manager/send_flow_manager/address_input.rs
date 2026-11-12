@@ -13,6 +13,13 @@ impl RustSendFlowManager {
         // only the length, since a mistaken paste can be a recovery phrase
         debug!("handle_entering_address_changed: {} chars", address.len());
 
+        // a platform echoing back the text rust set, such as the bare address it shows for a
+        // payment request, is not an edit, and re-parsing it would drop the request's Payjoin
+        // endpoint
+        if self.state.lock().entering_address == address {
+            return;
+        }
+
         let mut sender = self.reconciler.deferred_sender();
 
         self.state.lock().entering_address = address.clone();
@@ -125,40 +132,31 @@ impl RustSendFlowManager {
         sender.queue(Message::UpdateEnteringAddress(String::new()));
     }
 
-    pub(crate) fn handle_scan_code_changed(
-        self: &Arc<Self>,
-        _old_value: String,
-        new_value: String,
-    ) {
-        debug!("handle_scan_code_changed: {} chars", new_value.len());
-
-        let request = match AddressWithNetwork::try_new(&new_value) {
-            Ok(request) => request,
-            Err(err) => return self.send_alert(SendFlowError::from_address_error(err, new_value)),
-        };
-
-        if let Err(error) = self.check_request_network(&request) {
+    /// Pay a payment request scanned in the send screen or passed in when it opened
+    ///
+    /// The request's amount is applied quietly, since the wallet's balance may still be loading
+    /// when the screen opens, and an amount checked against it then would alert wrongly
+    pub(crate) fn handle_payment_request(self: &Arc<Self>, request: &AddressWithNetwork) {
+        if let Err(error) = self.check_request_network(request) {
             return self.send_alert(error);
         }
 
         let mut sender = self.reconciler.deferred_sender();
-        let should_show_amount_error = self.apply_payment_request(&request, &mut sender);
+        self.apply_payment_request(request, &mut sender);
 
-        // if amount is invalid, go to amount field
-        if !self.validate_amount_internal(should_show_amount_error) {
-            let focus_field = SetAmountFocusField::Amount;
-            self.state.lock().focus_field = Some(focus_field);
-            sender.queue(Message::UpdateFocusField(Some(focus_field)));
+        // go to the amount field while it still needs one, and leave the fields once both are set
+        if self.validate_address_internal(false) {
+            let focus_field = if self.validate_amount_internal(false) {
+                None
+            } else {
+                Some(SetAmountFocusField::Amount)
+            };
+
+            self.state.lock().focus_field = focus_field;
+            sender.queue(Message::UpdateFocusField(focus_field));
         }
 
-        // if both address and amount are valid, then clear the focus field
-        if self.validate_amount_internal(false) && self.validate_address_internal(false) {
-            self.state.lock().focus_field = None;
-            sender.queue(Message::UpdateFocusField(None));
-        }
-
-        // the address or amount might have changed
-        // lets update the fee rate options if its needed
+        // a new address changes the fee, and a new amount can change a Max send
         let me = self.clone();
         let is_max_selected = self.state.lock().max_selected.is_some();
         cove_tokio::task::spawn(async move {
@@ -167,16 +165,6 @@ impl RustSendFlowManager {
                 me.refresh_max_send_report_error().await;
             }
         });
-    }
-
-    /// Pay a payment request the app was opened with, such as one scanned outside the send flow
-    pub(crate) fn handle_payment_request(self: &Arc<Self>, request: &AddressWithNetwork) {
-        if let Err(error) = self.check_request_network(request) {
-            return self.send_alert(error);
-        }
-
-        let mut sender = self.reconciler.deferred_sender();
-        self.apply_payment_request(request, &mut sender);
     }
 
     fn check_request_network(&self, request: &AddressWithNetwork) -> Result<(), SendFlowError> {
@@ -193,12 +181,12 @@ impl RustSendFlowManager {
     }
 
     /// Take the request's address and Payjoin endpoint, and its amount unless coin control fixes
-    /// the amount, returning whether the amount was taken
+    /// the amount
     fn apply_payment_request(
         self: &Arc<Self>,
         request: &AddressWithNetwork,
         sender: &mut DeferredSender<Message>,
-    ) -> bool {
+    ) {
         let address = Arc::new(request.address.clone());
 
         {
@@ -215,7 +203,7 @@ impl RustSendFlowManager {
 
         let is_coin_control = self.state.lock().mode.is_coin_control();
         let Some(amount) = request.amount.filter(|_| !is_coin_control) else {
-            return false;
+            return;
         };
 
         let max_was_selected = self.state.lock().max_selected.take().is_some();
@@ -224,7 +212,6 @@ impl RustSendFlowManager {
         }
 
         self.handle_amount_changed(amount);
-        true
     }
 }
 
@@ -253,6 +240,7 @@ mod tests {
     use super::super::{Action, Message, RustSendFlowManager};
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
+    const P2PKH_MAINNET_ADDRESS: &str = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
     const AMOUNT_SATS: u64 = 50_000;
 
     // a BIP 77 v2 endpoint from the payjoin crate's own session test vectors
@@ -306,9 +294,9 @@ mod tests {
     }
 
     /// Payjoin URIs pasted into the address field become a one-recipient send: the field shows
-    /// the bare address and the amount comes from the URI. With Payjoin switched on, only a v2
-    /// endpoint reaches the confirm screen as a Payjoin; a BIP 78 endpoint or a stray pjos is
-    /// paid as a normal payment
+    /// the bare address, even after the app writes it back, and the amount comes from the URI.
+    /// With Payjoin switched on, only a v2 endpoint reaches the confirm screen as a Payjoin; a
+    /// BIP 78 endpoint or a stray pjos is paid as a normal payment
     #[tokio::test(flavor = "current_thread")]
     async fn payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
@@ -352,6 +340,10 @@ mod tests {
                 let manager = funded_send_flow(network);
 
                 manager.clone().dispatch(Action::NotifyEnteringAddressChanged(uri.clone()));
+
+                // iOS writes the bare address rust shows back through the field's binding, and
+                // that echo must not drop the request
+                manager.clone().dispatch(Action::NotifyEnteringAddressChanged(address.clone()));
 
                 {
                     let state = manager.state.lock();
@@ -441,5 +433,65 @@ mod tests {
         }
 
         App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+    }
+
+    /// A payment request scanned after an amount and address were typed keeps that amount,
+    /// replaces the fee total for the typed address with one for its own, and confirms with its
+    /// Payjoin endpoint
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_scanned_request_without_an_amount_refreshes_the_fee_and_keeps_its_payjoin() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+
+        let _choice = PayjoinChoiceGuard::set(true);
+        App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+
+        let manager = funded_send_flow(Network::Bitcoin);
+        // set directly, since typing an amount schedules its own delayed fee refresh, which
+        // would refresh the fee for the scanned address on the request's behalf
+        manager.state.lock().amount_sats = Some(AMOUNT_SATS);
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(MAINNET_ADDRESS.into()));
+
+        let mut fee_before = None;
+        wait_for("the fee total for the typed address", || {
+            fee_before = manager.selected_fee_rate().and_then(|fee| fee.total_fee);
+            fee_before.is_some()
+        })
+        .await;
+
+        // a P2PKH output is larger than the typed P2WPKH one, so its fee total differs
+        let uri = format!("bitcoin:{P2PKH_MAINNET_ADDRESS}?pj={PJ_V2_ENDPOINT}");
+        let request = AddressWithNetwork::try_new(&uri).expect("URI parses");
+        let endpoint = request.payjoin.clone().expect("the URI carries a v2 endpoint").endpoint;
+        manager.clone().dispatch(Action::SetPaymentRequest(Arc::new(request)));
+
+        wait_for("the fee total for the scanned address", || {
+            manager
+                .selected_fee_rate()
+                .and_then(|fee| fee.total_fee)
+                .is_some_and(|fee| Some(fee) != fee_before)
+        })
+        .await;
+
+        assert_eq!(manager.state.lock().entering_address, P2PKH_MAINNET_ADDRESS);
+        assert_eq!(manager.state.lock().amount_sats, Some(AMOUNT_SATS), "the typed amount stays");
+
+        manager.clone().dispatch(Action::FinalizeAndGoToNextScreen);
+        wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
+
+        let confirm = pushed_confirm_route().expect("confirm route was pushed");
+        App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+
+        let SendConfirmationInput::Unsigned { mode } = confirm.input else {
+            panic!("a hot wallet confirms an unsigned payment");
+        };
+        let UnsignedPaymentMode::Payjoin { intent } = mode else {
+            panic!("the scanned request confirms as a Payjoin, got {mode:?}");
+        };
+        assert_eq!(intent.endpoint, endpoint);
+        assert_eq!(confirm.details.sending_amount.as_sats(), AMOUNT_SATS);
     }
 }

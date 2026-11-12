@@ -16,12 +16,17 @@ class DeviceAccesor: DeviceAccess {
         #if DEBUG
             return .debug
         #else
-            // TestFlight installs carry a sandbox receipt, App Store installs don't
-            if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
-                return .beta
-            }
-
-            return .release
+            return Self.installedBuildChannel()
         #endif
+    }
+
+    /// Kept outside `#if DEBUG` so every configuration compiles it
+    private static func installedBuildChannel() -> BuildChannel {
+        // TestFlight installs carry a sandbox receipt, App Store installs don't
+        if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+            return .beta
+        }
+
+        return .release
     }
 }

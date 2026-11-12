@@ -328,15 +328,8 @@ private fun SendFlowRouteToScreen(
                                     when (multiFormat) {
                                         is MultiFormat.Address -> {
                                             // the whole request goes to rust, so a BIP 21 amount and pj endpoint
-                                            // are kept with the address
+                                            // are kept with the address, and rust moves the focus once it's applied
                                             sendFlowManager.setPaymentRequest(multiFormat.v1)
-                                            // focus management: if amount valid clear focus, otherwise focus amount
-                                            presenter.focusField =
-                                                if (sendFlowManager.validateAmount()) {
-                                                    null
-                                                } else {
-                                                    SetAmountFocusField.AMOUNT
-                                                }
                                         }
                                         else -> {
                                             app.alertState =

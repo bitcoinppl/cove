@@ -57667,16 +57667,6 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
-    data class NotifyScanCodeChanged(
-        val `old`: kotlin.String,
-        val `new`: kotlin.String) : SendFlowManagerAction()
-
-    {
-
-
-        companion object
-    }
-
     data class NotifyPricesChanged(
         val v1: org.bitcoinppl.cove_core.PriceResponse) : SendFlowManagerAction()
 
@@ -57697,7 +57687,8 @@ sealed class SendFlowManagerAction: Disposable  {
     }
 
     /**
-     * Pay a scanned address or BIP 21 payment request, taking its amount and Payjoin endpoint
+     * Pay an address or BIP 21 payment request, scanned in the send screen or passed in when it
+     * opened, taking its amount and Payjoin endpoint
      */
     data class SetPaymentRequest(
         val v1: org.bitcoinppl.cove_core.types.AddressWithNetwork) : SendFlowManagerAction()
@@ -57828,14 +57819,6 @@ sealed class SendFlowManagerAction: Disposable  {
     )
 
             }
-            is SendFlowManagerAction.NotifyScanCodeChanged -> {
-
-    Disposable.destroy(
-        this.`old`,
-        this.`new`
-    )
-
-            }
             is SendFlowManagerAction.NotifyPricesChanged -> {
 
     Disposable.destroy(
@@ -57940,32 +57923,28 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFiatOrBtc.read(buf),
                 FfiConverterTypeFiatOrBtc.read(buf),
                 )
-            15 -> SendFlowManagerAction.NotifyScanCodeChanged(
-                FfiConverterString.read(buf),
-                FfiConverterString.read(buf),
-                )
-            16 -> SendFlowManagerAction.NotifyPricesChanged(
+            15 -> SendFlowManagerAction.NotifyPricesChanged(
                 FfiConverterTypePriceResponse.read(buf),
                 )
-            17 -> SendFlowManagerAction.NotifyFocusFieldChanged(
+            16 -> SendFlowManagerAction.NotifyFocusFieldChanged(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            18 -> SendFlowManagerAction.SetPaymentRequest(
+            17 -> SendFlowManagerAction.SetPaymentRequest(
                 FfiConverterTypeAddressWithNetwork.read(buf),
                 )
-            19 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
+            18 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
                 FfiConverterTypeAmount.read(buf),
                 )
-            20 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
+            19 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
                 FfiConverterBoolean.read(buf),
                 )
-            21 -> SendFlowManagerAction.ChangeFeeRateOptions(
+            20 -> SendFlowManagerAction.ChangeFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
-            22 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
-            23 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
+            21 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            22 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
                 FfiConverterTypeSendFlowWarningKind.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -58066,14 +58045,6 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 4UL
                 + FfiConverterTypeFiatOrBtc.allocationSize(value.`old`)
                 + FfiConverterTypeFiatOrBtc.allocationSize(value.`new`)
-            )
-        }
-        is SendFlowManagerAction.NotifyScanCodeChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`old`)
-                + FfiConverterString.allocationSize(value.`new`)
             )
         }
         is SendFlowManagerAction.NotifyPricesChanged -> {
@@ -58204,50 +58175,44 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFiatOrBtc.write(value.`new`, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifyScanCodeChanged -> {
-                buf.putInt(15)
-                FfiConverterString.write(value.`old`, buf)
-                FfiConverterString.write(value.`new`, buf)
-                Unit
-            }
             is SendFlowManagerAction.NotifyPricesChanged -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterTypePriceResponse.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyFocusFieldChanged -> {
-                buf.putInt(17)
+                buf.putInt(16)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`old`, buf)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.SetPaymentRequest -> {
-                buf.putInt(18)
+                buf.putInt(17)
                 FfiConverterTypeAddressWithNetwork.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
-                buf.putInt(19)
+                buf.putInt(18)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
-                buf.putInt(20)
+                buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 FfiConverterBoolean.write(value.v2, buf)
                 Unit
             }
             is SendFlowManagerAction.ChangeFeeRateOptions -> {
-                buf.putInt(21)
+                buf.putInt(20)
                 FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
-                buf.putInt(22)
+                buf.putInt(21)
                 Unit
             }
             is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
-                buf.putInt(23)
+                buf.putInt(22)
                 FfiConverterTypeSendFlowWarningKind.write(value.v1, buf)
                 Unit
             }

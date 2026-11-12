@@ -34,7 +34,7 @@ struct SendFlowSetAmountScreen: View {
         idType: SendFlowPresenter.FocusField.self
     )
 
-    @State private var scannedCode: TaggedString? = .none
+    @State private var scannedRequest: TaggedItem<AddressWithNetwork>? = .none
 
     /// fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
@@ -127,7 +127,7 @@ struct SendFlowSetAmountScreen: View {
         )
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
-        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: scannedRequest, initial: false, scannedRequestChanged)
         .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .onChange(of: metadata.fiatOrBtc, initial: false, fiatOrBtcChanged)
         .onChange(of: app.prices, initial: true, pricesChanged)
@@ -136,7 +136,7 @@ struct SendFlowSetAmountScreen: View {
         .sheet(item: presenter.sheetStateBinding) { state in
             SendFlowSetAmountSheetContent(
                 state: state.item,
-                scannedCode: $scannedCode,
+                scannedRequest: $scannedRequest,
                 selectedPresentationDetent: $selectedPresentationDetent
             )
         }
@@ -288,14 +288,15 @@ struct SendFlowSetAmountScreen: View {
         presenter.sheetState = TaggedItem(.fee)
     }
 
-    private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
-        // scanned text can be a seed or an xpub, so only its length is logged
-        Log.debug("scannedCodeChanged len \(old?.item.count ?? 0) -> \(newValue?.item.count ?? 0)")
+    private func scannedRequestChanged(
+        _: TaggedItem<AddressWithNetwork>?,
+        newValue: TaggedItem<AddressWithNetwork>?
+    ) {
         guard let newValue else { return }
         presenter.sheetState = nil
-        sendFlowManager.dispatch(
-            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item)
-        )
+
+        // the whole request goes to rust, so its amount and Payjoin endpoint stay with the address
+        sendFlowManager.setPaymentRequest(newValue.item)
     }
 }
 
@@ -461,13 +462,13 @@ private struct SendFlowSetAmountSheetContent: View {
     @Environment(SendFlowManager.self) private var sendFlowManager
 
     let state: SheetState
-    @Binding var scannedCode: TaggedString?
+    @Binding var scannedRequest: TaggedItem<AddressWithNetwork>?
     @Binding var selectedPresentationDetent: PresentationDetent
 
     var body: some View {
         switch state {
         case .qr:
-            QrCodeAddressView(app: _app, scannedCode: $scannedCode)
+            QrCodeAddressView(app: _app, scannedRequest: $scannedRequest)
                 .presentationDetents([.large])
         case .fee:
             SendFlowFeeSelectionSheet(

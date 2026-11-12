@@ -164,17 +164,14 @@ pub enum SendFlowManagerAction {
         old: FiatOrBtc,
         new: FiatOrBtc,
     },
-    NotifyScanCodeChanged {
-        old: String,
-        new: String,
-    },
     NotifyPricesChanged(Arc<PriceResponse>),
     NotifyFocusFieldChanged {
         old: Option<SetAmountFocusField>,
         new: Option<SetAmountFocusField>,
     },
 
-    /// Pay a scanned address or BIP 21 payment request, taking its amount and Payjoin endpoint
+    /// Pay an address or BIP 21 payment request, scanned in the send screen or passed in when it
+    /// opened, taking its amount and Payjoin endpoint
     SetPaymentRequest(Arc<AddressWithNetwork>),
 
     // notify coin control custom amount changed
@@ -553,10 +550,6 @@ impl RustSendFlowManager {
 
             Action::NotifySelectedUnitedChanged { old, new } => {
                 self.handle_selected_unit_changed(old, new);
-            }
-
-            Action::NotifyScanCodeChanged { old, new } => {
-                self.handle_scan_code_changed(old, new);
             }
 
             Action::NotifyBtcOrFiatChanged { old, new } => {
