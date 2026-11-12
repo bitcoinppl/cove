@@ -1,5 +1,5 @@
-//! Pushes to a throwaway remote through `tools/git-hooks/pre-push` and checks which pushes its Rust
-//! format check lets through
+//! Runs `just pre-push` in a throwaway clone, directly and through the git hook `just install-hooks`
+//! enables, and checks which commits its Rust format check lets through
 
 use std::{
     fs,
@@ -12,8 +12,11 @@ use tempfile::TempDir;
 const CLEAN: &str = "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n";
 const UNFORMATTED: &str = "pub fn add(a:i32,b:i32)->i32{a+b}\n";
 
-fn hooks_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/git-hooks").canonicalize().unwrap()
+/// The files `just pre-push` and its hook need, copied from this checkout into the fixture
+const PRE_PUSH_FILES: [&str; 3] = ["justfile", "tools/pre-push.sh", "tools/git-hooks/pre-push"];
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
 }
 
 /// A clone with a bare `origin`, isolated from the user's and system's git settings
@@ -30,8 +33,13 @@ impl Repo {
         repo.git_in(repo.dir.path(), &["init", "-q", "-b", "master", "work"]);
         repo.git(&["config", "user.name", "Test"]);
         repo.git(&["config", "user.email", "test@example.com"]);
-        repo.git(&["config", "core.hooksPath", hooks_dir().to_str().unwrap()]);
         repo.git(&["remote", "add", "origin", "../origin.git"]);
+
+        for file in PRE_PUSH_FILES {
+            let path = repo.work().join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::copy(repo_root().join(file), path).unwrap();
+        }
 
         repo.write(
             "rust/Cargo.toml",
@@ -44,6 +52,9 @@ impl Repo {
         let output = repo.push(&["--no-verify", "-u", "origin", "master"]);
         assert!(output.status.success(), "{}", text(&output));
 
+        let output = repo.just(&["install-hooks"]);
+        assert!(output.status.success(), "{}", text(&output));
+
         repo
     }
 
@@ -52,7 +63,11 @@ impl Repo {
     }
 
     fn command_in(&self, dir: &Path, args: &[&str]) -> Command {
-        let mut command = Command::new("git");
+        self.program_in("git", dir, args)
+    }
+
+    fn program_in(&self, program: &str, dir: &Path, args: &[&str]) -> Command {
+        let mut command = Command::new(program);
         command
             .args(args)
             .current_dir(dir)
@@ -86,6 +101,10 @@ impl Repo {
     fn commit(&self, message: &str) {
         self.git(&["add", "-A"]);
         self.git(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", message]);
+    }
+
+    fn just(&self, args: &[&str]) -> Output {
+        self.program_in("just", &self.work(), args).output().unwrap()
     }
 
     fn push(&self, args: &[&str]) -> Output {
@@ -123,13 +142,19 @@ fn text(output: &Output) -> String {
     )
 }
 
+fn assert_installed(program: &str, args: &[&str]) {
+    let output = Command::new(program).args(args).output();
+    assert!(
+        output.is_ok_and(|output| output.status.success()),
+        "the pre-push test needs `{program} {}`",
+        args.join(" ")
+    );
+}
+
 #[test]
 fn rustfmt_gates_pushes_by_the_commits_they_add() {
-    let rustfmt = Command::new("cargo").args(["fmt", "--version"]).output();
-    assert!(
-        rustfmt.is_ok_and(|output| output.status.success()),
-        "the pre-push hook test needs rustfmt"
-    );
+    assert_installed("cargo", &["fmt", "--version"]);
+    assert_installed("just", &["--version"]);
 
     let repo = Repo::new();
 
@@ -137,6 +162,11 @@ fn rustfmt_gates_pushes_by_the_commits_they_add() {
     repo.git(&["checkout", "-q", "-b", "feature"]);
     repo.write("rust/src/lib.rs", UNFORMATTED);
     repo.commit("unformatted");
+
+    // run directly, it checks the branch against origin/master and exits 1 for a failed check
+    let output = repo.just(&["pre-push"]);
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output));
+    assert!(text(&output).contains("rustfmt FAILED"), "{}", text(&output));
 
     let output = repo.push(&["origin", "feature"]);
     assert!(!output.status.success(), "unformatted push went through: {}", text(&output));
@@ -151,6 +181,13 @@ fn rustfmt_gates_pushes_by_the_commits_they_add() {
     assert!(output.status.success(), "{}", text(&output));
     assert!(text(&output).contains("rustfmt passed"), "{}", text(&output));
     assert_eq!(repo.remote_branch("feature"), Some(repo.head()));
+
+    // with the file formatted the branch passes, and a revision that doesn't exist exits 2
+    let output = repo.just(&["pre-push"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output));
+
+    let output = repo.just(&["pre-push", "no-such-branch"]);
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output));
 
     // a force push that rewrites the pushed commits into one unformatted commit
     let pushed = repo.head();

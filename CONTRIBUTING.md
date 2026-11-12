@@ -23,7 +23,7 @@ Copy `.envrc.example` to your preferred local environment setup and load the And
 
 The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed Android release builds and bundles. Regular development work does not require them.
 
-Run `just install-hooks all` once to have every push run the quick format, lint and manifest checks for the files it changes, or `just install-hooks` to enable them in the current worktree only. `git push --no-verify` skips them once. See [Pre-push checks](docs/testing.md#pre-push-checks).
+`just pre-push` runs the quick format, lint, manifest and bindings checks for the files your branch changes. Run `just install-hooks all` once to have every push run it, or `just install-hooks` to enable it in the current worktree only. `git push --no-verify` skips it once. See [Pre-push checks](docs/testing.md#pre-push-checks).
 
 ## Quick Start
 

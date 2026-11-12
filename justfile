@@ -21,9 +21,18 @@ list:
 xtask *args:
     cd rust && cargo --locked xtask {{ args }}
 
+# With no revisions it checks the commits on HEAD that origin/master doesn't have. Exits 0 when the
+# checks that ran passed, 1 when one failed and 2 when the revisions can't be read; the git hook
+# relies on these, so keep them. See docs/testing.md#pre-push-checks
+# [quick] Run the quick format, lint, manifest and bindings checks for the files some commits change
+[group('utils')]
+[positional-arguments]
+pre-push *revisions:
+    @tools/pre-push.sh "$@"
+
 # `worktree` enables them in this worktree only; `all` enables them in every worktree of this clone,
 # including ones created later. See docs/testing.md#pre-push-checks
-# [quick] Run the quick format, lint and manifest checks before every git push
+# [quick] Run `just pre-push` on the commits of every git push from this worktree
 [group('utils')]
 [script('bash')]
 install-hooks scope="worktree":
