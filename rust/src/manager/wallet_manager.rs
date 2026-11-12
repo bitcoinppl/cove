@@ -24,6 +24,7 @@ use bdk_wallet::{AddUtxoError, error::CreateTxError};
 use futures::channel::oneshot;
 pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
+use payjoin::{PayjoinSessionId, PayjoinStatus};
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
 use tracing::{debug, error, warn};
 
@@ -41,7 +42,7 @@ use crate::{
     keychain::{Keychain, KeychainError, WalletSecret},
     label_manager::LabelManager,
     psbt::Psbt,
-    router::Route,
+    router::{Route, UnsignedPaymentMode},
     transaction::{
         Amount, Transaction, TransactionDetailsPresentation, TxId, Unit, ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
@@ -99,7 +100,7 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressError(String),
     ReceiveAddressClosed(u64),
 
-    PayjoinTxBroadcast,
+    PayjoinStatusChanged(PayjoinStatus),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -117,6 +118,9 @@ pub enum WalletManagerAction {
     OpenReceiveAddress,
     CreateNewReceiveAddress,
     CloseReceiveAddress(u64),
+
+    /// Stop waiting for the Payjoin receiver and broadcast the original payment now
+    CancelPayjoin(PayjoinSessionId),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -769,6 +773,14 @@ impl RustWalletManager {
         call!(self.actor.balance()).await.map_err(|_| Error::ManagerClosed)
     }
 
+    /// The wallet's Payjoin status for a screen's initial snapshot, including a session
+    /// resumed after a restart; later changes arrive as `PayjoinStatusChanged`
+    #[uniffi::method]
+    pub async fn payjoin_status(&self) -> Result<PayjoinStatus, Error> {
+        self.ensure_active()?;
+        call!(self.actor.payjoin_status()).await.map_err(|_| Error::ManagerClosed)
+    }
+
     #[uniffi::method]
     pub async fn unlocked_spendable_balance(&self) -> Result<Amount, Error> {
         self.ensure_active()?;
@@ -784,12 +796,12 @@ impl RustWalletManager {
     pub async fn initiate_payment(
         &self,
         psbt: Arc<Psbt>,
-        payjoin_endpoint: Option<String>,
+        mode: UnsignedPaymentMode,
     ) -> Result<(), Error> {
         self.ensure_ledger_ready_for_spend()?;
 
         let psbt = Arc::unwrap_or_clone(psbt);
-        call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint))
+        call!(self.actor.initiate_payment(psbt.into(), mode))
             .await
             .map_err(|_| Error::ActorNotFound)??;
 
@@ -1172,6 +1184,10 @@ impl RustWalletManager {
 
             Action::CloseReceiveAddress(request_id) => {
                 send!(self.actor.close_receive_address(request_id));
+            }
+
+            Action::CancelPayjoin(session_id) => {
+                send!(self.actor.cancel_payjoin(session_id));
             }
 
             action => {

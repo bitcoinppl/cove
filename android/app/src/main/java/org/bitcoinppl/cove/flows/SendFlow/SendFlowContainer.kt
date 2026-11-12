@@ -442,7 +442,10 @@ private fun SendFlowRouteToScreen(
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
             val input = sendRoute.v1.input
-            val payjoinEndpoint = sendRoute.v1.payjoinEndpoint
+            val payjoinSessionId =
+                ((input as? SendConfirmationInput.Unsigned)?.mode as? UnsignedPaymentMode.Payjoin)
+                    ?.intent
+                    ?.sessionId
 
             var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
             var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
@@ -460,10 +463,13 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // show success UI on payjoin broadcast; TaggedItem key changes each time so
-            // no manual reset is needed even if the user sends multiple payjoin transactions
-            LaunchedEffect(walletManager.payjoinTxBroadcast) {
-                if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
+            // show success UI once this screen's own payjoin session completes
+            LaunchedEffect(walletManager.payjoinStatus) {
+                val status = walletManager.payjoinStatus
+                if (status is PayjoinStatus.Completed &&
+                    status.sessionId == payjoinSessionId &&
+                    sendState == SendState.Sending
+                ) {
                     sendState = SendState.Sent
                     showSuccessAlert = true
                 }
@@ -553,10 +559,10 @@ private fun SendFlowRouteToScreen(
                                             ?: error("Unable to finalize transaction")
                                     walletManager.broadcastTransaction(txnToBroadcast)
                                 }
-                                SendConfirmationInput.Unsigned -> {
-                                    walletManager.initiatePayment(details.psbt(), payjoinEndpoint)
-                                    // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
-                                    if (payjoinEndpoint != null) return@launch
+                                is SendConfirmationInput.Unsigned -> {
+                                    walletManager.initiatePayment(details.psbt(), input.mode)
+                                    // for payjoin, stay in Sending until its session completes
+                                    if (input.mode is UnsignedPaymentMode.Payjoin) return@launch
                                 }
                             }
                             sendState = SendState.Sent

@@ -29,7 +29,8 @@ mod transaction_confirmation;
 mod transactions;
 
 use super::payjoin::{
-    PayjoinActor, PayjoinConfig, PayjoinSessionPersister, SessionResumption, resume_session,
+    PayjoinActor, PayjoinConfig, PayjoinDeadline, PayjoinSessionId, PayjoinSessionPersister,
+    PayjoinStatus, PayjoinTransactionKind, SessionResumption, resume_session,
 };
 use crate::manager::deferred_sender::MessageSender;
 use act_zero::{runtimes::tokio::spawn_actor, *};
@@ -114,7 +115,8 @@ pub(crate) enum ActorState {
 ///
 /// The persisted session record survives restarts, while this phase says whether this actor
 /// already owns that record. Startup recovery, the send gate and late negotiation results all
-/// check it, so one session can never dispatch a second negotiation or terminal broadcast
+/// check it, so one session can never dispatch a second negotiation or terminal broadcast.
+/// The status the send screens show is derived from it, see `PayjoinPhase::status`
 #[derive(Debug, Default)]
 enum PayjoinPhase {
     /// No Payjoin work is running, a stored session record may still need recovery
@@ -122,25 +124,57 @@ enum PayjoinPhase {
     Idle,
 
     /// A child actor is negotiating with the receiver
-    Negotiating(Addr<PayjoinActor>),
+    Negotiating(PayjoinNegotiation),
 
     /// The committed terminal transaction is being broadcast and applied to the wallet
-    Broadcasting(Txid),
+    Broadcasting(PayjoinBroadcast),
+
+    /// The last session's terminal transaction was broadcast and its record cleared; no
+    /// Payjoin work is running
+    Completed(PayjoinBroadcast),
+}
+
+#[derive(Debug)]
+struct PayjoinNegotiation {
+    session_id: PayjoinSessionId,
+    deadline: PayjoinDeadline,
+    actor: Addr<PayjoinActor>,
+}
+
+#[derive(Debug, Clone)]
+struct PayjoinBroadcast {
+    session_id: PayjoinSessionId,
+    txid: Txid,
+    kind: PayjoinTransactionKind,
 }
 
 impl PayjoinPhase {
+    /// Whether no Payjoin work is running, so a new session or a stored record's recovery
+    /// may start
     const fn is_idle(&self) -> bool {
-        matches!(self, Self::Idle)
+        matches!(self, Self::Idle | Self::Completed(_))
     }
 
-    /// Take the negotiating child actor, leaving any other phase unchanged
-    fn take_negotiator(&mut self) -> Option<Addr<PayjoinActor>> {
-        match std::mem::take(self) {
-            Self::Negotiating(actor) => Some(actor),
-            other => {
-                *self = other;
-                None
-            }
+    fn status(&self) -> PayjoinStatus {
+        match self {
+            Self::Idle => PayjoinStatus::Idle,
+
+            Self::Negotiating(negotiation) => PayjoinStatus::Negotiating {
+                session_id: negotiation.session_id.clone(),
+                expires_at_secs: negotiation.deadline.expires_at_secs(),
+            },
+
+            Self::Broadcasting(broadcast) => PayjoinStatus::Broadcasting {
+                session_id: broadcast.session_id.clone(),
+                txid: Arc::new(broadcast.txid.into()),
+                kind: broadcast.kind,
+            },
+
+            Self::Completed(broadcast) => PayjoinStatus::Completed {
+                session_id: broadcast.session_id.clone(),
+                txid: Arc::new(broadcast.txid.into()),
+                kind: broadcast.kind,
+            },
         }
     }
 }
@@ -162,7 +196,10 @@ impl Actor for WalletActor {
         self.addr = addr.downgrade();
         self.spawn_scan_actor();
         send!(addr.check_node_connection());
-        send!(addr.resume_payjoin_session());
+
+        // resume before handling any message, a queued resume would let a screen's first
+        // status read run first and report no Payjoin while a stored session is pending
+        self.resume_payjoin_session().await?;
         Produces::ok(())
     }
 
@@ -361,7 +398,8 @@ impl WalletActor {
             }
             WalletManagerAction::OpenReceiveAddress
             | WalletManagerAction::CreateNewReceiveAddress
-            | WalletManagerAction::CloseReceiveAddress(_) => return None,
+            | WalletManagerAction::CloseReceiveAddress(_)
+            | WalletManagerAction::CancelPayjoin(_) => return None,
         };
 
         Some(patch)
@@ -466,7 +504,7 @@ impl WalletActor {
             receive_address_refresh_timer: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
-            payjoin_phase: PayjoinPhase::Idle,
+            payjoin_phase: PayjoinPhase::default(),
             payjoin_config: PayjoinConfig::default(),
             db,
         }
@@ -491,16 +529,17 @@ impl WalletActor {
 
             SessionResumption::Resume(actor) => self.spawn_payjoin_actor(*actor),
 
-            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
-                self.start_payjoin_terminal_broadcast(proposal_tx);
+            SessionResumption::BroadcastStoredProposal { session_id, proposal_tx } => {
+                let kind = PayjoinTransactionKind::Proposal;
+                self.start_payjoin_terminal_broadcast(session_id, proposal_tx, kind);
             }
 
-            SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx } => {
-                self.recover_payjoin_success(proposal_psbt, fallback_tx).await;
+            SessionResumption::SignRecoveredProposal { session_id, proposal_psbt, fallback_tx } => {
+                self.recover_payjoin_success(session_id, proposal_psbt, fallback_tx).await;
             }
 
-            SessionResumption::BroadcastFallback { fallback_tx } => {
-                self.start_payjoin_fallback_broadcast(fallback_tx);
+            SessionResumption::BroadcastFallback { session_id, fallback_tx } => {
+                self.start_payjoin_fallback_broadcast(session_id, fallback_tx);
             }
 
             SessionResumption::ReportError { message } => self.report_payjoin_error(message),
@@ -516,6 +555,53 @@ impl WalletActor {
 
     fn report_payjoin_error(&self, msg: String) {
         self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(msg)));
+    }
+
+    /// The Payjoin status for a screen's initial snapshot, later changes arrive as
+    /// `PayjoinStatusChanged`
+    pub async fn payjoin_status(&mut self) -> ActorResult<PayjoinStatus> {
+        Produces::ok(self.payjoin_phase.status())
+    }
+
+    /// Stop waiting for the receiver and broadcast the original now
+    ///
+    /// The receiver may already hold the signed original, so the payment itself cannot be
+    /// aborted. The negotiating child commits the fallback and hands it back exactly as when
+    /// its deadline passes, and this handler returns without waiting for it. Any other
+    /// phase, or another session's id, only reports the current status
+    ///
+    /// A proposal the child accepted before the cancel reached it is still broadcast: the
+    /// receiver has signed it, it pays the same amount, and the status names which one went out
+    pub async fn cancel_payjoin(&mut self, session_id: PayjoinSessionId) -> ActorResult<()> {
+        match &self.payjoin_phase {
+            PayjoinPhase::Negotiating(negotiation) if negotiation.session_id == session_id => {
+                send!(negotiation.actor.cancel_negotiation());
+            }
+
+            phase => {
+                debug!("payjoin cancel for {session_id} has no negotiation to stop");
+                self.send(WalletManagerReconcileMessage::PayjoinStatusChanged(phase.status()));
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    /// Move to `phase`, telling the screens when the status they show changes
+    fn set_payjoin_phase(&mut self, phase: PayjoinPhase) {
+        let previous = std::mem::replace(&mut self.payjoin_phase, phase).status();
+        let status = self.payjoin_phase.status();
+
+        if status != previous {
+            self.send(WalletManagerReconcileMessage::PayjoinStatusChanged(status));
+        }
+    }
+
+    fn payjoin_negotiator(&self) -> Option<Addr<PayjoinActor>> {
+        match &self.payjoin_phase {
+            PayjoinPhase::Negotiating(negotiation) => Some(negotiation.actor.clone()),
+            _ => None,
+        }
     }
 
     #[into_actor_result]
@@ -868,14 +954,16 @@ impl WalletActor {
         match terminal_payjoin_authority {
             Some(authority) => {
                 let mut payjoin_quiesced = true;
-                if let Some(actor) = self.payjoin_phase.take_negotiator()
-                    && let Err(error) =
-                        call!(actor.cancel_and_fallback_for_terminal_shutdown(authority.clone()))
-                            .await
-                {
-                    first_error.get_or_insert_with(|| error.to_string());
-                    self.payjoin_phase = PayjoinPhase::Negotiating(actor);
-                    payjoin_quiesced = false;
+                if let Some(actor) = self.payjoin_negotiator() {
+                    match call!(actor.cancel_and_fallback_for_terminal_shutdown(authority.clone()))
+                        .await
+                    {
+                        Ok(_) => self.set_payjoin_phase(PayjoinPhase::Idle),
+                        Err(error) => {
+                            first_error.get_or_insert_with(|| error.to_string());
+                            payjoin_quiesced = false;
+                        }
+                    }
                 }
 
                 if payjoin_quiesced {
@@ -896,12 +984,14 @@ impl WalletActor {
                 }
             }
             None => {
-                if let Some(actor) = self.payjoin_phase.take_negotiator() {
+                if let Some(actor) = self.payjoin_negotiator() {
                     let terminal_fallback = match call!(actor.cancel_and_fallback()).await {
-                        Ok(fallback) => fallback,
+                        Ok(fallback) => {
+                            self.set_payjoin_phase(PayjoinPhase::Idle);
+                            fallback
+                        }
                         Err(error) => {
                             first_error.get_or_insert_with(|| error.to_string());
-                            self.payjoin_phase = PayjoinPhase::Negotiating(actor);
                             None
                         }
                     };
@@ -1743,6 +1833,12 @@ mod test_support {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        manager::wallet_manager::payjoin::{
+            PayjoinIntent, PayjoinSessionId, PayjoinStatus, PayjoinTransactionKind, unix_now_secs,
+        },
+        router::UnsignedPaymentMode,
+    };
     use act_zero::{runtimes::tokio::spawn_actor, *};
     use bdk_wallet::{
         KeychainKind, LocalOutput,
@@ -1872,7 +1968,7 @@ mod tests {
             Produces::ok(())
         }
 
-        async fn payjoin_phase_is_idle_for_test(&mut self) -> ActorResult<bool> {
+        pub(crate) async fn payjoin_phase_is_idle_for_test(&mut self) -> ActorResult<bool> {
             Produces::ok(self.payjoin_phase.is_idle())
         }
 
@@ -3148,7 +3244,9 @@ mod tests {
         let terminal_tx = test_broadcast_transaction();
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &terminal_tx, unix_now_secs())
+            .unwrap();
         actor.spawn_payjoin_actor(
             crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
                 persister,
@@ -3187,7 +3285,9 @@ mod tests {
         let terminal_tx = test_broadcast_transaction();
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &terminal_tx, unix_now_secs())
+            .unwrap();
         persister.set_pending_fallback().unwrap();
         actor.db = db.clone();
 
@@ -3286,7 +3386,8 @@ mod tests {
         let db = actor.db.clone();
         let addr = spawn_actor(actor);
 
-        let result = call!(addr.initiate_payment(psbt, Some(endpoint)))
+        let mode = UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint) };
+        let result = call!(addr.initiate_payment(psbt, mode))
             .await
             .expect("initiate_payment actor responds");
 
@@ -3330,14 +3431,16 @@ mod tests {
                 .await;
         let db = actor.db.clone();
 
-        // spawning queues the startup resume behind this payment, as in the issue
+        // startup's resume finds no session yet; the explicit resume below runs after the
+        // payment saved its record, as the queued startup resume did in the issue
         let addr = spawn_actor(actor);
 
         // a v1 endpoint fails sender setup after the session record is saved, so the payment
         // takes the fallback without contacting a payjoin directory
-        let result = call!(
-            addr.start_payjoin_payment_for_test(psbt, "https://payjoin.example/pj".to_string())
-        )
+        let result = call!(addr.start_payjoin_payment_for_test(
+            psbt,
+            PayjoinIntent::new("https://payjoin.example/pj".to_string())
+        ))
         .await
         .expect("initiate_payjoin_payment actor responds");
 
@@ -3360,6 +3463,49 @@ mod tests {
         assert!(payjoin_session.is_none(), "the applied fallback clears its session record");
     }
 
+    // a screen opened as the wallet starts reads its status before anything else reaches the
+    // actor, and must already see the session the previous app run left behind
+    #[tokio::test(flavor = "current_thread")]
+    async fn first_payjoin_status_read_reports_the_stored_session() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let server = set_broadcast_esplora_node(200).await;
+        let PjV2Payment { actor, metadata, .. } =
+            PjV2Payment::new(CoveNetwork::Bitcoin, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm")
+                .await;
+
+        // the previous run committed the fallback and exited before broadcasting it
+        let fallback_tx = test_broadcast_transaction();
+        let session_id = PayjoinSessionId::generate();
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(actor.db.clone());
+        persister.create_session(session_id.clone(), &fallback_tx, unix_now_secs()).unwrap();
+        persister.set_pending_fallback().unwrap();
+
+        let addr = spawn_actor(actor);
+        let status = call!(addr.payjoin_status()).await.expect("actor responds");
+        let idle = wait_for_payjoin_idle(&addr).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(
+            status,
+            PayjoinStatus::Broadcasting {
+                session_id,
+                txid: Arc::new(fallback_tx.compute_txid().into()),
+                kind: PayjoinTransactionKind::Fallback,
+            },
+            "the first read reports the stored session's broadcast"
+        );
+        assert!(idle, "the stored fallback finishes broadcasting");
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn duplicate_payjoin_terminal_dispatch_broadcasts_once() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
@@ -3370,16 +3516,19 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
         let (db, _tmp) = new_test_wallet_data_db(wallet.id.clone());
         let fallback_tx = test_broadcast_transaction();
+        let session_id = PayjoinSessionId::generate();
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
-            .create_session(&fallback_tx)
+            .create_session(session_id.clone(), &fallback_tx, unix_now_secs())
             .unwrap();
 
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
         call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
 
         // the node holds the first broadcast, so a second dispatch cannot find it in the wallet
-        call!(addr.handle_payjoin_fallback(fallback_tx.clone())).await.expect("actor responds");
-        call!(addr.handle_payjoin_fallback(fallback_tx)).await.expect("actor responds");
+        call!(addr.handle_payjoin_fallback(session_id.clone(), fallback_tx.clone()))
+            .await
+            .expect("actor responds");
+        call!(addr.handle_payjoin_fallback(session_id, fallback_tx)).await.expect("actor responds");
         wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
         tokio::time::sleep(Duration::from_millis(200)).await;
         let held_broadcasts = pending_server.broadcast_requests.load(Ordering::SeqCst);
@@ -4778,13 +4927,13 @@ mod tests {
         };
 
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
-            .create_session(&fallback_tx)
+            .create_session(PayjoinSessionId::generate(), &fallback_tx, unix_now_secs())
             .unwrap();
 
         actor.db = db;
 
         let empty_psbt = bitcoin::Psbt::from_unsigned_tx(fallback_tx).unwrap();
-        let result = actor.initiate_payment(empty_psbt, None).await;
+        let result = actor.initiate_payment(empty_psbt, UnsignedPaymentMode::Standard).await;
         let outcome = actor_value(result).await;
 
         assert!(matches!(&outcome, Err(super::Error::PayjoinSessionError(_))));
@@ -4814,7 +4963,9 @@ mod tests {
 
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &terminal_tx, unix_now_secs())
+            .unwrap();
         persister.set_pending_fallback().unwrap();
 
         actor.db = db;
@@ -4826,7 +4977,7 @@ mod tests {
             output: vec![],
         })
         .unwrap();
-        let result = actor.initiate_payment(dummy_psbt, None).await;
+        let result = actor.initiate_payment(dummy_psbt, UnsignedPaymentMode::Standard).await;
         let outcome = actor_value(result).await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
@@ -4855,7 +5006,9 @@ mod tests {
 
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &terminal_tx, unix_now_secs())
+            .unwrap();
         persister.set_pending_proposal(&terminal_tx).unwrap();
 
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
@@ -4897,7 +5050,7 @@ mod tests {
         };
 
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
-            .create_session(&fallback_tx)
+            .create_session(PayjoinSessionId::generate(), &fallback_tx, unix_now_secs())
             .unwrap();
 
         actor.db = db;
@@ -4910,7 +5063,9 @@ mod tests {
         })
         .unwrap();
 
-        actor.recover_payjoin_success(proposal_psbt, fallback_tx).await;
+        actor
+            .recover_payjoin_success(PayjoinSessionId::generate(), proposal_psbt, fallback_tx)
+            .await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
         assert!(session.is_some(), "session must be retained when signing fails");

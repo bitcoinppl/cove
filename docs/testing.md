@@ -6,7 +6,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 
 - [Layers](#layers)
 - [Hardware signer tests](#hardware-signer-tests)
-- [Payjoin end-to-end test](#payjoin-end-to-end-test)
+- [Payjoin end-to-end tests](#payjoin-end-to-end-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Features left out of release passes](#features-left-out-of-release-passes)
 - [Fixtures](#fixtures)
@@ -82,15 +82,20 @@ These Rust tests run the PSBT signing loops that a release pass would otherwise 
 
 `just test-tapsigner-emulator` runs the emulator tests. It finds `ecard.py` in the `coinkite-tap-proto` submodule of the pinned rust-cktap checkout, installs the emulator's Python dependencies with uv into `~/.cache/cove/tapsigner-emulator-venv`, and runs the tests under cargo-nextest with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set. The run fails when its filter selects no emulator test, so a renamed module cannot pass without running them. `just test` and `cargo test` list these tests as ignored, and when they are run without the emulator they fail with a message naming the recipe.
 
-## Payjoin end-to-end test
+## Payjoin end-to-end tests
 
 `rust/src/manager/wallet_manager/payjoin_e2e_tests.rs` pays a BIP 77 receiver through Cove's real Payjoin sender, with every service running inside the test process. It needs no Docker, no bitcoind and no network access.
 
-- **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate.
+- **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate. Its `SilentRelay` accepts connections and never answers, for tests that need a request still in flight.
 - **Receiver.** The test drives a v2 receiver step by step and signs its proposal with a BDK wallet. The receiver's coin is on the fake node, as is the sender's.
 - **Sender.** A hot wallet builds a payment with change to the receiver's pj URI and starts the session through `initiate_payjoin_payment`. Payjoin is still gated off in the send flow, so the test reaches it through a test-only entry point on the wallet actor.
 
-The test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone.
+The payment test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone. Every test also checks the `PayjoinStatus` sequence the screens receive and what `payjoin_status()` returns. The other tests cover:
+
+- Cancelling a negotiation, which broadcasts the Original exactly once while the wallet keeps answering.
+- Resuming a session after a relaunch, which reports the same id and deadline.
+- Cancelling after the broadcast has started, which changes nothing.
+- A session falling back at its reported deadline while a request to a silent relay hangs.
 
 Relays and the session timeout come from `PayjoinConfig`, which the wallet actor owns. The app uses the built-in `https` relays and a ten-minute timeout. Only tests can build a config with plain `http` relays, and only when they listen on a loopback host.
 

@@ -168,9 +168,9 @@ class WalletManager :
     var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
         private set
 
-    // non-null when a payjoin transaction has been broadcast (success or fallback);
-    // TaggedItem ensures a new unique key each time so Compose always re-fires the observer
-    var payjoinTxBroadcast by mutableStateOf<TaggedItem<Unit>?>(null)
+    // the wallet's payjoin send; each session has its own id, so a new session's status
+    // always differs from the last one's
+    var payjoinStatus by mutableStateOf<PayjoinStatus>(PayjoinStatus.Idle)
 
     // cached transaction detail presentations (observable for Compose)
     val transactionDetailsPresentations: SnapshotStateMap<TxId, TransactionDetailsPresentation> =
@@ -604,9 +604,9 @@ class WalletManager :
         }
     }
 
-    suspend fun initiatePayment(psbt: Psbt, payjoinEndpoint: String?) {
+    suspend fun initiatePayment(psbt: Psbt, mode: UnsignedPaymentMode) {
         withRustSuspend {
-            initiatePayment(psbt, payjoinEndpoint)
+            initiatePayment(psbt, mode)
         }
     }
 
@@ -959,8 +959,8 @@ class WalletManager :
                 }
             }
 
-            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
-                payjoinTxBroadcast = TaggedItem(Unit)
+            is WalletManagerReconcileMessage.PayjoinStatusChanged -> {
+                payjoinStatus = message.v1
             }
         }
     }

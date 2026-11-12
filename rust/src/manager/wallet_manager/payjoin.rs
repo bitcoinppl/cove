@@ -20,7 +20,7 @@ use payjoin::{
     uri::v2::PjParam as V2PjParam,
 };
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::database::wallet_data::{
@@ -30,8 +30,11 @@ use crate::database::wallet_data::{
 use super::actor::WalletActor;
 
 mod config;
+mod status;
 
 pub(crate) use config::{OhttpRelays, PayjoinConfig};
+pub(crate) use status::{PayjoinDeadline, unix_now_secs};
+pub use status::{PayjoinIntent, PayjoinSessionId, PayjoinStatus, PayjoinTransactionKind};
 
 /// Persists payjoin session events to the wallet's database so sessions survive app restarts.
 ///
@@ -163,7 +166,9 @@ impl PayjoinSessionPersister {
     /// The caller must clear any existing record before creating a new one.
     pub(crate) fn create_session(
         &self,
+        session_id: PayjoinSessionId,
         fallback_tx: &BdkTransaction,
+        created_at_secs: u64,
     ) -> Result<(), WalletDataError> {
         if self.db.get_payjoin_sender_session()?.is_some() {
             return Err(WalletDataError::Save(
@@ -171,12 +176,11 @@ impl PayjoinSessionPersister {
             ));
         }
 
-        let created_at_secs =
-            SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs());
         let session = PayjoinSenderSession {
+            session_id,
             events: vec![],
             fallback_tx: consensus::serialize(fallback_tx).into(),
-            created_at_secs,
+            created_at_secs: Some(created_at_secs),
             pending_action: None,
         };
         self.db.set_payjoin_sender_session(session)
@@ -526,9 +530,14 @@ pub(crate) struct PayjoinActor {
     wallet_addr: WeakAddr<WalletActor>,
     persister: PayjoinSessionPersister,
     config: PayjoinConfig,
+    session_id: PayjoinSessionId,
+    deadline: PayjoinDeadline,
     fallback_tx: BdkTransaction,
     session: PayjoinSession,
-    poll_deadline: Option<Instant>,
+
+    /// `deadline` on the monotonic clock: a timer falls back when it passes, and no poll
+    /// starts after it
+    poll_deadline: Instant,
     /// Kept so a failure that repeats on every poll logs once until it changes or clears
     last_poll_failure: Option<PollFailure>,
 }
@@ -538,6 +547,8 @@ impl PayjoinActor {
         wallet_addr: WeakAddr<WalletActor>,
         persister: PayjoinSessionPersister,
         config: PayjoinConfig,
+        session_id: PayjoinSessionId,
+        deadline: PayjoinDeadline,
         sender: V2Sender<WithReplyKey>,
         fallback_tx: BdkTransaction,
     ) -> Self {
@@ -546,9 +557,11 @@ impl PayjoinActor {
             wallet_addr,
             persister,
             config,
+            session_id,
+            deadline,
             fallback_tx,
             session: PayjoinSession::PrePost { sender },
-            poll_deadline: None,
+            poll_deadline: deadline.instant(),
             last_poll_failure: None,
         }
     }
@@ -558,32 +571,31 @@ impl PayjoinActor {
         wallet_addr: WeakAddr<WalletActor>,
         persister: PayjoinSessionPersister,
         config: PayjoinConfig,
+        session_id: PayjoinSessionId,
+        deadline: PayjoinDeadline,
         polling_sender: V2Sender<PollingForProposal>,
         fallback_tx: BdkTransaction,
-        created_at_secs: Option<u64>,
     ) -> Self {
-        let session_timeout = config.session_timeout();
-        let poll_deadline = Some(match created_at_secs {
-            None => Instant::now() + session_timeout,
-
-            Some(start) => {
-                let now_secs =
-                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-                let elapsed = Duration::from_secs(now_secs.saturating_sub(start));
-                Instant::now() + session_timeout.saturating_sub(elapsed)
-            }
-        });
-
         Self {
             addr: WeakAddr::default(),
             wallet_addr,
             persister,
             config,
+            session_id,
+            deadline,
             fallback_tx,
             session: PayjoinSession::Polling { polling_sender },
-            poll_deadline,
+            poll_deadline: deadline.instant(),
             last_poll_failure: None,
         }
+    }
+
+    pub(crate) fn session_id(&self) -> &PayjoinSessionId {
+        &self.session_id
+    }
+
+    pub(crate) const fn deadline(&self) -> PayjoinDeadline {
+        self.deadline
     }
 }
 
@@ -596,6 +608,15 @@ impl Actor for PayjoinActor {
             PayjoinSession::Polling { .. } => send!(addr.begin_poll()),
             _ => {}
         }
+
+        // a POST or long poll can run well past the deadline, so the deadline the screens
+        // count down to ends the wait by itself instead of waiting for that request
+        let deadline = tokio::time::Instant::from_std(self.poll_deadline);
+        self.addr.send_fut_with(move |addr| async move {
+            tokio::time::sleep_until(deadline).await;
+            send!(addr.deadline_passed());
+        });
+
         Produces::ok(())
     }
 
@@ -686,7 +707,6 @@ impl PayjoinActor {
             return Produces::ok(());
         }
 
-        self.poll_deadline = Some(Instant::now() + self.config.session_timeout());
         self.session = PayjoinSession::Polling { polling_sender };
         self.begin_next_poll();
         Produces::ok(())
@@ -698,13 +718,9 @@ impl PayjoinActor {
             return Produces::ok(());
         }
 
-        // if the session deadline has passed, broadcast the fallback immediately
-        if self.poll_deadline.is_some_and(|d| Instant::now() >= d) {
-            let last_failure = self.last_poll_failure;
-            warn!(
-                "payjoin session deadline passed without a proposal, broadcasting fallback, last poll failure: {last_failure:?}"
-            );
-            self.complete_with_fallback();
+        // the deadline timer may still be queued behind this poll
+        if Instant::now() >= self.poll_deadline {
+            self.fall_back_at_deadline();
             return Produces::ok(());
         }
 
@@ -775,6 +791,36 @@ impl PayjoinActor {
         });
     }
 
+    /// Broadcast the original once the session's deadline passes, even with a request in flight
+    async fn deadline_passed(&mut self) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
+        self.fall_back_at_deadline();
+        Produces::ok(())
+    }
+
+    fn fall_back_at_deadline(&mut self) {
+        let last_failure = self.last_poll_failure;
+        warn!(
+            "payjoin session deadline passed without a proposal, broadcasting fallback, last poll failure: {last_failure:?}"
+        );
+        self.complete_with_fallback();
+    }
+
+    /// Stop waiting for the receiver and hand the original back for broadcast, exactly as
+    /// when the deadline passes
+    ///
+    /// Sent without waiting for an answer, so the wallet actor never waits on this actor or
+    /// its network requests. A request still in flight finds the session closed, and its
+    /// late event is rejected once the fallback is committed
+    pub(crate) async fn cancel_negotiation(&mut self) -> ActorResult<()> {
+        info!("payjoin negotiation cancelled, broadcasting fallback");
+        self.complete_with_fallback();
+        Produces::ok(())
+    }
+
     /// Cancel the session and return its committed fallback transaction
     pub(crate) async fn cancel_and_fallback(&mut self) -> ActorResult<Option<BdkTransaction>> {
         if matches!(self.session, PayjoinSession::Closed) {
@@ -816,8 +862,9 @@ impl PayjoinActor {
             return Produces::ok(());
         }
 
+        let session_id = self.session_id.clone();
         let fallback_tx = self.fallback_tx.clone();
-        send!(self.wallet_addr.handle_payjoin_success(proposal_psbt, fallback_tx));
+        send!(self.wallet_addr.handle_payjoin_success(session_id, proposal_psbt, fallback_tx));
         Produces::ok(())
     }
 
@@ -854,8 +901,9 @@ impl PayjoinActor {
             return;
         }
 
+        let session_id = self.session_id.clone();
         let fallback_tx = self.fallback_tx.clone();
-        send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
+        send!(self.wallet_addr.handle_payjoin_fallback(session_id, fallback_tx));
     }
 
     fn close_session(&mut self) -> bool {
@@ -864,7 +912,6 @@ impl PayjoinActor {
         }
 
         self.session = PayjoinSession::Closed;
-        self.poll_deadline = None;
         true
     }
 }
@@ -876,14 +923,18 @@ pub(crate) enum SessionResumption {
     /// Session is still in flight, spawn this actor to continue it
     Resume(Box<PayjoinActor>),
     /// A BroadcastProposal marker was stored: broadcast this exact consensus-encoded tx
-    BroadcastStoredProposal { proposal_tx: BdkTransaction },
+    BroadcastStoredProposal { session_id: PayjoinSessionId, proposal_tx: BdkTransaction },
     /// Session closed with a success outcome but no stored tx: sign the recovered PSBT and
     /// broadcast.  `fallback_tx` is carried so that if persisting the proposal intent fails,
     /// the actor can fall back to the original transaction.  A signing failure retains the
     /// session without selecting the fallback — the user must retry.
-    SignRecoveredProposal { proposal_psbt: Psbt, fallback_tx: BdkTransaction },
+    SignRecoveredProposal {
+        session_id: PayjoinSessionId,
+        proposal_psbt: Psbt,
+        fallback_tx: BdkTransaction,
+    },
     /// Session ended without a proposal, broadcast the original tx
-    BroadcastFallback { fallback_tx: BdkTransaction },
+    BroadcastFallback { session_id: PayjoinSessionId, fallback_tx: BdkTransaction },
     /// The session data is unreadable or the session is in an unrecoverable state; the user
     /// must be shown `message`.  Whether the record is retained or cleared depends on which
     /// producer returned this variant.
@@ -934,22 +985,20 @@ pub(crate) fn resume_session(
         }
     };
 
+    let session_id = record.session_id.clone();
     let fallback_tx = history.fallback_tx();
     match session {
         SendSession::WithReplyKey(_) => {
             // The POST may have already reached the directory before the crash;
             // re-posting is not retry-safe so fall back to the original transaction.
-            SessionResumption::BroadcastFallback { fallback_tx }
+            SessionResumption::BroadcastFallback { session_id, fallback_tx }
         }
 
         SendSession::PollingForProposal(polling_sender) => {
-            let now_secs =
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-            let elapsed = record
-                .created_at_secs
-                .map(|start| Duration::from_secs(now_secs.saturating_sub(start)));
+            let deadline =
+                PayjoinDeadline::for_session(record.created_at_secs, config.session_timeout());
 
-            if elapsed.is_some_and(|e| e >= config.session_timeout()) {
+            if deadline.has_passed() {
                 warn!("payjoin session expired before resume, broadcasting fallback");
                 return fallback_from_record(&db, record);
             }
@@ -958,22 +1007,25 @@ pub(crate) fn resume_session(
                 wallet_addr,
                 persister,
                 config.clone(),
+                session_id,
+                deadline,
                 polling_sender,
                 fallback_tx,
-                record.created_at_secs,
             )))
         }
 
         // Cove never cancels through the library, but a replayed Cancelled event still means
         // the original transaction is the one to broadcast
-        SendSession::PendingFallback(_) => SessionResumption::BroadcastFallback { fallback_tx },
+        SendSession::PendingFallback(_) => {
+            SessionResumption::BroadcastFallback { session_id, fallback_tx }
+        }
 
         SendSession::Closed(SessionOutcome::Success(proposal_psbt)) => {
-            SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx }
+            SessionResumption::SignRecoveredProposal { session_id, proposal_psbt, fallback_tx }
         }
 
         SendSession::Closed(SessionOutcome::Aborted) => {
-            SessionResumption::BroadcastFallback { fallback_tx }
+            SessionResumption::BroadcastFallback { session_id, fallback_tx }
         }
     }
 }
@@ -981,7 +1033,9 @@ pub(crate) fn resume_session(
 /// Recovers the fallback tx from the session record when replay is not possible.
 fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
     match consensus::deserialize(record.fallback_tx.as_ref()) {
-        Ok(fallback_tx) => SessionResumption::BroadcastFallback { fallback_tx },
+        Ok(fallback_tx) => {
+            SessionResumption::BroadcastFallback { session_id: record.session_id, fallback_tx }
+        }
 
         Err(error) if matches!(record.pending_action, Some(PendingAction::BroadcastFallback)) => {
             // Marker was written before broadcast, so the fallback may have reached the node.
@@ -1027,7 +1081,10 @@ fn proposal_from_record(_db: &WalletDataDb, record: PayjoinSenderSession) -> Ses
         }
     };
     match consensus::deserialize::<BdkTransaction>(&tx_bytes) {
-        Ok(proposal_tx) => SessionResumption::BroadcastStoredProposal { proposal_tx },
+        Ok(proposal_tx) => SessionResumption::BroadcastStoredProposal {
+            session_id: record.session_id,
+            proposal_tx,
+        },
         Err(error) => {
             error!(
                 "stored payjoin proposal tx is corrupt; retaining record for manual recovery: {error}"
@@ -1047,14 +1104,18 @@ pub(crate) mod test_support {
         persister: PayjoinSessionPersister,
         fallback_tx: BdkTransaction,
     ) -> PayjoinActor {
+        let deadline = PayjoinDeadline::for_session(Some(unix_now_secs()), Duration::ZERO);
+
         PayjoinActor {
             addr: WeakAddr::default(),
             wallet_addr: WeakAddr::default(),
             persister,
             config: PayjoinConfig::default(),
+            session_id: PayjoinSessionId::generate(),
+            deadline,
             fallback_tx,
             session: PayjoinSession::Posting,
-            poll_deadline: Some(Instant::now()),
+            poll_deadline: deadline.instant(),
             last_poll_failure: None,
         }
     }
@@ -1135,7 +1196,9 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         let (persister, db, _tmp) = new_persistent_test_persister();
-        persister.create_session(&test_fallback_tx()).expect("payjoin session is persisted");
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .expect("payjoin session is persisted");
         let wallet_id = db.id.clone();
         let actor = cove_tokio::task::spawn_actor(terminal_test_actor(persister));
         let (authority, preparation) = if full_wipe {
@@ -1179,7 +1242,7 @@ mod tests {
                 script_pubkey: bitcoin::ScriptBuf::new(),
             }],
         };
-        persister.create_session(&fallback).unwrap();
+        persister.create_session(PayjoinSessionId::generate(), &fallback, unix_now_secs()).unwrap();
         persister.set_pending_proposal(&proposal).unwrap();
         let (authority, preparation) =
             crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
@@ -1215,7 +1278,9 @@ mod tests {
         assert!(db.get_payjoin_sender_session().unwrap().is_none());
         drop(preparation);
 
-        persister.create_session(&test_fallback_tx()).expect("recovery data is restored");
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .expect("recovery data is restored");
         call!(actor.cancel_and_fallback())
             .await
             .expect("the retained Payjoin actor retries after persistence recovers");
@@ -1227,20 +1292,10 @@ mod tests {
     #[test]
     fn test_close_session_is_idempotent() {
         let (persister, _db) = new_test_persister();
-        let mut actor = PayjoinActor {
-            addr: WeakAddr::default(),
-            wallet_addr: WeakAddr::default(),
-            persister,
-            config: PayjoinConfig::default(),
-            fallback_tx: empty_transaction(),
-            session: PayjoinSession::Posting,
-            poll_deadline: Some(Instant::now()),
-            last_poll_failure: None,
-        };
+        let mut actor = super::test_support::terminal_actor(persister, empty_transaction());
 
         assert!(actor.close_session());
         assert!(matches!(actor.session, PayjoinSession::Closed));
-        assert!(actor.poll_deadline.is_none());
         assert!(!actor.close_session());
     }
 
@@ -1303,7 +1358,9 @@ mod tests {
     #[test]
     fn events_round_trip_in_order() {
         let (persister, _db) = new_test_persister();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
 
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
         persister.save_event(PayjoinSessionEvent::Closed(SessionOutcome::Aborted)).unwrap();
@@ -1321,10 +1378,16 @@ mod tests {
     #[test]
     fn create_session_rejects_when_session_exists() {
         let (persister, _db) = new_test_persister();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
-        let result = persister.create_session(&test_fallback_tx());
+        let result = persister.create_session(
+            PayjoinSessionId::generate(),
+            &test_fallback_tx(),
+            unix_now_secs(),
+        );
 
         assert!(result.is_err(), "expected error when session already exists");
         assert_eq!(persister.load().unwrap().count(), 1, "existing session must be unchanged");
@@ -1333,7 +1396,9 @@ mod tests {
     #[test]
     fn close_keeps_the_session_record() {
         let (persister, _db) = new_test_persister();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
         persister.close().unwrap();
@@ -1354,14 +1419,14 @@ mod tests {
     fn resume_with_unreplayable_log_broadcasts_stored_fallback() {
         let (persister, db) = new_test_persister();
         let tx = test_fallback_tx();
-        persister.create_session(&tx).unwrap();
+        persister.create_session(PayjoinSessionId::generate(), &tx, unix_now_secs()).unwrap();
         // a log that does not start with a Created event cannot be replayed
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
         let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
-            SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
+            SessionResumption::BroadcastFallback { fallback_tx, .. } => assert_eq!(fallback_tx, tx),
             _ => panic!("expected BroadcastFallback"),
         }
     }
@@ -1369,7 +1434,9 @@ mod tests {
     #[test]
     fn save_event_rejected_after_set_pending_fallback() {
         let (persister, _db) = new_test_persister();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.set_pending_fallback().unwrap();
 
         let result = persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt());
@@ -1382,6 +1449,7 @@ mod tests {
         let (_persister, db) = new_test_persister();
         let tx = test_fallback_tx();
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec!["irrelevant_event".to_string()],
             fallback_tx: consensus::serialize(&tx).into(),
             created_at_secs: None,
@@ -1392,7 +1460,7 @@ mod tests {
         let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
-            SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
+            SessionResumption::BroadcastFallback { fallback_tx, .. } => assert_eq!(fallback_tx, tx),
             _ => panic!("expected BroadcastFallback"),
         }
     }
@@ -1401,7 +1469,9 @@ mod tests {
     fn set_pending_fallback_rejects_overwrite_of_proposal() {
         let (persister, _db) = new_test_persister();
         let tx = empty_transaction();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.set_pending_proposal(&tx).unwrap();
 
         let result = persister.set_pending_fallback();
@@ -1415,7 +1485,9 @@ mod tests {
         let tx_a = empty_transaction();
         let mut tx_b = empty_transaction();
         tx_b.version = Version::ONE;
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.set_pending_proposal(&tx_a).unwrap();
 
         let result = persister.set_pending_proposal(&tx_b);
@@ -1427,7 +1499,9 @@ mod tests {
     fn set_pending_proposal_is_idempotent() {
         let (persister, db) = new_test_persister();
         let tx = empty_transaction();
-        persister.create_session(&test_fallback_tx()).unwrap();
+        persister
+            .create_session(PayjoinSessionId::generate(), &test_fallback_tx(), unix_now_secs())
+            .unwrap();
         persister.set_pending_proposal(&tx).unwrap();
 
         // calling again with the same tx must succeed
@@ -1445,6 +1519,7 @@ mod tests {
         let (_persister, db) = new_test_persister();
         let tx = empty_transaction();
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![],
             fallback_tx: consensus::serialize(&test_fallback_tx()).into(),
             created_at_secs: None,
@@ -1457,7 +1532,7 @@ mod tests {
         let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
-            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
+            SessionResumption::BroadcastStoredProposal { proposal_tx, .. } => {
                 assert_eq!(proposal_tx, tx)
             }
             _ => panic!("expected BroadcastStoredProposal"),
@@ -1468,6 +1543,7 @@ mod tests {
     fn resume_with_corrupt_proposal_retains_record_and_reports_error() {
         let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![],
             fallback_tx: consensus::serialize(&test_fallback_tx()).into(),
             created_at_secs: None,
@@ -1494,6 +1570,7 @@ mod tests {
     fn resume_with_corrupt_fallback_clears_the_record() {
         let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![],
             fallback_tx: vec![0xff].into(),
             created_at_secs: None,
@@ -1518,6 +1595,7 @@ mod tests {
     fn resume_with_corrupt_committed_fallback_retains_the_record() {
         let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![],
             fallback_tx: vec![0xff].into(),
             created_at_secs: None,
