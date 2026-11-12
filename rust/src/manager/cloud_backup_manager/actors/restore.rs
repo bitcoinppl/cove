@@ -664,7 +664,9 @@ impl RestoreOperation {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
                     // the restore report keeps generic copy, so only this log keeps the cause
-                    warn!("Failed to download wallet backup {record_name}: {error}");
+                    // the record name comes from a cloud filename, which a user can rename to
+                    // anything, so the log leaves it out
+                    warn!("Failed to download wallet backup: {error}");
                     let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
                     report.wallets_failed += 1;
                     failed_wallet_errors.push((index, error));

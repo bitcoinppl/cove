@@ -56,11 +56,14 @@ impl WalletBackupReader {
     ) -> Result<DownloadedWalletBackup, CloudBackupError> {
         match self.lookup(record_id).await? {
             WalletBackupLookup::Found(wallet) => Ok(wallet),
-            WalletBackupLookup::NotFound => Err(CloudBackupError::Cloud(format!(
-                "download {record_id}: not found in cloud backup"
-            ))),
+            // record ids come from cloud filenames, which a user can rename to anything, so
+            // download errors leave them out
+            WalletBackupLookup::NotFound => Err(CloudBackupError::Cloud(
+                "download wallet backup: not found in cloud backup".into(),
+            )),
             WalletBackupLookup::UnsupportedVersion(version) => Err(CloudBackupError::Internal(
-                format!("download {record_id}: unsupported wallet backup version {version}").into(),
+                format!("download wallet backup: unsupported wallet backup version {version}")
+                    .into(),
             )),
         }
     }
@@ -139,7 +142,7 @@ impl WalletBackupReader {
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
             Err(error) => {
                 return Err(CloudBackupError::cloud_storage_context(
-                    format!("download {record_id}"),
+                    "download wallet backup",
                     error,
                 ));
             }
