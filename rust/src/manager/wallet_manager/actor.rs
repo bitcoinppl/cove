@@ -28,7 +28,9 @@ mod scan;
 mod transaction_confirmation;
 mod transactions;
 
-use super::payjoin::{PayjoinActor, PayjoinSessionPersister, SessionResumption, resume_session};
+use super::payjoin::{
+    PayjoinActor, PayjoinConfig, PayjoinSessionPersister, SessionResumption, resume_session,
+};
 use crate::manager::deferred_sender::MessageSender;
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
@@ -82,6 +84,9 @@ pub(crate) struct WalletActor {
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
     payjoin_actor: Option<Addr<PayjoinActor>>,
+
+    /// Relays and timeout every Payjoin session this wallet starts or resumes runs with
+    payjoin_config: PayjoinConfig,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -427,6 +432,7 @@ impl WalletActor {
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
             payjoin_actor: None,
+            payjoin_config: PayjoinConfig::default(),
             db,
         }
     }
@@ -442,7 +448,7 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        match resume_session(self.db.clone(), self.addr.clone()) {
+        match resume_session(self.db.clone(), self.addr.clone(), &self.payjoin_config) {
             SessionResumption::None => {}
 
             SessionResumption::Resume(actor) => {

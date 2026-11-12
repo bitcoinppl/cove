@@ -6,6 +6,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 
 - [Layers](#layers)
 - [Hardware signer tests](#hardware-signer-tests)
+- [Payjoin end-to-end test](#payjoin-end-to-end-test)
 - [Planning a release pass](#planning-a-release-pass)
 - [Features left out of release passes](#features-left-out-of-release-passes)
 - [Fixtures](#fixtures)
@@ -80,6 +81,22 @@ These Rust tests run the PSBT signing loops that a release pass would otherwise 
 - **TAPSIGNER against the card emulator** (`rust/src/tap_card/tap_signer_reader/emulator_tests.rs`). Each test starts its own factory-fresh emulated card and drives Cove's `TapSignerReader` through the `TapcardTransportProtocol` callback that the iOS and Android NFC layers implement. The tests cover setup with the default and an advanced chain code, the factory PIN being replaced, a wrong PIN during setup, derive, backup and signing followed by a successful retry, import of the card's account as a wallet whose addresses must match the card's own xpub, and signing and finalizing a saved draft. The emulator's certificate chain doesn't lead to Coinkite's factory root, so the tests skip only that check after asserting that `create_tap_signer_reader` rejects the card. The emulator implements neither the rate limit nor `wait`, so mock-card tests in `tap_signer_reader.rs` cover the auth delay instead: a card whose delay counts down gets one `wait` per second, with the countdown message shown before each, both when the reader connects and while it probes a CVC, and a card that answers 429 reports a rate limit instead of a wrong CVC
 
 `just test-tapsigner-emulator` runs the emulator tests. It finds `ecard.py` in the `coinkite-tap-proto` submodule of the pinned rust-cktap checkout, installs the emulator's Python dependencies with uv into `~/.cache/cove/tapsigner-emulator-venv`, and runs the tests under cargo-nextest with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set. The run fails when its filter selects no emulator test, so a renamed module cannot pass without running them. `just test` and `cargo test` list these tests as ignored, and when they are run without the emulator they fail with a message naming the recipe.
+
+## Payjoin end-to-end test
+
+`rust/src/manager/wallet_manager/payjoin_e2e_tests.rs` pays a BIP 77 receiver through Cove's real Payjoin sender, with every service running inside the test process. It needs no Docker, no bitcoind and no network access.
+
+- **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate.
+- **Receiver.** The test drives a v2 receiver step by step and signs its proposal with a BDK wallet. The receiver's coin is on the fake node, as is the sender's.
+- **Sender.** A hot wallet builds a Max payment to the receiver's pj URI and starts the session through `initiate_payjoin_payment`. Payjoin is still gated off in the send flow, so the test reaches it through a test-only entry point on the wallet actor.
+
+The test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone.
+
+Relays and the session timeout come from `PayjoinConfig`, which the wallet actor owns. The app uses the built-in `https` relays and a ten-minute timeout. Only tests can build a config with plain `http` relays, and only when they listen on a loopback host.
+
+```sh
+cd rust && cargo nextest run -p cove -E 'test(payjoin_e2e)'
+```
 
 ## Planning a release pass
 
