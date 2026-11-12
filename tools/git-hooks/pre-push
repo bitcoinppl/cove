@@ -193,11 +193,14 @@ needs_host_library() {
 }
 
 # gradlew stops at a JAVA_HOME without Java rather than falling back to the java on PATH, and
-# downloads the Gradle release it pins when it isn't cached, which --offline doesn't prevent
+# downloads the Gradle release it pins unless an earlier unpack finished, which it marks with a
+# `.zip.ok` file; --offline doesn't prevent the download
 needs_gradle_and_just() {
-    local distribution
+    local distribution installed
     distribution=$(sed -n 's|^distributionUrl=.*/\(gradle-[^/]*\)\.zip$|\1|p' \
         android/gradle/wrapper/gradle-wrapper.properties)
+    installed=$(find "${GRADLE_USER_HOME:-$HOME/.gradle}/wrapper/dists/$distribution" -mindepth 2 \
+        -maxdepth 2 -name "$distribution.zip.ok" 2>/dev/null | head -1)
 
     if ! have just; then
         echo "just isn't installed"
@@ -205,8 +208,8 @@ needs_gradle_and_just() {
         echo "JAVA_HOME ($JAVA_HOME) has no bin/java"
     elif [ -z "${JAVA_HOME:-}" ] && ! have java; then
         echo "Java isn't installed"
-    elif [ ! -d "${GRADLE_USER_HOME:-$HOME/.gradle}/wrapper/dists/$distribution" ]; then
-        echo "${distribution:-the pinned Gradle} isn't downloaded, any ./gradlew command in android/ downloads it"
+    elif [ -z "$distribution" ] || [ -z "$installed" ]; then
+        echo "${distribution:-the pinned Gradle} isn't fully downloaded, any ./gradlew command in android/ downloads it"
     fi
 }
 
