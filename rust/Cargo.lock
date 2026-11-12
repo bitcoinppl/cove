@@ -1357,6 +1357,7 @@ dependencies = [
  "futures",
  "hex",
  "hmac 0.13.0",
+ "ipnet",
  "itertools 0.14.0",
  "jiff",
  "keyteleport",
@@ -1386,6 +1387,8 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sha2 0.11.0",
+ "simple-dns",
+ "socket2",
  "strsim",
  "strum",
  "tap",
@@ -5179,6 +5182,15 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "simple-dns"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f6dbb5d714bdbc8d8f9d0f556c4e914384b794af849092033513f0898245f88"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "simple_asn1"

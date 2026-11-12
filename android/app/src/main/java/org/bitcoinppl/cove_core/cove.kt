@@ -1807,6 +1807,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
     ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_discover_lan_nodes(
+    ): Short
     external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_preset_nodes(
@@ -3058,6 +3060,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_nodeselector_check_and_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_cove_fn_method_nodeselector_discover_lan_nodes(`ptr`: Long,`interfaces`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`apiType`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4998,6 +5002,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodeselector_discover_lan_nodes() != 19359.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549.toShort()) {
@@ -18004,6 +18011,15 @@ public interface NodeSelectorInterface {
     suspend fun `checkSelectedNode`(`node`: Node)
 
     /**
+     * Finds Electrum servers for the selected network on the local network
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
+     * only opens and closes TCP connections, so no server receives a request until the person
+     * picks one and it goes through `check_and_save_node`
+     */
+    suspend fun `discoverLanNodes`(`interfaces`: List<LanInterface>): List<DiscoveredNode>
+
+    /**
      * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
     fun `parseCustomNode`(`url`: kotlin.String, `apiType`: ApiType, `enteredName`: kotlin.String): Node
@@ -18178,6 +18194,35 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
         // Error FFI converter
         NodeSelectorException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Finds Electrum servers for the selected network on the local network
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
+     * only opens and closes TCP connections, so no server receives a request until the person
+     * picks one and it goes through `check_and_save_node`
+     */
+    @Throws(NodeDiscoveryException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `discoverLanNodes`(`interfaces`: List<LanInterface>) : List<DiscoveredNode> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_nodeselector_discover_lan_nodes(
+                uniffiHandle,
+
+        FfiConverterSequenceTypeLanInterface.lower(`interfaces`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeDiscoveredNode.lift(it) },
+        // Error FFI converter
+        NodeDiscoveryException.ErrorHandler,
     )
     }
 
@@ -33908,6 +33953,70 @@ public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<Diag
 
 
 
+/**
+ * A server found on the local network, which the person can pick as their node
+ */
+data class DiscoveredNode (
+    /**
+     * The node to check and save when the person picks it, addressed by IP so it connects
+     * without the platform resolving `.local` names
+     */
+    var `node`: Node
+    ,
+    /**
+     * The server's `.local` hostname, or its IP address when it has none
+     */
+    var `host`: kotlin.String
+    ,
+    /**
+     * The server's IP address and port, such as `192.168.1.10:50001`
+     */
+    var `address`: kotlin.String
+    ,
+    /**
+     * The node software known to run there, such as `Umbrel Fulcrum`
+     */
+    var `software`: kotlin.String?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDiscoveredNode: FfiConverterRustBuffer<DiscoveredNode> {
+    override fun read(buf: ByteBuffer): DiscoveredNode {
+        return DiscoveredNode(
+            FfiConverterTypeNode.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DiscoveredNode) = (
+            FfiConverterTypeNode.allocationSize(value.`node`) +
+            FfiConverterString.allocationSize(value.`host`) +
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterOptionalString.allocationSize(value.`software`)
+    )
+
+    override fun write(value: DiscoveredNode, buf: ByteBuffer) {
+            FfiConverterTypeNode.write(value.`node`, buf)
+            FfiConverterString.write(value.`host`, buf)
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterOptionalString.write(value.`software`, buf)
+    }
+}
+
+
+
 data class FeeResponse (
     var `fastestFee`: kotlin.Float
     ,
@@ -34710,6 +34819,64 @@ public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExp
     override fun write(value: LabelExportResult, buf: ByteBuffer) {
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
+/**
+ * A Wi-Fi or Ethernet interface address the app reports, the only network discovery sweeps
+ *
+ * The platform picks the interfaces, since only it knows which one is Wi-Fi or Ethernet rather
+ * than cellular or a VPN, which can also carry private addresses
+ */
+data class LanInterface (
+    /**
+     * The interface's IPv4 address, such as `192.168.1.18`
+     */
+    var `ipv4Address`: kotlin.String
+    ,
+    /**
+     * The interface's network prefix length, such as 24 for a `255.255.255.0` netmask
+     */
+    var `prefixLength`: kotlin.UByte
+    ,
+    /**
+     * The network every socket searching this interface's subnet is bound to
+     */
+    var `binding`: LanBinding
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanInterface: FfiConverterRustBuffer<LanInterface> {
+    override fun read(buf: ByteBuffer): LanInterface {
+        return LanInterface(
+            FfiConverterString.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterTypeLanBinding.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LanInterface) = (
+            FfiConverterString.allocationSize(value.`ipv4Address`) +
+            FfiConverterUByte.allocationSize(value.`prefixLength`) +
+            FfiConverterTypeLanBinding.allocationSize(value.`binding`)
+    )
+
+    override fun write(value: LanInterface, buf: ByteBuffer) {
+            FfiConverterString.write(value.`ipv4Address`, buf)
+            FfiConverterUByte.write(value.`prefixLength`, buf)
+            FfiConverterTypeLanBinding.write(value.`binding`, buf)
     }
 }
 
@@ -51548,6 +51715,98 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
 
 
 
+/**
+ * The network an interface belongs to, which each discovery socket is bound to
+ */
+sealed class LanBinding {
+
+    /**
+     * An Android network, by `android.net.Network.getNetworkHandle()`
+     */
+    data class AndroidNetwork(
+        val `handle`: kotlin.ULong) : LanBinding()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A network interface by its index, such as `if_nametoindex("en0")` on iOS
+     */
+    data class InterfaceIndex(
+        val `index`: kotlin.UInt) : LanBinding()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanBinding : FfiConverterRustBuffer<LanBinding>{
+    override fun read(buf: ByteBuffer): LanBinding {
+        return when(buf.getInt()) {
+            1 -> LanBinding.AndroidNetwork(
+                FfiConverterULong.read(buf),
+                )
+            2 -> LanBinding.InterfaceIndex(
+                FfiConverterUInt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: LanBinding): ULong = when(value) {
+        is LanBinding.AndroidNetwork -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`handle`)
+            )
+        }
+        is LanBinding.InterfaceIndex -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`index`)
+            )
+        }
+    }
+
+    override fun write(value: LanBinding, buf: ByteBuffer) {
+        when(value) {
+            is LanBinding.AndroidNetwork -> {
+                buf.putInt(1)
+                FfiConverterULong.write(value.`handle`, buf)
+                Unit
+            }
+            is LanBinding.InterfaceIndex -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.`index`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 enum class ListSortDirection {
 
@@ -52765,6 +53024,85 @@ public object FfiConverterTypeNewWalletRoute : FfiConverterRustBuffer<NewWalletR
 }
 
 
+
+
+
+
+
+sealed class NodeDiscoveryException: kotlin.Exception() {
+
+    /**
+     * None of the interfaces the app reported is on a local network, such as when the phone is
+     * only on cellular data
+     */
+    class NoLocalNetwork(
+        ) : NodeDiscoveryException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The local network can't be searched directly, such as when a VPN that doesn't allow local
+     * network access covers the app; searching anyway would send the probes through the VPN
+     */
+    class LocalNetworkBlocked(
+        ) : NodeDiscoveryException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NodeDiscoveryException> {
+        override fun lift(error_buf: RustBuffer.ByValue): NodeDiscoveryException = FfiConverterTypeNodeDiscoveryError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeDiscoveryError : FfiConverterRustBuffer<NodeDiscoveryException> {
+    override fun read(buf: ByteBuffer): NodeDiscoveryException {
+
+
+        return when(buf.getInt()) {
+            1 -> NodeDiscoveryException.NoLocalNetwork()
+            2 -> NodeDiscoveryException.LocalNetworkBlocked()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeDiscoveryException): ULong {
+        return when(value) {
+            is NodeDiscoveryException.NoLocalNetwork -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeDiscoveryException.LocalNetworkBlocked -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: NodeDiscoveryException, buf: ByteBuffer) {
+        when(value) {
+            is NodeDiscoveryException.NoLocalNetwork -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeDiscoveryException.LocalNetworkBlocked -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
 
 
 
@@ -68711,6 +69049,34 @@ public object FfiConverterSequenceTypeDiagnosticsReportRecord: FfiConverterRustB
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeDiscoveredNode: FfiConverterRustBuffer<List<DiscoveredNode>> {
+    override fun read(buf: ByteBuffer): List<DiscoveredNode> {
+        val len = buf.getInt()
+        return List<DiscoveredNode>(len) {
+            FfiConverterTypeDiscoveredNode.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DiscoveredNode>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDiscoveredNode.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DiscoveredNode>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDiscoveredNode.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer<List<FoundAddress>> {
     override fun read(buf: ByteBuffer): List<FoundAddress> {
         val len = buf.getInt()
@@ -68757,6 +69123,34 @@ public object FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer<List<G
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeGroupedWord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeLanInterface: FfiConverterRustBuffer<List<LanInterface>> {
+    override fun read(buf: ByteBuffer): List<LanInterface> {
+        val len = buf.getInt()
+        return List<LanInterface>(len) {
+            FfiConverterTypeLanInterface.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<LanInterface>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeLanInterface.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<LanInterface>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeLanInterface.write(it, buf)
         }
     }
 }
