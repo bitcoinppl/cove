@@ -172,7 +172,11 @@ enum WalletManagerPreview {
 
     /// the wallet's payjoin send; each session has its own id, so a new session's status
     /// always differs from the last one's
-    var payjoinStatus: PayjoinStatus = .idle
+    private(set) var payjoinStatus: PayjoinStatus = .idle
+
+    /// Counts applied `payjoinStatusChanged` deltas, so the initial read never overwrites a newer one
+    @ObservationIgnored
+    private var payjoinStatusDeltas = 0
 
     /// cached transaction detail presentations
     var transactionDetailsPresentations: [TxId: TransactionDetailsPresentation] = [:]
@@ -206,6 +210,31 @@ enum WalletManagerPreview {
 
         rustState.withLock { $0.rust = rust }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
+        loadPayjoinStatus()
+    }
+
+    /// A session resumed after a relaunch reports no delta until it changes, so the wallet screen
+    /// needs this first read to show it
+    private func loadPayjoinStatus() {
+        Task { [weak self] in
+            guard let self else { return }
+            let deltasBeforeRead = await MainActor.run { self.payjoinStatusDeltas }
+
+            let status: PayjoinStatus
+            do {
+                status = try await withRustAsync { try await $0.payjoinStatus() }
+            } catch {
+                logger.error("Unable to read the payjoin status: \(error)")
+                return
+            }
+
+            await MainActor.run {
+                // once a delta arrives, later deltas keep the status current, while the read's
+                // answer may predate that delta
+                guard self.payjoinStatusDeltas == deltasBeforeRead else { return }
+                self.payjoinStatus = status
+            }
+        }
     }
 
     convenience init(id: WalletId, delegate: WalletManagerDelegate? = AppManager.shared) throws {
@@ -929,6 +958,7 @@ extension WalletManager {
             delegate?.showWalletAlert(.hotWalletKeyMissing(walletId: walletId))
 
         case let .payjoinStatusChanged(status):
+            payjoinStatusDeltas += 1
             payjoinStatus = status
 
         default:
