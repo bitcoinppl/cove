@@ -17485,14 +17485,22 @@ public func FfiConverterTypeDiagnosticsSubmission_lower(_ value: DiagnosticsSubm
 /**
  * A replacement fee the user should confirm before signing, as a new send warns
  */
-public struct FeeBumpFeeWarning: Equatable, Hashable {
+public struct FeeBumpFeeWarning {
+    /**
+     * The rate of the replacement it warns about, so accepting it can't approve another rate
+     */
+    public var feeRate: FeeRate
     public var level: FeeWarningLevel
     public var title: String
     public var message: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(level: FeeWarningLevel, title: String, message: String) {
+    public init(
+        /**
+         * The rate of the replacement it warns about, so accepting it can't approve another rate
+         */feeRate: FeeRate, level: FeeWarningLevel, title: String, message: String) {
+        self.feeRate = feeRate
         self.level = level
         self.title = title
         self.message = message
@@ -17514,6 +17522,7 @@ public struct FfiConverterTypeFeeBumpFeeWarning: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeBumpFeeWarning {
         return
             try FeeBumpFeeWarning(
+                feeRate: FfiConverterTypeFeeRate.read(from: &buf),
                 level: FfiConverterTypeFeeWarningLevel.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
                 message: FfiConverterString.read(from: &buf)
@@ -17521,6 +17530,7 @@ public struct FfiConverterTypeFeeBumpFeeWarning: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: FeeBumpFeeWarning, into buf: inout [UInt8]) {
+        FfiConverterTypeFeeRate.write(value.feeRate, into: &buf)
         FfiConverterTypeFeeWarningLevel.write(value.level, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.message, into: &buf)
@@ -29550,8 +29560,10 @@ public enum FeeBumpManagerAction {
     case screenAppeared
     /**
      * The user accepted a [`FeeBumpManagerReconcileMessage::FeeWarning`], so continue again
+     *
+     * Ignored when the warning was for a rate other than the one now selected
      */
-    case acknowledgeFeeWarning(FeeWarningLevel
+    case acknowledgeFeeWarning(FeeBumpFeeWarning
     )
 
 
@@ -29581,7 +29593,7 @@ public struct FfiConverterTypeFeeBumpManagerAction: FfiConverterRustBuffer {
 
         case 3: return .screenAppeared
 
-        case 4: return .acknowledgeFeeWarning(try FfiConverterTypeFeeWarningLevel.read(from: &buf)
+        case 4: return .acknowledgeFeeWarning(try FfiConverterTypeFeeBumpFeeWarning.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29607,7 +29619,7 @@ public struct FfiConverterTypeFeeBumpManagerAction: FfiConverterRustBuffer {
 
         case let .acknowledgeFeeWarning(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeFeeWarningLevel.write(v1, into: &buf)
+            FfiConverterTypeFeeBumpFeeWarning.write(v1, into: &buf)
 
         }
     }
@@ -29644,7 +29656,7 @@ public enum FeeBumpManagerReconcileMessage {
     )
     /**
      * The replacement's fee is high for the amount it sends, continuing needs
-     * [`FeeBumpManagerAction::AcknowledgeFeeWarning`] with its level
+     * [`FeeBumpManagerAction::AcknowledgeFeeWarning`] with this warning
      */
     case feeWarning(FeeBumpFeeWarning
     )
