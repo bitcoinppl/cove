@@ -12,32 +12,11 @@ struct TransferDestinationSheet: View {
     let destinations: [TransferDestination]
     let onSelect: (WalletId) -> Void
 
-    private var hasHardwareWallet: Bool {
-        destinations.contains { $0.metadata.walletType == .cold }
-    }
-
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    ForEach(destinations, id: \.metadata.id) { destination in
-                        TransferDestinationRow(destination: destination) {
-                            dismiss()
-                            onSelect(destination.metadata.id)
-                        }
-                    }
-                } header: {
-                    Text("Cove fills in that wallet's next receive address.")
-                        .textCase(nil)
-                } footer: {
-                    // cove derives a hardware wallet's address from its public key, the device
-                    // never saw it
-                    if hasHardwareWallet {
-                        Text(
-                            "Cove derives a hardware wallet's address from its public key. Check the address on the device before sending a large amount."
-                        )
-                    }
-                }
+            TransferDestinationList(destinations: destinations) { id in
+                dismiss()
+                onSelect(id)
             }
             .navigationTitle("Send to My Wallet")
             .navigationBarTitleDisplayMode(.inline)
@@ -48,6 +27,42 @@ struct TransferDestinationSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private struct TransferDestinationList: View {
+    let destinations: [TransferDestination]
+    let select: (WalletId) -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(destinations, id: \.metadata.id) { destination in
+                    TransferDestinationRow(destination: destination) {
+                        select(destination.metadata.id)
+                    }
+                }
+            } header: {
+                Text("Cove fills in that wallet's next receive address.")
+                    .textCase(nil)
+            } footer: {
+                HardwareWalletNote(destinations: destinations)
+            }
+        }
+    }
+}
+
+/// Warns about hardware wallets when one is listed, since Cove derives their addresses from the
+/// public key and the device never saw them
+private struct HardwareWalletNote: View {
+    let destinations: [TransferDestination]
+
+    var body: some View {
+        if destinations.contains(where: { $0.metadata.walletType == .cold }) {
+            Text(
+                "Cove derives a hardware wallet's address from its public key. Check the address on the device before sending a large amount."
+            )
+        }
     }
 }
 
