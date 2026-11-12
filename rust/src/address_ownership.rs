@@ -6,7 +6,7 @@
 //! reveals a decoy wallet
 
 use bdk_wallet::{KeychainKind, chain::SpkIterator, descriptor::ExtendedDescriptor};
-use bitcoin::{Script, ScriptBuf};
+use bitcoin::ScriptBuf;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_types::{
     Network, WalletId,
@@ -114,10 +114,6 @@ impl AddressOwnershipLookup {
     ///
     /// Searches fail with [`AddressOwnershipError::WalletModeChanged`] unless that mode is the
     /// app's active mode, so a wallet left over from the other mode cannot reveal its wallets
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the send flow and transfer labels stacked on this call it")
-    )]
     pub fn for_wallet(metadata: &WalletMetadata) -> Self {
         Self { mode: metadata.wallet_mode, network: Some(metadata.network) }
     }
@@ -131,24 +127,24 @@ impl AddressOwnershipLookup {
     ) -> Result<AddressOwnership, AddressOwnershipError> {
         let script = address.address.script_pubkey();
         let networks = self.networks().filter(|network| address.is_valid_for_network(*network));
+        let mut found = self.find_in_networks(networks, std::slice::from_ref(&script))?;
 
-        self.find_in_networks(networks, &script)
+        // one answer per script searched
+        Ok(found.swap_remove(0))
     }
 
-    /// Search every wallet in scope for an output script, such as a transaction output's
+    /// Search every wallet in scope for output scripts, such as a transaction's outputs,
+    /// returning each script's owners in the order given
     ///
-    /// A script carries no network, so a lookup over every network matches wallets on any of
-    /// them; use [`Self::for_wallet`] to stay on one network.
+    /// Each wallet is read and its address chains derived once for all the scripts. A script
+    /// carries no network, so a lookup over every network matches wallets on any of them; use
+    /// [`Self::for_wallet`] to stay on one network.
     /// This reads wallet stores from disk, so async callers should run it on a blocking thread
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "transfer labels at broadcast, stacked on this, call it")
-    )]
-    pub fn find_script_owners(
+    pub fn find_scripts_owners(
         &self,
-        script: &Script,
-    ) -> Result<AddressOwnership, AddressOwnershipError> {
-        self.find_in_networks(self.networks(), &script.to_owned())
+        scripts: &[ScriptBuf],
+    ) -> Result<Vec<AddressOwnership>, AddressOwnershipError> {
+        self.find_in_networks(self.networks(), scripts)
     }
 
     fn networks(&self) -> impl Iterator<Item = Network> + use<> {
@@ -159,16 +155,20 @@ impl AddressOwnershipLookup {
     fn find_in_networks(
         &self,
         networks: impl Iterator<Item = Network>,
-        script: &ScriptBuf,
-    ) -> Result<AddressOwnership, AddressOwnershipError> {
+        scripts: &[ScriptBuf],
+    ) -> Result<Vec<AddressOwnership>, AddressOwnershipError> {
         self.ensure_mode_is_active()?;
 
-        let mut owners = Vec::new();
+        let mut owners = vec![Vec::new(); scripts.len()];
         let mut unchecked_wallets = Vec::new();
         for metadata in self.wallets_in(networks)? {
-            match find_in_wallet(&metadata, script) {
-                Ok(Some(owned)) => owners.push(owned),
-                Ok(None) => {}
+            match find_in_wallet(&metadata, scripts) {
+                Ok(found) => {
+                    for (script_owners, owned) in owners.iter_mut().zip(found) {
+                        script_owners.extend(owned);
+                    }
+                }
+
                 Err(error) => {
                     warn!(id = %metadata.id, %error, "unable to check whether a wallet owns an address");
                     unchecked_wallets.push(UncheckedWallet::from(&metadata));
@@ -179,11 +179,20 @@ impl AddressOwnershipLookup {
         // a mode switch while the stores were read must not hand this mode's wallets to the other
         self.ensure_mode_is_active()?;
 
-        if owners.is_empty() {
-            return Ok(AddressOwnership::NotFound { unchecked_wallets });
-        }
+        let ownerships = owners
+            .into_iter()
+            .map(|owners| {
+                if owners.is_empty() {
+                    return AddressOwnership::NotFound {
+                        unchecked_wallets: unchecked_wallets.clone(),
+                    };
+                }
 
-        Ok(AddressOwnership::Owned { owners })
+                AddressOwnership::Owned { owners }
+            })
+            .collect();
+
+        Ok(ownerships)
     }
 
     /// Fails unless this lookup's mode is the app's active mode
@@ -258,30 +267,34 @@ fn active_wallet_mode() -> Result<WalletMode, AddressOwnershipError> {
         .map_err_str(AddressOwnershipError::WalletModeUnavailable)
 }
 
-/// Where one wallet derives the script, or `None` when the wallet's search window lacks it
+/// Where one wallet derives each script, in the order given, with `None` for each script the
+/// wallet's search window lacks
 fn find_in_wallet(
     metadata: &WalletMetadata,
-    script: &ScriptBuf,
-) -> Result<Option<OwnedAddress>, WalletError> {
+    scripts: &[ScriptBuf],
+) -> Result<Vec<Option<OwnedAddress>>, WalletError> {
     let chains =
         addressing::read_published_address_chains(metadata)?.ok_or(WalletError::WalletNotFound)?;
 
-    let found = [KeychainKind::External, KeychainKind::Internal]
-        .into_iter()
-        .find_map(|keychain| chains.search(keychain, script).map(|index| (keychain, index)));
+    let mut found: Vec<Option<OwnedAddress>> = vec![None; scripts.len()];
+    for keychain in [KeychainKind::External, KeychainKind::Internal] {
+        let indexes = chains.search(keychain, scripts, |position| found[position].is_some());
 
-    let Some((keychain, index)) = found else {
-        return Ok(None);
-    };
+        for (slot, index) in found.iter_mut().zip(indexes) {
+            let Some(index) = index else { continue };
 
-    Ok(Some(OwnedAddress {
-        wallet_id: metadata.id.clone(),
-        wallet_name: metadata.name.clone(),
-        network: metadata.network,
-        chain: keychain.into(),
-        index,
-        account: chains.descriptor(keychain).account_index(),
-    }))
+            *slot = Some(OwnedAddress {
+                wallet_id: metadata.id.clone(),
+                wallet_name: metadata.name.clone(),
+                network: metadata.network,
+                chain: keychain.into(),
+                index,
+                account: chains.descriptor(keychain).account_index(),
+            });
+        }
+    }
+
+    Ok(found)
 }
 
 impl PublishedAddressChains {
@@ -292,9 +305,17 @@ impl PublishedAddressChains {
         }
     }
 
-    /// The index of `script` on one chain, searching up to the lookup gap past its last revealed
-    /// address, or through the first gap's worth when none was revealed
-    fn search(&self, keychain: KeychainKind, script: &ScriptBuf) -> Option<u32> {
+    /// The index of each script on one chain, in the order given, searching up to the lookup gap
+    /// past its last revealed address, or through the first gap's worth when none was revealed
+    ///
+    /// The chain is derived once for every script, and scripts `skip` says are already found
+    /// elsewhere are left out
+    fn search(
+        &self,
+        keychain: KeychainKind,
+        scripts: &[ScriptBuf],
+        skip: impl Fn(usize) -> bool,
+    ) -> Vec<Option<u32>> {
         let last_revealed = match keychain {
             KeychainKind::External => self.last_revealed_external,
             KeychainKind::Internal => self.last_revealed_internal,
@@ -304,9 +325,27 @@ impl PublishedAddressChains {
             index.saturating_add(ADDRESS_OWNERSHIP_LOOKUP_GAP)
         });
 
-        SpkIterator::new_with_range(self.descriptor(keychain), 0..=last_searched)
-            .find(|(_, candidate)| candidate == script)
-            .map(|(index, _)| index)
+        let mut indexes = vec![None; scripts.len()];
+        let mut missing = (0..scripts.len()).filter(|position| !skip(*position)).count();
+
+        for (index, candidate) in
+            SpkIterator::new_with_range(self.descriptor(keychain), 0..=last_searched)
+        {
+            if missing == 0 {
+                break;
+            }
+
+            for (position, script) in scripts.iter().enumerate() {
+                if indexes[position].is_some() || skip(position) || *script != candidate {
+                    continue;
+                }
+
+                indexes[position] = Some(index);
+                missing -= 1;
+            }
+        }
+
+        indexes
     }
 }
 
