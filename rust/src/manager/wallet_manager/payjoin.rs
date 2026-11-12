@@ -649,8 +649,10 @@ impl PayjoinActor {
             let polling_sender =
                 match sender.process_response(&post_response, post_ctx).save(&persister) {
                     Ok(ps) => ps,
+                    // Display, not Debug: a transient error carries the sender state, whose
+                    // Debug output includes the whole signed Original PSBT
                     Err(e) => {
-                        warn!("payjoin POST: failed to process response: {e:?}");
+                        warn!("payjoin POST: failed to process response: {e}");
                         send!(addr.complete_with_fallback_msg());
                         return;
                     }
@@ -914,8 +916,10 @@ pub(crate) fn resume_session(
             warn!("payjoin session expired before resume, broadcasting fallback");
             return fallback_from_record(&db, record);
         }
-        Err(error) => {
-            warn!("payjoin session replay failed, broadcasting fallback: {error:?}");
+        // a replay error's Display and Debug both print the session events, which hold the
+        // signed Original PSBT, so only the fact of the failure is logged
+        Err(_) => {
+            warn!("payjoin session log could not be replayed, broadcasting fallback");
             return fallback_from_record(&db, record);
         }
     };
