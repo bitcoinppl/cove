@@ -228,13 +228,14 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(upload) => {
-                if let Err(error) = self.start_enable_upload_finalization(claim, upload) {
-                    self.fail_enable_operation(&manager, claim, error);
-                }
+        match result.map(|upload| self.start_enable_upload_finalization(claim, upload)) {
+            Ok(Ok(())) => {}
+            Err(error) | Ok(Err(PromotionStartError::Failed(error))) => {
+                self.fail_enable_operation(&manager, claim, error);
             }
-            Err(error) => self.fail_enable_operation(&manager, claim, error),
+            Ok(Err(PromotionStartError::NeedsRecovery(error))) => {
+                self.stop_enable_for_promotion_recovery(&manager, claim, error);
+            }
         }
 
         Produces::ok(())
@@ -244,7 +245,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         upload: CloudBackupUploadedEnableBackup,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<(), PromotionStartError> {
         info!("Enable: persisting cloud backup state");
         let decrypted_master = master_key_crypto::decrypt_master_key(
             &upload.encrypted_master,
@@ -254,7 +255,8 @@ impl CloudBackupSupervisor {
         if decrypted_master.as_bytes() != upload.master_key.as_bytes() {
             return Err(CloudBackupError::Crypto(
                 "fresh passkey material decrypted the wrong master key".into(),
-            ));
+            )
+            .into());
         }
         let manager = self
             .manager()
@@ -330,6 +332,8 @@ impl CloudBackupSupervisor {
             pending_completion,
             context.verification_source,
         );
+        // every stop below leaves the journal either the saved passkey's pause again or a started
+        // promotion, which is the journal recovery's to finish or roll back, not a failed run
         match (result, activation) {
             // the journal is the pause again once the promotion is rolled back; one that can't
             // be rolled back is left for the recovery, which Try Again runs
@@ -337,7 +341,7 @@ impl CloudBackupSupervisor {
                 if let Err(rollback) =
                     manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
                 {
-                    self.fail_enable_operation(
+                    self.stop_enable_for_promotion_recovery(
                         &manager,
                         claim,
                         CloudBackupError::Internal(
@@ -352,8 +356,9 @@ impl CloudBackupSupervisor {
                 }
                 return Produces::ok(());
             }
+            // with no durable completion the recovery rolls the promotion back to the pause
             (Ok(()), Err(error)) => {
-                self.fail_enable_operation(&manager, claim, error);
+                self.stop_enable_for_promotion_recovery(&manager, claim, error);
                 return Produces::ok(());
             }
             (Err(error), Ok(())) => {
@@ -366,8 +371,10 @@ impl CloudBackupSupervisor {
 
         // reset verification while the pending-enable journal still owns completion
         manager.apply_verification_state(VerificationState::Idle);
+        // the durable completion is saved, so the recovery finishes the promotion however far
+        // the commit got, including a commit whose only failure was clearing the journal
         if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
-            self.fail_enable_operation(&manager, claim, error);
+            self.stop_enable_for_promotion_recovery(&manager, claim, error);
             return Produces::ok(());
         }
 

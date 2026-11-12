@@ -349,7 +349,7 @@ impl CloudBackupSupervisor {
     /// Unknown evidence is never a saved passkey. It is the load failure it is, so the screen
     /// offers Try Again, which runs the recovery again, and nothing replaces the configuration
     /// the evidence may still restore
-    fn admission_body(&self, manager: &RustCloudBackupManager) -> AdmissionBody {
+    pub(crate) fn admission_body(&self, manager: &RustCloudBackupManager) -> AdmissionBody {
         let body = self.runtime.admission_body();
         let settled = self.runtime.claim().is_none()
             && !matches!(body, AdmissionBody::PendingEnableRecovery | AdmissionBody::Resetting);

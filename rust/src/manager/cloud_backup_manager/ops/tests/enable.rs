@@ -8,7 +8,7 @@ use cove_types::network::Network;
 use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot, PendingWork,
+    PendingEnableLocalMetadataSnapshot, PendingWork, PromotionStartError,
 };
 
 fn seed_retained_active_master() -> ([u8; 32], PendingEnableLocalMetadataSnapshot) {
@@ -142,7 +142,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             provider_hint: None,
         })
     );
-    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.abort_recovered_existing_enable().unwrap();
 
     assert!(matches!(error, CloudBackupError::CloudStorage(_)));
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
@@ -193,10 +193,8 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
+    // the configured backup's local key is gone, which is what recovers an existing backup
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    let prior_master_key = cove_cspp::master_key::MasterKey::generate();
-    let prior_master_key_bytes = *prior_master_key.as_bytes();
-    cspp.save_master_key(&prior_master_key).unwrap();
     let cloud_keychain = CloudBackupKeychain::global();
     cloud_keychain.save_passkey_and_namespace(&[7, 8, 9], [8; 32], "prior-namespace").unwrap();
     let prior_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
@@ -222,10 +220,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
             preparation.recovered_passkey_metadata(),
         )
         .unwrap();
-    assert_eq!(
-        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
-        &prior_master_key_bytes
-    );
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     let staged_journal = cloud_keychain.load_pending_enable_journal().unwrap().unwrap();
@@ -248,11 +243,8 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         )
         .unwrap_err();
 
-    assert!(matches!(error, CloudBackupError::Internal(_)));
-    assert_eq!(
-        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
-        &prior_master_key_bytes
-    );
+    assert!(matches!(error, PromotionStartError::Failed(CloudBackupError::Internal(_))));
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     assert_eq!(
         cspp.master_key_promotion_status().unwrap(),
@@ -263,8 +255,11 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 
-    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.abort_recovered_existing_enable().unwrap();
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
+    assert_eq!(cloud_keychain.load_pending_enable_journal().unwrap(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]

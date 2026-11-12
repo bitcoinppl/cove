@@ -84,6 +84,9 @@ pub(crate) enum DriveAccountSwitchReinitializationEnd {
     Failed,
     /// The reinitialize registered a passkey and waits for the user to confirm it
     AwaitingSavedPasskey,
+    /// The run stopped after its local promotion started, which the journal recovery finishes
+    /// or rolls back, then hands the switch on from
+    AwaitingPromotionRecovery,
 }
 
 impl DriveAccountSwitchReinitializationEnd {
@@ -94,6 +97,7 @@ impl DriveAccountSwitchReinitializationEnd {
             Self::AwaitingSavedPasskey => {
                 PersistedDriveAccountSwitchPhase::AwaitingSavedPasskeyConfirmation
             }
+            Self::AwaitingPromotionRecovery => PersistedDriveAccountSwitchPhase::Reinitializing,
         }
     }
 }
@@ -484,9 +488,11 @@ impl CloudBackupSupervisor {
         manager: &Arc<RustCloudBackupManager>,
         platform_state: DriveAccountSwitchPlatformState,
     ) {
-        // a closed lifecycle can't move the switch; the next launch or Try Again reports again
+        // a closed lifecycle can't move the switch; the next launch or Try Again reports again.
+        // journal evidence that is unavailable closes it too: a promotion the recovery hasn't
+        // decided yet would otherwise look like a reinitialize to start again
         if matches!(
-            self.runtime.admission_body(),
+            self.admission_body(manager),
             AdmissionBody::LoadFailed | AdmissionBody::Resetting
         ) {
             warn!("Cloud Backup can't reconcile a Google Drive account switch now");
@@ -649,7 +655,14 @@ impl CloudBackupSupervisor {
             return DriveAccountSwitchReinitializationCompletion::Stale;
         }
 
-        if let Err(error) = self.set_drive_account_switch_phase(transition_id, end.phase()) {
+        let saved = match end {
+            // the record already says Reinitializing, the phase the journal recovery hands a
+            // promotion back from; a failed save would draw the save-failure card over the Try
+            // Again that runs that recovery
+            DriveAccountSwitchReinitializationEnd::AwaitingPromotionRecovery => Ok(()),
+            end => self.set_drive_account_switch_phase(transition_id, end.phase()),
+        };
+        if let Err(error) = saved {
             error!("Failed to persist Google Drive account switch completion: {error}");
             self.drive_account_switch_unsaved =
                 Some(UnsavedDriveAccountSwitchCompletion { transition_id, end });
@@ -672,14 +685,39 @@ impl CloudBackupSupervisor {
                 );
             }
             // nothing exists in the new account yet, so the switch holds in its own phase and
-            // Confirm Saved Passkey continues it as this switch's reinitialize
-            DriveAccountSwitchReinitializationEnd::AwaitingSavedPasskey => {
+            // Confirm Saved Passkey continues it as this switch's reinitialize. a promotion the
+            // recovery owns holds in Reinitializing until that recovery hands it back
+            DriveAccountSwitchReinitializationEnd::AwaitingSavedPasskey
+            | DriveAccountSwitchReinitializationEnd::AwaitingPromotionRecovery => {
                 self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
 
         DriveAccountSwitchReinitializationCompletion::Handled
+    }
+
+    /// Moves the switch on from a reinitialize whose promotion the recovery finished after its run
+    /// ended without saving it, as a reset abandoned with keys kept or a relaunch leaves it
+    ///
+    /// The switch commits the new account as it would after its run's own success, so the
+    /// platform's next report doesn't start a second reinitialize beside the backup that exists
+    pub(crate) fn drive_account_switch_reinitialization_recovered(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        transition_id: DriveAccountSwitchId,
+    ) {
+        let end = DriveAccountSwitchReinitializationEnd::Succeeded;
+        if let Err(error) = self.set_drive_account_switch_phase(transition_id, end.phase()) {
+            error!("Failed to persist the recovered Google Drive account switch: {error}");
+            // saved first by the switch's next step, as a run's own unsaved end is
+            self.drive_account_switch_unsaved =
+                Some(UnsavedDriveAccountSwitchCompletion { transition_id, end });
+            Self::report_drive_account_switch_recovery_required(manager, SAVE_FAILED_MESSAGE);
+            return;
+        }
+
+        Self::request_platform_step(manager, PlatformStep::Commit(transition_id));
     }
 
     /// Saves the phase the switch's last reinitialize run ended in when that run could not; false,

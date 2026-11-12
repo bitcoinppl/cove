@@ -2195,7 +2195,7 @@ async fn enable_recovery_finalization_requires_durable_pending_completion_before
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_evidence() {
+async fn enable_recovery_finalization_failure_rolls_the_recovered_backup_all_the_way_back() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
@@ -2243,13 +2243,11 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
         &prior_master_key_bytes
     );
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
-    assert_eq!(
-        cspp.master_key_promotion_status().unwrap(),
-        MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
-    );
-    let journal = cloud_keychain.load_pending_enable_journal().unwrap().unwrap();
-    assert!(matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)));
-    assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
+    // a recovered backup has no pause to keep its stage for, so nothing is left for a retry to
+    // refuse: the next Enable recovers the backup again from the start
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
+    assert_eq!(manager.pending_enable.pending_work(), PendingWork::None);
     assert!(!emitted_enable_completed(&manager));
     assert_eq!(supervisor.runtime, None);
 }

@@ -7,24 +7,35 @@
 //! Each test body runs in child processes; see [`super::run_case`]
 #![cfg(test)]
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use cove_cspp::backup_data::wallet_filename_from_record_id;
+use cove_cspp::master_key::MasterKey;
+use cove_cspp::{Cspp, MasterKeyPromotionStatus};
 use cove_device::cloud_storage::CloudStorageError;
+use cove_device::keychain::Keychain;
 use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyError};
+use parking_lot::Mutex;
 
 use super::app::Step;
 use super::process::checkpoint;
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PhaseEnd, TestApp,
-    assert_uploads_confirmed_in, finish_wipe, keychain_namespace, load_detail, persisted, run_case,
-    seed_an_uploaded_wallet, seed_verifiable_master_key,
+    assert_uploads_confirmed_in, finish_wipe, keychain_namespace, launch_keychain, load_detail,
+    open_durable_state, persisted, run_case, seed_an_uploaded_wallet, seed_verifiable_master_key,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::PersistedDriveAccountSwitchPhase;
+use crate::database::cloud_backup::{
+    PersistedDriveAccountSwitchPhase, PersistedPendingVerificationCompletion,
+};
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
-use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
-use crate::manager::cloud_backup_manager::pending_enable::PendingEnableJournal;
+use crate::manager::cloud_backup_manager::keychain::{
+    CSPP_NAMESPACE_ID_KEY, CSPP_PENDING_ENABLE_JOURNAL_KEY, CloudBackupKeychain,
+};
+use crate::manager::cloud_backup_manager::pending_enable::{
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableNamespaceOwnership,
+};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDriveAccountSwitchStage, CloudBackupRejection,
     CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle, CloudBackupScreenAction as A,
@@ -33,7 +44,7 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupResetPermit,
     DriveAccountSwitchPlatformResult as Platform, DriveAccountSwitchPlatformState,
-    RequestedDriveAccountSwitchStep as Step_,
+    PendingEnableLocalMetadataSnapshot, RequestedDriveAccountSwitchStep as Step_,
 };
 
 /// How long a newly registered passkey is given before Cove asks the user to confirm it
@@ -1063,6 +1074,889 @@ fn abandon_reset_permit(app: &mut TestApp, permit: CloudBackupResetPermit) {
     .then_cannot(&[N::Enable]);
 }
 
+fn active_master_key() -> MasterKey {
+    Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .expect("read the active master key")
+        .expect("an active master key")
+}
+
+/// Model review sequence: a reset that begins after a switch's confirmed reinitialize started its
+/// local promotion, and before its finalization recorded the durable completion
+///
+/// The reset cancels the finalization before it can commit or roll back the promotion, and the
+/// write lane drops the finalization's late completion. A reset that then fails before its wipe
+/// takes the journal up as a relaunch does: with no durable completion the promotion rolls back,
+/// the previous account's backup is active again, and the switch waits on its saved passkey.
+/// Confirm then finishes the switch from the rolled-back stage, with no relaunch and no second
+/// passkey
+#[test]
+fn a_switch_whose_promotion_a_failed_reset_cut_off_finishes_through_confirm() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_whose_promotion_a_failed_reset_cut_off_finishes_through_confirm"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let old_namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+        let old_key = active_master_key();
+
+        // no passkey is discoverable, so the new account's reinitialize registers one
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+        let transition_id = switch_to_a_new_account(&mut app);
+        app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+
+        // the confirmed reinitialize uploads, promotes its stage, and holds on the listing its
+        // finalization counts the uploaded wallets with
+        let listing = Hold::default();
+        app.cloud.script_next(CloudCall::ListWalletFiles, CloudFault::Hold(listing.clone()));
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        app.block_on("the finalization's listing to be held", listing.entered());
+        let journal = pending_enable_journal().expect("the switch's journal");
+        assert!(
+            matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_)),
+            "{journal:?}\n{}",
+            app.describe()
+        );
+        let new_namespace = journal.namespace_id().to_owned();
+        assert_eq!(keychain_namespace().as_deref(), Some(new_namespace.as_str()));
+
+        // a reset cancels the finalization, and its wipe then fails before its commit
+        let manager = app.manager().clone();
+        let reset = cove_tokio::task::spawn(async move { manager.prepare_local_reset().await });
+        app.event("a full wipe begins", |_| {}).then_cannot(&[N::Enable]);
+        app.event("release the held listing", |_| listing.release()).then_cannot(&[N::Enable]);
+        let permit = app
+            .block_on("the reset to be ready", reset)
+            .expect("reset task")
+            .expect("reset permit");
+        abandon_reset_permit(&mut app, permit);
+
+        // with no durable completion the promotion rolled back to its stage, kept for a retry
+        let journal = pending_enable_journal().expect("the switch's journal");
+        assert!(
+            matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)),
+            "{journal:?}\n{}",
+            app.describe()
+        );
+        assert_eq!(journal.namespace_id(), new_namespace);
+        assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
+        assert_eq!(active_master_key().as_bytes(), old_key.as_bytes());
+        assert!(
+            persisted()
+                .pending_verification_completion()
+                .is_none_or(|completion| { completion.namespace_id() != new_namespace }),
+            "{}",
+            app.describe()
+        );
+        assert_switch_paused_with_its_confirm(&app);
+
+        // Confirm finishes the switch from that stage, with no relaunch and no second passkey
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
+        assert_eq!(keychain_namespace().as_deref(), Some(new_namespace.as_str()));
+        assert_ne!(active_master_key().as_bytes(), old_key.as_bytes());
+        assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
+        assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    });
+}
+
 fn pending_enable_journal() -> Option<PendingEnableJournal> {
     CloudBackupKeychain::global().load_pending_enable_journal().expect("the journal loads")
+}
+
+/// The user's Switch to a new account, whose reinitialize registered a passkey and waits for its
+/// Confirm, with the transition and the namespace the device was on before the switch
+fn switch_paused_on_its_reinitialize(app: &mut TestApp) -> (u64, String) {
+    let old_namespace = FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    // no passkey is discoverable, so the new account's reinitialize registers one
+    app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+    app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+    let transition_id = switch_to_a_new_account(app);
+    app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[N::Enable]);
+    assert_switch_paused_with_its_confirm(app);
+    app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+
+    (transition_id, old_namespace)
+}
+
+/// The new namespace whose durable completion the switch's reinitialize saved, while the switch
+/// still records its reinitialize and the journal its started promotion
+fn assert_switch_completion_saved(app: &TestApp) -> String {
+    let journal = pending_enable_journal().expect("the switch's journal");
+    assert!(
+        matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_)),
+        "{journal:?}\n{}",
+        app.describe()
+    );
+    let new_namespace = journal.namespace_id().to_owned();
+    assert!(
+        persisted()
+            .pending_verification_completion()
+            .is_some_and(|completion| completion.namespace_id() == new_namespace),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+    assert_eq!(keychain_namespace().as_deref(), Some(new_namespace.as_str()));
+    new_namespace
+}
+
+/// The recovery finished the switch's promotion into `new_namespace` under `new_key`, and the
+/// switch, moved on to wait for the platform's commit, asked for it
+fn assert_switch_reinitialized_into(
+    app: &TestApp,
+    transition_id: u64,
+    new_namespace: &str,
+    new_key: &MasterKey,
+) {
+    assert_eq!(keychain_namespace().as_deref(), Some(new_namespace), "{}", app.describe());
+    assert_eq!(active_master_key().as_bytes(), new_key.as_bytes());
+    assert!(
+        persisted()
+            .pending_verification_completion()
+            .is_some_and(|completion| completion.namespace_id() == new_namespace),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    assert_eq!(
+        switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(requested_steps(app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+}
+
+/// The platform's state report goes on to the commit, with no new key and no passkey
+fn a_state_report_commits_without_a_new_reinitialize(
+    app: &mut TestApp,
+    transition_id: u64,
+    new_key: &MasterKey,
+) {
+    let created = app.passkey.inner.create_count();
+    let authenticated = app.passkey.inner.authenticate_count();
+    platform_reports(app, Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)))
+        .then_cannot(&[N::Enable]);
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(active_master_key().as_bytes(), new_key.as_bytes());
+    assert_eq!(app.passkey.inner.create_count(), created, "a second passkey was registered");
+    assert_eq!(app.passkey.inner.authenticate_count(), authenticated);
+}
+
+/// Model review sequence: a reset that begins after a switch's reinitialize saved its durable
+/// completion, and before its finalization's callback saved the switch's next phase
+///
+/// The reset cancels the callback, and then fails before its wipe. Its recovery finds the
+/// promotion's durable completion, so it commits the promotion and hands the switch its
+/// finished reinitialize: the switch moves on to the platform's commit, and the platform's
+/// next report doesn't run a second reinitialize beside the backup that exists
+#[test]
+fn a_switch_promotion_a_failed_reset_found_saved_goes_on_to_its_commit() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_promotion_a_failed_reset_found_saved_goes_on_to_its_commit"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let (transition_id, old_namespace) = switch_paused_on_its_reinitialize(&mut app);
+
+        // the reset starts as the record takes the new namespace's completion, so it reaches the
+        // supervisor before the write lane hands the finalization its result, and cancels the
+        // finalization before its callback
+        let reset = Arc::new(Mutex::new(None));
+        let started = reset.clone();
+        let manager = app.manager().clone();
+        let previous = old_namespace.clone();
+        Database::global().cloud_backup_state.fail_next_write_where(move |state| {
+            let saved = state.drive_account_switch().is_some()
+                && state
+                    .pending_verification_completion()
+                    .is_some_and(|completion| completion.namespace_id() != previous);
+            let mut started = started.lock();
+            if saved && started.is_none() {
+                let manager = manager.clone();
+                *started =
+                    Some(cove_tokio::task::spawn(
+                        async move { manager.prepare_local_reset().await },
+                    ));
+            }
+
+            // the write itself goes through
+            false
+        });
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        Database::global().cloud_backup_state.fail_next_write_where(|_| false);
+
+        let reset = reset.lock().take().expect("the reset started at the completion's save");
+        let new_namespace = assert_switch_completion_saved(&app);
+        let new_key = active_master_key();
+        let permit = app
+            .block_on("the reset to be ready", reset)
+            .expect("reset task")
+            .expect("reset permit");
+        abandon_reset_permit(&mut app, permit);
+
+        assert_switch_reinitialized_into(&app, transition_id, &new_namespace, &new_key);
+        a_state_report_commits_without_a_new_reinitialize(&mut app, transition_id, &new_key);
+        platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
+        assert_eq!(keychain_namespace().as_deref(), Some(new_namespace.as_str()));
+        assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
+    });
+}
+
+/// The same promotion, saved and then cut off by a kill instead of a reset: the relaunch's
+/// recovery hands the switch its finished reinitialize the same way
+#[test]
+fn a_switch_promotion_saved_before_a_kill_goes_on_to_its_commit() {
+    let test =
+        concat!(module_path!(), "::a_switch_promotion_saved_before_a_kill_goes_on_to_its_commit");
+    run_case(test, &[PhaseEnd::KillAt("switch-completion-saved"), PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            switch_paused_on_its_reinitialize(&mut app);
+
+            // the upload reads the wallet's key too, so the marking's read is held only once
+            // the finalization's listing, after the upload, is. The held read blocks the
+            // harness's one runtime thread, so the kill comes with nothing else run
+            let listing = Hold::default();
+            app.cloud.script_next(CloudCall::ListWalletFiles, CloudFault::Hold(listing.clone()));
+            app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+            app.block_on("the finalization's listing to be held", listing.entered());
+
+            let marking = Hold::default();
+            app.keychain
+                .hold_next_read_where(|key| key.ends_with("::wallet_xpub"), marking.clone());
+            listing.release();
+            app.block_on("the uploaded wallet's marking to be held", marking.entered());
+            assert_switch_completion_saved(&app);
+            checkpoint("switch-completion-saved");
+            unreachable!("the parent kills this process before the finalization's callback");
+        }
+
+        // the promotion moved the active key and namespace to the new backup before the kill
+        open_durable_state();
+        let new_key = active_master_key();
+        let new_namespace = keychain_namespace().expect("the promoted namespace");
+        let transition_id =
+            persisted().drive_account_switch().expect("the switch survived").transition_id.value();
+
+        let mut app = TestApp::launch();
+        assert_switch_reinitialized_into(&app, transition_id, &new_namespace, &new_key);
+        a_state_report_commits_without_a_new_reinitialize(&mut app, transition_id, &new_key);
+        assert_eq!(app.passkey.inner.create_count(), 0, "a second passkey was registered");
+        assert_eq!(app.passkey.inner.authenticate_count(), 0);
+
+        assert_eq!(requested_steps(&app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+        platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+        platform_reports(&mut app, Platform::Finalized(transition_id))
+            .then_can(&[N::TurnOff])
+            .then_cannot(&[N::Enable]);
+        assert_eq!(keychain_namespace().as_deref(), Some(new_namespace.as_str()));
+        assert_eq!(switch_phase(), None);
+    });
+}
+
+/// What a switch's promotion left once its journal cleanup failed: the new namespace, active
+/// key, credential and durable completion the recovery has to keep
+struct StoppedPromotion {
+    namespace: String,
+    key: MasterKey,
+    credential_id: Option<Vec<u8>>,
+    completion: Option<PersistedPendingVerificationCompletion>,
+}
+
+impl StoppedPromotion {
+    fn assert_kept(&self) {
+        assert_eq!(keychain_namespace().as_deref(), Some(self.namespace.as_str()));
+        assert_eq!(active_master_key().as_bytes(), self.key.as_bytes());
+        assert_eq!(credential_id(), self.credential_id);
+        assert_eq!(persisted().pending_verification_completion().cloned(), self.completion);
+    }
+}
+
+fn credential_id() -> Option<Vec<u8>> {
+    CloudBackupKeychain::global().load_credential_id().expect("the credential loads")
+}
+
+/// The switch's Confirm uploads and commits its promotion, saving the durable completion, but
+/// the keychain refuses the journal's final delete once
+///
+/// That is not a failed reinitialize: the switch stays Reinitializing with its claim given up,
+/// and the started promotion is the journal recovery's, so the screen offers Try Again for it
+fn switch_promotion_stopped_at_its_journal_cleanup(app: &mut TestApp) -> StoppedPromotion {
+    app.keychain.fail_next_delete_of(CSPP_PENDING_ENABLE_JOURNAL_KEY);
+    app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey)
+        .then_can(&[N::RetryLoad])
+        .then_cannot(&[N::Enable, N::TurnOff]);
+
+    let namespace = assert_switch_completion_saved(app);
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::LoadFailed);
+    assert_eq!(requested_steps(app), vec![], "{}", app.describe());
+    StoppedPromotion {
+        namespace,
+        key: active_master_key(),
+        credential_id: credential_id(),
+        completion: persisted().pending_verification_completion().cloned(),
+    }
+}
+
+/// While the promotion waits for its recovery, the platform's state report starts nothing
+fn a_state_report_waits_for_the_recovery(app: &mut TestApp, transition_id: u64) {
+    platform_reports(app, Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)))
+        .then_can(&[N::RetryLoad])
+        .then_cannot(&[N::Enable]);
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+    assert_eq!(requested_steps(app), vec![], "{}", app.describe());
+}
+
+/// Try Again runs the journal recovery, which finishes the promotion with what it kept and hands
+/// the switch on to the platform's commit, with no new key, passkey or master key upload
+fn try_again_hands_the_promotion_to_the_switch(
+    app: &mut TestApp,
+    transition_id: u64,
+    stopped: &StoppedPromotion,
+) {
+    let created = app.passkey.inner.create_count();
+    let authenticated = app.passkey.inner.authenticate_count();
+    let master_uploads = app.cloud.count(CloudCall::UploadMasterKey);
+
+    app.dispatch(CloudBackupManagerAction::RetryLoad).then_cannot(&[N::RetryLoad, N::Enable]);
+    assert_switch_reinitialized_into(app, transition_id, &stopped.namespace, &stopped.key);
+    stopped.assert_kept();
+    a_state_report_commits_without_a_new_reinitialize(app, transition_id, &stopped.key);
+    assert_eq!(app.passkey.inner.create_count(), created, "a second passkey was registered");
+    assert_eq!(app.passkey.inner.authenticate_count(), authenticated);
+    assert_eq!(app.cloud.count(CloudCall::UploadMasterKey), master_uploads);
+}
+
+/// Model review sequence: a switch's promotion commits and saves its durable completion, and
+/// only the journal's final delete fails
+///
+/// Its reinitialize didn't fail, so the switch neither offers it again nor reports it failed.
+/// Once the keychain works again, the screen's Try Again finishes the promotion through the
+/// journal recovery and the switch goes on to the platform's commit
+#[test]
+fn a_switch_promotion_whose_journal_cleanup_failed_goes_on_to_its_commit() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_promotion_whose_journal_cleanup_failed_goes_on_to_its_commit"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let (transition_id, old_namespace) = switch_paused_on_its_reinitialize(&mut app);
+        let stopped = switch_promotion_stopped_at_its_journal_cleanup(&mut app);
+        a_state_report_waits_for_the_recovery(&mut app, transition_id);
+
+        // the keychain refused only that one delete
+        try_again_hands_the_promotion_to_the_switch(&mut app, transition_id, &stopped);
+        platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
+        assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
+        assert_eq!(app.cloud.count(CloudCall::UploadMasterKey), 1);
+    });
+}
+
+/// The same stopped promotion after a relaunch whose keychain can't read the journal at first:
+/// the launch shows Try Again, and once reads work it hands the switch on the same way
+#[test]
+fn a_switch_promotion_whose_journal_cleanup_failed_goes_on_after_a_relaunch() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_promotion_whose_journal_cleanup_failed_goes_on_after_a_relaunch"
+    );
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            switch_paused_on_its_reinitialize(&mut app);
+            switch_promotion_stopped_at_its_journal_cleanup(&mut app);
+            return;
+        }
+
+        open_durable_state();
+        let stopped = StoppedPromotion {
+            namespace: keychain_namespace().expect("the promoted namespace"),
+            key: active_master_key(),
+            credential_id: credential_id(),
+            completion: persisted().pending_verification_completion().cloned(),
+        };
+        let transition_id =
+            persisted().drive_account_switch().expect("the switch survived").transition_id.value();
+
+        launch_keychain().inner.fail_reads_for(CSPP_PENDING_ENABLE_JOURNAL_KEY);
+        let mut app = TestApp::launch();
+        app.current().then_can(&[N::RetryLoad]).then_cannot(&[N::Enable, N::TurnOff]);
+        assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::LoadFailed);
+        a_state_report_waits_for_the_recovery(&mut app, transition_id);
+
+        app.keychain.inner.clear_read_failures();
+        try_again_hands_the_promotion_to_the_switch(&mut app, transition_id, &stopped);
+        assert_eq!(app.passkey.inner.create_count(), 0, "a second passkey was registered");
+        assert_eq!(app.passkey.inner.authenticate_count(), 0);
+        assert_eq!(app.cloud.count(CloudCall::UploadMasterKey), 0);
+    });
+}
+
+/// The keychain item holding CSPP's active master-key encryption key, which every promotion and
+/// rollback of the active key rewrites
+const ACTIVE_ENCRYPTION_KEY_ITEM: &str = "cspp::v1::master_key_encryption_key_and_nonce";
+
+fn staged_master_key() -> MasterKey {
+    Cspp::new(Keychain::global().clone())
+        .load_staged_master_key()
+        .expect("read the staged master key")
+        .expect("a staged master key")
+}
+
+/// Model review sequence: a switch's Confirm uploads backup N, and its promotion fails while it
+/// starts, after the journal records it: the keychain refuses the active key's write, and the
+/// rollback's write of the previous one too
+///
+/// That is not a failed reinitialize the switch could run again, since staging another backup
+/// would meet the started promotion's journal. The switch stays Reinitializing, and once the
+/// keychain works, the screen's Try Again runs the journal recovery: with no durable completion
+/// it rolls the promotion back, and the switch is paused on N's passkey again, whose Confirm
+/// finishes it under the same staged key and credential
+#[test]
+fn a_switch_promotion_that_fails_to_start_or_roll_back_pauses_again_on_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_promotion_that_fails_to_start_or_roll_back_pauses_again_on_try_again"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let (transition_id, old_namespace) = switch_paused_on_its_reinitialize(&mut app);
+        let old_key = active_master_key();
+        let old_credential = credential_id();
+        let staged = staged_master_key();
+
+        app.keychain.fail_saves_of(ACTIVE_ENCRYPTION_KEY_ITEM);
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey)
+            .then_can(&[N::RetryLoad])
+            .then_cannot(&[N::Enable, N::TurnOff]);
+        let journal = pending_enable_journal().expect("the switch's journal");
+        assert!(
+            matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_)),
+            "{journal:?}\n{}",
+            app.describe()
+        );
+        assert_eq!(journal.namespace_id(), staged.namespace_id());
+        assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+        assert!(!app.runs_operation(), "{}", app.describe());
+        assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::LoadFailed);
+        a_state_report_waits_for_the_recovery(&mut app, transition_id);
+
+        // the recovery is local: no passkey, key or upload
+        app.keychain.clear_save_failures();
+        let created = app.passkey.inner.create_count();
+        let authenticated = app.passkey.inner.authenticate_count();
+        let uploads =
+            (app.cloud.count(CloudCall::UploadMasterKey), app.cloud.count(CloudCall::UploadWallet));
+        app.dispatch(CloudBackupManagerAction::RetryLoad).then_cannot(&[N::RetryLoad, N::Enable]);
+        assert_eq!(app.passkey.inner.create_count(), created);
+        assert_eq!(app.passkey.inner.authenticate_count(), authenticated);
+        assert_eq!(
+            (app.cloud.count(CloudCall::UploadMasterKey), app.cloud.count(CloudCall::UploadWallet)),
+            uploads
+        );
+
+        // the previous backup is active again, and N waits on its passkey as before
+        assert_eq!(active_master_key().as_bytes(), old_key.as_bytes());
+        assert_eq!(keychain_namespace().as_deref(), Some(old_namespace.as_str()));
+        assert_eq!(credential_id(), old_credential);
+        let journal = pending_enable_journal().expect("the switch's journal");
+        assert!(
+            matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)),
+            "{journal:?}\n{}",
+            app.describe()
+        );
+        assert_eq!(journal.namespace_id(), staged.namespace_id());
+        assert_eq!(
+            journal.passkey().map(|passkey| passkey.credential_id.clone()),
+            Some(vec![4, 5, 6])
+        );
+        assert_eq!(staged_master_key().as_bytes(), staged.as_bytes());
+        assert_switch_paused_with_its_confirm(&app);
+
+        // Confirm asks for the same passkey once more and finishes the switch into N
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
+        assert_eq!(app.passkey.inner.authenticate_count(), authenticated + 1);
+        assert_eq!(active_master_key().as_bytes(), staged.as_bytes());
+        assert_eq!(credential_id(), Some(vec![4, 5, 6]));
+        assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+        platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
+        assert_eq!(keychain_namespace().as_deref(), Some(staged.namespace_id().as_str()));
+    });
+}
+
+/// A switch whose reinitialize recovers a backup the user's passkey opens rather than creating
+/// one, since the device's local key is gone, and what a full rollback of that recovery restores
+///
+/// The harness has one cloud, so the account the switch moves to holds the configured backup
+struct RecoveringSwitch {
+    transition_id: u64,
+    metadata: PendingEnableLocalMetadataSnapshot,
+    recovered_key: MasterKey,
+}
+
+/// Seeds the backup the switch's reinitialize recovers, and the passkey that opens it; the
+/// switch starts once `faults` are armed
+fn switch_recovering_a_backup(
+    app: &mut TestApp,
+    faults: impl FnOnce(&mut TestApp),
+) -> RecoveringSwitch {
+    let namespace = FakeAccount::new(1, 0).seed(app);
+    seed_verifiable_master_key(app, &namespace);
+    load_detail(app);
+    let recovered_key = active_master_key();
+    CloudBackupKeychain::global().delete_master_key().expect("delete the local master key");
+    let metadata = CloudBackupKeychain::global().snapshot_passkey_metadata().expect("metadata");
+
+    faults(app);
+    let transition_id = switch_to_a_new_account(app);
+    RecoveringSwitch { transition_id, metadata, recovered_key }
+}
+
+/// The switch's recovered promotion stopped for the journal recovery: the switch still
+/// reinitializes, nothing is running, and the screen offers Try Again for the recovery
+fn assert_recovered_promotion_stopped(app: &mut TestApp, switch: &RecoveringSwitch) {
+    let journal = assert_switch_stopped_for_the_recovery(app, switch);
+    assert!(
+        matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_)),
+        "{journal:?}\n{}",
+        app.describe()
+    );
+}
+
+/// The switch's recovered run stopped with its journal left for the journal recovery, which
+/// the screen's Try Again runs rather than the switch's own; returns that journal
+fn assert_switch_stopped_for_the_recovery(
+    app: &mut TestApp,
+    switch: &RecoveringSwitch,
+) -> PendingEnableJournal {
+    app.current().then_can(&[N::RetryLoad]).then_cannot(&[N::Enable, N::TurnOff]);
+    let journal = pending_enable_journal().expect("the recovery's journal");
+    assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
+    assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::LoadFailed);
+    assert_eq!(requested_steps(app), vec![], "{}", app.describe());
+    a_state_report_waits_for_the_recovery(app, switch.transition_id);
+    journal
+}
+
+/// Try Again finds no durable completion, so it rolls the recovery all the way back: a
+/// recovered backup has no saved-passkey pause to go back to. The switch, still stopped, offers
+/// its own Try Again, whose next run recovers the backup again and goes on to the commit
+fn try_again_rolls_the_recovery_back_for_the_switch_to_run_again(
+    app: &mut TestApp,
+    switch: &RecoveringSwitch,
+) {
+    let uploads =
+        (app.cloud.count(CloudCall::UploadMasterKey), app.cloud.count(CloudCall::UploadWallet));
+    app.dispatch(CloudBackupManagerAction::RetryLoad).then_cannot(&[N::RetryLoad, N::Enable]);
+    assert_eq!(
+        (app.cloud.count(CloudCall::UploadMasterKey), app.cloud.count(CloudCall::UploadWallet)),
+        uploads,
+        "the recovery is local"
+    );
+    assert_rolled_back_for_the_switch_to_run_again(app, switch);
+}
+
+/// Nothing of the recovery is left and the switch, still stopped, offers its own Try Again,
+/// whose next run recovers the backup again and goes on to the commit
+fn assert_rolled_back_for_the_switch_to_run_again(app: &mut TestApp, switch: &RecoveringSwitch) {
+    assert!(recovered_active_key().is_none(), "{}", app.describe());
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().expect("metadata"),
+        switch.metadata
+    );
+    assert_eq!(promotion_status(), MasterKeyPromotionStatus::None);
+    assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    assert_eq!(paused_switch_controls(app), None, "a recovered backup has no pause");
+    assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+    assert_eq!(
+        availability(app, A::RetryDriveAccountSwitchRecovery),
+        Some(CloudBackupActionAvailability::Available),
+        "{}",
+        app.describe()
+    );
+
+    app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+        .then_cannot(&[N::Enable]);
+    assert_eq!(requested_steps(app), vec![Step_::ReportState], "{}", app.describe());
+    the_passkey_opens_the_recovered_backup(app);
+    platform_reports(
+        app,
+        Platform::State(DriveAccountSwitchPlatformState::Staged(switch.transition_id)),
+    )
+    .then_cannot(&[N::Enable]);
+    assert_switch_committing_the_recovered_backup(app, switch);
+}
+
+/// The recovered key is active under the backup's metadata, nothing of the recovery is left, and
+/// the switch asked the platform for its commit
+fn assert_switch_committing_the_recovered_backup(app: &TestApp, switch: &RecoveringSwitch) {
+    let active = recovered_active_key().expect("the recovered key is active");
+    assert_eq!(active.as_bytes(), switch.recovered_key.as_bytes(), "{}", app.describe());
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().expect("metadata"),
+        switch.metadata
+    );
+    assert_eq!(promotion_status(), MasterKeyPromotionStatus::None);
+    assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    assert_eq!(
+        switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(
+        requested_steps(app),
+        vec![Step_::Commit(switch.transition_id)],
+        "{}",
+        app.describe()
+    );
+}
+
+/// Each discovery takes the answer it finds, so the next recovery needs the passkey again
+fn the_passkey_opens_the_recovered_backup(app: &TestApp) {
+    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![7; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+}
+
+fn recovered_active_key() -> Option<MasterKey> {
+    Cspp::new(Keychain::global().clone()).load_master_key_from_store().expect("read active key")
+}
+
+fn promotion_status() -> MasterKeyPromotionStatus {
+    Cspp::new(Keychain::global().clone()).master_key_promotion_status().expect("read promotion")
+}
+
+/// Arms `fault` on the finalization's lifecycle write that saves the recovery's durable
+/// completion, once; `fails` says whether that write itself fails
+fn at_the_durable_completion(fails: bool, fault: impl Fn() + Send + 'static) {
+    let fired = Arc::new(Mutex::new(false));
+    Database::global().cloud_backup_state.fail_next_write_where(move |state| {
+        let mut fired = fired.lock();
+        if *fired || state.pending_verification_completion().is_none() {
+            return false;
+        }
+
+        *fired = true;
+        fault();
+        fails
+    });
+}
+
+/// Model review sequence: a switch's recovered promotion fails while it starts, after the
+/// journal records it: the keychain refuses the backup's namespace for the promotion and again
+/// for its rollback
+///
+/// The promotion stays started, which only the journal recovery can roll back, so the switch
+/// stops rather than failing. Its Try Again rolls the recovery all the way back, with no
+/// saved-passkey pause, and the switch's own Try Again then recovers the backup again
+#[test]
+fn a_recovered_switch_promotion_that_fails_to_start_or_roll_back_rolls_back_on_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_promotion_that_fails_to_start_or_roll_back_rolls_back_on_try_again"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_recovering_a_backup(&mut app, |app| {
+            app.keychain.fail_saves_of(CSPP_NAMESPACE_ID_KEY);
+        });
+        assert_recovered_promotion_stopped(&mut app, &switch);
+
+        app.keychain.clear_save_failures();
+        try_again_rolls_the_recovery_back_for_the_switch_to_run_again(&mut app, &switch);
+    });
+}
+
+/// Model review sequence: a switch's recovered finalization fails to save the durable
+/// completion, and the rollback of its promotion fails too, as the keychain refuses to remove
+/// the recovered key
+///
+/// The switch stops for the journal recovery, whose Try Again rolls the recovery back
+#[test]
+fn a_recovered_switch_finalization_whose_rollback_fails_rolls_back_on_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_finalization_whose_rollback_fails_rolls_back_on_try_again"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_recovering_a_backup(&mut app, |app| {
+            let keychain = app.keychain.clone();
+            at_the_durable_completion(true, move || {
+                keychain.fail_next_delete_of(ACTIVE_ENCRYPTION_KEY_ITEM);
+            });
+        });
+        assert_recovered_promotion_stopped(&mut app, &switch);
+        assert_eq!(persisted().pending_verification_completion(), None);
+
+        try_again_rolls_the_recovery_back_for_the_switch_to_run_again(&mut app, &switch);
+    });
+}
+
+/// A switch's recovered finalization saves its durable completion, and the read that would
+/// activate it fails, so the run can't tell whether the completion is there
+fn switch_whose_recovered_activation_read_fails(app: &mut TestApp) -> RecoveringSwitch {
+    // the lifecycle publish, the screen projection and the flags reconcile each read the record
+    // between the write and its callback, in the order the harness runtime runs them; the sixth
+    // read is the activation's
+    let switch = switch_recovering_a_backup(app, |_| {
+        at_the_durable_completion(false, || {
+            Database::global().cloud_backup_state.fail_read_after(5);
+        });
+    });
+    assert_recovered_promotion_stopped(app, &switch);
+    assert!(persisted().pending_verification_completion().is_some(), "{}", app.describe());
+    switch
+}
+
+/// Model review sequence: a switch's recovered finalization saves its durable completion, and
+/// the read that activates it fails
+///
+/// The completion is there, so the switch's Try Again finishes the promotion and hands the
+/// switch on to the platform's commit, with no second recovery
+#[test]
+fn a_recovered_switch_activation_that_fails_finishes_on_try_again() {
+    let test =
+        concat!(module_path!(), "::a_recovered_switch_activation_that_fails_finishes_on_try_again");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_whose_recovered_activation_read_fails(&mut app);
+        let authenticated = app.passkey.inner.authenticate_count();
+
+        app.dispatch(CloudBackupManagerAction::RetryLoad).then_cannot(&[N::RetryLoad, N::Enable]);
+        assert_switch_committing_the_recovered_backup(&app, &switch);
+        assert_eq!(app.passkey.inner.authenticate_count(), authenticated);
+    });
+}
+
+/// Model review sequence: as above, but the durable completion is gone by the time Try Again
+/// reads it
+///
+/// A finalization that succeeded always saved its completion, so the test removes it the way a
+/// lifecycle writer dropping it would. Without it, Try Again rolls the recovery back
+#[test]
+fn a_recovered_switch_activation_that_fails_without_its_completion_rolls_back_on_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_activation_that_fails_without_its_completion_rolls_back_on_try_again"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_whose_recovered_activation_read_fails(&mut app);
+
+        let mut record = persisted();
+        assert!(record.clear_pending_verification_completion());
+        Database::global().cloud_backup_state.set(&record).expect("drop the completion");
+
+        try_again_rolls_the_recovery_back_for_the_switch_to_run_again(&mut app, &switch);
+    });
+}
+
+/// Model review sequence: a switch's recovered promotion commits and saves its durable
+/// completion, and only the journal's final delete fails
+///
+/// The switch stops for the journal recovery, whose Try Again finds the promotion committed,
+/// removes the journal and hands the switch on to the platform's commit
+#[test]
+fn a_recovered_switch_promotion_whose_journal_cleanup_failed_goes_on_to_its_commit() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_promotion_whose_journal_cleanup_failed_goes_on_to_its_commit"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_recovering_a_backup(&mut app, |app| {
+            app.keychain.fail_next_delete_of(CSPP_PENDING_ENABLE_JOURNAL_KEY);
+        });
+        assert_recovered_promotion_stopped(&mut app, &switch);
+        assert_eq!(
+            recovered_active_key().map(|key| *key.as_bytes()),
+            Some(*switch.recovered_key.as_bytes())
+        );
+
+        app.dispatch(CloudBackupManagerAction::RetryLoad).then_cannot(&[N::RetryLoad, N::Enable]);
+        assert_switch_committing_the_recovered_backup(&app, &switch);
+    });
+}
+
+/// A switch's recovered promotion fails before its commit and rolls back, and the full rollback
+/// after it gets past the key and the metadata but can't delete the journal
+///
+/// The device's key was already gone, so the rollback leaves no key active while the journal
+/// still names the backup's metadata as the prior state. The switch stops for the journal
+/// recovery rather than failing, since its own retry would skip that recovery
+fn switch_whose_recovered_rollback_keeps_its_journal(app: &mut TestApp) -> RecoveringSwitch {
+    let switch = switch_recovering_a_backup(app, |app| {
+        app.keychain.fail_saves_of(ACTIVE_ENCRYPTION_KEY_ITEM);
+        app.keychain.fail_next_delete_of(CSPP_PENDING_ENABLE_JOURNAL_KEY);
+    });
+    let journal = assert_switch_stopped_for_the_recovery(app, &switch);
+    assert!(
+        matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)),
+        "{journal:?}\n{}",
+        app.describe()
+    );
+    assert!(recovered_active_key().is_none(), "{}", app.describe());
+    assert_eq!(promotion_status(), MasterKeyPromotionStatus::None);
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().expect("metadata"),
+        switch.metadata
+    );
+
+    app.keychain.clear_save_failures();
+    switch
+}
+
+/// Model review sequence: a switch's recovered promotion fails before its commit, and its
+/// rollback stops at the journal's delete
+///
+/// Try Again finishes the rollback from where it stopped, and the switch's own Try Again then
+/// recovers the backup again
+#[test]
+fn a_recovered_switch_rollback_that_keeps_its_journal_finishes_on_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_rollback_that_keeps_its_journal_finishes_on_try_again"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_whose_recovered_rollback_keeps_its_journal(&mut app);
+
+        try_again_rolls_the_recovery_back_for_the_switch_to_run_again(&mut app, &switch);
+    });
+}
+
+/// As above, but the app relaunches instead: the launch's journal recovery finishes the
+/// rollback, and the switch's Try Again recovers the backup again
+#[test]
+fn a_recovered_switch_rollback_that_keeps_its_journal_finishes_after_a_relaunch() {
+    let test = concat!(
+        module_path!(),
+        "::a_recovered_switch_rollback_that_keeps_its_journal_finishes_after_a_relaunch"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let switch = switch_whose_recovered_rollback_keeps_its_journal(&mut app);
+
+        app.relaunch().then_cannot(&[N::RetryLoad, N::Enable]);
+        assert_rolled_back_for_the_switch_to_run_again(&mut app, &switch);
+    });
 }

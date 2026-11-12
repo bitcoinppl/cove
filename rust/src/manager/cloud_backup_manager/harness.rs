@@ -18,6 +18,7 @@ mod invariants;
 mod model_tests;
 mod owner_tests;
 mod process;
+mod recovered_enable_tests;
 mod reset_tests;
 mod runtime;
 mod tests;

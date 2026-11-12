@@ -1689,12 +1689,28 @@ impl CloudBackupSupervisor {
         let end = self.runtime.finish_reset(outcome);
         debug!("Cloud Backup local reset finished: {outcome:?}, {end:?}");
 
-        // a reset that left Cloud Backup off ended any switch with the record, so a step that
-        // failed before it no longer needs the user; one that resumed the backup keeps its switch
-        let turned_off =
-            matches!(end, Some(ResetEnd::Wiped | ResetEnd::Abandoned(AbandonedReset::Disabled)));
-        if turned_off && let Some(manager) = self.manager() {
-            self.drive_account_switch_ended_by_reset(&manager);
+        match (end, self.manager()) {
+            // a reset that left Cloud Backup off cleared the keys and ended any switch with the
+            // record, so a step that failed before it no longer needs the user
+            (
+                Some(ResetEnd::Wiped | ResetEnd::Abandoned(AbandonedReset::Disabled)),
+                Some(manager),
+            ) => {
+                self.drive_account_switch_ended_by_reset(&manager);
+            }
+
+            // one that kept the keys keeps its switch, but dropped the paused work's material with
+            // the rest of its in-memory state, and may have cut off a finalization between its
+            // local promotion and its commit or rollback. The journal of both is taken up as a
+            // relaunch takes it up, before admission reopens, and a switch whose promotion it
+            // finishes goes on to its commit; a held recovery already owns that evidence
+            (Some(ResetEnd::Abandoned(AbandonedReset::Resumed)), Some(manager))
+                if self.runtime.admission_body() != AdmissionBody::PendingEnableRecovery =>
+            {
+                self.recover_journaled_enable(&manager);
+            }
+
+            _ => {}
         }
 
         // the reset dropped the cycle's queued work, and a scope reload it queued found the cycle

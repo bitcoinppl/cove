@@ -7,7 +7,7 @@
 
 use parking_lot::Mutex;
 
-use super::{PendingEnableJournal, PendingEnableJournalPhase};
+use super::{PendingEnableJournal, PendingEnableJournalPhase, PendingEnableNamespaceOwnership};
 use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 
 /// What the journal holds, as this process last wrote or read it
@@ -21,8 +21,9 @@ enum JournalFact {
     NoSavedPasskey,
     /// A fresh Enable's registered passkey waits for the user's Confirm or Discard
     SavedPasskey,
-    /// A local promotion began, and only a running finalization or the recovery may end it
-    PromotionStarted,
+    /// A local promotion began, or a recovered backup's work has no pause to go back to: only a
+    /// running operation or the recovery may end it
+    RecoveryOwned,
     /// The recovery could not read the journal
     Unreadable,
 }
@@ -35,9 +36,10 @@ impl JournalFact {
                 if matches!(
                     journal.phase(),
                     PendingEnableJournalPhase::LocalPromotionStarted(_)
-                ) =>
+                ) || journal.namespace_ownership()
+                    == PendingEnableNamespaceOwnership::RecoveredExisting =>
             {
-                Self::PromotionStarted
+                Self::RecoveryOwned
             }
             Some(_) | None => Self::NoSavedPasskey,
         }
@@ -73,7 +75,7 @@ pub(crate) fn pending_work() -> PendingWork {
         (JournalFact::NotRead | JournalFact::NoSavedPasskey, _) => PendingWork::None,
         (JournalFact::SavedPasskey, Some(owner)) => PendingWork::Paused(owner),
         (JournalFact::SavedPasskey, None)
-        | (JournalFact::PromotionStarted | JournalFact::Unreadable, _) => PendingWork::Unavailable,
+        | (JournalFact::RecoveryOwned | JournalFact::Unreadable, _) => PendingWork::Unavailable,
     }
 }
 

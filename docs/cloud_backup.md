@@ -203,11 +203,25 @@ A local reset that leaves Cloud Backup off ends the switch with its record, a
 step that failed included, so the screen shows Cloud Backup off rather than the
 switch's Try Again. Android's next state report then finalizes or rolls back
 whatever it still holds of a switch Rust no longer records. A reset that
-resumes the backup keeps the switch as it was.
+resumes the backup keeps the switch as it was, and runs the pending-enable
+journal's recovery, which hands the switch a reinitialize whose promotion it
+finished.
 
-A run of the switch's reinitialize ends one of three ways: succeeded, failed,
-or paused for its saved passkey. Each moves the switch to its next phase, and
-only a run that succeeded keeps its claim, through the platform's commit. When
+A run of the switch's reinitialize ends one of four ways: succeeded, failed,
+paused for its saved passkey, or stopped after its local promotion started.
+The first three move the switch to their next phase, and only a run that
+succeeded keeps its claim, through the platform's commit. A run that stopped
+after its promotion started, say because the keychain refused the journal's
+final delete after the durable completion was saved, or because the promotion's
+active-key write and its rollback both failed, has not failed: the switch
+stays reinitializing and the promotion is the journal recovery's. A promotion
+that fails and rolls back fully is an ordinary failure, with the pause its
+journal records again, or, for a recovered backup, nothing left of the run. The
+screen shows the load failure's Try Again, Android's state report waits
+meanwhile instead of starting another reinitialize, and that Try Again, or the
+next launch, runs the recovery, which hands the switch its finished
+reinitialize. A plain reinitialize stopped the same way isn't offered again
+either. When
 saving that phase fails, the run's claim ends anyway, the record still says
 reinitializing, and the supervisor keeps how the run ended in memory. The
 switch then shows the save failure with Try Again. Try Again, Android's state
@@ -372,7 +386,7 @@ writes the fact itself.
 | Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |
 | Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
 | Pending Enable journal (keychain), and the in-memory view of it admission and the screen read (`PendingWork`) | `PendingEnableCoordinator`; the journal's keychain accessors update the view on every write, read and delete | The Enable and recovery operations; the supervisor names the work that owns the journal when that work starts or the recovery takes it up |
-| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim; the restart and any Confirm, Discard or run that finds none held, which take it up from the journal |
+| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim; the restart, a reset abandoned before its wipe, and any Confirm, Discard or run that finds none held, which take it up from the journal |
 | Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, the other-backups scan |
 | Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
@@ -586,9 +600,51 @@ journal too. An Enable's prompts hold no material, so their Discard
 closes them without reading the journal.
 
 A journal the recovery can't read is unavailable, never a saved passkey. So is
-a started promotion no running finalization owns. While nothing runs, the
-screen shows the load failure with Try Again, which runs the recovery again
-and, once the keychain reads, gives the pause back without a relaunch.
+a started promotion no running finalization owns, and so is the journal of a
+recovered backup nothing runs for: recovered work has no saved-passkey pause,
+so its journal outside a run is cleanup a failed run couldn't finish, which no
+new recovery may stage beside. While nothing runs, the screen shows the load
+failure with Try Again, which runs the recovery again and, once the keychain
+reads, gives the pause back, finishes the promotion, or runs the cleanup
+again, without a relaunch. Android's switch state reports wait while it is shown.
+
+A recovered backup's run that fails rolls the device all the way back to
+before it began, through the one abort the restart's recovery also runs. An
+existing backup is only recovered while no local key is active, and the
+coordinator refuses to stage one otherwise, so before it began there was no
+key: the abort removes the recovered key and its stage, restores the passkey
+metadata and deletes the journal, and the run offered again recovers the
+backup from the start. When a step of the abort fails, the run stops for the
+recovery instead of failing, and a switch stays reinitializing rather than
+offering its own retry, which would skip the recovery. The journal keeps the
+work the recovery's, and Try Again or a relaunch runs the abort again. Each
+step can run again, so the abort picks up after any step that finished, as long
+as the keychain holds only this recovery's material: the journal's staged key,
+or, once the key's rollback finished, no active key, so it refuses a key active
+then. A journal that can't be read keeps the load failure until it reads. Any
+other error in the recovery, a refused abort included, goes to the recovery
+assessment: for an idle Enable or reinitialize, that offers local cleanup when
+the device still matches its prior configuration, and support otherwise. A
+switch can't enter that recovery and keeps the load failure.
+
+A local promotion runs to its commit or its rollback under the restart's
+recovery, which a relaunch and a local reset abandoned before its wipe both
+run. The reset cancels the finalization between the promotion and the durable
+completion, and the write lane drops that finalization's late writes, so the
+recovery decides from durable state alone: a matching durable completion
+finishes the promotion, and without one the promotion rolls back to the stage
+it promoted, the previous backup is active again, and the pause waits on its
+saved passkey as before. A recovered backup's promotion has no pause to wait
+in, so without a completion it rolls all the way back instead. A Google Drive
+account switch's reinitialize records its durable completion in the backup the
+switch carries, and the recovery
+reads it there. When the switch still records that reinitialize, the recovery
+hands the switch its finished reinitialize: the switch saves that it waits for
+the platform's commit and asks for it, so the platform's next report doesn't
+run a second reinitialize beside the backup that exists. A matching completion
+beside a switch in any other phase is a conflict, which the interrupted-Enable
+recovery shows. The same recovery returns any other pause the reset dropped,
+with the controls it had.
 
 Work paused on its saved passkey owns the screen while nothing runs, whichever
 work it is: the body is `SavedPasskeyConfirmation`, with Rust's title and

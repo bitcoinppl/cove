@@ -792,6 +792,9 @@ impl PasskeyProvider for HarnessPasskey {
     }
 }
 
+/// A hold on the next keychain read of a key the predicate names
+type ReadHold = (fn(&str) -> bool, Hold);
+
 /// File-backed keychain that survives process death
 #[derive(Debug, Clone)]
 pub(crate) struct HarnessKeychain {
@@ -801,6 +804,12 @@ pub(crate) struct HarnessKeychain {
     slow_deletes: Arc<Mutex<Option<Duration>>>,
     /// Holds the next delete of the namespace item until the test releases it
     namespace_delete_hold: Arc<Mutex<Option<Hold>>>,
+    /// Holds the next read of a key the predicate names until the test releases it
+    read_hold: Arc<Mutex<Option<ReadHold>>>,
+    /// Fails the next delete of this key, as a platform keychain that refuses it once
+    failing_delete: Arc<Mutex<Option<&'static str>>>,
+    /// Fails every save of this key until cleared, as a platform keychain that keeps refusing it
+    failing_save: Arc<Mutex<Option<&'static str>>>,
 }
 
 impl HarnessKeychain {
@@ -811,6 +820,9 @@ impl HarnessKeychain {
             file: Arc::new(file),
             slow_deletes: Arc::default(),
             namespace_delete_hold: Arc::default(),
+            read_hold: Arc::default(),
+            failing_delete: Arc::default(),
+            failing_save: Arc::default(),
         };
         let flushed = keychain.clone();
         on_checkpoint(move || flushed.persist());
@@ -832,22 +844,58 @@ impl HarnessKeychain {
         hold.label("held keychain namespace delete".into());
         *self.namespace_delete_hold.lock() = Some(hold);
     }
+
+    /// Holds the next read of a key `matches` names, on the thread that reads it
+    pub(crate) fn hold_next_read_where(&self, matches: fn(&str) -> bool, hold: Hold) {
+        hold.label("held keychain read".into());
+        *self.read_hold.lock() = Some((matches, hold));
+    }
+
+    /// Fails the next delete of `key`, leaving the item in place; later deletes work again
+    pub(crate) fn fail_next_delete_of(&self, key: &'static str) {
+        *self.failing_delete.lock() = Some(key);
+    }
+
+    /// Fails every save of `key`, leaving the stored value as it was, until
+    /// [`Self::clear_save_failures`]
+    pub(crate) fn fail_saves_of(&self, key: &'static str) {
+        *self.failing_save.lock() = Some(key);
+    }
+
+    pub(crate) fn clear_save_failures(&self) {
+        *self.failing_save.lock() = None;
+    }
 }
 
 impl KeychainAccess for HarnessKeychain {
     fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+        if *self.failing_save.lock() == Some(key.as_str()) {
+            return Err(KeychainError::Save);
+        }
+
         let result = self.inner.save(key, value);
         self.persist();
         result
     }
 
     fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
-        self.inner.get(key)
+        let hold =
+            self.read_hold.lock().take_if(|(matches, _)| matches(&key)).map(|(_, hold)| hold);
+        let Some(hold) = hold else { return self.inner.get(key) };
+
+        hold.block_until_released();
+        let value = self.inner.get(key);
+        hold.finish();
+        value
     }
 
     fn delete(&self, key: String) -> bool {
         if let Some(duration) = *self.slow_deletes.lock() {
             std::thread::sleep(duration);
+        }
+
+        if self.failing_delete.lock().take_if(|failing| *failing == key).is_some() {
+            return false;
         }
 
         let hold = (key == CSPP_NAMESPACE_ID_KEY)

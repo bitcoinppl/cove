@@ -8,7 +8,7 @@ use super::wallets::{StagedPrfKey, UnpersistedPrfKey};
 mod coordinator;
 pub(crate) mod evidence;
 
-pub(crate) use coordinator::PendingEnableCoordinator;
+pub(crate) use coordinator::{PendingEnableCoordinator, PromotionStartError};
 pub(crate) use evidence::PendingWork;
 
 pub(crate) const PENDING_ENABLE_JOURNAL_VERSION: u8 = 1;

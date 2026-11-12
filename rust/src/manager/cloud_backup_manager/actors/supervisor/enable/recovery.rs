@@ -10,11 +10,15 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(completion) => {
-                if let Err(error) = self.start_enable_recovery_finalization(claim, completion) {
-                    self.fail_enable_recovery_before_commit(&manager, claim, error);
-                }
+        match result.map(|completion| self.start_enable_recovery_finalization(claim, completion)) {
+            Ok(Ok(())) => {}
+            Ok(Err(PromotionStartError::Failed(error))) => {
+                self.fail_enable_recovery_before_commit(&manager, claim, error);
+            }
+            // the recovered promotion started and stayed: rolling back the recovery's staged key
+            // would refuse it, and the journal recovery rolls it back instead
+            Ok(Err(PromotionStartError::NeedsRecovery(error))) => {
+                self.stop_enable_for_promotion_recovery(&manager, claim, error);
             }
             Err(error) => {
                 error!("enable recovery failed: {error}");
@@ -68,7 +72,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         completion: CloudBackupEnableRecoveryCompletion,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<(), PromotionStartError> {
         let CloudBackupEnableRecoveryCompletion {
             context,
             namespace_id,
@@ -138,12 +142,13 @@ impl CloudBackupSupervisor {
             pending_completion,
             context.verification_source,
         );
+        // as a fresh Enable's finalization: a started promotion that is neither finished nor
+        // rolled back is the journal recovery's, not a failed run. A recovered backup has no
+        // pause to keep, so it rolls back all the way, as the restart's recovery does
         match (result, activation) {
             (Err(error), Err(_)) => {
-                if let Err(rollback) =
-                    manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
-                {
-                    self.fail_enable_operation(
+                if let Err(rollback) = manager.pending_enable.abort_recovered_existing_enable() {
+                    self.stop_enable_for_promotion_recovery(
                         &manager,
                         claim,
                         CloudBackupError::Internal(
@@ -159,7 +164,7 @@ impl CloudBackupSupervisor {
                 return Produces::ok(());
             }
             (Ok(()), Err(error)) => {
-                self.fail_enable_operation(&manager, claim, error);
+                self.stop_enable_for_promotion_recovery(&manager, claim, error);
                 return Produces::ok(());
             }
             (Err(error), Ok(())) => {
@@ -173,7 +178,7 @@ impl CloudBackupSupervisor {
         // reset verification while the pending-enable journal still owns completion
         manager.apply_verification_state(VerificationState::Idle);
         if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
-            self.fail_enable_operation(&manager, claim, error);
+            self.stop_enable_for_promotion_recovery(&manager, claim, error);
             return Produces::ok(());
         }
 
@@ -213,9 +218,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) {
-        match manager.pending_enable.rollback_enable_recovery_master_key() {
+        match manager.pending_enable.abort_recovered_existing_enable() {
             Ok(()) => self.fail_enable_operation(manager, claim, error),
-            Err(rollback) => self.fail_enable_operation(
+            // the journal stays, so the rest of the abort is the journal recovery's, as for the
+            // finalization's failed abort: a failed switch's retry would skip that recovery
+            Err(rollback) => self.stop_enable_for_promotion_recovery(
                 manager,
                 claim,
                 CloudBackupError::Internal(

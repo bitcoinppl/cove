@@ -133,7 +133,7 @@ use self::owner::lifecycle::{DisablingRecord, LifecycleLoad, LifecycleWriter};
 pub(crate) use self::pending_enable::{
     PENDING_ENABLE_JOURNAL_VERSION, PendingEnableCoordinator, PendingEnableJournal,
     PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnablePasskeyMetadata, PendingEnableSession, PendingWork,
+    PendingEnablePasskeyMetadata, PendingEnableSession, PendingWork, PromotionStartError,
 };
 pub(crate) use self::pending_verification::{
     PendingVerificationCompletion, PendingVerificationUpload,
