@@ -9,7 +9,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -196,14 +196,17 @@ pub(crate) enum TestRelayBehavior {
 /// gets, so a test can tell which relays a session used
 pub(crate) struct TestRelay {
     url: Url,
-    requests: Arc<AtomicUsize>,
+    state: Arc<TestRelayState>,
     server: AbortHandle,
 }
 
 struct TestRelayState {
     behavior: TestRelayBehavior,
     client: reqwest::Client,
-    requests: Arc<AtomicUsize>,
+    requests: AtomicUsize,
+
+    // set by `go_down`, after which the relay answers as `TestRelayBehavior::Down` does
+    down: AtomicBool,
 }
 
 impl TestRelay {
@@ -219,16 +222,20 @@ impl TestRelay {
             .await
             .expect("a loopback port for the test relay");
         let port = listener.local_addr().expect("the test relay has an address").port();
-        let requests = Arc::new(AtomicUsize::new(0));
-        let state = Arc::new(TestRelayState { behavior, client, requests: requests.clone() });
+        let state = Arc::new(TestRelayState {
+            behavior,
+            client,
+            requests: AtomicUsize::new(0),
+            down: AtomicBool::new(false),
+        });
 
-        let app = axum::Router::new().fallback(relay_request).with_state(state);
+        let app = axum::Router::new().fallback(relay_request).with_state(state.clone());
         let server = tokio::spawn(async move {
             axum::serve(listener, app).await.expect("the test relay serves");
         });
 
         let url = Url::parse(&format!("http://127.0.0.1:{port}")).expect("a valid URL");
-        Self { url, requests, server: server.abort_handle() }
+        Self { url, state, server: server.abort_handle() }
     }
 
     pub(crate) fn url(&self) -> &Url {
@@ -237,7 +244,12 @@ impl TestRelay {
 
     /// How many requests reached this relay
     pub(crate) fn requests(&self) -> usize {
-        self.requests.load(Ordering::SeqCst)
+        self.state.requests.load(Ordering::SeqCst)
+    }
+
+    /// Makes the relay answer every later request as a down relay does
+    pub(crate) fn go_down(&self) {
+        self.state.down.store(true, Ordering::SeqCst);
     }
 
     /// A sender config that tries `relays` in the given order and waits up to `session_timeout`
@@ -263,6 +275,9 @@ async fn relay_request(
     body: Bytes,
 ) -> Response {
     state.requests.fetch_add(1, Ordering::SeqCst);
+    if state.down.load(Ordering::SeqCst) {
+        return StatusCode::BAD_GATEWAY.into_response();
+    }
 
     let upstream = match &state.behavior {
         TestRelayBehavior::Forward(upstream) => upstream,

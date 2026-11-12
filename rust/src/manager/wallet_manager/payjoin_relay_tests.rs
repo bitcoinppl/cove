@@ -1,6 +1,6 @@
 //! Which OHTTP relays a Payjoin sender session sends through: it adopts the first relay whose
-//! answer passes `process_response`, sends every later request through that relay alone, and
-//! keeps it when the session resumes after a restart (#910)
+//! answer passes `process_response`, sends every later request through that relay alone, even
+//! while it fails, and keeps it when the session resumes after a restart (#910)
 
 use std::time::Duration;
 
@@ -112,6 +112,61 @@ async fn a_resumed_session_keeps_its_saved_relay() {
     assert_eq!(down.requests(), 1, "only the POST's first attempt reached the down relay");
 }
 
+/// A session whose saved relay is no longer configured after a restart broadcasts the original
+/// transaction rather than send the session through a second relay
+#[tokio::test(flavor = "current_thread")]
+async fn a_resumed_session_whose_relay_was_removed_falls_back() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let adopted = TestRelay::forwarding_to(&services, 0).await;
+    let other = TestRelay::forwarding_to(&services, 1).await;
+    let mut payment = Payment::prepare(&mut fx, &services).await;
+
+    payment.start(TestRelay::sender_config(&[&adopted], SESSION_TIMEOUT)).await;
+    payment.wait_for_original().await;
+    wait_until("a poll through the adopted relay", || adopted.requests() >= 2).await;
+
+    call!(
+        payment
+            .manager
+            .actor
+            .restart_payjoin_session_for_test(TestRelay::sender_config(&[&other], SESSION_TIMEOUT))
+    )
+    .await
+    .expect("the wallet actor answers");
+
+    payment.wait_for_fallback(&fx).await;
+    assert_eq!(other.requests(), 0, "the resumed session never tried the other relay");
+}
+
+/// After the POST, the adopted relay goes down, so the session keeps retrying it until the
+/// session times out and broadcasts the original transaction, never trying the other relay
+#[tokio::test(flavor = "current_thread")]
+async fn a_failing_adopted_relay_is_retried_until_the_session_falls_back() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let adopted = TestRelay::forwarding_to(&services, 0).await;
+    let other = TestRelay::forwarding_to(&services, 1).await;
+    let mut payment = Payment::prepare(&mut fx, &services).await;
+
+    payment.start(TestRelay::sender_config(&[&adopted, &other], Duration::from_secs(10))).await;
+    payment.wait_for_original().await;
+    wait_until("a poll through the adopted relay", || adopted.requests() >= 2).await;
+    assert_eq!(payment.saved_relay().await.as_ref(), Some(adopted.url()));
+
+    adopted.go_down();
+    let before_outage = adopted.requests();
+    payment.wait_for_fallback(&fx).await;
+
+    assert!(
+        adopted.requests() >= before_outage + 2,
+        "the session retried the adopted relay while it was down"
+    );
+    assert_eq!(other.requests(), 0, "the session never switched to the other relay");
+}
+
 /// A funded hot wallet with a Max payment to a BIP 77 receiver, ready to start as a Payjoin
 struct Payment {
     manager: RustWalletManager,
@@ -190,6 +245,22 @@ impl Payment {
             .expect("the wallet actor answers")
             .expect("the session record exists")
             .ohttp_relay
+    }
+
+    /// Waits for the sender to give up on the Payjoin and broadcast the original transaction
+    async fn wait_for_fallback(&self, fx: &Fixture) {
+        wait_until("the original transaction to be broadcast", || {
+            !fx.node.chain().broadcasts().is_empty()
+        })
+        .await;
+
+        let broadcasts = fx.node.chain().broadcasts();
+        assert_eq!(broadcasts.len(), 1, "the node accepted exactly one transaction");
+        assert_eq!(
+            broadcasts[0].compute_txid(),
+            self.psbt.unsigned_tx.compute_txid(),
+            "the broadcast is the original transaction"
+        );
     }
 
     /// Answers with the receiver's proposal and waits for the sender to broadcast it
