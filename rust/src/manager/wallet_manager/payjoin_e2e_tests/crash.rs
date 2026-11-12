@@ -20,7 +20,7 @@ use std::{
 };
 
 use act_zero::{Addr, AddrLike as _, call};
-use bitcoin::{Amount, FeeRate as BdkFeeRate, Psbt, Transaction, Txid};
+use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, Psbt, Transaction, Txid};
 use cove_device::keychain::WalletSecret;
 use cove_fake_node::{Protocol, Scripted};
 use cove_tokio::task::spawn_actor;
@@ -41,8 +41,7 @@ use crate::{
     manager::import_wallet_manager::import_mnemonic_with_target,
     test_support::{
         loaded_host_wait,
-        payjoin::PayjoinReceiver,
-        payjoin::PayjoinServices,
+        payjoin::{PayjoinReceiver, PayjoinServices, TestRelay, TestRelayBehavior},
         payjoin_crash::{CrashSwitch, DurableStep, FlakyStore},
     },
     wallet::{Address, Wallet, metadata::WalletId, metadata::WalletMode},
@@ -185,7 +184,8 @@ impl CrashRun {
         let id = wallet.id.clone();
         fx.own(&id);
 
-        let config = services.sender_config(SESSION_TIMEOUT);
+        let relay = TestRelay::forwarding_to(services, 0).await;
+        let config = TestRelay::sender_config(&[&relay], SESSION_TIMEOUT);
         let switch = CrashSwitch::after(self.stop_after);
         switch.install_on(&fx.node);
 
@@ -200,6 +200,7 @@ impl CrashRun {
         )
         .await;
         let psbt = first.pay(&receiver).await;
+        let receiver_coin = receiver.coin_outpoint();
 
         // the receiver answers whenever the Original reaches it, in either process's lifetime
         let answer = self.answer;
@@ -218,9 +219,9 @@ impl CrashRun {
             first.kill(&self).await;
             fx.node.clear_rules();
 
-            let mut recovery = Recovery::install(self.fault, &fx, &id);
+            let mut recovery = Recovery::install(self.fault, &fx, &id, &relay);
             let second = WalletProcess::launch(&id, config, |db| recovery.store(db));
-            recovery.after_startup(&id, &second).await;
+            recovery.after_startup(&id, &second, &relay).await;
             let retries = second.until_settled(&self).await;
 
             (second, retries)
@@ -231,8 +232,10 @@ impl CrashRun {
             recovered = recovered => recovered,
         };
 
-        self.assert_one_transaction_sent(&fx, &psbt);
+        let sent = self.assert_one_transaction_sent(&fx, &psbt, receiver_coin);
         second.assert_session_finished(&self).await;
+        second.kill(&self).await;
+        self.assert_wallet_saved(&id, sent, &psbt);
 
         if self.fault == RecoveryFault::None {
             assert_eq!(retries, 0, "{self}: a clean relaunch finishes the session on its own");
@@ -252,7 +255,15 @@ impl CrashRun {
     /// mempool for a moment would, so a proposal and an Original both reaching it would show
     /// here. Sending the same transaction twice is allowed, since a relaunch cannot know whether
     /// the node got it
-    fn assert_one_transaction_sent(&self, fx: &Fixture, psbt: &Psbt) {
+    ///
+    /// A proposal must spend the receiver's coin, so a transaction the sender rebuilt on its own
+    /// counts as neither
+    fn assert_one_transaction_sent(
+        &self,
+        fx: &Fixture,
+        psbt: &Psbt,
+        receiver_coin: OutPoint,
+    ) -> Txid {
         let sender_coin = psbt.unsigned_tx.input[0].previous_output;
         let spends: BTreeSet<Txid> = fx
             .node
@@ -267,12 +278,32 @@ impl CrashRun {
             panic!("{self}: exactly one transaction spending the sender's coin, got {spends:?}");
         };
 
-        let kind = if sent == psbt.unsigned_tx.compute_txid() {
-            PayjoinTransactionKind::Fallback
-        } else {
-            PayjoinTransactionKind::Proposal
+        let sent_tx = fx.node.chain().broadcasts().into_iter().find(|tx| tx.compute_txid() == sent);
+        let spends_receiver_coin = sent_tx
+            .expect("the node keeps the transaction it accepted")
+            .input
+            .iter()
+            .any(|input| input.previous_output == receiver_coin);
+        let kind = match (sent == psbt.unsigned_tx.compute_txid(), spends_receiver_coin) {
+            (true, _) => PayjoinTransactionKind::Fallback,
+            (false, true) => PayjoinTransactionKind::Proposal,
+            (false, false) => panic!("{self}: {sent} is neither the Original nor a proposal"),
         };
         assert_eq!(kind, self.expected_kind(), "{self}: the node got the expected transaction");
+
+        sent
+    }
+
+    /// Checks the wallet as the next launch would load it has saved the sent transaction and
+    /// no longer counts the coin it spent
+    fn assert_wallet_saved(&self, id: &WalletId, sent: Txid, psbt: &Psbt) {
+        let sender_coin = psbt.unsigned_tx.input[0].previous_output;
+        let wallet = Wallet::try_load_persisted(id.clone()).expect("the wallet loads");
+        assert!(wallet.bdk.get_tx(sent).is_some(), "{self}: the wallet saved {sent}");
+        assert!(
+            wallet.bdk.list_unspent().all(|coin| coin.outpoint != sender_coin),
+            "{self}: the wallet counts its paid coin as spent"
+        );
     }
 }
 
@@ -437,25 +468,32 @@ impl WalletProcess {
 struct Recovery {
     fault: RecoveryFault,
     hidden_secret: Option<WalletSecret>,
+    held_relay: Option<TestRelayBehavior>,
 }
 
 impl Recovery {
-    fn install(fault: RecoveryFault, fx: &Fixture, id: &WalletId) -> Self {
-        let mut hidden_secret = None;
+    fn install(fault: RecoveryFault, fx: &Fixture, id: &WalletId, relay: &TestRelay) -> Self {
+        let mut recovery = Self { fault, hidden_secret: None, held_relay: None };
         match fault {
             RecoveryFault::None | RecoveryFault::WriteFailsOnce => {}
 
             RecoveryFault::SigningUnavailable => {
                 let keychain = Keychain::global();
                 let secret = keychain.get_wallet_secret(id).expect("the secret reads");
-                hidden_secret = Some(secret.expect("a hot wallet has a secret"));
+                recovery.hidden_secret = Some(secret.expect("a hot wallet has a secret"));
                 assert!(keychain.delete_wallet_secret(id), "the secret is hidden");
+
+                // a resumed session must not hear from the receiver before the secret is back,
+                // or it could sign a fresh proposal while the secret is still hidden, so only
+                // startup's own recovery meets the hidden secret
+                recovery.held_relay = Some(relay.behavior());
+                relay.set_behavior(TestRelayBehavior::Down);
             }
 
             RecoveryFault::BroadcastRefusedOnce => refuse_first_broadcast(fx),
         }
 
-        Self { fault, hidden_secret }
+        recovery
     }
 
     fn store(&self, db: WalletDataDb) -> Arc<dyn PayjoinSessionStore> {
@@ -467,11 +505,15 @@ impl Recovery {
 
     /// Ends a fault that only lasts through startup, once the wallet has answered a message and
     /// so finished its startup resume
-    async fn after_startup(&mut self, id: &WalletId, process: &WalletProcess) {
+    async fn after_startup(&mut self, id: &WalletId, process: &WalletProcess, relay: &TestRelay) {
         let _status =
             call!(process.actor.payjoin_status()).await.expect("the wallet actor answers");
         if let Some(secret) = self.hidden_secret.take() {
             Keychain::global().save_wallet_secret(id, secret).expect("the secret is restored");
+        }
+
+        if let Some(behavior) = self.held_relay.take() {
+            relay.set_behavior(behavior);
         }
     }
 }
