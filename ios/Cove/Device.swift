@@ -11,4 +11,17 @@ class DeviceAccesor: DeviceAccess {
     func timezone() -> String {
         TimeZone.current.identifier
     }
+
+    func buildChannel() -> BuildChannel {
+        #if DEBUG
+            return .debug
+        #else
+            // TestFlight installs carry a sandbox receipt, App Store installs don't
+            if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+                return .beta
+            }
+
+            return .release
+        #endif
+    }
 }

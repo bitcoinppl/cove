@@ -226,19 +226,11 @@ private enum SendFlowManagerAccessError: LocalizedError {
         previousWorkItem?.cancel()
     }
 
-    public func setAddress(_ address: Address) {
+    /// Pay a scanned address or BIP 21 payment request, with its amount and Payjoin endpoint
+    public func setPaymentRequest(_ request: AddressWithNetwork) {
         guard canApplyReconcileMessages else { return }
 
-        self._enteringAddress = address.unformatted()
-        self.address = address
-        self.dispatch(action: .notifyAddressChanged(address))
-    }
-
-    public func setAmount(_ amount: Amount) {
-        guard canApplyReconcileMessages else { return }
-
-        self.amount = amount
-        self.dispatch(action: .notifyAmountChanged(amount))
+        self.dispatch(action: .setPaymentRequest(request))
     }
 
     public func refreshPresenters() {
