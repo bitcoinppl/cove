@@ -305,6 +305,31 @@ fn wallets_without_a_store_are_searched_from_their_keychain_descriptors() {
 }
 
 #[test]
+fn a_wallet_still_on_the_legacy_file_store_is_reported_as_unchecked() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+    let legacy = save_store_less_watch_only(
+        Some(bip84_pair(&mnemonic, Network::Bitcoin)),
+        Network::Bitcoin,
+        WalletMode::Main,
+    );
+
+    // only opening the wallet migrates its file store, which may hold addresses past the gap
+    let [file_store_path, ..] = BdkStore::wallet_store_artifact_paths(&legacy.id);
+    std::fs::write(&file_store_path, b"legacy").unwrap();
+
+    // the keychain mirror would find index 0, but it must not stand in for the unmigrated store
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 0);
+    let ownership = find_owners(&address);
+    std::fs::remove_file(&file_store_path).unwrap();
+
+    assert_eq!(
+        ownership,
+        AddressOwnership::NotFound { unchecked_wallets: vec![UncheckedWallet::from(&legacy)] }
+    );
+}
+
+#[test]
 fn a_wallet_with_no_descriptors_is_reported_as_unchecked() {
     let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
     let degraded = save_store_less_watch_only(None, Network::Bitcoin, WalletMode::Main);
