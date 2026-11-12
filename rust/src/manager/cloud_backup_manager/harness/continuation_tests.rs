@@ -11,8 +11,9 @@ use cove_cspp::master_key_crypto::encrypt_master_key;
 use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyError};
 
 use super::{
-    FakeAccount, NextAction as N, PhaseEnd, TestApp, keychain_namespace, load_detail, persisted,
-    run_case,
+    CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PhaseEnd, TestApp,
+    assert_uploads_confirmed_in, change_a_wallet, keychain_namespace, load_detail, persisted,
+    run_case, seed_an_uploaded_wallet,
 };
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
 use crate::manager::cloud_backup_manager::actors::write::Decision;
@@ -337,5 +338,79 @@ fn discard_from_the_existing_backup_prompt_clears_it() {
         assert_eq!(app.manager().current_status(), CloudBackupStatus::Disabled);
         assert!(app.cloud.inner.has_namespace(&namespace));
         assert_eq!(app.passkey.inner.create_count(), 0);
+    });
+}
+
+/// A reinitialize moves the backup to a new namespace under a new master key, and every wallet
+/// it uploads is confirmed there, though the wallet's upload row began in the replaced namespace:
+/// a row left naming that one has its confirmation read the replaced backup, which the new key
+/// can't decrypt, and fails for good
+#[test]
+fn a_reinitialize_confirms_its_uploads_in_the_new_namespace() {
+    let test =
+        concat!(module_path!(), "::a_reinitialize_confirms_its_uploads_in_the_new_namespace");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let old_namespace = seed_an_uploaded_wallet(&mut app);
+
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
+        app.dispatch(CloudBackupManagerAction::ReinitializeBackup)
+            .then_cannot(&[N::TurnOff, N::Verify]);
+        app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[
+            N::Enable,
+            N::TurnOff,
+            N::Verify,
+        ]);
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.tap_saved_passkey(Control::Confirm).then_can(&[N::TurnOff, N::Verify]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+
+        let new_namespace = keychain_namespace().expect("a configured namespace");
+        assert_ne!(new_namespace, old_namespace, "{}", app.describe());
+        assert_uploads_confirmed_in(&app, &new_namespace);
+    });
+}
+
+/// A wallet that changes while a reinitialize uploads it keeps its row from the replaced
+/// namespace, since the reinitialize uploaded an older revision. Its own upload, once the
+/// reinitialize ends, goes to the new namespace and is confirmed there
+#[test]
+fn a_change_during_a_reinitialize_uploads_and_confirms_in_the_new_namespace() {
+    let test = concat!(
+        module_path!(),
+        "::a_change_during_a_reinitialize_uploads_and_confirms_in_the_new_namespace"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let old_namespace = seed_an_uploaded_wallet(&mut app);
+
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
+        app.dispatch(CloudBackupManagerAction::ReinitializeBackup)
+            .then_cannot(&[N::TurnOff, N::Verify]);
+        app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[
+            N::Enable,
+            N::TurnOff,
+            N::Verify,
+        ]);
+
+        // the confirmed reinitialize holds on its wallet upload while the wallet changes
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::UploadWallet, CloudFault::Hold(hold.clone()));
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.tap_saved_passkey(Control::Confirm).then_cannot(&[N::Enable]);
+        app.block_on("the reinitialize's wallet upload to be held", hold.entered());
+        app.event("a local wallet changed", |app| {
+            change_a_wallet(app).expect("a seeded wallet changed");
+        })
+        .then_cannot(&[N::Enable]);
+
+        app.event("the held upload completes", |_| hold.release()).then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+
+        let new_namespace = keychain_namespace().expect("a configured namespace");
+        assert_ne!(new_namespace, old_namespace, "{}", app.describe());
+        assert_uploads_confirmed_in(&app, &new_namespace);
     });
 }

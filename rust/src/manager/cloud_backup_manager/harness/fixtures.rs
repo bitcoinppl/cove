@@ -12,7 +12,7 @@ use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::app::{NextAction, TestApp};
 use crate::database::Database;
-use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
     wallet_entry_with_labels, xpub_only_wallet_metadata,
@@ -233,6 +233,44 @@ pub(crate) fn change_a_wallet(app: &TestApp) -> Option<WalletId> {
         .expect("save the changed wallet");
     app.manager().handle_wallet_metadata_update(&before, &after);
     Some(after.id)
+}
+
+/// Seeds a configured backup of one wallet and uploads a change to that wallet, so the wallet has
+/// an upload row in the seeded namespace, which this returns
+pub(crate) fn seed_an_uploaded_wallet(app: &mut TestApp) -> String {
+    let namespace = FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    app.event("a local wallet changed", |app| {
+        change_a_wallet(app).expect("a seeded wallet changed");
+    })
+    .then_can(&[NextAction::TurnOff]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[NextAction::TurnOff]);
+
+    let rows = Database::global().cloud_blob_sync_states.list().expect("read the upload rows");
+    assert!(
+        rows.iter().any(|row| row.wallet_id().is_some() && row.namespace_id == namespace),
+        "the changed wallet has an upload row in {namespace}: {rows:#?}"
+    );
+
+    namespace
+}
+
+/// Every upload row names `namespace`, and every wallet's upload there is confirmed
+pub(crate) fn assert_uploads_confirmed_in(app: &TestApp, namespace: &str) {
+    let rows = Database::global().cloud_blob_sync_states.list().expect("read the upload rows");
+    assert!(rows.iter().any(|row| row.wallet_id().is_some()), "no wallet upload row: {rows:#?}");
+
+    for row in rows {
+        assert_eq!(row.namespace_id, namespace, "{row:#?}\n{}", app.describe());
+        if row.wallet_id().is_some() {
+            assert!(
+                matches!(row.state, PersistedCloudBlobState::Confirmed(_)),
+                "{row:#?}\n{}",
+                app.describe()
+            );
+        }
+    }
 }
 
 /// The lifecycle record as the database holds it now

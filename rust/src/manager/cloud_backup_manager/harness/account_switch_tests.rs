@@ -15,8 +15,9 @@ use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyError};
 
 use super::app::Step;
 use super::{
-    CloudCall, CloudFault, FakeAccount, NextAction as N, PhaseEnd, TestApp, keychain_namespace,
-    load_detail, persisted, run_case, seed_verifiable_master_key,
+    CloudCall, CloudFault, FakeAccount, NextAction as N, PhaseEnd, TestApp,
+    assert_uploads_confirmed_in, keychain_namespace, load_detail, persisted, run_case,
+    seed_an_uploaded_wallet, seed_verifiable_master_key,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedDriveAccountSwitchPhase;
@@ -328,6 +329,35 @@ fn a_switch_paused_for_its_saved_passkey_holds_until_confirmed() {
         assert_ne!(new_namespace, old_namespace, "{}", app.describe());
         assert_eq!(switch_phase(), None);
         assert_eq!(app.passkey.inner.create_count(), 1);
+    });
+}
+
+/// The switch's reinitialize uploads every wallet to the new account's namespace, and each is
+/// confirmed there, though the wallet's upload row began in the namespace the switch replaced
+#[test]
+fn a_switch_confirms_its_uploads_in_the_new_namespace() {
+    let test = concat!(module_path!(), "::a_switch_confirms_its_uploads_in_the_new_namespace");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let old_namespace = seed_an_uploaded_wallet(&mut app);
+
+        // the new account's backup is created under a passkey the platform already has
+        app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: vec![7; 32],
+            credential_id: vec![1, 2, 3],
+        }));
+
+        let transition_id = switch_to_a_new_account(&mut app);
+        assert_eq!(requested_steps(&app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+        platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+        platform_reports(&mut app, Platform::Finalized(transition_id))
+            .then_can(&[N::TurnOff])
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+
+        let new_namespace = keychain_namespace().expect("a configured namespace");
+        assert_ne!(new_namespace, old_namespace, "{}", app.describe());
+        assert_uploads_confirmed_in(&app, &new_namespace);
     });
 }
 

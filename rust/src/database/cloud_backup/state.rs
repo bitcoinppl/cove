@@ -844,8 +844,22 @@ impl PersistedCloudBlobSyncState {
         self.record_key.wallet_id()
     }
 
+    /// This record in the namespace the row already names, with `state`
+    ///
+    /// For changes within one namespace, such as a confirmation's result or a return to Dirty. An
+    /// upload names its own namespace through [`Self::uploaded_to`]
     pub fn with_state(&self, state: PersistedCloudBlobState) -> Self {
         Self { namespace_id: self.namespace_id.clone(), record_key: self.record_key.clone(), state }
+    }
+
+    /// This record once an upload to `namespace_id` started or landed, with `state`
+    ///
+    /// The upload owns the row's namespace, because its confirmation reads the namespace the row
+    /// names. A reinitialize or a Drive account switch moves the backup to a new namespace, so a
+    /// row created before it would otherwise send the confirmation to the replaced backup, which
+    /// the new master key can't decrypt
+    pub fn uploaded_to(&self, namespace_id: &str, state: PersistedCloudBlobState) -> Self {
+        Self { namespace_id: namespace_id.to_string(), record_key: self.record_key.clone(), state }
     }
 
     pub fn is_master_key_wrapper(&self) -> bool {

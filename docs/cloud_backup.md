@@ -811,6 +811,14 @@ Pending upload verification confirms that blobs marked
 revision. Authorization failures pause the verifier without rewriting the blob
 state, so the app can resume after the platform cloud authorization is restored.
 
+The verifier reads each blob in the namespace its sync row names, and the upload
+owns that namespace: an upload, or the finalization of an Enable or
+reinitialize, writes the namespace it uploaded to into the row it starts or
+marks pending. A reinitialize or a Google Drive account switch moves the backup
+to a new namespace under a new master key. If a wallet's row still named the
+replaced namespace, the verifier would read the replaced backup with the new
+key and record a permanent decryption failure for an upload that landed.
+
 A detail refresh or a verification pass that reads a wallet's revision can also
 confirm an upload waiting for it. The read is tagged with the namespace it read
 and the configuration generation its producer started under
