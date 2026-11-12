@@ -218,6 +218,14 @@
     <string name="node_error_unknown">Unknown error: %1$s</string>
     <string name="node_error_url_empty">URL cannot be empty</string>
     <string name="node_error_parse_title">Unable to parse URL</string>
+    <string name="node_lan_section">On This Network</string>
+    <string name="node_lan_find">Find Nodes on This Network</string>
+    <string name="node_lan_search_again">Search Again</string>
+    <string name="node_lan_searching">Searching this network…</string>
+    <string name="node_lan_none_found">No Electrum servers found on this network</string>
+    <string name="node_lan_no_network">Connect to Wi-Fi to find nodes on your network</string>
+    <string name="node_lan_blocked">A VPN is blocking this network. Allow local network access in your VPN, or turn it off, to search.</string>
+    <string name="node_lan_detail">%1$s · %2$s</string>
     <string name="content_description_back">Back</string>
     <string name="content_description_menu">Menu</string>
     <string name="content_description_qr_code">QR Code</string>

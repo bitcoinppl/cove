@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,6 +48,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.LanNodeDiscovery
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
@@ -55,6 +57,8 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.ApiType
+import org.bitcoinppl.cove_core.DiscoveredNode
+import org.bitcoinppl.cove_core.NodeDiscoveryException
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
@@ -66,7 +70,10 @@ private const val TAG = "NodeSettings"
 fun NodeSettingsScreen(
     app: org.bitcoinppl.cove.AppManager,
     modifier: Modifier = Modifier,
+    discoverLanNodes: (suspend (NodeSelector) -> List<DiscoveredNode>)? = null,
 ) {
+    val context = LocalContext.current
+    val searchLan = discoverLanNodes ?: remember(context) { LanNodeDiscovery(context)::discover }
     val nodeSelector = remember { NodeSelector() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -79,6 +86,7 @@ fun NodeSettingsScreen(
     var customNodeName by remember { mutableStateOf("") }
 
     var isLoading by remember { mutableStateOf(false) }
+    var lanSearch by remember { mutableStateOf<LanSearch>(LanSearch.NotStarted) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
@@ -126,7 +134,12 @@ fun NodeSettingsScreen(
         }
     }
 
+    // one selection is checked at a time, as the iOS loading popup enforces, so a slow check
+    // finishing late can't replace a node picked after it. Each selection claims isLoading before
+    // launching, so a second tap in the same frame is already turned away
     fun selectPresetNode(nodeName: String) {
+        if (isLoading) return
+
         val row = NodeRowSelection.Preset(nodeName)
         if (selectedRow == row && NodeRowSelection.of(selectedNodeSelection) == row) {
             return
@@ -136,8 +149,8 @@ fun NodeSettingsScreen(
         customUrl = ""
         customNodeName = ""
 
+        isLoading = true
         scope.launch {
-            isLoading = true
             try {
                 val node =
                     withContext(Dispatchers.IO) {
@@ -178,8 +191,67 @@ fun NodeSettingsScreen(
         }
     }
 
+    // nothing reaches a discovered server until it is picked here, when the check talks to it
+    fun selectDiscoveredNode(found: DiscoveredNode) {
+        if (isLoading) return
+
+        isLoading = true
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    nodeSelector.checkAndSaveNode(found.node)
+                }
+
+                refreshNodeState()
+
+                // a picked server is saved as a custom node, which the custom form shows
+                customUrl = found.node.url
+                customNodeName = found.node.name
+
+                scope.launch {
+                    snackbarHostState.showSnackbar(successSaved)
+                }
+            } catch (e: NodeSelectorException.NodeAccessException) {
+                errorTitle = errorConnectionFailed
+                errorMessage = errorConnectionMessage.format(e.v1)
+                showErrorDialog = true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Saving a discovered node failed", e)
+                errorTitle = errorTitleDefault
+                errorMessage = errorUnknown.format(e.message ?: "")
+                showErrorDialog = true
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun searchLocalNetwork() {
+        if (lanSearch == LanSearch.Searching) return
+
+        scope.launch {
+            lanSearch = LanSearch.Searching
+            lanSearch =
+                try {
+                    LanSearch.Finished(searchLan(nodeSelector))
+                } catch (_: NodeDiscoveryException.NoLocalNetwork) {
+                    LanSearch.NoLocalNetwork
+                } catch (_: NodeDiscoveryException.LocalNetworkBlocked) {
+                    LanSearch.LocalNetworkBlocked
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Local network node search failed", e)
+                    LanSearch.Finished(emptyList())
+                }
+        }
+    }
+
     fun checkAndSaveCustomNode() {
-        val apiType = customApiType ?: return
+        // nothing to save without a custom row, or while another selection is being checked
+        val apiType = customApiType?.takeUnless { isLoading } ?: return
 
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
@@ -188,8 +260,8 @@ fun NodeSettingsScreen(
             return
         }
 
+        isLoading = true
         scope.launch {
-            isLoading = true
             try {
                 val node =
                     withContext(Dispatchers.IO) {
@@ -299,6 +371,15 @@ fun NodeSettingsScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+                SectionHeader(stringResource(R.string.node_lan_section))
+                LanNodesSection(
+                    search = lanSearch,
+                    selectedUrl = (selectedNodeSelection as? NodeSelection.Custom)?.v1?.url,
+                    onSearch = { searchLocalNetwork() },
+                    onSelect = { selectDiscoveredNode(it) },
+                )
+
                 // custom node input fields
                 if (showCustomFields) {
                     Spacer(modifier = Modifier.height(MaterialSpacing.medium))
@@ -364,6 +445,130 @@ fun NodeSettingsScreen(
                 }
             },
         )
+    }
+}
+
+/** Where a search of the local network for nodes stands */
+private sealed interface LanSearch {
+    data object NotStarted : LanSearch
+
+    data object Searching : LanSearch
+
+    data object NoLocalNetwork : LanSearch
+
+    data object LocalNetworkBlocked : LanSearch
+
+    data class Finished(
+        val nodes: List<DiscoveredNode>,
+    ) : LanSearch
+}
+
+@Composable
+private fun LanNodesSection(
+    search: LanSearch,
+    selectedUrl: String?,
+    onSearch: () -> Unit,
+    onSelect: (DiscoveredNode) -> Unit,
+) {
+    MaterialSection {
+        Column {
+            val message =
+                when (search) {
+                    LanSearch.NotStarted -> null
+                    LanSearch.Searching -> stringResource(R.string.node_lan_searching)
+                    LanSearch.NoLocalNetwork -> stringResource(R.string.node_lan_no_network)
+                    LanSearch.LocalNetworkBlocked -> stringResource(R.string.node_lan_blocked)
+                    is LanSearch.Finished ->
+                        if (search.nodes.isEmpty()) stringResource(R.string.node_lan_none_found) else null
+                }
+
+            if (search is LanSearch.Finished) {
+                search.nodes.forEach { found ->
+                    DiscoveredNodeRow(
+                        found = found,
+                        isSelected = found.node.url == selectedUrl,
+                        onClick = { onSelect(found) },
+                    )
+
+                    MaterialDivider()
+                }
+            }
+
+            message?.let {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (search == LanSearch.Searching) {
+                        CircularProgressIndicator(modifier = Modifier.width(16.dp).height(16.dp), strokeWidth = 2.dp)
+                    }
+
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                MaterialDivider()
+            }
+
+            val searchLabel =
+                if (search == LanSearch.NotStarted) R.string.node_lan_find else R.string.node_lan_search_again
+
+            TextButton(
+                onClick = onSearch,
+                enabled = search != LanSearch.Searching,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            ) {
+                Text(
+                    text = stringResource(searchLabel),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredNodeRow(
+    found: DiscoveredNode,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = found.host,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            val detail =
+                found.software?.let { stringResource(R.string.node_lan_detail, it, found.address) } ?: found.address
+
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = stringResource(R.string.content_description_selected),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 
