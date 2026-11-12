@@ -3631,7 +3631,7 @@ mod tests {
         for evidence in [PendingEnableEvidence::NotChecked, PendingEnableEvidence::Remains] {
             for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
                 assert!(matches!(
-                    reconcile(status.clone(), evidence),
+                    reconcile(status, evidence),
                     CloudBackupLifecycle::PendingEnableRecovery(_)
                 ));
             }
