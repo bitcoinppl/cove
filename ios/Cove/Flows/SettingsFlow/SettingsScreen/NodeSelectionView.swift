@@ -23,6 +23,9 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
+    @State private var lanSearch: LanSearch = .notStarted
+    @State private var lanSearchTask: Task<Void, Never>?
+
     init() {
         let savedNode = nodeSelector.selectedNode()
         selectedRow = NodeRowSelection(savedNode)
@@ -43,6 +46,12 @@ struct NodeSelectionView: View {
 
     var showCustomUrlField: Bool {
         customNodeApiType != nil
+    }
+
+    /// The saved custom node's url, which a server found on the network is saved as once picked
+    private var selectedCustomUrl: String? {
+        guard case let .custom(node) = nodeSelector.selectedNode() else { return nil }
+        return node.url
     }
 
     /// Whether the custom form holds something other than the saved custom node
@@ -133,10 +142,57 @@ struct NodeSelectionView: View {
         }
     }
 
+    private func searchLocalNetwork() {
+        guard lanSearch != .searching else { return }
+
+        lanSearch = .searching
+        lanSearchTask = Task {
+            let search: LanSearch
+            do {
+                let nodes = try await LanNodeDiscovery.discover(nodeSelector: nodeSelector)
+                search = .finished(nodes)
+            } catch NodeDiscoveryError.NoLocalNetwork {
+                search = .noLocalNetwork
+            } catch NodeDiscoveryError.LocalNetworkBlocked {
+                search = .localNetworkBlocked
+            } catch {
+                Log.warn("Local network node search failed: \(error.localizedDescription)")
+                search = .finished([])
+            }
+
+            guard !Task.isCancelled else { return }
+            lanSearch = search
+        }
+    }
+
+    /// Nothing reaches a discovered server until it is picked here, when the check talks to it
+    private func selectDiscoveredNode(_ found: DiscoveredNode) {
+        showLoadingPopup()
+        checkUrlTask = Task {
+            do {
+                try await nodeSelector.checkAndSaveNode(node: found.node)
+
+                // a picked server is saved as a custom node, which the custom form shows
+                customUrl = found.node.url
+                customNodeName = found.node.name
+                refreshNodeState()
+                completeLoading(.success("Connected to node successfully"))
+            } catch {
+                completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
+            }
+        }
+    }
+
     var body: some View {
         NodeSelectionForm(
             presetNodes: presetNodes,
             selectedRow: $selectedRow,
+            lanSection: NodeSelectionLanSection(
+                search: lanSearch,
+                selectedUrl: selectedCustomUrl,
+                onSearch: searchLocalNetwork,
+                onSelect: selectDiscoveredNode
+            ),
             customUrl: $customUrl,
             customNodeName: $customNodeName,
             saveCustomNode: checkAndSaveNode
@@ -146,6 +202,8 @@ struct NodeSelectionView: View {
             nodeSelectionChanged(to: newSelectedRow)
         }
         .onDisappear {
+            lanSearchTask?.cancel()
+
             // save what was typed into the custom form, but do not re-check an unchanged saved node
             if customFormHasUnsavedChanges { checkAndSaveNode() }
         }
@@ -209,6 +267,7 @@ struct NodeSelectionView: View {
 private struct NodeSelectionForm: View {
     let presetNodes: [Node]
     @Binding var selectedRow: NodeRowSelection
+    let lanSection: NodeSelectionLanSection
     @Binding var customUrl: String
     @Binding var customNodeName: String
     let saveCustomNode: () -> Void
@@ -219,6 +278,7 @@ private struct NodeSelectionForm: View {
                 presetNodes: presetNodes,
                 selectedRow: $selectedRow
             )
+            lanSection
             NodeSelectionCustomFields(
                 customRow: CustomNodeRow(selectedRow),
                 customUrl: $customUrl,
@@ -250,6 +310,98 @@ private struct NodeSelectionPresetSection: View {
                 )
             }
         }
+    }
+}
+
+/// Where a search of the local network for nodes stands
+private enum LanSearch: Equatable {
+    case notStarted
+    case searching
+    case noLocalNetwork
+    case localNetworkBlocked
+    case finished([DiscoveredNode])
+}
+
+private struct NodeSelectionLanSection: View {
+    let search: LanSearch
+    let selectedUrl: String?
+    let onSearch: () -> Void
+    let onSelect: (DiscoveredNode) -> Void
+
+    private var message: String? {
+        switch search {
+        case .notStarted: nil
+        case .searching: "Searching this network…"
+        case .noLocalNetwork: "Connect to Wi-Fi to find nodes on your network"
+        case .localNetworkBlocked:
+            "A VPN is blocking this network. Allow local network access in your VPN, or turn it off, to search."
+        case let .finished(nodes): nodes.isEmpty ? "No Electrum servers found on this network" : nil
+        }
+    }
+
+    var body: some View {
+        Section {
+            if case let .finished(nodes) = search {
+                ForEach(nodes, id: \.node.url) { found in
+                    DiscoveredNodeRow(
+                        found: found,
+                        isSelected: found.node.url == selectedUrl,
+                        select: { onSelect(found) }
+                    )
+                }
+            }
+
+            if let message {
+                HStack(spacing: 10) {
+                    if search == .searching { ProgressView() }
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button(search == .notStarted ? "Find Nodes on This Network" : "Search Again", action: onSearch)
+                .font(.subheadline)
+                .disabled(search == .searching)
+        } header: {
+            Text("On This Network")
+        } footer: {
+            // iOS can refuse the first search's connections while it asks for Local Network access
+            if search == .finished([]) {
+                Text("If you just allowed local network access, search again.")
+            }
+        }
+    }
+}
+
+private struct DiscoveredNodeRow: View {
+    let found: DiscoveredNode
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(found.host)
+                    .font(.subheadline)
+                Text(found.software.map { "\($0) · \(found.address)" } ?? found.address)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

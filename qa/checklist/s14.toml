@@ -592,3 +592,46 @@ coverage = [
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # the rust tests run the scan against an in-process electrum server; the node screen's parsing and submit stay with the agent
+
+[[row]]
+id = "s14-find-and-pick-a-node-on-the-local-network"
+section = "14"
+title = "Find a node on the local network and pick it"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/node_discovery.rs",
+    "rust/src/node_discovery/**",
+    "rust/src/node_connect.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/LanNodeDiscovery.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/node_discovery/tests.rs::a_swept_electrum_port_becomes_a_node_named_by_its_reverse_lookup",
+    "rust:rust/src/node_discovery/tests.rs::a_discovered_node_parses_back_to_itself_as_a_custom_node",
+    "rust:rust/src/node_discovery/probe.rs::a_probe_sends_nothing_to_the_server",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::pickingAServerFoundOnTheNetworkSavesItAsTheSelectedNode",
+    "agent:ios",
+]
+# rust decides what the search finds and that it sends nothing; the screens only search when asked
+# and save a picked server through the custom node check. On a network with an Electrum server,
+# `live_lan_discovery_finds_and_connects_to_the_node` runs the real search with --ignored
+
+[[row]]
+id = "s14-ios-local-network-prompt-on-first-node-search"
+section = "14"
+title = "iOS asks for local network access on the first node search"
+platforms = ["ios"]
+target = "manual"
+paths = [
+    "ios/Cove/Info.plist",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
+]
+coverage = [
+    "human",
+]
+# the simulator has no local network privacy, so only a device shows the prompt, and a search
+# made before it is answered can come back empty until Search Again
