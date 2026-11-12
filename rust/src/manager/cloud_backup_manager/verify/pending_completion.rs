@@ -401,7 +401,10 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         config: ConfigGeneration,
     ) -> Option<CloudBackupDetail> {
-        match self.refresh_cloud_backup_detail(config).await {
+        // the verifier resumes at launch and on foreground with nobody tapping, so a listing that
+        // needs Drive consent fails instead of asking, like its reads above
+        let cloud = CloudStorage::global_silent_client();
+        match self.list_cloud_backup_detail(config, cloud).await {
             Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) => {
                 Some(listed.detail)
             }

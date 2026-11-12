@@ -18,7 +18,11 @@ use super::{
     PhaseEnd, TestApp, keychain_namespace, load_detail, open_durable_state, persisted, run_case,
     seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
 };
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::database::Database;
+use crate::database::cloud_backup::{
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedDeepVerificationReport,
+    PersistedPendingVerificationCompletion,
+};
 use crate::manager::cloud_backup_manager::actors::write::Decision;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, PauseReason, Rejection, UserIntent,
@@ -406,6 +410,69 @@ fn launch_discovery_never_asks_for_drive_consent_but_check_again_may() {
             "{tapped:?}"
         );
         assert_eq!(app.cloud.consent_sheets(), 1);
+    });
+}
+
+/// The pending upload verifier resumes at launch with nobody tapping, so the listing it finishes
+/// with may not ask for Google Drive consent either
+#[test]
+fn a_pending_verification_resumed_at_launch_never_asks_for_drive_consent() {
+    let test = concat!(
+        module_path!(),
+        "::a_pending_verification_resumed_at_launch_never_asks_for_drive_consent"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace_id = FakeAccount::new(1, 0).seed(&app);
+
+        // a verification that finished uploading and waits only for its closing listing
+        let table = &Database::global().cloud_backup_state;
+        let mut state = table.get().expect("read cloud backup state");
+        let completion = PersistedPendingVerificationCompletion {
+            report: PersistedDeepVerificationReport {
+                master_key_wrapper_repaired: true,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                wallet_issues: None,
+            },
+            namespace_id,
+            uploads: Vec::new(),
+            created_at: Some(cove_util::time::unix_timestamp_secs_or_zero()),
+        };
+        assert!(state.replace_pending_verification_completion(completion));
+        table.set(&state).expect("persist the pending verification");
+        let before = app.cloud.calls().len();
+
+        // the platforms resume the verifier at startup, after the manager is built
+        app.relaunch().then_cannot(&[N::Enable]);
+        app.event("startup resumes the verifier", |app| {
+            app.manager().resume_pending_cloud_upload_verification();
+        })
+        .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("the relaunch lost the configuration:\n{}", app.describe());
+        };
+        assert!(
+            configured.pending_verification_completion.is_none(),
+            "the verifier never finished the pending verification\n{}",
+            app.describe()
+        );
+
+        let resumed = call_policies(&app, before);
+        assert!(
+            resumed.iter().any(|(kind, _)| *kind == CloudCall::ListWalletFiles),
+            "the resumed verification listed nothing\n{}",
+            app.describe()
+        );
+        assert!(
+            resumed.iter().all(|(_, policy)| *policy == Some(CloudAccessPolicy::Silent)),
+            "the resumed verification asked for consent: {resumed:?}"
+        );
     });
 }
 

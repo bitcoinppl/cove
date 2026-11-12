@@ -207,8 +207,9 @@ impl RustCloudBackupManager {
     /// `config` is the configuration generation the caller read before starting the refresh, so
     /// the uploads the read confirms are confirmed only while that configuration is current
     ///
-    /// For an operation's follow-up, which runs on the user's tap, so the provider may ask for
-    /// consent; the detail refresh cycle lists through the client its origin chose instead
+    /// For an exclusive operation's follow-up: every exclusive operation starts from a dispatched
+    /// tap, so the provider may ask for consent. The detail refresh cycle lists through the client
+    /// its origin chose, and the pending upload verifier, which nobody taps, lists silently
     pub(crate) async fn refresh_cloud_backup_detail(
         &self,
         config: ConfigGeneration,
@@ -216,7 +217,7 @@ impl RustCloudBackupManager {
         self.list_cloud_backup_detail(config, CloudStorage::global_explicit_client()).await
     }
 
-    async fn list_cloud_backup_detail(
+    pub(crate) async fn list_cloud_backup_detail(
         &self,
         config: ConfigGeneration,
         cloud: CloudStorageClient,

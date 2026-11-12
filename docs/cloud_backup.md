@@ -507,7 +507,10 @@ with nobody tapping, so they list silently; one that needs consent ends as an
 incomplete inventory that offers Reconnect. A tap that joins a waiting or
 running refresh gives the refresh after it the tap's authority. A local reset
 closes the detail refresh, and nothing reopens it while the reset holds the
-runtime.
+runtime. The listing that finishes a pending upload verification also lists
+silently, since the app resumes that verification at startup and on returning
+to the foreground. The refresh after a sync, restore, delete or passkey repair
+may ask, since each of those operations starts from a tap.
 
 Enable behavior depends on what discovery proved:
 
