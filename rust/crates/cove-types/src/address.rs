@@ -14,7 +14,6 @@ use bitcoin::{
     address::{NetworkChecked, NetworkUnchecked},
     params::Params,
 };
-use payjoin::UriExt as _;
 use serde::Deserialize;
 use strum::IntoEnumIterator as _;
 
@@ -224,16 +223,16 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
 
     // Try full payjoin URI parsing first
     if let Ok(uri) = payjoin::Uri::try_from(normalized.as_str()) {
-        let amount = uri.amount.map(|a| Amount::from_sat(a.to_sat()));
+        let amount = uri.amount().map(|a| Amount::from_sat(a.to_sat()));
 
         // skip network check; try_new() validates later
         let checked = uri.assume_checked();
-        let address = checked.address.to_string();
+        let address = checked.address().to_string();
 
         // Extract payjoin params if present
         let payjoin = match checked.check_pj_supported() {
             Ok(pj_uri) => {
-                let endpoint = pj_uri.extras.endpoint();
+                let endpoint = pj_uri.extras().endpoint();
                 Some(PayJoinParams { endpoint })
             }
             Err(_) => None,
@@ -247,9 +246,9 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
     // entirely; stripping both lets the address/amount still be extracted for a normal payment.
     let stripped = strip_payjoin_params(&normalized);
     let uri = payjoin::Uri::try_from(stripped.as_str()).map_err(|_| Error::InvalidAddress)?;
-    let amount = uri.amount.map(|a| Amount::from_sat(a.to_sat()));
+    let amount = uri.amount().map(|a| Amount::from_sat(a.to_sat()));
     let checked = uri.assume_checked();
-    let address = checked.address.to_string();
+    let address = checked.address().to_string();
 
     Ok(ParsedBitcoinUri { address, amount, payjoin: None })
 }
