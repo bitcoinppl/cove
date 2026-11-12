@@ -49,6 +49,11 @@ pub struct SendFlowManagerState {
     /// The amount, in sats, of an alerting check that found no fee total and runs again once one
     /// lands, see `AmountAlert::ShownOnceFeeLoads`
     pub(crate) amount_check_awaiting_fee: Option<u64>,
+    /// The address last handed out by another of the user's wallets for this send
+    pub(crate) transfer_reservation: Option<TransferReservation>,
+    /// Counts the addresses put in the send, so a picked wallet's address that lands after a
+    /// newer one is dropped
+    pub(crate) address_generation: u64,
 
     // public
     pub entering_address: String,
@@ -84,6 +89,13 @@ pub struct AmountEntry {
     pub mode: AmountEntryMode,
     pub btc_text: String,
     pub fiat_text: String,
+}
+
+/// A receive address another of the user's wallets handed out for this send
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransferReservation {
+    pub wallet_id: WalletId,
+    pub address: Address,
 }
 
 /// A Max amount and the drain it was built from
@@ -228,6 +240,8 @@ impl SendFlowManagerState {
             has_base_fees: false,
             last_fee_failure: None,
             amount_check_awaiting_fee: None,
+            transfer_reservation: None,
+            address_generation: 0,
             payjoin_endpoint: None,
         }
     }

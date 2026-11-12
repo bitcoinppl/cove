@@ -6,6 +6,7 @@ use tracing::{debug, warn};
 
 use crate::app::AppAction;
 use crate::manager::deferred_dispatch::DeferredDispatch;
+use crate::transfer_destination::{TransferDestination, transfer_destinations};
 
 use super::{
     AmountEntryMode, EnterMode, Message, RustSendFlowManager, SendFlowAlertState, validation,
@@ -23,6 +24,20 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn amount_entry_mode(&self) -> AmountEntryMode {
         self.state.lock().amount_entry.mode
+    }
+
+    /// The user's other wallets this send can pay directly, for the wallet picker
+    ///
+    /// Only wallets on this wallet's network and in its main or decoy mode are listed
+    #[uniffi::method]
+    pub fn transfer_destinations(&self) -> Vec<TransferDestination> {
+        let source = self.wallet_manager.metadata.read().clone();
+
+        // the picker treats an unreadable list like an empty one, the address field still works
+        transfer_destinations(&source).unwrap_or_else(|error| {
+            warn!("unable to list transfer destinations: {error}");
+            Vec::new()
+        })
     }
 
     #[uniffi::method]

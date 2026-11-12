@@ -407,6 +407,40 @@ impl WalletLifecycleCoordinator {
             Self::begin_construction_locked(&mut data, wallet_id.clone())?
         };
 
+        self.construction_permit(wallet_id, transition)
+    }
+
+    /// Return the one writer allowed to change a wallet's store right now
+    ///
+    /// A wallet's BDK store has no lock of its own, and a live actor keeps its revealed indexes in
+    /// memory, so a second loader could reveal an address the actor later hands out again. Writes
+    /// to an open wallet therefore go through its actor, and writes to a closed wallet hold a
+    /// construction permit so no manager can open the store until they finish
+    pub(crate) fn begin_store_write(
+        &'static self,
+        wallet_id: WalletId,
+    ) -> Result<WalletStoreWriter, WalletLifecycleFailure> {
+        let transition = {
+            let mut data = self.data.lock();
+            let live_actor = data.actors.values().find(|actors| {
+                actors.wallet_id == wallet_id && actors.state == RegistrationState::Active
+            });
+
+            if let Some(actors) = live_actor {
+                return Ok(WalletStoreWriter::Actor(actors.wallet.clone()));
+            }
+
+            Self::begin_construction_locked(&mut data, wallet_id.clone())?
+        };
+
+        self.construction_permit(wallet_id, transition).map(WalletStoreWriter::Closed)
+    }
+
+    fn construction_permit(
+        &'static self,
+        wallet_id: WalletId,
+        transition: ConstructionTransition,
+    ) -> Result<WalletConstructionPermit, WalletLifecycleFailure> {
         match transition {
             ConstructionTransition::Permit { scope_id } => Ok(WalletConstructionPermit {
                 coordinator: self,
@@ -1376,6 +1410,18 @@ impl WalletLifecycleCoordinator {
             Updater::send_update(AppStateReconcileMessage::ClearCachedWalletManager(wallet_id));
         }
     }
+}
+
+/// The owner of a wallet store's writes, from [`WalletLifecycleCoordinator::begin_store_write`]
+#[derive(Debug)]
+pub(crate) enum WalletStoreWriter {
+    /// An open manager's actor owns the store, so the write is a message to it
+    Actor(Addr<WalletActor>),
+
+    /// No manager is open, and this permit keeps one from opening until it drops
+    ///
+    /// It is never registered: dropping it after the write releases the reservation
+    Closed(WalletConstructionPermit),
 }
 
 /// Capability held while a persistent wallet manager is being built

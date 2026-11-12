@@ -31,7 +31,11 @@ use crate::{
     app::App,
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::client::PriceResponse,
-    wallet::{Address, balance::Balance, metadata::FiatOrBtc},
+    wallet::{
+        Address,
+        balance::Balance,
+        metadata::{FiatOrBtc, WalletId},
+    },
 };
 use act_zero::WeakAddr;
 use alert_state::{SendFlowAlertState, SendFlowWarningKind};
@@ -115,6 +119,10 @@ pub struct RustSendFlowManager {
 
     /// Follows the wallet's display preferences, aborted when the send flow is dropped
     display_preferences_task: OnceLock<AbortableTask<()>>,
+
+    /// Taken by each action that puts an address in the send and by a picked wallet's address
+    /// when it lands from its task, so they apply one at a time and the latest one wins
+    address_entry: Arc<Mutex<()>>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -148,6 +156,9 @@ pub enum SendFlowManagerReconcileMessage {
 #[derive(Debug, Clone, PartialEq, strum::IntoStaticStr, uniffi::Enum)]
 pub enum SendFlowManagerAction {
     ChangeEnteringAddress(String),
+
+    /// Pay another of the user's wallets, filling in its next receive address
+    SelectTransferDestination(WalletId),
 
     ChangeSetAmountFocusField(Option<SetAmountFocusField>),
 
@@ -204,6 +215,21 @@ pub enum SendFlowManagerAction {
     AcknowledgeWarningAndFinalize(SendFlowWarningKind),
 }
 
+impl SendFlowManagerAction {
+    /// Whether the action puts a new address in the send, or clears it
+    const fn enters_address(&self) -> bool {
+        matches!(
+            self,
+            Self::ChangeEnteringAddress(_)
+                | Self::SelectTransferDestination(_)
+                | Self::NotifyEnteringAddressChanged(_)
+                | Self::NotifyAddressChanged(_)
+                | Self::NotifyScanCodeChanged { .. }
+                | Self::ClearAddress
+        )
+    }
+}
+
 impl RustSendFlowManager {
     pub fn new(balance: Arc<Balance>, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
         let me = Self::with_wallet(wallet_manager, balance);
@@ -256,6 +282,7 @@ impl RustSendFlowManager {
             reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
             display_preferences_task: OnceLock::new(),
+            address_entry: Arc::default(),
         });
 
         // spawned once the manager exists, so the task can always reach it while it lives
@@ -572,6 +599,15 @@ impl RustSendFlowManager {
         // only the variant name: actions carry typed or scanned text, which can be a pasted seed
         trace!("dispatch: {}", <&'static str>::from(&action));
 
+        // each new address starts a generation, which drops any picked wallet's address that
+        // is still on its way
+        let address_entry = self.address_entry.clone();
+        let _address_turn = action.enters_address().then(|| {
+            let turn = address_entry.lock();
+            self.state.lock().address_generation += 1;
+            turn
+        });
+
         match action {
             Action::NotifyEnteringBtcAmountChanged { text, unit } => {
                 self.handle_btc_field_changed(text, unit);
@@ -642,6 +678,10 @@ impl RustSendFlowManager {
             Action::ChangeEnteringAddress(string) => {
                 self.reconciler.send(Message::UpdateEnteringAddress(string.clone()));
                 self.handle_entering_address_changed(string);
+            }
+
+            Action::SelectTransferDestination(wallet_id) => {
+                self.select_transfer_destination(wallet_id);
             }
 
             Action::DisableCoinControlMode => self.disable_coin_control_mode(),
