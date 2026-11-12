@@ -1,9 +1,15 @@
 use std::sync::Arc;
 
-use cove_types::address::AddressWithNetwork;
-use tracing::debug;
+use cove_types::address::{AddressInfoWithDerivation, AddressWithNetwork};
+use tracing::{debug, warn};
 
-use super::{Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
+use super::{
+    Message, RustSendFlowManager, SendFlowError, SetAmountFocusField, state::TransferReservation,
+};
+use crate::{
+    transfer_destination::{TransferAddressError, reserve_transfer_address},
+    wallet::{Address, metadata::WalletId},
+};
 
 impl RustSendFlowManager {
     /// Called when the user types or pastes into the address field.
@@ -214,6 +220,78 @@ impl RustSendFlowManager {
             }
         });
     }
+
+    /// Fills the address with the next receive address of another of the user's wallets
+    ///
+    /// Picking the same wallet again while its address is still entered reuses that address,
+    /// so going back and forth in the picker doesn't take a new address each time. Runs inside
+    /// `dispatch`'s address turn, which already started this pick's generation
+    pub(crate) fn select_transfer_destination(self: &Arc<Self>, destination: WalletId) {
+        let (source, generation, reusable) = {
+            let state = self.state.lock();
+            let reusable = state
+                .transfer_reservation
+                .as_ref()
+                .filter(|reservation| reservation.wallet_id == destination)
+                .filter(|reservation| state.address.as_deref() == Some(&reservation.address))
+                .map(|reservation| reservation.address.to_string());
+
+            (state.metadata.clone(), state.address_generation, reusable)
+        };
+
+        if let Some(address) = reusable {
+            return self.enter_address(address);
+        }
+
+        // the previous recipient must not stay valid while the address is on its way, or Next
+        // could confirm a send to it
+        self.enter_address(String::new());
+
+        let me = self.clone();
+        cove_tokio::task::spawn(async move {
+            let reserved = reserve_transfer_address(&source, &destination).await;
+            me.finish_transfer_destination(generation, destination, reserved);
+        });
+    }
+
+    /// Applies a picked wallet's address, or its error, unless another address was entered or
+    /// another wallet picked since
+    fn finish_transfer_destination(
+        self: &Arc<Self>,
+        generation: u64,
+        destination: WalletId,
+        reserved: Result<AddressInfoWithDerivation, TransferAddressError>,
+    ) {
+        let address_entry = self.address_entry.clone();
+        let _address_turn = address_entry.lock();
+
+        if self.state.lock().address_generation != generation {
+            debug!("dropping a transfer address the user moved on from");
+            return;
+        }
+
+        let reserved = match reserved {
+            Ok(reserved) => reserved,
+            Err(error) => {
+                warn!("unable to reserve a transfer address: {error}");
+                return self.send_alert(error.alert());
+            }
+        };
+
+        let address = Address::new(reserved.info.address.clone());
+        let entered = address.to_string();
+        self.state.lock().transfer_reservation =
+            Some(TransferReservation { wallet_id: destination, address });
+
+        self.enter_address(entered);
+    }
+
+    /// Puts an address in the field the same way a paste does, so validation, fees and the
+    /// ownership indicator all run
+    fn enter_address(self: &Arc<Self>, address: String) {
+        self.reconciler.send(Message::UpdateEnteringAddress(address.clone()));
+        self.handle_entering_address_changed(address);
+    }
 }
 
 #[cfg(test)]
@@ -231,9 +309,16 @@ mod tests {
         },
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
-        test_support::hardware_signing::external_address,
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        test_support::{hardware_signing::external_address, wallet_target::WalletTargetGuard},
+        transfer_destination::test_support::{import, mark_scanned},
+        wallet::{
+            Wallet,
+            balance::Balance,
+            metadata::{WalletMetadata, WalletMode},
+        },
+        wallet_lifecycle::WalletLifecycleCoordinator,
     };
+    use bdk_wallet::KeychainKind;
 
     use super::super::{
         Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
@@ -261,6 +346,7 @@ mod tests {
             state: state.into_inner(),
             reconciler: ReconcileChannel::new(100),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+            address_entry: Arc::default(),
         });
 
         {
@@ -302,6 +388,141 @@ mod tests {
             Route::Send(SendRoute::Confirm(args)) => Some(args),
             _ => None,
         })
+    }
+
+    /// Picking another wallet fills the address field with that wallet's next receive address,
+    /// picking it again keeps that address, and picking it after typing something else takes
+    /// the wallet's next address instead of reusing one a different send may still pay
+    #[tokio::test(flavor = "current_thread")]
+    async fn picking_another_wallet_fills_its_next_receive_address() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+
+        let destination = import(Network::Signet, WalletMode::Main);
+        mark_scanned(&destination);
+
+        let receive_address = |index| {
+            let wallet = Wallet::try_load_persisted(destination.id.clone()).unwrap();
+            wallet.bdk.peek_address(KeychainKind::External, index).address.to_string()
+        };
+        let first = receive_address(0);
+        let second = receive_address(1);
+
+        let manager = funded_send_flow(Network::Signet);
+        let entered = || {
+            let state = manager.state.lock();
+            (state.entering_address.clone(), state.address.as_deref().map(ToString::to_string))
+        };
+
+        manager.clone().dispatch(Action::SelectTransferDestination(destination.id.clone()));
+        wait_for("the first address", || entered().1.as_deref() == Some(first.as_str())).await;
+        assert_eq!(entered().0, first, "the field shows the wallet's address");
+        assert!(
+            drain_reconcile_messages(&manager)
+                .contains(&Message::UpdateEnteringAddress(first.clone())),
+            "the apps' field was not set to the wallet's address"
+        );
+
+        // going back and forth in the picker keeps the same address
+        manager.clone().dispatch(Action::SelectTransferDestination(destination.id.clone()));
+        assert_eq!(entered().1.as_deref(), Some(first.as_str()));
+        let wallet = Wallet::try_load_persisted(destination.id.clone()).unwrap();
+        assert_eq!(wallet.bdk.derivation_index(KeychainKind::External), Some(0));
+
+        // another address entered in between means the first may be paid by that other send
+        let other = external_address(bitcoin::Network::Signet).to_string();
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(other.clone()));
+        assert_eq!(entered().1.as_deref(), Some(other.as_str()));
+
+        manager.clone().dispatch(Action::SelectTransferDestination(destination.id.clone()));
+        wait_for("the second address", || entered().1.as_deref() == Some(second.as_str())).await;
+    }
+
+    /// A pick still on its way never sends to the old recipient or replaces what the user did
+    /// next: the old address goes the moment the wallet is picked, and an address entered, or
+    /// another wallet picked, while the pick waits stays when the pick lands
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_pick_on_its_way_never_replaces_a_newer_address() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+
+        let slow = import(Network::Signet, WalletMode::Main);
+        let quick = import(Network::Signet, WalletMode::Main);
+        mark_scanned(&slow);
+        mark_scanned(&quick);
+
+        let stored_index = |wallet: &WalletMetadata| {
+            let wallet = Wallet::try_load_persisted(wallet.id.clone()).unwrap();
+            wallet.bdk.derivation_index(KeychainKind::External)
+        };
+        let receive_address = |wallet: &WalletMetadata, index| {
+            let wallet = Wallet::try_load_persisted(wallet.id.clone()).unwrap();
+            wallet.bdk.peek_address(KeychainKind::External, index).address.to_string()
+        };
+
+        let manager = funded_send_flow(Network::Signet);
+        let entered = || {
+            let state = manager.state.lock();
+            (state.entering_address.clone(), state.address.as_deref().map(ToString::to_string))
+        };
+
+        let earlier = receive_address(&quick, 5);
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(earlier.clone()));
+        assert_eq!(entered().1.as_deref(), Some(earlier.as_str()));
+
+        // another loader holding the slow wallet's store keeps its pick retrying
+        let permit = WalletLifecycleCoordinator::global()
+            .begin_construction(slow.id.clone())
+            .expect("nothing else holds the slow wallet");
+
+        manager.clone().dispatch(Action::SelectTransferDestination(slow.id.clone()));
+        assert_eq!(entered(), (String::new(), None), "the earlier recipient is still valid");
+
+        let typed = external_address(bitcoin::Network::Signet).to_string();
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(typed.clone()));
+        drop(permit);
+
+        wait_for("the slow pick to take an address", || stored_index(&slow) == Some(0)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            entered().1.as_deref(),
+            Some(typed.as_str()),
+            "the pick replaced a typed address"
+        );
+
+        // a slow pick that lands after a quicker one leaves the quicker one in place
+        let permit = WalletLifecycleCoordinator::global()
+            .begin_construction(slow.id.clone())
+            .expect("nothing else holds the slow wallet");
+
+        manager.clone().dispatch(Action::SelectTransferDestination(slow.id.clone()));
+        manager.clone().dispatch(Action::SelectTransferDestination(quick.id.clone()));
+        let quick_address = receive_address(&quick, 0);
+        wait_for("the quick pick", || entered().1.as_deref() == Some(quick_address.as_str())).await;
+
+        drain_reconcile_messages(&manager);
+        drop(permit);
+
+        wait_for("the slow pick to take an address", || stored_index(&slow) == Some(1)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(entered().1.as_deref(), Some(quick_address.as_str()), "the slow pick won");
+
+        let messages = drain_reconcile_messages(&manager);
+        assert!(
+            !messages.iter().any(|message| matches!(
+                message,
+                Message::UpdateEnteringAddress(_) | Message::SetAlert(_)
+            )),
+            "the dropped pick reached the apps: {messages:?}"
+        );
     }
 
     /// Payjoin URIs pasted into the address field become an ordinary one-recipient send: the

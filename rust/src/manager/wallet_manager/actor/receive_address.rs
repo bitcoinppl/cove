@@ -9,6 +9,7 @@ use bdk_wallet::{
     },
 };
 use cove_tokio::{AbortableTask, FutureTimeoutExt as _};
+use cove_types::address::AddressInfoWithDerivation;
 use cove_util::result_ext::ResultExt as _;
 use tracing::warn;
 
@@ -176,16 +177,23 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        let result = if let Some(sync_result) = sync_result {
-            self.open_fresh_after_receive_address_sync(
-                request_id,
-                now,
-                derivation_index,
-                sync_result,
-            )
-            .await
-        } else {
-            self.open_cached_receive_address(cache, request_id, now)
+        let result = match sync_result {
+            Some(sync_result) => {
+                self.open_fresh_after_receive_address_sync(
+                    request_id,
+                    now,
+                    derivation_index,
+                    sync_result,
+                )
+                .await
+            }
+
+            None if self.receive_address_cache_still_holds(&cache) => {
+                self.open_cached_receive_address(cache, request_id, now)
+            }
+
+            // a send from another wallet took the cached address while its activity was checked
+            None => self.open_fresh_receive_address(request_id, now),
         };
 
         self.finish_open_receive_address(result);
@@ -240,6 +248,17 @@ impl WalletActor {
             && cache.first_shown_at_secs <= now_secs
             && now_secs < expires_at_secs
             && self.wallet.receive_address_is_unused(cache.derivation_index)
+    }
+
+    /// Whether the stored cache still holds the address `cache` was read with
+    ///
+    /// An unreadable cache counts as gone, so the open takes a fresh address instead of
+    /// showing one that may have been handed out
+    fn receive_address_cache_still_holds(&self, cache: &ReceiveAddressCache) -> bool {
+        self.receive_address_cache()
+            .ok()
+            .flatten()
+            .is_some_and(|stored| stored.derivation_index == cache.derivation_index)
     }
 
     fn receive_address_cache(&self) -> Result<Option<ReceiveAddressCache>, Error> {
@@ -311,6 +330,41 @@ impl WalletActor {
         let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
 
         Ok(state)
+    }
+
+    /// Hand out the address another of the user's wallets pays when it sends to this one
+    ///
+    /// Takes the next address in the Receive screen's own rotation and saves the rotation, so
+    /// the Receive screen moves past it instead of showing it to someone else. A wallet that has
+    /// not finished its first full scan cannot know which addresses are already used, so it
+    /// refuses like a spend does
+    pub async fn reserve_transfer_address(
+        &mut self,
+    ) -> ActorResult<Result<AddressInfoWithDerivation, Error>> {
+        if let Err(error) = self.ensure_ledger_ready_for_spend() {
+            return Produces::ok(Err(error));
+        }
+
+        let reserved = self.wallet.get_next_address().map_err(Error::from).and_then(
+            |(address, address_index)| {
+                if let Some(address_index) = address_index {
+                    self.apply_metadata_patch(WalletMetadataPatch::Internal(
+                        WalletInternalMetadataPatch {
+                            address_index: Some(address_index),
+                            ..Default::default()
+                        },
+                    ))?;
+                }
+
+                self.db
+                    .forget_cached_receive_address(address.info.index)
+                    .map_err_str(Error::ReceiveAddressError)?;
+
+                Ok(address)
+            },
+        );
+
+        Produces::ok(reserved)
     }
 
     pub async fn refresh_expired_receive_address(&mut self, request_id: u64) -> ActorResult<()> {

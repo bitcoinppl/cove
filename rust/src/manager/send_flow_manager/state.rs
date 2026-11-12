@@ -14,7 +14,11 @@ use crate::{
     app::App,
     database::Database,
     fiat::FiatCurrency,
-    wallet::{Address, balance::Balance, metadata::WalletMetadata},
+    wallet::{
+        Address,
+        balance::Balance,
+        metadata::{WalletId, WalletMetadata},
+    },
 };
 
 #[derive(Debug, Clone, derive_more::Deref)]
@@ -38,6 +42,11 @@ pub struct SendFlowManagerState {
     pub(crate) mode: EnterMode,
     /// Last fee update failure, kept so recalculations on every edit log only when it changes
     pub(crate) last_fee_failure: Option<String>,
+    /// The address last handed out by another of the user's wallets for this send
+    pub(crate) transfer_reservation: Option<TransferReservation>,
+    /// Counts the addresses put in the send, so a picked wallet's address that lands after a
+    /// newer one is dropped
+    pub(crate) address_generation: u64,
 
     // public
     pub entering_btc_amount: String,
@@ -55,6 +64,13 @@ pub struct SendFlowManagerState {
     pub fee_selection: Option<FeeSelection>,
 
     pub payjoin_endpoint: Option<String>,
+}
+
+/// A receive address another of the user's wallets handed out for this send
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransferReservation {
+    pub wallet_id: WalletId,
+    pub address: Address,
 }
 
 /// A Max amount and the drain it was built from
@@ -170,6 +186,8 @@ impl SendFlowManagerState {
             selected_fiat_currency,
             has_base_fees: false,
             last_fee_failure: None,
+            transfer_reservation: None,
+            address_generation: 0,
             payjoin_endpoint: None,
         }
     }
