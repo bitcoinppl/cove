@@ -19194,6 +19194,71 @@ public func FfiConverterTypeSendConfirmationLock_lower(_ value: SendConfirmation
 }
 
 
+/**
+ * Tells the user that the address they are sending to is one of their own
+ */
+public struct SendFlowAddressOwnership {
+    /**
+     * The address this note describes; the apps show the note only while the send is to it, so
+     * a note that arrives after the address changed is never shown
+     */
+    public var address: Address
+    public var message: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The address this note describes; the apps show the note only while the send is to it, so
+         * a note that arrives after the address changed is never shown
+         */address: Address, message: String) {
+        self.address = address
+        self.message = message
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendFlowAddressOwnership: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowAddressOwnership: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowAddressOwnership {
+        return
+            try SendFlowAddressOwnership(
+                address: FfiConverterTypeAddress.read(from: &buf),
+                message: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendFlowAddressOwnership, into buf: inout [UInt8]) {
+        FfiConverterTypeAddress.write(value.address, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAddressOwnership_lift(_ buf: RustBuffer) throws -> SendFlowAddressOwnership {
+    return try FfiConverterTypeSendFlowAddressOwnership.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAddressOwnership_lower(_ value: SendFlowAddressOwnership) -> RustBuffer {
+    return FfiConverterTypeSendFlowAddressOwnership.lower(value)
+}
+
+
 public struct SendFlowCoinControlMode {
     public var utxoList: UtxoList
     public var isMaxSelected: Bool
@@ -37405,6 +37470,8 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateAddress(Address?
     )
+    case updateAddressOwnership(SendFlowAddressOwnership
+    )
     case setMaxSelected(Amount
     )
     case unsetMaxSelected
@@ -37453,29 +37520,32 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 4: return .updateAddress(try FfiConverterOptionTypeAddress.read(from: &buf)
         )
 
-        case 5: return .setMaxSelected(try FfiConverterTypeAmount.read(from: &buf)
+        case 5: return .updateAddressOwnership(try FfiConverterTypeSendFlowAddressOwnership.read(from: &buf)
         )
 
-        case 6: return .unsetMaxSelected
-
-        case 7: return .updateAmountSats(try FfiConverterUInt64.read(from: &buf)
+        case 6: return .setMaxSelected(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 8: return .updateAmountFiat(try FfiConverterDouble.read(from: &buf)
+        case 7: return .unsetMaxSelected
+
+        case 8: return .updateAmountSats(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 9: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
+        case 9: return .updateAmountFiat(try FfiConverterDouble.read(from: &buf)
         )
 
-        case 10: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
+        case 10: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 11: return .refreshPresenters
-
-        case 12: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        case 11: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
         )
 
-        case 13: return .clearAlert
+        case 12: return .refreshPresenters
+
+        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        )
+
+        case 14: return .clearAlert
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -37505,46 +37575,51 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterOptionTypeAddress.write(v1, into: &buf)
 
 
-        case let .setMaxSelected(v1):
+        case let .updateAddressOwnership(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeSendFlowAddressOwnership.write(v1, into: &buf)
+
+
+        case let .setMaxSelected(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case .unsetMaxSelected:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
 
 
         case let .updateAmountSats(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case let .updateAmountFiat(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterDouble.write(v1, into: &buf)
 
 
         case let .updateFocusField(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
 
 
         case let .updateFeeSelection(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFeeSelection.write(v1, into: &buf)
 
 
         case .refreshPresenters:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
 
 
         case let .setAlert(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
 
 
         case .clearAlert:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
 
         }
     }
