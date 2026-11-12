@@ -397,6 +397,9 @@ class AppManager private constructor() : FfiReconcile {
 
         // a decoy mode switch drops a held picker result, so its request would never finish
         tapSignerBackupExports.clear()
+
+        // an open alert can name the previous mode's wallets
+        alertState = null
     }
 
     /**

@@ -20,7 +20,10 @@ private struct AppAlertMessage: View {
     var body: some View {
         let text = alert.message()
 
-        if case .foundAddress = alert {
+        if case let .foundAddress(_, _, ownership?) = alert {
+            let address = Text(text).font(.system(.caption2, design: .monospaced))
+            Text("\(address)\n\n\(ownership)")
+        } else if case .foundAddress = alert {
             Text(text)
                 .font(.system(.caption2, design: .monospaced))
                 .minimumScaleFactor(0.5)
@@ -241,7 +244,7 @@ private struct AddressAlertActions: View {
         case let .addressWrongNetwork(address, _, _), let .noWalletSelected(address):
             CopyAddressActions(address: address, app: app)
 
-        case let .foundAddress(address, amount):
+        case let .foundAddress(address, amount, _):
             FoundAddressActions(address: address, amount: amount, app: app)
 
         case .noCameraPermission:

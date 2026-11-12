@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bdk_wallet::{
     KeychainKind, bitcoin::bip32::Xpriv, descriptor::ExtendedDescriptor,
     descriptor::IntoWalletDescriptor as _,
@@ -13,6 +15,7 @@ use super::{
     check_address_ownership_with,
 };
 use crate::{
+    app::alert_state::{AppAlertState, found_address_alert},
     bdk_store::BdkStore,
     database::Database,
     manager::import_wallet_manager::import_mnemonic_with_target,
@@ -357,12 +360,20 @@ fn the_account_comes_from_the_chain_that_owns_the_address() {
         save_store_less_watch_only(Some((external, internal)), Network::Bitcoin, WalletMode::Main);
 
     let address = AddressWithNetwork::try_new(&change_address.to_string()).unwrap();
+    let ownership = find_owners(&address);
     assert_eq!(
-        find_owners(&address),
+        ownership,
         owned_by(vec![OwnedAddress {
             account: Some(1),
             ..owned(&wallet, AddressChain::Change, 2)
         }])
+    );
+
+    // another wallet's user is told the account, since it is not the usual account 0
+    let owner = ownership.owner_to_name(&WalletId::preview_new()).unwrap();
+    assert_eq!(
+        owner.describe(&WalletId::preview_new()),
+        format!("This is your address in “{}” (account 1, change, index 2)", wallet.name)
     );
 }
 
@@ -470,5 +481,40 @@ fn a_store_path_that_cannot_be_checked_is_reported_as_unchecked() {
     assert_eq!(
         ownership,
         AddressOwnership::NotFound { unchecked_wallets: vec![UncheckedWallet::from(&wallet)] }
+    );
+}
+
+#[test]
+fn a_scanned_address_alert_names_the_wallet_that_owns_it() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let selected_keys = random_mnemonic();
+    let selected =
+        import_mnemonic_with_target(selected_keys.clone(), Network::Bitcoin, WalletMode::Main)
+            .unwrap();
+    let other_keys = random_mnemonic();
+    let other = import_mnemonic_with_target(other_keys.clone(), Network::Bitcoin, WalletMode::Main)
+        .unwrap();
+    Database::global().global_config.select_wallet(selected.id).unwrap();
+
+    let ownership = |address: AddressWithNetwork| {
+        let alert = cove_tokio::task::block_on(found_address_alert(Arc::new(address)));
+        let AppAlertState::FoundAddress { ownership, .. } = alert else {
+            panic!("a scanned address shows the found address alert, got {alert:?}");
+        };
+
+        ownership
+    };
+
+    assert_eq!(
+        ownership(address_at(&selected_keys, Network::Bitcoin, KeychainKind::External, 3)),
+        Some("This is an address in this wallet (receive, index 3)".to_string())
+    );
+    assert_eq!(
+        ownership(address_at(&other_keys, Network::Bitcoin, KeychainKind::Internal, 2)),
+        Some(format!("This is your address in “{}” (change, index 2)", other.name))
+    );
+    assert_eq!(
+        ownership(address_at(&random_mnemonic(), Network::Bitcoin, KeychainKind::External, 0)),
+        None
     );
 }

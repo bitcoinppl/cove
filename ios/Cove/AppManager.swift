@@ -279,6 +279,9 @@ struct CorruptedWalletDeletionRetry: Equatable {
         // a mode switch must not leave the previous mode's NFC session running
         tapSignerNfc?.cancel()
         tapSignerNfc = nil
+
+        // an open alert can name the previous mode's wallets
+        alertState = .none
     }
 
     func deleteCorruptedWallet(id: WalletId, databaseError: String) {
