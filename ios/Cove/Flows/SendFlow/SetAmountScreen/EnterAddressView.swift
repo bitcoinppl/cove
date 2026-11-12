@@ -60,7 +60,7 @@ struct EnterAddressView: View {
                 in: .whitespaces
             )
 
-            address = noSpaces
+            if noSpaces != new { address = noSpaces }
         }
         .padding(.top, 14)
     }
