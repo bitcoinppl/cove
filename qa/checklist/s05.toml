@@ -279,17 +279,23 @@ paths = [
 ]
 coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_seed_backup_only_a_watch_only_wallet_matches_may_be_the_only_copy",
-    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::rows_an_invalidation_left_on_screen_offer_and_authorize_no_delete",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_invalidation_has_the_owner_read_the_rows_again",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::row_delete_waits_for_the_write_in_flight",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_authorization_for_a_record_that_left_and_came_back_deletes_nothing",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_of_a_record_already_gone_completes",
-    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_whose_relist_fails_still_removes_the_row",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_whose_follow_up_listing_is_held_frees_the_lane_and_turn_off",
     "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::a_row_delete_trusted_under_an_earlier_configuration_deletes_nothing",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_whose_inventory_changed_partway_keeps_the_rest",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_deletes_only_the_confirmed_records_still_undecryptable",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_a_later_read_finds_readable_is_not_authorized",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_read_readable_loses_its_unreadable_delete",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_unreadable_delete_reads_the_record_when_the_lane_runs_it",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_unreadable_row_delete_reads_the_record_when_the_lane_runs_it",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_stale_batch_has_the_rows_read_again",
+    "rust:rust/src/manager/cloud_backup_manager/harness/row_delete_tests.rs::a_stale_row_delete_says_so_while_its_rows_are_read_again",
+    "rust:rust/src/manager/cloud_backup_manager/harness/row_delete_tests.rs::a_failed_row_delete_says_why_while_its_rows_are_read_again",
 ]
-# rust tests check that a seed backup a watch-only wallet matches still counts as possibly the only copy, that rows an invalidation left on screen offer no Delete and authorize nothing until a fetch reads them again, that a delete queued behind a write, or one whose record left and came back, or one trusted under an earlier configuration deletes nothing, that a record already gone or a failed relist still completes the delete, that an undecryptable batch stops at the first changed record and keeps the rest, that a batch deletes only the confirmed records still undecryptable when it runs, and that a batch never deletes a record a later fetch reads
+# rust tests check that a seed backup a watch-only wallet matches still counts as possibly the only copy, that rows an invalidation left on screen offer no Delete and authorize nothing until the inventory owner's own fetch reads them again, that a delete queued behind a write, or one whose record left and came back, or one trusted under an earlier configuration deletes nothing, that a record already gone still completes the delete, that a delete ends at the provider's answer so a held follow-up listing holds neither the lane nor Turn Off, that an undecryptable batch stops at the first changed record and keeps the rest, that a batch deletes only the confirmed records still undecryptable when it runs, that a batch never deletes a record a later fetch reads, that a record read readable during a batch loses its unreadable Delete, that an unreadable record, a batch's or a single row's, is read again in the lane and kept when another device rewrote it while the delete waited, that a stale batch has the rows read again, and that a stale or failed row delete keeps saying why while the rows are read again
 
 [[row]]
 id = "s05-cloud-upload-keeps-a-key-this-device-lost"
