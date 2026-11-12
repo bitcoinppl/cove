@@ -5,6 +5,7 @@ use std::{
 
 use cove_tokio::FutureTimeoutExt as _;
 use futures::{StreamExt as _, stream};
+use tokio::sync::Semaphore;
 use tracing::debug;
 
 use super::lan_binding::LanBinding;
@@ -13,25 +14,45 @@ use super::lan_binding::LanBinding;
 /// and short enough that hosts that don't exist don't hold up the sweep
 pub const CONNECT_TIMEOUT: Duration = Duration::from_millis(800);
 
-/// How many probes run at once, kept well under iOS's default limit of 256 open files
+/// How many probes run at once across a whole search, kept well under iOS's default limit of
+/// 256 open files
 pub const MAX_CONCURRENT_PROBES: usize = 64;
 
-/// Finds which of the addresses accept a TCP connection, returning them in no particular order
-///
-/// A probe only completes the TCP handshake and closes the connection: it never writes, so a
-/// server learns nothing about the wallet until the person picks it and the app checks it.
-/// Every probe is bound to `binding`'s network, and one that can't be bound isn't sent
-pub async fn open_ports(
-    binding: LanBinding,
-    targets: impl IntoIterator<Item = SocketAddr>,
-    timeout: Duration,
-) -> Vec<SocketAddr> {
-    stream::iter(targets)
-        .map(|target| async move { accepts(binding, target, timeout).await.then_some(target) })
-        .buffer_unordered(MAX_CONCURRENT_PROBES)
-        .filter_map(std::future::ready)
-        .collect()
-        .await
+/// Sends probes, holding every one it sends to a single allowance of open sockets, so a search
+/// covering several networks at once still stays under the open file limit
+#[derive(Debug)]
+pub struct Prober(Semaphore);
+
+impl Default for Prober {
+    fn default() -> Self {
+        Self(Semaphore::new(MAX_CONCURRENT_PROBES))
+    }
+}
+
+impl Prober {
+    /// Finds which of the addresses accept a TCP connection, returning them in no particular
+    /// order
+    ///
+    /// A probe only completes the TCP handshake and closes the connection: it never writes, so a
+    /// server learns nothing about the wallet until the person picks it and the app checks it.
+    /// Every probe is bound to `binding`'s network, and one that can't be bound isn't sent
+    pub async fn open_ports(
+        &self,
+        binding: LanBinding,
+        targets: impl IntoIterator<Item = SocketAddr>,
+        timeout: Duration,
+    ) -> Vec<SocketAddr> {
+        stream::iter(targets)
+            .map(|target| async move {
+                // the semaphore is never closed, so waiting always ends with a permit
+                let _permit = self.0.acquire().await.ok()?;
+                accepts(binding, target, timeout).await.then_some(target)
+            })
+            .buffer_unordered(MAX_CONCURRENT_PROBES)
+            .filter_map(std::future::ready)
+            .collect()
+            .await
+    }
 }
 
 async fn accepts(binding: LanBinding, target: SocketAddr, timeout: Duration) -> bool {
@@ -67,7 +88,7 @@ mod tests {
         // binding then dropping a listener leaves a port nothing listens on
         let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap().local_addr().unwrap();
 
-        let found = open_ports(loopback(), [open, closed], CONNECT_TIMEOUT).await;
+        let found = Prober::default().open_ports(loopback(), [open, closed], CONNECT_TIMEOUT).await;
 
         assert_eq!(found, vec![open]);
     }
@@ -79,7 +100,10 @@ mod tests {
         let open = listener.local_addr().unwrap();
         let missing = LanBinding::InterfaceIndex { index: u32::MAX };
 
-        assert_eq!(open_ports(missing, [open], CONNECT_TIMEOUT).await, Vec::new());
+        assert_eq!(
+            Prober::default().open_ports(missing, [open], CONNECT_TIMEOUT).await,
+            Vec::new()
+        );
     }
 
     // a probe must not send anything, so the server reads end of stream right after accepting
@@ -99,7 +123,10 @@ mod tests {
             received
         });
 
-        assert_eq!(open_ports(loopback(), [address], CONNECT_TIMEOUT).await, vec![address]);
+        assert_eq!(
+            Prober::default().open_ports(loopback(), [address], CONNECT_TIMEOUT).await,
+            vec![address]
+        );
         assert_eq!(server.join().unwrap(), Vec::<u8>::new());
     }
 

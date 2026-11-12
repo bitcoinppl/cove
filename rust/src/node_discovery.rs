@@ -26,6 +26,7 @@ use crate::{network::Network, node::Node};
 use catalog::{Catalog, ServicePort};
 use lan_subnet::LanSubnet;
 use mdns::{MdnsAnswers, MdnsClient};
+use probe::Prober;
 
 pub use lan_subnet::LanInterface;
 
@@ -71,8 +72,10 @@ pub async fn discover(
         return Err(NodeDiscoveryError::LocalNetworkBlocked);
     }
 
+    // every subnet is searched at once, drawing on one allowance of open sockets
     let catalog = Catalog::for_network(network);
-    let found = join_all(subnets.iter().map(|subnet| discover_on(subnet, &catalog))).await;
+    let prober = Prober::default();
+    let found = join_all(subnets.iter().map(|subnet| discover_on(subnet, &catalog, &prober))).await;
     let nodes = merge(network, &catalog, found);
 
     info!("Found {} node servers on the local network", nodes.len());
@@ -96,13 +99,13 @@ fn can_bind_to(subnet: &LanSubnet) -> bool {
         .is_ok()
 }
 
-async fn discover_on(subnet: &LanSubnet, catalog: &Catalog) -> SubnetFindings {
+async fn discover_on(subnet: &LanSubnet, catalog: &Catalog, prober: &Prober) -> SubnetFindings {
     let mdns = MdnsClient::on_subnet(subnet);
     let hostnames = catalog.known_hostnames();
 
     // the subnet sweep runs while mDNS waits for answers about the well-known hostnames
     let sweep_hosts: Vec<IpAddr> = subnet.hosts().map(IpAddr::V4).collect();
-    let sweep = probe::open_ports(
+    let sweep = prober.open_ports(
         subnet.binding(),
         probe::targets(&sweep_hosts, &catalog.generic_port_numbers()),
         probe::CONNECT_TIMEOUT,
@@ -123,7 +126,7 @@ async fn discover_on(subnet: &LanSubnet, catalog: &Catalog) -> SubnetFindings {
         .collect();
 
     let known_open =
-        probe::open_ports(subnet.binding(), known_targets, probe::CONNECT_TIMEOUT).await;
+        prober.open_ports(subnet.binding(), known_targets, probe::CONNECT_TIMEOUT).await;
     let open: BTreeSet<SocketAddr> = swept.into_iter().chain(known_open).collect();
 
     // servers no well-known hostname covers are named by a reverse lookup of their address
@@ -145,7 +148,7 @@ async fn discover_on(subnet: &LanSubnet, catalog: &Catalog) -> SubnetFindings {
 }
 
 fn lan_subnets(interfaces: &[LanInterface]) -> Vec<LanSubnet> {
-    let subnets: BTreeSet<LanSubnet> = interfaces
+    let mut subnets: Vec<LanSubnet> = interfaces
         .iter()
         .filter_map(|interface| {
             LanSubnet::try_from(interface)
@@ -154,7 +157,11 @@ fn lan_subnets(interfaces: &[LanInterface]) -> Vec<LanSubnet> {
         })
         .collect();
 
-    subnets.into_iter().collect()
+    // hosts reached through two addresses on one network are swept once; sorting groups those
+    // subnets, which order by binding, block and network before their own address
+    subnets.sort_unstable();
+    subnets.dedup_by(|later, earlier| later.sweeps_same_hosts_as(earlier));
+    subnets
 }
 
 /// Turns what every subnet found into one list of nodes, well-known hosts first

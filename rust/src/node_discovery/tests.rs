@@ -169,6 +169,27 @@ async fn a_network_sockets_cannot_be_bound_to_is_reported_as_blocked() {
     );
 }
 
+// two addresses on one network share a block that is swept once, while the same block on
+// another network, such as Ethernet beside Wi-Fi, is still swept over that network
+#[test]
+fn a_block_is_swept_once_per_network() {
+    let on = |address: &str, prefix_length: u8, index: u32| LanInterface {
+        ipv4_address: address.to_string(),
+        prefix_length,
+        binding: LanBinding::InterfaceIndex { index },
+    };
+
+    let subnets = lan_subnets(&[
+        on("192.168.1.18", 24, 1),
+        on("192.168.1.19", 24, 1),
+        on("192.168.1.20", 16, 1),
+        on("192.168.1.30", 24, 2),
+    ]);
+
+    // the /16 address narrows to the same /24 but also sweeps that block's edges, so it stays
+    assert_eq!(subnets.len(), 3);
+}
+
 /// Runs discovery on a real local network, then picks what it found the way the node screen
 /// does
 ///
