@@ -1505,6 +1505,92 @@ public func FfiConverterTypeRemoteBackupLocation_lower(_ value: RemoteBackupLoca
 }
 
 
+/**
+ * Who a build of the app was made for
+ */
+
+public enum BuildChannel: Equatable, Hashable {
+
+    /**
+     * A debug build from a developer's machine
+     */
+    case debug
+    /**
+     * A release build for testers, such as one installed from TestFlight
+     */
+    case beta
+    /**
+     * A release build from an app store; Android reports every release build as this, since
+     * it can't tell its testing tracks apart
+     */
+    case release
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BuildChannel: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuildChannel: FfiConverterRustBuffer {
+    typealias SwiftType = BuildChannel
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuildChannel {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .debug
+
+        case 2: return .beta
+
+        case 3: return .release
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BuildChannel, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .debug:
+            writeInt(&buf, Int32(1))
+
+
+        case .beta:
+            writeInt(&buf, Int32(2))
+
+
+        case .release:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildChannel_lift(_ buf: RustBuffer) throws -> BuildChannel {
+    return try FfiConverterTypeBuildChannel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildChannel_lower(_ value: BuildChannel) -> RustBuffer {
+    return FfiConverterTypeBuildChannel.lower(value)
+}
+
+
+
 
 public enum CloudAccessPolicy: Equatable, Hashable {
 
@@ -3499,6 +3585,11 @@ public protocol DeviceAccess: AnyObject, Sendable {
 
     func timezone()  -> String
 
+    /**
+     * Which kind of build of the app is running
+     */
+    func buildChannel()  -> BuildChannel
+
 }
 
 
@@ -3540,6 +3631,28 @@ fileprivate struct UniffiCallbackInterfaceDeviceAccess {
 
 
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        buildChannel: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> BuildChannel in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceDeviceAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.buildChannel(
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeBuildChannel_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
@@ -4471,6 +4584,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_deviceaccess_build_channel() != 280) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_keychainaccess_save() != 21295) {

@@ -4826,6 +4826,11 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func isInMainMode()  -> Bool
 
+    /**
+     * Payjoin as the Settings screen shows it
+     */
+    func payjoinSetting()  -> PayjoinSetting
+
     func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func selectWallet(id: WalletId) throws
@@ -4850,6 +4855,11 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func setCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func setHashedPinCode(hashedPinCode: String) throws
+
+    /**
+     * Save the user's Payjoin choice from Settings
+     */
+    func setPayjoinEnabled(enabled: Bool) throws
 
     func setSelectedNetwork(network: Network) throws
 
@@ -5020,6 +5030,18 @@ open func isInMainMode() -> Bool  {
 })
 }
 
+    /**
+     * Payjoin as the Settings screen shows it
+     */
+open func payjoinSetting() -> PayjoinSetting  {
+    return try!  FfiConverterTypePayjoinSetting_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_payjoin_setting(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func previewCustomBlockExplorer(network: Network, input: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
@@ -5126,6 +5148,18 @@ open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError
     uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(hashedPinCode),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Save the user's Payjoin choice from Settings
+     */
+open func setPayjoinEnabled(enabled: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_payjoin_enabled(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(enabled),uniffiCallStatus
     )
 }
 }
@@ -7650,7 +7684,7 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
 
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
 
-    func sendSetAmount(id: WalletId, address: Address?, amount: Amount?)  -> Route
+    func sendSetAmount(id: WalletId, request: AddressWithNetwork?)  -> Route
 
     func walletSettings(id: WalletId, route: WalletSettingsRoute)  -> Route
 
@@ -7922,14 +7956,13 @@ open func sendHardwareExport(id: WalletId, details: ConfirmDetails) -> Route  {
 })
 }
 
-open func sendSetAmount(id: WalletId, address: Address? = nil, amount: Amount? = nil) -> Route  {
+open func sendSetAmount(id: WalletId, request: AddressWithNetwork? = nil) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_routefactory_send_set_amount(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletId_lower(id),
-        FfiConverterOptionTypeAddress.lower(address),
-        FfiConverterOptionTypeAmount.lower(amount),uniffiCallStatus
+        FfiConverterOptionTypeAddressWithNetwork.lower(request),uniffiCallStatus
     )
 })
 }
@@ -21012,7 +21045,7 @@ public enum AppAlertState {
     )
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network
     )
-    case foundAddress(address: Address, amount: Amount?
+    case foundAddress(request: AddressWithNetwork
     )
     case unableToSelectWallet
     case errorImportingHardwareWallet(message: String
@@ -21130,7 +21163,7 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
         case 7: return .addressWrongNetwork(address: try FfiConverterTypeAddress.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), currentNetwork: try FfiConverterTypeNetwork.read(from: &buf)
         )
 
-        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
+        case 8: return .foundAddress(request: try FfiConverterTypeAddressWithNetwork.read(from: &buf)
         )
 
         case 9: return .unableToSelectWallet
@@ -21239,10 +21272,9 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeNetwork.write(currentNetwork, into: &buf)
 
 
-        case let .foundAddress(address,amount):
+        case let .foundAddress(request):
             writeInt(&buf, Int32(8))
-            FfiConverterTypeAddress.write(address, into: &buf)
-            FfiConverterOptionTypeAmount.write(amount, into: &buf)
+            FfiConverterTypeAddressWithNetwork.write(request, into: &buf)
 
 
         case .unableToSelectWallet:
@@ -29567,6 +29599,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case onboardingProgress
     case customBlockExplorer(Network
     )
+    case payjoinChoice
 
 
 
@@ -29617,6 +29650,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 14: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
         )
+
+        case 15: return .payjoinChoice
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29682,6 +29717,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case let .customBlockExplorer(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeNetwork.write(v1, into: &buf)
+
+
+        case .payjoinChoice:
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -34446,6 +34485,86 @@ public func FfiConverterTypeOtherBackupsOperation_lower(_ value: OtherBackupsOpe
 
 
 /**
+ * Payjoin as the Settings screen shows it
+ */
+
+public enum PayjoinSetting: Equatable, Hashable {
+
+    /**
+     * This build doesn't offer Payjoin, so Settings has no Payjoin switch and every payment is
+     * sent as an ordinary one
+     */
+    case unavailable
+    /**
+     * Settings shows a Payjoin switch, labelled beta when `beta` is set
+     */
+    case available(enabled: Bool, beta: Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PayjoinSetting: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinSetting: FfiConverterRustBuffer {
+    typealias SwiftType = PayjoinSetting
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinSetting {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .unavailable
+
+        case 2: return .available(enabled: try FfiConverterBool.read(from: &buf), beta: try FfiConverterBool.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PayjoinSetting, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .unavailable:
+            writeInt(&buf, Int32(1))
+
+
+        case let .available(enabled,beta):
+            writeInt(&buf, Int32(2))
+            FfiConverterBool.write(enabled, into: &buf)
+            FfiConverterBool.write(beta, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinSetting_lift(_ buf: RustBuffer) throws -> PayjoinSetting {
+    return try FfiConverterTypePayjoinSetting.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinSetting_lower(_ value: PayjoinSetting) -> RustBuffer {
+    return FfiConverterTypePayjoinSetting.lower(value)
+}
+
+
+
+/**
  * The wallet's Payjoin send, as the send screens show it
  *
  * Sent as `PayjoinStatusChanged` whenever it changes, and read once through
@@ -37018,9 +37137,10 @@ public enum SendFlowManagerAction {
     )
     case notifyFocusFieldChanged(old: SetAmountFocusField?, new: SetAmountFocusField?
     )
-    case notifyAddressChanged(Address
-    )
-    case notifyAmountChanged(Amount
+    /**
+     * Pay a scanned address or BIP 21 payment request, taking its amount and Payjoin endpoint
+     */
+    case setPaymentRequest(AddressWithNetwork
     )
     case notifyCoinControlAmountChanged(Amount
     )
@@ -37098,24 +37218,21 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 17: return .notifyFocusFieldChanged(old: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), new: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 18: return .notifyAddressChanged(try FfiConverterTypeAddress.read(from: &buf)
+        case 18: return .setPaymentRequest(try FfiConverterTypeAddressWithNetwork.read(from: &buf)
         )
 
-        case 19: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
+        case 19: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 20: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
+        case 20: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
         )
 
-        case 21: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
+        case 21: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
 
-        case 22: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
-        )
+        case 22: return .finalizeAndGoToNextScreen
 
-        case 23: return .finalizeAndGoToNextScreen
-
-        case 24: return .acknowledgeWarningAndFinalize(try FfiConverterTypeSendFlowWarningKind.read(from: &buf)
+        case 23: return .acknowledgeWarningAndFinalize(try FfiConverterTypeSendFlowWarningKind.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -37210,38 +37327,33 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterOptionTypeSetAmountFocusField.write(new, into: &buf)
 
 
-        case let .notifyAddressChanged(v1):
+        case let .setPaymentRequest(v1):
             writeInt(&buf, Int32(18))
-            FfiConverterTypeAddress.write(v1, into: &buf)
+            FfiConverterTypeAddressWithNetwork.write(v1, into: &buf)
 
 
-        case let .notifyAmountChanged(v1):
+        case let .notifyCoinControlAmountChanged(v1):
             writeInt(&buf, Int32(19))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
-        case let .notifyCoinControlAmountChanged(v1):
-            writeInt(&buf, Int32(20))
-            FfiConverterTypeAmount.write(v1, into: &buf)
-
-
         case let .notifyCoinControlEnteredAmountChanged(v1,v2):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(20))
             FfiConverterString.write(v1, into: &buf)
             FfiConverterBool.write(v2, into: &buf)
 
 
         case let .changeFeeRateOptions(v1):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(21))
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
 
 
         case .finalizeAndGoToNextScreen:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(22))
 
 
         case let .acknowledgeWarningAndFinalize(v1):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(23))
             FfiConverterTypeSendFlowWarningKind.write(v1, into: &buf)
 
         }
@@ -37514,7 +37626,10 @@ public func FfiConverterTypeSendFlowWarningKind_lower(_ value: SendFlowWarningKi
 
 public enum SendRoute {
 
-    case setAmount(id: WalletId, address: Address?, amount: Amount?
+    /**
+     * Enter a payment, starting from a scanned address or BIP 21 payment request if there is one
+     */
+    case setAmount(id: WalletId, request: AddressWithNetwork?
     )
     case coinControlSetAmount(id: WalletId, utxos: [Utxo]
     )
@@ -37543,7 +37658,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .setAmount(id: try FfiConverterTypeWalletId.read(from: &buf), address: try FfiConverterOptionTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
+        case 1: return .setAmount(id: try FfiConverterTypeWalletId.read(from: &buf), request: try FfiConverterOptionTypeAddressWithNetwork.read(from: &buf)
         )
 
         case 2: return .coinControlSetAmount(id: try FfiConverterTypeWalletId.read(from: &buf), utxos: try FfiConverterSequenceTypeUtxo.read(from: &buf)
@@ -37563,11 +37678,10 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .setAmount(id,address,amount):
+        case let .setAmount(id,request):
             writeInt(&buf, Int32(1))
             FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterOptionTypeAddress.write(address, into: &buf)
-            FfiConverterOptionTypeAmount.write(amount, into: &buf)
+            FfiConverterOptionTypeAddressWithNetwork.write(request, into: &buf)
 
 
         case let .coinControlSetAmount(id,utxos):
@@ -45590,6 +45704,30 @@ fileprivate struct FfiConverterOptionTypeAddress: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAddressWithNetwork: FfiConverterRustBuffer {
+    typealias SwiftType = AddressWithNetwork?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAddressWithNetwork.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAddressWithNetwork.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
     typealias SwiftType = Amount?
 
@@ -48384,6 +48522,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_payjoin_setting() != 34216) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -48415,6 +48556,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_payjoin_enabled() != 57697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578) {
@@ -49140,7 +49284,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_send_hardware_export() != 13876) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 53502) {
+    if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 38685) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_wallet_settings() != 16190) {
