@@ -203,10 +203,7 @@ struct NodeSelectionView: View {
         .onChange(of: selectedRow) { _, newSelectedRow in
             nodeSelectionChanged(to: newSelectedRow)
         }
-        .onDisappear {
-            // save what was typed into the custom form, but do not re-check an unchanged saved node
-            if customFormHasUnsavedChanges { checkAndSaveNode() }
-        }
+        .onDisappear(perform: saveCustomFormOnLeaving)
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
                 title: Text("Unable to parse URL"),
@@ -218,6 +215,17 @@ struct NodeSelectionView: View {
                 }
             )
         }
+    }
+
+    /// Saves what was typed into the custom form when the screen goes away, which includes the
+    /// privacy cover when the app is backgrounded
+    private func saveCustomFormOnLeaving() {
+        // one selection is checked at a time: older form values must not replace a preset or a
+        // found server whose check is still running
+        guard checkUrlTask == nil else { return }
+
+        // an unchanged saved node is not re-checked
+        if customFormHasUnsavedChanges { checkAndSaveNode() }
     }
 
     private func nodeSelectionChanged(to newSelectedRow: NodeRowSelection) {
