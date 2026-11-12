@@ -4,7 +4,7 @@ A fake Esplora and Electrum node backed by one deterministic in-memory chain. Bo
 
 It runs two ways:
 
-- **In process**, for Rust tests: `FakeNode::start(network)` binds free loopback ports. Tests mutate the chain through `FakeNode::chain()`, read the request log, and script requests to fail, stall, run slowly or wait on a gate (`FakeNode::on`). The app crate takes this library as a dev-dependency only, and `rust/src/test_support/fake_node.rs` adds the helpers that point Cove's node settings at it
+- **In process**, for Rust tests: `FakeNode::start(network)` binds free loopback ports. Tests mutate the chain through `FakeNode::chain()`, read the request log, and script requests to fail, stall, run slowly, wait on a gate, or be decided one at a time by a test's own function, which can also accept a broadcast and then leave it unanswered (`FakeNode::on`). The app crate takes this library as a dev-dependency only, and `rust/src/test_support/fake_node.rs` adds the helpers that point Cove's node settings at it
 - **As the `cove-fake-node` binary**, for iOS and Android UI tests: it serves the node on the ports it is given with a JSON control API, so a test running in a simulator or emulator can fund a wallet, mine blocks and check what the app broadcast
 
 ## Broadcasts

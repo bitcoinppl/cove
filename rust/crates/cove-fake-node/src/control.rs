@@ -74,12 +74,37 @@ impl Drop for Held<'_> {
     }
 }
 
+/// What a scripted rule does with one request it matched
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Scripted {
+    /// Answers it as the server would without the rule
+    Serve,
+    /// Processes it, so a broadcast is accepted, then never answers, as a request whose
+    /// client died mid-flight is left
+    ServeThenStall,
+    /// Neither processes nor answers it
+    Stall,
+    /// Answers with an error, as [`RuleBuilder::fail`] does
+    Fail { status: u16, message: String },
+}
+
+/// Decides each matched request in turn, see [`RuleBuilder::script`]
+#[derive(Clone)]
+struct Script(Arc<dyn Fn(&LoggedRequest) -> Scripted + Send + Sync>);
+
+impl std::fmt::Debug for Script {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Script")
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Behavior {
     Fail { status: u16, message: String },
     Stall,
     Delay(Duration),
     Hold(Gate),
+    Script(Script),
 }
 
 #[derive(Debug)]
@@ -106,7 +131,12 @@ impl RuleHandle {
 #[derive(Debug)]
 pub(crate) enum Verdict {
     Serve,
-    Fail { status: u16, message: String },
+    /// Process the request, then leave it unanswered
+    ServeThenStall,
+    Fail {
+        status: u16,
+        message: String,
+    },
 }
 
 /// Request log and scripted behaviour shared by the fake Esplora and Electrum servers
@@ -141,11 +171,9 @@ impl Control {
     ///
     /// A stall never returns, so the connection stays open and silent
     pub(crate) async fn intercept(&self, protocol: Protocol, name: &str, detail: &str) -> Verdict {
-        self.requests.lock().push(LoggedRequest {
-            protocol,
-            name: name.to_string(),
-            detail: detail.to_string(),
-        });
+        let request =
+            LoggedRequest { protocol, name: name.to_string(), detail: detail.to_string() };
+        self.requests.lock().push(request.clone());
 
         let behavior = {
             let rules = self.rules.lock();
@@ -169,6 +197,12 @@ impl Control {
                 Verdict::Serve
             }
             Some(Behavior::Stall) => std::future::pending().await,
+            Some(Behavior::Script(Script(decide))) => match decide(&request) {
+                Scripted::Serve => Verdict::Serve,
+                Scripted::ServeThenStall => Verdict::ServeThenStall,
+                Scripted::Stall => std::future::pending().await,
+                Scripted::Fail { status, message } => Verdict::Fail { status, message },
+            },
         }
     }
 }
@@ -197,6 +231,16 @@ impl RuleBuilder<'_> {
     /// Answers normally after waiting `delay`
     pub fn delay(self, delay: Duration) -> RuleHandle {
         self.control.add_rule(&self.pattern, Behavior::Delay(delay))
+    }
+
+    /// Lets `decide` choose what happens to each matching request, in the order they arrive
+    ///
+    /// `decide` runs while the request is being received, so it must not block
+    pub fn script(
+        self,
+        decide: impl Fn(&LoggedRequest) -> Scripted + Send + Sync + 'static,
+    ) -> RuleHandle {
+        self.control.add_rule(&self.pattern, Behavior::Script(Script(Arc::new(decide))))
     }
 
     /// Holds the request until the returned gate opens
