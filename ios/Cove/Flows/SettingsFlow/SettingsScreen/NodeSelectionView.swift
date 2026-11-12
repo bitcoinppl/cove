@@ -366,12 +366,23 @@ private struct NodeSelectionLanSection: View {
         } header: {
             Text("On This Network")
         } footer: {
-            // iOS can refuse the first search's connections while it asks for Local Network access
+            // iOS doesn't say whether Local Network access was granted, and can refuse the first
+            // search's connections while it asks, so an empty result covers both cases. A denied
+            // prompt never comes back, so only Settings can undo it
             if search == .finished([]) {
-                Text("If you just allowed local network access, search again.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("If you just allowed local network access, search again.")
+                    Text("If you didn't, turn on Local Network for Cove in Settings.")
+                    Button("Open Settings", action: openSettings)
+                }
             }
         }
     }
+}
+
+private func openSettings() {
+    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+    UIApplication.shared.open(url)
 }
 
 private struct DiscoveredNodeRow: View {
