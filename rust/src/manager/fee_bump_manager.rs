@@ -22,7 +22,11 @@ use tracing::{debug, warn};
 use crate::{
     app::AppAction,
     fee_client::FEE_CLIENT,
-    manager::{deferred_dispatch::DeferredDispatch, wallet_manager::RustWalletManager},
+    manager::{
+        deferred_dispatch::DeferredDispatch,
+        send_flow_manager::alert_state::{FeeShare, FeeWarningLevel},
+        wallet_manager::RustWalletManager,
+    },
     router::RouteFactory,
     transaction::{
         FeeRate,
@@ -57,6 +61,10 @@ pub enum FeeBumpManagerReconcileMessage {
 
     /// Building the replacement failed after the user picked a rate, the message is for an alert
     ContinueFailed(String),
+
+    /// The replacement's fee is high for the amount it sends, continuing needs
+    /// [`FeeBumpManagerAction::AcknowledgeFeeWarning`] with its level
+    FeeWarning(FeeBumpFeeWarning),
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -69,6 +77,47 @@ pub enum FeeBumpManagerAction {
     /// The screen is showing again, such as after the user came back from the confirm screen,
     /// so continue can build a new replacement
     ScreenAppeared,
+
+    /// The user accepted a [`FeeBumpManagerReconcileMessage::FeeWarning`], so continue again
+    AcknowledgeFeeWarning(FeeWarningLevel),
+}
+
+/// A replacement fee the user should confirm before signing, as a new send warns
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeeBumpFeeWarning {
+    pub level: FeeWarningLevel,
+    pub title: String,
+    pub message: String,
+}
+
+impl FeeBumpFeeWarning {
+    /// The warning for a replacement that pays `fee` to send `amount`, unless the user already
+    /// accepted one at least as severe for the selected rate
+    fn check(fee: Amount, amount: Amount, acknowledged: Option<FeeWarningLevel>) -> Option<Self> {
+        let share = FeeShare::of(fee.as_sats(), amount.as_sats())?;
+        let level = share.warning_level()?;
+        if acknowledged.is_some_and(|acknowledged| acknowledged >= level) {
+            return None;
+        }
+
+        let percent = share.display_percent();
+        let (title, message) = match level {
+            FeeWarningLevel::High => (
+                "High Network Fee",
+                format!("The new network fee is {percent}% of the amount you are sending."),
+            ),
+            FeeWarningLevel::VeryHigh => (
+                "Very High Network Fee",
+                format!(
+                    "The new network fee is {percent}% of the amount you are sending. That is \
+                     unusually high for an on-chain payment, check the fee rate before \
+                     continuing."
+                ),
+            ),
+        };
+
+        Some(Self { level, title: title.to_string(), message })
+    }
 }
 
 /// Whether the transaction can be sped up, and at which rates
@@ -166,6 +215,15 @@ struct State {
     status: FeeBumpStatus,
     selected: Option<Arc<FeeRateOptionWithTotalFee>>,
     continue_state: ContinueState,
+
+    /// The most severe fee warning the user accepted for the selected rate
+    acknowledged_fee_warning: Option<FeeWarningLevel>,
+}
+
+/// Where continue ended up once the replacement was built
+enum ContinueOutcome {
+    Pushed,
+    NeedsAcknowledgement(FeeBumpFeeWarning),
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -214,6 +272,7 @@ impl RustFeeBumpManager {
             Action::SelectFeeRate(fee_rate) => self.select_fee_rate(fee_rate),
             Action::Continue => self.continue_with_selected_fee_rate(),
             Action::ScreenAppeared => self.screen_appeared(),
+            Action::AcknowledgeFeeWarning(level) => self.acknowledge_fee_warning(level),
         }
     }
 
@@ -244,6 +303,7 @@ impl RustFeeBumpManager {
             status: FeeBumpStatus::Loading,
             selected: None,
             continue_state: ContinueState::Idle,
+            acknowledged_fee_warning: None,
         };
 
         Self {
@@ -343,6 +403,7 @@ impl RustFeeBumpManager {
         {
             let mut state = self.state.lock();
             state.selected = Some(fee_rate.clone());
+            state.acknowledged_fee_warning = None;
 
             // a custom rate becomes the options' custom row, so the picker can show it
             if let (FeeSpeed::Custom { .. }, FeeBumpStatus::Ready(options)) =
@@ -365,8 +426,17 @@ impl RustFeeBumpManager {
         }
     }
 
+    fn acknowledge_fee_warning(self: Arc<Self>, level: FeeWarningLevel) {
+        {
+            let mut state = self.state.lock();
+            state.acknowledged_fee_warning = state.acknowledged_fee_warning.max(Some(level));
+        }
+
+        self.continue_with_selected_fee_rate();
+    }
+
     fn continue_with_selected_fee_rate(self: Arc<Self>) {
-        let selected = {
+        let (selected, acknowledged) = {
             let mut state = self.state.lock();
             let Some(selected) = state.selected.clone() else { return };
             if state.continue_state != ContinueState::Idle {
@@ -374,17 +444,26 @@ impl RustFeeBumpManager {
             }
 
             state.continue_state = ContinueState::Building;
-            selected
+            (selected, state.acknowledged_fee_warning)
         };
 
         cove_tokio::task::spawn(async move {
-            let result = self.push_confirm_route(selected.fee_rate).await;
+            let result = self.push_confirm_route(selected.fee_rate, acknowledged).await;
 
-            let continue_state =
-                if result.is_ok() { ContinueState::Pushed } else { ContinueState::Idle };
+            let continue_state = match &result {
+                Ok(ContinueOutcome::Pushed) => ContinueState::Pushed,
+                Ok(ContinueOutcome::NeedsAcknowledgement(_)) | Err(_) => ContinueState::Idle,
+            };
             self.state.lock().continue_state = continue_state;
 
-            let Err(error) = result else { return };
+            let error = match result {
+                Ok(ContinueOutcome::Pushed) => return,
+                Ok(ContinueOutcome::NeedsAcknowledgement(warning)) => {
+                    return self.reconciler.send_async(Message::FeeWarning(warning)).await;
+                }
+                Err(error) => error,
+            };
+
             warn!("unable to build the replacement for {}: {error:?}", self.txid);
 
             // a transaction that confirmed or was replaced meanwhile can't be sped up any more
@@ -400,8 +479,22 @@ impl RustFeeBumpManager {
     }
 
     /// Builds the replacement and sends the frontend to sign it, the way a new send would
-    async fn push_confirm_route(&self, fee_rate: FeeRate) -> Result<(), FeeBumpError> {
+    ///
+    /// Stops short of signing when the replacement's fee needs a warning the user hasn't accepted
+    async fn push_confirm_route(
+        &self,
+        fee_rate: FeeRate,
+        acknowledged: Option<FeeWarningLevel>,
+    ) -> Result<ContinueOutcome, FeeBumpError> {
         let details = self.wallet_manager.confirm_fee_bump_txn(self.txid, fee_rate).await?;
+
+        // checked on the replacement as built, whose fee and amount are the ones the user signs
+        let warning =
+            FeeBumpFeeWarning::check(details.fee_total, details.sending_amount, acknowledged);
+        if let Some(warning) = warning {
+            return Ok(ContinueOutcome::NeedsAcknowledgement(warning));
+        }
+
         let details = Arc::new(details);
         let metadata = self.wallet_manager.current_metadata();
 
@@ -420,7 +513,7 @@ impl RustFeeBumpManager {
         let mut deferred = DeferredDispatch::<AppAction>::new();
         deferred.queue(AppAction::PushRoute(route));
 
-        Ok(())
+        Ok(ContinueOutcome::Pushed)
     }
 }
 
@@ -457,4 +550,36 @@ fn raised_to(base: FeeRateOptions, minimum: FeeRate) -> FeeRateOptions {
     };
 
     FeeRateOptions { fast: raise(base.fast), medium: raise(base.medium), slow: raise(base.slow) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn warning(fee: u64, amount: u64, acknowledged: Option<FeeWarningLevel>) -> Option<String> {
+        let warning =
+            FeeBumpFeeWarning::check(Amount::from_sat(fee), Amount::from_sat(amount), acknowledged);
+
+        warning.map(|warning| format!("{:?}: {}", warning.level, warning.message))
+    }
+
+    #[test]
+    fn a_high_replacement_fee_asks_once_per_level() {
+        // under 5% of the amount sent needs no warning
+        assert_eq!(warning(400, 10_000, None), None);
+
+        assert_eq!(
+            warning(600, 10_000, None).as_deref(),
+            Some("High: The new network fee is 6% of the amount you are sending.")
+        );
+        assert_eq!(warning(600, 10_000, Some(FeeWarningLevel::High)), None);
+
+        // accepting a high fee doesn't cover a very high one, but the reverse holds
+        let very_high = warning(2_500, 10_000, Some(FeeWarningLevel::High)).unwrap();
+        assert!(very_high.starts_with("VeryHigh: The new network fee is 25% of the amount"));
+        assert_eq!(warning(600, 10_000, Some(FeeWarningLevel::VeryHigh)), None);
+
+        // nothing sent outside the wallet leaves no share to warn about
+        assert_eq!(warning(600, 0, None), None);
+    }
 }
