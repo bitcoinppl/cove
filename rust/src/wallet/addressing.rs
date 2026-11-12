@@ -112,21 +112,66 @@ pub(crate) fn authoritative_public_descriptor_mirror(
 
             Ok(Some(public_descriptors(&wallet)))
         }
-        Err(load_error) => {
-            let keychain_pair = Keychain::global().get_public_descriptor(&metadata.id)?;
-            let Some((external, internal)) = keychain_pair else {
-                return Ok(None);
-            };
-
-            if descriptor_pair_matches_address_type(&external, &internal, metadata.address_type) {
-                return Ok(Some((external, internal)));
-            }
-
-            Err(WalletError::LoadError(format!(
-                "{load_error}; keychain descriptors do not match published wallet metadata"
-            )))
-        }
+        Err(load_error) => matching_keychain_descriptors(metadata, &load_error),
     }
+}
+
+/// A wallet's published scripts, read without writing to its store or the keychain
+pub(crate) enum PublishedWalletScripts {
+    /// The wallet store, which also records how far each address chain was revealed
+    Store(Box<bdk_wallet::PersistedWallet<bdk_wallet::rusqlite::Connection>>),
+
+    /// The keychain descriptor mirror, used when the store is missing or unreadable
+    KeychainMirror(Box<(ExtendedDescriptor, ExtendedDescriptor)>),
+}
+
+/// Read a wallet's published scripts without healing anything
+///
+/// Unlike [`authoritative_public_descriptor_mirror`], this never creates a missing store and
+/// never rewrites the keychain mirror, so lookups that only read can run at any time
+pub(crate) fn read_published_wallet_scripts(
+    metadata: &WalletMetadata,
+) -> Result<Option<PublishedWalletScripts>, WalletError> {
+    let operation = WalletLifecycleCoordinator::global()
+        .begin_persistence_operation(metadata.id.clone())
+        .map_err_str(WalletError::LoadError)?;
+
+    let store = BdkStore::try_open_existing_with_persistence_operation(
+        &metadata.id,
+        metadata.network,
+        &operation,
+    )
+    .map_err_str(WalletError::LoadError)
+    .and_then(|store| store.ok_or(WalletError::WalletNotFound));
+
+    let load_error = match store.and_then(load_wallet_from_store) {
+        Ok((wallet, _storage)) => {
+            return Ok(Some(PublishedWalletScripts::Store(Box::new(wallet))));
+        }
+        Err(error) => error,
+    };
+
+    let mirror = matching_keychain_descriptors(metadata, &load_error)?;
+    Ok(mirror.map(|pair| PublishedWalletScripts::KeychainMirror(Box::new(pair))))
+}
+
+/// The keychain descriptor pair, when it matches the address type the metadata publishes
+fn matching_keychain_descriptors(
+    metadata: &WalletMetadata,
+    load_error: &WalletError,
+) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, WalletError> {
+    let keychain_pair = Keychain::global().get_public_descriptor(&metadata.id)?;
+    let Some((external, internal)) = keychain_pair else {
+        return Ok(None);
+    };
+
+    if descriptor_pair_matches_address_type(&external, &internal, metadata.address_type) {
+        return Ok(Some((external, internal)));
+    }
+
+    Err(WalletError::LoadError(format!(
+        "{load_error}; keychain descriptors do not match published wallet metadata"
+    )))
 }
 
 /// Retry the keychain mirror from the descriptor pair published in the store
