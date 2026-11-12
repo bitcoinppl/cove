@@ -201,6 +201,7 @@ fun NodeSettingsScreen(
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkAndSaveNode(found.node)
                 }
+
                 refreshNodeState()
 
                 // a picked server is saved as a custom node, which the custom form shows
@@ -488,6 +489,7 @@ private fun LanNodesSection(
                         isSelected = found.node.url == selectedUrl,
                         onClick = { onSelect(found) },
                     )
+
                     MaterialDivider()
                 }
             }
@@ -501,12 +503,14 @@ private fun LanNodesSection(
                     if (search == LanSearch.Searching) {
                         CircularProgressIndicator(modifier = Modifier.width(16.dp).height(16.dp), strokeWidth = 2.dp)
                     }
+
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
                 MaterialDivider()
             }
 
@@ -547,6 +551,7 @@ private fun DiscoveredNodeRow(
                 text = found.host,
                 style = MaterialTheme.typography.bodyMedium,
             )
+
             val detail =
                 found.software?.let { stringResource(R.string.node_lan_detail, it, found.address) } ?: found.address
 
