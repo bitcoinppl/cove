@@ -19,6 +19,8 @@ use crate::{
 use cove_common::consts::{WALLET_DATA_DIR, wallet_data_dir_path};
 use cove_types::redb::Json;
 
+use crate::manager::wallet_manager::payjoin::PayjoinSessionId;
+
 use ahash::AHashMap as HashMap;
 use cove_util::result_ext::ResultExt as _;
 
@@ -149,13 +151,46 @@ pub enum PendingAction {
 
 /// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(from = "StoredPayjoinSenderSession")]
 pub struct PayjoinSenderSession {
+    /// Identifies the payment in the status the wallet reports for it
+    pub session_id: PayjoinSessionId,
     pub events: Vec<String>,
     pub fallback_tx: TransactionBytes,
-    #[serde(default)]
     pub created_at_secs: Option<u64>,
-    #[serde(default)]
     pub pending_action: Option<PendingAction>,
+}
+
+/// A `PayjoinSenderSession` as any build saved it, including those before sessions had an id
+#[derive(Deserialize)]
+struct StoredPayjoinSenderSession {
+    #[serde(default)]
+    session_id: Option<PayjoinSessionId>,
+    events: Vec<String>,
+    fallback_tx: TransactionBytes,
+    #[serde(default)]
+    created_at_secs: Option<u64>,
+    #[serde(default)]
+    pending_action: Option<PendingAction>,
+}
+
+impl From<StoredPayjoinSenderSession> for PayjoinSenderSession {
+    fn from(stored: StoredPayjoinSenderSession) -> Self {
+        let StoredPayjoinSenderSession {
+            session_id,
+            events,
+            fallback_tx,
+            created_at_secs,
+            pending_action,
+        } = stored;
+
+        // a record without an id is read again on every poll event and terminal write until
+        // one is saved, so its id must come out the same each time
+        let session_id = session_id
+            .unwrap_or_else(|| PayjoinSessionId::for_legacy_session(fallback_tx.as_ref()));
+
+        Self { session_id, events, fallback_tx, created_at_secs, pending_action }
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -948,6 +983,7 @@ mod tests {
         let wallet_id = WalletId::preview_new_random();
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()],
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
@@ -959,11 +995,48 @@ mod tests {
         assert_eq!(db.get_payjoin_sender_session().unwrap(), Some(session));
     }
 
+    /// A session saved before sessions had an id still reads, keeps its fields, and gets an id
+    /// that the next save keeps
+    #[test]
+    fn payjoin_sender_session_without_an_id_reads_with_a_stable_one() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+
+        // the exact JSON the earlier record shape serialized to
+        let legacy = |fallback_tx: &str| {
+            let json = format!(
+                r#"{{"PayjoinSenderSession":{{"events":["{{\"PostedOriginalPsbt\":[]}}"],"fallback_tx":{fallback_tx},"created_at_secs":1700000000,"pending_action":"BroadcastFallback"}}}}"#
+            );
+            let WalletData::PayjoinSenderSession(session) =
+                serde_json::from_str::<WalletData>(&json).expect("the earlier record shape reads")
+            else {
+                panic!("the record reads as a payjoin session");
+            };
+
+            session
+        };
+
+        let session = legacy("[2,0,0,0]");
+        assert_eq!(session.events, vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()]);
+        assert_eq!(session.fallback_tx, vec![0x02, 0x00, 0x00, 0x00].into());
+        assert_eq!(session.created_at_secs, Some(1_700_000_000));
+        assert_eq!(session.pending_action, Some(PendingAction::BroadcastFallback));
+
+        // every read before the id is saved names the same payment, and another payment differs
+        assert_eq!(legacy("[2,0,0,0]").session_id, session.session_id, "a re-read keeps the id");
+        assert_ne!(legacy("[1,0,0,0]").session_id, session.session_id, "ids differ per payment");
+
+        db.set_payjoin_sender_session(session.clone()).unwrap();
+        let saved = db.get_payjoin_sender_session().unwrap().expect("the session is saved");
+        assert_eq!(saved, session, "the saved record reads back with its id");
+    }
+
     #[test]
     fn delete_payjoin_sender_session_clears_session() {
         let wallet_id = WalletId::preview_new_random();
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
             events: vec![r#"{"Closed":"Failure"}"#.to_string()],
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,

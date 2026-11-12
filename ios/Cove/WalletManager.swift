@@ -170,9 +170,9 @@ enum WalletManagerPreview {
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
-    /// non-nil when a payjoin transaction has been broadcast (success or fallback);
-    /// UUID changes each time so onChange always fires even across multiple sends
-    var payjoinTxBroadcast: UUID? = nil
+    /// the wallet's payjoin send; each session has its own id, so a new session's status
+    /// always differs from the last one's
+    var payjoinStatus: PayjoinStatus = .idle
 
     /// cached transaction detail presentations
     var transactionDetailsPresentations: [TxId: TransactionDetailsPresentation] = [:]
@@ -470,9 +470,9 @@ enum WalletManagerPreview {
         try await withRustAsync { try await $0.broadcastTransaction(signedTransaction: transaction) }
     }
 
-    func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws {
+    func initiatePayment(psbt: Psbt, mode: UnsignedPaymentMode) async throws {
         try await withRustAsync {
-            try await $0.initiatePayment(psbt: psbt, payjoinEndpoint: payjoinEndpoint)
+            try await $0.initiatePayment(psbt: psbt, mode: mode)
         }
     }
 
@@ -697,7 +697,7 @@ enum WalletManagerPreview {
             applyTransactionMessage(message)
         case .walletBalanceChanged, .unsignedTransactionsChanged, .walletMetadataChanged,
              .walletScannerResponse, .nodeConnectionFailed, .walletError, .unknownError,
-             .sendFlowError, .hotWalletKeyMissing, .payjoinTxBroadcast:
+             .sendFlowError, .hotWalletKeyMissing, .payjoinStatusChanged:
             applyWalletStateMessage(message)
         case .receiveAddressUpdated, .receiveAddressPresentationUpdated,
              .receiveAddressLoadingChanged, .receiveAddressError, .receiveAddressClosed:
@@ -928,8 +928,8 @@ extension WalletManager {
         case let .hotWalletKeyMissing(walletId):
             delegate?.showWalletAlert(.hotWalletKeyMissing(walletId: walletId))
 
-        case .payjoinTxBroadcast:
-            payjoinTxBroadcast = UUID()
+        case let .payjoinStatusChanged(status):
+            payjoinStatus = status
 
         default:
             preconditionFailure("Expected a wallet state reconcile message")

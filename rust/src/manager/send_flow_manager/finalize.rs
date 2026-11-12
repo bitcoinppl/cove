@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     app::AppAction,
     manager::deferred_dispatch::DeferredDispatch,
-    router::RouteFactory,
+    router::{RouteFactory, UnsignedPaymentMode},
     wallet::{Address, metadata::WalletType},
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
@@ -226,7 +226,12 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None),
+                // Payjoin stays off until it ships, so a pj URI is paid as an ordinary payment
+                WalletType::Hot => RouteFactory::new().send_confirm(
+                    wallet_id,
+                    details,
+                    UnsignedPaymentMode::Standard,
+                ),
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }

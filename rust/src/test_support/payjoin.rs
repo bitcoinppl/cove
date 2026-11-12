@@ -6,7 +6,13 @@
 //! receiver is driven step by step from the test and signs with a BDK wallet whose coin lives on
 //! the fake node, so the node's script check passes when the sender broadcasts the Payjoin
 
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use bdk_wallet::{KeychainKind, SignOptions, Wallet as BdkWallet};
 use bitcoin::{Amount, FeeRate, OutPoint, Psbt, TxOut};
@@ -116,6 +122,56 @@ impl PayjoinServices {
             .expect("the OHTTP keys body reads");
 
         OhttpKeys::decode(&body).expect("the directory's OHTTP keys decode")
+    }
+}
+
+/// An OHTTP relay that accepts every connection and never answers, so a sender's request
+/// through it stays in flight until the sender gives up on it
+pub(crate) struct SilentRelay {
+    port: u16,
+    connections: Arc<AtomicUsize>,
+    server: AbortHandle,
+}
+
+impl SilentRelay {
+    /// Listens on IPv4 loopback, as the mailroom instances do
+    pub(crate) async fn start() -> Self {
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("the silent relay listens");
+        let port = listener.local_addr().expect("the silent relay has an address").port();
+        let connections = Arc::new(AtomicUsize::new(0));
+
+        let accepted = connections.clone();
+        let server = tokio::spawn(async move {
+            // kept open and unread until the relay drops, so no request ever gets an answer
+            let mut held = Vec::new();
+            while let Ok((stream, _)) = listener.accept().await {
+                accepted.fetch_add(1, Ordering::SeqCst);
+                held.push(stream);
+            }
+        });
+
+        Self { port, connections, server: server.abort_handle() }
+    }
+
+    /// A sender config whose only relay is this one, waiting up to `session_timeout`
+    pub(crate) fn sender_config(&self, session_timeout: Duration) -> PayjoinConfig {
+        let url = Url::parse(&format!("http://localhost:{}", self.port)).expect("a valid URL");
+        let relays = OhttpRelays::loopback_for_test(vec![url])
+            .expect("loopback relays are allowed in tests");
+
+        PayjoinConfig::new(relays, session_timeout)
+    }
+
+    /// How many connections senders have opened to this relay
+    pub(crate) fn connections(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for SilentRelay {
+    fn drop(&mut self) {
+        self.server.abort();
     }
 }
 

@@ -20,7 +20,6 @@ struct SendFlowConfirmScreen: View {
     @State var manager: WalletManager
     let details: ConfirmDetails
     let input: SendConfirmationInput
-    let payjoinEndpoint: String?
 
     let prices: PriceResponse? = nil
 
@@ -95,7 +94,7 @@ struct SendFlowConfirmScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
             .onDisappear(perform: handleDisappear)
-            .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
+            .onChange(of: manager.payjoinStatus, payjoinStatusChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
                 resultAlertBinding,
@@ -123,9 +122,13 @@ struct SendFlowConfirmScreen: View {
         self.sendConfirmationLock = nil
     }
 
-    private func payjoinBroadcastChanged(_: UUID?, _ uuid: UUID?) {
-        // UUID changes each time so this fires reliably across multiple sends
-        guard uuid != nil, case .sending = sendState else { return }
+    private func payjoinStatusChanged(_: PayjoinStatus, _ status: PayjoinStatus) {
+        // only this screen's own session completing ends its send
+        guard case let .unsigned(mode: .payjoin(intent: intent)) = input,
+              case let .completed(sessionId: sessionId, txid: _, kind: _) = status,
+              sessionId == intent.sessionId,
+              case .sending = sendState
+        else { return }
 
         sendState = .sent
         presenter.confirmationAlertState = .init(.sent(id))
@@ -160,13 +163,10 @@ struct SendFlowConfirmScreen: View {
                     throw SendConfirmationError.unfinalizedSignedPsbt
                 }
                 try await manager.broadcastTransaction(finalizedTransaction)
-            case .unsigned:
-                try await manager.initiatePayment(
-                    psbt: details.psbt(),
-                    payjoinEndpoint: payjoinEndpoint
-                )
-                // for payjoin, stay in .sending until PayjoinTxBroadcast reconciles
-                if payjoinEndpoint == nil {
+            case let .unsigned(mode: mode):
+                try await manager.initiatePayment(psbt: details.psbt(), mode: mode)
+                // for payjoin, stay in .sending until its session completes
+                if case .standard = mode {
                     sendState = .sent
                     presenter.confirmationAlertState = .init(.sent(id))
                 }
@@ -531,8 +531,7 @@ private enum SendConfirmationError: LocalizedError {
                                     id: WalletId(),
                                     manager: manager,
                                     details: confirmDetailsPreviewNew(),
-                                    input: .unsigned,
-                                    payjoinEndpoint: nil
+                                    input: .unsigned(mode: .standard)
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
@@ -560,8 +559,7 @@ private enum SendConfirmationError: LocalizedError {
             id: WalletId(),
             manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew(),
-            input: .unsigned,
-            payjoinEndpoint: nil
+            input: .unsigned(mode: .standard)
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
