@@ -113,6 +113,13 @@ struct SelectedWalletMainContent: View {
                 )
             }
 
+            // a payjoin payment still in progress, such as one resumed after a relaunch once its
+            // confirm screen is gone
+            PayjoinPendingBanner(
+                status: manager.payjoinStatus,
+                sendWithoutPayjoin: { updater(.cancelPayjoin($0)) }
+            )
+
             SelectedWalletTransactionsView(
                 loadState: manager.loadState,
                 unsignedTransactions: manager.unsignedTransactions,

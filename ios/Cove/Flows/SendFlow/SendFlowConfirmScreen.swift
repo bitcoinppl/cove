@@ -66,6 +66,21 @@ struct SendFlowConfirmScreen: View {
         )
     }
 
+    /// The Payjoin session this screen starts, nil for an ordinary send
+    private var payjoinSessionId: PayjoinSessionId? {
+        guard case let .unsigned(mode: .payjoin(intent: intent)) = input else { return nil }
+        return intent.sessionId
+    }
+
+    /// The wallet's Payjoin status when it is this screen's payment; another payment's
+    /// status never changes this screen
+    private var ownPayjoinStatus: PayjoinStatus? {
+        guard let payjoinSessionId, manager.payjoinStatus.sessionId == payjoinSessionId
+        else { return nil }
+
+        return manager.payjoinStatus
+    }
+
     private var confirmationAlertContext: SendFlowConfirmAlertContext {
         SendFlowConfirmAlertContext(presenter: presenter, sendState: $sendState)
     }
@@ -88,13 +103,16 @@ struct SendFlowConfirmScreen: View {
                 footerHeight: $sendConfirmationFooterHeight,
                 lockingTask: $lockingTask,
                 walletType: metadata.walletType,
+                payjoinWaiting: ownPayjoinStatus?.negotiation,
                 confirmSend: confirmSend,
-                lockWallet: lockForSendConfirmation
+                lockWallet: lockForSendConfirmation,
+                sendWithoutPayjoin: sendWithoutPayjoin
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
             .onDisappear(perform: handleDisappear)
-            .onChange(of: manager.payjoinStatus, payjoinStatusChanged)
+            // initial, so a status the wallet already holds for this session applies on appear
+            .onChange(of: manager.payjoinStatus, initial: true, payjoinStatusChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
                 resultAlertBinding,
@@ -122,16 +140,32 @@ struct SendFlowConfirmScreen: View {
         self.sendConfirmationLock = nil
     }
 
-    private func payjoinStatusChanged(_: PayjoinStatus, _ status: PayjoinStatus) {
-        // only this screen's own session completing ends its send
-        guard case let .unsigned(mode: .payjoin(intent: intent)) = input,
-              case let .completed(sessionId: sessionId, txid: _, kind: _) = status,
-              sessionId == intent.sessionId,
-              case .sending = sendState
-        else { return }
+    /// Cancels only the wait for the receiver; the wallet broadcasts the normal transaction at once
+    private func sendWithoutPayjoin(_ sessionId: PayjoinSessionId) {
+        manager.dispatch(action: .cancelPayjoin(sessionId))
+    }
 
-        sendState = .sent
-        presenter.confirmationAlertState = .init(.sent(id))
+    private func payjoinStatusChanged(_: PayjoinStatus, _: PayjoinStatus) {
+        guard let status = ownPayjoinStatus else { return }
+
+        switch status {
+        // the session id is new to this screen, so a status naming it means this payment started
+        case .negotiating, .broadcasting:
+            if case .idle = sendState { sendState = .sending }
+
+        // a fallback is a normal send, not an error
+        case let .completed(sessionId: _, txid: _, kind: kind):
+            if case .sent = sendState { return }
+
+            sendState = .sent
+            presenter.confirmationAlertState = switch kind {
+            case .proposal: .init(.sent(id))
+            case .fallback: .init(.sentWithoutPayjoin(id))
+            }
+
+        case .idle:
+            break
+        }
     }
 
     private func sendFlowErrorChanged(
@@ -226,8 +260,10 @@ private struct SendFlowConfirmationContent: View {
     @Binding var footerHeight: CGFloat
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
+    let payjoinWaiting: PayjoinNegotiation?
     let confirmSend: () -> Void
     let lockWallet: () -> Void
+    let sendWithoutPayjoin: (PayjoinSessionId) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -244,8 +280,10 @@ private struct SendFlowConfirmationContent: View {
                     footerHeight: $footerHeight,
                     lockingTask: $lockingTask,
                     walletType: walletType,
+                    payjoinWaiting: payjoinWaiting,
                     confirmSend: confirmSend,
                     lockWallet: lockWallet,
+                    sendWithoutPayjoin: sendWithoutPayjoin,
                     size: geometry.size
                 )
             }
@@ -264,8 +302,10 @@ private struct SendFlowConfirmationBody: View {
     @Binding var footerHeight: CGFloat
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
+    let payjoinWaiting: PayjoinNegotiation?
     let confirmSend: () -> Void
     let lockWallet: () -> Void
+    let sendWithoutPayjoin: (PayjoinSessionId) -> Void
     let size: CGSize
 
     var body: some View {
@@ -297,8 +337,10 @@ private struct SendFlowConfirmationBody: View {
                 sendState: $sendState,
                 lockingTask: $lockingTask,
                 walletType: walletType,
+                payjoinWaiting: payjoinWaiting,
                 confirmSend: confirmSend,
-                lockWallet: lockWallet
+                lockWallet: lockWallet,
+                sendWithoutPayjoin: sendWithoutPayjoin
             )
             .offset(y: -sendConfirmationActionBottomPadding)
             .padding(.bottom, sendConfirmationActionBottomPadding)
@@ -472,11 +514,22 @@ private struct SendFlowConfirmationFooter: View {
     @Binding var lockingTask: Task<Void, Never>?
 
     let walletType: WalletType
+    let payjoinWaiting: PayjoinNegotiation?
     let confirmSend: () -> Void
     let lockWallet: () -> Void
+    let sendWithoutPayjoin: (PayjoinSessionId) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
+            if let payjoinWaiting {
+                PayjoinWaitingCard(
+                    negotiation: payjoinWaiting,
+                    sendWithoutPayjoin: sendWithoutPayjoin
+                )
+                .id(payjoinWaiting.sessionId)
+                .padding(.horizontal)
+            }
+
             SwipeToSendView(
                 sendState: $sendState,
                 onConfirm: confirmSend

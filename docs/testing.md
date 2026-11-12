@@ -103,6 +103,8 @@ Relays and the session timeout come from `PayjoinConfig`, which the wallet actor
 cd rust && cargo nextest run -p cove -E 'test(payjoin_e2e)'
 ```
 
+The screens that show this status have their own Android test, `PayjoinWaitingTest` (`androidTest`). It feeds `PayjoinStatusChanged` messages to a preview wallet manager, with no Payjoin services. On the confirm screen, a status for another session must change nothing. A `Negotiating` status for the screen's own session shows the waiting card and a countdown. Send without Payjoin must dispatch `CancelPayjoin` with that session's id, and `Completed` with the `Fallback` kind must show the result as a normal send. If the route is rebuilt while waiting, as on a rotation, a broadcast error must still reach the user, including one that arrives while the route is gone, when the status has already returned to `Idle`. An earlier payment's error must not come back. On the wallet screen, a `Negotiating` status shows the pending banner, which `Completed` removes. Pass `-e payjoinScreenshots true` to also save both screens to `Pictures/cove-layout-screenshots` on the device.
+
 ## Planning a release pass
 
 1. **Identify the artifact.** Record the version, build number and commit from Settings → About on each phone. Plan against that commit, not the local branch: a TestFlight or Play build can lag the branch it was cut from.
