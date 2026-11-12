@@ -480,7 +480,7 @@ fn begin_test_detail_refresh(
     manager: &RustCloudBackupManager,
 ) -> DetailRefreshClaim {
     supervisor.detail_workflow.open();
-    let DetailRefreshPlan::Start(claim) = supervisor.detail_workflow.request_refresh() else {
+    let DetailRefreshPlan::Start(claim) = supervisor.detail_workflow.request_refresh(DetailRefreshOrigin::Tap) else {
         panic!("expected detail refresh to start");
     };
     manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
@@ -1771,7 +1771,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
 
     supervisor.detail_workflow.open();
     let DetailRefreshPlan::Start(superseded_refresh) =
-        supervisor.detail_workflow.request_refresh()
+        supervisor.detail_workflow.request_refresh(DetailRefreshOrigin::Tap)
     else {
         panic!("expected detail refresh to start");
     };
@@ -1980,7 +1980,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
     let (claim, confirmation) =
         start_trusted_local_refresh(&mut supervisor, &manager, listed_detail(&[])).await;
 
-    assert_eq!(supervisor.detail_workflow.request_refresh(), DetailRefreshPlan::Queued);
+    assert_eq!(supervisor.detail_workflow.request_refresh(DetailRefreshOrigin::Tap), DetailRefreshPlan::Queued);
 
     supervisor
         .complete_confirm_refresh_detail(
@@ -1997,7 +1997,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
         .unwrap();
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
-    assert_eq!(supervisor.detail_workflow.request_refresh(), DetailRefreshPlan::Queued);
+    assert_eq!(supervisor.detail_workflow.request_refresh(DetailRefreshOrigin::Tap), DetailRefreshPlan::Queued);
 }
 
 #[tokio::test(flavor = "current_thread")]

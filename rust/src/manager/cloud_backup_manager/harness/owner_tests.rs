@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use act_zero::call;
+use cove_device::cloud_storage::CloudAccessPolicy;
 
 use super::invariants::Invariant;
 use super::process::checkpoint;
@@ -26,9 +27,14 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupInventoryControl, CloudBackupProgressSection, CloudBackupScreenBody,
+    CloudBackupSection,
+};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupResetRecovery,
-    CloudBackupRuntimeOwnership, CloudBackupStatus, CloudBackupVerificationSource,
+    CloudBackupInventoryIncompleteReason, CloudBackupManagerAction, CloudBackupResetPermit,
+    CloudBackupResetRecovery, CloudBackupRuntimeOwnership, CloudBackupStatus,
+    CloudBackupVerificationSource,
 };
 
 fn running_claim(app: &TestApp) -> Option<CloudBackupExclusiveOperationClaim> {
@@ -453,8 +459,41 @@ fn a_reinitialize_waits_for_a_running_cleanup_delete_before_it_reads_the_namespa
     });
 }
 
+/// The sections the published detail draws, empty when the backup is not configured
+fn configured_sections(app: &TestApp) -> Vec<CloudBackupSection> {
+    match app.manager().published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.sections,
+        _ => Vec::new(),
+    }
+}
+
+/// How many of this device's wallets the published detail lists
+fn own_rows(app: &TestApp) -> usize {
+    configured_sections(app)
+        .iter()
+        .map(|section| match section {
+            CloudBackupSection::Wallets(wallets) => {
+                wallets.up_to_date.len() + wallets.needs_sync.len()
+            }
+            _ => 0,
+        })
+        .sum()
+}
+
+/// The policy of each inventory listing after the first `skip` calls
+fn listing_policies(app: &TestApp, skip: usize) -> Vec<Option<CloudAccessPolicy>> {
+    app.cloud
+        .calls()
+        .into_iter()
+        .skip(skip)
+        .filter(|(id, _)| id.kind == CloudCall::ListWalletFilesSnapshot)
+        .map(|(id, _)| app.cloud.policy_of(id))
+        .collect()
+}
+
 /// A local reset owns the detail refresh queued before it: one still waiting on its rate limit
-/// when the reset begins never lists the cloud, so it can't ask the user for provider consent
+/// when the reset begins never lists the cloud, so it can't ask the user for provider consent.
+/// When the reset fails and the backup resumes, the cycle opens again with nobody tapping
 #[test]
 fn a_local_reset_cancels_the_detail_refresh_waiting_on_its_rate_limit() {
     let test = concat!(
@@ -473,7 +512,7 @@ fn a_local_reset_cancels_the_detail_refresh_waiting_on_its_rate_limit() {
         app.cloud.revoke_authorization();
 
         let manager = app.manager().clone();
-        let _permit = app
+        let permit = app
             .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
             .expect("reset permit");
         app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::TurnOff, N::Enable]);
@@ -485,5 +524,77 @@ fn a_local_reset_cancels_the_detail_refresh_waiting_on_its_rate_limit() {
             app.describe()
         );
         assert_eq!(app.cloud.consent_sheets(), 0);
+
+        // the resumed cycle lists on its own, without the taps from before the reset
+        let before = app.cloud.calls().len();
+        let recovery = abandon(&mut app, permit, "the wipe fails before the key clear");
+        assert_eq!(recovery, CloudBackupResetRecovery::PreviousStatusResumed);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let resumed = listing_policies(&app, before);
+        assert!(
+            !resumed.is_empty() && resumed.iter().all(|p| *p == Some(CloudAccessPolicy::Silent)),
+            "the resumed backup did not list its inventory silently: {resumed:?}\n{}",
+            app.describe()
+        );
+        assert_eq!(app.cloud.consent_sheets(), 0);
+
+        let progress = configured_sections(&app).into_iter().find_map(|section| match section {
+            CloudBackupSection::Progress(progress) => Some(progress),
+            _ => None,
+        });
+        assert!(
+            matches!(
+                &progress,
+                Some(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::AuthorizationRequired,
+                    controls,
+                }) if controls.contains(&CloudBackupInventoryControl::ReconnectDrive)
+            ),
+            "the resumed listing that needs consent did not offer Reconnect: {progress:?}\n{}",
+            app.describe()
+        );
+
+        // Check Again is a new tap, so its listing may ask, and the rows load
+        load_detail(&mut app);
+        assert_eq!(app.cloud.consent_sheets(), 1);
+        assert_eq!(own_rows(&app), 1, "{}", app.describe());
+    });
+}
+
+/// Launch discovery that arrives while a local reset holds the runtime doesn't reopen the detail
+/// refresh the reset suspended, so it lists nothing for the configuration being cleared; when the
+/// reset fails and the backup resumes, the cycle opens and the inventory loads
+#[test]
+fn launch_discovery_during_a_local_reset_lists_nothing() {
+    let test = concat!(module_path!(), "::launch_discovery_during_a_local_reset_lists_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let permit = configured_reset(&mut app);
+        let listings = app.cloud.count(CloudCall::ListWalletFilesSnapshot);
+
+        app.event("launch discovery during the reset", |app| {
+            app.manager().start_background_inventory_discovery();
+        })
+        .then_cannot(&[N::TurnOff, N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::TurnOff, N::Enable]);
+
+        assert_eq!(
+            app.cloud.count(CloudCall::ListWalletFilesSnapshot),
+            listings,
+            "discovery reopened the detail refresh during the reset\n{}",
+            app.describe()
+        );
+
+        let recovery = abandon(&mut app, permit, "the wipe fails before the key clear");
+        assert_eq!(recovery, CloudBackupResetRecovery::PreviousStatusResumed);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+
+        assert!(
+            app.cloud.count(CloudCall::ListWalletFilesSnapshot) > listings,
+            "the resumed backup never listed its inventory\n{}",
+            app.describe()
+        );
+        assert_eq!(own_rows(&app), 1, "{}", app.describe());
     });
 }

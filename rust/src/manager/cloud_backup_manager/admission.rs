@@ -240,7 +240,8 @@ pub(crate) enum Admission {
 /// The only intents that may coalesce, each of which leaves visible feedback on screen
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CoalescibleIntent {
-    /// A detail refresh is already loading, and the inventory shows it loading
+    /// A detail refresh is already loading, and the inventory shows it loading; the tap gives
+    /// the load after it the tap's authority
     RefreshDetail,
     /// A sync is already running, and the wallet rows show it syncing
     SyncUnsynced,
@@ -653,8 +654,9 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         | I::PromptEnablePasskeyChoice(_)
         | I::EnterDetail => Accepted,
 
-        // a load the inventory already shows answers Check Again; a silent refresh under a
-        // loaded inventory shows nothing, so the tap is accepted and queues the next load
+        // a tap while the inventory shows a load joins it, and the load after it lists with the
+        // tap's authority, since the running one may be silent; a silent refresh under a loaded
+        // inventory shows nothing, so the tap is accepted and queues the next load
         I::RefreshDetail if snapshot.detail_checking => Coalesced(CoalescibleIntent::RefreshDetail),
         I::RefreshDetail => Accepted,
 

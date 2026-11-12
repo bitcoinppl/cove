@@ -410,11 +410,17 @@ with a Verify card. Only a user's Verify asks for the passkey.
 The supervisor embeds a `DetailWorkflow` that owns refresh scheduling. It
 permits one screen refresh in flight and coalesces further requests into one
 trailing refresh. A Check Again tapped while the inventory shows Checking joins
-that load (`CoalescibleIntent::RefreshDetail`); one tapped under a loaded
-inventory, whose refresh runs silently, is accepted and queues the next load. Rust starts refresh generations no more than
-once every five seconds and admits results by start order, so an older screen or
-operation refresh cannot overwrite a newer one. Closing the detail screen
-invalidates its refresh owner without cancelling manager-owned operations.
+that load (`CoalescibleIntent::RefreshDetail`) and starts no second one, and
+the load after it carries the tap's authority. One tapped under a loaded
+inventory, whose refresh runs silently, is accepted and queues the next load.
+Rust starts refresh generations no more than once every five seconds and
+admits results by start order, so an older screen or operation refresh cannot
+overwrite a newer one. Closing the detail screen invalidates its refresh owner
+without cancelling manager-owned operations. A local reset suspends the cycle
+and drops its queued work, and a completed reset leaves it closed. A failed
+reset that resumes the backup reopens a cycle that was open before or opened
+during the reset, with a new owner and nobody tapping, so the inventory the
+reset cleared loads again silently.
 
 A local wallet change doesn't wait for that refresh to correct the local rows.
 The inventory owner drops rows for wallets that are no longer on this device at once,
@@ -493,6 +499,15 @@ Cloud access has an explicit presentation boundary. Silent startup discovery
 must not present provider consent. User-initiated restore or enable work may use
 consent-allowed access; on Android, this is the boundary at which Google Drive
 authorization may appear.
+
+A detail refresh carries who started it. Opening Cloud Backup and Check Again
+are taps, so their listing may ask for consent. Launch discovery, a provider or
+wallet change, a new configuration and the refresh after a verification start
+with nobody tapping, so they list silently; one that needs consent ends as an
+incomplete inventory that offers Reconnect. A tap that joins a waiting or
+running refresh gives the refresh after it the tap's authority. A local reset
+closes the detail refresh, and nothing reopens it while the reset holds the
+runtime.
 
 Enable behavior depends on what discovery proved:
 

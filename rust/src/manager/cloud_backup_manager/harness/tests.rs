@@ -284,6 +284,131 @@ fn delete_policies(app: &TestApp, skip: usize) -> Vec<Option<CloudAccessPolicy>>
         .collect()
 }
 
+/// Each cloud call after the first `skip`, with the provider policy it asked for
+fn call_policies(app: &TestApp, skip: usize) -> Vec<(CloudCall, Option<CloudAccessPolicy>)> {
+    app.cloud
+        .calls()
+        .into_iter()
+        .skip(skip)
+        .map(|(id, _)| (id.kind, app.cloud.policy_of(id)))
+        .collect()
+}
+
+/// Check Again while launch discovery's silent load runs joins that load instead of starting a
+/// second one, and the load after it lists with the tap's authority, so it may ask for Google
+/// Drive consent
+#[test]
+fn check_again_during_a_silent_load_lists_again_with_consent() {
+    use crate::manager::cloud_backup_manager::admission::CoalescibleIntent;
+
+    let test =
+        concat!(module_path!(), "::check_again_during_a_silent_load_lists_again_with_consent");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        FakeAccount::new(1, 1).seed(&app);
+        let before = app.cloud.calls().len();
+
+        let listed = app.cloud.count(CloudCall::ListWalletFilesSnapshot);
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::ListWalletFilesSnapshot, CloudFault::Hold(hold.clone()));
+        app.event("launch discovery", |app| app.manager().start_background_inventory_discovery())
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+        app.block_on("the silent listing to be held", hold.entered());
+
+        // the held listing got in before Drive revoked its authorization, so only a listing that
+        // may ask for consent gets in after it
+        app.cloud.revoke_authorization();
+
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
+        let outcome = app.last_outcome().expect("Check Again was decided");
+        assert_eq!(outcome.admission, Admission::Coalesced(CoalescibleIntent::RefreshDetail));
+        assert_eq!(
+            app.cloud.count(CloudCall::ListWalletFilesSnapshot),
+            listed + 1,
+            "the tap started a second load beside the held one\n{}",
+            app.describe()
+        );
+
+        app.event("the silent listing answers", |_| hold.release()).then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let listings = call_policies(&app, before)
+            .into_iter()
+            .filter(|(kind, _)| *kind == CloudCall::ListWalletFilesSnapshot)
+            .map(|(_, policy)| policy)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            listings,
+            vec![Some(CloudAccessPolicy::Silent), Some(CloudAccessPolicy::ConsentAllowed)],
+            "the joined tap did not give the next listing its authority\n{}",
+            app.describe()
+        );
+        assert_eq!(app.cloud.consent_sheets(), 1);
+    });
+}
+
+/// Launch discovery loads the inventory with nobody tapping, so none of its Google Drive calls
+/// may ask the user for consent: one that needs it shows Reconnect instead. Check Again is a tap,
+/// so its listing may ask
+#[test]
+fn launch_discovery_never_asks_for_drive_consent_but_check_again_may() {
+    let test = concat!(
+        module_path!(),
+        "::launch_discovery_never_asks_for_drive_consent_but_check_again_may"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        FakeAccount::new(1, 1).seed(&app);
+        app.cloud.revoke_authorization();
+        let before = app.cloud.calls().len();
+
+        app.event("launch discovery", |app| app.manager().start_background_inventory_discovery())
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let launch = call_policies(&app, before);
+        assert!(
+            launch.iter().any(|(kind, _)| *kind == CloudCall::ListWalletFilesSnapshot),
+            "launch discovery listed nothing\n{}",
+            app.describe()
+        );
+        assert!(
+            launch.iter().all(|(_, policy)| *policy == Some(CloudAccessPolicy::Silent)),
+            "launch discovery asked for consent: {launch:?}"
+        );
+        assert_eq!(app.cloud.consent_sheets(), 0);
+
+        let progress = configured_sections(&app).into_iter().find_map(|section| match section {
+            CloudBackupSection::Progress(progress) => Some(progress),
+            _ => None,
+        });
+        assert!(
+            matches!(
+                &progress,
+                Some(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::AuthorizationRequired,
+                    controls,
+                }) if controls.contains(&CloudBackupInventoryControl::ReconnectDrive)
+            ),
+            "launch discovery that needs consent did not offer Reconnect: {progress:?}\n{}",
+            app.describe()
+        );
+
+        let before = app.cloud.calls().len();
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let tapped = call_policies(&app, before);
+        assert_eq!(
+            tapped.iter().find(|(kind, _)| *kind == CloudCall::ListWalletFilesSnapshot),
+            Some(&(CloudCall::ListWalletFilesSnapshot, Some(CloudAccessPolicy::ConsentAllowed))),
+            "{tapped:?}"
+        );
+        assert_eq!(app.cloud.consent_sheets(), 1);
+    });
+}
+
 /// Where the published screen's committed Turn Off stands
 fn finishing_stage(app: &TestApp) -> Option<CloudBackupFinishingDisableStage> {
     match app.manager().published_screen().body {
@@ -1283,15 +1408,54 @@ fn silent_inventory_paths_never_prompt() {
             .then_cannot(&[N::Enable]);
         load_detail(&mut app);
 
-        // the provider reports a cloud change
+        // a relaunch whose launch listings fail, the inventory's and the other backups scan's,
+        // so only a later listing loads the inventory
+        app.relaunch().then_cannot(&[N::Enable]);
+        let listed = app.cloud.count(CloudCall::ListWalletFilesSnapshot);
+        for nth in [listed + 1, listed + 2] {
+            app.cloud.script(
+                CallId::new(CloudCall::ListWalletFilesSnapshot, nth),
+                CloudFault::Fail(CloudStorageError::NotAvailable("the provider is busy".into())),
+            );
+        }
+
+        app.event("launch discovery", |app| app.manager().start_background_inventory_discovery())
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+        assert!(!app.manager().listing_is_provider_confirmed(), "{}", app.describe());
+
+        // the provider reports a cloud change, which nobody tapped for, so it lists again
+        // without asking for consent
+        let before_change = app.cloud.calls().len();
         app.event("cloud change", |app| {
             send!(app.manager().supervisor.provider_inventory_did_change());
         })
         .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
 
-        // a relaunch, then a relaunch with no local master key
-        app.relaunch().then_cannot(&[N::Enable]);
-        app.dispatch(CloudBackupManagerAction::EnterDetail).then_cannot(&[N::Enable]);
+        let changed = call_policies(&app, before_change);
+        assert!(
+            changed.iter().any(|(kind, _)| *kind == CloudCall::ListWalletFilesSnapshot),
+            "the cloud change listed nothing\n{}",
+            app.describe()
+        );
+        assert!(
+            changed.iter().all(|(_, policy)| *policy == Some(CloudAccessPolicy::Silent)),
+            "the cloud change asked for consent: {changed:?}"
+        );
+        assert!(
+            app.manager().listing_is_provider_confirmed(),
+            "the cloud change did not load the inventory\n{}",
+            app.describe()
+        );
+        assert_eq!(
+            app.manager().inventory.read().cloud_only().loaded_rows().map(<[_]>::len),
+            Some(2),
+            "{}",
+            app.describe()
+        );
+
+        // a relaunch with no local master key
         CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
         app.relaunch().then_cannot(&[N::Enable]);
         app.dispatch(CloudBackupManagerAction::EnterDetail).then_cannot(&[N::Enable]);

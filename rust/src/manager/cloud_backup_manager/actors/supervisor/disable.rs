@@ -48,7 +48,7 @@ impl CloudBackupSupervisor {
 
         // a review lives only on the open detail screen, so a closed refresh owner runs no
         // refresh to wait for, and the review goes on with the inventory as it stands
-        let plan = self.detail_workflow.request_refresh();
+        let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Tap);
         if plan == DetailRefreshPlan::Ignored {
             self.gather_turn_off_review(manager, review_id);
             return;

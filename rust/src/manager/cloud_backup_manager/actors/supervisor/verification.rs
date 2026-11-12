@@ -517,8 +517,9 @@ impl CloudBackupSupervisor {
 
         self.settle_verification_evidence(&manager, run.basis, run.read_at, result);
 
+        // a verification that needed consent already has it, so the refresh after it is silent
         if should_refresh_open_detail {
-            let plan = self.detail_workflow.request_refresh();
+            let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
             self.handle_detail_refresh_plan(manager.clone(), plan);
         }
 

@@ -114,7 +114,9 @@ pub(crate) use account_switch::{
 pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use verification::DeepVerificationContinuation;
 
-use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
+use detail_workflow::{
+    DetailRefreshClaim, DetailRefreshOrigin, DetailRefreshPlan, DetailResultClaim, DetailWorkflow,
+};
 
 mod tests {
     #![cfg(test)]
@@ -903,7 +905,7 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.detail_workflow.open();
-        let plan = self.detail_workflow.request_refresh();
+        let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Tap);
         self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
@@ -922,7 +924,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let plan = self.detail_workflow.request_refresh();
+        let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
         self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
@@ -936,7 +938,7 @@ impl CloudBackupSupervisor {
 
         // the shown detail sorts wallets by which ones are local, so it is stale as well
         if self.detail_workflow.is_open() {
-            let plan = self.detail_workflow.request_refresh();
+            let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
             self.handle_detail_refresh_plan(manager, plan);
         }
 
@@ -952,7 +954,7 @@ impl CloudBackupSupervisor {
         self.detail_workflow.open();
         self.ensure_supplemental_inventory_discovery(manager.clone());
         if !manager.detail_inventory_is_ready() {
-            let plan = self.detail_workflow.request_refresh();
+            let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
             self.handle_detail_refresh_plan(manager, plan);
         }
 
@@ -975,7 +977,8 @@ impl CloudBackupSupervisor {
     ) {
         manager.refresh_sync_health();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.load_cloud_backup_detail_inventory_snapshot().await;
+            let cloud = claim.origin().cloud_client();
+            let result = manager.load_cloud_backup_detail_inventory_snapshot(cloud).await;
             send!(addr.complete_refresh_detail_snapshot(result, attempt, claim, scope));
         });
     }
@@ -990,8 +993,10 @@ impl CloudBackupSupervisor {
     ) {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let completion =
-                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot, config).await;
+            let cloud = claim.origin().cloud_client();
+            let completion = manager
+                .complete_cloud_backup_detail_inventory_snapshot(snapshot, config, cloud)
+                .await;
             send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim, scope));
         });
     }
@@ -1006,8 +1011,10 @@ impl CloudBackupSupervisor {
     ) {
         let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.confirm_cloud_backup_detail_inventory(confirmation.clone(), config).await;
+            let cloud = claim.origin().cloud_client();
+            let result = manager
+                .confirm_cloud_backup_detail_inventory(confirmation.clone(), config, cloud)
+                .await;
             send!(addr.complete_confirm_refresh_detail(
                 confirmation,
                 result,
@@ -1253,7 +1260,7 @@ impl CloudBackupSupervisor {
 
         // entering detail only loads the inventory; it never asks for the passkey, so a missing
         // key shows as unchecked rows until the user starts a verification
-        let plan = self.detail_workflow.request_refresh();
+        let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Tap);
         self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
@@ -1317,16 +1324,20 @@ impl CloudBackupSupervisor {
     /// Loads the inventory again after a configuration change dropped the old one's, when the
     /// detail is open
     pub async fn reload_inventory_for_new_scope(&mut self) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        self.reload_open_inventory();
+        Produces::ok(())
+    }
+
+    /// Loads the inventory again, with nobody tapping, when the detail refresh cycle is open
+    fn reload_open_inventory(&mut self) {
+        let Some(manager) = self.manager() else { return };
         if !self.detail_workflow.is_open() {
-            return Produces::ok(());
+            return;
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
-        let plan = self.detail_workflow.request_refresh();
+        let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
         self.handle_detail_refresh_plan(manager, plan);
-
-        Produces::ok(())
     }
 
     pub async fn start_master_key_upload_confirmation_grace(
@@ -1586,7 +1597,7 @@ impl CloudBackupSupervisor {
         // the reset owns the work queued before it: a detail refresh still waiting on its rate
         // limit, or in flight, would list the cloud through a client that may ask the user for
         // consent, for a configuration the reset is clearing
-        self.detail_workflow.close();
+        self.detail_workflow.suspend();
         Produces::ok(Ok(receiver))
     }
 
@@ -1674,6 +1685,13 @@ impl CloudBackupSupervisor {
     ) -> ActorResult<Option<ResetEnd>> {
         let end = self.runtime.finish_reset(outcome);
         debug!("Cloud Backup local reset finished: {outcome:?}, {end:?}");
+
+        // the reset dropped the cycle's queued work, and a scope reload it queued found the cycle
+        // suspended, so a resumed backup loads its inventory again, with nobody tapping
+        let resumed = end == Some(ResetEnd::Abandoned(AbandonedReset::Resumed));
+        if self.detail_workflow.end_suspension(resumed) {
+            self.reload_open_inventory();
+        }
 
         Produces::ok(end)
     }

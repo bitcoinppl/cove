@@ -1,15 +1,50 @@
 use std::time::Duration;
 
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use tokio::time::Instant;
 
 use crate::manager::cloud_backup_manager::owner::inventory::InventoryScope;
 
 pub(crate) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs(5);
 
+/// Who asked for a detail refresh, which decides whether its provider calls may ask the user
+/// for consent
+///
+/// Ordered so the stronger origin wins when requests join: a tap that joins a waiting or
+/// running refresh gives the refresh after it the tap's authority
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum DetailRefreshOrigin {
+    /// Nobody tapped: launch discovery, a provider or wallet change, a new configuration
+    Automatic,
+    /// The user opened Cloud Backup or tapped Check Again
+    Tap,
+}
+
+impl DetailRefreshOrigin {
+    /// The provider client the refresh lists with
+    ///
+    /// A refresh nobody tapped for only gets a silent client, so the provider can't show its
+    /// consent sheet: one that needs consent fails with `AuthorizationRequired`, which the screen
+    /// shows as an incomplete inventory offering Reconnect
+    pub(crate) fn cloud_client(self) -> CloudStorageClient {
+        match self {
+            Self::Automatic => CloudStorage::global_silent_client(),
+            Self::Tap => CloudStorage::global_explicit_client(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DetailRefreshClaim {
     owner: u64,
     generation: u64,
+    origin: DetailRefreshOrigin,
+}
+
+impl DetailRefreshClaim {
+    pub(crate) fn origin(self) -> DetailRefreshOrigin {
+        self.origin
+    }
 }
 
 /// One operation's claim to apply the detail it reads, carrying the inventory scope its read
@@ -46,13 +81,21 @@ pub(crate) struct DetailRefreshCompletion {
 enum RefreshPhase {
     #[default]
     Closed,
+    /// A local reset owns the runtime, so nothing refreshes until it ends; `reopen` says whether
+    /// the cycle opens again when the reset is abandoned and the backup resumes
+    Suspended {
+        reopen: bool,
+    },
     Idle,
     InFlight {
         claim: DetailRefreshClaim,
-        trailing_requested: bool,
+        /// The strongest origin among the requests that arrived while it ran
+        trailing: Option<DetailRefreshOrigin>,
     },
     /// A rate-limit timer is scheduled and a trailing refresh is waiting on it
-    WaitingTimer,
+    WaitingTimer {
+        origin: DetailRefreshOrigin,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -65,45 +108,99 @@ struct DetailRefreshCoordinator {
 
 impl DetailRefreshCoordinator {
     pub(crate) fn open(&mut self) {
-        if self.phase != RefreshPhase::Closed {
-            return;
-        }
+        match &mut self.phase {
+            RefreshPhase::Closed => self.reopen(),
 
+            // the reset owns the runtime, so the open waits for the reset to end
+            RefreshPhase::Suspended { reopen } => *reopen = true,
+            RefreshPhase::Idle
+            | RefreshPhase::InFlight { .. }
+            | RefreshPhase::WaitingTimer { .. } => {}
+        }
+    }
+
+    /// Drops the waiting or in-flight refresh until the reset ends, remembering whether the cycle
+    /// was open; the resume takes a new owner, so the dropped one's timer and claim match nothing
+    fn suspend(&mut self) {
+        let reopen = match self.phase {
+            RefreshPhase::Closed => false,
+            RefreshPhase::Suspended { reopen } => reopen,
+            RefreshPhase::Idle
+            | RefreshPhase::InFlight { .. }
+            | RefreshPhase::WaitingTimer { .. } => true,
+        };
+
+        self.phase = RefreshPhase::Suspended { reopen };
+    }
+
+    /// Ends the reset's suspension; a cycle that was open reopens when the backup `resumed`,
+    /// with nothing queued, and returns whether it did
+    fn end_suspension(&mut self, resumed: bool) -> bool {
+        match self.phase {
+            RefreshPhase::Suspended { reopen: true } if resumed => {
+                self.reopen();
+                true
+            }
+
+            RefreshPhase::Suspended { .. } => {
+                self.phase = RefreshPhase::Closed;
+                false
+            }
+
+            RefreshPhase::Closed
+            | RefreshPhase::Idle
+            | RefreshPhase::InFlight { .. }
+            | RefreshPhase::WaitingTimer { .. } => false,
+        }
+    }
+
+    fn reopen(&mut self) {
         self.owner = self.owner.wrapping_add(1);
         self.phase = RefreshPhase::Idle;
     }
 
-    /// Drops the waiting or in-flight refresh; the next open takes a new owner, so the dropped
-    /// one's timer and claim match nothing
-    fn close(&mut self) {
-        self.phase = RefreshPhase::Closed;
+    /// A request that joins the load the inventory shows: it raises the authority of the refresh
+    /// after that load, and never starts a second load beside it
+    fn join(&mut self, origin: DetailRefreshOrigin) {
+        match &mut self.phase {
+            RefreshPhase::InFlight { trailing, .. } => *trailing = (*trailing).max(Some(origin)),
+            RefreshPhase::WaitingTimer { origin: waiting } => *waiting = (*waiting).max(origin),
+            RefreshPhase::Closed | RefreshPhase::Suspended { .. } | RefreshPhase::Idle => {}
+        }
     }
 
-    pub(crate) fn request(&mut self, now: Duration) -> DetailRefreshPlan {
-        match &mut self.phase {
-            RefreshPhase::Closed => DetailRefreshPlan::Ignored,
-            RefreshPhase::InFlight { trailing_requested, .. } => {
-                *trailing_requested = true;
+    pub(crate) fn request(
+        &mut self,
+        now: Duration,
+        origin: DetailRefreshOrigin,
+    ) -> DetailRefreshPlan {
+        match self.phase {
+            RefreshPhase::Closed | RefreshPhase::Suspended { .. } => DetailRefreshPlan::Ignored,
+            RefreshPhase::InFlight { .. } | RefreshPhase::WaitingTimer { .. } => {
+                self.join(origin);
                 DetailRefreshPlan::Queued
             }
-            RefreshPhase::WaitingTimer => DetailRefreshPlan::Queued,
+
             RefreshPhase::Idle => match self.rate_limit_delay(now) {
                 Some(delay) => {
-                    self.phase = RefreshPhase::WaitingTimer;
+                    self.phase = RefreshPhase::WaitingTimer { origin };
                     DetailRefreshPlan::Wait { owner: self.owner, delay }
                 }
-                None => self.start(now),
+                None => self.start(now, origin),
             },
         }
     }
 
     pub(crate) fn timer_elapsed(&mut self, owner: u64, now: Duration) -> DetailRefreshPlan {
-        if self.phase != RefreshPhase::WaitingTimer || self.owner != owner {
+        let RefreshPhase::WaitingTimer { origin } = self.phase else {
+            return DetailRefreshPlan::Ignored;
+        };
+        if self.owner != owner {
             return DetailRefreshPlan::Ignored;
         }
 
         self.phase = RefreshPhase::Idle;
-        self.request(now)
+        self.request(now, origin)
     }
 
     pub(crate) fn complete(
@@ -115,16 +212,24 @@ impl DetailRefreshCoordinator {
             return DetailRefreshCompletion { apply: false, next: DetailRefreshPlan::Ignored };
         }
 
-        let trailing_requested =
-            matches!(self.phase, RefreshPhase::InFlight { trailing_requested: true, .. });
+        let trailing = match self.phase {
+            RefreshPhase::InFlight { trailing, .. } => trailing,
+            _ => None,
+        };
         self.phase = RefreshPhase::Idle;
-        let next = if trailing_requested { self.request(now) } else { DetailRefreshPlan::Ignored };
+        let next = match trailing {
+            Some(origin) => self.request(now, origin),
+            None => DetailRefreshPlan::Ignored,
+        };
 
         DetailRefreshCompletion { apply: true, next }
     }
 
     pub(crate) fn is_open(&self) -> bool {
-        self.phase != RefreshPhase::Closed
+        matches!(
+            self.phase,
+            RefreshPhase::Idle | RefreshPhase::InFlight { .. } | RefreshPhase::WaitingTimer { .. }
+        )
     }
 
     /// Re-key the in-flight refresh to the claim that carries the shared result generation
@@ -139,10 +244,11 @@ impl DetailRefreshCoordinator {
             && matches!(self.phase, RefreshPhase::InFlight { claim: in_flight, .. } if in_flight == claim)
     }
 
-    fn start(&mut self, now: Duration) -> DetailRefreshPlan {
-        let claim = DetailRefreshClaim { owner: self.owner, generation: self.next_generation };
+    fn start(&mut self, now: Duration, origin: DetailRefreshOrigin) -> DetailRefreshPlan {
+        let claim =
+            DetailRefreshClaim { owner: self.owner, generation: self.next_generation, origin };
         self.next_generation = self.next_generation.wrapping_add(1);
-        self.phase = RefreshPhase::InFlight { claim, trailing_requested: false };
+        self.phase = RefreshPhase::InFlight { claim, trailing: None };
         self.last_started_at = Some(now);
 
         DetailRefreshPlan::Start(claim)
@@ -183,13 +289,26 @@ impl DetailWorkflow {
         self.refresh.is_open()
     }
 
-    /// Cancels the refresh cycle until the detail opens again
-    pub(crate) fn close(&mut self) {
-        self.refresh.close();
+    /// Cancels the refresh cycle while a local reset owns the runtime; nothing opens it until
+    /// [`Self::end_suspension`]
+    pub(crate) fn suspend(&mut self) {
+        self.refresh.suspend();
     }
 
-    pub(crate) fn request_refresh(&mut self) -> DetailRefreshPlan {
-        let plan = self.refresh.request(self.now());
+    /// Ends a local reset's suspension and returns whether the cycle reopened, which it does
+    /// only when it was open and the backup `resumed`; the caller loads the inventory again
+    pub(crate) fn end_suspension(&mut self, resumed: bool) -> bool {
+        self.refresh.end_suspension(resumed)
+    }
+
+    /// A tap that joins the load the inventory shows loading, which gives the refresh after that
+    /// load the tap's authority
+    pub(crate) fn join_refresh(&mut self, origin: DetailRefreshOrigin) {
+        self.refresh.join(origin);
+    }
+
+    pub(crate) fn request_refresh(&mut self, origin: DetailRefreshOrigin) -> DetailRefreshPlan {
+        let plan = self.refresh.request(self.now(), origin);
         self.admit_refresh_plan(plan)
     }
 
@@ -243,7 +362,7 @@ impl DetailWorkflow {
         let DetailRefreshPlan::Start(claim) = plan else { return plan };
 
         let generation = self.start_result_generation();
-        let claim = DetailRefreshClaim { owner: claim.owner, generation };
+        let claim = DetailRefreshClaim { generation, ..claim };
         self.refresh.replace_in_flight_claim(claim);
 
         DetailRefreshPlan::Start(claim)
@@ -259,11 +378,19 @@ mod tests {
         let mut coordinator = DetailRefreshCoordinator::default();
         coordinator.open();
 
-        let DetailRefreshPlan::Start(first) = coordinator.request(Duration::ZERO) else {
+        let DetailRefreshPlan::Start(first) =
+            coordinator.request(Duration::ZERO, DetailRefreshOrigin::Automatic)
+        else {
             panic!("expected first refresh to start");
         };
-        assert_eq!(coordinator.request(Duration::from_secs(1)), DetailRefreshPlan::Queued);
-        assert_eq!(coordinator.request(Duration::from_secs(2)), DetailRefreshPlan::Queued);
+        assert_eq!(
+            coordinator.request(Duration::from_secs(1), DetailRefreshOrigin::Automatic),
+            DetailRefreshPlan::Queued
+        );
+        assert_eq!(
+            coordinator.request(Duration::from_secs(2), DetailRefreshOrigin::Automatic),
+            DetailRefreshPlan::Queued
+        );
 
         let completion = coordinator.complete(first, Duration::from_secs(2));
         assert!(completion.apply);
@@ -271,7 +398,10 @@ mod tests {
             completion.next,
             DetailRefreshPlan::Wait { owner: first.owner, delay: Duration::from_secs(3) }
         );
-        assert_eq!(coordinator.request(Duration::from_secs(3)), DetailRefreshPlan::Queued);
+        assert_eq!(
+            coordinator.request(Duration::from_secs(3), DetailRefreshOrigin::Automatic),
+            DetailRefreshPlan::Queued
+        );
 
         let DetailRefreshPlan::Start(second) =
             coordinator.timer_elapsed(first.owner, Duration::from_secs(5))
@@ -295,15 +425,100 @@ mod tests {
     fn newer_operation_supersedes_screen_result_without_dropping_trailing_refresh() {
         let mut workflow = DetailWorkflow::default();
         workflow.open();
-        let DetailRefreshPlan::Start(refresh) = workflow.request_refresh() else {
+        let DetailRefreshPlan::Start(refresh) =
+            workflow.request_refresh(DetailRefreshOrigin::Automatic)
+        else {
             panic!("expected refresh to start");
         };
-        assert_eq!(workflow.request_refresh(), DetailRefreshPlan::Queued);
+        assert_eq!(
+            workflow.request_refresh(DetailRefreshOrigin::Automatic),
+            DetailRefreshPlan::Queued
+        );
 
         workflow.start_operation_result(InventoryScope::default());
         let completion = workflow.complete_refresh(refresh);
 
         assert!(!completion.apply);
         assert!(matches!(completion.next, DetailRefreshPlan::Wait { .. }));
+    }
+
+    #[test]
+    fn a_tap_that_joins_an_automatic_refresh_gives_the_next_one_its_authority() {
+        let mut coordinator = DetailRefreshCoordinator::default();
+        coordinator.open();
+
+        let DetailRefreshPlan::Start(automatic) =
+            coordinator.request(Duration::ZERO, DetailRefreshOrigin::Automatic)
+        else {
+            panic!("expected the automatic refresh to start");
+        };
+        assert_eq!(automatic.origin(), DetailRefreshOrigin::Automatic);
+        assert_eq!(
+            coordinator.request(Duration::from_secs(1), DetailRefreshOrigin::Tap),
+            DetailRefreshPlan::Queued
+        );
+        assert_eq!(
+            coordinator.request(Duration::from_secs(1), DetailRefreshOrigin::Automatic),
+            DetailRefreshPlan::Queued
+        );
+
+        let completion = coordinator.complete(automatic, Duration::from_secs(10));
+        let DetailRefreshPlan::Start(trailing) = completion.next else {
+            panic!("expected the trailing refresh to start");
+        };
+        assert_eq!(trailing.origin(), DetailRefreshOrigin::Tap);
+    }
+
+    #[test]
+    fn an_abandoned_reset_reopens_the_cycle_it_suspended_without_its_queued_work() {
+        let mut coordinator = DetailRefreshCoordinator::default();
+        coordinator.open();
+        let DetailRefreshPlan::Start(before) =
+            coordinator.request(Duration::ZERO, DetailRefreshOrigin::Automatic)
+        else {
+            panic!("expected the refresh to start");
+        };
+        assert_eq!(
+            coordinator.request(Duration::ZERO, DetailRefreshOrigin::Tap),
+            DetailRefreshPlan::Queued
+        );
+
+        coordinator.suspend();
+        coordinator.open();
+        assert!(!coordinator.is_open(), "an open during the reset waits for it to end");
+        assert_eq!(
+            coordinator.request(Duration::from_secs(1), DetailRefreshOrigin::Tap),
+            DetailRefreshPlan::Ignored
+        );
+
+        assert!(coordinator.end_suspension(true));
+        assert!(coordinator.is_open());
+        assert_eq!(
+            coordinator.complete(before, Duration::from_secs(10)),
+            DetailRefreshCompletion { apply: false, next: DetailRefreshPlan::Ignored },
+            "the refresh from before the reset, and the tap that joined it, belong to no cycle"
+        );
+
+        let DetailRefreshPlan::Start(after) =
+            coordinator.request(Duration::from_secs(10), DetailRefreshOrigin::Automatic)
+        else {
+            panic!("expected the reopened cycle to start a refresh");
+        };
+        assert_ne!(after.owner, before.owner);
+        assert_eq!(after.origin(), DetailRefreshOrigin::Automatic);
+    }
+
+    #[test]
+    fn a_reset_reopens_nothing_unless_it_resumes_a_cycle_that_was_open() {
+        let mut completed = DetailRefreshCoordinator::default();
+        completed.open();
+        completed.suspend();
+        assert!(!completed.end_suspension(false), "a completed reset keeps the cycle closed");
+        assert!(!completed.is_open());
+
+        let mut never_opened = DetailRefreshCoordinator::default();
+        never_opened.suspend();
+        assert!(!never_opened.end_suspension(true), "a resume reopens only an open cycle");
+        assert!(!never_opened.is_open());
     }
 }

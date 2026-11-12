@@ -1,7 +1,8 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionSnapshot, ContinuationOwner, ContinuationStage, EnableIntent,
-    EnablePromptAnswers, PausedContinuation, RestoreAllAdmission, UserIntent, evaluate_admission,
+    Admission, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner, ContinuationStage,
+    EnableIntent, EnablePromptAnswers, PausedContinuation, RestoreAllAdmission, UserIntent,
+    evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::delete_consent::DeleteConsents;
 use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
@@ -106,6 +107,12 @@ impl CloudBackupSupervisor {
         let decided = self.decide(manager, intent);
         if decided != Admission::Accepted {
             self.record_admission(manager, intent, decided);
+
+            // a coalesced intent starts nothing of its own, but the work it repeats takes it
+            if let Admission::Coalesced(into) = decided {
+                self.join_running(into);
+            }
+
             return None;
         }
 
@@ -126,6 +133,20 @@ impl CloudBackupSupervisor {
                 }
                 None
             }
+        }
+    }
+
+    /// Hands a coalesced intent to the work it joins, which already shows on screen
+    fn join_running(&mut self, into: CoalescibleIntent) {
+        match into {
+            // the load running may be silent, so the refresh after it carries the tap's authority
+            // to ask the provider for consent
+            CoalescibleIntent::RefreshDetail => {
+                self.detail_workflow.join_refresh(DetailRefreshOrigin::Tap);
+            }
+
+            // the running sync and operation already do what the repeated tap asks
+            CoalescibleIntent::SyncUnsynced | CoalescibleIntent::RepeatOfRunning(_) => {}
         }
     }
 

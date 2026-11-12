@@ -507,8 +507,9 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
     globals.cloud.set_wallet_files_snapshot(namespace.clone(), Vec::new(), false);
     let initial_download_attempts = globals.cloud.wallet_backup_download_attempt_count();
 
-    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
-        manager.load_cloud_backup_detail_inventory_snapshot().await
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) = manager
+        .load_cloud_backup_detail_inventory_snapshot(CloudStorage::global_explicit_client())
+        .await
     else {
         panic!("expected incomplete inventory snapshot");
     };
@@ -528,7 +529,11 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
     let Some(CloudBackupDetailSnapshotCompletion::Final(CloudBackupDetailResult::AccessError(
         error,
     ))) = manager
-        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .complete_cloud_backup_detail_inventory_snapshot(
+            snapshot,
+            current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
+        )
         .await
     else {
         panic!("expected authoritative inventory failure");
@@ -549,8 +554,9 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     let initial_snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
 
-    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
-        manager.load_cloud_backup_detail_inventory_snapshot().await
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) = manager
+        .load_cloud_backup_detail_inventory_snapshot(CloudStorage::global_explicit_client())
+        .await
     else {
         panic!("expected complete inventory snapshot");
     };
@@ -564,7 +570,11 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
             ..
         },
     )) = manager
-        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .complete_cloud_backup_detail_inventory_snapshot(
+            snapshot,
+            current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
+        )
         .await
     else {
         panic!("expected complete cloud backup detail");
@@ -607,8 +617,9 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
-        manager.load_cloud_backup_detail_inventory_snapshot().await
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) = manager
+        .load_cloud_backup_detail_inventory_snapshot(CloudStorage::global_explicit_client())
+        .await
     else {
         panic!("expected local inventory snapshot");
     };
@@ -622,7 +633,11 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
     let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     globals.cloud.fail_list_wallet_files("metadata query should not run");
     let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) = manager
-        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .complete_cloud_backup_detail_inventory_snapshot(
+            snapshot,
+            current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
+        )
         .await
     else {
         panic!("expected detail from the trusted local snapshot");
@@ -637,7 +652,11 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
         authority: CloudBackupInventoryAuthority::ProviderConfirmed,
         ..
     }) = manager
-        .confirm_cloud_backup_detail_inventory(confirmation, current_config(&manager).await)
+        .confirm_cloud_backup_detail_inventory(
+            confirmation,
+            current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
+        )
         .await
     else {
         panic!("expected provider-confirmed cloud backup detail");
@@ -657,6 +676,7 @@ async fn provider_confirmation_rejects_a_changed_namespace() {
         .confirm_cloud_backup_detail_inventory(
             CloudBackupDetailProviderConfirmation { namespace: "different-namespace".into() },
             current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
         )
         .await
     else {
