@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,7 +69,13 @@ internal fun SendFlowConfirmRoute(
             ?.intent
             ?.sessionId
 
-    var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
+    // a payjoin payment ends after its swipe, and rust may report that end while a rotation rebuilds
+    // this route; a failed session no longer names itself in the status, so only this saved fact
+    // lets the rebuilt route resume Sending and show the error rust left in sendFlowErrorAlert
+    var payjoinStarted by rememberSaveable { mutableStateOf(false) }
+    var sendState by remember {
+        mutableStateOf<SendState>(if (payjoinStarted) SendState.Sending else SendState.Idle)
+    }
     var sentWithoutPayjoin by remember { mutableStateOf(false) }
     var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
     var showSuccessAlert by remember { mutableStateOf(false) }
@@ -89,19 +96,19 @@ internal fun SendFlowConfirmRoute(
         }
     }
 
-    // the session id is new to this route, so a status naming it means this payment has started;
-    // recreating the route resets sendState, and the wallet's status puts it back to Sending so a
-    // later broadcast error still reaches the user. Once the session completes, show success, a
-    // fallback being a normal send, not an error
+    // the session id is new to this route, so a status naming it means this payment has started.
+    // Once the session completes, show success, a fallback being a normal send, not an error
     LaunchedEffect(ownPayjoinStatus) {
         when (val status = ownPayjoinStatus) {
             is PayjoinStatus.Negotiating, is PayjoinStatus.Broadcasting -> {
+                payjoinStarted = true
                 if (sendState == SendState.Idle) sendState = SendState.Sending
             }
 
             is PayjoinStatus.Completed -> {
                 if (sendState == SendState.Sent) return@LaunchedEffect
 
+                payjoinStarted = false
                 sendState = SendState.Sent
                 sentWithoutPayjoin = status.kind == PayjoinTransactionKind.FALLBACK
                 showSuccessAlert = true
@@ -123,6 +130,7 @@ internal fun SendFlowConfirmRoute(
                 is SendFlowErrorAlert.ConfirmDetails -> alert.v1
             }
 
+        payjoinStarted = false
         sendState = SendState.Error(message)
         showErrorAlert = true
 
@@ -192,6 +200,7 @@ internal fun SendFlowConfirmRoute(
         onSwipeToSend = {
             // an error no screen handled, such as a resumed session's, belongs to an earlier payment
             walletManager.sendFlowErrorAlert = null
+            payjoinStarted = payjoinSessionId != null
             sendState = SendState.Sending
             scope.launch {
                 try {
@@ -214,9 +223,11 @@ internal fun SendFlowConfirmRoute(
                     sendState = SendState.Sent
                     showSuccessAlert = true
                 } catch (e: WalletManagerException) {
+                    payjoinStarted = false
                     sendState = SendState.Error(e.message ?: "Unknown error")
                     showErrorAlert = true
                 } catch (e: Exception) {
+                    payjoinStarted = false
                     sendState = SendState.Error(e.message ?: "Unknown error")
                     showErrorAlert = true
                 }
