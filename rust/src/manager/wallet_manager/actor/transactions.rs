@@ -1418,6 +1418,45 @@ async fn broadcast_to_node_with_connection(
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use act_zero::{ActorResult, Produces};
+    use bdk_wallet::chain::bitcoin::Psbt;
+
+    use crate::{
+        database::wallet_data::PayjoinSenderSession,
+        manager::wallet_manager::{Error, actor::WalletActor, payjoin::PayjoinConfig},
+    };
+
+    impl WalletActor {
+        /// Points this wallet's Payjoin sessions at a test's own relays and timeout
+        pub(crate) async fn set_payjoin_config_for_test(
+            &mut self,
+            config: PayjoinConfig,
+        ) -> ActorResult<()> {
+            self.payjoin_config = config;
+            Produces::ok(())
+        }
+
+        /// Starts a Payjoin payment through the sender path that `initiate_payment` skips while
+        /// Payjoin is not enabled
+        pub(crate) async fn start_payjoin_payment_for_test(
+            &mut self,
+            psbt: Psbt,
+            endpoint: String,
+        ) -> ActorResult<Result<(), Error>> {
+            Produces::ok(self.initiate_payjoin_payment(psbt, endpoint).await)
+        }
+
+        /// The persisted Payjoin sender session record, if one exists
+        pub(crate) async fn payjoin_session_for_test(
+            &mut self,
+        ) -> ActorResult<Option<PayjoinSenderSession>> {
+            Produces::ok(self.db.get_payjoin_sender_session().expect("payjoin session reads"))
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
