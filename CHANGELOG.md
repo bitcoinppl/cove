@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Improved app lock handling so finishing or leaving a send never clears a lock that needs authentication
+- Added a note in the send flow when the address you enter belongs to one of your wallets, naming the wallet and address index
 
 ## [1.3.0] - 2026-07-16
 
