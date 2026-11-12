@@ -24,7 +24,6 @@ struct NodeSelectionView: View {
     @State private var checkUrlTask: Task<Void, Never>?
 
     @State private var lanSearch: LanSearch = .notStarted
-    @State private var lanSearchTask: Task<Void, Never>?
 
     init() {
         let savedNode = nodeSelector.selectedNode()
@@ -146,7 +145,11 @@ struct NodeSelectionView: View {
         guard lanSearch != .searching else { return }
 
         lanSearch = .searching
-        lanSearchTask = Task {
+
+        // the search always runs to the end and records its result: the Rust search can't be
+        // cancelled from Swift, and the view also disappears under the privacy cover, after which
+        // a dropped result would leave the section searching forever
+        Task {
             let search: LanSearch
             do {
                 let nodes = try await LanNodeDiscovery.discover(nodeSelector: nodeSelector)
@@ -160,7 +163,6 @@ struct NodeSelectionView: View {
                 search = .finished([])
             }
 
-            guard !Task.isCancelled else { return }
             lanSearch = search
         }
     }
@@ -202,8 +204,6 @@ struct NodeSelectionView: View {
             nodeSelectionChanged(to: newSelectedRow)
         }
         .onDisappear {
-            lanSearchTask?.cancel()
-
             // save what was typed into the custom form, but do not re-check an unchanged saved node
             if customFormHasUnsavedChanges { checkAndSaveNode() }
         }
