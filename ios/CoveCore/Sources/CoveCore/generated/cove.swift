@@ -4826,11 +4826,6 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func isInMainMode()  -> Bool
 
-    /**
-     * Payjoin as the Settings screen shows it
-     */
-    func payjoinSetting()  -> PayjoinSetting
-
     func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func selectWallet(id: WalletId) throws
@@ -4855,11 +4850,6 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func setCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func setHashedPinCode(hashedPinCode: String) throws
-
-    /**
-     * Save the user's Payjoin choice from Settings
-     */
-    func setPayjoinEnabled(enabled: Bool) throws
 
     func setSelectedNetwork(network: Network) throws
 
@@ -5030,18 +5020,6 @@ open func isInMainMode() -> Bool  {
 })
 }
 
-    /**
-     * Payjoin as the Settings screen shows it
-     */
-open func payjoinSetting() -> PayjoinSetting  {
-    return try!  FfiConverterTypePayjoinSetting_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_payjoin_setting(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
 open func previewCustomBlockExplorer(network: Network, input: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
@@ -5148,18 +5126,6 @@ open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError
     uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(hashedPinCode),uniffiCallStatus
-    )
-}
-}
-
-    /**
-     * Save the user's Payjoin choice from Settings
-     */
-open func setPayjoinEnabled(enabled: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_set_payjoin_enabled(
-            self.uniffiCloneHandle(),
-        FfiConverterBool.lower(enabled),uniffiCallStatus
     )
 }
 }
@@ -29599,7 +29565,6 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case onboardingProgress
     case customBlockExplorer(Network
     )
-    case payjoinChoice
 
 
 
@@ -29650,8 +29615,6 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 14: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
         )
-
-        case 15: return .payjoinChoice
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29717,10 +29680,6 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case let .customBlockExplorer(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeNetwork.write(v1, into: &buf)
-
-
-        case .payjoinChoice:
-            writeInt(&buf, Int32(15))
 
         }
     }
@@ -34480,86 +34439,6 @@ public func FfiConverterTypeOtherBackupsOperation_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeOtherBackupsOperation_lower(_ value: OtherBackupsOperation) -> RustBuffer {
     return FfiConverterTypeOtherBackupsOperation.lower(value)
-}
-
-
-
-/**
- * Payjoin as the Settings screen shows it
- */
-
-public enum PayjoinSetting: Equatable, Hashable {
-
-    /**
-     * This build doesn't offer Payjoin, so Settings has no Payjoin switch and every payment is
-     * sent as an ordinary one
-     */
-    case unavailable
-    /**
-     * Settings shows a Payjoin switch, labelled beta when `beta` is set
-     */
-    case available(enabled: Bool, beta: Bool
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension PayjoinSetting: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePayjoinSetting: FfiConverterRustBuffer {
-    typealias SwiftType = PayjoinSetting
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinSetting {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .unavailable
-
-        case 2: return .available(enabled: try FfiConverterBool.read(from: &buf), beta: try FfiConverterBool.read(from: &buf)
-        )
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: PayjoinSetting, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .unavailable:
-            writeInt(&buf, Int32(1))
-
-
-        case let .available(enabled,beta):
-            writeInt(&buf, Int32(2))
-            FfiConverterBool.write(enabled, into: &buf)
-            FfiConverterBool.write(beta, into: &buf)
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePayjoinSetting_lift(_ buf: RustBuffer) throws -> PayjoinSetting {
-    return try FfiConverterTypePayjoinSetting.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePayjoinSetting_lower(_ value: PayjoinSetting) -> RustBuffer {
-    return FfiConverterTypePayjoinSetting.lower(value)
 }
 
 
@@ -48512,9 +48391,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_payjoin_setting() != 34216) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -48546,9 +48422,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalconfigtable_set_payjoin_enabled() != 57697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578) {
