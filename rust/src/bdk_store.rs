@@ -63,6 +63,22 @@ impl BdkStore {
         Ok(me)
     }
 
+    /// Open the persistent BDK wallet store only when its file already exists
+    ///
+    /// Opening a missing SQLite file creates an empty one, so readers that must not change
+    /// storage use this instead of [`Self::try_new_with_persistence_operation`]
+    pub(crate) fn try_open_existing_with_persistence_operation(
+        id: &WalletId,
+        network: impl Into<Network>,
+        operation: &crate::wallet_lifecycle::WalletPersistenceOperation,
+    ) -> Result<Option<Self>> {
+        if !sqlite_data_path(id).exists() {
+            return Ok(None);
+        }
+
+        Self::try_new_with_persistence_operation(id, network, operation).map(Some)
+    }
+
     /// Open an in-memory BDK wallet store for ephemeral wallet views
     pub fn in_memory(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
         let network = network.into();

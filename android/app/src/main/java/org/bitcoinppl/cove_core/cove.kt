@@ -1077,6 +1077,8 @@ internal object IntegrityCheckingUniffiLib {
     }
     external fun uniffi_cove_checksum_func_set_root_data_dir(
     ): Short
+    external fun uniffi_cove_checksum_func_check_address_ownership(
+    ): Short
     external fun uniffi_cove_checksum_func_initialize_app(
     ): Short
     external fun uniffi_cove_checksum_func_bootstrap(
@@ -3469,6 +3471,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtable`: UniffiVTableCallbackInterfaceTapcardTransportProtocol,
     ): Unit
+    external fun uniffi_cove_fn_method_addressownershiperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_apperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_appalertstate_display_type(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3655,6 +3659,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_func_set_root_data_dir(`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_func_check_address_ownership(`address`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_func_initialize_app(uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_func_bootstrap(
@@ -3903,6 +3909,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_set_root_data_dir() != 5349.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_check_address_ownership() != 51896.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_initialize_app() != 18498.toShort()) {
@@ -34995,6 +35004,70 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
 
 
 
+/**
+ * One wallet that owns the looked-up address
+ */
+data class OwnedAddress (
+    var `walletId`: WalletId
+    ,
+    var `walletName`: kotlin.String
+    ,
+    var `network`: Network
+    ,
+    var `chain`: AddressChain
+    ,
+    var `index`: kotlin.UInt
+    ,
+    /**
+     * The account in the wallet's derivation path, when its descriptor records one
+     */
+    var `account`: kotlin.UInt?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress> {
+    override fun read(buf: ByteBuffer): OwnedAddress {
+        return OwnedAddress(
+            FfiConverterTypeWalletId.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeNetwork.read(buf),
+            FfiConverterTypeAddressChain.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OwnedAddress) = (
+            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
+            FfiConverterString.allocationSize(value.`walletName`) +
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterTypeAddressChain.allocationSize(value.`chain`) +
+            FfiConverterUInt.allocationSize(value.`index`) +
+            FfiConverterOptionalUInt.allocationSize(value.`account`)
+    )
+
+    override fun write(value: OwnedAddress, buf: ByteBuffer) {
+            FfiConverterTypeWalletId.write(value.`walletId`, buf)
+            FfiConverterString.write(value.`walletName`, buf)
+            FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterTypeAddressChain.write(value.`chain`, buf)
+            FfiConverterUInt.write(value.`index`, buf)
+            FfiConverterOptionalUInt.write(value.`account`, buf)
+    }
+}
+
+
+
 data class PendingDetails (
     var `lastSeen`: kotlin.ULong
 
@@ -35771,6 +35844,52 @@ public object FfiConverterTypeTransactionExportResult: FfiConverterRustBuffer<Tr
 
 
 
+/**
+ * A wallet the lookup could not read, so the address might still belong to it
+ */
+data class UncheckedWallet (
+    var `walletId`: WalletId
+    ,
+    var `walletName`: kotlin.String
+    ,
+    var `network`: Network
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUncheckedWallet: FfiConverterRustBuffer<UncheckedWallet> {
+    override fun read(buf: ByteBuffer): UncheckedWallet {
+        return UncheckedWallet(
+            FfiConverterTypeWalletId.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeNetwork.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UncheckedWallet) = (
+            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
+            FfiConverterString.allocationSize(value.`walletName`) +
+            FfiConverterTypeNetwork.allocationSize(value.`network`)
+    )
+
+    override fun write(value: UncheckedWallet, buf: ByteBuffer) {
+            FfiConverterTypeWalletId.write(value.`walletId`, buf)
+            FfiConverterString.write(value.`walletName`, buf)
+            FfiConverterTypeNetwork.write(value.`network`, buf)
+    }
+}
+
+
+
 data class UnsupportedDbVersion (
     var `path`: kotlin.String
     ,
@@ -36404,6 +36523,251 @@ public object FfiConverterTypeXpubExportResult: FfiConverterRustBuffer<XpubExpor
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`filename`, buf)
     }
+}
+
+
+
+/**
+ * Which of a wallet's two address chains an address comes from
+ */
+
+enum class AddressChain {
+
+    RECEIVE,
+    CHANGE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressChain: FfiConverterRustBuffer<AddressChain> {
+    override fun read(buf: ByteBuffer) = try {
+        AddressChain.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AddressChain) = 4UL
+
+    override fun write(value: AddressChain, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * The answer to whether an address belongs to one of the user's wallets
+ */
+sealed class AddressOwnership {
+
+    /**
+     * The address belongs to these wallets, in wallet list order
+     *
+     * More than one wallet can own the same address, such as one key set imported on both
+     * testnet and signet, which share an address format. The list is never empty
+     */
+    data class Owned(
+        val `owners`: List<org.bitcoinppl.cove_core.OwnedAddress>) : AddressOwnership()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * No searched wallet owns the address within the lookup gap
+     *
+     * Wallets that could not be read are listed, since the address may belong to one of them
+     */
+    data class NotFound(
+        val `uncheckedWallets`: List<org.bitcoinppl.cove_core.UncheckedWallet>) : AddressOwnership()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressOwnership : FfiConverterRustBuffer<AddressOwnership>{
+    override fun read(buf: ByteBuffer): AddressOwnership {
+        return when(buf.getInt()) {
+            1 -> AddressOwnership.Owned(
+                FfiConverterSequenceTypeOwnedAddress.read(buf),
+                )
+            2 -> AddressOwnership.NotFound(
+                FfiConverterSequenceTypeUncheckedWallet.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: AddressOwnership): ULong = when(value) {
+        is AddressOwnership.Owned -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeOwnedAddress.allocationSize(value.`owners`)
+            )
+        }
+        is AddressOwnership.NotFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeUncheckedWallet.allocationSize(value.`uncheckedWallets`)
+            )
+        }
+    }
+
+    override fun write(value: AddressOwnership, buf: ByteBuffer) {
+        when(value) {
+            is AddressOwnership.Owned -> {
+                buf.putInt(1)
+                FfiConverterSequenceTypeOwnedAddress.write(value.`owners`, buf)
+                Unit
+            }
+            is AddressOwnership.NotFound -> {
+                buf.putInt(2)
+                FfiConverterSequenceTypeUncheckedWallet.write(value.`uncheckedWallets`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+sealed class AddressOwnershipException: kotlin.Exception() {
+
+    class InvalidAddress(
+
+        val v1: kotlin.String
+        ) : AddressOwnershipException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class WalletListUnavailable(
+
+        val v1: kotlin.String
+        ) : AddressOwnershipException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * The lookup's mode is not, or stopped being, the app's active mode, so its result would
+     * reveal the other mode's wallets and is withheld
+     */
+    class WalletModeChanged(
+        ) : AddressOwnershipException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_addressownershiperror_uniffi_trait_display(FfiConverterTypeAddressOwnershipError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AddressOwnershipException> {
+        override fun lift(error_buf: RustBuffer.ByValue): AddressOwnershipException = FfiConverterTypeAddressOwnershipError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressOwnershipError : FfiConverterRustBuffer<AddressOwnershipException> {
+    override fun read(buf: ByteBuffer): AddressOwnershipException {
+
+
+        return when(buf.getInt()) {
+            1 -> AddressOwnershipException.InvalidAddress(
+                FfiConverterString.read(buf),
+                )
+            2 -> AddressOwnershipException.WalletListUnavailable(
+                FfiConverterString.read(buf),
+                )
+            3 -> AddressOwnershipException.WalletModeChanged()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: AddressOwnershipException): ULong {
+        return when(value) {
+            is AddressOwnershipException.InvalidAddress -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is AddressOwnershipException.WalletListUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is AddressOwnershipException.WalletModeChanged -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: AddressOwnershipException, buf: ByteBuffer) {
+        when(value) {
+            is AddressOwnershipException.InvalidAddress -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AddressOwnershipException.WalletListUnavailable -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AddressOwnershipException.WalletModeChanged -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
 }
 
 
@@ -68795,6 +69159,62 @@ public object FfiConverterSequenceTypeNode: FfiConverterRustBuffer<List<Node>> {
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeOwnedAddress: FfiConverterRustBuffer<List<OwnedAddress>> {
+    override fun read(buf: ByteBuffer): List<OwnedAddress> {
+        val len = buf.getInt()
+        return List<OwnedAddress>(len) {
+            FfiConverterTypeOwnedAddress.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<OwnedAddress>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeOwnedAddress.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<OwnedAddress>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeOwnedAddress.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeUncheckedWallet: FfiConverterRustBuffer<List<UncheckedWallet>> {
+    override fun read(buf: ByteBuffer): List<UncheckedWallet> {
+        val len = buf.getInt()
+        return List<UncheckedWallet>(len) {
+            FfiConverterTypeUncheckedWallet.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<UncheckedWallet>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeUncheckedWallet.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<UncheckedWallet>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeUncheckedWallet.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer<List<WalletMetadata>> {
     override fun read(buf: ByteBuffer): List<WalletMetadata> {
         val len = buf.getInt()
@@ -69414,6 +69834,28 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 }
 
 
+
+        /**
+         * Check whether a scanned or pasted address, or a `bitcoin:` URI, belongs to one of the user's
+         * wallets in the active wallet mode
+         *
+         * Runs entirely on the device; nothing about the address is sent to a server
+         */
+    @Throws(AddressOwnershipException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `checkAddressOwnership`(`address`: kotlin.String) : AddressOwnership {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_check_address_ownership(
+        FfiConverterString.lower(`address`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeAddressOwnership.lift(it) },
+        // Error FFI converter
+        AddressOwnershipException.ErrorHandler,
+    )
+    }
 
         /**
          * Initialize the global App instance (Updater, router, state)
