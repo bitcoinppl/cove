@@ -88,6 +88,10 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
         let outcome = match verdict {
             Verdict::Fail { status, message } => Err(RpcError::new(i64::from(status), message)),
             Verdict::Serve => handle(&shared.chain, &method, &params),
+            Verdict::ServeThenStall => {
+                let _ = handle(&shared.chain, &method, &params);
+                return std::future::pending().await;
+            }
         };
 
         let reply = match outcome {

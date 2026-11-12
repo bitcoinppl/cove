@@ -51,6 +51,10 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
         let response = match verdict {
             Verdict::Fail { status, message } => Response::error(status, &message),
             Verdict::Serve => route(&shared.chain, &method, &path, &body),
+            Verdict::ServeThenStall => {
+                let _ = route(&shared.chain, &method, &path, &body);
+                return std::future::pending().await;
+            }
         };
 
         if write_response(reader.get_mut(), &response).await.is_err() {
