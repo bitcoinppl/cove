@@ -15,6 +15,7 @@ use bdk_wallet::{
 };
 use bitcoin::{Transaction, Txid, consensus::Decodable};
 use cove_bdk_progressive_scan::{ProgressiveScanner, ScanEvent};
+use cove_util::json::JsonDecodeError;
 use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
@@ -32,6 +33,37 @@ struct ElectrumTransactionResponse {
     /// Missing for a mempool transaction, since electrs forwards bitcoind's
     /// `getrawtransaction` reply, which only counts confirmations for a block
     confirmations: Option<i64>,
+}
+
+/// Reads a verbose `blockchain.transaction.get` reply, `None` while it is unconfirmed
+fn confirmed_transaction_from_response(
+    response: Value,
+) -> Result<Option<bitcoin::Transaction>, Error> {
+    fn err(e: impl Into<String>) -> Error {
+        Error::ElectrumGetTransaction(electrum_client::Error::InvalidResponse(Value::String(
+            e.into(),
+        )))
+    }
+
+    // serde's own text quotes the rejected value, and this error reaches the transaction
+    // watcher's log, so only its category and position are kept
+    let tx_response: ElectrumTransactionResponse =
+        serde_json::from_value(response).map_err(|error| {
+            let error = JsonDecodeError::from(error);
+            err(format!("failed to deserialize electrum response: {error}"))
+        })?;
+
+    if tx_response.confirmations.is_none_or(|confirmations| confirmations < 1) {
+        return Ok(None);
+    }
+
+    let bytes = hex::decode(&tx_response.hex)
+        .map_err(|error| err(format!("failed to decode hex: {error:?}")))?;
+
+    let txn = Transaction::consensus_decode(&mut bytes.as_slice())
+        .map_err(|error| err(format!("failed to decode transaction: {error:?}")))?;
+
+    Ok(Some(txn))
 }
 
 #[derive(Clone)]
@@ -117,12 +149,6 @@ impl ElectrumClient {
         })
         .await;
 
-        fn err(e: impl Into<String>) -> Error {
-            Error::ElectrumGetTransaction(electrum_client::Error::InvalidResponse(Value::String(
-                e.into(),
-            )))
-        }
-
         let response = match result {
             Ok(response) => response,
             Err(electrum_client::Error::InvalidResponse(Value::Null)) => return Ok(None),
@@ -148,20 +174,7 @@ impl ElectrumClient {
             Err(error) => return Err(Error::ElectrumGetTransaction(error)),
         };
 
-        let tx_response: ElectrumTransactionResponse = serde_json::from_value(response)
-            .map_err(|e| err(format!("failed to deserialize electrum response: {e:?}")))?;
-
-        if tx_response.confirmations.is_none_or(|confirmations| confirmations < 1) {
-            return Ok(None);
-        }
-
-        let bytes = hex::decode(&tx_response.hex)
-            .map_err(|error| err(format!("failed to decode hex: {error:?}")))?;
-
-        let txn = Transaction::consensus_decode(&mut bytes.as_slice())
-            .map_err(|error| err(format!("failed to decode transaction: {error:?}")))?;
-
-        Ok(Some(txn))
+        confirmed_transaction_from_response(response)
     }
 
     /// Fetches a transaction from the mempool or chain; returns `None` if not found.
@@ -345,6 +358,22 @@ impl std::fmt::Debug for ElectrumClient {
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    // the server's reply reaches the transaction watcher's log through this error
+    #[test]
+    fn malformed_transaction_reply_stays_out_of_the_error() {
+        let marker = "private-text-in-electrum-reply";
+        let response = serde_json::json!({ "hex": "00", "confirmations": marker });
+
+        let error = confirmed_transaction_from_response(response).unwrap_err();
+
+        assert!(!error.to_string().contains(marker), "error text quotes the server reply");
+        assert!(!format!("{error:?}").contains(marker), "error debug quotes the server reply");
+        assert!(
+            error.to_string().contains("failed to deserialize electrum response: data error"),
+            "deserialize cause missing: {error}"
+        );
+    }
 
     #[tokio::test]
     #[ignore] // requires external network connection to blockstream electrum server
