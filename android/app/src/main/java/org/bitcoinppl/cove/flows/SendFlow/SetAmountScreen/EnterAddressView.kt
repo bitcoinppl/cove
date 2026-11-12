@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.Icon
@@ -51,6 +53,7 @@ fun EnterAddressView(
     focusRequester: FocusRequester,
     onFocusChanged: (Boolean) -> Unit = {},
     onDone: () -> Unit = {},
+    ownershipMessage: String? = null,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -162,6 +165,30 @@ fun EnterAddressView(
                 )
             }
         }
+        if (ownershipMessage != null) {
+            AddressOwnershipNote(ownershipMessage)
+        }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+// the line under the address field naming which of the user's wallets owns the address
+@Composable
+internal fun AddressOwnershipNote(message: String) {
+    Spacer(Modifier.height(8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = Icons.Filled.AccountCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            modifier = Modifier.testTag("sendFlow.addressOwnership"),
+        )
     }
 }

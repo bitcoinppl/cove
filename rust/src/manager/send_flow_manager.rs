@@ -1,4 +1,5 @@
 mod address_input;
+pub mod address_ownership;
 pub mod alert_state;
 mod amount_input;
 pub mod amount_or_max;
@@ -115,6 +116,7 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateEnteringFiatAmount(String),
     UpdateEnteringAddress(String),
     UpdateAddress(Option<Arc<Address>>),
+    UpdateAddressOwnership(address_ownership::SendFlowAddressOwnership),
 
     SetMaxSelected(Arc<Amount>),
     UnsetMaxSelected,
@@ -559,13 +561,8 @@ impl RustSendFlowManager {
             }
 
             Action::NotifyAddressChanged(address) => {
-                let mut state = self.state.lock();
-                if state.address.as_ref() != Some(&address) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.address = Some(address.clone());
-                state.entering_address = address.to_string();
-                state.payjoin_endpoint = None;
+                self.state.lock().entering_address = address.to_string();
+                self.replace_address(Some(address), None);
             }
 
             Action::NotifyAmountChanged(amount) => self.handle_amount_changed(*amount),

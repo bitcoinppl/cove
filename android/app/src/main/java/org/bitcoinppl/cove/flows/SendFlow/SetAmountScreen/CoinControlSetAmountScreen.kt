@@ -185,6 +185,7 @@ fun CoinControlSetAmountScreen(
                     AddressWidget(
                         onScanQr = onScanQr,
                         initialAddress = initialAddress,
+                        ownershipMessage = sendFlowManager.addressOwnershipMessage,
                         onAddressChanged = onAddressChanged,
                         focusRequester = addressFocusRequester,
                         onDone = onAddressDone,
@@ -426,6 +427,7 @@ private fun AddressWidget(
     focusRequester: FocusRequester,
     onDone: () -> Unit = {},
     onFocusChanged: (Boolean) -> Unit = {},
+    ownershipMessage: String? = null,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -531,6 +533,9 @@ private fun AddressWidget(
                     fontWeight = FontWeight.Medium,
                 )
             }
+        }
+        if (ownershipMessage != null) {
+            AddressOwnershipNote(ownershipMessage)
         }
         Spacer(Modifier.height(24.dp))
     }

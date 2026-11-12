@@ -358,12 +358,17 @@ private struct SendFlowCoinControlContent: View {
 }
 
 private struct SendFlowCoinControlAddressSection: View {
+    @Environment(SendFlowManager.self) private var sendFlowManager
+
     let address: Binding<String>
 
     var body: some View {
         VStack {
             Divider()
-            EnterAddressView(address: address)
+            EnterAddressView(
+                address: address,
+                ownershipMessage: sendFlowManager.addressOwnershipMessage
+            )
             Divider()
         }
     }
