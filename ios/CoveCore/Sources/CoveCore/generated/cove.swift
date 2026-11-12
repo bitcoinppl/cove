@@ -6879,6 +6879,15 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
     func checkSelectedNode(node: Node) async throws
 
     /**
+     * Finds Electrum servers for the selected network on the local network
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
+     * only opens and closes TCP connections, so no server receives a request until the person
+     * picks one and it goes through `check_and_save_node`
+     */
+    func discoverLanNodes(interfaces: [LanInterface]) async throws  -> [DiscoveredNode]
+
+    /**
      * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
     func parseCustomNode(url: String, apiType: ApiType, enteredName: String) throws  -> Node
@@ -6991,6 +7000,30 @@ open func checkSelectedNode(node: Node)async throws   {
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeNodeSelectorError_lift
+        )
+}
+
+    /**
+     * Finds Electrum servers for the selected network on the local network
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
+     * only opens and closes TCP connections, so no server receives a request until the person
+     * picks one and it goes through `check_and_save_node`
+     */
+open func discoverLanNodes(interfaces: [LanInterface])async throws  -> [DiscoveredNode]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_nodeselector_discover_lan_nodes(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeLanInterface.lower(interfaces)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeDiscoveredNode.lift,
+            errorHandler: FfiConverterTypeNodeDiscoveryError_lift
         )
 }
 
@@ -17279,6 +17312,97 @@ public func FfiConverterTypeDiagnosticsSubmission_lower(_ value: DiagnosticsSubm
 }
 
 
+/**
+ * A server found on the local network, which the person can pick as their node
+ */
+public struct DiscoveredNode: Equatable, Hashable {
+    /**
+     * The node to check and save when the person picks it, addressed by IP so it connects
+     * without the platform resolving `.local` names
+     */
+    public var node: Node
+    /**
+     * The server's `.local` hostname, or its IP address when it has none
+     */
+    public var host: String
+    /**
+     * The server's IP address and port, such as `192.168.1.10:50001`
+     */
+    public var address: String
+    /**
+     * The node software known to run there, such as `Umbrel Fulcrum`
+     */
+    public var software: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The node to check and save when the person picks it, addressed by IP so it connects
+         * without the platform resolving `.local` names
+         */node: Node,
+        /**
+         * The server's `.local` hostname, or its IP address when it has none
+         */host: String,
+        /**
+         * The server's IP address and port, such as `192.168.1.10:50001`
+         */address: String,
+        /**
+         * The node software known to run there, such as `Umbrel Fulcrum`
+         */software: String?) {
+        self.node = node
+        self.host = host
+        self.address = address
+        self.software = software
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DiscoveredNode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscoveredNode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveredNode {
+        return
+            try DiscoveredNode(
+                node: FfiConverterTypeNode.read(from: &buf),
+                host: FfiConverterString.read(from: &buf),
+                address: FfiConverterString.read(from: &buf),
+                software: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscoveredNode, into buf: inout [UInt8]) {
+        FfiConverterTypeNode.write(value.node, into: &buf)
+        FfiConverterString.write(value.host, into: &buf)
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterOptionString.write(value.software, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscoveredNode_lift(_ buf: RustBuffer) throws -> DiscoveredNode {
+    return try FfiConverterTypeDiscoveredNode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscoveredNode_lower(_ value: DiscoveredNode) -> RustBuffer {
+    return FfiConverterTypeDiscoveredNode.lower(value)
+}
+
+
 public struct FeeResponse: Equatable, Hashable {
     public var fastestFee: Float
     public var halfHourFee: Float
@@ -18288,6 +18412,88 @@ public func FfiConverterTypeLabelExportResult_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeLabelExportResult_lower(_ value: LabelExportResult) -> RustBuffer {
     return FfiConverterTypeLabelExportResult.lower(value)
+}
+
+
+/**
+ * A Wi-Fi or Ethernet interface address the app reports, the only network discovery sweeps
+ *
+ * The platform picks the interfaces, since only it knows which one is Wi-Fi or Ethernet rather
+ * than cellular or a VPN, which can also carry private addresses
+ */
+public struct LanInterface: Equatable, Hashable {
+    /**
+     * The interface's IPv4 address, such as `192.168.1.18`
+     */
+    public var ipv4Address: String
+    /**
+     * The interface's network prefix length, such as 24 for a `255.255.255.0` netmask
+     */
+    public var prefixLength: UInt8
+    /**
+     * The network every socket searching this interface's subnet is bound to
+     */
+    public var binding: LanBinding
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The interface's IPv4 address, such as `192.168.1.18`
+         */ipv4Address: String,
+        /**
+         * The interface's network prefix length, such as 24 for a `255.255.255.0` netmask
+         */prefixLength: UInt8,
+        /**
+         * The network every socket searching this interface's subnet is bound to
+         */binding: LanBinding) {
+        self.ipv4Address = ipv4Address
+        self.prefixLength = prefixLength
+        self.binding = binding
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LanInterface: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLanInterface: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LanInterface {
+        return
+            try LanInterface(
+                ipv4Address: FfiConverterString.read(from: &buf),
+                prefixLength: FfiConverterUInt8.read(from: &buf),
+                binding: FfiConverterTypeLanBinding.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LanInterface, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ipv4Address, into: &buf)
+        FfiConverterUInt8.write(value.prefixLength, into: &buf)
+        FfiConverterTypeLanBinding.write(value.binding, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanInterface_lift(_ buf: RustBuffer) throws -> LanInterface {
+    return try FfiConverterTypeLanInterface.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanInterface_lower(_ value: LanInterface) -> RustBuffer {
+    return FfiConverterTypeLanInterface.lower(value)
 }
 
 
@@ -32137,6 +32343,87 @@ public func FfiConverterTypeLabelManagerError_lower(_ value: LabelManagerError) 
 }
 
 
+/**
+ * The network an interface belongs to, which each discovery socket is bound to
+ */
+
+public enum LanBinding: Equatable, Hashable {
+
+    /**
+     * An Android network, by `android.net.Network.getNetworkHandle()`
+     */
+    case androidNetwork(handle: UInt64
+    )
+    /**
+     * A network interface by its index, such as `if_nametoindex("en0")` on iOS
+     */
+    case interfaceIndex(index: UInt32
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LanBinding: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLanBinding: FfiConverterRustBuffer {
+    typealias SwiftType = LanBinding
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LanBinding {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .androidNetwork(handle: try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 2: return .interfaceIndex(index: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LanBinding, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .androidNetwork(handle):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(handle, into: &buf)
+
+
+        case let .interfaceIndex(index):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(index, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanBinding_lift(_ buf: RustBuffer) throws -> LanBinding {
+    return try FfiConverterTypeLanBinding.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanBinding_lower(_ value: LanBinding) -> RustBuffer {
+    return FfiConverterTypeLanBinding.lower(value)
+}
+
+
+
 
 public enum ListSortDirection: Equatable, Hashable {
 
@@ -33048,6 +33335,91 @@ public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> Rus
     return FfiConverterTypeNewWalletRoute.lower(value)
 }
 
+
+
+public
+enum NodeDiscoveryError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    /**
+     * None of the interfaces the app reported is on a local network, such as when the phone is
+     * only on cellular data
+     */
+    case NoLocalNetwork
+    /**
+     * The local network can't be searched directly, such as when a VPN that doesn't allow local
+     * network access covers the app; searching anyway would send the probes through the VPN
+     */
+    case LocalNetworkBlocked
+
+
+
+
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension NodeDiscoveryError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeDiscoveryError: FfiConverterRustBuffer {
+    typealias SwiftType = NodeDiscoveryError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeDiscoveryError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .NoLocalNetwork
+        case 2: return .LocalNetworkBlocked
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeDiscoveryError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .NoLocalNetwork:
+            writeInt(&buf, Int32(1))
+
+
+        case .LocalNetworkBlocked:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryError_lift(_ buf: RustBuffer) throws -> NodeDiscoveryError {
+    return try FfiConverterTypeNodeDiscoveryError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryError_lower(_ value: NodeDiscoveryError) -> RustBuffer {
+    return FfiConverterTypeNodeDiscoveryError.lower(value)
+}
 
 
 
@@ -46156,6 +46528,31 @@ fileprivate struct FfiConverterSequenceTypeDiagnosticsReportRecord: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeDiscoveredNode: FfiConverterRustBuffer {
+    typealias SwiftType = [DiscoveredNode]
+
+    public static func write(_ value: [DiscoveredNode], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDiscoveredNode.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DiscoveredNode] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DiscoveredNode]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDiscoveredNode.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer {
     typealias SwiftType = [FoundAddress]
 
@@ -46198,6 +46595,31 @@ fileprivate struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeGroupedWord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLanInterface: FfiConverterRustBuffer {
+    typealias SwiftType = [LanInterface]
+
+    public static func write(_ value: [LanInterface], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLanInterface.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LanInterface] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LanInterface]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLanInterface.read(from: &buf))
         }
         return seq
     }
@@ -48610,6 +49032,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nodeselector_discover_lan_nodes() != 19359) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549) {
