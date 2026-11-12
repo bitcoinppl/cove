@@ -606,3 +606,103 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
         );
     }
 }
+
+/// Verify run while the inventory is still loading, or after a load failed, keeps one progress
+/// section, the verification's, since the platforms key sections by kind
+#[tokio::test(flavor = "current_thread")]
+async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
+    use crate::manager::cloud_backup_manager::screen::{
+        CloudBackupProgressSection, CloudBackupSection, repeated_section_kinds, section_kind,
+    };
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupInventoryIncompleteReason, CloudBackupWalletItem, CloudBackupWalletStatus,
+    };
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    let progress_sections = |manager: &RustCloudBackupManager| {
+        let screen = manager.published_screen();
+        assert_eq!(repeated_section_kinds(&screen), Vec::<&str>::new());
+
+        let CloudBackupScreenBody::Configured(configured) = screen.body else {
+            panic!("a configured screen");
+        };
+
+        assert_eq!(configured.sections.first().map(section_kind), Some("progress"));
+        configured
+            .sections
+            .into_iter()
+            .filter_map(|section| match section {
+                CloudBackupSection::Progress(progress) => Some(progress),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    // the first load is still running, with no rows to show, so the verification is a card
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
+    manager.apply_verification_state(VerificationState::Verifying);
+    supervisor_checkpoint(&manager).await;
+
+    assert!(matches!(
+        progress_sections(&manager).as_slice(),
+        [CloudBackupProgressSection::VerificationCard(_)]
+    ));
+
+    // a refresh failed and kept its rows, so the verification runs inline above them
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    let mut wallet = crate::wallet::metadata::WalletMetadata::preview_new();
+    wallet.wallet_type = crate::wallet::metadata::WalletType::WatchOnly;
+    Database::global()
+        .wallets()
+        .save_all_wallets(wallet.network, wallet.wallet_mode, vec![wallet.clone()])
+        .unwrap();
+
+    let mut listed = listed_detail(&[]);
+    listed.detail.up_to_date.push(CloudBackupWalletItem {
+        name: wallet.name.clone(),
+        network: None,
+        wallet_mode: None,
+        wallet_type: None,
+        fingerprint: None,
+        label_count: None,
+        backup_updated_at: None,
+        sync_status: CloudBackupWalletStatus::Confirmed,
+        restore_failure: None,
+        record_id: wallet_record_id(wallet.id.as_ref()),
+    });
+
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::RefreshedWithAuthority {
+            listed,
+            authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+        },
+    );
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::Failed {
+            reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+            error: "provider sync pending".into(),
+        },
+    );
+    manager.apply_verification_state(VerificationState::Verifying);
+    supervisor_checkpoint(&manager).await;
+
+    assert!(matches!(
+        progress_sections(&manager).as_slice(),
+        [CloudBackupProgressSection::VerificationInline(_)]
+    ));
+
+    // once the verification ends, the incomplete load's progress returns
+    manager.apply_verification_state(VerificationState::Idle);
+    supervisor_checkpoint(&manager).await;
+
+    assert!(matches!(
+        progress_sections(&manager).as_slice(),
+        [CloudBackupProgressSection::InventoryIncomplete { .. }]
+    ));
+}

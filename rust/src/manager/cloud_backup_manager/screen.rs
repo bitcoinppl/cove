@@ -23,7 +23,7 @@ use parking_lot::Mutex;
 use tracing::error;
 
 #[cfg(test)]
-pub(crate) use self::contract::undrawn_actions;
+pub(crate) use self::contract::{repeated_section_kinds, section_kind, undrawn_actions};
 #[cfg(test)]
 pub(crate) use self::fixtures::cloud_backup_screen_fixtures;
 pub(crate) use self::notices::{LastOutcome, Notices};
@@ -45,7 +45,8 @@ pub use self::types::{
 #[cfg(test)]
 pub(crate) use self::types::{
     CloudBackupDriveAccountSwitchStage, CloudBackupListedRow, CloudBackupOutcomeTarget,
-    CloudBackupRowActionKind, CloudBackupSection, CloudBackupVerificationControl,
+    CloudBackupProgressSection, CloudBackupRowActionKind, CloudBackupSection,
+    CloudBackupVerificationControl,
 };
 use crate::database::cloud_backup::PersistedHealNotice;
 
