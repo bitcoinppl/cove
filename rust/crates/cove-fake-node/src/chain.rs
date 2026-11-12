@@ -623,6 +623,7 @@ impl ChainState {
         let total_in = tx.input.iter().try_fold(Amount::ZERO, |total, input| {
             total.checked_add(self.prevout(&input.previous_output)?.value)
         })?;
+
         let total_out = tx
             .output
             .iter()
