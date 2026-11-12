@@ -19,7 +19,7 @@ pub enum Error {
 
     /// Built through `From`, which drops the request URL
     #[error("esplora scan failed: {0}")]
-    Esplora(Box<esplora_client::Error>),
+    Esplora(#[source] Box<esplora_client::Error>),
 
     #[error("electrum scan failed: {0}")]
     Electrum(#[from] bdk_electrum::electrum_client::Error),
