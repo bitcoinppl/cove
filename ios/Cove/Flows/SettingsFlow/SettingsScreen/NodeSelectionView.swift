@@ -61,6 +61,12 @@ struct NodeSelectionView: View {
         return savedNode.apiType != apiType || savedNode.url != customUrl || savedNode.name != customNodeName
     }
 
+    /// Whether a selection is still being checked, which lasts until the check itself ends:
+    /// closing the loading popup cancels only the Swift task, never the Rust check and save
+    private var isCheckingSelection: Bool {
+        checkUrlTask != nil
+    }
+
     func cancelCheckUrlTask() {
         if let checkUrlTask {
             checkUrlTask.cancel()
@@ -123,8 +129,8 @@ struct NodeSelectionView: View {
         }
 
         if let node {
-            Task {
-                showLoadingPopup()
+            showLoadingPopup()
+            checkUrlTask = Task {
                 let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                 switch result {
@@ -199,6 +205,8 @@ struct NodeSelectionView: View {
             customNodeName: $customNodeName,
             saveCustomNode: checkAndSaveNode
         )
+        // one selection is checked at a time, so an older check can't save over a newer choice
+        .disabled(isCheckingSelection)
         .scrollContentBackground(.hidden)
         .onChange(of: selectedRow) { _, newSelectedRow in
             nodeSelectionChanged(to: newSelectedRow)
@@ -222,7 +230,7 @@ struct NodeSelectionView: View {
     private func saveCustomFormOnLeaving() {
         // one selection is checked at a time: older form values must not replace a preset or a
         // found server whose check is still running
-        guard checkUrlTask == nil else { return }
+        guard !isCheckingSelection else { return }
 
         // an unchanged saved node is not re-checked
         if customFormHasUnsavedChanges { checkAndSaveNode() }
