@@ -4,7 +4,9 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use act_zero_ext::into_actor_result;
 use bdk_wallet::{TxOrdering, chain::ChainPosition, chain::bitcoin::Psbt};
-use bitcoin::{FeeRate as BdkFeeRate, OutPoint, Transaction as BdkTransaction, Txid, Weight};
+use bitcoin::{
+    Amount, FeeRate as BdkFeeRate, OutPoint, Transaction as BdkTransaction, Txid, Weight,
+};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use tracing::{debug, warn};
 
@@ -279,27 +281,89 @@ impl WalletActor {
     }
 }
 
-/// MARK: after a replacement is broadcast
+// MARK: after a replacement is broadcast
+
+/// The wallet's pending transactions that spend a coin a just-broadcast transaction spends,
+/// split by which of them the node holds
+///
+/// A node only lets a double spend in when it pays more in total than the pending transactions
+/// it evicts (BIP 125 rule 3), so whichever pays more is the later one. That holds whatever
+/// order the broadcast result and a sync reach the wallet in, where the time each was seen does
+/// not
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct DoubleSpends {
+    /// The transactions it replaced, with when each was last seen
+    pub(crate) replaced: BTreeMap<Txid, u64>,
+
+    /// When the earliest double spend paying at least as much was seen, when one was: the
+    /// broadcast transaction was itself replaced before its result arrived
+    pub(crate) superseded_at: Option<u64>,
+}
+
+impl DoubleSpends {
+    /// Sorts the double spends of a transaction paying `fee` by theirs
+    ///
+    /// Each double spend comes with when it was last seen and its fee. One whose fee is unknown,
+    /// such as a payjoin with another wallet's inputs, can't have outbid a transaction the node
+    /// just accepted, so it counts as replaced
+    pub(crate) fn sort(
+        fee: Option<Amount>,
+        double_spends: impl IntoIterator<Item = (Txid, u64, Option<Amount>)>,
+    ) -> Self {
+        let mut sorted = Self::default();
+        for (txid, last_seen, double_spend_fee) in double_spends {
+            let outbid =
+                matches!((fee, double_spend_fee), (Some(fee), Some(other)) if other >= fee);
+            if !outbid {
+                sorted.replaced.insert(txid, last_seen);
+                continue;
+            }
+
+            let earliest = sorted.superseded_at.map_or(last_seen, |at| at.min(last_seen));
+            sorted.superseded_at = Some(earliest);
+        }
+
+        sorted
+    }
+
+    /// When the wallet should count the broadcast transaction as seen, so that BDK, which keeps
+    /// whichever double spend it saw last, keeps the one the node holds
+    pub(crate) fn seen_at(&self, now: u64) -> u64 {
+        if let Some(superseded_at) = self.superseded_at {
+            return now.min(superseded_at.saturating_sub(1));
+        }
+
+        self.replaced.values().map(|last_seen| last_seen + 1).fold(now, u64::max)
+    }
+}
+
 impl WalletActor {
-    /// Pending wallet transactions that `tx` double-spends, with when each was last seen
-    pub(crate) fn pending_transactions_replaced_by(
-        &self,
-        tx: &BdkTransaction,
-    ) -> BTreeMap<Txid, u64> {
-        self.wallet
-            .bdk
-            .tx_graph()
-            .direct_conflicts(tx)
-            .filter_map(|(_, conflict)| {
-                let canonical = self.wallet.bdk.get_tx(conflict)?;
-                match canonical.chain_position {
-                    ChainPosition::Unconfirmed { last_seen, .. } => {
-                        Some((conflict, last_seen.unwrap_or_default()))
-                    }
-                    ChainPosition::Confirmed { .. } => None,
-                }
-            })
-            .collect()
+    /// The pending transactions `tx` double-spends, sorted by whether `tx` replaced them
+    ///
+    /// Includes ones the wallet already dropped from its list, since a sync can learn of `tx`
+    /// before its broadcast result arrives and leave the original out of the canonical set
+    pub(crate) fn double_spends_of(&self, tx: &BdkTransaction) -> DoubleSpends {
+        let bdk = &self.wallet.bdk;
+        let graph = bdk.tx_graph();
+        let fee = graph.calculate_fee(tx).ok();
+
+        let double_spends = graph.direct_conflicts(tx).filter_map(|(_, txid)| {
+            let node = graph.get_tx_node(txid)?;
+
+            // a confirmed double spend would have made the node refuse `tx`
+            let confirmed = bdk.get_tx(txid).is_some_and(|canonical| {
+                matches!(canonical.chain_position, ChainPosition::Confirmed { .. })
+            });
+
+            if confirmed {
+                return None;
+            }
+
+            let last_seen = node.last_seen.unwrap_or_default();
+            Some((txid, last_seen, graph.calculate_fee(&node.tx).ok()))
+        });
+
+        DoubleSpends::sort(fee, double_spends.collect::<Vec<_>>())
     }
 
     /// Stops watching the transactions `replacement` replaced, and gives it their label
@@ -329,8 +393,13 @@ impl WalletActor {
             return Ok(());
         }
 
+        // a transaction replaced more than once leaves several originals, the latest one holds
+        // the label the user saw last
+        let mut by_last_seen = replaced.iter().collect::<Vec<_>>();
+        by_last_seen.sort_by_key(|(_, last_seen)| std::cmp::Reverse(**last_seen));
+
         let mut replaced_label = None;
-        for txid in replaced.keys() {
+        for (txid, _) in by_last_seen {
             let record = labels.get_txn_label_record(*txid).map_err(|error| error.to_string())?;
             if let Some(record) = record.filter(|record| record.item.label.is_some()) {
                 replaced_label = Some(record.item);
@@ -351,5 +420,44 @@ impl WalletActor {
                 label.origin,
             )
             .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::hashes::Hash as _;
+
+    use super::*;
+
+    fn txid(byte: u8) -> Txid {
+        Txid::from_byte_array([byte; 32])
+    }
+
+    fn sats(sats: u64) -> Amount {
+        Amount::from_sat(sats)
+    }
+
+    #[test]
+    fn the_double_spend_paying_more_wins_whatever_order_they_arrive_in() {
+        // the replacement's result arrives after the original, which it replaced: it is seen
+        // after the original even when the clock is behind
+        let sped_up = DoubleSpends::sort(Some(sats(2_000)), [(txid(1), 100, Some(sats(1_000)))]);
+        assert_eq!(sped_up.replaced, BTreeMap::from([(txid(1), 100)]));
+        assert_eq!(sped_up.superseded_at, None);
+        assert_eq!(sped_up.seen_at(50), 101);
+        assert_eq!(sped_up.seen_at(300), 300);
+
+        // the original's result arrives after a sync found the replacement that outbid it: it
+        // stays behind the replacement
+        let late = DoubleSpends::sort(Some(sats(1_000)), [(txid(2), 200, Some(sats(2_000)))]);
+        assert!(late.replaced.is_empty());
+        assert_eq!(late.superseded_at, Some(200));
+        assert_eq!(late.seen_at(300), 199);
+
+        // a double spend whose fee is unknown, such as a payjoin with another wallet's input,
+        // can't have outbid it
+        let unknown = DoubleSpends::sort(Some(sats(1_000)), [(txid(3), 200, None)]);
+        assert_eq!(unknown.replaced, BTreeMap::from([(txid(3), 200)]));
+        assert_eq!(unknown.seen_at(150), 201);
     }
 }

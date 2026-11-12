@@ -129,6 +129,31 @@ impl FeeBumpBlocker {
     }
 }
 
+/// Shown when no confirmed coin is left to pay a replacement's higher fee
+pub const INSUFFICIENT_FUNDS_MESSAGE: &str = "This wallet has no confirmed funds left to pay the \
+    higher fee. Wait for a pending payment to confirm, then try again.";
+
+impl FeeBumpError {
+    /// A message safe to show the user, where `Display` can carry internal error text for logs
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::NotFound => "This transaction is no longer in the wallet.".to_string(),
+            Self::InitialScanIncomplete => {
+                "Wait for the wallet to finish its first scan, then try again.".to_string()
+            }
+            Self::Blocked(blocker) => blocker.user_message(),
+            Self::FeeRateTooLow { minimum } => format!(
+                "The fee rate is too low to replace this transaction. Use at least {:.1} sat/vB.",
+                sat_per_vb(*minimum)
+            ),
+            Self::InsufficientFunds { .. } => INSUFFICIENT_FUNDS_MESSAGE.to_string(),
+            Self::Build(_) => {
+                "Unable to build the faster transaction. Please try again.".to_string()
+            }
+        }
+    }
+}
+
 impl From<WalletManagerError> for FeeBumpError {
     fn from(error: WalletManagerError) -> Self {
         match error {
@@ -184,9 +209,12 @@ impl ReplaceableTransaction {
 
     /// The lowest rate worth trying: one incremental relay step above the original's rate
     ///
-    /// BIP 125 rule 6 needs a higher rate than the original, and BDK refuses anything below
-    /// this step. Rule 4 can need more when the replacement is smaller than the original,
-    /// which [`Self::minimum_fee`] checks once the replacement's weight is known
+    /// BIP 125 rule 6 only needs a higher rate than the original, but BDK's `build_fee_bump`
+    /// refuses any rate below this step. A replacement that grows, by adding an input to pay the
+    /// fee, could relay a little under it, and getting there would mean building at an absolute
+    /// fee and searching coin selection by hand, so the wallet keeps BDK's floor. Rule 4 can
+    /// need more when the replacement is smaller than the original, which
+    /// [`Self::minimum_fee`] checks once the replacement's weight is known
     pub fn starting_fee_rate(&self) -> BdkFeeRate {
         let sat_per_kwu =
             self.fee_rate().to_sat_per_kwu().saturating_add(INCREMENTAL_RELAY_SAT_PER_KWU);

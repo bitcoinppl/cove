@@ -23,7 +23,7 @@ use cove_types::{
 };
 use cove_util::result_ext::ResultExt as _;
 use tap::TapFallible as _;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     database::{Database, unsigned_transactions::UnsignedTransactionRecord},
@@ -812,10 +812,10 @@ impl WalletActor {
 
         let txid = transaction.compute_txid();
 
-        // a replacement must be seen after the transactions it replaces, since the wallet keeps
-        // whichever of two double spends it saw last
-        let replaced = self.pending_transactions_replaced_by(&transaction);
-        let seen_at = replaced.values().map(|last_seen| last_seen + 1).fold(now, u64::max);
+        // a replacement must be seen after the transactions it replaces, and before one that
+        // replaced it in turn, since the wallet keeps whichever double spend it saw last
+        let double_spends = self.double_spends_of(&transaction);
+        let seen_at = double_spends.seen_at(now);
 
         // insert the unconfirmed transaction into the local wallet
         self.wallet.bdk.apply_unconfirmed_txs([(transaction, seen_at)]);
@@ -842,8 +842,14 @@ impl WalletActor {
             self.prune_settled_unsigned_transactions();
         }
 
-        if !replaced.is_empty() {
-            self.hand_over_to_replacement(&replaced, txid).await;
+        // a transaction replaced before its broadcast result arrived will never confirm
+        if double_spends.superseded_at.is_some() {
+            info!("{txid} was replaced before its broadcast result arrived");
+            return;
+        }
+
+        if !double_spends.replaced.is_empty() {
+            self.hand_over_to_replacement(&double_spends.replaced, txid).await;
         }
 
         send!(self.addr.start_transaction_watcher(txid));
