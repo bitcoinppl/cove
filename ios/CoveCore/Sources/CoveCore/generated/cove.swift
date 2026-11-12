@@ -4855,6 +4855,15 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func setSelectedNode(node: Node) throws
 
+    /**
+     * The wallet mode, or an error when the setting cannot be read
+     *
+     * [`Self::wallet_mode`] reads an unreadable setting as main mode. Code that decides which
+     * mode's wallets a caller may see uses this instead, so a read failure during a decoy
+     * session cannot expose main-mode wallets
+     */
+    func tryWalletMode() throws  -> WalletMode
+
     func walletMode()  -> WalletMode
 
 }
@@ -5146,6 +5155,22 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * The wallet mode, or an error when the setting cannot be read
+     *
+     * [`Self::wallet_mode`] reads an unreadable setting as main mode. Code that decides which
+     * mode's wallets a caller may see uses this instead, so a read failure during a decoy
+     * session cannot expose main-mode wallets
+     */
+open func tryWalletMode()throws  -> WalletMode  {
+    return try  FfiConverterTypeWalletMode_lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_try_wallet_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 open func walletMode() -> WalletMode  {
@@ -18645,6 +18670,85 @@ public func FfiConverterTypeOnboardingState_lower(_ value: OnboardingState) -> R
 }
 
 
+/**
+ * One wallet that owns the looked-up address
+ */
+public struct OwnedAddress: Equatable, Hashable {
+    public var walletId: WalletId
+    public var walletName: String
+    public var network: Network
+    public var chain: AddressChain
+    public var index: UInt32
+    /**
+     * The account in the wallet's derivation path, when its descriptor records one
+     */
+    public var account: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletId: WalletId, walletName: String, network: Network, chain: AddressChain, index: UInt32,
+        /**
+         * The account in the wallet's derivation path, when its descriptor records one
+         */account: UInt32?) {
+        self.walletId = walletId
+        self.walletName = walletName
+        self.network = network
+        self.chain = chain
+        self.index = index
+        self.account = account
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OwnedAddress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOwnedAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OwnedAddress {
+        return
+            try OwnedAddress(
+                walletId: FfiConverterTypeWalletId.read(from: &buf),
+                walletName: FfiConverterString.read(from: &buf),
+                network: FfiConverterTypeNetwork.read(from: &buf),
+                chain: FfiConverterTypeAddressChain.read(from: &buf),
+                index: FfiConverterUInt32.read(from: &buf),
+                account: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OwnedAddress, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletId.write(value.walletId, into: &buf)
+        FfiConverterString.write(value.walletName, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterTypeAddressChain.write(value.chain, into: &buf)
+        FfiConverterUInt32.write(value.index, into: &buf)
+        FfiConverterOptionUInt32.write(value.account, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOwnedAddress_lift(_ buf: RustBuffer) throws -> OwnedAddress {
+    return try FfiConverterTypeOwnedAddress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOwnedAddress_lower(_ value: OwnedAddress) -> RustBuffer {
+    return FfiConverterTypeOwnedAddress.lower(value)
+}
+
+
 public struct PendingDetails: Equatable, Hashable {
     public var lastSeen: UInt64
 
@@ -19605,6 +19709,67 @@ public func FfiConverterTypeTransactionExportResult_lower(_ value: TransactionEx
 }
 
 
+/**
+ * A wallet the lookup could not read, so the address might still belong to it
+ */
+public struct UncheckedWallet: Equatable, Hashable {
+    public var walletId: WalletId
+    public var walletName: String
+    public var network: Network
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletId: WalletId, walletName: String, network: Network) {
+        self.walletId = walletId
+        self.walletName = walletName
+        self.network = network
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UncheckedWallet: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUncheckedWallet: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UncheckedWallet {
+        return
+            try UncheckedWallet(
+                walletId: FfiConverterTypeWalletId.read(from: &buf),
+                walletName: FfiConverterString.read(from: &buf),
+                network: FfiConverterTypeNetwork.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UncheckedWallet, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletId.write(value.walletId, into: &buf)
+        FfiConverterString.write(value.walletName, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUncheckedWallet_lift(_ buf: RustBuffer) throws -> UncheckedWallet {
+    return try FfiConverterTypeUncheckedWallet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUncheckedWallet_lower(_ value: UncheckedWallet) -> RustBuffer {
+    return FfiConverterTypeUncheckedWallet.lower(value)
+}
+
+
 public struct UnsupportedDbVersion: Equatable, Hashable {
     public var path: String
     public var version: UInt8
@@ -20358,6 +20523,280 @@ public func FfiConverterTypeXpubExportResult_lift(_ buf: RustBuffer) throws -> X
 #endif
 public func FfiConverterTypeXpubExportResult_lower(_ value: XpubExportResult) -> RustBuffer {
     return FfiConverterTypeXpubExportResult.lower(value)
+}
+
+
+/**
+ * Which of a wallet's two address chains an address comes from
+ */
+
+public enum AddressChain: Equatable, Hashable {
+
+    case receive
+    case change
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AddressChain: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressChain: FfiConverterRustBuffer {
+    typealias SwiftType = AddressChain
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressChain {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .receive
+
+        case 2: return .change
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddressChain, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .receive:
+            writeInt(&buf, Int32(1))
+
+
+        case .change:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressChain_lift(_ buf: RustBuffer) throws -> AddressChain {
+    return try FfiConverterTypeAddressChain.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressChain_lower(_ value: AddressChain) -> RustBuffer {
+    return FfiConverterTypeAddressChain.lower(value)
+}
+
+
+
+/**
+ * The answer to whether an address belongs to one of the user's wallets
+ */
+
+public enum AddressOwnership: Equatable, Hashable {
+
+    /**
+     * The address belongs to these wallets, in wallet list order
+     *
+     * More than one wallet can own the same address, such as one key set imported on both
+     * testnet and signet, which share an address format. The list is never empty
+     */
+    case owned(owners: [OwnedAddress]
+    )
+    /**
+     * No searched wallet owns the address within the lookup gap
+     *
+     * Wallets that could not be read are listed, since the address may belong to one of them
+     */
+    case notFound(uncheckedWallets: [UncheckedWallet]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AddressOwnership: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressOwnership: FfiConverterRustBuffer {
+    typealias SwiftType = AddressOwnership
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressOwnership {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .owned(owners: try FfiConverterSequenceTypeOwnedAddress.read(from: &buf)
+        )
+
+        case 2: return .notFound(uncheckedWallets: try FfiConverterSequenceTypeUncheckedWallet.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddressOwnership, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .owned(owners):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeOwnedAddress.write(owners, into: &buf)
+
+
+        case let .notFound(uncheckedWallets):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeUncheckedWallet.write(uncheckedWallets, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressOwnership_lift(_ buf: RustBuffer) throws -> AddressOwnership {
+    return try FfiConverterTypeAddressOwnership.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressOwnership_lower(_ value: AddressOwnership) -> RustBuffer {
+    return FfiConverterTypeAddressOwnership.lower(value)
+}
+
+
+
+public
+enum AddressOwnershipError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case InvalidAddress(String
+    )
+    case WalletListUnavailable(String
+    )
+    /**
+     * Whether the app is in main or decoy mode could not be read, so no wallets are searched
+     */
+    case WalletModeUnavailable(String
+    )
+    /**
+     * The lookup's mode is not, or stopped being, the app's active mode, so its result would
+     * reveal the other mode's wallets and is withheld
+     */
+    case WalletModeChanged
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_addressownershiperror_uniffi_trait_display(
+            FfiConverterTypeAddressOwnershipError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension AddressOwnershipError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressOwnershipError: FfiConverterRustBuffer {
+    typealias SwiftType = AddressOwnershipError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressOwnershipError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .InvalidAddress(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .WalletListUnavailable(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .WalletModeUnavailable(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .WalletModeChanged
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddressOwnershipError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case let .InvalidAddress(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .WalletListUnavailable(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .WalletModeUnavailable(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletModeChanged:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressOwnershipError_lift(_ buf: RustBuffer) throws -> AddressOwnershipError {
+    return try FfiConverterTypeAddressOwnershipError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressOwnershipError_lower(_ value: AddressOwnershipError) -> RustBuffer {
+    return FfiConverterTypeAddressOwnershipError.lower(value)
 }
 
 
@@ -46231,6 +46670,56 @@ fileprivate struct FfiConverterSequenceTypeNode: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOwnedAddress: FfiConverterRustBuffer {
+    typealias SwiftType = [OwnedAddress]
+
+    public static func write(_ value: [OwnedAddress], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOwnedAddress.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OwnedAddress] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OwnedAddress]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOwnedAddress.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUncheckedWallet: FfiConverterRustBuffer {
+    typealias SwiftType = [UncheckedWallet]
+
+    public static func write(_ value: [UncheckedWallet], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUncheckedWallet.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UncheckedWallet] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UncheckedWallet]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUncheckedWallet.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [WalletMetadata]
 
@@ -46882,6 +47371,26 @@ public func setRootDataDir(path: String)throws   {try rustCallWithError(FfiConve
 }
 }
 /**
+ * Check whether a scanned or pasted address, or a `bitcoin:` URI, belongs to one of the user's
+ * wallets in the active wallet mode
+ *
+ * Runs entirely on the device; nothing about the address is sent to a server
+ */
+public func checkAddressOwnership(address: String)async throws  -> AddressOwnership  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_check_address_ownership(FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAddressOwnership_lift,
+            errorHandler: FfiConverterTypeAddressOwnershipError_lift
+        )
+}
+/**
  * Initialize the global App instance (Updater, router, state)
  * Must be called after storage bootstrap completes
  */
@@ -47517,6 +48026,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_set_root_data_dir() != 5349) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_check_address_ownership() != 51896) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_initialize_app() != 18498) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -47977,6 +48489,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_try_wallet_mode() != 65109) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720) {
