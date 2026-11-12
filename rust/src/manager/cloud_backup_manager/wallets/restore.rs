@@ -266,16 +266,16 @@ impl DownloadedWalletBackup {
         local_wallets: &ExistingWalletIdentitySet,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let (identity_key, identity_error) = self.identity_key();
-        let wallet_id = &self.metadata.id;
 
+        // the wallet id comes from decrypted backup content, so these logs leave it out
         match local_wallets.coverage(&identity_key, self.recovery_material()) {
             LocalWalletCoverage::Covered => {
-                info!("Cloud-only wallet id={wallet_id} is already on this device");
+                info!("Cloud-only wallet is already on this device");
                 return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
             }
             LocalWalletCoverage::SecretMissing => {
                 info!(
-                    "Cloud-only wallet id={wallet_id} matches a local wallet without its secret, adding the secret"
+                    "Cloud-only wallet matches a local wallet without its secret, adding the secret"
                 );
 
                 if let Some(outcome) = self.add_secret_to_local_wallet()? {
@@ -283,7 +283,7 @@ impl DownloadedWalletBackup {
                 }
             }
             LocalWalletCoverage::Absent => {
-                info!("Cloud-only wallet id={wallet_id} has no local match, restoring as new");
+                info!("Cloud-only wallet has no local match, restoring as new");
             }
         }
 
@@ -357,9 +357,8 @@ impl DownloadedWalletBackup {
     fn add_secret_to_local_wallet(
         &self,
     ) -> Result<Option<CloudOnlyRestoreOutcome>, CloudBackupError> {
-        let wallet_id = &self.metadata.id;
         let Some(secret) = self.signing_secret()? else {
-            info!("Cloud-only wallet id={wallet_id} has no signing secret, restoring as new");
+            info!("Cloud-only wallet has no signing secret, restoring as new");
             return Ok(None);
         };
 
@@ -375,18 +374,14 @@ impl DownloadedWalletBackup {
         ) {
             Ok(Some(upgrade)) => upgrade,
             Ok(None) => {
-                info!(
-                    "Cloud-only wallet id={wallet_id} has no single local wallet to upgrade, restoring as new"
-                );
+                info!("Cloud-only wallet has no single local wallet to upgrade, restoring as new");
                 return Ok(None);
             }
 
             // several local wallets share this identity, such as one seed watched under two
             // address types, so the seed restores as its own hot wallet instead of being stuck
             Err(SecretUpgradeError::IdentityCollision) => {
-                info!(
-                    "Cloud-only wallet id={wallet_id} matches several local wallets, restoring as new"
-                );
+                info!("Cloud-only wallet matches several local wallets, restoring as new");
                 return Ok(None);
             }
 
@@ -402,14 +397,14 @@ impl DownloadedWalletBackup {
             }
             // the local wallet gained a readable secret after coverage was read
             Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
-                info!("Cloud-only wallet id={wallet_id} secret was added locally meanwhile");
+                info!("Cloud-only wallet secret was added locally meanwhile");
                 Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice))
             }
             // the backup may hold the only readable copy of this secret, so the row stays
             // restorable instead of becoming a deletable copy
             Err(SecretUpgradeError::UnreadableSecret(local_id)) => {
                 info!(
-                    "Cloud-only wallet id={wallet_id} not added: local wallet id={local_id} holds an unreadable secret"
+                    "Cloud-only wallet not added: local wallet id={local_id} holds an unreadable secret"
                 );
 
                 Err(CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable))

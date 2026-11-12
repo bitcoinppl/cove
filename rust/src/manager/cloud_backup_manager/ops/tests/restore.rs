@@ -236,6 +236,7 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
     let entry_marker = "private-user-text-in-wallet-entry";
     let wallet_id_marker = "private-user-text-in-wallet-id";
     let wallet_name_marker = "private-user-text-in-wallet-name";
+    let metadata_id_marker = "private-user-text-in-metadata-id";
     let label_marker = "private-user-text-in-wallet-label";
     let envelope_marker = "private-text-in-backup-envelope";
     let markers = [
@@ -243,6 +244,7 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
         entry_marker,
         wallet_id_marker,
         wallet_name_marker,
+        metadata_id_marker,
         label_marker,
         envelope_marker,
     ];
@@ -290,13 +292,15 @@ async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
     entry["wallet_id"] = serde_json::Value::from(wallet_id_marker);
     let wallet_id_record_id = upload(&wallet, entry);
 
-    // the backup parses, but its xpub does not, and the wallet's name must not be logged with it.
-    // Without a fingerprint its fallback duplicate key is its own id, so it can never be skipped
-    // as a duplicate of the wallet that restores
+    // the backup parses, but its xpub does not, and neither the wallet's name nor the id inside
+    // its metadata, which the envelope does not check, may be logged with it. Without a
+    // fingerprint its fallback duplicate key is its own id, so it can never be skipped as a
+    // duplicate of the wallet that restores
     let mut wallet = xpub_only_wallet_metadata();
     wallet.master_fingerprint = None;
     let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
     entry["metadata"]["name"] = serde_json::Value::from(wallet_name_marker);
+    entry["metadata"]["id"] = serde_json::Value::from(metadata_id_marker);
     entry["xpub"] = serde_json::Value::from("not-an-xpub");
     upload(&wallet, entry);
 

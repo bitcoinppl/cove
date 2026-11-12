@@ -269,11 +269,10 @@ mod tests {
             .warning
             .as_deref()
             .expect("invalid public identity should become a wallet warning");
-        let expected = format!(
-            "Import will fail: public descriptor identity for wallet {}: failed to parse descriptor",
-            invalid_metadata.id
+        assert_eq!(
+            warning,
+            "Import will fail: public descriptor identity: failed to parse descriptor"
         );
-        assert_eq!(warning, expected);
 
         assert_eq!(report.wallets[1].name, valid_metadata.name);
         assert!(!report.wallets[1].already_on_device);
