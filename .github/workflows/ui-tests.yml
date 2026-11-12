@@ -306,9 +306,10 @@ jobs:
     if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
     runs-on: macos-26
     # each shard spends 10 to 24 minutes building the Rust library, unless compile-ios cached it,
-    # the fake node and the test bundles, then about 95 minutes on its tests by the checked-in
-    # timings, a CoveUITests test taking about 5 minutes on its own simulator and each simulator
-    # retry as long again; the headroom covers a slow runner and a run of retries
+    # the fake node and the test bundles, then about 100 minutes on its tests by the checked-in timings, a CoveUITests test
+    # taking about 5 minutes on its own simulator and each simulator retry as long again; shards
+    # took 108 to 122 minutes in a full run, and the headroom covers a slow runner, a run of
+    # retries or a test stopped at its 25-minute allowance
     timeout-minutes: 150
     strategy:
       fail-fast: false
