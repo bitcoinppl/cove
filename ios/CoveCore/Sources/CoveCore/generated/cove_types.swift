@@ -4567,6 +4567,9 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
+/**
+ * A payment request's BIP 77 v2 Payjoin endpoint
+ */
 public struct PayJoinParams: Equatable, Hashable {
     public var endpoint: String
 
