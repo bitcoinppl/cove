@@ -1,4 +1,3 @@
-use cove_util::ResultExt as _;
 use zeroize::Zeroizing;
 
 use crate::wallet::metadata::WalletMetadata;
@@ -37,7 +36,7 @@ fn verify_payload(
     let mut wallets = Vec::with_capacity(payload.wallets.len());
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
-            .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
+            .map_err(|error| BackupError::deserialization("wallet metadata", &error))?;
 
         let identity_preview =
             WalletIdentityPreview::new(&metadata, wallet_backup, &existing_identities);
@@ -270,9 +269,9 @@ mod tests {
             .warning
             .as_deref()
             .expect("invalid public identity should become a wallet warning");
-        assert!(
-            warning
-                .contains("Import will fail: public descriptor identity for Broken public wallet")
+        assert_eq!(
+            warning,
+            "Import will fail: public descriptor identity: failed to parse descriptor"
         );
 
         assert_eq!(report.wallets[1].name, valid_metadata.name);

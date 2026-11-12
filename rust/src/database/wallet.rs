@@ -286,6 +286,11 @@ impl WalletsTable {
 }
 
 impl WalletsTable {
+    /// The main database handle backing this table, for read-only diagnostics
+    pub(crate) fn redb(&self) -> &redb::Database {
+        &self.db
+    }
+
     /// Read every supported network and wallet-mode bucket or fail the full inventory
     pub(crate) fn complete_inventory(&self) -> Result<Vec<WalletMetadata>, WalletInventoryFailure> {
         use strum::IntoEnumIterator as _;

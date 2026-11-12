@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
-import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,11 +58,6 @@ fun TapSignerEnterPinView(
     var isSubmitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val message = action.userMessage()
-    val createBackupLauncher =
-        rememberBackupExportLauncher(app) {
-            app.getTapSignerBackup(tapSigner)
-                ?: error("Backup is not available for this TAPSIGNER")
-        }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -83,7 +77,6 @@ fun TapSignerEnterPinView(
                     tapSigner = tapSigner,
                     action = action,
                     cvc = cvc,
-                    createBackupLauncher = createBackupLauncher,
                 )
             } finally {
                 cvc = ""
@@ -162,14 +155,11 @@ private suspend fun runAction(
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     action: AfterPinAction,
     cvc: String,
-    createBackupLauncher: ActivityResultLauncher<String>,
 ) {
     when (action) {
         AfterPinAction.Derive -> deriveAction(app, manager, tapSigner, cvc)
         AfterPinAction.Change -> changeAction(manager, tapSigner, cvc)
-        AfterPinAction.Backup -> {
-            backupAction(app, manager, tapSigner, cvc, createBackupLauncher)
-        }
+        AfterPinAction.Backup -> backupAction(app, manager, tapSigner, cvc)
         is AfterPinAction.Sign -> signAction(app, manager, tapSigner, action.v1, cvc)
     }
 }
@@ -236,7 +226,6 @@ private suspend fun backupAction(
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     cvc: String,
-    createBackupLauncher: ActivityResultLauncher<String>,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
     manager.beginScan("Hold your phone near the TapSigner to back up the card")
@@ -253,7 +242,11 @@ private suspend fun backupAction(
 
     if (backup != null) {
         app.saveTapSignerBackup(tapSigner, backup)
-        createBackupLauncher.launch("${tapSigner.identFileNamePrefix()}_backup.txt")
+
+        // the app-level export host owns the picker, so this sheet can close while it is open
+        app.tapSignerBackupExports.request("${tapSigner.identFileNamePrefix()}_backup.txt") {
+            app.getTapSignerBackup(tapSigner) ?: error("Backup is not available for this TAPSIGNER")
+        }
         app.sheetState = null
         return
     }

@@ -7,10 +7,11 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, LazyLock,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, Ordering},
         mpsc,
     },
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use parking_lot::Mutex;
@@ -26,8 +27,24 @@ const LOG_FILE_BYTES: usize = RING_CAP_BYTES;
 const ARCHIVE_FILE_COUNT: usize = (MAX_TOTAL_FILE_BYTES / LOG_FILE_BYTES) - 1;
 const WRITER_QUEUE_CAPACITY: usize = 64;
 const CURRENT_LOG_FILE: &str = "cove-rust.log";
+const PANIC_MARKER_FILE: &str = "cove-rust-panics.log";
+
+/// Restarts the panic marker file once a crash loop grows it past this size
+const PANIC_MARKER_MAX_BYTES: u64 = 16 * 1024;
+
+/// Bounds how long the panic hook waits for the capture lock before relying on the marker
+const PANIC_CAPTURE_LOCK_TIMEOUT: Duration = Duration::from_millis(50);
+
+/// Text that identifies a gap marker line in persisted history
+const GAP_MARKER: &str = "diagnostics log gap:";
+
+const CAPTURE_LOG_TARGET: &str = module_path!();
 
 static CAPTURE: LazyLock<Capture> = LazyLock::new(Capture::default);
+
+// kept outside the capture lock so the panic hook never waits on a lock the panicking
+// thread may already hold
+static PANIC_MARKER_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 thread_local! {
     static FORMATTING_EVENT: Cell<bool> = const { Cell::new(false) };
@@ -71,15 +88,23 @@ struct Capture {
 struct CaptureState {
     ring: RingBuffer,
     writer: Option<LogWriter>,
-    writer_health: Arc<WriterHealth>,
     replayed_on_attach: bool,
+
+    // sequence number of the last recorded line, so the writer can detect queue drops
+    last_seq: u64,
 }
 
 #[derive(Debug)]
 struct RingBuffer {
-    lines: VecDeque<String>,
+    lines: VecDeque<RingLine>,
     bytes: usize,
     cap_bytes: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RingLine {
+    seq: u64,
+    text: String,
 }
 
 #[derive(Debug)]
@@ -101,21 +126,43 @@ struct LogWriterHandle {
     health: Arc<WriterHealth>,
 }
 
+/// Writer progress shared with snapshots, readable even when the writer thread is gone
 #[derive(Default)]
 struct WriterHealth {
-    dropped_writes: AtomicUsize,
-    cleared_drops_through: AtomicUsize,
+    persisted_through: AtomicU64,
 }
 
 enum WriterCommand {
-    Write(String),
-    Flush(mpsc::Sender<Result<Option<String>, CaptureError>>),
+    Write {
+        seq: u64,
+        entry: String,
+    },
+    Flush {
+        through_seq: u64,
+        reply: mpsc::Sender<Result<Option<String>, CaptureError>>,
+    },
     ClearAndWrite {
         marker: String,
-        clear_drops_through: usize,
+        through_seq: u64,
         reply: mpsc::Sender<Result<(), CaptureError>>,
     },
     Shutdown,
+}
+
+/// Entries the writer could not persist since the last gap marker reached disk
+#[derive(Debug, Default)]
+struct PendingGap {
+    queue_full: usize,
+    write_failed: usize,
+    last_error: Option<String>,
+}
+
+/// Writer-thread state that turns lost entries into gap markers in the persisted history
+struct DiskWriter {
+    file: RollingLogFile,
+    health: Arc<WriterHealth>,
+    last_seen_seq: u64,
+    pending_gap: PendingGap,
 }
 
 pub fn layer() -> CaptureLayer {
@@ -135,6 +182,24 @@ pub fn snapshot_text() -> String {
     snapshot.finish()
 }
 
+/// Record a panic line synchronously in the marker file, then in the capture if possible
+///
+/// Called from the panic hook, so it never blocks on the capture lock: the panicking thread
+/// may already hold it, and release builds abort right after the hook returns
+pub(crate) fn record_panic(line: &str) {
+    let line = format!("{} ERROR {}: {line}", timestamp(), super::panic::PANIC_LOG_TARGET);
+
+    let marker_dir = PANIC_MARKER_DIR.try_lock().and_then(|dir| dir.clone());
+    if let Some(dir) = marker_dir {
+        // nothing useful can be done with a failure inside the panic hook
+        let _ = write_panic_marker(&dir, &line);
+    }
+
+    if let Some(mut state) = CAPTURE.state.try_lock_for(PANIC_CAPTURE_LOCK_TIMEOUT) {
+        state.record_line(line);
+    }
+}
+
 pub fn clear() -> Result<(), CaptureError> {
     let clear = CAPTURE.state.lock().start_clear()?;
     if let Some(clear) = clear {
@@ -146,20 +211,11 @@ pub fn clear() -> Result<(), CaptureError> {
 
 pub fn clear_default_logs_dir() -> Result<(), CaptureError> {
     let logs_dir = ROOT_DATA_DIR.join("logs");
-    let (writer, writer_health) = {
-        let mut state = CAPTURE.state.lock();
-        let writer = state.detach_writer_for_dir(&logs_dir);
-
-        (writer, state.writer_health.clone())
-    };
+    let writer = CAPTURE.state.lock().detach_writer_for_dir(&logs_dir);
     let should_reattach = writer.is_some();
     drop(writer);
 
     let remove_result = remove_dir_all_if_exists(&logs_dir);
-    if remove_result.is_ok() {
-        writer_health.mark_all_drops_cleared();
-    }
-
     let reattach_result = if should_reattach { attach(logs_dir) } else { Ok(()) };
 
     remove_result?;
@@ -212,8 +268,8 @@ impl Default for CaptureState {
         Self {
             ring: RingBuffer::new(RING_CAP_BYTES),
             writer: None,
-            writer_health: Arc::new(WriterHealth::default()),
             replayed_on_attach: false,
+            last_seq: 0,
         }
     }
 }
@@ -228,7 +284,7 @@ impl CaptureState {
             source,
         })?;
 
-        let mut file = RollingLogFile::open(logs_dir)?;
+        let mut file = RollingLogFile::open(logs_dir.clone())?;
         if !self.replayed_on_attach {
             for line in self.ring.iter() {
                 file.write_entry(line)?;
@@ -237,29 +293,33 @@ impl CaptureState {
             self.replayed_on_attach = true;
         }
 
-        self.writer = Some(LogWriter::spawn(file, self.writer_health.clone())?);
+        self.writer = Some(LogWriter::spawn(file, self.last_seq)?);
+        *PANIC_MARKER_DIR.lock() = Some(logs_dir);
+
         Ok(())
     }
 
     fn record_line(&mut self, line: impl Into<String>) {
         let mut line = line.into();
         line.push('\n');
-        self.ring.push(line.clone());
+        self.last_seq += 1;
+        self.ring.push(self.last_seq, line.clone());
 
         if let Some(writer) = &self.writer {
-            writer.write(line);
+            writer.write(self.last_seq, line);
         }
     }
 
     fn snapshot_start(&self) -> SnapshotStart {
         let Some(writer) = &self.writer else {
-            return SnapshotStart::Ring(self.ring.text());
+            return SnapshotStart::Ring(self.ring.text_after(0));
         };
 
         SnapshotStart::Writer {
             dir: writer.handle.dir.clone(),
-            ring_text: self.ring.text(),
-            flush: writer.handle.start_flush(),
+            ring: self.ring.lines_after(0),
+            health: writer.handle.health.clone(),
+            flush: writer.handle.start_flush(self.last_seq),
         }
     }
 
@@ -280,11 +340,12 @@ impl CaptureState {
     fn start_clear(&mut self) -> Result<Option<WriterReply>, CaptureError> {
         let marker = format!("diagnostics logs cleared at {}", timestamp());
         self.ring.clear();
-        self.ring.push(format!("{marker}\n"));
+        self.last_seq += 1;
+        self.ring.push(self.last_seq, format!("{marker}\n"));
 
         self.writer
             .as_ref()
-            .map(|writer| writer.handle.start_clear_and_write(format!("{marker}\n")))
+            .map(|writer| writer.handle.start_clear_and_write(format!("{marker}\n"), self.last_seq))
             .transpose()
     }
 
@@ -302,41 +363,34 @@ impl CaptureState {
 
 enum SnapshotStart {
     Ring(String),
-    Writer { dir: PathBuf, ring_text: String, flush: Result<FlushReply, CaptureError> },
+    Writer {
+        dir: PathBuf,
+        ring: Vec<RingLine>,
+        health: Arc<WriterHealth>,
+        flush: Result<FlushReply, CaptureError>,
+    },
 }
 
 impl SnapshotStart {
     fn finish(self) -> String {
         let text = match self {
             Self::Ring(text) => text,
-            Self::Writer { dir, ring_text, flush } => {
-                match flush {
-                    Ok(flush) => match flush.wait() {
-                        Ok(Some(error)) => {
-                            return disk_incomplete_snapshot(
-                                format!("failed to write Rust diagnostics log file: {error}"),
-                                &ring_text,
-                            );
-                        }
-                        Ok(None) => {}
-                        Err(error) => {
-                            return disk_incomplete_snapshot(
-                                format!("failed to flush Rust diagnostics log file: {error}"),
-                                &ring_text,
-                            );
-                        }
-                    },
+            Self::Writer { dir, ring, health, flush } => {
+                let pending_gap = match flush.and_then(FlushReply::wait) {
+                    Ok(pending_gap) => pending_gap,
                     Err(error) => {
-                        return disk_incomplete_snapshot(
-                            format!("failed to flush Rust diagnostics log file: {error}"),
-                            &ring_text,
-                        );
+                        Some(format!("failed to flush Rust diagnostics log file: {error}"))
                     }
-                }
+                };
 
-                let mut text = String::new();
-                text.push_str(&RollingLogFile::snapshot_text_in_dir(&dir));
-                text
+                DiskSnapshot {
+                    panics: read_panic_markers(&dir),
+                    history: RollingLogFile::snapshot_text_in_dir(&dir),
+                    pending_gap,
+                    ring,
+                    persisted_through: health.persisted_through.load(Ordering::Acquire),
+                }
+                .render()
             }
         };
 
@@ -344,16 +398,55 @@ impl SnapshotStart {
     }
 }
 
-fn disk_incomplete_snapshot(reason: String, ring_text: &str) -> String {
-    let mut text = String::new();
-    text.push_str(&reason);
-    text.push('\n');
-    text.push_str(
-        "using in-memory Rust diagnostics log fallback because disk capture may be incomplete\n",
-    );
-    text.push_str(ring_text);
+/// Persisted history plus whatever the writer has not managed to put on disk yet
+struct DiskSnapshot {
+    panics: String,
+    history: String,
+    pending_gap: Option<String>,
+    ring: Vec<RingLine>,
+    persisted_through: u64,
+}
 
-    text
+impl DiskSnapshot {
+    fn render(self) -> String {
+        let mut text = String::new();
+        if !self.panics.is_empty() {
+            text.push_str("Rust panics recorded since diagnostics logs were last cleared:\n");
+            text.push_str(&self.panics);
+            text.push_str("end of recorded Rust panics\n");
+        }
+
+        // one report-level summary, so a reader sees the gaps before reading the history
+        let recorded_gaps = self.history.lines().filter(|line| line.contains(GAP_MARKER)).count();
+        let summary = match (recorded_gaps, &self.pending_gap) {
+            (0, None) => None,
+            (gaps, None) => Some(format!("{gaps} gap(s) marked in saved history")),
+            (0, Some(pending)) => Some(pending.clone()),
+            (gaps, Some(pending)) => {
+                Some(format!("{gaps} gap(s) marked in saved history; {pending}"))
+            }
+        };
+
+        if let Some(summary) = summary {
+            text.push_str(&format!(
+                "{} WARN {CAPTURE_LOG_TARGET}: diagnostics log capture incomplete: {summary}\n",
+                timestamp()
+            ));
+        }
+
+        text.push_str(&self.history);
+
+        // while the writer is failing, lines after the last persisted entry live only in memory
+        if self.pending_gap.is_some() {
+            let unpersisted = self.ring.iter().filter(|line| line.seq > self.persisted_through);
+            text.push_str("Rust log lines not yet written to disk:\n");
+            for line in unpersisted {
+                text.push_str(&line.text);
+            }
+        }
+
+        text
+    }
 }
 
 struct FlushReply {
@@ -380,13 +473,14 @@ impl WriterReply {
 }
 
 impl LogWriter {
-    fn spawn(file: RollingLogFile, health: Arc<WriterHealth>) -> Result<Self, CaptureError> {
+    fn spawn(file: RollingLogFile, last_seq: u64) -> Result<Self, CaptureError> {
         let dir = file.dir.clone();
         let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
-        let writer_health = health.clone();
+        let health = Arc::new(WriterHealth { persisted_through: AtomicU64::new(last_seq) });
+        let disk_writer = DiskWriter::new(file, health.clone(), last_seq);
         let join_handle = thread::Builder::new()
             .name("cove-diagnostics-log-writer".to_string())
-            .spawn(move || run_writer(file, receiver, writer_health))
+            .spawn(move || disk_writer.run(receiver))
             .map_err(|source| CaptureError::StartWriter { source })?;
 
         let handle = LogWriterHandle { dir, sender, health };
@@ -394,41 +488,40 @@ impl LogWriter {
         Ok(Self { handle, join_handle: Some(join_handle) })
     }
 
-    fn write(&self, entry: String) {
-        self.handle.write(entry);
+    fn write(&self, seq: u64, entry: String) {
+        self.handle.write(seq, entry);
     }
 }
 
 impl LogWriterHandle {
-    fn write(&self, entry: String) {
+    fn write(&self, seq: u64, entry: String) {
         let entry = if entry.len() > LOG_FILE_BYTES {
             last_bytes_at_token_boundary(&entry, LOG_FILE_BYTES)
         } else {
             entry
         };
 
-        if matches!(
-            self.sender.try_send(WriterCommand::Write(entry)),
-            Err(mpsc::TrySendError::Full(_))
-        ) {
-            self.health.record_dropped_write();
-        }
+        // a full queue drops the entry; the writer sees the sequence jump and marks the gap
+        let _ = self.sender.try_send(WriterCommand::Write { seq, entry });
     }
 
-    fn start_flush(&self) -> Result<FlushReply, CaptureError> {
+    fn start_flush(&self, through_seq: u64) -> Result<FlushReply, CaptureError> {
         let (reply, receiver) = mpsc::channel();
         self.sender
-            .send(WriterCommand::Flush(reply))
+            .send(WriterCommand::Flush { through_seq, reply })
             .map_err(|_| CaptureError::WriterUnavailable { action: "flush diagnostics logs" })?;
 
         Ok(FlushReply { receiver })
     }
 
-    fn start_clear_and_write(&self, marker: String) -> Result<WriterReply, CaptureError> {
+    fn start_clear_and_write(
+        &self,
+        marker: String,
+        through_seq: u64,
+    ) -> Result<WriterReply, CaptureError> {
         let (reply, receiver) = mpsc::channel();
-        let clear_drops_through = self.health.total_dropped_writes();
         self.sender
-            .send(WriterCommand::ClearAndWrite { marker, clear_drops_through, reply })
+            .send(WriterCommand::ClearAndWrite { marker, through_seq, reply })
             .map_err(|_| CaptureError::WriterUnavailable { action: "clear diagnostics logs" })?;
 
         Ok(WriterReply { receiver, action: "clear diagnostics logs" })
@@ -444,70 +537,110 @@ impl Drop for LogWriter {
     }
 }
 
-impl WriterHealth {
-    fn record_dropped_write(&self) {
-        self.dropped_writes.fetch_add(1, Ordering::Relaxed);
+impl PendingGap {
+    fn is_empty(&self) -> bool {
+        self.queue_full == 0 && self.write_failed == 0
     }
 
-    fn total_dropped_writes(&self) -> usize {
-        self.dropped_writes.load(Ordering::Relaxed)
-    }
+    fn describe(&self) -> String {
+        let missing = self.queue_full + self.write_failed;
+        let mut text = format!(
+            "{missing} entries not written to disk (writer queue full: {}, write failed: {})",
+            self.queue_full, self.write_failed
+        );
+        if let Some(error) = &self.last_error {
+            text.push_str(&format!(", last error: {error}"));
+        }
 
-    fn dropped_writes_since_clear(&self) -> usize {
-        self.total_dropped_writes()
-            .saturating_sub(self.cleared_drops_through.load(Ordering::Relaxed))
-    }
-
-    fn mark_cleared_through(&self, dropped_writes: usize) {
-        self.cleared_drops_through.store(dropped_writes, Ordering::Relaxed);
-    }
-
-    fn mark_all_drops_cleared(&self) {
-        self.mark_cleared_through(self.total_dropped_writes());
+        text
     }
 }
 
-fn run_writer(
-    mut file: RollingLogFile,
-    receiver: mpsc::Receiver<WriterCommand>,
-    health: Arc<WriterHealth>,
-) {
-    let mut last_write_error = None;
+impl DiskWriter {
+    fn new(file: RollingLogFile, health: Arc<WriterHealth>, last_seq: u64) -> Self {
+        Self { file, health, last_seen_seq: last_seq, pending_gap: PendingGap::default() }
+    }
 
-    for command in receiver {
-        match command {
-            WriterCommand::Write(entry) => {
-                if let Err(error) = file.write_entry(&entry) {
-                    last_write_error = Some(error.to_string());
+    fn run(mut self, receiver: mpsc::Receiver<WriterCommand>) {
+        for command in receiver {
+            match command {
+                WriterCommand::Write { seq, entry } => {
+                    self.note_sent_through(seq.saturating_sub(1));
+                    self.last_seen_seq = seq;
+                    self.write(seq, &entry);
                 }
-            }
-            WriterCommand::Flush(reply) => {
-                let dropped_writes = health.dropped_writes_since_clear();
-                let queue_error = (dropped_writes > 0).then(|| {
-                    format!(
-                        "dropped {dropped_writes} entries because the diagnostics writer queue was full"
-                    )
-                });
-                let incomplete_reason = match (&last_write_error, queue_error) {
-                    (Some(write_error), Some(queue_error)) => {
-                        Some(format!("{write_error}; {queue_error}"))
+                WriterCommand::Flush { through_seq, reply } => {
+                    self.note_sent_through(through_seq);
+                    self.write_pending_gap_marker();
+
+                    let pending_gap = (!self.pending_gap.is_empty()).then(|| {
+                        format!("{} since the last saved entry", self.pending_gap.describe())
+                    });
+                    let _ = reply.send(self.file.flush().map(|()| pending_gap));
+                }
+                WriterCommand::ClearAndWrite { marker, through_seq, reply } => {
+                    let result = self.file.clear_and_write(&marker);
+                    if result.is_ok() {
+                        self.pending_gap = PendingGap::default();
+                        self.last_seen_seq = through_seq;
+                        self.health.persisted_through.store(through_seq, Ordering::Release);
                     }
-                    (Some(write_error), None) => Some(write_error.clone()),
-                    (None, queue_error) => queue_error,
-                };
 
-                let result = file.flush().map(|()| incomplete_reason);
-                let _ = reply.send(result);
-            }
-            WriterCommand::ClearAndWrite { marker, clear_drops_through, reply } => {
-                let result = file.clear_and_write(&marker);
-                if result.is_ok() {
-                    last_write_error = None;
-                    health.mark_cleared_through(clear_drops_through);
+                    let _ = reply.send(result);
                 }
-                let _ = reply.send(result);
+                WriterCommand::Shutdown => {
+                    self.write_pending_gap_marker();
+                    break;
+                }
             }
-            WriterCommand::Shutdown => break,
+        }
+    }
+
+    /// Count entries recorded through `seq` that never reached the queue
+    fn note_sent_through(&mut self, seq: u64) {
+        if seq > self.last_seen_seq {
+            self.pending_gap.queue_full += (seq - self.last_seen_seq) as usize;
+            self.last_seen_seq = seq;
+        }
+    }
+
+    fn write(&mut self, seq: u64, entry: &str) {
+        // an entry written after an unmarked gap would hide the gap, so skip it too
+        if !self.write_pending_gap_marker() {
+            self.pending_gap.write_failed += 1;
+            return;
+        }
+
+        match self.file.write_entry(entry) {
+            Ok(()) => self.health.persisted_through.store(seq, Ordering::Release),
+            Err(error) => {
+                self.pending_gap.write_failed += 1;
+                self.pending_gap.last_error = Some(error.to_string());
+            }
+        }
+    }
+
+    /// Persist one marker line for the pending gap, returning whether no gap remains unmarked
+    fn write_pending_gap_marker(&mut self) -> bool {
+        if self.pending_gap.is_empty() {
+            return true;
+        }
+
+        let marker = format!(
+            "{} WARN {CAPTURE_LOG_TARGET}: {GAP_MARKER} {}\n",
+            timestamp(),
+            self.pending_gap.describe()
+        );
+
+        match self.file.write_entry(&marker) {
+            Ok(()) => {
+                self.pending_gap = PendingGap::default();
+                true
+            }
+            Err(error) => {
+                self.pending_gap.last_error = Some(error.to_string());
+                false
+            }
         }
     }
 }
@@ -517,27 +650,31 @@ impl RingBuffer {
         Self { lines: VecDeque::new(), bytes: 0, cap_bytes }
     }
 
-    fn push(&mut self, mut line: String) {
+    fn push(&mut self, seq: u64, mut line: String) {
         if line.len() > self.cap_bytes {
             line = last_bytes_at_token_boundary(&line, self.cap_bytes);
         }
 
         self.bytes += line.len();
-        self.lines.push_back(line);
+        self.lines.push_back(RingLine { seq, text: line });
 
         while self.bytes > self.cap_bytes {
             let Some(front) = self.lines.pop_front() else { break };
-            self.bytes = self.bytes.saturating_sub(front.len());
+            self.bytes = self.bytes.saturating_sub(front.text.len());
         }
     }
 
     fn iter(&self) -> impl Iterator<Item = &str> {
-        self.lines.iter().map(String::as_str)
+        self.lines.iter().map(|line| line.text.as_str())
     }
 
-    fn text(&self) -> String {
-        self.lines.iter().fold(String::new(), |mut text, line| {
-            text.push_str(line);
+    fn lines_after(&self, seq: u64) -> Vec<RingLine> {
+        self.lines.iter().filter(|line| line.seq > seq).cloned().collect()
+    }
+
+    fn text_after(&self, seq: u64) -> String {
+        self.lines.iter().filter(|line| line.seq > seq).fold(String::new(), |mut text, line| {
+            text.push_str(&line.text);
             text
         })
     }
@@ -611,6 +748,7 @@ impl RollingLogFile {
     }
 
     fn remove_all_logs(&self) -> Result<(), CaptureError> {
+        remove_file_if_exists(&self.dir.join(PANIC_MARKER_FILE))?;
         remove_file_if_exists(&current_log_path(&self.dir))?;
         for index in 1..=ARCHIVE_FILE_COUNT {
             remove_file_if_exists(&archived_log_path(&self.dir, index))?;
@@ -711,6 +849,30 @@ impl Visit for EventVisitor {
     }
 }
 
+fn write_panic_marker(dir: &Path, line: &str) -> std::io::Result<()> {
+    let path = dir.join(PANIC_MARKER_FILE);
+
+    // a crash loop restarts the file instead of growing it, keeping the newest marker
+    let restart = path.metadata().is_ok_and(|metadata| metadata.len() > PANIC_MARKER_MAX_BYTES);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(!restart)
+        .write(true)
+        .truncate(restart)
+        .open(&path)?;
+
+    file.write_all(format!("{line}\n").as_bytes())?;
+    file.sync_data()
+}
+
+fn read_panic_markers(dir: &Path) -> String {
+    match std::fs::read_to_string(dir.join(PANIC_MARKER_FILE)) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => format!("failed to read Rust panic marker file: {error}\n"),
+    }
+}
+
 fn current_log_path(dir: &Path) -> PathBuf {
     dir.join(CURRENT_LOG_FILE)
 }
@@ -783,6 +945,10 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    // attach points the process-global panic marker dir at its own directory, so tests that
+    // attach serialize to keep a parallel attach from redirecting another test's panic marker
+    static MARKER_DIR_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
     fn writer_that_replaces_current_file_on_shutdown(dir: &Path) -> LogWriter {
         let writer_dir = dir.to_path_buf();
         let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
@@ -807,7 +973,7 @@ mod tests {
     }
 
     #[test]
-    fn full_writer_queue_drops_writes_and_reports_incomplete_disk_capture() -> eyre::Result<()> {
+    fn full_writer_queue_keeps_disk_history_and_marks_gap() -> eyre::Result<()> {
         let dir = TempDir::new()?;
         let file = RollingLogFile::open(dir.path().to_path_buf())?;
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -815,17 +981,22 @@ mod tests {
         let handle =
             LogWriterHandle { dir: dir.path().to_path_buf(), sender, health: health.clone() };
 
-        handle.write("first\n".to_string());
-        handle.write("dropped\n".to_string());
+        handle.write(1, "first\n".to_string());
+        handle.write(2, "dropped\n".to_string());
+        handle.write(3, "also dropped\n".to_string());
 
-        let join_handle = thread::spawn(move || run_writer(file, receiver, health));
-        let error = handle.start_flush()?.wait()?.expect("dropped write is reported");
+        let writer = DiskWriter::new(file, health, 0);
+        let join_handle = thread::spawn(move || writer.run(receiver));
+        assert_eq!(handle.start_flush(3)?.wait()?, None);
 
-        assert!(error.contains("dropped 1 entries"));
-        assert_eq!(std::fs::read_to_string(current_log_path(dir.path()))?, "first\n");
+        let history = std::fs::read_to_string(current_log_path(dir.path()))?;
+        assert!(history.starts_with("first\n"));
+        assert!(history.contains("diagnostics log gap: 2 entries not written to disk"));
+        assert!(!history.contains("dropped\n"));
 
-        handle.start_clear_and_write("cleared\n".to_string())?.wait()?;
-        assert_eq!(handle.start_flush()?.wait()?, None);
+        handle.write(4, "after gap\n".to_string());
+        handle.start_clear_and_write("cleared\n".to_string(), 5)?.wait()?;
+        assert_eq!(handle.start_flush(5)?.wait()?, None);
         assert_eq!(std::fs::read_to_string(current_log_path(dir.path()))?, "cleared\n");
 
         handle.sender.send(WriterCommand::Shutdown)?;
@@ -835,32 +1006,90 @@ mod tests {
     }
 
     #[test]
+    fn write_error_keeps_disk_history_and_gap_survives_restart() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
+        let dir = TempDir::new()?;
+
+        // a directory where rotation expects the oldest archive makes the next rotation fail
+        std::fs::create_dir_all(archived_log_path(dir.path(), ARCHIVE_FILE_COUNT).join("blocker"))?;
+
+        {
+            let mut state = CaptureState::default();
+            state.attach(dir.path().to_path_buf())?;
+            state.record_line("before failure");
+            state.record_line(" ".repeat(LOG_FILE_BYTES));
+            state.record_line("after failure");
+
+            let text = state.snapshot_text();
+            assert!(text.contains("before failure"));
+            assert!(text.contains("after failure"));
+            assert!(text.contains("diagnostics log gap: 1 entries not written to disk"));
+            assert!(text.contains("diagnostics log capture incomplete: 1 gap(s)"));
+            assert!(!text.contains("not yet written to disk:"));
+        }
+
+        let mut state = CaptureState::default();
+        state.attach(dir.path().to_path_buf())?;
+        let text = state.snapshot_text();
+
+        assert!(text.contains("before failure"));
+        assert!(text.contains("diagnostics log capture incomplete: 1 gap(s)"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn panic_marker_survives_into_next_snapshot_until_cleared() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
+        let dir = TempDir::new()?;
+        {
+            let mut state = CaptureState::default();
+            state.attach(dir.path().to_path_buf())?;
+            record_panic("Rust panic at src/example.rs:1:1 thread=main span=none");
+        }
+
+        let mut state = CaptureState::default();
+        state.attach(dir.path().to_path_buf())?;
+        let text = state.snapshot_text();
+
+        assert!(text.starts_with("Rust panics recorded since diagnostics logs were last cleared:"));
+        assert!(
+            text.contains("ERROR cove_common::logging::panic: Rust panic at src/example.rs:1:1")
+        );
+
+        state.clear()?;
+        assert!(!state.snapshot_text().contains("Rust panic at"));
+
+        Ok(())
+    }
+
+    #[test]
     fn ring_cap_keeps_latest_lines_in_order() {
         let mut ring = RingBuffer::new(18);
 
-        ring.push("first\n".to_string());
-        ring.push("second\n".to_string());
-        ring.push("third\n".to_string());
+        ring.push(1, "first\n".to_string());
+        ring.push(2, "second\n".to_string());
+        ring.push(3, "third\n".to_string());
 
-        assert_eq!(ring.text(), "second\nthird\n");
+        assert_eq!(ring.text_after(0), "second\nthird\n");
     }
 
     #[test]
     fn oversized_line_drops_partial_leading_token() {
         let mut ring = RingBuffer::new(10);
 
-        ring.push("prefix xprvSECRET\n".to_string());
+        ring.push(1, "prefix xprvSECRET\n".to_string());
 
-        assert_eq!(ring.text(), "\n");
+        assert_eq!(ring.text_after(0), "\n");
     }
 
     #[test]
     fn oversized_line_keeps_tail_from_token_boundary() {
         let mut ring = RingBuffer::new(17);
 
-        ring.push("prefix xprvSECRET suffix\n".to_string());
+        ring.push(1, "prefix xprvSECRET suffix\n".to_string());
 
-        assert_eq!(ring.text(), " suffix\n");
+        assert_eq!(ring.text_after(0), " suffix\n");
     }
 
     #[test]
@@ -888,6 +1117,7 @@ mod tests {
 
     #[test]
     fn attach_replays_ring_once() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.record_line("before attach");
@@ -903,6 +1133,7 @@ mod tests {
 
     #[test]
     fn reattach_stops_previous_writer_before_opening_replacement() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         std::fs::write(current_log_path(dir.path()), "original\n")?;
 
@@ -921,6 +1152,7 @@ mod tests {
 
     #[test]
     fn snapshot_reads_persisted_current_file_after_restart() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         {
             let mut state = CaptureState::default();
@@ -938,6 +1170,7 @@ mod tests {
 
     #[test]
     fn snapshot_reads_archives_before_current_file() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         std::fs::write(archived_log_path(dir.path(), 2), "oldest\n")?;
         std::fs::write(archived_log_path(dir.path(), 1), "older\n")?;
@@ -952,7 +1185,8 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_uses_ring_fallback_after_writer_failure() -> eyre::Result<()> {
+    fn snapshot_appends_unpersisted_lines_while_writer_fails() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;
@@ -963,12 +1197,12 @@ mod tests {
 
         let text = state.snapshot_text();
 
-        assert!(text.contains("failed to write Rust diagnostics log file"));
-        assert!(text.contains("disk capture may be incomplete"));
+        assert!(text.contains("diagnostics log capture incomplete: 1 entries not written"));
+        assert!(text.contains("Rust log lines not yet written to disk:"));
         assert!(text.contains("after disk failure"));
 
         let text = state.snapshot_text();
-        assert!(text.contains("failed to write Rust diagnostics log file"));
+        assert!(text.contains("diagnostics log capture incomplete"));
         assert!(text.contains("after disk failure"));
 
         Ok(())
@@ -976,6 +1210,7 @@ mod tests {
 
     #[test]
     fn clear_reopens_file_with_marker() -> eyre::Result<()> {
+        let _guard = MARKER_DIR_LOCK.lock();
         let dir = TempDir::new()?;
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;

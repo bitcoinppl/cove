@@ -544,6 +544,17 @@ async fn signed_psbts_that_match_no_saved_draft_are_rejected() {
     fixture.manager.delete_unsigned_transaction(Arc::new(draft_id)).expect("draft deletes");
     assert!(fixture.manager.get_unsigned_transactions().expect("drafts list").is_empty());
 
+    // a failed draft delete names the delete and keeps the database cause
+    let deleted_again = fixture.manager.delete_unsigned_transaction(Arc::new(draft_id));
+    assert!(
+        matches!(
+            deleted_again,
+            Err(WalletManagerError::DeleteUnsignedTransactionError(ref error))
+                if error.to_string().contains("no record found")
+        ),
+        "deleting a missing draft reports the delete: {deleted_again:?}"
+    );
+
     scanner.reset();
     let scanned = scanned_psbt(scan_frames(&scanner, &bbqr));
     assert_eq!(scanned.tx_id(), draft_id, "the scan itself still succeeds");

@@ -156,14 +156,19 @@ impl ReceiveWorkflow<'_> {
                 return Vec::new();
             };
 
-            let Ok(session) = session.try_clone() else {
-                return Vec::new();
+            let session = match session.try_clone() {
+                Ok(session) => session,
+                Err(error) => {
+                    warn!("unable to reveal KeyTeleport words, session copy failed: {error}");
+                    return Vec::new();
+                }
             };
 
             (session, mnemonic.clone())
         };
 
-        if self.0.receive_sessions.authoritative(&session).is_err() {
+        if let Err(error) = self.0.receive_sessions.authoritative(&session) {
+            warn!("unable to reveal KeyTeleport words, session is not current: {error}");
             return Vec::new();
         }
 
@@ -171,7 +176,10 @@ impl ReceiveWorkflow<'_> {
     }
 
     pub(crate) fn reveal_xprv(&self) -> Option<String> {
-        self.set_xprv_revealed(true).ok()?;
+        if let Err(error) = self.set_xprv_revealed(true) {
+            warn!("unable to reveal KeyTeleport xprv: {error}");
+            return None;
+        }
 
         let model = self.0.model.lock();
         let Phase::Receive(ReceivePhase::XprvReview { xprv, .. }) = &model.phase else {

@@ -84,7 +84,9 @@ class AndroidPasskeyProvider(
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyCreateError(error)
+                val mapped = mapPasskeyCreateError(error)
+                logPasskeyFailure("registration", error, mapped)
+                throw mapped
             }
         }
     }
@@ -117,7 +119,9 @@ class AndroidPasskeyProvider(
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error, PasskeyOperation.AUTHENTICATE_ASSERTION)
+                val mapped = mapPasskeyGetError(error, PasskeyOperation.AUTHENTICATE_ASSERTION)
+                logPasskeyFailure("authentication", error, mapped)
+                throw mapped
             }
         }
     }
@@ -153,7 +157,9 @@ class AndroidPasskeyProvider(
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                throw mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
+                val mapped = mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
+                logPasskeyFailure("discovery", error, mapped)
+                throw mapped
             }
         }
 
@@ -384,6 +390,44 @@ internal fun mapPasskeyGetError(
                 passkeyUnknownReason("passkey authentication failed"),
             )
     }
+
+/**
+ * Logs a passkey failure where the platform exception is still visible, since the mapped
+ * [PasskeyException] that reaches Rust drops the platform exception type
+ *
+ * Logs only exception and reason kinds; platform messages can echo request or response JSON
+ */
+private fun logPasskeyFailure(
+    stage: String,
+    error: Exception,
+    mapped: PasskeyException,
+) {
+    if (mapped is PasskeyException.UserCancelled) {
+        Log.i(PASSKEY_LOG_TAG, "passkey $stage cancelled by user")
+        return
+    }
+
+    val domType =
+        when (error) {
+            is CreatePublicKeyCredentialDomException -> error.domError.type
+            is GetPublicKeyCredentialDomException -> error.domError.type
+            else -> null
+        }
+    val reason =
+        when (mapped) {
+            is PasskeyException.RequestFailed -> mapped.reason.javaClass.simpleName
+            is PasskeyException.NotSupported -> mapped.reason.javaClass.simpleName
+            else -> null
+        }
+
+    Log.w(
+        PASSKEY_LOG_TAG,
+        "passkey $stage failed: error=${error.javaClass.simpleName} dom=$domType " +
+            "mapped=${mapped.javaClass.simpleName} reason=$reason",
+    )
+}
+
+private const val PASSKEY_LOG_TAG = "AndroidPasskeyProvider"
 
 private fun passkeyNotSupported(
     reason: PasskeyFailureReason,

@@ -6,7 +6,7 @@ use bdk_wallet::chain::BlockId;
 use cove_tokio::FutureTimeoutExt as _;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{
     database::{
@@ -458,9 +458,13 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
     //
     // todo: consider reusing the cached client when using esplora, since esplora
     // uses HTTP and does not have electrum's persistent TCP concurrency limits
-    let node_client = NodeClient::new(node)
-        .await
-        .map_err(|_| "unable to create a connection to the node".to_string())?;
+    // the user-facing message stays generic, so the log keeps the failure kind. the cause's
+    // text can quote the node URL and any credentials in it
+    let node_client = NodeClient::new(node).await.map_err(|error| {
+        let kind = error.kind();
+        warn!("failed to create node client for connection check: {kind}");
+        "unable to create a connection to the node".to_string()
+    })?;
 
     node_client
         .check_url()

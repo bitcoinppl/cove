@@ -370,7 +370,9 @@ impl WalletDiscoveryScanner {
 
         // await only after every worker has received shutdown so callbacks cannot block progress
         for scan_task in scan_tasks {
-            let _ = scan_task.await;
+            if let Err(error) = scan_task.await {
+                task::log_unexpected_join_error("wallet discovery scan", &error);
+            }
         }
 
         for worker_termination in worker_terminations {
@@ -424,7 +426,7 @@ impl WalletDiscoveryScanner {
             return Produces::ok(());
         };
 
-        error!("wallet discovery worker {wallet_type:?} failed: {message}");
+        // the scan task logs the full error chain before reporting it here
         worker.state = WorkerState::Failed(message);
 
         self.finish_if_all_workers_stopped().await?;
@@ -551,6 +553,9 @@ struct DiscoveryScanTask {
     current_address: u32,
     scan_limit: u32,
     db: WalletDataDb,
+
+    // progress saves repeat every few addresses, so only the first failure is logged
+    progress_save_failed: bool,
 }
 
 impl DiscoveryScanTask {
@@ -559,7 +564,7 @@ impl DiscoveryScanTask {
         let failure_parent = self.parent.clone();
 
         if let Err(error) = self.scan().await {
-            error!("wallet scan failed: {error}");
+            error!("wallet discovery worker {wallet_type:?} failed: {error:#}");
 
             if let Err(report_error) =
                 call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
@@ -569,7 +574,7 @@ impl DiscoveryScanTask {
         }
     }
 
-    async fn scan(self) -> eyre::Result<()> {
+    async fn scan(mut self) -> eyre::Result<()> {
         let client = self.client_builder.build().await.context("build discovery node client")?;
         let mut current_address = self.current_address;
 
@@ -605,15 +610,25 @@ impl DiscoveryScanTask {
         }
     }
 
-    fn save_progress(&self, current_address: u32) {
+    fn save_progress(&mut self, current_address: u32) {
         if !current_address.is_multiple_of(5) {
             return;
         }
 
-        let scan_state = ScanningInfo { address_type: self.wallet_type, count: current_address };
+        let wallet_type = self.wallet_type;
+        let scan_state = ScanningInfo { address_type: wallet_type, count: current_address };
 
-        if let Err(error) = self.db.set_scan_state(self.wallet_type, scan_state) {
-            error!("unable to update scan state: {error}");
+        match self.db.set_scan_state(wallet_type, scan_state) {
+            Ok(()) if self.progress_save_failed => {
+                self.progress_save_failed = false;
+                info!("wallet discovery scan progress for {wallet_type} saved again");
+            }
+            Ok(()) => {}
+            Err(error) if !self.progress_save_failed => {
+                self.progress_save_failed = true;
+                error!("unable to save wallet discovery scan progress for {wallet_type}: {error}");
+            }
+            Err(_) => {}
         }
     }
 }
@@ -689,6 +704,7 @@ impl WalletDiscoveryWorker {
             current_address: self.scan_info.count,
             scan_limit: self.scan_limit,
             db: self.db.clone(),
+            progress_save_failed: false,
         };
 
         let join = task::spawn(async move {

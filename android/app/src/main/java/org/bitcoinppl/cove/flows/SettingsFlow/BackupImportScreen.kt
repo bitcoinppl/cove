@@ -220,7 +220,7 @@ fun BackupImportScreen(
             } catch (e: Exception) {
                 if (generation == inputGeneration) {
                     clearPreparation()
-                    errorMessage = backupErrorMessage(e)
+                    errorMessage = loggedBackupErrorMessage("import", e)
                 }
             } finally {
                 prepared?.close()
@@ -271,7 +271,7 @@ fun BackupImportScreen(
             } catch (e: Exception) {
                 if (generation == inputGeneration) {
                     clearPreparation()
-                    errorMessage = backupErrorMessage(e)
+                    errorMessage = loggedBackupErrorMessage("import", e)
                 }
             } finally {
                 if (generation == inputGeneration) {
@@ -472,7 +472,7 @@ fun BackupImportScreen(
                                 } catch (e: Exception) {
                                     if (generation == inputGeneration) {
                                         clearPreparation()
-                                        errorMessage = backupErrorMessage(e)
+                                        errorMessage = loggedBackupErrorMessage("verify", e)
                                     }
                                 } finally {
                                     if (generation == inputGeneration) {
@@ -683,6 +683,16 @@ private fun ImportConflictSummary(count: Int) {
             )
         }
     }
+}
+
+// file loads already log through runCatchingCancellable, so only command failures use this
+private fun loggedBackupErrorMessage(
+    operation: String,
+    error: Throwable,
+): String {
+    logUnexpectedBackupFailure(operation, error)
+
+    return backupErrorMessage(error)
 }
 
 private fun backupErrorMessage(error: Throwable): String {

@@ -1,8 +1,10 @@
+use std::mem::{Discriminant, discriminant};
 use std::sync::{Arc, Weak};
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, send};
 use cove_device::cloud_storage::CloudSyncHealth;
 use cove_util::{GenerationToken, GenerationTracker};
+use tracing::{info, warn};
 
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::pending::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
@@ -15,6 +17,9 @@ pub(crate) struct CloudBackupSyncHealthWorker {
     master_key_upload_grace_generations: GenerationTracker,
     sync_health_refresh_state: SyncHealthRefreshState,
     sync_health_refresh_generations: GenerationTracker,
+    /// Kind of the last observed sync health, so the roughly once a second refresh logs only
+    /// when the kind changes
+    last_logged_sync_health: Option<Discriminant<CloudSyncHealth>>,
 }
 
 #[derive(Debug)]
@@ -40,6 +45,26 @@ impl CloudBackupSyncHealthWorker {
             master_key_upload_grace_generations: GenerationTracker::new(),
             sync_health_refresh_state: SyncHealthRefreshState::Idle,
             sync_health_refresh_generations: GenerationTracker::new(),
+            last_logged_sync_health: None,
+        }
+    }
+
+    fn log_sync_health_change(&mut self, sync_health: &CloudSyncHealth) {
+        let kind = discriminant(sync_health);
+        if self.last_logged_sync_health == Some(kind) {
+            return;
+        }
+
+        self.last_logged_sync_health = Some(kind);
+        match sync_health {
+            CloudSyncHealth::Failed(_)
+            | CloudSyncHealth::AuthorizationRequired(_)
+            | CloudSyncHealth::Unavailable => warn!("Cloud sync health changed: {sync_health:?}"),
+
+            CloudSyncHealth::Unknown
+            | CloudSyncHealth::AllUploaded
+            | CloudSyncHealth::Uploading
+            | CloudSyncHealth::NoFiles => info!("Cloud sync health changed: {sync_health:?}"),
         }
     }
 
@@ -131,6 +156,7 @@ impl CloudBackupSyncHealthWorker {
         self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
 
         if is_current && let Some(manager) = self.manager() {
+            self.log_sync_health_change(&sync_health);
             manager.observe_sync_health(sync_health);
         }
 

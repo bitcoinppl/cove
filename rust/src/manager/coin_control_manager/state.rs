@@ -7,7 +7,7 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletMetadata};
 
@@ -43,8 +43,24 @@ impl State {
         let wallet_id = metadata.id.clone();
         let unit = metadata.selected_unit;
         let network = metadata.network;
-        let utxos =
-            unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
+        let total = unspent.len();
+        let mut last_error = None;
+        let utxos: Vec<Utxo> = unspent
+            .into_iter()
+            .filter_map(|output| {
+                Utxo::try_from_local(output, network)
+                    .inspect_err(|error| last_error = Some(error.to_string()))
+                    .ok()
+            })
+            .collect();
+
+        // one summary line instead of one per output
+        if let Some(error) = last_error {
+            let skipped = total - utxos.len();
+            warn!(
+                "coin control hid {skipped} of {total} outputs it could not convert, last: {error}"
+            );
+        }
 
         let sort = SortState::default();
         let selected_utxos = vec![];

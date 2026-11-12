@@ -13,6 +13,7 @@ pub mod historical_price;
 pub mod key;
 pub mod macros;
 pub mod migration;
+pub(crate) mod read_health;
 pub mod record;
 pub mod unsigned_transactions;
 pub mod wallet;
@@ -233,7 +234,7 @@ fn get_or_create_main_database() -> Result<redb::Database, error::DatabaseError>
     encrypted_backend::open_or_create_database(&database_location())
 }
 
-fn database_location() -> PathBuf {
+pub(crate) fn database_location() -> PathBuf {
     DATABASE_LOCATION_OVERRIDE
         .get()
         .cloned()

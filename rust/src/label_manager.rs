@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_util::json::JsonDecodeError;
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
@@ -654,8 +655,15 @@ impl LabelManager {
     }
 }
 
+// serde's text quotes the rejected value, and labels are user-written and can come from a
+// decrypted backup, so a parse failure keeps only its category and position
 fn parse_labels(jsonl: &str) -> Result<ParsedLabels, LabelManagerError> {
-    Labels::try_from_str_with_metadata(jsonl).map_err_str(LabelManagerError::Parse)
+    Labels::try_from_str_with_metadata(jsonl).map_err(|error| match error {
+        bip329::error::ParseError::ParseError(error) => {
+            LabelManagerError::Parse(JsonDecodeError::from(error).to_string())
+        }
+        error => LabelManagerError::Parse(error.to_string()),
+    })
 }
 
 fn is_auto_output_label(txn_label: Option<&str>, output_label: Option<&str>) -> bool {

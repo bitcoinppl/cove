@@ -5,7 +5,7 @@ use act_zero::Addr;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::result_ext::ResultExt as _;
 use parking_lot::RwLock;
-use tracing::warn;
+use tracing::{error, warn};
 
 use crate::{
     database::Database,
@@ -212,7 +212,9 @@ impl RustWalletManager {
         let channel = ReconcileChannel::new(100);
 
         let wallet =
-            Wallet::try_new_persisted_from_tap_signer(tap_signer, derive_info, backup, birthday)?;
+            Wallet::try_new_persisted_from_tap_signer(tap_signer, derive_info, backup, birthday)
+                .inspect_err(|error| error!("failed to create TAPSIGNER wallet: {error}"))?;
+
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
         let shared_metadata = Arc::new(RwLock::new(metadata));
@@ -227,9 +229,13 @@ impl RustWalletManager {
             wallet_snapshot.clone(),
             shared_metadata.clone(),
         )
-        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))
+        .inspect_err(|error| error!("failed to open new TAPSIGNER wallet data: {error}"))?;
+
         let label_manager = LabelManager::try_new(id.clone())
-            .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
+            .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))
+            .inspect_err(|error| error!("failed to open new TAPSIGNER wallet labels: {error}"))?;
+
         let actor = task::spawn_actor(wallet_actor);
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), None);

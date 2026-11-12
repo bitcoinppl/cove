@@ -269,6 +269,7 @@ fun BackupVerifyScreen(
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
+                                    logUnexpectedBackupFailure("verify", e)
                                     isVerifying = false
                                     errorMessage = backupVerifyErrorMessage(e)
                                 }

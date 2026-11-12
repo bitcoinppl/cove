@@ -1,6 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use redb::TableHandle as _;
@@ -8,6 +9,7 @@ use redb::TableHandle as _;
 use crate::bootstrap::{AppInitError, BootstrapStep};
 use crate::database::encrypted_backend::{EncryptedBackend, encryption_key};
 use crate::database::migration::MigrationFailure;
+use crate::database::{DATABASE, Database, wallet_data::DATABASE_CONNECTIONS};
 use crate::wallet::metadata::WalletId;
 
 macro_rules! report_line {
@@ -22,6 +24,26 @@ macro_rules! report_line {
 static LAST_BOOTSTRAP_FAILURE: Mutex<Option<LastBootstrapFailure>> = Mutex::new(None);
 static LAST_WALLET_MIGRATION_FAILURES: Mutex<Vec<MigrationFailure>> = Mutex::new(Vec::new());
 static LAST_KNOWN_WALLET_IDS: Mutex<Option<BTreeSet<String>>> = Mutex::new(None);
+
+/// Storage handles the running app already holds
+///
+/// redb locks a file per open handle, so reopening a database the app holds fails with
+/// "already locked"; the report reads these handles instead and inspects files only when
+/// no live handle exists
+#[derive(Default)]
+pub(crate) struct LiveStorage {
+    main_db_path: PathBuf,
+    main_db: Option<Arc<Database>>,
+    wallet_data_dir: PathBuf,
+    wallet_dbs: HashMap<String, Arc<redb::Database>>,
+}
+
+/// Where the report's list of known wallet ids came from
+enum KnownWalletIds {
+    Live(BTreeSet<String>),
+    Bootstrap(BTreeSet<String>),
+    Unavailable(String),
+}
 
 #[derive(Debug, Clone)]
 struct LastBootstrapFailure {
@@ -154,17 +176,88 @@ pub(crate) fn text_report() -> String {
     let root_dir = &*cove_common::consts::ROOT_DATA_DIR;
     let wallet_dir = root_dir.join("wallets");
 
-    text_report_for_paths(root_dir, &wallet_dir)
+    text_report_for_paths(root_dir, &wallet_dir, &LiveStorage::capture())
 }
 
-pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> String {
+impl LiveStorage {
+    /// Collect the handles the app holds without opening or initializing anything
+    pub(crate) fn capture() -> Self {
+        let main_db = DATABASE.get().map(arc_swap::ArcSwapAny::load_full);
+        let wallet_dbs = DATABASE_CONNECTIONS
+            .read()
+            .iter()
+            .map(|(id, db)| (id.to_string(), db.clone()))
+            .collect();
+
+        Self {
+            main_db_path: crate::database::database_location(),
+            main_db,
+            wallet_data_dir: cove_common::consts::WALLET_DATA_DIR.clone(),
+            wallet_dbs,
+        }
+    }
+
+    fn main_db_for(&self, path: &Path) -> Option<&redb::Database> {
+        let database = self.main_db.as_ref().filter(|_| path == self.main_db_path)?;
+        Some(database.wallets.redb())
+    }
+
+    fn wallet_db_for(&self, wallet_dir: &Path, wallet_id: &str) -> Option<&redb::Database> {
+        if wallet_dir != self.wallet_data_dir {
+            return None;
+        }
+
+        self.wallet_dbs.get(wallet_id).map(AsRef::as_ref)
+    }
+
+    /// List wallet ids in every network and wallet-mode bucket, falling back to the bootstrap
+    /// inventory when the main database is not open
+    fn known_wallet_ids(&self) -> KnownWalletIds {
+        let bootstrap_ids = LAST_KNOWN_WALLET_IDS.lock().clone();
+
+        let Some(database) = &self.main_db else {
+            return match bootstrap_ids {
+                Some(ids) => KnownWalletIds::Bootstrap(ids),
+                None => KnownWalletIds::Unavailable("main database not open".into()),
+            };
+        };
+
+        match database.wallets.complete_inventory() {
+            Ok(wallets) => {
+                KnownWalletIds::Live(wallets.iter().map(|wallet| wallet.id.to_string()).collect())
+            }
+            Err(failure) => match bootstrap_ids {
+                Some(ids) => KnownWalletIds::Bootstrap(ids),
+                None => KnownWalletIds::Unavailable(format!(
+                    "live wallet inventory failed: {}",
+                    failure.source_detail
+                )),
+            },
+        }
+    }
+}
+
+impl KnownWalletIds {
+    fn ids(&self) -> Option<&BTreeSet<String>> {
+        match self {
+            Self::Live(ids) | Self::Bootstrap(ids) => Some(ids),
+            Self::Unavailable(_) => None,
+        }
+    }
+}
+
+pub(crate) fn text_report_for_paths(
+    root_dir: &Path,
+    wallet_dir: &Path,
+    live: &LiveStorage,
+) -> String {
     let mut report = String::new();
     let generated_at = crate::diagnostics::timestamp();
     let step = super::bootstrap_progress();
     let active_progress = super::migration::active_migration()
         .map(|migration| migration.progress())
         .map(|progress| (progress.current, progress.total));
-    let known_wallet_ids = LAST_KNOWN_WALLET_IDS.lock().clone();
+    let known_wallet_ids = live.known_wallet_ids();
     let last_failure = LAST_BOOTSTRAP_FAILURE.lock().clone();
     let wallet_failures = last_failure
         .as_ref()
@@ -195,12 +288,14 @@ pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> Strin
     report_line!(report);
     report_line!(report, "Storage files");
     report_line!(report, "Root: {}", root_dir.display());
-    append_main_database_state(&mut report, root_dir);
+    append_main_database_state(&mut report, root_dir, live);
+    append_root_file_inventory(&mut report, root_dir);
 
     report_line!(report);
     report_line!(report, "Wallet storage");
     report_line!(report, "Wallet dir: {}", wallet_dir.display());
-    append_wallet_dirs(&mut report, wallet_dir, known_wallet_ids.as_ref());
+    append_known_wallet_ids(&mut report, &known_wallet_ids);
+    append_wallet_dirs(&mut report, wallet_dir, &known_wallet_ids, live);
 
     report_line!(report);
     report_line!(report, "Last wallet migration failures");
@@ -215,7 +310,7 @@ pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> Strin
     report
 }
 
-fn append_main_database_state(report: &mut String, root_dir: &Path) {
+fn append_main_database_state(report: &mut String, root_dir: &Path, live: &LiveStorage) {
     let table_classification = main_table_classification();
     report_line!(
         report,
@@ -223,26 +318,82 @@ fn append_main_database_state(report: &mut String, root_dir: &Path) {
         migration_state(root_dir, "cove.db", "cove.encrypted.db", "cove.encrypted.db.tmp")
     );
 
-    let source = append_database_file(report, root_dir, "cove.db", "", &table_classification);
-    let dest =
-        append_database_file(report, root_dir, "cove.encrypted.db", "", &table_classification);
-    let tmp =
-        append_database_file(report, root_dir, "cove.encrypted.db.tmp", "", &table_classification);
-    append_database_file(report, root_dir, "cove.db.bak", "", &table_classification);
-    append_database_file(report, root_dir, "cove.db.enc.tmp", "", &table_classification);
-    append_database_file(report, root_dir, "cove.encrypted.db.corrupt", "", &table_classification);
+    let file = |name| DatabaseFile { directory: root_dir, name, prefix: "", live: None };
+    let live_main = live.main_db_for(&root_dir.join("cove.encrypted.db"));
+
+    let source = append_database_file(report, file("cove.db"), &table_classification);
+    let dest = append_database_file(
+        report,
+        DatabaseFile { live: live_main, ..file("cove.encrypted.db") },
+        &table_classification,
+    );
+    let tmp = append_database_file(report, file("cove.encrypted.db.tmp"), &table_classification);
+    append_database_file(report, file("cove.db.bak"), &table_classification);
+    append_database_file(report, file("cove.db.enc.tmp"), &table_classification);
+    append_database_file(report, file("cove.encrypted.db.corrupt"), &table_classification);
 
     append_table_comparison(report, "cove.db -> cove.encrypted.db", &source, &dest, "");
     append_table_comparison(report, "cove.db -> cove.encrypted.db.tmp", &source, &tmp, "");
 }
 
+/// List every file in the data root, which holds BDK SQLite stores and their WAL, SHM,
+/// journal, switch, backup and temp files next to the main database
+fn append_root_file_inventory(report: &mut String, root_dir: &Path) {
+    report_line!(report, "Root files");
+
+    let listing = match sorted_entries(root_dir) {
+        Ok(listing) => listing,
+        Err(error) => {
+            report_line!(report, "root directory unreadable: {error}");
+            return;
+        }
+    };
+
+    append_entry_errors(report, &listing, "");
+    for path in listing.paths.iter().filter(|path| !path.is_dir()) {
+        let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("<invalid>");
+        match path.metadata() {
+            Ok(metadata) => {
+                report_line!(report, "- {name}: bytes={}", metadata.len());
+            }
+            Err(error) => {
+                report_line!(report, "- {name}: unreadable: {error}");
+            }
+        }
+    }
+}
+
+fn append_known_wallet_ids(report: &mut String, known_wallet_ids: &KnownWalletIds) {
+    match known_wallet_ids {
+        KnownWalletIds::Live(ids) => {
+            report_line!(
+                report,
+                "known wallet ids (live database, all networks and modes): {}",
+                ids.len()
+            );
+        }
+        KnownWalletIds::Bootstrap(ids) => {
+            report_line!(report, "known wallet ids (bootstrap inventory): {}", ids.len());
+        }
+        KnownWalletIds::Unavailable(reason) => {
+            report_line!(report, "known wallet ids: unavailable: {reason}");
+        }
+    }
+
+    for id in known_wallet_ids.ids().into_iter().flatten() {
+        report_line!(report, "- {id}");
+    }
+}
+
 fn append_wallet_dirs(
     report: &mut String,
     wallet_dir: &Path,
-    known_wallet_ids: Option<&BTreeSet<String>>,
+    known_wallet_ids: &KnownWalletIds,
+    live: &LiveStorage,
 ) {
-    let entries = match sorted_dirs(wallet_dir) {
-        Ok(entries) => entries,
+    let known_wallet_ids = known_wallet_ids.ids();
+    let listing = match sorted_entries(wallet_dir) {
+        Ok(listing) => listing,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             report_line!(report, "wallet directory missing");
             return;
@@ -253,10 +404,9 @@ fn append_wallet_dirs(
         }
     };
 
+    append_entry_errors(report, &listing, "");
+    let entries = listing.paths.into_iter().filter(|path| path.is_dir()).collect::<Vec<_>>();
     report_line!(report, "wallet directories: {}", entries.len());
-    if known_wallet_ids.is_none() {
-        report_line!(report, "known wallet ids: unavailable");
-    }
 
     for path in entries {
         let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("<invalid>");
@@ -267,11 +417,16 @@ fn append_wallet_dirs(
         };
 
         report_line!(report, "- {name} ({})", status.as_str());
-        append_wallet_database_state(report, &path, status);
+        append_wallet_database_state(report, &path, status, live.wallet_db_for(wallet_dir, name));
     }
 }
 
-fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: WalletDirStatus) {
+fn append_wallet_database_state(
+    report: &mut String,
+    wallet_dir: &Path,
+    status: WalletDirStatus,
+    live_db: Option<&redb::Database>,
+) {
     let table_classification = wallet_table_classification();
     let state = migration_state(
         wallet_dir,
@@ -285,35 +440,24 @@ fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: 
         report_line!(report, "  migration state: {state}");
     }
 
-    let source =
-        append_database_file(report, wallet_dir, "wallet_data.json", "  ", &table_classification);
+    let file = |name| DatabaseFile { directory: wallet_dir, name, prefix: "  ", live: None };
+
+    let source = append_database_file(report, file("wallet_data.json"), &table_classification);
     let dest = append_database_file(
         report,
-        wallet_dir,
-        "wallet_data.encrypted.json.redb",
-        "  ",
+        DatabaseFile { live: live_db, ..file("wallet_data.encrypted.json.redb") },
         &table_classification,
     );
     let tmp = append_database_file(
         report,
-        wallet_dir,
-        "wallet_data.encrypted.json.redb.tmp",
-        "  ",
+        file("wallet_data.encrypted.json.redb.tmp"),
         &table_classification,
     );
-    append_database_file(report, wallet_dir, "wallet_data.json.bak", "  ", &table_classification);
+    append_database_file(report, file("wallet_data.json.bak"), &table_classification);
+    append_database_file(report, file("wallet_data.json.enc.tmp"), &table_classification);
     append_database_file(
         report,
-        wallet_dir,
-        "wallet_data.json.enc.tmp",
-        "  ",
-        &table_classification,
-    );
-    append_database_file(
-        report,
-        wallet_dir,
-        "wallet_data.encrypted.json.redb.corrupt",
-        "  ",
+        file("wallet_data.encrypted.json.redb.corrupt"),
         &table_classification,
     );
 
@@ -333,13 +477,20 @@ fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: 
     );
 }
 
+/// One database file to describe, with the app's live handle when it holds the file open
+struct DatabaseFile<'a> {
+    directory: &'a Path,
+    name: &'a str,
+    prefix: &'a str,
+    live: Option<&'a redb::Database>,
+}
+
 fn append_database_file(
     report: &mut String,
-    directory: &Path,
-    name: &str,
-    prefix: &str,
+    file: DatabaseFile<'_>,
     table_classification: &TableClassification,
 ) -> DatabaseFileReport {
+    let DatabaseFile { directory, name, prefix, live } = file;
     let path = directory.join(name);
     let metadata = match path.metadata() {
         Ok(metadata) => metadata,
@@ -360,9 +511,17 @@ fn append_database_file(
 
     let encrypted = EncryptedBackend::is_encrypted(&path);
     let encrypted_suffix = if encrypted { ", cove_header=true" } else { "" };
-    report_line!(report, "{prefix}{name}: present, bytes={}{}", metadata.len(), encrypted_suffix);
+    let live_suffix = if live.is_some() { ", open_in_app=true" } else { "" };
+    report_line!(
+        report,
+        "{prefix}{name}: present, bytes={}{encrypted_suffix}{live_suffix}",
+        metadata.len()
+    );
 
-    let tables = inspect_tables(&path, encrypted);
+    let tables = match live {
+        Some(db) => table_names(db),
+        None => inspect_tables(&path, encrypted),
+    };
     append_table_inventory(report, &tables, table_classification, prefix);
 
     DatabaseFileReport { present_file: true, tables: Some(tables) }
@@ -602,17 +761,30 @@ fn format_list(items: &[&str]) -> String {
     if items.is_empty() { "none".into() } else { items.join(", ") }
 }
 
-fn sorted_dirs(path: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut entries = std::fs::read_dir(path)?
-        .filter_map(|entry| match entry {
-            Ok(entry) => Some(entry.path()),
-            Err(_) => None,
-        })
-        .filter(|path| path.is_dir())
-        .collect::<Vec<_>>();
+/// Directory entries in name order, keeping per-entry read errors for the report
+struct DirListing {
+    paths: Vec<PathBuf>,
+    entry_errors: Vec<std::io::Error>,
+}
 
-    entries.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
-    Ok(entries)
+fn sorted_entries(path: &Path) -> std::io::Result<DirListing> {
+    let mut paths = Vec::new();
+    let mut entry_errors = Vec::new();
+    for entry in std::fs::read_dir(path)? {
+        match entry {
+            Ok(entry) => paths.push(entry.path()),
+            Err(error) => entry_errors.push(error),
+        }
+    }
+
+    paths.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    Ok(DirListing { paths, entry_errors })
+}
+
+fn append_entry_errors(report: &mut String, listing: &DirListing, prefix: &str) {
+    for error in &listing.entry_errors {
+        report_line!(report, "{prefix}unreadable directory entry: {error}");
+    }
 }
 
 fn format_progress(progress: Option<(u32, u32)>) -> String {
@@ -659,7 +831,7 @@ mod tests {
         record_bootstrap_failure(&AppInitError::MainDatabaseMigration("root cause".into()));
         record_bootstrap_failure(&AppInitError::AlreadyCalled("second call".into()));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("Last failure category: main_database_migration"));
         assert!(
@@ -681,7 +853,7 @@ mod tests {
         reset_test_state();
         record_bootstrap_failure(&AppInitError::AlreadyCalled("second call".into()));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("Last failure category: already_called"));
         assert!(report.contains("Last failure message: Bootstrap already called: second call"));
@@ -700,7 +872,7 @@ mod tests {
         record_bootstrap_failure(&AppInitError::AlreadyCalled("first call".into()));
         record_bootstrap_failure(&AppInitError::WalletDatabaseMigration("root cause".into()));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("Last failure category: wallet_database_migration"));
         assert!(
@@ -724,11 +896,51 @@ mod tests {
         *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
 
         clear_bootstrap_failure();
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("known wallet ids: unavailable"));
         assert!(report.contains("known_wallet (unknown)"));
         assert!(!report.contains("known_wallet (known)"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn live_report_reads_open_databases_and_lists_wallet_ids_in_every_bucket() -> eyre::Result<()> {
+        use crate::database::wallet_data::WalletDataDb;
+        use crate::network::Network;
+        use crate::wallet::metadata::{WalletMetadata, WalletMode};
+
+        let _global_guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _guard = TEST_LOCK.lock();
+        reset_test_state();
+
+        // an earlier test in this process may have unlinked the main database file while the
+        // global handle stayed open on the deleted inode, so start clean and reopen the global
+        // to make the open handle match the file the report reads from disk
+        crate::database::test_support::delete_database();
+        Database::try_reinit()?;
+        let database = Database::global();
+
+        let main_wallet = WalletMetadata::preview_new();
+        let mut decoy_testnet_wallet = WalletMetadata::preview_new();
+        decoy_testnet_wallet.network = Network::Testnet;
+        decoy_testnet_wallet.wallet_mode = WalletMode::Decoy;
+        database.wallets.save_restored_wallet_metadata(main_wallet.clone())?;
+        database.wallets.save_restored_wallet_metadata(decoy_testnet_wallet.clone())?;
+        let _wallet_db = WalletDataDb::new_or_existing(main_wallet.id.clone())?;
+
+        let report = text_report();
+
+        assert!(report.contains("known wallet ids (live database, all networks and modes)"));
+        assert!(report.contains(&format!("- {}\n", main_wallet.id)));
+        assert!(report.contains(&format!("- {}\n", decoy_testnet_wallet.id)));
+        assert!(report.contains(&format!("- {} (known)", main_wallet.id)));
+        assert!(report.contains("cove.encrypted.db: present"));
+        assert!(report.contains("wallet_data.encrypted.json.redb: present"));
+        assert_eq!(report.matches("open_in_app=true").count(), 2);
+        assert!(!report.contains("already locked"));
+        assert!(!report.contains("failed to open"));
 
         Ok(())
     }
@@ -749,7 +961,7 @@ mod tests {
         reset_test_state();
         *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("known_wallet (known)"));
         assert!(report.contains("orphan_wallet (orphan)"));
@@ -772,7 +984,7 @@ mod tests {
 
         reset_test_state();
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("Main migration state: source and destination both present"));
         assert!(report.contains("future_table (unknown)"));
@@ -798,7 +1010,7 @@ mod tests {
 
         reset_test_state();
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("global_flag (current)"));
         assert!(report.contains("global_bool_config (historical)"));
@@ -825,7 +1037,7 @@ mod tests {
         reset_test_state();
         *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("known_wallet (known)"));
         assert!(report.contains("migration state: needs plaintext migration"));
@@ -852,7 +1064,7 @@ mod tests {
         reset_test_state();
         *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("wallet_data.json (current)"));
         assert!(report.contains("transaction_labels.json (historical)"));
@@ -872,7 +1084,7 @@ mod tests {
 
         reset_test_state();
 
-        let report = text_report_for_paths(dir.path(), &wallet_dir);
+        let report = text_report_for_paths(dir.path(), &wallet_dir, &LiveStorage::default());
 
         assert!(report.contains("cove.db: present"));
         assert!(report.contains("schema unavailable: failed to open redb"));

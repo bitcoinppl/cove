@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use act_zero::*;
 use bitcoin::Txid;
 use cove_types::Network;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     database::Database,
@@ -125,22 +125,23 @@ impl TransactionWatcher {
         let kind = match result {
             TransactionWatcherPollResult::Pending(client) => {
                 self.client = Some(client);
-                self.consecutive_failures = 0;
+                self.record_poll_success();
                 TransactionWatcherPollKind::Pending
             }
 
             TransactionWatcherPollResult::Confirmed(client) => {
                 self.client = Some(client);
-                self.consecutive_failures = 0;
+                self.record_poll_success();
                 TransactionWatcherPollKind::Confirmed
             }
 
             TransactionWatcherPollResult::Failed(error) => {
                 self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-                error!(
-                    "failed to check txn {} ({} in a row): {error:?}",
-                    self.tx_id, self.consecutive_failures
-                );
+
+                // polls repeat until the node answers, so log only the start of a failure run
+                if self.consecutive_failures == 1 {
+                    warn!("failed to check txn {}, will keep retrying: {error:?}", self.tx_id);
+                }
 
                 self.client = None;
                 TransactionWatcherPollKind::Failed
@@ -178,6 +179,17 @@ impl TransactionWatcher {
             tokio::time::sleep(wait_time).await;
             send!(addr.poll());
         });
+    }
+
+    fn record_poll_success(&mut self) {
+        if self.consecutive_failures > 0 {
+            info!(
+                "checking txn {} recovered after {} failed polls",
+                self.tx_id, self.consecutive_failures
+            );
+        }
+
+        self.consecutive_failures = 0;
     }
 
     fn normal_wait_time(&self) -> Duration {

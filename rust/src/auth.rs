@@ -5,6 +5,7 @@ use argon2::{
 use cove_util::ResultExt as _;
 use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
 
 use crate::database;
 
@@ -86,10 +87,31 @@ impl AuthPin {
             .map_err(AuthError::DatabaseSaveError)
     }
 
+    /// Return whether `pin` matches the stored hash
+    ///
+    /// Logs never include the PIN, its hash or its salt
     pub fn check(&self, pin: &str) -> bool {
-        let hashed_pin = Database::global().global_config.hashed_pin_code().unwrap_or_default();
+        // a read failure or missing hash must not look like a wrong PIN in the logs
+        let hashed_pin = match Database::global().global_config.hashed_pin_code() {
+            Ok(hashed_pin) if hashed_pin.is_empty() => {
+                warn!("PIN check ran with no stored PIN hash");
+                return false;
+            }
+            Ok(hashed_pin) => hashed_pin,
+            Err(error) => {
+                error!("PIN check could not read the stored PIN hash: {error}");
+                return false;
+            }
+        };
 
-        self.verify(pin, &hashed_pin).is_ok()
+        match self.verify(pin, &hashed_pin) {
+            Ok(()) => true,
+            Err(AuthError::VerificationFailed(_)) => false,
+            Err(error) => {
+                error!("PIN check failed before comparing the PIN: {error}");
+                false
+            }
+        }
     }
 
     pub fn verify(&self, pin: &str, hashed_pin: &str) -> Result<()> {

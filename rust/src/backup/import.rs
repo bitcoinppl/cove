@@ -207,7 +207,7 @@ fn preflight_wallets(payload: &BackupPayload) -> Result<Vec<PreparedImportWallet
 
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
-            .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
+            .map_err(|error| BackupError::deserialization("wallet metadata", &error))?;
 
         let validated_id =
             crate::backup::recovery::ValidatedRestoreWalletId::validate(&metadata.id)?;

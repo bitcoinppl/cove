@@ -8,6 +8,22 @@ use crate::{
 
 use super::TerminalPayjoinPersistenceAuthority;
 
+/// Why a terminal actor shutdown attempt did not finish
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum TerminalShutdownFailure {
+    #[error("actor did not start the shutdown request")]
+    NotStarted,
+
+    #[error("actor quiesce failed: {0}")]
+    Quiesce(String),
+
+    #[error("actor did not finish quiescing before the deadline")]
+    TimedOut,
+
+    #[error("actor dropped the shutdown reply")]
+    ReplyDropped,
+}
+
 enum TerminalReply {
     Completed(Result<(), String>),
     Cancelled,
@@ -17,7 +33,7 @@ pub(crate) async fn terminal_wallet_shutdown(
     authority: Option<TerminalPayjoinPersistenceAuthority>,
     actor: Addr<WalletActor>,
     deadline: tokio::time::Instant,
-) -> Result<(), ()> {
+) -> Result<(), TerminalShutdownFailure> {
     terminal_shutdown(actor, deadline, move |actor| {
         async move {
             match authority {
@@ -35,7 +51,7 @@ pub(crate) async fn terminal_wallet_shutdown(
 pub(crate) async fn terminal_discovery_shutdown(
     actor: Addr<WalletDiscoveryScanner>,
     deadline: tokio::time::Instant,
-) -> Result<(), ()> {
+) -> Result<(), TerminalShutdownFailure> {
     terminal_shutdown(actor, deadline, |actor| {
         async move { actor.shutdown().await.map(|_| ()).map_err(|error| error.to_string()) }.boxed()
     })
@@ -46,7 +62,7 @@ pub(crate) async fn terminal_shutdown<T>(
     actor: Addr<T>,
     deadline: tokio::time::Instant,
     quiesce: impl for<'a> FnOnce(&'a mut T) -> BoxFuture<'a, Result<(), String>> + Send + 'static,
-) -> Result<(), ()>
+) -> Result<(), TerminalShutdownFailure>
 where
     T: Actor,
 {
@@ -85,24 +101,27 @@ where
     };
     if !started {
         cancellation.cancel();
-        return Err(());
+        return Err(TerminalShutdownFailure::NotStarted);
     }
 
     let mut reply_receiver = reply_receiver;
     let reply = tokio::select! {
         biased;
-        result = &mut reply_receiver => result.ok(),
+        result = &mut reply_receiver => result.map_err(|_| TerminalShutdownFailure::ReplyDropped),
         () = tokio::time::sleep_until(deadline) => {
             cancellation.cancel();
-            None
+            Err(TerminalShutdownFailure::TimedOut)
         }
     };
 
-    match reply {
-        Some(TerminalReply::Completed(Ok(()))) => {
+    match reply? {
+        TerminalReply::Completed(Ok(())) => {
             actor.termination().await;
             Ok(())
         }
-        Some(TerminalReply::Completed(Err(_))) | Some(TerminalReply::Cancelled) | None => Err(()),
+        TerminalReply::Completed(Err(error)) => Err(TerminalShutdownFailure::Quiesce(error)),
+
+        // only the deadline branch cancels the request
+        TerminalReply::Cancelled => Err(TerminalShutdownFailure::TimedOut),
     }
 }

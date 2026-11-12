@@ -46,6 +46,15 @@ pub(crate) enum BroadcastTransactionError {
 }
 
 impl BroadcastTransactionError {
+    fn log(&self) {
+        match self {
+            Self::BroadcastFailed(error) => warn!("transaction broadcast failed: {error}"),
+            Self::PostBroadcastFailed(error) => {
+                error!("transaction broadcast bookkeeping failed: {error}")
+            }
+        }
+    }
+
     fn into_error(self) -> Error {
         match self {
             Self::BroadcastFailed(error) | Self::PostBroadcastFailed(error) => error,
@@ -499,6 +508,14 @@ impl WalletActor {
         let psbt = cove_types::psbt::Psbt::from(psbt);
         let labels_db = self.db.labels.clone();
 
+        // label reads run per input, so failures are counted and logged once below
+        let mut label_read_failures = 0_usize;
+        let mut last_label_read_error = None;
+        let mut record_label_error = |error: crate::database::wallet_data::label::LabelDbError| {
+            label_read_failures += 1;
+            last_label_read_error = Some(error);
+        };
+
         let extras = psbt
             .utxos_iter()
             .map(|(tx_in, tx_out)| {
@@ -512,24 +529,35 @@ impl WalletActor {
                     bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))
                         .ok();
 
-                let label = labels_db
+                let txn_label = labels_db
                     .get_txn_label_record(outpoint.txid)
-                    .ok()
-                    .flatten()
-                    .map(|record| record.item.label)
-                    .unwrap_or_else(|| match address {
-                        Some(address) => labels_db
-                            .get_address_record(address.into_unchecked())
-                            .ok()
-                            .flatten()
-                            .and_then(|record| record.item.label),
-                        None => None,
-                    });
+                    .unwrap_or_else(|error| {
+                        record_label_error(error);
+                        None
+                    })
+                    .map(|record| record.item.label);
+
+                let label = txn_label.unwrap_or_else(|| {
+                    let address = address?;
+                    labels_db
+                        .get_address_record(address.into_unchecked())
+                        .unwrap_or_else(|error| {
+                            record_label_error(error);
+                            None
+                        })
+                        .and_then(|record| record.item.label)
+                });
 
                 let extra = ExtraItem::new(label, utxo_type);
                 (&outpoint.txid, extra)
             })
             .collect();
+
+        if let Some(error) = last_label_read_error {
+            warn!(
+                "confirm details missing labels, {label_read_failures} label reads failed, last: {error}"
+            );
+        }
 
         let more_details = InputOutputDetails::new_with_labels(&psbt, self.wallet.network, extras);
         let fee_percentage = fee.to_sat() * 100 / output_amount.to_sat();
@@ -668,7 +696,10 @@ impl WalletActor {
         let secret = Keychain::global()
             .get_wallet_secret(&self.wallet.metadata.id)
             .tap_err(|error| error!("failed to get wallet secret: {error}"))?
-            .ok_or_else(|| err("failed to get wallet secret"))?;
+            .ok_or_else(|| {
+                error!("wallet secret missing, unable to sign");
+                err("failed to get wallet secret")
+            })?;
         let descriptors = secret.into_descriptors(network, self.wallet.metadata.address_type);
 
         let create_params = descriptors.into_create_params().network(network.into());
@@ -685,6 +716,7 @@ impl WalletActor {
             .map_err(|_| err("unable to sign"))?;
 
         if !finalized {
+            warn!("signing did not finalize every input");
             return Err(err("transaction not finalized, unable to sign"));
         }
 
@@ -718,6 +750,7 @@ impl WalletActor {
         self.addr.send_fut_with(|addr| async move {
             let result = broadcast_transaction_with_connection(addr, connection, transaction)
                 .await
+                .inspect_err(BroadcastTransactionError::log)
                 .map_err(BroadcastTransactionError::into_error);
             let _ = reply.send(Produces::Value(result));
         });

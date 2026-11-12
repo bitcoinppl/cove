@@ -321,9 +321,14 @@ private fun GlobalAlertDialog(
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
+
+                        // the card refuses a PIN change until it has been backed up, so take the
+                        // backup here; InitSelect is the setup chooser and takes no backup
                         app.sheetState =
                             TaggedItem(
-                                AppSheetState.TapSigner(TapSignerRoute.InitSelect(state.tapSigner)),
+                                AppSheetState.TapSigner(
+                                    TapSignerRoute.EnterPin(state.tapSigner, AfterPinAction.Backup),
+                                ),
                             )
                     }) { Text("Yes") }
                 },

@@ -1828,7 +1828,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 34599.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 14021.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440.toShort()) {
@@ -7284,7 +7284,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
      * Creates a new PSBT from serialized bytes
      *
      * # Errors
-     * Returns `PsbtError::Other` if deserialization fails
+     * Returns `PsbtError::Other` with a payload-free reason if deserialization fails
      */
     constructor(`data`: kotlin.ByteArray) :
         this(UniffiWithHandle,

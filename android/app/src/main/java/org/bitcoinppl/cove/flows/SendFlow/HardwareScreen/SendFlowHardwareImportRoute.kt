@@ -8,10 +8,12 @@ import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
@@ -20,6 +22,8 @@ import org.bitcoinppl.cove_core.SignedTransactionOrPsbt
 import org.bitcoinppl.cove_core.UnsignedTransactionRecord
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryFromBytes
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryParse
+
+private const val TAG = "SignedImport"
 
 internal object TransactionImportErrors {
     const val FAILED_TO_IMPORT = "Failed to import signed transaction"
@@ -43,9 +47,8 @@ internal fun rememberSignedImportFilePicker(
                 try {
                     // signers write binary PSBTs and transactions, so Rust detects the format from raw bytes
                     val fileData =
-                        withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
+                        withContext(Dispatchers.IO) { readSignedImportFile(context, uri) }
+                            ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
 
                     app.pushRoute(signedImportRoute(fileData))
                 } catch (e: Exception) {
@@ -55,6 +58,25 @@ internal fun rememberSignedImportFilePicker(
         }
     }
 }
+
+/** Reads the picked file, logging why it could not be read and returning null */
+private fun readSignedImportFile(
+    context: Context,
+    uri: Uri,
+): ByteArray? =
+    try {
+        val data = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        if (data == null) Log.w(TAG, "Signed import file picker returned no readable stream")
+
+        data
+    } catch (e: IOException) {
+        // the exception message can name the picked file, so log only the kind
+        Log.w(TAG, "Signed import file read failed: ${e.javaClass.simpleName}")
+        null
+    } catch (e: SecurityException) {
+        Log.w(TAG, "Signed import file access denied: ${e.javaClass.simpleName}")
+        null
+    }
 
 internal fun signedImportRoute(input: String): Route {
     val (txnRecord, parsed) = parseSignedImport { signedTransactionOrPsbtTryParse(input) }
@@ -77,23 +99,28 @@ internal fun signedImportRoute(data: ByteArray): Route {
 private fun parseSignedImport(
     parse: () -> SignedTransactionOrPsbt,
 ): Pair<UnsignedTransactionRecord, SignedTransactionOrPsbt> {
-    val parsed =
-        try {
-            parse()
-        } catch (e: Exception) {
-            throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
-        }
-
-    val db = Database().unsignedTransactions()
-    val record =
-        try {
-            db.getTxThrow(txId = parsed.unsignedTxId())
-        } catch (e: Exception) {
-            throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
-        }
+    val parsed = parseSignedInput(parse)
+    val record = unsignedRecordFor(parsed)
 
     return Pair(record, parsed)
 }
+
+private fun parseSignedInput(parse: () -> SignedTransactionOrPsbt): SignedTransactionOrPsbt =
+    try {
+        parse()
+    } catch (e: Exception) {
+        // the input is a PSBT or transaction and the message can quote it, so log only the kind
+        Log.w(TAG, "Signed import parse failed: ${e.javaClass.simpleName}")
+        throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
+    }
+
+private fun unsignedRecordFor(parsed: SignedTransactionOrPsbt): UnsignedTransactionRecord =
+    try {
+        Database().unsignedTransactions().getTxThrow(txId = parsed.unsignedTxId())
+    } catch (e: Exception) {
+        Log.w(TAG, "Signed import has no matching unsigned transaction: ${e.javaClass.simpleName}")
+        throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
+    }
 
 private fun signedImportRoute(
     txnRecord: UnsignedTransactionRecord,

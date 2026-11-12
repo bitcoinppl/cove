@@ -21,6 +21,7 @@ import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportSendStartResult
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
+import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerBackupExports
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.device.KeychainException
@@ -116,6 +117,9 @@ class AppManager private constructor() : FfiReconcile {
 
     var alertState by mutableStateOf<TaggedItem<AppAlertState>?>(null)
     var sheetState by mutableStateOf<TaggedItem<AppSheetState>?>(null)
+
+    /** TAPSIGNER backup saves, kept here so they finish after the requesting sheet closes */
+    val tapSignerBackupExports = TapSignerBackupExports()
     internal var corruptedWalletDeletionRetry by mutableStateOf<CorruptedWalletDeletionRetry?>(null)
         private set
 
@@ -171,7 +175,7 @@ class AppManager private constructor() : FfiReconcile {
     init {
         Log.d(tag, "Initializing AppManager")
         rust.listenForUpdates(this)
-        wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
+        wallets = readWallets(Database())
     }
 
     private fun <T> withRust(
@@ -390,6 +394,9 @@ class AppManager private constructor() : FfiReconcile {
         clearWalletManager()
         clearKeyTeleportManager()
         corruptedWalletDeletionRetry = null
+
+        // a decoy mode switch drops a held picker result, so its request would never finish
+        tapSignerBackupExports.clear()
     }
 
     /**
@@ -477,8 +484,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun loadWallets() {
-        wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+        wallets = readWallets(database)
     }
+
+    // an empty list keeps the sidebar usable, but the read failure must still reach diagnostics
+    private fun readWallets(source: Database): List<WalletMetadata> =
+        runCatchingCancellable(tag, "Failed to read the wallet list") {
+            source.wallets().all()
+        }.getOrElse { emptyList() }
 
     fun reorderWallets(ids: List<WalletId>) {
         val currentWalletsById = wallets.associateBy { it.id }
@@ -929,7 +942,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.WalletsChanged -> {
-                    wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    wallets = readWallets(database)
                 }
 
                 is AppStateReconcileMessage.ClearCachedWalletManager -> {

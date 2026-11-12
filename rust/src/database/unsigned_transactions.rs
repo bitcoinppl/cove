@@ -1,6 +1,6 @@
 use redb::{ReadableTable as _, TableDefinition};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, error};
 
 use cove_util::result_ext::ResultExt as _;
 
@@ -221,7 +221,16 @@ impl UnsignedTransactionsTable {
     #[uniffi::method(name = "getTx")]
     pub fn _get_tx(&self, tx_id: Arc<TxId>) -> Option<Arc<UnsignedTransactionRecord>> {
         debug!("getTx: {tx_id:?}");
-        self.get(&tx_id).ok().flatten().map(Arc::new)
+
+        // callers only see None, so a read failure must be logged here to stay distinct from a
+        // missing record
+        match self.get(&tx_id) {
+            Ok(record) => record.map(Arc::new),
+            Err(error) => {
+                error!("unable to read unsigned transaction {tx_id:?}: {error}");
+                None
+            }
+        }
     }
 
     #[uniffi::method(name = "getTxThrow")]

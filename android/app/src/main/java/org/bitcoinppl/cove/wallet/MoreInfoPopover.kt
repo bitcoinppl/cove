@@ -10,11 +10,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.utils.writeExportBytes
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove.Log
 
@@ -138,12 +140,12 @@ private fun rememberExportFileLauncher(
                 }
 
                 withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.bufferedWriter().use { it.write(content) }
-                    }
+                    writeExportBytes({ context.contentResolver.openOutputStream(uri) }, content.toByteArray())
                 }
 
                 snackbarHostState.showSnackbar(successMessage)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(tag, "error exporting file", e)
                 snackbarHostState.showSnackbar("Unable to export $exportName: ${e.localizedMessage ?: e.message}")

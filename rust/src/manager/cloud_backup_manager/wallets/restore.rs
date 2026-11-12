@@ -5,6 +5,7 @@ use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_util::ResultExt as _;
+use cove_util::json::JsonDecodeError;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -55,11 +56,14 @@ impl WalletBackupReader {
     ) -> Result<DownloadedWalletBackup, CloudBackupError> {
         match self.lookup(record_id).await? {
             WalletBackupLookup::Found(wallet) => Ok(wallet),
-            WalletBackupLookup::NotFound => Err(CloudBackupError::Cloud(format!(
-                "download {record_id}: not found in cloud backup"
-            ))),
+            // record ids come from cloud filenames, which a user can rename to anything, so
+            // download errors leave them out
+            WalletBackupLookup::NotFound => Err(CloudBackupError::Cloud(
+                "download wallet backup: not found in cloud backup".into(),
+            )),
             WalletBackupLookup::UnsupportedVersion(version) => Err(CloudBackupError::Internal(
-                format!("download {record_id}: unsupported wallet backup version {version}").into(),
+                format!("download wallet backup: unsupported wallet backup version {version}")
+                    .into(),
             )),
         }
     }
@@ -85,9 +89,13 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError> {
         match self.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => {
+                // the metadata is decrypted backup content, so only the parse position is kept
                 let metadata =
                     serde_json::from_value(entry.metadata.clone()).map_err(|source| {
-                        CloudBackupError::internal_context("parse wallet metadata", source)
+                        CloudBackupError::internal_context(
+                            "parse wallet metadata",
+                            JsonDecodeError::from(source),
+                        )
                     })?;
                 Ok(WalletBackupLookup::Found(DownloadedWalletBackup { metadata, entry }))
             }
@@ -134,13 +142,14 @@ impl WalletBackupReader {
             Err(CloudStorageError::NotFound(_)) => return Ok(WalletBackupLookup::NotFound),
             Err(error) => {
                 return Err(CloudBackupError::cloud_storage_context(
-                    format!("download {record_id}"),
+                    "download wallet backup",
                     error,
                 ));
             }
         };
 
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
+            .map_err(JsonDecodeError::from)
             .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
 
         match encrypted.backup_version() {
@@ -261,17 +270,24 @@ impl DownloadedWalletBackup {
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let (identity_key, identity_error) = self.identity_key();
 
+        // the wallet id comes from decrypted backup content, so these logs leave it out
         match local_wallets.coverage(&identity_key, self.recovery_material()) {
             LocalWalletCoverage::Covered => {
                 info!("Cloud-only wallet is already on this device");
                 return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
             }
             LocalWalletCoverage::SecretMissing => {
+                info!(
+                    "Cloud-only wallet matches a local wallet without its secret, adding the secret"
+                );
+
                 if let Some(outcome) = self.add_secret_to_local_wallet()? {
                     return Ok(outcome);
                 }
             }
-            LocalWalletCoverage::Absent => {}
+            LocalWalletCoverage::Absent => {
+                info!("Cloud-only wallet has no local match, restoring as new");
+            }
         }
 
         if let Some(error) = identity_error {
@@ -345,6 +361,7 @@ impl DownloadedWalletBackup {
         &self,
     ) -> Result<Option<CloudOnlyRestoreOutcome>, CloudBackupError> {
         let Some(secret) = self.signing_secret()? else {
+            info!("Cloud-only wallet has no signing secret, restoring as new");
             return Ok(None);
         };
 
@@ -359,9 +376,18 @@ impl DownloadedWalletBackup {
             metadata.wallet_mode,
         ) {
             Ok(Some(upgrade)) => upgrade,
+            Ok(None) => {
+                info!("Cloud-only wallet has no single local wallet to upgrade, restoring as new");
+                return Ok(None);
+            }
+
             // several local wallets share this identity, such as one seed watched under two
             // address types, so the seed restores as its own hot wallet instead of being stuck
-            Ok(None) | Err(SecretUpgradeError::IdentityCollision) => return Ok(None),
+            Err(SecretUpgradeError::IdentityCollision) => {
+                info!("Cloud-only wallet matches several local wallets, restoring as new");
+                return Ok(None);
+            }
+
             Err(error) => {
                 return Err(CloudBackupError::internal_context("find wallet for secret", error));
             }
@@ -374,11 +400,16 @@ impl DownloadedWalletBackup {
             }
             // the local wallet gained a readable secret after coverage was read
             Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
+                info!("Cloud-only wallet secret was added locally meanwhile");
                 Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice))
             }
             // the backup may hold the only readable copy of this secret, so the row stays
             // restorable instead of becoming a deletable copy
-            Err(SecretUpgradeError::UnreadableSecret(_)) => {
+            Err(SecretUpgradeError::UnreadableSecret(local_id)) => {
+                info!(
+                    "Cloud-only wallet not added: local wallet id={local_id} holds an unreadable secret"
+                );
+
                 Err(CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable))
             }
             Err(error) => {

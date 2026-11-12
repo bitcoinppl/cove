@@ -518,7 +518,7 @@ fn load_wallet_from_store(
 > {
     let wallet = bdk_wallet::Wallet::load()
         .load_wallet(&mut store.conn)
-        .map_err_str(WalletError::LoadError)?
+        .map_err(WalletError::from)?
         .ok_or(WalletError::WalletNotFound)?;
 
     Ok((wallet, WalletStorage::persistent(store.conn)))

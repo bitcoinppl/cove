@@ -3730,7 +3730,7 @@ sealed class KeychainException: kotlin.Exception() {
      */
     class ParseSavedValue(
 
-        val v1: kotlin.String
+        val v1: SavedValueParseError
         ) : KeychainException() {
         override val message
             get() = "v1=${ v1 }"
@@ -3810,7 +3810,7 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
                 )
             3 -> KeychainException.Delete()
             4 -> KeychainException.ParseSavedValue(
-                FfiConverterString.read(buf),
+                FfiConverterTypeSavedValueParseError.read(buf),
                 )
             5 -> KeychainException.Encrypt(
                 FfiConverterString.read(buf),
@@ -3842,7 +3842,7 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
             is KeychainException.ParseSavedValue -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypeSavedValueParseError.allocationSize(value.v1)
             )
             is KeychainException.Encrypt -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3882,7 +3882,7 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
             }
             is KeychainException.ParseSavedValue -> {
                 buf.putInt(4)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypeSavedValueParseError.write(value.v1, buf)
                 Unit
             }
             is KeychainException.Encrypt -> {
@@ -4402,6 +4402,54 @@ public object FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffe
     override fun allocationSize(value: PasskeyRegistrationPlatform) = 4UL
 
     override fun write(value: PasskeyRegistrationPlatform, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * Which saved keychain value could not be parsed
+ *
+ * The parser errors quote the saved text, which is key material or a descriptor, so only the
+ * value's role is kept
+ */
+
+enum class SavedValueParseError {
+
+    XPUB,
+    MISSING_EXTERNAL_DESCRIPTOR,
+    MISSING_INTERNAL_DESCRIPTOR,
+    EXTERNAL_DESCRIPTOR,
+    INTERNAL_DESCRIPTOR,
+    MNEMONIC,
+    XPRIV,
+    UNKNOWN_WALLET_SECRET_TYPE,
+    LOCAL_ENCRYPTION_KEY,
+    TAP_SIGNER_BACKUP;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSavedValueParseError: FfiConverterRustBuffer<SavedValueParseError> {
+    override fun read(buf: ByteBuffer) = try {
+        SavedValueParseError.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SavedValueParseError) = 4UL
+
+    override fun write(value: SavedValueParseError, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }

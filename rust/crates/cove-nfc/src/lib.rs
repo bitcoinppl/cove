@@ -26,7 +26,7 @@ pub const BYTES_PER_BLOCK: u16 = 4;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum NfcReaderError {
-    #[error("Error parsing the NDEF message")]
+    #[error("Error parsing the NDEF message: {0}")]
     ParsingError(String),
 
     #[error("Not enough data to parse, need atleast enough to parse the message info")]
@@ -92,8 +92,19 @@ impl NfcReader {
         match &mut self.state {
             ParserState::NotStarted => {
                 let mut stream = parser::stream::new(&data);
+                // only a short read is NotEnoughData, a wrong header is a parse failure the
+                // caller cannot fix by reading more blocks
                 let message_info =
-                    parse_message_info(&mut stream).map_err(|_e| NfcReaderError::NotEnoughData)?;
+                    parse_message_info(&mut stream).map_err(|error| match error {
+                        winnow::error::ErrMode::Incomplete(_) => NfcReaderError::NotEnoughData,
+                        error => {
+                            tracing::warn!(
+                                data_len = data.len(),
+                                "NFC message header is not a supported NDEF header: {error}"
+                            );
+                            NfcReaderError::ParsingError(format!("invalid message header: {error}"))
+                        }
+                    })?;
 
                 let parsed = data.len() - stream.len();
 
@@ -248,6 +259,15 @@ mod tests {
             file_string.split(',').map(str::trim).map(|s| s.parse::<u8>().unwrap()).collect();
 
         bytes
+    }
+
+    #[test]
+    fn header_errors_tell_a_short_read_from_a_wrong_header() {
+        let short = NfcReader::new().parse(vec![226, 67, 0]);
+        assert_eq!(short, Err(NfcReaderError::NotEnoughData));
+
+        let wrong = NfcReader::new().parse(vec![0; 16]);
+        assert!(matches!(wrong, Err(NfcReaderError::ParsingError(_))), "{wrong:?}");
     }
 
     #[test]

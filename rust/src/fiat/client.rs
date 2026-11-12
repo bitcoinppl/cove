@@ -1,5 +1,8 @@
 use std::{
-    sync::{Arc, LazyLock},
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -9,9 +12,13 @@ use eyre::{Context as _, Result};
 use jiff::Timestamp;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
-use crate::{database::Database, fiat::FiatCurrency, transaction::Amount};
+use crate::{
+    database::{Database, read_health},
+    fiat::FiatCurrency,
+    transaction::Amount,
+};
 use cove_macros::impl_default_for;
 
 use super::historical::HistoricalPricesResponse;
@@ -35,6 +42,9 @@ pub static PRICES: LazyLock<ArcSwap<Option<PriceResponse>>> =
 pub struct FiatClient {
     url: String,
     client: OnceCell<reqwest::Client>,
+
+    /// Whether the last background refresh failed, so repeated failures log once
+    refresh_failing: Arc<AtomicBool>,
 }
 
 #[derive(
@@ -81,7 +91,24 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self { url: CURRENCY_URL.to_string(), client: OnceCell::new() }
+        Self {
+            url: CURRENCY_URL.to_string(),
+            client: OnceCell::new(),
+            refresh_failing: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Log a background price refresh only when it changes between healthy and failing
+    pub(crate) fn record_refresh<E: std::fmt::Display>(&self, result: &Result<(), E>) {
+        let failing = result.is_err();
+        if self.refresh_failing.swap(failing, Ordering::Relaxed) == failing {
+            return;
+        }
+
+        match result {
+            Err(error) => warn!("fiat price refresh failed, using cached prices: {error}"),
+            Ok(()) => info!("fiat price refresh recovered"),
+        }
     }
     /// Sync method using cached prices only, returns None if no cache
     pub fn value_in_currency_cached(&self, amount: Amount, currency: FiatCurrency) -> Option<f64> {
@@ -118,14 +145,16 @@ impl FiatClient {
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
             if (now_secs - prices.fetched_at) > BACKGROUND_REFRESH_INTERVAL {
-                cove_tokio::task::spawn(async move { fetch_and_update_prices_if_needed().await });
+                cove_tokio::task::spawn(refresh_prices_in_background());
             }
 
             return Some(*prices);
         }
 
         // fallback to database cache
-        if let Ok(Some(prices)) = Database::global().global_cache.get_prices() {
+        let cached =
+            read_health::observe("cached prices", Database::global().global_cache.get_prices());
+        if let Some(Some(prices)) = cached {
             debug!("loaded cached prices from database");
             PRICES.swap(Arc::new(Some(prices)));
             return Some(prices);
@@ -237,6 +266,12 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
     db.global_cache.set_prices(prices).context("unable to save prices to the database")?;
 
     Ok(())
+}
+
+/// Refresh prices from a background task whose result has no other reader
+pub(crate) async fn refresh_prices_in_background() {
+    let result = fetch_and_update_prices_if_needed().await;
+    FIAT_CLIENT.record_refresh(&result.map_err(|error| format!("{error:#}")));
 }
 
 /// Update prices if needed

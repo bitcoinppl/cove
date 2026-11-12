@@ -5,7 +5,6 @@ use zeroize::Zeroize;
 
 use crate::wallet::metadata::WalletType;
 use cove_types::network::Network;
-use cove_util::ResultExt as _;
 
 mod wallet_secret;
 
@@ -64,12 +63,13 @@ impl BackupPayload {
             version: u32,
         }
 
-        let header: Header = serde_json::from_slice(bytes)
-            .map_err_str(super::error::BackupError::Deserialization)?;
+        let header: Header = serde_json::from_slice(bytes).map_err(|error| {
+            super::error::BackupError::deserialization("payload header", &error)
+        })?;
         validate_payload_version(header.version)?;
 
         let payload: Self = serde_json::from_slice(bytes)
-            .map_err_str(super::error::BackupError::Deserialization)?;
+            .map_err(|error| super::error::BackupError::deserialization("payload", &error))?;
         payload.validate()?;
         Ok(payload)
     }

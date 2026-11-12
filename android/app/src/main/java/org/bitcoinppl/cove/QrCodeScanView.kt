@@ -516,6 +516,8 @@ private fun handleQrCode(
     } catch (e: MultiQrException.RecoverableFrame) {
         Log.d("QrCodeScanView", "Ignoring recoverable multipart frame: ${e.v1}")
     } catch (e: Exception) {
+        // the scan ends here; the message can quote scanned content, so log only the kind
+        Log.w("QrCodeScanView", "QR scan failed: ${e.javaClass.simpleName}")
         onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
     }
 }

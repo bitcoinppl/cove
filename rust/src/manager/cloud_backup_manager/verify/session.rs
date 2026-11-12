@@ -486,7 +486,7 @@ impl VerificationSession {
         match self.cloud.download_master_key_backup(self.namespace.clone()).await {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
-                    serde_json::from_slice(&json).map_err(CloudBackupError::internal)?;
+                    serde_json::from_slice(&json).map_err(CloudBackupError::from)?;
                 encrypted.remote_metadata.normalized_master_key(&self.namespace).map_err(
                     |error| {
                         CloudBackupError::Internal(
@@ -498,7 +498,8 @@ impl VerificationSession {
                 match encrypted.backup_version() {
                     Ok(MasterKeyBackupVersion::V1) => {}
                     Err(unsupported) => {
-                        let _version = unsupported.0;
+                        let version = unsupported.0;
+                        warn!("Verify: master key backup version {version} is not supported");
                         return Ok(EncryptedMasterKeyStep::Finished(
                             DeepVerificationResult::Failed(
                                 DeepVerificationFailure::UnsupportedVersion {
@@ -515,11 +516,12 @@ impl VerificationSession {
 
             Err(CloudStorageError::NotFound(_)) => {
                 if self.local_master_key.is_some() {
+                    info!("Verify: master key backup missing from cloud, repairing from local key");
                     return Ok(EncryptedMasterKeyStep::Missing);
                 }
 
                 Ok(EncryptedMasterKeyStep::Finished(
-                    self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+                    self.reinitialize_result("master key backup missing and no local master key"),
                 ))
             }
 
@@ -547,6 +549,7 @@ impl VerificationSession {
             }
             PasskeyAuthOutcome::NoCredentialFound => {
                 if self.local_master_key.is_some() {
+                    info!("Verify: no passkey found for the master key, repairing from local key");
                     return Ok(MasterKeyResolution::Continue(
                         ContinuableMasterKeyResolution::NeedsWrapperRepair {
                             reuse_credential_id: None,
@@ -555,7 +558,7 @@ impl VerificationSession {
                 }
 
                 return Ok(MasterKeyResolution::Finished(
-                    self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+                    self.reinitialize_result("no passkey found and no local master key"),
                 ));
             }
         };
@@ -584,15 +587,21 @@ impl VerificationSession {
                 )))
             }
             // the passkey worked but the wrapper is stale; use the local key to replace it
-            Err(_) if self.local_master_key.is_some() => Ok(MasterKeyResolution::Continue(
-                ContinuableMasterKeyResolution::NeedsWrapperRepair {
-                    reuse_credential_id: Some(authenticated.credential_id),
-                },
-            )),
+            Err(error) if self.local_master_key.is_some() => {
+                info!(
+                    "Verify: passkey did not decrypt the master key ({error}), repairing wrapper"
+                );
+                Ok(MasterKeyResolution::Continue(
+                    ContinuableMasterKeyResolution::NeedsWrapperRepair {
+                        reuse_credential_id: Some(authenticated.credential_id),
+                    },
+                ))
+            }
+
             // without a local key there is no trusted source left to rebuild the cloud wrapper
-            Err(_) => Ok(MasterKeyResolution::Finished(
-                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
-            )),
+            Err(error) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(&format!(
+                "passkey did not decrypt the master key ({error}) and no local master key"
+            )))),
         }
     }
 
@@ -637,7 +646,7 @@ impl VerificationSession {
     ) -> Result<RepairedMasterKeyResolution, CloudBackupError> {
         let Some(local_master_key) = self.local_master_key.as_ref() else {
             return Ok(RepairedMasterKeyResolution::Finished(
-                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+                self.reinitialize_result("wrapper repair needs a local master key"),
             ));
         };
         let local_master_key = MasterKey::from_bytes(*local_master_key.as_bytes());
@@ -660,7 +669,7 @@ impl VerificationSession {
             ))),
 
             Err(WrapperRepairError::WrongKey) => Ok(RepairedMasterKeyResolution::Finished(
-                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+                self.reinitialize_result("local master key does not decrypt the cloud wallets"),
             )),
 
             Err(WrapperRepairError::Inconclusive) => Ok(RepairedMasterKeyResolution::Finished(
@@ -1007,6 +1016,8 @@ impl VerificationSession {
 
     /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest
     fn recreate_manifest_result(&self) -> DeepVerificationResult {
+        warn!("Verify: wallet backup list not found in cloud, manifest needs recreating");
+
         DeepVerificationResult::Failed(DeepVerificationFailure::RecreateManifest {
             message: CLOUD_BACKUP_RECREATE_MESSAGE.into(),
             warning: RECREATE_WARNING.into(),
@@ -1015,9 +1026,13 @@ impl VerificationSession {
     }
 
     /// Builds the failure shown when the backup cannot be trusted and should be recreated from scratch
-    fn reinitialize_result(&self, message: impl Into<String>) -> DeepVerificationResult {
+    ///
+    /// Every cause shares one reader message, so `reason` is logged to tell them apart
+    fn reinitialize_result(&self, reason: &str) -> DeepVerificationResult {
+        warn!("Verify: cloud backup needs reinitializing: {reason}");
+
         DeepVerificationResult::Failed(DeepVerificationFailure::ReinitializeBackup {
-            message: message.into(),
+            message: CLOUD_BACKUP_REINITIALIZE_MESSAGE.into(),
             warning: REINITIALIZE_WARNING.into(),
             detail: self.detail(),
         })

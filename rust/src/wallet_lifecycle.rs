@@ -4,7 +4,7 @@ mod shutdown;
 
 #[cfg(test)]
 use shutdown::terminal_shutdown;
-use shutdown::{terminal_discovery_shutdown, terminal_wallet_shutdown};
+use shutdown::{TerminalShutdownFailure, terminal_discovery_shutdown, terminal_wallet_shutdown};
 
 use std::{
     cell::RefCell,
@@ -23,6 +23,7 @@ use futures::{StreamExt as _, stream};
 use parking_lot::Mutex;
 use rand::RngExt as _;
 use tokio::sync::Notify;
+use tracing::{error, warn};
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
@@ -228,6 +229,7 @@ impl DestructiveIntent {
 #[derive(Debug)]
 struct OrdinaryCloseTarget {
     registration_id: RegistrationId,
+    wallet_id: WalletId,
     wallet: Addr<WalletActor>,
     discovery: Option<Addr<WalletDiscoveryScanner>>,
     deadline_tier: ShutdownDeadlineTier,
@@ -371,6 +373,22 @@ fn register_operation_scope(scope: OperationScope) -> u64 {
 
 fn release_operation_scope(id: u64) {
     ACTIVE_OPERATION_SCOPES.with(|scopes| scopes.borrow_mut().retain(|(active, _)| *active != id));
+}
+
+/// Log each actor that failed one shutdown attempt, once per attempt
+fn log_terminal_shutdown_failures(
+    close_kind: &str,
+    wallet_id: &WalletId,
+    discovery: &Result<(), TerminalShutdownFailure>,
+    wallet: &Result<(), TerminalShutdownFailure>,
+) {
+    if let Err(failure) = discovery {
+        warn!("{close_kind} close of wallet {wallet_id} discovery actor failed: {failure}");
+    }
+
+    if let Err(failure) = wallet {
+        warn!("{close_kind} close of wallet {wallet_id} wallet actor failed: {failure}");
+    }
 }
 
 impl WalletLifecycleCoordinator {
@@ -962,6 +980,7 @@ impl WalletLifecycleCoordinator {
             wallet_result,
         ) in results
         {
+            log_terminal_shutdown_failures("destructive", &wallet_id, &discovery, &wallet_result);
             if discovery.is_err() {
                 failures.push(WalletActorKind::Discovery);
             }
@@ -986,7 +1005,12 @@ impl WalletLifecycleCoordinator {
                 continue;
             }
 
-            if call!(wallet.resume_after_failed_quiesce()).await.is_ok() {
+            let resumed = call!(wallet.resume_after_failed_quiesce()).await;
+            if let Err(error) = &resumed {
+                error!("wallet {wallet_id} could not resume after a failed shutdown: {error}");
+            }
+
+            if resumed.is_ok() {
                 let Some(resume) = self.restore_after_failed_destructive_quiesce(registration_id)
                 else {
                     continue;
@@ -1076,6 +1100,7 @@ impl WalletLifecycleCoordinator {
     ) -> OrdinaryCloseTarget {
         OrdinaryCloseTarget {
             registration_id,
+            wallet_id: actors.wallet_id.clone(),
             wallet: actors.wallet.clone(),
             discovery: actors.discovery.clone(),
             deadline_tier,
@@ -1184,16 +1209,31 @@ impl WalletLifecycleCoordinator {
                 terminal_wallet_shutdown(None, target.wallet.clone(), deadline),
             );
 
+            log_terminal_shutdown_failures(
+                "ordinary",
+                &target.wallet_id,
+                &discovery_result,
+                &wallet_result,
+            );
+
             let outcome = if discovery_result.is_ok() && wallet_result.is_ok() {
                 OrdinaryCloseOutcome::Closed
             } else if had_discovery || wallet_result.is_ok() {
                 OrdinaryCloseOutcome::RecoveryRequired
-            } else if call!(target.wallet.resume_after_failed_quiesce()).await.is_ok()
-                && target.deadline_tier == ShutdownDeadlineTier::Initial
-            {
-                OrdinaryCloseOutcome::Retryable
             } else {
-                OrdinaryCloseOutcome::RecoveryRequired
+                let resumed = call!(target.wallet.resume_after_failed_quiesce()).await;
+                if let Err(error) = &resumed {
+                    error!(
+                        "wallet {} could not resume after a failed shutdown: {error}",
+                        target.wallet_id
+                    );
+                }
+
+                if resumed.is_ok() && target.deadline_tier == ShutdownDeadlineTier::Initial {
+                    OrdinaryCloseOutcome::Retryable
+                } else {
+                    OrdinaryCloseOutcome::RecoveryRequired
+                }
             };
 
             self.finish_ordinary_close(target.registration_id, outcome);

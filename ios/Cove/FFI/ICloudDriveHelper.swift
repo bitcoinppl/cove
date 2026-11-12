@@ -81,6 +81,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         attributes: .concurrent
     )
     private static let legacyFileReadNoSuchFileError = 4
+    private let localReadOutcomes = LocalReadOutcomes()
 
     init(
         containerURLProvider: @escaping @Sendable () -> URL? = {
@@ -884,14 +885,17 @@ extension ICloudDriveHelper {
         var freshURL = url
         freshURL.removeAllCachedResourceValues()
 
-        guard
-            let values = try? freshURL.resourceValues(forKeys: [
+        let values: URLResourceValues
+        do {
+            values = try freshURL.resourceValues(forKeys: [
                 .isUbiquitousItemKey,
                 .ubiquitousItemIsUploadingKey,
                 .ubiquitousItemIsUploadedKey,
                 .ubiquitousItemUploadingErrorKey,
             ])
-        else {
+            localReadOutcomes.record("read iCloud upload state", item: url, failure: nil)
+        } catch {
+            localReadOutcomes.record("read iCloud upload state", item: url, failure: error)
             return .unknown
         }
 
@@ -910,14 +914,17 @@ extension ICloudDriveHelper {
         var freshURL = url
         freshURL.removeAllCachedResourceValues()
 
-        guard
-            let values = try? freshURL.resourceValues(forKeys: [
+        let values: URLResourceValues
+        do {
+            values = try freshURL.resourceValues(forKeys: [
                 .isUbiquitousItemKey,
                 .ubiquitousItemIsDownloadingKey,
                 .ubiquitousItemDownloadingStatusKey,
                 .ubiquitousItemDownloadingErrorKey,
             ])
-        else {
+            localReadOutcomes.record("read iCloud download state", item: url, failure: nil)
+        } catch {
+            localReadOutcomes.record("read iCloud download state", item: url, failure: error)
             return .unknown
         }
 
@@ -937,7 +944,9 @@ extension ICloudDriveHelper {
 
     func locallyVisibleSubdirectoryNames(parentPath: String) -> [String] {
         let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
-        return (try? listSubdirectoriesViaFileManager(parentURL: parentURL).sorted()) ?? []
+        return localListing("list local iCloud directories", directory: parentURL) {
+            try listSubdirectoriesViaFileManager(parentURL: parentURL).sorted()
+        }
     }
 
     func metadataSubdirectoryNames(
@@ -952,12 +961,36 @@ extension ICloudDriveHelper {
 
     func locallyVisibleFileNames(namespacePath: String, prefix: String) -> [String] {
         let directoryURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
-        return (try? listFilesViaFileManager(dirURL: directoryURL, prefix: prefix).sorted()) ?? []
+        return localListing("list local iCloud files", directory: directoryURL) {
+            try listFilesViaFileManager(dirURL: directoryURL, prefix: prefix).sorted()
+        }
     }
 
-    func localFileSnapshot(namespacePath: String, prefix: String) throws -> [String] {
-        let directoryURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
-        return try listFilesViaFileManager(dirURL: directoryURL, prefix: prefix).sorted()
+    /// Runs a local directory listing that falls back to no entries, logging failures on change
+    ///
+    /// A missing directory is the normal state before the first backup, so it is not a failure
+    private func localListing(
+        _ operation: String,
+        directory: URL,
+        list: () throws -> [String]
+    ) -> [String] {
+        do {
+            let names = try list()
+            localReadOutcomes.record(operation, item: directory, failure: nil)
+            return names
+        } catch {
+            let nsError = error as NSError
+            let isMissingDirectory = nsError.domain == NSCocoaErrorDomain
+                && (nsError.code == NSFileReadNoSuchFileError
+                    || nsError.code == Self.legacyFileReadNoSuchFileError)
+
+            localReadOutcomes.record(
+                operation,
+                item: directory,
+                failure: isMissingDirectory ? nil : error
+            )
+            return []
+        }
     }
 
     func metadataFileNames(namespacePath: String, prefix: String) async throws -> [String] {
@@ -1238,5 +1271,33 @@ extension ICloudDriveHelper {
             allUploaded: allUploaded,
             anyFailed: anyFailed
         )
+    }
+}
+
+/// Last outcome of each repeated local iCloud read, so a failure logs once when it starts and
+/// once when it clears instead of on every poll
+///
+/// Each outcome is keyed by the file or directory read as well, so one failing item next to a
+/// readable one does not flip the state on every sweep; the log line names only the operation
+private final class LocalReadOutcomes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var failures: [String: String] = [:]
+
+    func record(_ operation: String, item: URL, failure: Error?) {
+        let key = "\(operation) \(item.path)"
+        let summary = failure?.logSummary
+        let previous = lock.withLock {
+            let previous = failures[key]
+            failures[key] = summary
+            return previous
+        }
+
+        guard previous != summary else { return }
+
+        if let summary {
+            Log.warn("\(operation) failed: \(summary)")
+        } else {
+            Log.info("\(operation) recovered")
+        }
     }
 }

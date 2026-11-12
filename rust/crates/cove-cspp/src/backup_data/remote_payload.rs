@@ -93,12 +93,8 @@ impl RemotePayloadMetadata {
             Some(wallet_id) => {
                 validate_optional_string("wallet_id", self.wallet_id.as_deref(), wallet_id)?;
             }
-            None if let Some(actual) = self.wallet_id.as_deref() => {
-                return Err(RemotePayloadError::Mismatch {
-                    field: "wallet_id",
-                    expected: "none".to_string(),
-                    actual: actual.to_string(),
-                });
+            None if self.wallet_id.is_some() => {
+                return Err(RemotePayloadError::Mismatch { field: "wallet_id" });
             }
             None => {}
         }
@@ -132,8 +128,14 @@ pub struct NormalizedRemotePayloadMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RemotePayloadError {
-    #[error("remote payload {field} mismatch: expected {expected}, got {actual}")]
-    Mismatch { field: &'static str, expected: String, actual: String },
+    #[error("remote payload kind mismatch: expected {expected:?}, got {actual:?}")]
+    KindMismatch { expected: RemotePayloadKind, actual: RemotePayloadKind },
+
+    /// An identifier differs from the one expected. Neither value is kept, since the expected
+    /// one can come from decrypted backup content and the error reaches logs
+    #[error("remote payload {field} mismatch")]
+    Mismatch { field: &'static str },
+
     #[error("unsupported remote payload schema version {0}")]
     UnsupportedSchemaVersion(u32),
 }
@@ -150,11 +152,7 @@ fn validate_optional_kind(
         return Ok(());
     }
 
-    Err(RemotePayloadError::Mismatch {
-        field: "kind",
-        expected: format!("{expected:?}"),
-        actual: format!("{actual:?}"),
-    })
+    Err(RemotePayloadError::KindMismatch { expected, actual })
 }
 
 fn validate_optional_schema_version(version: Option<u32>) -> Result<(), RemotePayloadError> {
@@ -174,11 +172,7 @@ fn validate_optional_string(
         return Ok(());
     }
 
-    Err(RemotePayloadError::Mismatch {
-        field,
-        expected: expected.to_string(),
-        actual: actual.unwrap().to_string(),
-    })
+    Err(RemotePayloadError::Mismatch { field })
 }
 
 #[cfg(test)]
@@ -223,10 +217,9 @@ mod tests {
 
         assert_eq!(
             error,
-            RemotePayloadError::Mismatch {
-                field: "kind",
-                expected: "Wallet".to_string(),
-                actual: "MasterKey".to_string(),
+            RemotePayloadError::KindMismatch {
+                expected: RemotePayloadKind::Wallet,
+                actual: RemotePayloadKind::MasterKey,
             },
         );
     }

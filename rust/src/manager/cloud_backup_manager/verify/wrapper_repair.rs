@@ -4,7 +4,7 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::PasskeyAccess;
 use rand::RngExt as _;
-use tracing::info;
+use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use crate::manager::cloud_backup_manager::wallets::{
@@ -167,38 +167,67 @@ impl LocalKeyVerifier {
             self.namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
-        let mut had_wrong_key = false;
-        let mut verified = false;
+        let mut skipped = SkippedProofRecords::default();
 
         for record_id in wallet_record_ids {
             let encrypted = match reader.download_encrypted(record_id).await {
                 Ok(WalletBackupLookup::Found(encrypted)) => encrypted,
-                Ok(WalletBackupLookup::NotFound | WalletBackupLookup::UnsupportedVersion(_))
-                | Err(_) => continue,
+                Ok(WalletBackupLookup::NotFound) => {
+                    skipped.not_found += 1;
+                    continue;
+                }
+                Ok(WalletBackupLookup::UnsupportedVersion(_)) => {
+                    skipped.unsupported += 1;
+                    continue;
+                }
+                Err(error) => {
+                    skipped.download_failed += 1;
+                    skipped.first_error.get_or_insert_with(|| error.to_string());
+                    continue;
+                }
             };
 
             match reader.decrypt_entry(&encrypted) {
-                Ok(_) => {
-                    verified = true;
-                    break;
+                Ok(_) => return LocalKeyProof::Verified,
+                Err(cove_cspp::CsppError::WrongKey) => skipped.wrong_key += 1,
+                Err(error) => {
+                    skipped.decrypt_failed += 1;
+                    skipped.first_error.get_or_insert_with(|| error.to_string());
                 }
-                Err(cove_cspp::CsppError::WrongKey) => {
-                    had_wrong_key = true;
-                }
-                Err(_) => {}
             }
         }
 
-        if verified {
-            return LocalKeyProof::Verified;
-        }
+        // one summary per proof, since the per-record causes decide wrong key versus inconclusive
+        let proof = if skipped.wrong_key > 0 {
+            LocalKeyProof::WrongKey
+        } else {
+            LocalKeyProof::Inconclusive
+        };
 
-        if had_wrong_key {
-            return LocalKeyProof::WrongKey;
-        }
+        warn!(
+            "Local master key proof {proof:?} over {} wallet backup(s): wrong_key={}, not_found={}, unsupported={}, download_failed={}, decrypt_failed={}, first_error={}",
+            wallet_record_ids.len(),
+            skipped.wrong_key,
+            skipped.not_found,
+            skipped.unsupported,
+            skipped.download_failed,
+            skipped.decrypt_failed,
+            skipped.first_error.as_deref().unwrap_or("none")
+        );
 
-        LocalKeyProof::Inconclusive
+        proof
     }
+}
+
+/// Why each wallet backup failed to prove the local master key, summarized after the proof
+#[derive(Default)]
+struct SkippedProofRecords {
+    wrong_key: usize,
+    not_found: usize,
+    unsupported: usize,
+    download_failed: usize,
+    decrypt_failed: usize,
+    first_error: Option<String>,
 }
 
 /// Repairs the cloud master-key wrapper after proving the local master key is valid

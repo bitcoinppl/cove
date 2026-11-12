@@ -81,7 +81,7 @@ impl BackupManager {
     }
 
     pub async fn export(&self, password: String) -> Result<BackupResult, BackupError> {
-        export::export_all(password).await
+        export::export_all(password).await.map_err(|error| error.logged("export"))
     }
 
     /// Decrypt and preflight a backup without changing local wallet state
@@ -91,7 +91,10 @@ impl BackupManager {
         data: Vec<u8>,
         password: String,
     ) -> Result<Arc<BackupImportPreparation>, BackupError> {
-        let state = import::prepare_import(data, password).await?;
+        let state = import::prepare_import(data, password)
+            .await
+            .map_err(|error| error.logged("prepare import"))?;
+
         Ok(BackupImportPreparation::new(state))
     }
 
@@ -101,44 +104,48 @@ impl BackupManager {
         &self,
         preparation: Arc<BackupImportPreparation>,
     ) -> Result<Arc<BackupImportApproval>, BackupError> {
-        let (payload_digest, requested_snapshots) = {
-            let guard = preparation.state.lock();
-            let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
-            let requested_snapshots = state
-                .wallets
-                .iter()
-                .filter(|wallet| wallet.snapshot.has_markerless_conflict())
-                .map(|wallet| (wallet.metadata.id.clone(), wallet.snapshot.clone()))
-                .collect::<Vec<_>>();
+        async move {
+            let (payload_digest, requested_snapshots) = {
+                let guard = preparation.state.lock();
+                let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                let requested_snapshots = state
+                    .wallets
+                    .iter()
+                    .filter(|wallet| wallet.snapshot.has_markerless_conflict())
+                    .map(|wallet| (wallet.metadata.id.clone(), wallet.snapshot.clone()))
+                    .collect::<Vec<_>>();
 
-            (state.payload_digest.clone(), requested_snapshots)
-        };
+                (state.payload_digest.clone(), requested_snapshots)
+            };
 
-        let snapshots = tokio::task::spawn_blocking(move || {
-            let mut snapshots = std::collections::HashMap::new();
-            for (wallet_id, expected) in requested_snapshots {
-                let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;
-                let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
-                if current != expected {
-                    return Err(BackupError::ImportApprovalStale(wallet_id));
+            let snapshots = tokio::task::spawn_blocking(move || {
+                let mut snapshots = std::collections::HashMap::new();
+                for (wallet_id, expected) in requested_snapshots {
+                    let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;
+                    let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
+                    if current != expected {
+                        return Err(BackupError::ImportApprovalStale(wallet_id));
+                    }
+
+                    snapshots.insert(wallet_id.as_str().to_string(), expected);
                 }
 
-                snapshots.insert(wallet_id.as_str().to_string(), expected);
-            }
+                Ok::<_, BackupError>(snapshots)
+            })
+            .await
+            .map_err(|error| {
+                BackupError::Restore(format!("approval snapshot task failed: {error}"))
+            })??;
 
-            Ok::<_, BackupError>(snapshots)
-        })
+            Ok(Arc::new(BackupImportApproval {
+                state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
+                    payload_digest,
+                    snapshots,
+                }))),
+            }))
+        }
         .await
-        .map_err(|error| {
-            BackupError::Restore(format!("approval snapshot task failed: {error}"))
-        })??;
-
-        Ok(Arc::new(BackupImportApproval {
-            state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
-                payload_digest,
-                snapshots,
-            }))),
-        }))
+        .map_err(|error: BackupError| error.logged("approve import"))
     }
 
     /// Consume a preparation and optional one-use approval to import the backup
@@ -148,43 +155,47 @@ impl BackupManager {
         preparation: Arc<BackupImportPreparation>,
         approval: Option<Arc<BackupImportApproval>>,
     ) -> Result<BackupImportReport, BackupError> {
-        let (state, approval) = match approval {
-            Some(approval) => {
-                let mut preparation_guard = preparation.state.lock();
-                let mut approval_guard = approval.state.lock();
-                let preparation_state =
-                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+        async move {
+            let (state, approval) = match approval {
+                Some(approval) => {
+                    let mut preparation_guard = preparation.state.lock();
+                    let mut approval_guard = approval.state.lock();
+                    let preparation_state =
+                        preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                let approval_state =
-                    approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                    let approval_state =
+                        approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                import::validate_prepared_import(preparation_state, Some(approval_state))?;
+                    import::validate_prepared_import(preparation_state, Some(approval_state))?;
 
-                let state = preparation_guard
-                    .take()
-                    .expect("preparation was checked as present while holding its mutex");
+                    let state = preparation_guard
+                        .take()
+                        .expect("preparation was checked as present while holding its mutex");
 
-                let approval = approval_guard
-                    .take()
-                    .expect("approval was checked as present while holding its mutex");
-                (state, Some(approval))
-            }
+                    let approval = approval_guard
+                        .take()
+                        .expect("approval was checked as present while holding its mutex");
+                    (state, Some(approval))
+                }
 
-            None => {
-                let mut preparation_guard = preparation.state.lock();
-                let preparation_state =
-                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                None => {
+                    let mut preparation_guard = preparation.state.lock();
+                    let preparation_state =
+                        preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                import::validate_prepared_import(preparation_state, None)?;
+                    import::validate_prepared_import(preparation_state, None)?;
 
-                let state = preparation_guard
-                    .take()
-                    .expect("preparation was checked as present while holding its mutex");
-                (state, None)
-            }
-        };
+                    let state = preparation_guard
+                        .take()
+                        .expect("preparation was checked as present while holding its mutex");
+                    (state, None)
+                }
+            };
 
-        import::import_prepared(state, approval).await
+            import::import_prepared(state, approval).await
+        }
+        .await
+        .map_err(|error: BackupError| error.logged("import"))
     }
 
     #[uniffi::method(name = "verifyBackup")]
@@ -193,12 +204,12 @@ impl BackupManager {
         data: Vec<u8>,
         password: String,
     ) -> Result<BackupVerifyReport, BackupError> {
-        verify::verify_backup(data, password).await
+        verify::verify_backup(data, password).await.map_err(|error| error.logged("verify"))
     }
 
     /// Validate the file format without decrypting
     pub fn validate_format(&self, data: Vec<u8>) -> Result<(), BackupError> {
-        crypto::validate_header(&data)
+        crypto::validate_header(&data).map_err(|error| error.logged("validate format"))
     }
 
     /// Generate a 12-word BIP39 mnemonic to use as the backup password
@@ -281,20 +292,24 @@ mod tests {
         assert!(!mgr.is_password_valid("abc def ghi jkl mno"));
     }
 
+    fn empty_payload() -> super::model::BackupPayload {
+        super::model::BackupPayload {
+            version: super::model::PAYLOAD_VERSION,
+            created_at: 0,
+            wallets: Vec::new(),
+            settings: super::model::AppSettings {
+                selected_network: None,
+                selected_fiat_currency: None,
+                color_scheme: None,
+                selected_nodes: Vec::new(),
+                custom_block_explorers: BTreeMap::new(),
+            },
+        }
+    }
+
     fn empty_preparation(digest: &str) -> Arc<BackupImportPreparation> {
         BackupImportPreparation::new(import::ImportPreparationState {
-            payload: Some(super::model::BackupPayload {
-                version: super::model::PAYLOAD_VERSION,
-                created_at: 0,
-                wallets: Vec::new(),
-                settings: super::model::AppSettings {
-                    selected_network: None,
-                    selected_fiat_currency: None,
-                    color_scheme: None,
-                    selected_nodes: Vec::new(),
-                    custom_block_explorers: BTreeMap::new(),
-                },
-            }),
+            payload: Some(empty_payload()),
             payload_digest: digest.to_string(),
             wallets: Vec::new(),
         })
@@ -351,5 +366,103 @@ mod tests {
             Err(BackupError::ImportApprovalStale(_))
         ));
         assert!(manager.import_prepared(preparation, None).await.is_ok());
+    }
+
+    // decrypted backup values that fail to parse must not reach logs, only serde's position
+    #[tokio::test(flavor = "current_thread")]
+    async fn malformed_decrypted_backup_values_stay_out_of_logs() {
+        use crate::test_support::log_capture::LogCapture;
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        init_import_test_state();
+
+        let manager = BackupManager::new();
+        let password = manager.generate_password();
+
+        // verify and import strip whitespace from the password before deriving the key
+        let encryption_password = crypto::clean_password(&password).unwrap();
+        let secret_network = "private-user-text-network";
+        let secret_created_at = "private-user-text-created-at";
+
+        let encrypt = |payload: &serde_json::Value| {
+            let json = serde_json::to_vec(payload).unwrap();
+            crypto::encrypt(&crypto::compress(&json), &encryption_password).unwrap()
+        };
+
+        let metadata = crate::test_support::hot_wallet_metadata("Restored");
+        let wallet = super::model::WalletBackup {
+            metadata: serde_json::to_value(metadata).unwrap(),
+            secret: super::model::WalletSecret::None,
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+
+        let mut payload = empty_payload();
+        payload.wallets.push(wallet);
+        let mut payload = serde_json::to_value(payload).unwrap();
+        payload["wallets"][0]["metadata"]["network"] = serde_json::Value::from(secret_network);
+        let bad_wallet_backup = encrypt(&payload);
+
+        let mut payload = serde_json::to_value(empty_payload()).unwrap();
+        payload["created_at"] = serde_json::Value::from(secret_created_at);
+        let bad_payload_backup = encrypt(&payload);
+
+        let capture = LogCapture::start();
+        let errors = [
+            manager.verify(bad_wallet_backup.clone(), password.clone()).await.unwrap_err(),
+            manager.prepare_import(bad_wallet_backup, password.clone()).await.unwrap_err(),
+            manager.verify(bad_payload_backup.clone(), password.clone()).await.unwrap_err(),
+            manager.prepare_import(bad_payload_backup, password).await.unwrap_err(),
+        ];
+        let logs = capture.text();
+
+        // failure messages name what was missing or leaked, never the captured text, since it
+        // would carry the very values this test keeps out of logs
+        for error in &errors {
+            let kind = error.kind();
+            assert!(matches!(error, BackupError::Deserialization(_)), "unexpected {kind} error");
+        }
+
+        assert!(logs.contains("backup verify failed"), "verify failure was not logged");
+        assert!(logs.contains("backup prepare import failed"), "import failure was not logged");
+        assert!(logs.contains("wallet metadata: data error"), "wallet error position missing");
+        assert!(
+            logs.contains("payload: data error at line 1 column"),
+            "payload error position missing"
+        );
+
+        for secret in [secret_network, secret_created_at] {
+            assert!(!logs.contains(secret), "logs quote a decrypted backup value");
+            for error in &errors {
+                let kind = error.kind();
+                assert!(
+                    !error.to_string().contains(secret),
+                    "{kind} error quotes a decrypted backup value"
+                );
+            }
+        }
+    }
+
+    // restore and keychain errors can name the wallet or quote key material, so only the kind
+    // is logged
+    #[test]
+    fn free_text_backup_errors_log_only_their_kind() {
+        use crate::test_support::log_capture::LogCapture;
+
+        let wallet_name = "private wallet name";
+        let capture = LogCapture::start();
+        BackupError::Restore(format!("invalid xpub for {wallet_name}")).logged("import");
+        BackupError::Keychain(format!("xpub for {wallet_name}: xpub6Cbad")).logged("import");
+        let logs = capture.text();
+
+        assert!(logs.contains("backup import failed kind=\"restore\""), "restore kind not logged");
+        assert!(
+            logs.contains("backup import failed kind=\"keychain\""),
+            "keychain kind not logged"
+        );
+
+        assert!(!logs.contains(wallet_name), "logs quote the wallet name");
+        assert!(!logs.contains("xpub6Cbad"), "logs quote the xpub");
     }
 }

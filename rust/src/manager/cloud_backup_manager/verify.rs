@@ -10,7 +10,7 @@ use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
-use cove_device::passkey::PasskeyAccess;
+use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -396,7 +396,9 @@ impl RustCloudBackupManager {
 
         let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
             Ok(json) => json,
+            // recovery-required errors carry only reader copy, so each cause is logged here
             Err(CloudStorageError::NotFound(_)) => {
+                warn!("Master key recovery needs a new backup: no master key backup in cloud");
                 return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
             }
             Err(error) => {
@@ -408,7 +410,7 @@ impl RustCloudBackupManager {
         };
 
         let encrypted: EncryptedMasterKeyBackup =
-            serde_json::from_slice(&master_json).map_err(CloudBackupError::internal)?;
+            serde_json::from_slice(&master_json).map_err(CloudBackupError::from)?;
         encrypted.remote_metadata.normalized_master_key(namespace).map_err(|error| {
             CloudBackupError::Internal(format!("normalize master key payload: {error}").into())
         })?;
@@ -428,17 +430,22 @@ impl RustCloudBackupManager {
             authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
         let authenticated = match auth_outcome {
             PasskeyAuthOutcome::Authenticated(result) => result,
+            // a typed cancel keeps the cancel reader copy and logs at info instead of warn
             PasskeyAuthOutcome::UserCancelled => {
-                return Err(CloudBackupError::Passkey("user cancelled".into()));
+                return Err(CloudBackupError::passkey(PasskeyError::UserCancelled));
             }
             PasskeyAuthOutcome::NoCredentialFound => {
+                warn!("Master key recovery needs a new backup: no passkey found ({auth_policy:?})");
                 return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
             }
         };
 
         let master_key = master_key_crypto::decrypt_master_key(&encrypted, &authenticated.prf_key)
-            .map_err(|_| match auth_policy {
+            .map_err(|error| match auth_policy {
                 PasskeyAuthPolicy::StoredOnly => {
+                    warn!(
+                        "Master key recovery needs a new backup: stored passkey did not decrypt the master key: {error}"
+                    );
                     CloudBackupError::RecoveryRequired(recovery_message.into())
                 }
                 PasskeyAuthPolicy::StoredThenDiscover | PasskeyAuthPolicy::DiscoverOnly => {

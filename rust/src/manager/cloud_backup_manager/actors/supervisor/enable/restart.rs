@@ -677,9 +677,11 @@ impl CloudBackupSupervisor {
 
     fn pending_enable_recovery_assessment() -> Option<PendingEnableRecoveryAssessment> {
         let cloud_keychain = CloudBackupKeychain::global();
+        // the support code alone cannot say which evidence was unreadable, so each read logs it
         let journal = match cloud_keychain.load_pending_enable_journal() {
             Ok(journal) => journal,
-            Err(_) => {
+            Err(error) => {
+                warn!("Pending enable recovery: failed to read enable journal: {error}");
                 return Some(Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence));
             }
         };
@@ -691,7 +693,10 @@ impl CloudBackupSupervisor {
                     reason: PendingEnableRecoveryReason::OwnershipJournalMissing,
                     cleanup_plan: Some(PendingEnableCleanupPlan::UnownedStaged),
                 }),
-                Err(_) => Some(Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence)),
+                Err(error) => {
+                    warn!("Pending enable recovery: failed to read master key promotion: {error}");
+                    Some(Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence))
+                }
                 Ok(MasterKeyPromotionStatus::Pending(_)) => {
                     Some(Self::support_only(PendingEnableRecoveryReason::OwnershipJournalMissing))
                 }
@@ -707,7 +712,8 @@ impl CloudBackupSupervisor {
             .master_key_promotion_evidence(journal.namespace_id(), prior_namespace)
         {
             Ok(evidence) => evidence,
-            Err(_) => {
+            Err(error) => {
+                warn!("Pending enable recovery: failed to read master key evidence: {error}");
                 return Some(Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence));
             }
         };
@@ -728,7 +734,8 @@ impl CloudBackupSupervisor {
 
         let persisted = match Database::global().cloud_backup_state.get() {
             Ok(persisted) => persisted,
-            Err(_) => {
+            Err(error) => {
+                warn!("Pending enable recovery: failed to read cloud backup state: {error}");
                 return Some(Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence));
             }
         };
@@ -750,6 +757,8 @@ impl CloudBackupSupervisor {
     }
 
     fn support_only(reason: PendingEnableRecoveryReason) -> PendingEnableRecoveryAssessment {
+        // the reader sees only a support code, so the log names the reason behind it
+        warn!("Pending enable recovery needs support: {reason:?}");
         PendingEnableRecoveryAssessment { reason, cleanup_plan: None }
     }
 

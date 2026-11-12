@@ -196,22 +196,30 @@ impl MultiFormat {
 
         // try to parse as PSBT (base64 or hex); if it fails for any reason other than NotSigned,
         // keep trying other formats — but NotSigned means it's definitely a PSBT so stop here
-        match crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
-            Ok(parsed) => {
-                if let Some(psbt) = parsed.psbt() {
-                    return Ok(Self::SignedPsbt(psbt));
-                }
-                if let Some(txn) = parsed.transaction() {
-                    return Ok(Self::Transaction(txn));
-                }
-            }
-            Err(SignedImportError::NotSigned) => {
-                return Err(MultiFormatError::PsbtNotSigned);
-            }
-            Err(_) => {}
-        }
+        let signed_import_error =
+            match crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
+                Ok(parsed) => {
+                    if let Some(psbt) = parsed.psbt() {
+                        return Ok(Self::SignedPsbt(psbt));
+                    }
+                    if let Some(txn) = parsed.transaction() {
+                        return Ok(Self::Transaction(txn));
+                    }
 
-        warn!(input_len = string.len(), "could not parse string as MultiFormat");
+                    None
+                }
+                Err(SignedImportError::NotSigned) => {
+                    return Err(MultiFormatError::PsbtNotSigned);
+                }
+                Err(error) => Some(error),
+            };
+
+        // signed import errors never quote the input, so the PSBT parse reason is safe to keep
+        warn!(
+            input_len = string.len(),
+            signed_import_error = signed_import_error.as_ref().map(tracing::field::display),
+            "could not parse string as MultiFormat"
+        );
         Err(MultiFormatError::UnrecognizedFormat)
     }
 
@@ -232,7 +240,7 @@ impl MultiFormat {
         match ur_type {
             UrType::CryptoPsbt => {
                 let crypto_psbt = cove_ur::CryptoPsbt::decode(data.to_vec())
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "crypto-psbt decode", &error))?;
 
                 let psbt = Psbt::from(crypto_psbt.psbt().clone());
                 if !crate::signed_import::psbt_has_signatures(&psbt) {
@@ -243,28 +251,30 @@ impl MultiFormat {
 
             UrType::CryptoSeed => {
                 // decode crypto-seed CBOR structure
-                let crypto_seed = cove_ur::CryptoSeed::decode(data.to_vec())
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                let crypto_seed = cove_ur::CryptoSeed::decode(data.to_vec()).map_err(|_| {
+                    unrecognized_ur(ur_type, "crypto-seed decode", &"details withheld")
+                })?;
                 let entropy = crypto_seed.entropy();
                 let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|_| unrecognized_ur(ur_type, "seed entropy", &"details withheld"))?;
                 Ok(Self::Mnemonic(Arc::new(mnemonic.into())))
             }
 
             UrType::CryptoOutput => {
                 // decode crypto-output CBOR structure
                 let crypto_output = cove_ur::CryptoOutput::decode(data)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "crypto-output decode", &error))?;
 
                 // get descriptor string using inferred network from UR metadata
                 let network = crypto_output.hdkey().infer_network();
                 let descriptor = crypto_output
                     .descriptor_string(network)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "descriptor string", &error))?;
 
                 // parse as hardware export
-                let format = pubport::Format::try_new_from_str(&descriptor)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                let format = pubport::Format::try_new_from_str(&descriptor).map_err(|_| {
+                    unrecognized_ur(ur_type, "descriptor format", &"details withheld")
+                })?;
 
                 let hardware_export = HardwareExport::new(format);
                 Ok(Self::HardwareExport(hardware_export.into()))
@@ -273,41 +283,40 @@ impl MultiFormat {
             UrType::CryptoHdkey => {
                 // decode crypto-hdkey CBOR structure
                 let crypto_hdkey = cove_ur::CryptoHdkey::decode(data.to_vec())
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "crypto-hdkey decode", &error))?;
 
                 // convert to xpub string using inferred network from UR metadata
                 let network = crypto_hdkey.infer_network();
                 let xpub_str = crypto_hdkey
                     .to_xpub_string(network)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "xpub string", &error))?;
 
                 // parse as hardware export
                 let format = pubport::Format::try_new_from_str(&xpub_str)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|_| unrecognized_ur(ur_type, "xpub format", &"details withheld"))?;
 
                 let hardware_export = HardwareExport::new(format);
                 Ok(Self::HardwareExport(hardware_export.into()))
             }
 
             UrType::CryptoAccount => {
-                let account = cove_ur::CryptoAccount::from_cbor(data).map_err(|e| {
-                    warn!("Failed to decode CryptoAccount: {e:?}");
-                    MultiFormatError::UnrecognizedFormat
-                })?;
+                let account = cove_ur::CryptoAccount::from_cbor(data)
+                    .map_err(|error| unrecognized_ur(ur_type, "crypto-account decode", &error))?;
 
                 if account.is_taproot_only() {
                     warn!("CryptoAccount only has taproot descriptors");
                     return Err(MultiFormatError::TaprootNotSupported);
                 }
 
-                let preferred = account
-                    .get_preferred_descriptor()
-                    .ok_or(MultiFormatError::UnrecognizedFormat)?;
+                let preferred = account.get_preferred_descriptor().ok_or_else(|| {
+                    unrecognized_ur(ur_type, "preferred descriptor", &"none found")
+                })?;
                 let network = preferred.hdkey.infer_network();
 
                 // convert to Json format (works for single or multiple descriptors)
-                let json =
-                    account.to_pubport_json(network).ok_or(MultiFormatError::UnrecognizedFormat)?;
+                let json = account.to_pubport_json(network).ok_or_else(|| {
+                    unrecognized_ur(ur_type, "account descriptors", &"no supported descriptor")
+                })?;
                 let format = pubport::Format::Json(Box::new(json));
                 let hardware_export = HardwareExport::new(format);
                 Ok(Self::HardwareExport(hardware_export.into()))
@@ -316,15 +325,16 @@ impl MultiFormat {
             UrType::Bytes => {
                 // ur:bytes payload is CBOR-encoded byte string (per UR spec)
                 let mut decoder = minicbor::Decoder::new(data);
-                let inner_bytes =
-                    decoder.bytes().map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                let inner_bytes = decoder
+                    .bytes()
+                    .map_err(|error| unrecognized_ur(ur_type, "bytes decode", &error))?;
 
                 let json_str = std::str::from_utf8(inner_bytes)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|error| unrecognized_ur(ur_type, "bytes utf-8", &error))?;
 
                 // pubport handles Passport JSON format
                 let format = pubport::Format::try_new_from_str(json_str)
-                    .map_err(|_| MultiFormatError::UnrecognizedFormat)?;
+                    .map_err(|_| unrecognized_ur(ur_type, "bytes format", &"details withheld"))?;
                 let hardware_export = HardwareExport::new(format);
                 Ok(Self::HardwareExport(hardware_export.into()))
             }
@@ -401,6 +411,19 @@ impl From<Arc<cove_tap_card::TapSigner>> for MultiFormat {
             Self::TapSignerReady(tap_signer)
         }
     }
+}
+
+/// Log why a complete UR payload was not recognized and return the reader-facing error
+///
+/// Runs once per assembled UR, not per frame. `detail` must never carry payload bytes, key
+/// material or the scanned text, so stages that could echo them pass a fixed note instead
+fn unrecognized_ur(
+    ur_type: &crate::ur::UrType,
+    stage: &'static str,
+    detail: &dyn std::fmt::Display,
+) -> MultiFormatError {
+    warn!("UR {ur_type:?} payload not recognized at {stage}: {detail}");
+    MultiFormatError::UnrecognizedFormat
 }
 
 #[cfg(test)]
@@ -862,5 +885,37 @@ mod tests {
         assert_eq!(bip84.fingerprint().map(|f| f.to_string()).as_deref(), Some("817e7be0"));
         assert_eq!(bip84.xpub().unwrap().to_string(), ACCOUNT_XPUB);
         assert_eq!(first_address.to_string(), "bc1q0g0vn4yqyk0zjwxw0zv5pltyyczty004zc9g7r");
+    }
+
+    #[test]
+    fn malformed_psbt_import_keeps_the_payload_out_of_errors_and_logs() {
+        use crate::test_support::{log_capture::LogCapture, malformed_psbt::MalformedPsbt};
+        use base64::{Engine as _, prelude::BASE64_STANDARD};
+
+        for fixture in MalformedPsbt::all() {
+            fixture.assert_parser_echoes_payload();
+
+            let mut cbor = Vec::new();
+            minicbor::Encoder::new(&mut cbor).bytes(&fixture.bytes).unwrap();
+            let ur = UR::new("crypto-psbt", &cbor).to_string();
+            let base64 = BASE64_STANDARD.encode(&fixture.bytes);
+
+            let capture = LogCapture::start();
+            let errors = [
+                MultiFormat::try_from_string(&base64).unwrap_err(),
+                MultiFormat::try_from_string(&ur).unwrap_err(),
+                MultiFormat::try_from_data(&fixture.bytes).unwrap_err(),
+            ];
+            let logs = capture.text();
+
+            // both the text probe and the UR decoder logged their failure
+            assert!(logs.contains("could not parse string as MultiFormat"), "{logs}");
+            assert!(logs.contains("payload not recognized at crypto-psbt decode"), "{logs}");
+            fixture.assert_absent_from("captured logs", &logs);
+
+            for error in errors {
+                fixture.assert_absent_from("error text", &error.to_string());
+            }
+        }
     }
 }

@@ -71,6 +71,9 @@ impl CloudBackupRemoteWriteCommand {
                 let listed_wallet_count = cloud
                     .list_wallet_backups(namespace_id)
                     .await
+                    .inspect_err(|error| {
+                        warn!("Cloud backup wallet count unavailable, listing failed: {error}");
+                    })
                     .ok()
                     .map(|record_ids| record_ids.len() as u32);
                 Ok(CloudBackupRemoteWriteResult::ListedWalletCount(listed_wallet_count))

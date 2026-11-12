@@ -1,5 +1,7 @@
 use crate::wallet_identity::WalletIdentityError;
 use cove_types::WalletId;
+use cove_util::json::JsonDecodeError;
+use tracing::{error, warn};
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -120,6 +122,77 @@ impl BackupError {
                     .to_string()
             }
         }
+    }
+}
+
+impl BackupError {
+    /// A deserialization failure described by serde's error category and position only
+    ///
+    /// serde's message quotes the offending value, which here is decrypted backup content
+    pub(crate) fn deserialization(context: &str, error: &serde_json::Error) -> Self {
+        Self::Deserialization(format!("{context}: {}", JsonDecodeError::from(error)))
+    }
+
+    /// A stable variant name, safe to log
+    pub(crate) const fn kind(&self) -> &'static str {
+        match self {
+            Self::PasswordTooShort => "password_too_short",
+            Self::DecryptionFailed => "decryption_failed",
+            Self::InvalidFormat => "invalid_format",
+            Self::FileTooLarge => "file_too_large",
+            Self::UnsupportedVersion(_) => "unsupported_version",
+            Self::UnsupportedPayloadVersion(_) => "unsupported_payload_version",
+            Self::Truncated => "truncated",
+            Self::Encryption(_) => "encryption",
+            Self::Serialization(_) => "serialization",
+            Self::Deserialization(_) => "deserialization",
+            Self::Gather(_) => "gather",
+            Self::Restore(_) => "restore",
+            Self::Keychain(_) => "keychain",
+            Self::Database(_) => "database",
+            Self::WalletIdOccupied(_) => "wallet_id_occupied",
+            Self::InvalidWalletId(_) => "invalid_wallet_id",
+            Self::ImportApprovalStale(_) => "import_approval_stale",
+            Self::ImportApprovalRequired(_) => "import_approval_required",
+            Self::ImportApprovalUsed => "import_approval_used",
+            Self::Decompression(_) => "decompression",
+        }
+    }
+
+    /// Log a failure once at the `BackupManager` boundary and return it unchanged
+    ///
+    /// The free-text variants wrap inner errors whose text can quote decrypted backup values,
+    /// wallet names or key material, so only their kind is logged. Deserialization text holds
+    /// only serde's category and position, and the other variants carry ids and versions
+    pub(crate) fn logged(self, operation: &str) -> Self {
+        let kind = self.kind();
+        match &self {
+            // caused by the selected file, its password or a stale review, the user can retry
+            Self::PasswordTooShort
+            | Self::DecryptionFailed
+            | Self::InvalidFormat
+            | Self::FileTooLarge
+            | Self::UnsupportedVersion(_)
+            | Self::UnsupportedPayloadVersion(_)
+            | Self::Truncated
+            | Self::ImportApprovalStale(_)
+            | Self::ImportApprovalRequired(_)
+            | Self::ImportApprovalUsed
+            | Self::WalletIdOccupied(_) => warn!(kind, "backup {operation} failed: {self}"),
+
+            Self::Deserialization(_) => error!(kind, "backup {operation} failed: {self}"),
+
+            Self::Encryption(_)
+            | Self::Serialization(_)
+            | Self::Gather(_)
+            | Self::Restore(_)
+            | Self::Keychain(_)
+            | Self::Database(_)
+            | Self::InvalidWalletId(_)
+            | Self::Decompression(_) => error!(kind, "backup {operation} failed"),
+        }
+
+        self
     }
 }
 

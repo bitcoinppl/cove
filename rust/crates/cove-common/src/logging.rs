@@ -1,10 +1,24 @@
 use std::sync::Once;
 
-use tracing_subscriber::EnvFilter;
+use tracing::Level;
+use tracing_subscriber::{EnvFilter, filter::Targets};
 
 pub mod capture;
+mod panic;
 
 static INIT: Once = Once::new();
+
+/// Capture filter for diagnostics reports, independent of `RUST_LOG`
+///
+/// Cove crates log at INFO and dependencies at WARN so a developer's console filter
+/// can neither flood the bounded capture with debug output nor silence it
+///
+/// electrum-client warns on every retry and connection attempt and prints raw server
+/// responses, so it is held to ERROR to keep an unreachable node from flooding the capture
+const CAPTURE_FILTER: &str = "warn,cove=info,electrum_client=error";
+const CAPTURE_DEFAULT_LEVEL: Level = Level::WARN;
+const CAPTURE_COVE_LEVEL: Level = Level::INFO;
+const CAPTURE_ELECTRUM_CLIENT_LEVEL: Level = Level::ERROR;
 
 pub fn init() {
     INIT.call_once(|| {
@@ -22,10 +36,29 @@ pub fn init() {
             };
         }
 
+        let console_filter = std::env::var("RUST_LOG").unwrap_or_default();
+
         tracing_subscriber::registry()
-            .with(fmt::layer().with_writer(std::io::stdout).with_ansi(false))
-            .with(capture::layer())
-            .with(EnvFilter::from_default_env())
+            .with(
+                fmt::layer()
+                    .with_writer(std::io::stdout)
+                    .with_ansi(false)
+                    .with_filter(EnvFilter::from_default_env()),
+            )
+            .with(capture::layer().with_filter(capture_targets()))
             .init();
+
+        panic::install_hook();
+
+        tracing::info!(
+            "Rust logging initialized: console_filter={console_filter} capture_filter={CAPTURE_FILTER}"
+        );
     });
+}
+
+fn capture_targets() -> Targets {
+    Targets::new()
+        .with_default(CAPTURE_DEFAULT_LEVEL)
+        .with_target("cove", CAPTURE_COVE_LEVEL)
+        .with_target("electrum_client", CAPTURE_ELECTRUM_CLIENT_LEVEL)
 }

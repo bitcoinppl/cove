@@ -37,11 +37,13 @@ pub(crate) enum WalletIdentityError {
     #[error("same-fingerprint wallet {wallet_id} is missing public identity")]
     MissingExistingWalletPublicIdentity { wallet_id: WalletId },
 
-    #[error("public descriptor identity for {wallet_name}: {source}")]
-    BackupDescriptor { wallet_name: String, source: PublicWalletIdentityError },
+    // backup errors reach restore logs and warnings, and the backup's name and id are both
+    // decrypted content, so these errors name neither
+    #[error("public descriptor identity: {0}")]
+    BackupDescriptor(#[source] PublicWalletIdentityError),
 
-    #[error("xpub identity for {wallet_name}: {source}")]
-    BackupXpub { wallet_name: String, source: PublicWalletIdentityError },
+    #[error("xpub identity: {0}")]
+    BackupXpub(#[source] PublicWalletIdentityError),
 }
 
 #[cfg(test)]

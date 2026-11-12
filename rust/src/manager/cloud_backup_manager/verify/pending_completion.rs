@@ -1,7 +1,9 @@
+use std::sync::atomic::Ordering;
+
 use ahash::HashMap;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
-use tracing::warn;
+use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use super::{
@@ -99,6 +101,9 @@ impl RustCloudBackupManager {
     }
 
     fn expire_pending_verification_completion(&self, completion: PendingVerificationCompletion) {
+        warn!(
+            "Pending verification expired after {PENDING_VERIFICATION_COMPLETION_TTL_SECONDS}s without confirmed uploads"
+        );
         self.apply_failed_verification(DeepVerificationFailure::retry(
             "cloud backup upload confirmation expired; start verification again",
             completion.report().detail,
@@ -111,15 +116,10 @@ impl RustCloudBackupManager {
         &self,
         completion: &PendingVerificationCompletion,
     ) -> PendingVerificationUploadsReadiness {
-        let sync_states_by_record_id: HashMap<_, _> = Database::global()
-            .cloud_blob_sync_states
-            .list()
-            .ok()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|state| state.namespace_id == completion.namespace_id())
-            .map(|state| (state.record_id().to_string(), state.state))
-            .collect();
+        let Some(sync_states_by_record_id) = self.pending_verification_sync_states(completion)
+        else {
+            return PendingVerificationUploadsReadiness::Pending;
+        };
 
         for upload in completion.uploads() {
             let sync_state = sync_states_by_record_id.get(upload.record_id());
@@ -138,6 +138,38 @@ impl RustCloudBackupManager {
         }
 
         PendingVerificationUploadsReadiness::Confirmed
+    }
+
+    /// Blob sync states for the completion's namespace, or `None` while the database is unreadable
+    ///
+    /// An unreadable table proves nothing about the uploads, so callers keep the completion
+    /// pending; the queue retries every pass, so only a change in readability is logged
+    fn pending_verification_sync_states(
+        &self,
+        completion: &PendingVerificationCompletion,
+    ) -> Option<HashMap<String, PersistedCloudBlobState>> {
+        match Database::global().cloud_blob_sync_states.list() {
+            Ok(states) => {
+                if self.pending_sync_states_unreadable.swap(false, Ordering::AcqRel) {
+                    info!("Pending verification: cloud blob sync states are readable again");
+                }
+
+                let states = states
+                    .into_iter()
+                    .filter(|state| state.namespace_id == completion.namespace_id())
+                    .map(|state| (state.record_id().to_string(), state.state))
+                    .collect();
+
+                Some(states)
+            }
+            Err(error) => {
+                if !self.pending_sync_states_unreadable.swap(true, Ordering::AcqRel) {
+                    error!("Pending verification: failed to read cloud blob sync states: {error}");
+                }
+
+                None
+            }
+        }
     }
 
     fn is_pending_upload_confirmed(
@@ -184,23 +216,19 @@ impl RustCloudBackupManager {
             }
         };
 
-        let master_key = master_key.ok_or_else(|| {
-            Box::new(
+        let Some(master_key) = master_key else {
+            warn!("Pending upload verification failed: no local master key available");
+            return Err(Box::new(
                 self.pending_verification_failure(&completion, "no local master key available"),
-            )
-        })?;
+            ));
+        };
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let mut report = completion.report();
-        let sync_states_by_record_id: HashMap<_, _> = Database::global()
-            .cloud_blob_sync_states
-            .list()
-            .ok()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|state| state.namespace_id == completion.namespace_id())
-            .map(|state| (state.record_id().to_string(), state.state))
-            .collect();
+        let Some(sync_states_by_record_id) = self.pending_verification_sync_states(&completion)
+        else {
+            return Ok(FinalizePendingVerificationResult::Pending);
+        };
 
         for upload in completion.uploads() {
             match upload {

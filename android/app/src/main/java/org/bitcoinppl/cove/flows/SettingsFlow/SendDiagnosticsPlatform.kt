@@ -11,16 +11,18 @@ import android.os.Build
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.AppLogStore
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove_core.DiagnosticsPlatformInfo
 
 private const val DIAGNOSTICS_FILENAME = "cove-diagnostics.txt"
-private const val MAX_PLATFORM_LOG_CHARS = 256 * 1024
+private const val MAX_LOGCAT_CHARS = 256 * 1024
 private const val LOGCAT_LINE_COUNT = "1000"
 private val LOGCAT_TIMEOUT: Duration = Duration.ofSeconds(5)
 private val LOGCAT_TERMINATION_GRACE_PERIOD: Duration = Duration.ofMillis(250)
@@ -50,13 +52,28 @@ internal suspend fun collectAndroidPlatformLogs(
                 "Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
                 "Device: ${Build.MANUFACTURER} ${Build.MODEL}",
                 "Process ID: ${android.os.Process.myPid()}",
-                "",
-                "logcat",
             ).joinToString("\n")
+        val appLogs = AppLogStore.shared?.snapshot() ?: "Android app log store is not installed\n"
         val logcat = collectLogcat()
 
-        "$header\n${logcat.takeLastAtRedactionBoundary(MAX_PLATFORM_LOG_CHARS)}"
+        // the app log store is bounded on disk; logcat is a shared tail kept as secondary context
+        listOf(
+            header,
+            "",
+            "Android app logs",
+            "----------------",
+            appLogs,
+            "logcat",
+            "------",
+            logcat.takeLastAtRedactionBoundary(MAX_LOGCAT_CHARS),
+        ).joinToString("\n")
     }
+
+/** Clears the app's saved log lines, which the logcat clear does not reach */
+@Throws(IOException::class)
+internal suspend fun clearAndroidAppLogs(ioDispatcher: CoroutineDispatcher) {
+    withContext(ioDispatcher) { AppLogStore.shared?.clear() }
+}
 
 private fun collectLogcat(): String =
     runCatching {

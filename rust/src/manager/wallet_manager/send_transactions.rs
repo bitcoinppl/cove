@@ -24,8 +24,12 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let fee_rate = fee_rate.into();
 
-        let psbt = call!(actor.build_tx(amount, address, fee_rate)).await.unwrap()?;
-        let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
+        let psbt = call!(actor.build_tx(amount, address, fee_rate))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
         Ok(details)
     }
@@ -44,10 +48,13 @@ impl RustWalletManager {
         let fee_rate = fee_rate.into();
         let address = Arc::unwrap_or_clone(address);
 
-        let psbt =
-            call!(actor.build_manual_tx(outpoints, amount, address, fee_rate)).await.unwrap()?;
+        let psbt = call!(actor.build_manual_tx(outpoints, amount, address, fee_rate))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
-        let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
         Ok(details)
     }
 }

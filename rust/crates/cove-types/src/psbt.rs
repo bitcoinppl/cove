@@ -1,6 +1,6 @@
 use bdk_wallet::psbt::PsbtUtils as _;
 use bitcoin::{Amount as BdkAmount, TxIn, TxOut};
-use cove_util::ResultExt as _;
+use cove_util::{ResultExt as _, psbt::PsbtDecodeError};
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
@@ -40,17 +40,26 @@ pub enum PsbtError {
 type Error = PsbtError;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+impl Psbt {
+    /// Parse serialized PSBT bytes, keeping the typed failure reason
+    ///
+    /// # Errors
+    /// Returns a [`PsbtDecodeError`] that never quotes the input bytes
+    pub fn decode(data: &[u8]) -> Result<Self, PsbtDecodeError> {
+        cove_util::psbt::deserialize(data).map(Self)
+    }
+}
+
 #[uniffi::export]
 impl Psbt {
     /// Creates a new PSBT from serialized bytes
     ///
     /// # Errors
-    /// Returns `PsbtError::Other` if deserialization fails
+    /// Returns `PsbtError::Other` with a payload-free reason if deserialization fails
     #[uniffi::constructor(name = "new")]
     #[allow(clippy::needless_pass_by_value)] // uniffi requires Vec by value
     pub fn try_new(data: Vec<u8>) -> Result<Self> {
-        let psbt = BdkPsbt::deserialize(&data).map_err_str(PsbtError::Other)?;
-        Ok(psbt.into())
+        Self::decode(&data).map_err_str(PsbtError::Other)
     }
 
     /// The virtual size of the transaction

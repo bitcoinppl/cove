@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
-use tracing::trace;
+use tracing::{debug, info, trace, warn};
 
-use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
+use crate::{
+    fee_client::FEE_CLIENT, manager::wallet_manager::WalletManagerError, transaction::FeeRate,
+    wallet::Address,
+};
 
 use cove_types::{
     amount::Amount,
@@ -76,7 +79,14 @@ impl RustSendFlowManager {
     pub(crate) async fn get_and_update_base_fee_rate_options(
         self: &Arc<Self>,
     ) -> Option<Arc<FeeRateOptions>> {
-        let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
+        let fee_response = match FEE_CLIENT.fetch_and_get_fees().await {
+            Ok(fee_response) => fee_response,
+            Err(error) => {
+                self.record_fee_failure(Some(format!("unable to fetch fee rates: {error}")));
+                return None;
+            }
+        };
+
         let fees = Arc::new(remote_fee_rate_options(fee_response)?);
 
         {
@@ -86,6 +96,25 @@ impl RustSendFlowManager {
         }
 
         Some(fees)
+    }
+
+    /// Logs a fee update failure only when it differs from the last one, since fees recalculate
+    /// on every amount or address edit
+    pub(crate) fn record_fee_failure(&self, failure: Option<String>) {
+        let previous = {
+            let mut state = self.state.lock();
+            if state.last_fee_failure == failure {
+                return;
+            }
+
+            std::mem::replace(&mut state.last_fee_failure, failure.clone())
+        };
+
+        match (previous, failure) {
+            (_, Some(failure)) => warn!("send flow fee update failed: {failure}"),
+            (Some(_), None) => info!("send flow fee update recovered"),
+            (None, None) => {}
+        }
     }
 
     pub(crate) async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
@@ -125,14 +154,24 @@ impl RustSendFlowManager {
 
         let address = {
             let first_address = state.lock().first_address.clone();
-            if first_address.is_none() {
-                self.get_first_address().await;
-            }
+            let first_address_result = match first_address {
+                Some(_) => Ok(()),
+                None => self.get_first_address().await,
+            };
 
             match (address, first_address) {
                 (Some(address), _) => address,
                 (None, Some(first_address)) => first_address,
-                _ => return,
+                (None, None) => {
+                    // fees fall back to the first address until the user enters one
+                    if let Err(error) = first_address_result {
+                        self.record_fee_failure(Some(format!(
+                            "unable to load first address: {error}"
+                        )));
+                    }
+
+                    return;
+                }
             }
         };
 
@@ -170,13 +209,33 @@ impl RustSendFlowManager {
                 ))
             }
         }
-        .await
-        .unwrap();
+        .await;
 
         let mut fee_rate_options = match new_fee_rate_options {
-            Ok(fee_rate_options) => fee_rate_options,
-            Err(_) => return,
+            Ok(Ok(fee_rate_options)) => fee_rate_options,
+            // an amount below dust or above the spendable balance is an input state the screen
+            // shows, and its message changes with every keystroke, so it is not a failure
+            Ok(Err(WalletManagerError::OutputBelowDustLimit)) => {
+                return debug!("send flow fees unavailable: amount below dust limit");
+            }
+
+            Ok(Err(WalletManagerError::InsufficientFunds(_))) => {
+                return debug!("send flow fees unavailable: insufficient funds");
+            }
+
+            Ok(Err(error)) => {
+                return self.record_fee_failure(Some(format!("unable to calculate fees: {error}")));
+            }
+
+            // the wallet actor stops when the wallet closes, so this send flow is going away
+            Err(_) => {
+                return self.record_fee_failure(Some(
+                    "wallet actor stopped during fee calculation".to_string(),
+                ));
+            }
         };
+
+        self.record_fee_failure(None);
 
         let selected_fee_rate = self.selected_fee_rate();
         if let Some(updated_options) = self

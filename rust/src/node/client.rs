@@ -60,13 +60,13 @@ impl core::fmt::Debug for NodeClient {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to create node client: {0}")]
-    CreateEsploraClient(esplora_client::Error),
+    CreateEsploraClient(EsploraError),
 
     #[error("failed to create node client: {0}")]
     CreateElectrumClient(electrum_client::Error),
 
     #[error("failed to connect to node: {0}")]
-    EsploraConnect(esplora_client::Error),
+    EsploraConnect(EsploraError),
 
     #[error("failed to connect to node: {0}")]
     ElectrumConnect(electrum_client::Error),
@@ -75,28 +75,72 @@ pub enum Error {
     ElectrumScan(electrum_client::Error),
 
     #[error("failed to complete wallet scan: {0}")]
-    EsploraScan(Box<esplora_client::Error>),
+    EsploraScan(EsploraError),
 
     #[error("failed to complete progressive wallet scan: {0}")]
     ProgressiveScan(#[from] cove_bdk_progressive_scan::Error),
 
     #[error("failed to get a address: {0}")]
-    EsploraAddress(esplora_client::Error),
+    EsploraAddress(EsploraError),
 
     #[error("failed to get a address: {0}")]
     ElectrumAddress(electrum_client::Error),
 
     #[error("failed to broadcast transaction: {0}")]
-    EsploraBroadcast(esplora_client::Error),
+    EsploraBroadcast(EsploraError),
 
     #[error("failed to broadcast transaction: {0}")]
     ElectrumBroadcast(electrum_client::Error),
 
     #[error("failed to get transaction: {0}")]
-    EsploraGetTransaction(esplora_client::Error),
+    EsploraGetTransaction(EsploraError),
 
     #[error("failed to get transaction: {0}")]
     ElectrumGetTransaction(electrum_client::Error),
+}
+
+/// An esplora client error without the request URL
+///
+/// A node URL can carry an access token in its path or query, and node errors reach logs, so
+/// the only way in is through `From`, which drops it
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct EsploraError(esplora_client::Error);
+
+impl From<esplora_client::Error> for EsploraError {
+    fn from(error: esplora_client::Error) -> Self {
+        Self(cove_bdk_progressive_scan::esplora_error_without_url(error))
+    }
+}
+
+impl From<Box<esplora_client::Error>> for EsploraError {
+    fn from(error: Box<esplora_client::Error>) -> Self {
+        Self::from(*error)
+    }
+}
+
+impl Error {
+    /// A stable name for the failure, safe to log
+    ///
+    /// The underlying client errors can quote the node URL the user entered, including any
+    /// credentials in it
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::CreateEsploraClient(_) => "create_esplora_client",
+            Self::CreateElectrumClient(_) => "create_electrum_client",
+            Self::EsploraConnect(_) => "esplora_connect",
+            Self::ElectrumConnect(_) => "electrum_connect",
+            Self::ElectrumScan(_) => "electrum_scan",
+            Self::EsploraScan(_) => "esplora_scan",
+            Self::ProgressiveScan(_) => "progressive_scan",
+            Self::EsploraAddress(_) => "esplora_address",
+            Self::ElectrumAddress(_) => "electrum_address",
+            Self::EsploraBroadcast(_) => "esplora_broadcast",
+            Self::ElectrumBroadcast(_) => "electrum_broadcast",
+            Self::EsploraGetTransaction(_) => "esplora_get_transaction",
+            Self::ElectrumGetTransaction(_) => "electrum_get_transaction",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -11,7 +11,7 @@ use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
-use tracing::info;
+use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
@@ -133,17 +133,39 @@ impl RustCloudBackupManager {
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
+        // each read only refines the wallet count, so a failure falls back instead of failing
+        // the upload, and the log keeps the cause of a wrong count
         let existing_cloud_record_ids = cloud
             .list_wallet_backups(namespace.clone())
             .await
+            .inspect_err(|error| {
+                warn!("Wallet upload: failed to list cloud wallet backups: {error}")
+            })
             .ok()
             .map(|record_ids| record_ids.into_iter().collect::<HashSet<_>>());
 
-        let existing_sync_state_record_ids = db.cloud_blob_sync_states.list().ok().map(|states| {
-            states.into_iter().map(|state| state.record_id().to_string()).collect::<HashSet<_>>()
-        });
-        let previous_count =
-            db.cloud_backup_state.get().ok().and_then(|state| state.wallet_count()).unwrap_or(0);
+        let existing_sync_state_record_ids = db
+            .cloud_blob_sync_states
+            .list()
+            .inspect_err(|error| {
+                warn!("Wallet upload: failed to read cloud blob sync states: {error}")
+            })
+            .ok()
+            .map(|states| {
+                states
+                    .into_iter()
+                    .map(|state| state.record_id().to_string())
+                    .collect::<HashSet<_>>()
+            });
+
+        let previous_count = db
+            .cloud_backup_state
+            .get()
+            .inspect_err(|error| warn!("Wallet upload: failed to read cloud backup state: {error}"))
+            .ok()
+            .and_then(|state| state.wallet_count())
+            .unwrap_or(0);
+
         let batch = CloudWalletUploadBatch {
             cloud,
             namespace,

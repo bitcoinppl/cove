@@ -1,4 +1,5 @@
 use cove_util::ResultExt as _;
+use cove_util::json::JsonDecodeError;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock, Mutex};
 use tracing::{info, warn};
@@ -668,8 +669,12 @@ impl<S: CsppStore> Cspp<S> {
 
         let hex = cryptor.decrypt_from_string(encrypted).map_err_str(CsppError::Decrypt)?;
 
-        let decoded =
-            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(CsppError::InvalidData)?);
+        // hex's error names the offending character, which here is master key material
+        let decoded = Zeroizing::new(
+            hex::decode(hex.as_str())
+                .map_err(|_| CsppError::InvalidData("master key is not valid hex".into()))?,
+        );
+
         let bytes: [u8; 32] = decoded
             .as_slice()
             .try_into()
@@ -775,8 +780,11 @@ impl<S: CsppStore> Cspp<S> {
             return Ok(None);
         };
 
-        let journal: MasterKeyPromotionJournal =
-            serde_json::from_str(&serialized).map_err_str(CsppError::Deserialization)?;
+        // the journal holds master key entries, so a parse failure keeps only its position
+        let journal: MasterKeyPromotionJournal = serde_json::from_str(&serialized)
+            .map_err(JsonDecodeError::from)
+            .map_err_str(CsppError::Deserialization)?;
+
         if journal.version != MASTER_KEY_PROMOTION_JOURNAL_VERSION {
             return Err(CsppError::InvalidData(format!(
                 "unsupported master key promotion journal version {}",

@@ -43,9 +43,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -56,6 +58,8 @@ import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+
+private const val TAG = "NodeSettings"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,10 +160,15 @@ fun NodeSettingsScreen(
                 errorMessage = errorNotFound.format(e.v1)
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
+                // checkSelectedNode returns the failure without logging it, unlike checkAndSaveNode
+                Log.w(TAG, "Preset node check failed for $nodeName: ${e.v1}")
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                Log.e(TAG, "Preset node selection failed for $nodeName", e)
                 errorTitle = errorTitleDefault
                 errorMessage = errorUnknown.format(e.message ?: "")
                 showErrorDialog = true

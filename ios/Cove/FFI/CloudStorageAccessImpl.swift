@@ -418,19 +418,17 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         try await run {
             let namespace = try self.helper.validateNamespace(namespace)
             let namespaceDirectory = try self.helper.namespaceDirectoryReadURL(namespace: namespace)
-            let legacyFiles =
-                (try? self.helper.localFileSnapshot(
-                    namespacePath: namespaceDirectory.path,
-                    prefix: csppWalletFilePrefix()
-                )) ?? []
+            let legacyFiles = self.helper.locallyVisibleFileNames(
+                namespacePath: namespaceDirectory.path,
+                prefix: csppWalletFilePrefix()
+            )
 
             let walletsDirectory = try self.helper.walletsDirectoryReadURL(namespace: namespace)
-            let currentFiles =
-                ((try? self.helper.localFileSnapshot(
-                    namespacePath: walletsDirectory.path,
-                    prefix: csppWalletFilePrefix()
-                )) ?? [])
-                .map { self.helper.walletLocation(filename: $0) }
+            let currentFiles = self.helper.locallyVisibleFileNames(
+                namespacePath: walletsDirectory.path,
+                prefix: csppWalletFilePrefix()
+            )
+            .map { self.helper.walletLocation(filename: $0) }
 
             return CloudStorageInventorySnapshot(
                 names: Array(Set(legacyFiles + currentFiles)).sorted(),

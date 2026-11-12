@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+private let logger = Log(id: "QrCodeScanView")
+
 struct QrCodeScanView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -74,6 +76,15 @@ struct QrCodeScanView: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
+        // the camera reports a failure once, when it cannot start, so this logs on that change
+        if case let .failure(error) = result {
+            if case ScanError.permissionDenied = error {
+                logger.info("camera permission denied")
+            } else {
+                logger.warn("camera scan failed: \(error.logSummary)")
+            }
+        }
+
         // permission handling
         if case let .failure(error) = result, case ScanError.permissionDenied = error {
             dismiss()
@@ -112,6 +123,7 @@ struct QrCodeScanView: View {
     }
 
     private func handleFatalScanError(_ error: Error) {
+        logger.warn("QR scan stopped on a fatal error: \(error.logSummary)")
         scanner.reset()
         dismiss()
         app.alertState = TaggedItem(

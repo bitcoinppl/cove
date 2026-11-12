@@ -12,7 +12,7 @@ use cove_types::WalletId;
 use cove_util::{ResultExt as _, encryption::Cryptor};
 
 use super::{
-    KeychainError, SharedAccess,
+    KeychainError, SavedValueParseError, SharedAccess,
     encrypted_pair::{EncryptedPair, State},
 };
 
@@ -168,16 +168,16 @@ impl WalletSecret {
             // wallet secrets saved before typed storage were untagged mnemonics
             return Mnemonic::from_str(value)
                 .map(Self::Mnemonic)
-                .map_err_str(KeychainError::ParseSavedValue);
+                .map_err(|_| KeychainError::ParseSavedValue(SavedValueParseError::Mnemonic));
         };
 
         if let Some(xpriv) = tagged_value.strip_prefix(XPRIV_TAG) {
             return WalletXprv::parse(xpriv)
                 .map(Self::Xpriv)
-                .map_err_str(KeychainError::ParseSavedValue);
+                .map_err(|_| KeychainError::ParseSavedValue(SavedValueParseError::Xpriv));
         }
 
-        Err(KeychainError::ParseSavedValue("unknown wallet secret type".to_string()))
+        Err(KeychainError::ParseSavedValue(SavedValueParseError::UnknownWalletSecretType))
     }
 }
 

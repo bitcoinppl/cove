@@ -306,8 +306,11 @@ pub enum WalletManagerError {
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
 
-    #[error("unable to mark wallet as verified")]
-    MarkWalletAsVerifiedError(#[from] DatabaseError),
+    #[error("unable to save unsigned transaction: {0}")]
+    SaveUnsignedTransactionError(DatabaseError),
+
+    #[error("unable to delete unsigned transaction: {0}")]
+    DeleteUnsignedTransactionError(DatabaseError),
 
     #[error("unable to load wallet: {0}")]
     LoadWalletError(#[from] WalletError),
@@ -1075,8 +1078,10 @@ impl RustWalletManager {
 
         let actor = self.actor.clone();
         let psbt = Arc::unwrap_or_clone(psbt).into();
-        let transaction =
-            call!(actor.finalize_psbt(psbt)).await.map_err(|_| Error::ManagerClosed)??;
+        let transaction = call!(actor.finalize_psbt(psbt))
+            .await
+            .map_err(|_| Error::ManagerClosed)?
+            .inspect_err(|error| warn!("failed to finalize signed psbt: {error}"))?;
 
         Ok(BitcoinTransaction::from(transaction))
     }

@@ -770,10 +770,22 @@ enum WalletManagerPreview {
         }
 
         rustBridge.async { [weak self] in
-            guard let self, let rust = self.rust else { return }
+            guard let self else { return }
 
-            self.logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
-            try? rust.dispatch(action: action)
+            // a queued action can reach a closed manager, which drops it, so the case name is
+            // logged without its payload, which can hold labels or names
+            let actionKind = Mirror(reflecting: action).children.first?.label ?? "\(action)"
+            guard let rust = self.rust else {
+                self.logger.warn("dropped wallet action \(actionKind): manager closed")
+                return
+            }
+
+            self.logger.debug("dispatch: \(actionKind)")
+            do {
+                try rust.dispatch(action: action)
+            } catch {
+                self.logger.warn("dropped wallet action \(actionKind): \(error.logSummary)")
+            }
         }
     }
 

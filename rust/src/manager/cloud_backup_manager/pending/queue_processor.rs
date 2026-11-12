@@ -7,6 +7,7 @@
 use cove_cspp::backup_data::EncryptedWalletBackup;
 use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
+use cove_util::json::JsonDecodeError;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -312,6 +313,7 @@ impl PendingUploadVerifier {
         let encrypted: EncryptedWalletBackup = match serde_json::from_slice(&wallet_json) {
             Ok(encrypted) => encrypted,
             Err(error) => {
+                let error = JsonDecodeError::from(error);
                 return BlobCheckResult::terminal_failure(format!(
                     "deserialize wallet backup: {error}"
                 ));

@@ -4,7 +4,7 @@ use cove_types::WalletId;
 use cove_util::{ResultExt as _, encryption::Cryptor};
 
 use super::{
-    KeychainError, SharedAccess,
+    KeychainError, SavedValueParseError, SharedAccess,
     encrypted_pair::{EncryptedPair, State},
 };
 
@@ -47,10 +47,10 @@ impl TapSignerBackupStore {
         let backup_hex = cryptor
             .decrypt_from_string(&encrypted_backup)
             .map_err_prefix("tap signer backup", KeychainError::Decrypt)?;
-        let backup = Zeroizing::new(
-            hex::decode(backup_hex.as_str())
-                .map_err_prefix("tap signer backup hex", KeychainError::ParseSavedValue)?,
-        );
+        let backup =
+            Zeroizing::new(hex::decode(backup_hex.as_str()).map_err(|_| {
+                KeychainError::ParseSavedValue(SavedValueParseError::TapSignerBackup)
+            })?);
 
         Ok(Some(backup))
     }

@@ -83,6 +83,27 @@ pub enum WalletError {
     DescriptorKeyParseError(String),
 }
 
+// the descriptor parser quotes the stored descriptor it rejects, and load errors reach logs, so
+// descriptor failures are named without the parser's text
+impl From<bdk_wallet::LoadWithPersistError<bdk_wallet::rusqlite::Error>> for WalletError {
+    fn from(error: bdk_wallet::LoadWithPersistError<bdk_wallet::rusqlite::Error>) -> Self {
+        use bdk_wallet::{LoadError, LoadWithPersistError};
+
+        let message = match error {
+            LoadWithPersistError::Persist(error) => error.to_string(),
+            LoadWithPersistError::InvalidChangeSet(LoadError::Descriptor(_)) => {
+                "stored wallet descriptor is invalid".to_string()
+            }
+            LoadWithPersistError::InvalidChangeSet(LoadError::Mismatch(_)) => {
+                "stored wallet does not match the expected wallet".to_string()
+            }
+            LoadWithPersistError::InvalidChangeSet(error) => error.to_string(),
+        };
+
+        Self::LoadError(message)
+    }
+}
+
 #[derive(Debug, uniffi::Object)]
 pub struct Wallet {
     pub id: WalletId,
@@ -226,7 +247,7 @@ impl Wallet {
 
         let wallet = bdk_wallet::Wallet::load()
             .load_wallet(&mut store.conn)
-            .map_err_str(WalletError::LoadError)?
+            .map_err(WalletError::from)?
             .ok_or(WalletError::WalletNotFound)?;
 
         let mut metadata = Database::global()

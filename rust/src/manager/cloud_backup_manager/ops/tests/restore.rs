@@ -207,6 +207,167 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
         );
 }
 
+// decrypted backup content that cloud restore rejects must reach restore logs and errors only
+// as a failure kind or serde's category and position, since the parsers' own text quotes the
+// rejected value
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_keeps_malformed_decrypted_values_out_of_logs() {
+    use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
+
+    use crate::manager::cloud_backup_manager::wallets::{WalletBackupLookup, WalletBackupReader};
+    use crate::test_support::log_capture::LogCapture;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let metadata_marker = "private-user-text-in-wallet-metadata";
+    let entry_marker = "private-user-text-in-wallet-entry";
+    let wallet_id_marker = "private-user-text-in-wallet-id";
+    let wallet_name_marker = "private-user-text-in-wallet-name";
+    let metadata_id_marker = "private-user-text-in-metadata-id";
+    let label_marker = "private-user-text-in-wallet-label";
+    let envelope_marker = "private-text-in-backup-envelope";
+    let markers = [
+        metadata_marker,
+        entry_marker,
+        wallet_id_marker,
+        wallet_name_marker,
+        metadata_id_marker,
+        label_marker,
+        envelope_marker,
+    ];
+
+    let mut record_ids = Vec::new();
+    let mut upload = |metadata: &WalletMetadata, entry: serde_json::Value| {
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+        let remote_metadata = RemotePayloadMetadata {
+            wallet_id: Some(metadata.id.to_string()),
+            ..RemotePayloadMetadata::default()
+        };
+
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            record_id.clone(),
+            encrypted_wallet_backup_bytes_for_json(&entry, &master_key, remote_metadata),
+        );
+        record_ids.push(record_id.clone());
+
+        record_id
+    };
+
+    // the wallet restores, so the restore itself is known to have run, but one of its labels
+    // has a type no label can have
+    let good_wallet = xpub_only_wallet_metadata();
+    let labels = format!(r#"{{"type":"{label_marker}","ref":"x","label":"y"}}"#);
+    let entry = wallet_entry_with_labels(&good_wallet, Some(&labels));
+    upload(&good_wallet, serde_json::to_value(entry).unwrap());
+
+    // the wallet entry parses, but its metadata has a network no wallet can have
+    let wallet = xpub_only_wallet_metadata();
+    let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
+    entry["metadata"]["network"] = serde_json::Value::from(metadata_marker);
+    let bad_metadata_record_id = upload(&wallet, entry);
+
+    // the decrypted wallet entry itself fails to parse
+    let wallet = xpub_only_wallet_metadata();
+    let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
+    entry["wallet_mode"] = serde_json::Value::from(entry_marker);
+    let bad_entry_record_id = upload(&wallet, entry);
+
+    // the decrypted wallet id differs from the one the envelope names
+    let wallet = xpub_only_wallet_metadata();
+    let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
+    entry["wallet_id"] = serde_json::Value::from(wallet_id_marker);
+    let wallet_id_record_id = upload(&wallet, entry);
+
+    // the backup parses, but its xpub does not, and neither the wallet's name nor the id inside
+    // its metadata, which the envelope does not check, may be logged with it. Without a
+    // fingerprint its fallback duplicate key is its own id, so it can never be skipped as a
+    // duplicate of the wallet that restores
+    let mut wallet = xpub_only_wallet_metadata();
+    wallet.master_fingerprint = None;
+    let mut entry = serde_json::to_value(wallet_entry_with_labels(&wallet, None)).unwrap();
+    entry["metadata"]["name"] = serde_json::Value::from(wallet_name_marker);
+    entry["metadata"]["id"] = serde_json::Value::from(metadata_id_marker);
+    entry["xpub"] = serde_json::Value::from("not-an-xpub");
+    upload(&wallet, entry);
+
+    // the encrypted envelope around the backup fails to parse
+    let envelope_record_id = cove_cspp::backup_data::wallet_record_id("malformed-envelope");
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        envelope_record_id.clone(),
+        serde_json::to_vec(&serde_json::json!({ "version": envelope_marker })).unwrap(),
+    );
+    record_ids.push(envelope_record_id.clone());
+
+    globals.cloud.set_wallet_files(
+        namespace.clone(),
+        record_ids.iter().map(String::as_str).map(wallet_filename_from_record_id).collect(),
+    );
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let capture = LogCapture::start();
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+    let logs = capture.text();
+
+    let reader = WalletBackupReader::new(
+        CloudStorage::global_explicit_client(),
+        namespace,
+        zeroize::Zeroizing::new(master_key.critical_data_key()),
+    );
+    let mut errors = Vec::new();
+    let malformed_record_ids =
+        [&bad_metadata_record_id, &bad_entry_record_id, &wallet_id_record_id, &envelope_record_id];
+    for record_id in malformed_record_ids {
+        match reader.lookup(record_id).await {
+            Ok(WalletBackupLookup::Found(_)) => panic!("malformed wallet backup was read"),
+            Ok(_) => panic!("malformed wallet backup was not found"),
+            Err(error) => errors.push(error),
+        }
+    }
+
+    // failure messages never print the logs or errors, which would carry the markers
+    for marker in markers {
+        assert!(!logs.contains(marker), "restore logs quote decrypted backup content");
+        assert!(
+            report.failed_wallet_errors.iter().all(|error| !error.contains(marker)),
+            "restore report quotes decrypted backup content"
+        );
+
+        for error in &errors {
+            assert!(!error.to_string().contains(marker), "error text quotes backup content");
+            assert!(!format!("{error:?}").contains(marker), "error debug quotes backup content");
+        }
+    }
+
+    assert_eq!(report.wallets_restored, 1);
+    assert_eq!(report.wallets_failed, 5);
+    assert_eq!(logs.matches("Failed to download wallet backup").count(), 4, "download logs");
+    assert_eq!(logs.matches("Failed to restore wallet backup").count(), 1, "restore logs");
+    assert!(logs.contains("parse wallet metadata: data error"), "metadata cause missing");
+    assert!(
+        logs.contains("deserialization failed: data error at line 1 column"),
+        "wallet entry cause missing"
+    );
+    assert!(logs.contains("remote payload wallet_id mismatch"), "wallet id cause missing");
+    assert!(logs.contains("deserialize wallet: data error"), "envelope cause missing");
+    assert!(logs.contains("failed to parse xpub"), "xpub cause missing");
+    assert!(logs.contains("Failed to restore labels for restored wallet"), "label warning missing");
+}
+
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_queues_reupload_when_cloud_upload_confirmation_lags() {
     let _guard = async_test_lock().lock().await;

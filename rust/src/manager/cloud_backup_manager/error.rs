@@ -4,6 +4,7 @@ use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{
     cloud_storage::CloudStorageError, keychain::KeychainError, passkey::PasskeyError,
 };
+use cove_util::json::JsonDecodeError;
 use tracing::{error, info, warn};
 
 use crate::backup::import::LocalWalletConflict;
@@ -606,9 +607,10 @@ impl From<crate::backup::BackupError> for CloudBackupInternalError {
     }
 }
 
+// serde's text quotes the rejected value, which can be decrypted backup content
 impl From<serde_json::Error> for CloudBackupError {
     fn from(error: serde_json::Error) -> Self {
-        Self::internal(error)
+        Self::internal(JsonDecodeError::from(error))
     }
 }
 

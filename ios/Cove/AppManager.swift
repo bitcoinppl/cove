@@ -154,7 +154,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
         navigationCoordinator = NavigationCoordinator(routeClient: rust)
         managerCache = ManagerCache(backgroundScanTaskHandler: BackgroundScanTaskHandler())
         database = Database()
-        wallets = (try? database.wallets().all()) ?? []
+        wallets = Self.readWallets(database, logger: logger)
         needsOnboarding = rust.needsOnboarding()
 
         // set the cached prices and fees
@@ -262,7 +262,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
         colorSchemeSelection = globalConfig.colorScheme()
         selectedNode = globalConfig.selectedNode()
         selectedFiatCurrency = globalConfig.selectedFiatCurrency()
-        wallets = (try? database.wallets().all()) ?? []
+        wallets = Self.readWallets(database, logger: logger)
 
         router = rust.state().router
         routeId = UUID()
@@ -347,7 +347,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     /// Reload wallets from database (e.g. after cloud restore)
     func reloadWallets() {
-        wallets = (try? database.wallets().all()) ?? []
+        wallets = Self.readWallets(database, logger: logger)
         clearWalletManager()
     }
 
@@ -406,7 +406,20 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     func loadWallets() {
-        wallets = (try? database.wallets().all()) ?? []
+        wallets = Self.readWallets(database, logger: logger)
+    }
+
+    /// Reads the wallet list for the selected network and mode, logging a failed read
+    ///
+    /// A failed read still shows an empty list, so the log is the only trace of why wallets
+    /// disappeared
+    private static func readWallets(_ database: Database, logger: Log) -> [WalletMetadata] {
+        do {
+            return try database.wallets().all()
+        } catch {
+            logger.error("failed to read wallet list: \(error)")
+            return []
+        }
     }
 
     func moveWallets(from source: IndexSet, to destination: Int) {
@@ -835,7 +848,7 @@ extension AppManager {
             }
 
         case .walletsChanged:
-            wallets = (try? database.wallets().all()) ?? []
+            wallets = Self.readWallets(database, logger: logger)
 
         case let .clearCachedWalletManager(walletId):
             clearWalletManager(id: walletId)

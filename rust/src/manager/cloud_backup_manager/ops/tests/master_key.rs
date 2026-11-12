@@ -112,3 +112,26 @@ fn blocking_cloud_error_rewrites_offline_storage_errors_to_step_message() {
             if message == "Reconnect to the internet, then try enabling cloud backup again"
     ));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn cancelled_master_key_recovery_keeps_cancel_reader_message() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    seed_verifiable_cloud_master_key(globals);
+    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+    let Err(error) =
+        manager.recover_local_master_key_from_cloud(&namespace, "recovery required").await
+    else {
+        panic!("cancelled passkey recovered a master key");
+    };
+
+    // a typed cancel shows the cancel copy, not the generic passkey failure
+    assert_eq!(error.reader_message(), "The passkey request did not complete. Try again.");
+}

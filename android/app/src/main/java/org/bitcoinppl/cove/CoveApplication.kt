@@ -43,6 +43,9 @@ open class CoveApplication : Application() {
 
         try {
             setRootDataDir(dataDir.absolutePath)
+
+            // next to the Rust capture files, so a data reset clears both
+            AppLogStore.install(dataDir.resolve("logs"))
             Log.d(TAG, "Root data directory set to: ${dataDir.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set root data directory", e)
