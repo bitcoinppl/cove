@@ -634,4 +634,5 @@ coverage = [
     "human",
 ]
 # the simulator has no local network privacy, so only a device shows the prompt, and a search
-# made before it is answered can come back empty until Search Again
+# made before it is answered can come back empty until Search Again. Denying the prompt leaves
+# every search empty, and Open Settings must lead to Cove's Local Network switch
