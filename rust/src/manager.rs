@@ -4,6 +4,7 @@ pub mod coin_control_manager;
 pub mod connectivity_manager;
 pub mod deferred_dispatch;
 pub mod deferred_sender;
+pub mod fee_bump_manager;
 pub mod import_wallet_manager;
 pub mod key_teleport_manager;
 pub mod onboarding_manager;
