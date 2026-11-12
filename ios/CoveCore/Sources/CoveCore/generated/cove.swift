@@ -21424,7 +21424,7 @@ public enum AppAlertState {
     )
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network
     )
-    case foundAddress(address: Address, amount: Amount?
+    case foundAddress(address: Address, amount: Amount?, ownership: String?
     )
     case unableToSelectWallet
     case errorImportingHardwareWallet(message: String
@@ -21542,7 +21542,7 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
         case 7: return .addressWrongNetwork(address: try FfiConverterTypeAddress.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), currentNetwork: try FfiConverterTypeNetwork.read(from: &buf)
         )
 
-        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
+        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf), ownership: try FfiConverterOptionString.read(from: &buf)
         )
 
         case 9: return .unableToSelectWallet
@@ -21651,10 +21651,11 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeNetwork.write(currentNetwork, into: &buf)
 
 
-        case let .foundAddress(address,amount):
+        case let .foundAddress(address,amount,ownership):
             writeInt(&buf, Int32(8))
             FfiConverterTypeAddress.write(address, into: &buf)
             FfiConverterOptionTypeAmount.write(amount, into: &buf)
+            FfiConverterOptionString.write(ownership, into: &buf)
 
 
         case .unableToSelectWallet:
@@ -47476,6 +47477,27 @@ public func initializeApp()  {try! rustCall() {
 }
 }
 /**
+ * The alert for a scanned address that is valid on the selected network
+ *
+ * It names which of the user's wallets owns the address when one does. The lookup searches only
+ * wallets on the selected wallet's network and in its wallet mode, and nothing leaves the device
+ */
+public func foundAddressAlert(address: AddressWithNetwork)async  -> AppAlertState  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_found_address_alert(FfiConverterTypeAddressWithNetwork_lower(address)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAppAlertState_lift,
+            errorHandler: nil
+
+        )
+}
+/**
  * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
  * (encryption key derivation + redb migrations) on a blocking thread, then
  * attempts BDK migration. BDK migration failures are non-blocking — the app
@@ -48105,6 +48127,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_initialize_app() != 18498) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_found_address_alert() != 10583) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_bootstrap() != 63544) {

@@ -1081,6 +1081,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_initialize_app(
     ): Short
+    external fun uniffi_cove_checksum_func_found_address_alert(
+    ): Short
     external fun uniffi_cove_checksum_func_bootstrap(
     ): Short
     external fun uniffi_cove_checksum_func_bootstrap_progress(
@@ -3667,6 +3669,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_func_initialize_app(uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_func_found_address_alert(`address`: Long,
+    ): Long
     external fun uniffi_cove_fn_func_bootstrap(
     ): Long
     external fun uniffi_cove_fn_func_bootstrap_progress(uniffi_out_err: UniffiRustCallStatus,
@@ -3919,6 +3923,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_initialize_app() != 18498.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_found_address_alert() != 10583.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_bootstrap() != 63544.toShort()) {
@@ -37613,7 +37620,8 @@ sealed class AppAlertState: Disposable  {
 
     data class FoundAddress(
         val `address`: org.bitcoinppl.cove_core.types.Address,
-        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : AppAlertState()
+        val `amount`: org.bitcoinppl.cove_core.types.Amount?,
+        val `ownership`: kotlin.String?) : AppAlertState()
 
     {
 
@@ -37837,7 +37845,8 @@ sealed class AppAlertState: Disposable  {
 
     Disposable.destroy(
         this.`address`,
-        this.`amount`
+        this.`amount`,
+        this.`ownership`
     )
 
             }
@@ -38050,6 +38059,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
             8 -> AppAlertState.FoundAddress(
                 FfiConverterTypeAddress.read(buf),
                 FfiConverterOptionalTypeAmount.read(buf),
+                FfiConverterOptionalString.read(buf),
                 )
             9 -> AppAlertState.UnableToSelectWallet
             10 -> AppAlertState.ErrorImportingHardwareWallet(
@@ -38169,6 +38179,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeAddress.allocationSize(value.`address`)
                 + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
+                + FfiConverterOptionalString.allocationSize(value.`ownership`)
             )
         }
         is AppAlertState.UnableToSelectWallet -> {
@@ -38376,6 +38387,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 buf.putInt(8)
                 FfiConverterTypeAddress.write(value.`address`, buf)
                 FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
+                FfiConverterOptionalString.write(value.`ownership`, buf)
                 Unit
             }
             is AppAlertState.UnableToSelectWallet -> {
@@ -70015,6 +70027,27 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 }
 
 
+
+        /**
+         * The alert for a scanned address that is valid on the selected network
+         *
+         * It names which of the user's wallets owns the address when one does. The lookup searches only
+         * wallets on the selected wallet's network and in its wallet mode, and nothing leaves the device
+         */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `foundAddressAlert`(`address`: AddressWithNetwork) : AppAlertState {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_found_address_alert(
+        FfiConverterTypeAddressWithNetwork.lower(`address`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeAppAlertState.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
 
         /**
          * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap

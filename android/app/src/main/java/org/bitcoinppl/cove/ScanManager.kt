@@ -9,6 +9,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
+import java.util.concurrent.atomic.AtomicLong
 
 @Stable
 class ScanManager private constructor() {
@@ -16,6 +17,9 @@ class ScanManager private constructor() {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val app: AppManager get() = AppManager.getInstance()
+
+    // the latest scanned address, so an older address's alert never replaces a newer one's
+    private val latestAddressScan = AtomicLong()
     private val keyTeleport = KeyTeleportScanHandler(app)
 
     fun handleMultiFormat(multiFormat: MultiFormat) {
@@ -214,8 +218,22 @@ class ScanManager private constructor() {
             return
         }
 
-        val amount = addressWithNetwork.amount()
-        app.alertState = TaggedItem(AppAlertState.FoundAddress(address, amount))
+        val scan = latestAddressScan.incrementAndGet()
+        val alertChangesBefore = app.alertChanges
+        mainScope.launch {
+            val alert = foundAddressAlert(addressWithNetwork)
+
+            // anything that happened while the lookup ran makes this alert stale: a newer address,
+            // another alert shown or dismissed from any path, or a wallet or mode switch
+            val selectedNow = Database().globalConfig().selectedWallet()
+            val stale =
+                scan != latestAddressScan.get() ||
+                    app.alertChanges != alertChangesBefore ||
+                    selectedNow != selectedWallet
+            if (stale) return@launch
+
+            app.alertState = TaggedItem(alert)
+        }
     }
 
     private fun handleTransaction(transaction: BitcoinTransaction) {
