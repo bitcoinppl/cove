@@ -1,4 +1,4 @@
-//! Pays a receiver's pj URI through the send screen's own flow: the URI goes into the address
+//! Pays a payment request through the send screen's own flow: the URI goes into the address
 //! field, the send flow builds the payment and picks how the confirm screen sends it, and the
 //! wallet sends it the way the confirm screen does
 
@@ -18,7 +18,6 @@ use crate::{
         import_wallet_manager::import_mnemonic_with_target,
         send_flow_manager::{RustSendFlowManager, SendFlowManagerAction},
     },
-    payjoin_setting::test_support::PayjoinChoiceGuard,
     router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs, UnsignedPaymentMode},
     test_support::{
         fake_node::wait_until,
@@ -27,22 +26,21 @@ use crate::{
     wallet::metadata::WalletMode,
 };
 
-/// With Payjoin on, a pj URI entered in the send screen reaches the confirm screen as a
-/// Payjoin, and sending it ends with the receiver's proposal as the one broadcast
+/// A v2 pj URI entered in the send screen reaches the confirm screen as a Payjoin, and sending
+/// it ends with the receiver's proposal as the one broadcast
 #[tokio::test(flavor = "current_thread")]
-async fn a_pj_uri_sent_with_payjoin_on_broadcasts_the_receivers_proposal() {
+async fn a_pj_uri_sent_from_the_send_screen_broadcasts_the_receivers_proposal() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
-    let _choice = PayjoinChoiceGuard::set(true);
     let services = PayjoinServices::start(2).await;
     let mut send = SendFromScreen::open(&mut fx, &services).await;
 
-    let confirm = send.confirm_pj_uri().await;
+    let confirm = send.confirm(&send.uri).await;
     let SendConfirmationInput::Unsigned { mode } = confirm.input else {
         panic!("a hot wallet confirms an unsigned payment");
     };
     let UnsignedPaymentMode::Payjoin { intent } = &mode else {
-        panic!("with Payjoin on, the confirm screen sends a Payjoin, got {mode:?}");
+        panic!("a v2 pj URI confirms as a Payjoin, got {mode:?}");
     };
     assert_eq!(intent.endpoint, send.endpoint, "the session pays the URI's endpoint");
 
@@ -69,21 +67,26 @@ async fn a_pj_uri_sent_with_payjoin_on_broadcasts_the_receivers_proposal() {
     );
 }
 
-/// With Payjoin off, the same pj URI reaches the confirm screen as an ordinary payment, which
-/// the wallet broadcasts as built without starting a Payjoin session
+/// A BIP 78 v1 pj URI, which Cove's sender can't speak, reaches the confirm screen as an
+/// ordinary payment, which the wallet broadcasts as built without starting a Payjoin session
 #[tokio::test(flavor = "current_thread")]
-async fn a_pj_uri_sent_with_payjoin_off_broadcasts_the_payment_as_built() {
+async fn a_v1_pj_uri_sent_from_the_send_screen_broadcasts_the_payment_as_built() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
-    let _choice = PayjoinChoiceGuard::set(false);
     let services = PayjoinServices::start(2).await;
     let send = SendFromScreen::open(&mut fx, &services).await;
 
-    let confirm = send.confirm_pj_uri().await;
+    // the same receiver address and amount, behind a v1 endpoint instead of the v2 one
+    let v1_uri = format!("bitcoin:{}?amount=0.0004&pj=https://example.com/payjoin", send.address);
+    let parsed = AddressWithNetwork::try_new(&v1_uri).expect("the v1 URI parses");
+    assert!(parsed.payjoin.is_none(), "a v1 endpoint is never read as a Payjoin request");
+
+    let confirm = send.confirm(&v1_uri).await;
     let SendConfirmationInput::Unsigned { mode } = confirm.input else {
         panic!("a hot wallet confirms an unsigned payment");
     };
-    assert_eq!(mode, UnsignedPaymentMode::Standard, "with Payjoin off, the payment is ordinary");
+    assert_eq!(mode, UnsignedPaymentMode::Standard, "a v1 pj URI is paid as an ordinary payment");
+    assert_eq!(confirm.details.sending_amount.as_sats(), 40_000, "the URI's amount is paid");
 
     send.pay(&confirm.details.psbt, mode).await;
     wait_until("the payment to reach the node", || !fx.node.chain().broadcasts().is_empty()).await;
@@ -109,6 +112,7 @@ struct SendFromScreen {
     send_flow: Arc<RustSendFlowManager>,
     receiver: PayjoinReceiver,
     uri: String,
+    address: String,
     endpoint: String,
 }
 
@@ -145,20 +149,20 @@ impl SendFromScreen {
         // guards the fixture: the receiver's URI must be read as a Payjoin request
         let parsed = AddressWithNetwork::try_new(&uri).expect("the pj URI parses");
         let endpoint = parsed.payjoin.expect("the URI carries a v2 pj endpoint").endpoint;
+        let address = parsed.address.to_string();
 
         let wallet = Arc::new(wallet);
         let send_flow = RustSendFlowManager::with_preview_fees(wallet.clone());
         send_flow.load_wallet_for_test().await;
 
-        Self { wallet, screen, send_flow, receiver, uri, endpoint }
+        Self { wallet, screen, send_flow, receiver, uri, address, endpoint }
     }
 
-    /// Enters the pj URI in the address field and presses Next, returning the confirm screen's
-    /// route
-    async fn confirm_pj_uri(&self) -> SendRouteConfirmArgs {
+    /// Enters `uri` in the address field and presses Next, returning the confirm screen's route
+    async fn confirm(&self, uri: &str) -> SendRouteConfirmArgs {
         App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
 
-        let action = SendFlowManagerAction::NotifyEnteringAddressChanged(self.uri.clone());
+        let action = SendFlowManagerAction::NotifyEnteringAddressChanged(uri.to_string());
         self.send_flow.clone().dispatch(action);
 
         let send_flow = &self.send_flow;

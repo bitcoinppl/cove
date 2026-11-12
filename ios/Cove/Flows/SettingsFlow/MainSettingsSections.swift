@@ -52,16 +52,8 @@ struct MainSettingsBackupSection: View {
     }
 
     private var backupHeader: some View {
-        MainSettingsBetaHeader(title: "Backup")
-    }
-}
-
-struct MainSettingsBetaHeader: View {
-    let title: String
-
-    var body: some View {
         HStack(spacing: 6) {
-            Text(title)
+            Text("Backup")
 
             Text("BETA")
                 .font(.caption2)
@@ -71,50 +63,6 @@ struct MainSettingsBetaHeader: View {
                 .padding(.vertical, 2)
                 .background(Color.statusWarning, in: Capsule())
         }
-    }
-}
-
-/// The Payjoin switch, shown only when this build's Payjoin rollout offers it
-struct MainSettingsPayjoinSection: View {
-    @State private var setting = Database().globalConfig().payjoinSetting()
-
-    var body: some View {
-        if case let .available(enabled, beta) = setting {
-            Section {
-                Toggle("Payjoin", isOn: enabledBinding(enabled))
-            } header: {
-                header(beta: beta)
-            } footer: {
-                Text(
-                    "Lets a receiver that supports Payjoin add a coin to your payment, for more privacy. If they don't, Cove sends it as a normal transaction."
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func header(beta: Bool) -> some View {
-        if beta {
-            MainSettingsBetaHeader(title: "Payments")
-        } else {
-            Text("Payments")
-        }
-    }
-
-    private func enabledBinding(_ enabled: Bool) -> Binding<Bool> {
-        Binding(
-            get: { enabled },
-            set: { newValue in
-                do {
-                    try Database().globalConfig().setPayjoinEnabled(enabled: newValue)
-                } catch {
-                    Log.error("Failed to save the Payjoin choice: \(error)")
-                }
-
-                // read back what was saved, so a failed save leaves the switch where it was
-                setting = Database().globalConfig().payjoinSetting()
-            }
-        )
     }
 }
 

@@ -1062,7 +1062,6 @@
     <ID>PackageNaming:HotWalletQrScannerSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
     <ID>PackageNaming:HotWalletSelectScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
     <ID>PackageNaming:ImportWalletScreen.kt:package org.bitcoinppl.cove.import_wallet</ID>
-    <ID>PackageNaming:MainSettingsPayjoinSection.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
     <ID>PackageNaming:MainSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
     <ID>PackageNaming:MainSettingsScreenHelpersTest.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
     <ID>PackageNaming:MainSettingsSecuritySection.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>

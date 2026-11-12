@@ -311,7 +311,6 @@ private struct MainSettingsForm: View {
     var body: some View {
         Form {
             MainSettingsGeneralSection()
-            MainSettingsPayjoinSection()
             WalletSettingsSection()
             MainSettingsSecuritySection(
                 canUseBiometrics: canUseBiometrics,

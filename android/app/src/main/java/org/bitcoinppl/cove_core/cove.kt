@@ -1359,8 +1359,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
     ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_payjoin_setting(
-    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
@@ -1382,8 +1380,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
-    ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_set_payjoin_enabled(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_network(
     ): Short
@@ -2439,8 +2435,6 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_fn_method_globalconfigtable_payjoin_setting(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2462,8 +2456,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_globalconfigtable_set_payjoin_enabled(`ptr`: Long,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -4346,9 +4338,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_payjoin_setting() != 34216.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4380,9 +4369,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_payjoin_enabled() != 57697.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578.toShort()) {
@@ -13989,11 +13975,6 @@ public interface GlobalConfigTableInterface {
 
     fun `isInMainMode`(): kotlin.Boolean
 
-    /**
-     * Payjoin as the Settings screen shows it
-     */
-    fun `payjoinSetting`(): PayjoinSetting
-
     fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `selectWallet`(`id`: WalletId)
@@ -14018,11 +13999,6 @@ public interface GlobalConfigTableInterface {
     fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `setHashedPinCode`(`hashedPinCode`: kotlin.String)
-
-    /**
-     * Save the user's Payjoin choice from Settings
-     */
-    fun `setPayjoinEnabled`(`enabled`: kotlin.Boolean)
 
     fun `setSelectedNetwork`(`network`: Network)
 
@@ -14298,22 +14274,6 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
 
 
-    /**
-     * Payjoin as the Settings screen shows it
-     */override fun `payjoinSetting`(): PayjoinSetting {
-            return FfiConverterTypePayjoinSetting.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_payjoin_setting(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
-
     @Throws(DatabaseException::class)override fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -14468,23 +14428,6 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         it,
 
         FfiConverterString.lower(`hashedPinCode`),_status)
-}
-    }
-
-
-
-
-    /**
-     * Save the user's Payjoin choice from Settings
-     */
-    @Throws(DatabaseException::class)override fun `setPayjoinEnabled`(`enabled`: kotlin.Boolean)
-        =
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_payjoin_enabled(
-        it,
-
-        FfiConverterBoolean.lower(`enabled`),_status)
 }
     }
 
@@ -48311,9 +48254,6 @@ sealed class GlobalConfigKey {
         companion object
     }
 
-    object PayjoinChoice : GlobalConfigKey()
-
-
 
 
 
@@ -48348,7 +48288,6 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             14 -> GlobalConfigKey.CustomBlockExplorer(
                 FfiConverterTypeNetwork.read(buf),
                 )
-            15 -> GlobalConfigKey.PayjoinChoice
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48440,12 +48379,6 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 + FfiConverterTypeNetwork.allocationSize(value.v1)
             )
         }
-        is GlobalConfigKey.PayjoinChoice -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -48506,10 +48439,6 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             is GlobalConfigKey.CustomBlockExplorer -> {
                 buf.putInt(14)
                 FfiConverterTypeNetwork.write(value.v1, buf)
-                Unit
-            }
-            is GlobalConfigKey.PayjoinChoice -> {
-                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -54380,93 +54309,6 @@ public object FfiConverterTypeOtherBackupsOperation : FfiConverterRustBuffer<Oth
             is OtherBackupsOperation.Failed -> {
                 buf.putInt(6)
                 FfiConverterString.write(value.`error`, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-/**
- * Payjoin as the Settings screen shows it
- */
-sealed class PayjoinSetting {
-
-    /**
-     * This build doesn't offer Payjoin, so Settings has no Payjoin switch and every payment is
-     * sent as an ordinary one
-     */
-    object Unavailable : PayjoinSetting()
-
-
-    /**
-     * Settings shows a Payjoin switch, labelled beta when `beta` is set
-     */
-    data class Available(
-        val `enabled`: kotlin.Boolean,
-        val `beta`: kotlin.Boolean) : PayjoinSetting()
-
-    {
-
-
-        companion object
-    }
-
-
-
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypePayjoinSetting : FfiConverterRustBuffer<PayjoinSetting>{
-    override fun read(buf: ByteBuffer): PayjoinSetting {
-        return when(buf.getInt()) {
-            1 -> PayjoinSetting.Unavailable
-            2 -> PayjoinSetting.Available(
-                FfiConverterBoolean.read(buf),
-                FfiConverterBoolean.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: PayjoinSetting): ULong = when(value) {
-        is PayjoinSetting.Unavailable -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is PayjoinSetting.Available -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterBoolean.allocationSize(value.`enabled`)
-                + FfiConverterBoolean.allocationSize(value.`beta`)
-            )
-        }
-    }
-
-    override fun write(value: PayjoinSetting, buf: ByteBuffer) {
-        when(value) {
-            is PayjoinSetting.Unavailable -> {
-                buf.putInt(1)
-                Unit
-            }
-            is PayjoinSetting.Available -> {
-                buf.putInt(2)
-                FfiConverterBoolean.write(value.`enabled`, buf)
-                FfiConverterBoolean.write(value.`beta`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

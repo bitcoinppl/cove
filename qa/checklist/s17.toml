@@ -31,19 +31,18 @@ paths = [
     "rust/src/manager/wallet_manager/actor/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
-    "rust/src/payjoin_setting.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
 ]
 coverage = [
     "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin",
-    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_pj_uri_sent_with_payjoin_on_broadcasts_the_receivers_proposal",
-    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_pj_uri_sent_with_payjoin_off_broadcasts_the_payment_as_built",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_pj_uri_sent_from_the_send_screen_broadcasts_the_receivers_proposal",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests/send_flow.rs::a_v1_pj_uri_sent_from_the_send_screen_broadcasts_the_payment_as_built",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# with the Payjoin setting on, a v2 uri on mainnet or Signet becomes a confirm route carrying a
-# payjoin for its endpoint, and the wallet broadcasts the receiver's proposal once; with it off,
-# the wallet broadcasts the payment as built once and keeps no payjoin session
+# a v2 uri on mainnet or Signet becomes a confirm route carrying a payjoin for its endpoint, and
+# the wallet broadcasts the receiver's proposal once; a v1 uri is paid as built once and keeps no
+# payjoin session
 
 [[row]]
 id = "s17-sender-rejects-psbt-text-without-secret-import"
@@ -144,7 +143,6 @@ paths = [
     "rust/src/manager/wallet_manager/payjoin/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
-    "rust/src/payjoin_setting.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
 ]
 coverage = [

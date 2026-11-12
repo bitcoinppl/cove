@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import org.bitcoinppl.cove_core.device.BuildChannel
 import org.bitcoinppl.cove_core.device.DeviceAccess
 import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.KeychainException
@@ -100,10 +99,6 @@ private fun createEncryptedPrefs(context: Context, requestStrongBox: Boolean): S
 
 class DeviceAccessor : DeviceAccess {
     override fun timezone(): String = TimeZone.getDefault().id
-
-    // Play testing tracks install the same release build as production, so only debug builds
-    // can be told apart
-    override fun buildChannel(): BuildChannel = if (BuildConfig.DEBUG) BuildChannel.DEBUG else BuildChannel.RELEASE
 }
 
 /** Ref-counts the number of sensitive screens currently on the back stack.
