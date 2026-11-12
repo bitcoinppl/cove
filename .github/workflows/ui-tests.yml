@@ -90,9 +90,15 @@ jobs:
   # on a labeled PR, picks the platforms the change reaches, as CI's changes job does, see
   # .github/scripts/ci_changes.py; every other trigger runs both, and a job skips only when the
   # changes job succeeded and said 'false', so a failed changes job runs both too
+  # A labeled slice below the top of a GitHub stack skips the Android suites too, leaving them to the
+  # stack's top
   changes:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: ubuntu-24.04
+    # pull-requests: read lets the plan read the pull request's stack
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       ios_ui: ${{ steps.plan.outputs.ios_ui }}
       android_instrumented: ${{ steps.plan.outputs.android_instrumented }}
@@ -108,6 +114,8 @@ jobs:
 
       - name: Pick the platforms this change needs
         id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 -I .github/scripts/ci_changes.py
 
       # a manual run that names tests for only one platform has nothing for the other, whose jobs

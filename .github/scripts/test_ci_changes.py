@@ -21,7 +21,15 @@ ANDROID: frozenset[Job] = frozenset(
     {Job.ANDROID_INSTRUMENTED, Job.COMPILE_ANDROID, Job.KTLINT, Job.QA_MANIFEST}
 )
 IOS: frozenset[Job] = frozenset(
-    {Job.COMPILE_IOS, Job.IOS_UI, Job.QA_MANIFEST, Job.SWIFT_LINT, Job.TEST}
+    {
+        Job.COMPILE_IOS,
+        Job.IOS_UI,
+        Job.IOS_UNIT_TESTS,
+        Job.QA_MANIFEST,
+        Job.SWIFT_LINT,
+        Job.TEST,
+        Job.TEST_MACOS,
+    }
 )
 
 # the developer's own git config, such as commit signing, stays out of the throwaway repositories
@@ -68,6 +76,7 @@ class RuleTests(unittest.TestCase):
                 Job.COMPILE_ANDROID,
                 Job.COMPILE_IOS,
                 Job.IOS_UI,
+                Job.IOS_UNIT_TESTS,
                 Job.KTLINT,
                 Job.SWIFT_LINT,
                 Job.TAPSIGNER_EMULATOR,
@@ -190,7 +199,13 @@ class PlanTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as out_dir:
             output = Path(out_dir) / "output"
-            env = {k: v for k, v in GIT_ENV.items() if k != "BASE_REF"}
+            # the CI runner's own event and token stay out, or the script would place the
+            # pull request this test runs in
+            env = {
+                k: v
+                for k, v in GIT_ENV.items()
+                if k != "BASE_REF" and not k.startswith(("GITHUB_", "GH_"))
+            }
             subprocess.run(
                 [sys.executable, "-I", str(SCRIPT)],
                 cwd=self.repo.path,
@@ -213,7 +228,8 @@ class PlanTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(
                     self.run_script(branch, event),
-                    {job.value: "true" if job in selected else "false" for job in Job},
+                    {job.value: "true" if job in selected else "false" for job in Job}
+                    | {"merge_tiers": "true"},
                 )
 
 

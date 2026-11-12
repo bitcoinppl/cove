@@ -40,11 +40,16 @@ jobs:
   # changes job runs everything
   # It also skips a macOS job a trusted maintainer's cove-local-ci run already passed on this
   # commit, see .github/scripts/ci_local_results.py, since GitHub runs only a few macOS jobs at once
+  # A slice below the top of a GitHub stack skips the merge-tier jobs too, test (macos-latest), the
+  # iOS unit tests and the Android emulator tests, which the stack's top runs for the whole stack;
+  # stack-gate.yml holds the slice until the top passes them
   changes:
     runs-on: ubuntu-24.04
-    # statuses: read lets the local results step list the commit's statuses
+    # statuses: read lets the local results step list the commit's statuses, and pull-requests: read
+    # lets the plan read the pull request's stack
     permissions:
       contents: read
+      pull-requests: read
       statuses: read
     outputs:
       rustfmt: ${{ steps.plan.outputs.rustfmt }}
@@ -56,6 +61,8 @@ jobs:
       ktlint: ${{ steps.plan.outputs.ktlint }}
       compile_ios: ${{ steps.plan.outputs.compile_ios }}
       compile_android: ${{ steps.plan.outputs.compile_android }}
+      test_macos: ${{ steps.plan.outputs.test_macos }}
+      ios_unit_tests: ${{ steps.plan.outputs.ios_unit_tests }}
       compile_ios_local: ${{ steps.local.outputs.compile_ios_local }}
       swift_lint_local: ${{ steps.local.outputs.swift_lint_local }}
       test_macos_local: ${{ steps.local.outputs.test_macos_local }}
@@ -63,7 +70,8 @@ jobs:
       # the merge commit and both its parents, or with a base input the whole history, so the
       # script finds where the branch left it; diffing names reads trees, never blobs. The test of
       # .github/ios-ui-suites.toml reads it, which the cone takes with .github/scripts, and
-      # ui-tests.yml's suite list
+      # ui-tests.yml's suite list, and the stack gate's test reads the job and step names it looks
+      # for from the workflows
       - uses: actions/checkout@v6
         with:
           fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.base != '' && '0' || '2' }}
@@ -80,7 +88,14 @@ jobs:
         id: plan
         env:
           BASE_REF: ${{ inputs.base }}
+          GH_TOKEN: ${{ github.token }}
         run: python3 -I .github/scripts/ci_changes.py
+
+      # stack-gate.yml reads whether this step ran to tell a run that tested the merge tier from a
+      # slice's run, whose merge-tier jobs skip just as path-filtered ones do
+      - name: Plan the merge tier
+        if: steps.plan.outputs.merge_tiers == 'true'
+        run: echo "this run tests the merge tier, see .github/scripts/ci_changes.py"
 
       # a failure here leaves its outputs empty, which runs the macOS jobs, without failing the
       # job and with it the path filter above
@@ -293,10 +308,12 @@ jobs:
       - name: Compile iOS
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 
-      # tests in ios/test-quarantine.toml are skipped, and the step's log names each with its issue;
-      # each argument is one line of letters, digits, '_', '/', ':' and '-', so splitting the list on
-      # whitespace gives one argument a line
+      # the merge tier, which a stack's slices leave to its top. Tests in ios/test-quarantine.toml
+      # are skipped, and the step's log names each with its issue; each argument is one line of
+      # letters, digits, '_', '/', ':' and '-', so splitting the list on whitespace gives one
+      # argument a line
       - name: Run iOS unit tests
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.ios_unit_tests != 'false' }}
         run: |
           skip_args=$(cd rust && cargo run --locked -q -p xtask -- ios-quarantine skip-args --target CoveTests)
           cd ios
@@ -436,7 +453,7 @@ jobs:
   test-macos:
     name: test (macos-latest)
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') && needs.changes.outputs.test_macos_local != 'true' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test_macos != 'false') && needs.changes.outputs.test_macos_local != 'true' }}
     runs-on: macos-latest
     env:
       RUSTFLAGS: -D warnings
