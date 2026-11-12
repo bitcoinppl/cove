@@ -252,7 +252,11 @@ pub(crate) enum CoalescibleIntent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Rejection {
     CloudBackupOff,
-    NotConfigured,
+    /// Enable or restore was asked for while a backup is already configured
+    AlreadyOn,
+    /// The work needs a configured backup, and the Enable or restore that sets one up hasn't
+    /// finished
+    SetupNotFinished,
     /// The stored record could not be loaded; Try Again runs the load again
     LoadFailed,
     /// The stored record can't be read as a backup; only resetting Cloud Backup on this device
@@ -868,7 +872,7 @@ fn starts_while_off(
             | AdmissionBody::PendingEnableRecovery,
             None,
         ) => Admission::Accepted,
-        (AdmissionBody::Configured, None) => Admission::Rejected(Rejection::NotConfigured),
+        (AdmissionBody::Configured, None) => Admission::Rejected(Rejection::AlreadyOn),
         (AdmissionBody::DriveAccountSwitch, None) => {
             Admission::Rejected(Rejection::DriveAccountSwitch)
         }
@@ -948,9 +952,70 @@ fn not_configured(body: AdmissionBody) -> Rejection {
         AdmissionBody::FinishingDisable => Rejection::TurnOffCommitted,
         AdmissionBody::Resetting => Rejection::Resetting,
         AdmissionBody::DriveAccountSwitch => Rejection::DriveAccountSwitch,
-        AdmissionBody::Configured
-        | AdmissionBody::Enabling
+        AdmissionBody::Enabling
         | AdmissionBody::Restoring
-        | AdmissionBody::PendingEnableRecovery => Rejection::NotConfigured,
+        | AdmissionBody::PendingEnableRecovery => Rejection::SetupNotFinished,
+
+        // every caller decides a configured body itself; if one ever lands here, the backup is on
+        AdmissionBody::Configured => Rejection::AlreadyOn,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Admission, AdmissionBody, AdmissionSnapshot, DetailInventory, EnableIntent,
+        EnablePromptAnswers, Rejection, RestoreAllAdmission, SwitchAdmission, TurnOffAdmission,
+        UserIntent, evaluate_admission,
+    };
+    use crate::manager::cloud_backup_manager::CloudBackupEnableContext;
+
+    /// A snapshot of `body` with nothing running, paused or loaded
+    fn idle(body: AdmissionBody) -> AdmissionSnapshot {
+        AdmissionSnapshot {
+            body,
+            running: None,
+            sync_running: false,
+            detail_inventory: DetailInventory::NotLoaded,
+            detail_checking: false,
+            other_backups_loaded: false,
+            restore_all: RestoreAllAdmission::Unavailable,
+            continuation: None,
+            enable_prompt: EnablePromptAnswers { use_existing: None, create_new: None },
+            turn_off: TurnOffAdmission::None,
+            drive_account_switch: SwitchAdmission::None,
+        }
+    }
+
+    // each case carries its own reason, so both apps can word each one truthfully
+    #[test]
+    fn already_on_and_setup_not_finished_are_separate_reasons() {
+        let configured = idle(AdmissionBody::Configured);
+        let enable =
+            UserIntent::Enable(EnableIntent::Standard, CloudBackupEnableContext::settings_manual());
+        let already_on = Admission::Rejected(Rejection::AlreadyOn);
+        assert_eq!(evaluate_admission(&enable, &configured), already_on);
+        assert_eq!(
+            evaluate_admission(&UserIntent::RestoreFromCloudBackup, &configured),
+            already_on
+        );
+
+        let setup_not_finished = Admission::Rejected(Rejection::SetupNotFinished);
+        for body in [
+            AdmissionBody::Enabling,
+            AdmissionBody::Restoring,
+            AdmissionBody::PendingEnableRecovery,
+        ] {
+            let snapshot = idle(body);
+            for intent in
+                [UserIntent::TurnOff, UserIntent::SyncUnsynced, UserIntent::RecreateManifest]
+            {
+                assert_eq!(
+                    evaluate_admission(&intent, &snapshot),
+                    setup_not_finished,
+                    "{intent:?} in {body:?}"
+                );
+            }
+        }
     }
 }

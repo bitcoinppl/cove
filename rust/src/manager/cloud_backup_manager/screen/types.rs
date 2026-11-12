@@ -514,7 +514,10 @@ pub enum CloudBackupDisableNotStartedReason {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupRejection {
     CloudBackupOff,
-    NotConfigured,
+    /// Enable or restore was asked for while Cloud Backup is already on
+    AlreadyOn,
+    /// The work needs Cloud Backup on, and the Enable or restore that turns it on hasn't finished
+    SetupNotFinished,
     LoadFailed,
     /// Turn Off already deleted remote data, so it only goes forward
     TurnOffCommitted,

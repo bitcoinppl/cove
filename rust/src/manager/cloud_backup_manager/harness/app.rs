@@ -565,7 +565,10 @@ impl TestApp {
         let supervisor = self.manager.supervisor.clone();
         let intent = action.intent(self.turn_off_review().map(|review| review.review_id));
         self.block_on("the supervisor's admission answer", async move {
-            call!(supervisor.harness_admission(intent)).await.expect("admission")
+            call!(supervisor.harness_admission(intent))
+                .await
+                .expect("admission")
+                .expect("the harness holds the manager")
         })
     }
 
@@ -612,7 +615,10 @@ impl TestApp {
     pub(crate) fn admission_of(&self, intent: UserIntent) -> Admission {
         let supervisor = self.manager.supervisor.clone();
         self.block_on("the supervisor's admission answer", async move {
-            call!(supervisor.harness_admission(intent)).await.expect("admission")
+            call!(supervisor.harness_admission(intent))
+                .await
+                .expect("admission")
+                .expect("the harness holds the manager")
         })
     }
 

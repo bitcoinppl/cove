@@ -1938,16 +1938,14 @@ pub(crate) mod test_support {
         }
 
         /// What dispatch would do with `intent` now, without doing it
+        ///
+        /// `None` once the manager is gone, since no admission reason describes that
         pub(crate) async fn harness_admission(
             &mut self,
             intent: crate::manager::cloud_backup_manager::admission::UserIntent,
-        ) -> ActorResult<crate::manager::cloud_backup_manager::admission::Admission> {
-            use crate::manager::cloud_backup_manager::admission::Rejection;
-
-            let admission = match self.manager() {
-                Some(manager) => self.decide(&manager, &intent),
-                None => Admission::Rejected(Rejection::NotConfigured),
-            };
+        ) -> ActorResult<Option<crate::manager::cloud_backup_manager::admission::Admission>>
+        {
+            let admission = self.manager().map(|manager| self.decide(&manager, &intent));
             Produces::ok(admission)
         }
 

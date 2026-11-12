@@ -28,4 +28,12 @@ class CloudBackupScreenCopyTest {
         // only Turn Off and its resume share a name
         assertEquals(CloudBackupOperationKind.entries.size - 1, captions.values.distinct().size)
     }
+
+    // Enable while on and work before setup finishes have their own reasons, each worded as itself
+    @Test
+    fun alreadyOnAndSetupNotFinishedAreWordedApart() {
+        assertEquals("Cloud Backup is already on.", CloudBackupRejection.AlreadyOn.caption())
+        assertEquals("Cloud Backup isn't set up yet.", CloudBackupRejection.SetupNotFinished.caption())
+        assertEquals("Cloud Backup is off.", CloudBackupRejection.CloudBackupOff.caption())
+    }
 }

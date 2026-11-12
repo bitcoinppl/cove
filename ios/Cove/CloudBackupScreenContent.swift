@@ -153,8 +153,10 @@ extension CloudBackupRejection {
         switch self {
         case .cloudBackupOff:
             "Cloud Backup is off."
-        case .notConfigured:
+        case .alreadyOn:
             "Cloud Backup is already on."
+        case .setupNotFinished:
+            "Cloud Backup isn't set up yet."
         case .loadFailed:
             "Cove couldn't load Cloud Backup."
         case .turnOffCommitted:

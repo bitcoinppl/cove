@@ -45697,7 +45697,16 @@ sealed class CloudBackupRejection {
     object CloudBackupOff : CloudBackupRejection()
 
 
-    object NotConfigured : CloudBackupRejection()
+    /**
+     * Enable or restore was asked for while Cloud Backup is already on
+     */
+    object AlreadyOn : CloudBackupRejection()
+
+
+    /**
+     * The work needs Cloud Backup on, and the Enable or restore that turns it on hasn't finished
+     */
+    object SetupNotFinished : CloudBackupRejection()
 
 
     object LoadFailed : CloudBackupRejection()
@@ -45769,20 +45778,21 @@ public object FfiConverterTypeCloudBackupRejection : FfiConverterRustBuffer<Clou
     override fun read(buf: ByteBuffer): CloudBackupRejection {
         return when(buf.getInt()) {
             1 -> CloudBackupRejection.CloudBackupOff
-            2 -> CloudBackupRejection.NotConfigured
-            3 -> CloudBackupRejection.LoadFailed
-            4 -> CloudBackupRejection.TurnOffCommitted
-            5 -> CloudBackupRejection.OperationRunning(
+            2 -> CloudBackupRejection.AlreadyOn
+            3 -> CloudBackupRejection.SetupNotFinished
+            4 -> CloudBackupRejection.LoadFailed
+            5 -> CloudBackupRejection.TurnOffCommitted
+            6 -> CloudBackupRejection.OperationRunning(
                 FfiConverterTypeCloudBackupOperationKind.read(buf),
                 )
-            6 -> CloudBackupRejection.InventoryNotLoaded
-            7 -> CloudBackupRejection.OtherBackupsNotLoaded
-            8 -> CloudBackupRejection.RestoreAllUnavailable
-            9 -> CloudBackupRejection.NothingToCancel
-            10 -> CloudBackupRejection.NothingToContinue
-            11 -> CloudBackupRejection.ReviewStale
-            12 -> CloudBackupRejection.Resetting
-            13 -> CloudBackupRejection.TryAgainFirst
+            7 -> CloudBackupRejection.InventoryNotLoaded
+            8 -> CloudBackupRejection.OtherBackupsNotLoaded
+            9 -> CloudBackupRejection.RestoreAllUnavailable
+            10 -> CloudBackupRejection.NothingToCancel
+            11 -> CloudBackupRejection.NothingToContinue
+            12 -> CloudBackupRejection.ReviewStale
+            13 -> CloudBackupRejection.Resetting
+            14 -> CloudBackupRejection.TryAgainFirst
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45794,7 +45804,13 @@ public object FfiConverterTypeCloudBackupRejection : FfiConverterRustBuffer<Clou
                 4UL
             )
         }
-        is CloudBackupRejection.NotConfigured -> {
+        is CloudBackupRejection.AlreadyOn -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupRejection.SetupNotFinished -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -45875,53 +45891,57 @@ public object FfiConverterTypeCloudBackupRejection : FfiConverterRustBuffer<Clou
                 buf.putInt(1)
                 Unit
             }
-            is CloudBackupRejection.NotConfigured -> {
+            is CloudBackupRejection.AlreadyOn -> {
                 buf.putInt(2)
                 Unit
             }
-            is CloudBackupRejection.LoadFailed -> {
+            is CloudBackupRejection.SetupNotFinished -> {
                 buf.putInt(3)
                 Unit
             }
-            is CloudBackupRejection.TurnOffCommitted -> {
+            is CloudBackupRejection.LoadFailed -> {
                 buf.putInt(4)
                 Unit
             }
-            is CloudBackupRejection.OperationRunning -> {
+            is CloudBackupRejection.TurnOffCommitted -> {
                 buf.putInt(5)
+                Unit
+            }
+            is CloudBackupRejection.OperationRunning -> {
+                buf.putInt(6)
                 FfiConverterTypeCloudBackupOperationKind.write(value.`operation`, buf)
                 Unit
             }
             is CloudBackupRejection.InventoryNotLoaded -> {
-                buf.putInt(6)
-                Unit
-            }
-            is CloudBackupRejection.OtherBackupsNotLoaded -> {
                 buf.putInt(7)
                 Unit
             }
-            is CloudBackupRejection.RestoreAllUnavailable -> {
+            is CloudBackupRejection.OtherBackupsNotLoaded -> {
                 buf.putInt(8)
                 Unit
             }
-            is CloudBackupRejection.NothingToCancel -> {
+            is CloudBackupRejection.RestoreAllUnavailable -> {
                 buf.putInt(9)
                 Unit
             }
-            is CloudBackupRejection.NothingToContinue -> {
+            is CloudBackupRejection.NothingToCancel -> {
                 buf.putInt(10)
                 Unit
             }
-            is CloudBackupRejection.ReviewStale -> {
+            is CloudBackupRejection.NothingToContinue -> {
                 buf.putInt(11)
                 Unit
             }
-            is CloudBackupRejection.Resetting -> {
+            is CloudBackupRejection.ReviewStale -> {
                 buf.putInt(12)
                 Unit
             }
-            is CloudBackupRejection.TryAgainFirst -> {
+            is CloudBackupRejection.Resetting -> {
                 buf.putInt(13)
+                Unit
+            }
+            is CloudBackupRejection.TryAgainFirst -> {
+                buf.putInt(14)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

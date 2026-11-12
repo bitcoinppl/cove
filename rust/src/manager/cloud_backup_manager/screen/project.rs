@@ -711,7 +711,8 @@ impl From<Rejection> for CloudBackupRejection {
     fn from(rejection: Rejection) -> Self {
         match rejection {
             Rejection::CloudBackupOff => Self::CloudBackupOff,
-            Rejection::NotConfigured => Self::NotConfigured,
+            Rejection::AlreadyOn => Self::AlreadyOn,
+            Rejection::SetupNotFinished => Self::SetupNotFinished,
             // the exported reasons name no corrupted record; both say the record can't be used
             Rejection::LoadFailed | Rejection::Corrupted => Self::LoadFailed,
             Rejection::TurnOffCommitted => Self::TurnOffCommitted,

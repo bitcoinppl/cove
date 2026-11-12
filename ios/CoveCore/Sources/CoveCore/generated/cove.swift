@@ -28987,7 +28987,14 @@ public func FfiConverterTypeCloudBackupRecoveryOperation_lower(_ value: CloudBac
 public enum CloudBackupRejection: Equatable, Hashable {
 
     case cloudBackupOff
-    case notConfigured
+    /**
+     * Enable or restore was asked for while Cloud Backup is already on
+     */
+    case alreadyOn
+    /**
+     * The work needs Cloud Backup on, and the Enable or restore that turns it on hasn't finished
+     */
+    case setupNotFinished
     case loadFailed
     /**
      * Turn Off already deleted remote data, so it only goes forward
@@ -29036,30 +29043,32 @@ public struct FfiConverterTypeCloudBackupRejection: FfiConverterRustBuffer {
 
         case 1: return .cloudBackupOff
 
-        case 2: return .notConfigured
+        case 2: return .alreadyOn
 
-        case 3: return .loadFailed
+        case 3: return .setupNotFinished
 
-        case 4: return .turnOffCommitted
+        case 4: return .loadFailed
 
-        case 5: return .operationRunning(operation: try FfiConverterTypeCloudBackupOperationKind.read(from: &buf)
+        case 5: return .turnOffCommitted
+
+        case 6: return .operationRunning(operation: try FfiConverterTypeCloudBackupOperationKind.read(from: &buf)
         )
 
-        case 6: return .inventoryNotLoaded
+        case 7: return .inventoryNotLoaded
 
-        case 7: return .otherBackupsNotLoaded
+        case 8: return .otherBackupsNotLoaded
 
-        case 8: return .restoreAllUnavailable
+        case 9: return .restoreAllUnavailable
 
-        case 9: return .nothingToCancel
+        case 10: return .nothingToCancel
 
-        case 10: return .nothingToContinue
+        case 11: return .nothingToContinue
 
-        case 11: return .reviewStale
+        case 12: return .reviewStale
 
-        case 12: return .resetting
+        case 13: return .resetting
 
-        case 13: return .tryAgainFirst
+        case 14: return .tryAgainFirst
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29073,53 +29082,57 @@ public struct FfiConverterTypeCloudBackupRejection: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .notConfigured:
+        case .alreadyOn:
             writeInt(&buf, Int32(2))
 
 
-        case .loadFailed:
+        case .setupNotFinished:
             writeInt(&buf, Int32(3))
 
 
-        case .turnOffCommitted:
+        case .loadFailed:
             writeInt(&buf, Int32(4))
 
 
-        case let .operationRunning(operation):
+        case .turnOffCommitted:
             writeInt(&buf, Int32(5))
+
+
+        case let .operationRunning(operation):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeCloudBackupOperationKind.write(operation, into: &buf)
 
 
         case .inventoryNotLoaded:
-            writeInt(&buf, Int32(6))
-
-
-        case .otherBackupsNotLoaded:
             writeInt(&buf, Int32(7))
 
 
-        case .restoreAllUnavailable:
+        case .otherBackupsNotLoaded:
             writeInt(&buf, Int32(8))
 
 
-        case .nothingToCancel:
+        case .restoreAllUnavailable:
             writeInt(&buf, Int32(9))
 
 
-        case .nothingToContinue:
+        case .nothingToCancel:
             writeInt(&buf, Int32(10))
 
 
-        case .reviewStale:
+        case .nothingToContinue:
             writeInt(&buf, Int32(11))
 
 
-        case .resetting:
+        case .reviewStale:
             writeInt(&buf, Int32(12))
 
 
-        case .tryAgainFirst:
+        case .resetting:
             writeInt(&buf, Int32(13))
+
+
+        case .tryAgainFirst:
+            writeInt(&buf, Int32(14))
 
         }
     }

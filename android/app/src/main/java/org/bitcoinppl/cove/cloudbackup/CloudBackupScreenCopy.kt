@@ -34,8 +34,10 @@ internal const val PROVIDER = "Google Drive"
 /** Copy for each admission rejection; Rust decides the reason and Android only words it */
 internal fun CloudBackupRejection.caption(): String =
     when (this) {
-        CloudBackupRejection.CloudBackupOff -> "Cloud Backup is off."
-        CloudBackupRejection.NotConfigured -> "Cloud Backup isn't set up yet."
+        CloudBackupRejection.CloudBackupOff,
+        CloudBackupRejection.AlreadyOn,
+        CloudBackupRejection.SetupNotFinished,
+        -> onOffCaption()
         CloudBackupRejection.LoadFailed -> "Cove couldn't load Cloud Backup."
         CloudBackupRejection.TurnOffCommitted -> "Cloud Backup is being turned off."
         is CloudBackupRejection.OperationRunning -> "Waiting for ${operation.displayName()} to finish."
@@ -47,6 +49,18 @@ internal fun CloudBackupRejection.caption(): String =
         CloudBackupRejection.ReviewStale -> "Cloud Backup changed since you checked. Review it again."
         CloudBackupRejection.Resetting -> "Cove is resetting Cloud Backup on this device."
         CloudBackupRejection.TryAgainFirst -> "Try again first."
+    }
+
+/**
+ * Copy for the rejections that say whether Cloud Backup is on, split out so [caption] stays under
+ * detekt's complexity limit
+ */
+private fun CloudBackupRejection.onOffCaption(): String =
+    when (this) {
+        CloudBackupRejection.CloudBackupOff -> "Cloud Backup is off."
+        CloudBackupRejection.AlreadyOn -> "Cloud Backup is already on."
+        CloudBackupRejection.SetupNotFinished -> "Cloud Backup isn't set up yet."
+        else -> error("$this doesn't say whether Cloud Backup is on")
     }
 
 /** Names an operation for "Waiting for ... to finish." */

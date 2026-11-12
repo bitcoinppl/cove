@@ -837,7 +837,7 @@ async fn onboarding_restore_is_rejected_while_backup_is_configured() {
 
     assert!(matches!(event, CloudBackupRestoreEvent::Failed(_)), "{event:?}");
     let outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap().unwrap();
-    assert_eq!(outcome.admission, Admission::Rejected(Rejection::NotConfigured));
+    assert_eq!(outcome.admission, Admission::Rejected(Rejection::AlreadyOn));
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(globals.passkey.discover_count(), 0);
     assert_eq!(
