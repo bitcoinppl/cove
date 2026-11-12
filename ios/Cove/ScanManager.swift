@@ -7,6 +7,9 @@ import SwiftUI
         AppManager.shared
     }
 
+    /// The latest scanned address, so an older address's alert never replaces a newer one's
+    @ObservationIgnored private var latestAddressScan = UUID()
+
     @MainActor
     func handleMultiFormat(_ multiFormat: MultiFormat) {
         do {
@@ -267,8 +270,23 @@ import SwiftUI
             return
         }
 
-        let amount = addressWithNetwork.amount()
-        app.alertState = TaggedItem(.foundAddress(address: address, amount: amount))
+        let scan = UUID()
+        latestAddressScan = scan
+        let alertBefore = app.alertState?.id
+
+        Task { @MainActor in
+            let alert = await foundAddressAlert(address: addressWithNetwork)
+
+            // anything that happened while the lookup ran makes this alert stale: a newer address,
+            // another alert from any scan or error path, or a wallet or mode switch
+            let selectedNow = Database().globalConfig().selectedWallet()
+            guard latestAddressScan == scan,
+                  app.alertState?.id == alertBefore,
+                  selectedNow == selectedWallet
+            else { return }
+
+            app.alertState = TaggedItem(alert)
+        }
     }
 
     @MainActor

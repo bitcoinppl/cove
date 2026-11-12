@@ -49,6 +49,21 @@ pub struct OwnedAddress {
     pub index: u32,
 }
 
+impl OwnedAddress {
+    /// One line telling the user the address is theirs, worded for someone looking at `viewing`
+    ///
+    /// The chain and index mean nothing to most people, so it names only the wallet; it names
+    /// the viewed wallet too, so its own address can't be mistaken for another wallet's
+    pub fn describe(&self, viewing: &WalletId) -> String {
+        let wallet = &self.wallet_name;
+        if &self.wallet_id == viewing {
+            return format!("This address belongs to this wallet, “{wallet}”");
+        }
+
+        format!("This address belongs to your wallet “{wallet}”")
+    }
+}
+
 /// A wallet the lookup could not read, so the address might still belong to it
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct UncheckedWallet {
@@ -70,6 +85,16 @@ pub enum AddressOwnership {
     ///
     /// Wallets that could not be read are listed, since the address may belong to one of them
     NotFound { unchecked_wallets: Vec<UncheckedWallet> },
+}
+
+impl AddressOwnership {
+    /// The owner to name to someone looking at `viewing`: that wallet when it owns the address,
+    /// since an address of the wallet in hand is the case most worth pointing out, otherwise the
+    /// first owner
+    pub fn owner_to_name(&self, viewing: &WalletId) -> Option<&OwnedAddress> {
+        let Self::Owned { owners } = self else { return None };
+        owners.iter().find(|owner| &owner.wallet_id == viewing).or_else(|| owners.first())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]

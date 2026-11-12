@@ -226,7 +226,7 @@ private fun GlobalAlertDialog(
                 }
             ChoiceAlertDialog(
                 title = state.title(),
-                message = state.message(),
+                message = listOfNotNull(state.message(), state.ownership).joinToString("\n\n"),
                 choices = choices,
                 onDismiss = onDismiss,
             )

@@ -6,9 +6,7 @@ use cove_types::{WalletId, address::Address};
 use tracing::warn;
 
 use super::{Message, RustSendFlowManager};
-use crate::address_ownership::{
-    AddressOwnership, AddressOwnershipError, AddressOwnershipLookup, OwnedAddress,
-};
+use crate::address_ownership::{AddressOwnership, AddressOwnershipError, AddressOwnershipLookup};
 
 /// Tells the user that the address they are sending to is one of their own
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -21,27 +19,10 @@ pub struct SendFlowAddressOwnership {
 
 impl SendFlowAddressOwnership {
     /// The note for an address the user owns, or `None` when none of their wallets do
-    ///
-    /// When the sending wallet is one of the owners it is named, since sending a wallet's coins
-    /// back to itself is the case most worth pointing out
     fn new(address: Arc<Address>, ownership: &AddressOwnership, sender: &WalletId) -> Option<Self> {
-        let AddressOwnership::Owned { owners } = ownership else { return None };
-        let owner =
-            owners.iter().find(|owner| &owner.wallet_id == sender).or_else(|| owners.first())?;
-
-        Some(Self { address, message: message(owner, sender) })
+        let message = ownership.owner_to_name(sender)?.describe(sender);
+        Some(Self { address, message })
     }
-}
-
-// the chain and index mean nothing to most people, so the note names only the wallet; it names
-// the sending wallet too, so a send back to it can't be mistaken for one to another wallet
-fn message(owner: &OwnedAddress, sender: &WalletId) -> String {
-    let wallet = &owner.wallet_name;
-    if &owner.wallet_id == sender {
-        return format!("This address belongs to this wallet, “{wallet}”");
-    }
-
-    format!("This address belongs to your wallet “{wallet}”")
 }
 
 impl RustSendFlowManager {
