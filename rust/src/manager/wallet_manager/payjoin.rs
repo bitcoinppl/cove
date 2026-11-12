@@ -462,15 +462,15 @@ async fn do_poll(
 
         // the library has persisted Closed(Aborted), so the session cannot continue
         Err(e) if e.is_fatal() => {
-            // receiver-provided text is untrusted: well-known errors have a fixed Display
-            // per code and validation errors are produced locally, unrecognized ones log
-            // only their kind
+            // receiver-provided data is untrusted: well-known errors have a fixed Display per
+            // code, while validation errors can echo bytes of the receiver's PSBT, such as an
+            // invalid key, so they and unrecognized errors log only their kind
             match e.api_error_ref() {
                 Some(ResponseError::WellKnown(well_known)) => {
                     warn!("payjoin poll: receiver rejected session: {well_known}");
                 }
-                Some(ResponseError::Validation(validation)) => {
-                    warn!("payjoin poll: receiver proposal rejected: {validation}");
+                Some(ResponseError::Validation(_)) => {
+                    warn!("payjoin poll: receiver proposal failed validation");
                 }
                 Some(ResponseError::Unrecognized { .. }) => {
                     warn!("payjoin poll: receiver rejected session with an unrecognized error");
