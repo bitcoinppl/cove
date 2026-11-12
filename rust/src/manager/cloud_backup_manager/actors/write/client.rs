@@ -270,7 +270,7 @@ impl CloudBackupWriteClient {
         }
     }
 
-    /// Deletes one record of an unreadable batch, if its authorization still holds when the lane
+    /// Deletes one unreadable record, a row's or a batch's, if its authorization still holds when the lane
     /// reaches it and `reader`, the configuration's verified key, still fails to decrypt it then
     ///
     /// `None` when the lane's read kept the record; the inventory owner has what it read

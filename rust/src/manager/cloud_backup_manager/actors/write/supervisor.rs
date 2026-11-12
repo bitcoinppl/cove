@@ -665,7 +665,7 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(self.submit_record_delete(claim, authorization, record_id, remote))
     }
 
-    /// Deletes one record of an unreadable batch, which the lane reads with `reader`, the
+    /// Deletes one unreadable record, a row's or a batch's, which the lane reads with `reader`, the
     /// configuration's verified key, just before deleting it
     pub(crate) async fn delete_unreadable_record(
         &mut self,

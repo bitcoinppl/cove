@@ -796,6 +796,101 @@ async fn an_unreadable_delete_reads_the_record_when_the_lane_runs_it() {
     assert!(globals.cloud.has_wallet_backup(&rows.namespace, record_id));
 }
 
+/// Gives the undecryptable rows the batch's read under the verified key, the read their own
+/// Delete trusts
+async fn verify_unreadable_rows(manager: &RustCloudBackupManager) {
+    let consent = batch_consent(manager).await.expect("the screen offers the batch delete");
+    let prepared = prepare_batch(manager, &consent).await;
+    freeze_batch(manager, &consent, &prepared).await;
+}
+
+/// A single unreadable row's Delete follows the batch's rule: the lane reads the record with the
+/// verified key just before deleting it, so a record still undecryptable is deleted, and one
+/// another device rewrote while the delete waited behind an upload is kept
+#[tokio::test(flavor = "current_thread")]
+async fn an_unreadable_row_delete_reads_the_record_when_the_lane_runs_it() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet, Network::Signet]).await;
+    let [rewritten, still_unreadable] = [rows.record_ids[0].as_str(), rows.record_ids[1].as_str()];
+    let unreadable =
+        Some(CloudBackupDeleteCategory::Unreadable { kind: CloudBackupUnreadableKind::Decrypt });
+
+    verify_unreadable_rows(&manager).await;
+    assert_eq!(offered_delete(&manager, still_unreadable).await, unreadable);
+    start_row_delete(&manager, still_unreadable).await;
+    wait_for_operation_to_finish(&manager).await;
+    assert!(!globals.cloud.has_wallet_backup(&rows.namespace, still_unreadable));
+
+    // the delete's refetch reads the other row again, and the batch's read trusts it again
+    wait_for_rows_read_again(&manager).await;
+    verify_unreadable_rows(&manager).await;
+    let consent = row_delete_consent(&manager, rewritten).await.expect("the row offers Delete");
+    assert_eq!(Some(consent.evidence().category()), unreadable);
+
+    let (upload_gate, upload) =
+        hold_wallet_upload_in_flight(&manager, globals, fixture.local_wallet.id.clone()).await;
+    call!(manager.supervisor.dispatch(UserIntent::DeleteCloudWallet(consent))).await.unwrap();
+    wait_for_queued_lane_write(&manager).await;
+
+    // the record becomes readable while its delete waits in the lane
+    upload_test_wallet_backup(&rows.namespace, &rows.wallets[0]);
+    upload_gate.release();
+    upload.await.unwrap().unwrap();
+    wait_for_operation_to_finish(&manager).await;
+
+    assert!(globals.cloud.has_wallet_backup(&rows.namespace, rewritten));
+    wait_for_rows_read_again(&manager).await;
+    assert_eq!(
+        offered_delete(&manager, rewritten).await,
+        Some(CloudBackupDeleteCategory::NotOnDevice)
+    );
+}
+
+/// An unreadable record another device deleted before the lane read it is what its delete
+/// wanted: the row delete completes without asking the provider to delete it, the row goes, and
+/// so does the record's sync state
+#[tokio::test(flavor = "current_thread")]
+async fn an_unreadable_row_already_gone_completes_its_delete() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let rows = load_undecryptable_rows(&manager, &[Network::Testnet]).await;
+    let record_id = rows.record_ids[0].as_str();
+    verify_unreadable_rows(&manager).await;
+    confirm_own_backup(&rows.namespace, &rows.wallets[0]);
+
+    // another device deleted it, and a delete sent to the provider now would fail
+    globals.cloud.remove_wallet_backup(&rows.namespace, record_id);
+    globals.cloud.set_wallet_files(rows.namespace.clone(), Vec::new());
+    globals.cloud.fail_wallet_backup_delete(
+        rows.namespace.clone(),
+        record_id.to_owned(),
+        CloudStorageError::NotFound(record_id.to_owned()),
+    );
+    let authorization = authorize(&manager, record_id).await;
+
+    assert!(matches!(
+        run_row_delete(&manager, authorization, record_id).await,
+        Ok(RowDeleteReport::Removed { already_absent: true })
+    ));
+    assert_eq!(Database::global().cloud_blob_sync_states.get(record_id).unwrap(), None);
+
+    confirm_own_backup(&rows.namespace, &rows.wallets[0]);
+    start_row_delete(&manager, record_id).await;
+    wait_for_operation_to_finish(&manager).await;
+
+    assert_eq!(row_controls(&manager, record_id).await, None);
+    assert!(!matches!(
+        manager.inventory.read().cloud_only_operation(),
+        CloudOnlyOperation::Failed { .. }
+    ));
+    assert_eq!(Database::global().cloud_blob_sync_states.get(record_id).unwrap(), None);
+}
+
 /// A batch that went stale has the rows read again, and a refresh still waiting on an older
 /// listing is replaced instead of waited for
 #[tokio::test(flavor = "current_thread")]

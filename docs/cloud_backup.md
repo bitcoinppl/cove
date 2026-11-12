@@ -1168,6 +1168,14 @@ A delete the provider fails says why at the row's Delete too. The screen
 outcome holds both messages, as it holds a batch's, so reading the rows again
 doesn't clear them; the next accepted tap replaces them.
 
+An unreadable row's Delete follows the batch's rule (see
+[Frozen batches](#frozen-batches)): the lane reads the record again with this
+device's key for the namespace, just before deleting it, and deletes it only if
+it still fails to decrypt. A record another device rewrote while the delete
+waited is kept, the inventory owner gets the read, and the row says the backup
+changed. A row delete never asks for the passkey, so without that key nothing
+is read or deleted.
+
 A record that's already gone counts as deleted. A row delete ends when the
 provider answers it: the row is removed, the operation's claim is released, and
 the inventory is invalidated. The lane never lists the backups after a delete.

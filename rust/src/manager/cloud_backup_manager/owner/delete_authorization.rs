@@ -119,6 +119,11 @@ impl DeleteAuthorization {
         &self.namespace
     }
 
+    /// What the user agreed to delete the records as
+    pub(crate) fn category(&self) -> CloudBackupDeleteCategory {
+        self.category
+    }
+
     /// The records frozen at confirmation, in a stable order
     pub(crate) fn record_ids(&self) -> impl Iterator<Item = &str> {
         self.record_ids.iter().map(String::as_str)

@@ -13,7 +13,10 @@ use super::{
 };
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
-use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
+use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
+use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+    DeleteAuthorization, StaleTarget,
+};
 use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -321,7 +324,9 @@ impl RustCloudBackupManager {
     /// Deletes one listed record the user confirmed, through the write lane
     ///
     /// The lane checks the authorization again just before the remote call, so a row that
-    /// changed while this waited reports a stale target instead of deleting
+    /// changed while this waited reports a stale target instead of deleting. The lane reads an
+    /// unreadable row's record again with the verified key first, and keeps one that no longer
+    /// fails to decrypt
     pub(crate) async fn delete_authorized_cloud_wallet(
         &self,
         writes: CloudBackupWriteClient,
@@ -330,23 +335,24 @@ impl RustCloudBackupManager {
     ) -> Result<RowDeleteReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteCloudWallet)?;
 
-        let report = writes
-            .delete_authorized_record(
-                CloudStorage::global_explicit_client(),
-                authorization,
-                record_id,
-            )
-            .await
-            .map_err(|error| {
-                let error = match error {
-                    CloudBackupError::CloudStorage(source) => {
-                        CloudBackupError::cloud_storage_context("delete wallet backup", source)
-                    }
-                    error => error,
-                };
+        let cloud = CloudStorage::global_explicit_client();
+        let report = match authorization.category() {
+            CloudBackupDeleteCategory::Unreadable { .. } => {
+                delete_unreadable_row(&writes, cloud, authorization, record_id).await
+            }
+            _ => writes.delete_authorized_record(cloud, authorization, record_id).await,
+        };
 
-                blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
-            })?;
+        let report = report.map_err(|error| {
+            let error = match error {
+                CloudBackupError::CloudStorage(source) => {
+                    CloudBackupError::cloud_storage_context("delete wallet backup", source)
+                }
+                error => error,
+            };
+
+            blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
+        })?;
 
         if let RowDeleteReport::Removed { .. } = report {
             info!("Deleted cloud wallet");
@@ -355,6 +361,45 @@ impl RustCloudBackupManager {
         Ok(report)
     }
 }
+
+/// Deletes an unreadable row the way the unreadable batch deletes its records
+async fn delete_unreadable_row(
+    writes: &CloudBackupWriteClient,
+    cloud: CloudStorageClient,
+    authorization: Arc<DeleteAuthorization>,
+    record_id: String,
+) -> Result<RowDeleteReport, CloudBackupError> {
+    let reader = verified_reader(cloud.clone(), authorization.namespace())?;
+    let deleted = writes.delete_unreadable_record(cloud, reader, authorization, record_id).await?;
+
+    // the lane's read kept the record, so the category the user agreed to no longer holds; the
+    // inventory owner already has the read
+    Ok(deleted.unwrap_or(RowDeleteReport::StaleTarget(StaleTarget::CategoryChanged)))
+}
+
+/// A reader of `namespace` with this device's key, the key an unreadable row's Delete trusts
+///
+/// A row delete holds no passkey permit, so it never recovers a missing key; without the key
+/// nothing is read and nothing is deleted
+fn verified_reader(
+    cloud: CloudStorageClient,
+    namespace: &str,
+) -> Result<WalletBackupReader, CloudBackupError> {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
+        .filter(|master_key| master_key.namespace_id() == namespace)
+        .ok_or_else(|| CloudBackupError::RecoveryRequired(UNREADABLE_ROW_KEY_MESSAGE.into()))?;
+
+    Ok(WalletBackupReader::new(
+        cloud,
+        namespace.to_owned(),
+        Zeroizing::new(master_key.critical_data_key()),
+    ))
+}
+
+const UNREADABLE_ROW_KEY_MESSAGE: &str =
+    "Cloud backup needs verification before this wallet backup can be deleted";
 
 /// What `record_id` reads as with `reader`, which holds the key the configuration verified, for
 /// the inventory owner; a readable record is classified the way a fetch classifies it
