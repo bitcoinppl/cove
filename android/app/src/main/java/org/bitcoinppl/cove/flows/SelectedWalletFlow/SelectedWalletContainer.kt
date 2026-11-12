@@ -228,7 +228,7 @@ fun SelectedWalletContainer(
 
                 val balance = wm.balance.spendable().asSats()
                 if (balance > 0u.toULong()) {
-                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null)))
                 } else {
                     scope.launch {
                         snackbarHostState.showSnackbar("No funds available to send")

@@ -210,7 +210,7 @@ private fun GlobalAlertDialog(
                                 label = "Send To Address",
                                 emphasized = true,
                                 onClick = {
-                                    val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
+                                    val route = RouteFactory().sendSetAmount(selectedWallet, state.request)
                                     app.pushRoute(route)
                                     onDismiss()
                                 },
@@ -219,7 +219,7 @@ private fun GlobalAlertDialog(
                     }
                     add(
                         DialogChoice("Copy Address") {
-                            copyToClipboard(state.address.unformatted())
+                            copyToClipboard(state.request.address().unformatted())
                             onDismiss()
                         },
                     )

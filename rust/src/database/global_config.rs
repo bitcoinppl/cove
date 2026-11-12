@@ -15,6 +15,7 @@ use crate::{
     manager::auth_manager::DuplicateTrickPin,
     network::Network,
     node::Node,
+    payjoin_setting::{PayjoinChoice, PayjoinSetting},
     wallet::metadata::{WalletId, WalletMode},
 };
 
@@ -49,6 +50,7 @@ pub enum GlobalConfigKey {
     OnboardingProgress,
     CustomBlockExplorer(Network),
     TrickPinNotice,
+    PayjoinChoice,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -81,6 +83,7 @@ impl From<GlobalConfigKey> for &'static str {
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
             GlobalConfigKey::TrickPinNotice => "trick_pin_notice",
+            GlobalConfigKey::PayjoinChoice => "payjoin_choice",
         }
     }
 }
@@ -103,6 +106,7 @@ impl std::fmt::Display for GlobalConfigKey {
             }
             Self::OnboardingProgress => write!(f, "onboarding progress"),
             Self::CustomBlockExplorer(network) => write!(f, "{network} block explorer"),
+            Self::PayjoinChoice => write!(f, "Payjoin"),
         }
     }
 }
@@ -333,6 +337,18 @@ impl GlobalConfigTable {
         effective_transaction_url(network, stored_template.as_deref(), txid)
     }
 
+    /// The user's saved Payjoin choice, or None when they never chose or it can't be read
+    pub(crate) fn payjoin_choice(&self) -> Option<PayjoinChoice> {
+        let stored =
+            read_health::observe("payjoin choice", self.get(GlobalConfigKey::PayjoinChoice))
+                .flatten()?;
+
+        stored
+            .parse()
+            .inspect_err(|error| warn!("unreadable payjoin choice {stored:?}: {error}"))
+            .ok()
+    }
+
     /// The raw stored custom block explorer template, or None when unset or unreadable
     fn stored_custom_block_explorer(&self, network: Network) -> Option<String> {
         let read = format!("custom block explorer for {network}");
@@ -476,6 +492,16 @@ impl GlobalConfigTable {
         Updater::send_update(Update::SelectedNodeChanged(node.clone()));
 
         Ok(())
+    }
+
+    /// Payjoin as the Settings screen shows it
+    pub fn payjoin_setting(&self) -> PayjoinSetting {
+        PayjoinSetting::for_choice(self.payjoin_choice())
+    }
+
+    /// Save the user's Payjoin choice from Settings
+    pub fn set_payjoin_enabled(&self, enabled: bool) -> Result<()> {
+        self.set(GlobalConfigKey::PayjoinChoice, PayjoinChoice::from(enabled).to_string())
     }
 
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {

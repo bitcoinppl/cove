@@ -4,6 +4,7 @@ use cove_types::address::AddressWithNetwork;
 use tracing::debug;
 
 use super::{Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
+use crate::manager::deferred_sender::DeferredSender;
 
 impl RustSendFlowManager {
     /// Called when the user types or pastes into the address field.
@@ -42,10 +43,8 @@ impl RustSendFlowManager {
             self.handle_amount_changed(amount);
         }
 
-        let payjoin_endpoint = parsed
-            .as_ref()
-            .and_then(|address_with_network| address_with_network.payjoin.as_ref())
-            .map(|payjoin| payjoin.endpoint.clone());
+        let payjoin =
+            parsed.as_ref().and_then(|address_with_network| address_with_network.payjoin.clone());
         let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
         {
             let mut state = self.state.lock();
@@ -53,7 +52,7 @@ impl RustSendFlowManager {
                 state.clear_warning_acknowledgements();
             }
             state.address = address.clone();
-            state.payjoin_endpoint = payjoin_endpoint;
+            state.payjoin = payjoin;
         }
         sender.queue(Message::UpdateAddress(address));
 
@@ -118,7 +117,7 @@ impl RustSendFlowManager {
                 state.clear_warning_acknowledgements();
             }
             state.address = None;
-            state.payjoin_endpoint = None;
+            state.payjoin = None;
         }
         sender.queue(Message::UpdateAddress(None));
 
@@ -132,63 +131,18 @@ impl RustSendFlowManager {
         new_value: String,
     ) {
         debug!("handle_scan_code_changed: {} chars", new_value.len());
-        let mut sender = self.reconciler.deferred_sender();
 
-        let network = self.state.lock().metadata.network;
-        let address_with_network = {
-            let new_value_moved = new_value;
-            match AddressWithNetwork::try_new(&new_value_moved) {
-                Ok(address_with_network) => address_with_network,
-                Err(err) => {
-                    let error = SendFlowError::from_address_error(err, new_value_moved);
-                    return self.send_alert(error);
-                }
-            }
+        let request = match AddressWithNetwork::try_new(&new_value) {
+            Ok(request) => request,
+            Err(err) => return self.send_alert(SendFlowError::from_address_error(err, new_value)),
         };
 
-        if !address_with_network.is_valid_for_network(network) {
-            let error = SendFlowError::WrongNetwork {
-                address: address_with_network.address.to_string(),
-                valid_for: address_with_network.network,
-                current: network,
-            };
+        if let Err(error) = self.check_request_network(&request) {
             return self.send_alert(error);
         }
 
-        // set address
-        let payjoin_endpoint =
-            address_with_network.payjoin.as_ref().map(|payjoin| payjoin.endpoint.clone());
-        let address = Arc::new(address_with_network.address);
-
-        {
-            let mut state = self.state.lock();
-            if state.address.as_ref() != Some(&address) {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = Some(address.clone());
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
-        sender.queue(Message::UpdateAddress(Some(address.clone())));
-
-        self.state.lock().entering_address = address.to_string();
-        sender.queue(Message::UpdateEnteringAddress(address.to_string()));
-
-        // handle amount if its present
-        let mut should_show_amount_error = false;
-
-        // set amount if its valid
-        let is_coin_control = self.state.lock().mode.is_coin_control();
-        if let Some(amount) = address_with_network.amount
-            && !is_coin_control
-        {
-            let max_was_selected = self.state.lock().max_selected.take().is_some();
-            if max_was_selected {
-                sender.queue(Message::UnsetMaxSelected);
-            }
-
-            should_show_amount_error = true;
-            self.handle_amount_changed(amount);
-        }
+        let mut sender = self.reconciler.deferred_sender();
+        let should_show_amount_error = self.apply_payment_request(&request, &mut sender);
 
         // if amount is invalid, go to amount field
         if !self.validate_amount_internal(should_show_amount_error) {
@@ -214,6 +168,64 @@ impl RustSendFlowManager {
             }
         });
     }
+
+    /// Pay a payment request the app was opened with, such as one scanned outside the send flow
+    pub(crate) fn handle_payment_request(self: &Arc<Self>, request: &AddressWithNetwork) {
+        if let Err(error) = self.check_request_network(request) {
+            return self.send_alert(error);
+        }
+
+        let mut sender = self.reconciler.deferred_sender();
+        self.apply_payment_request(request, &mut sender);
+    }
+
+    fn check_request_network(&self, request: &AddressWithNetwork) -> Result<(), SendFlowError> {
+        let network = self.state.lock().metadata.network;
+        if request.is_valid_for_network(network) {
+            return Ok(());
+        }
+
+        Err(SendFlowError::WrongNetwork {
+            address: request.address.to_string(),
+            valid_for: request.network,
+            current: network,
+        })
+    }
+
+    /// Take the request's address and Payjoin endpoint, and its amount unless coin control fixes
+    /// the amount, returning whether the amount was taken
+    fn apply_payment_request(
+        self: &Arc<Self>,
+        request: &AddressWithNetwork,
+        sender: &mut DeferredSender<Message>,
+    ) -> bool {
+        let address = Arc::new(request.address.clone());
+
+        {
+            let mut state = self.state.lock();
+            if state.address.as_ref() != Some(&address) {
+                state.clear_warning_acknowledgements();
+            }
+            state.address = Some(address.clone());
+            state.payjoin = request.payjoin.clone();
+            state.entering_address = address.to_string();
+        }
+        sender.queue(Message::UpdateAddress(Some(address.clone())));
+        sender.queue(Message::UpdateEnteringAddress(address.to_string()));
+
+        let is_coin_control = self.state.lock().mode.is_coin_control();
+        let Some(amount) = request.amount.filter(|_| !is_coin_control) else {
+            return false;
+        };
+
+        let max_was_selected = self.state.lock().max_selected.take().is_some();
+        if max_was_selected {
+            sender.queue(Message::UnsetMaxSelected);
+        }
+
+        self.handle_amount_changed(amount);
+        true
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +233,7 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use cove_tokio::FutureTimeoutExt as _;
-    use cove_types::{address::AddressWithNetwork, fees::FeeRateOptions};
+    use cove_types::address::AddressWithNetwork;
 
     use crate::{
         app::{App, AppAction},
@@ -230,16 +242,15 @@ mod tests {
             wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         },
         network::Network,
+        payjoin_setting::test_support::PayjoinChoiceGuard,
         router::{
             Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs, UnsignedPaymentMode,
         },
         test_support::hardware_signing::external_address,
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        wallet::metadata::WalletMetadata,
     };
 
-    use super::super::{
-        Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
-    };
+    use super::super::{Action, Message, RustSendFlowManager};
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
     const AMOUNT_SATS: u64 = 50_000;
@@ -254,22 +265,10 @@ mod tests {
         metadata.network = network;
 
         let wallet_manager =
-            Arc::new(funded_preview_wallet_manager_with_metadata(metadata.clone(), &[100_000]));
+            Arc::new(funded_preview_wallet_manager_with_metadata(metadata, &[100_000]));
 
-        let state = State::new(metadata, Arc::new(Balance::default()));
-        let manager = Arc::new(RustSendFlowManager {
-            app: App::global().clone(),
-            wallet_manager,
-            state: state.into_inner(),
-            reconciler: ReconcileChannel::new(100),
-            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-        });
-
-        {
-            let mut state = manager.state.lock();
-            state.fee_rate_options_base = Some(Arc::new(FeeRateOptions::_ffi_preview_new()));
-            state.unlocked_spendable_sats = Some(100_000);
-        }
+        let manager = RustSendFlowManager::with_preview_fees(wallet_manager);
+        manager.state.lock().unlocked_spendable_sats = Some(100_000);
 
         manager
     }
@@ -306,16 +305,19 @@ mod tests {
         })
     }
 
-    /// Payjoin URIs pasted into the address field become an ordinary one-recipient send: the
-    /// field shows the bare address, the amount comes from the URI, and the confirm screen
-    /// gets no payjoin endpoint, so both apps sign and broadcast it as a normal payment
+    /// Payjoin URIs pasted into the address field become a one-recipient send: the field shows
+    /// the bare address and the amount comes from the URI. With Payjoin switched on, only a v2
+    /// endpoint reaches the confirm screen as a Payjoin; a BIP 78 endpoint or a stray pjos is
+    /// paid as a normal payment
     #[tokio::test(flavor = "current_thread")]
-    async fn payjoin_uris_entered_as_the_address_become_an_ordinary_draft() {
+    async fn payjoin_uris_entered_as_the_address_confirm_only_v2_as_a_payjoin() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
         crate::test_support::init_test_keychain();
         crate::database::test_support::init_test_database();
         crate::app::reconcile::test_support::init_noop_updater();
+
+        let _choice = PayjoinChoiceGuard::set(true);
 
         let signet_address = external_address(bitcoin::Network::Signet).to_string();
         let wallets =
@@ -406,11 +408,18 @@ mod tests {
                 wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
 
                 let confirm = pushed_confirm_route().expect("confirm route was pushed");
-                assert_eq!(
-                    confirm.input,
-                    SendConfirmationInput::Unsigned { mode: UnsignedPaymentMode::Standard },
-                    "{label}: no payjoin session starts"
-                );
+                let SendConfirmationInput::Unsigned { mode } = &confirm.input else {
+                    panic!("{label}: a hot wallet confirms an unsigned payment");
+                };
+
+                match (mode, &parsed.payjoin) {
+                    (UnsignedPaymentMode::Payjoin { intent }, Some(payjoin)) => {
+                        assert_eq!(intent.endpoint, payjoin.endpoint, "{label}");
+                    }
+                    (UnsignedPaymentMode::Standard, None) => {}
+                    (mode, _) => panic!("{label}: confirmed as {mode:?}"),
+                }
+
                 assert_eq!(confirm.details.sending_to.to_string(), address, "{label}");
                 assert_eq!(confirm.details.sending_amount.as_sats(), AMOUNT_SATS, "{label}");
 
