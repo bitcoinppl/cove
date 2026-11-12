@@ -108,6 +108,10 @@ private enum SendFlowManagerAccessError: LocalizedError {
             set: { newValue in
                 guard self.canApplyReconcileMessages else { return }
 
+                // views write back the text Rust just set, which is no edit, and Rust treats
+                // every edit as a newer address that drops a wallet pick still on its way
+                guard newValue != self._enteringAddress else { return }
+
                 self._enteringAddress = newValue
                 self.dispatch(action: .notifyEnteringAddressChanged(newValue))
             }
