@@ -156,7 +156,7 @@ async fn a_failing_adopted_relay_is_retried_until_the_session_falls_back() {
     wait_until("a poll through the adopted relay", || adopted.requests() >= 2).await;
     assert_eq!(payment.saved_relay().await.as_ref(), Some(adopted.url()));
 
-    adopted.go_down();
+    adopted.set_behavior(TestRelayBehavior::Down);
     let before_outage = adopted.requests();
     payment.wait_for_fallback(&fx).await;
 
@@ -165,6 +165,33 @@ async fn a_failing_adopted_relay_is_retried_until_the_session_falls_back() {
         "the session retried the adopted relay while it was down"
     );
     assert_eq!(other.requests(), 0, "the session never switched to the other relay");
+}
+
+/// After the POST, the adopted relay redirects every request to the other relay. The session
+/// does not follow the redirect, so the other relay never sees the sender, and the session
+/// falls back once it times out
+#[tokio::test(flavor = "current_thread")]
+async fn a_redirect_from_the_adopted_relay_is_not_followed() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let adopted = TestRelay::forwarding_to(&services, 0).await;
+    let other = TestRelay::forwarding_to(&services, 1).await;
+    let mut payment = Payment::prepare(&mut fx, &services).await;
+
+    payment.start(TestRelay::sender_config(&[&adopted, &other], Duration::from_secs(10))).await;
+    payment.wait_for_original().await;
+    wait_until("a poll through the adopted relay", || adopted.requests() >= 2).await;
+
+    adopted.set_behavior(TestRelayBehavior::Redirect(other.url().clone()));
+    let before_redirects = adopted.requests();
+    payment.wait_for_fallback(&fx).await;
+
+    assert!(
+        adopted.requests() >= before_redirects + 2,
+        "the session kept polling the adopted relay while it redirected"
+    );
+    assert_eq!(other.requests(), 0, "no request followed the redirect to the other relay");
 }
 
 /// A funded hot wallet with a Max payment to a BIP 77 receiver, ready to start as a Payjoin

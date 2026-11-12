@@ -9,7 +9,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -17,7 +17,10 @@ use std::{
 use axum::{
     body::Bytes,
     extract::State,
-    http::{HeaderMap, StatusCode, Uri, header::CONTENT_TYPE},
+    http::{
+        HeaderMap, StatusCode, Uri,
+        header::{CONTENT_TYPE, LOCATION},
+    },
     response::{IntoResponse as _, Response},
 };
 use bdk_wallet::{KeychainKind, SignOptions, Wallet as BdkWallet};
@@ -182,6 +185,7 @@ impl Drop for SilentRelay {
 }
 
 /// How a [`TestRelay`] answers the requests the sender sends it
+#[derive(Clone)]
 pub(crate) enum TestRelayBehavior {
     /// Passes each request on to a real relay and returns its answer
     Forward(Url),
@@ -190,6 +194,8 @@ pub(crate) enum TestRelayBehavior {
     /// Answers every request with 200 and a body that is not an OHTTP response, so the request
     /// itself succeeds but the sender's `process_response` rejects the answer
     Garbled,
+    /// Answers every request with a 307 redirect to the same path on another relay
+    Redirect(Url),
 }
 
 /// A relay a sender is configured with in place of a real one, which counts the requests it
@@ -201,12 +207,9 @@ pub(crate) struct TestRelay {
 }
 
 struct TestRelayState {
-    behavior: TestRelayBehavior,
+    behavior: parking_lot::Mutex<TestRelayBehavior>,
     client: reqwest::Client,
     requests: AtomicUsize,
-
-    // set by `go_down`, after which the relay answers as `TestRelayBehavior::Down` does
-    down: AtomicBool,
 }
 
 impl TestRelay {
@@ -223,10 +226,9 @@ impl TestRelay {
             .expect("a loopback port for the test relay");
         let port = listener.local_addr().expect("the test relay has an address").port();
         let state = Arc::new(TestRelayState {
-            behavior,
+            behavior: parking_lot::Mutex::new(behavior),
             client,
             requests: AtomicUsize::new(0),
-            down: AtomicBool::new(false),
         });
 
         let app = axum::Router::new().fallback(relay_request).with_state(state.clone());
@@ -247,9 +249,9 @@ impl TestRelay {
         self.state.requests.load(Ordering::SeqCst)
     }
 
-    /// Makes the relay answer every later request as a down relay does
-    pub(crate) fn go_down(&self) {
-        self.state.down.store(true, Ordering::SeqCst);
+    /// Changes how the relay answers every later request
+    pub(crate) fn set_behavior(&self, behavior: TestRelayBehavior) {
+        *self.state.behavior.lock() = behavior;
     }
 
     /// A sender config that tries `relays` in the given order and waits up to `session_timeout`
@@ -275,20 +277,22 @@ async fn relay_request(
     body: Bytes,
 ) -> Response {
     state.requests.fetch_add(1, Ordering::SeqCst);
-    if state.down.load(Ordering::SeqCst) {
-        return StatusCode::BAD_GATEWAY.into_response();
-    }
 
-    let upstream = match &state.behavior {
+    // the path carries the directory's origin, which the real relay forwards to
+    let path = uri.path_and_query().map_or("/", |path| path.as_str());
+    let behavior = state.behavior.lock().clone();
+    let upstream = match behavior {
         TestRelayBehavior::Forward(upstream) => upstream,
         TestRelayBehavior::Down => return StatusCode::BAD_GATEWAY.into_response(),
         TestRelayBehavior::Garbled => {
             return (StatusCode::OK, "not an OHTTP response").into_response();
         }
+        TestRelayBehavior::Redirect(target) => {
+            let location = format!("{}{path}", target.as_str().trim_end_matches('/'));
+            return (StatusCode::TEMPORARY_REDIRECT, [(LOCATION, location)]).into_response();
+        }
     };
 
-    // the path carries the directory's origin, which the real relay forwards to
-    let path = uri.path_and_query().map_or("/", |path| path.as_str());
     let url = format!("{}{path}", upstream.as_str().trim_end_matches('/'));
     let mut request = state.client.post(url).body(body);
     if let Some(content_type) = headers.get(CONTENT_TYPE) {

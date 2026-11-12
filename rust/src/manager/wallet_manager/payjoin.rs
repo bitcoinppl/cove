@@ -33,9 +33,12 @@ use super::actor::WalletActor;
 mod config;
 mod status;
 
-pub(crate) use config::{OhttpRelays, PayjoinConfig};
+pub(crate) use config::PayjoinConfig;
 pub(crate) use status::{PayjoinDeadline, unix_now_secs};
 pub use status::{PayjoinIntent, PayjoinSessionId, PayjoinStatus, PayjoinTransactionKind};
+
+#[cfg(test)]
+pub(crate) use config::OhttpRelays;
 
 /// Persists payjoin session events to the wallet's database so sessions survive app restarts.
 ///
@@ -320,26 +323,35 @@ impl SessionPersister for PostPersister<'_> {
     }
 }
 
+// a client that never follows redirects, so a relay cannot hand a session's request on to
+// another host that would then learn the sender's IP
+fn relay_client() -> Result<reqwest::Client> {
+    cove_http::new_client_without_redirects()
+        .map_err(|e| eyre::eyre!("failed to create HTTP client: {e:?}"))
+}
+
 // send a payjoin HTTP request via reqwest and return the response bytes
 async fn http_post(
     client: &reqwest::Client,
     req: payjoin::Request,
     timeout: Duration,
 ) -> Result<Vec<u8>> {
-    Ok(client
+    let response = client
         .post(&req.url)
         .header("Content-Type", req.content_type)
         .body(req.body)
         .timeout(timeout)
         .send()
         .await
-        .map_err(|e| eyre::eyre!("send failed: {e:?}"))?
-        .error_for_status()
-        .map_err(|e| eyre::eyre!("relay returned error status: {e:?}"))?
-        .bytes()
-        .await
-        .map_err(|e| eyre::eyre!("body read failed: {e:?}"))?
-        .to_vec())
+        .map_err(|e| eyre::eyre!("send failed: {e:?}"))?;
+
+    // a redirect is not followed, so it fails the attempt like an error status does
+    let status = response.status();
+    if !status.is_success() {
+        return Err(eyre::eyre!("relay returned status {status}"));
+    }
+
+    Ok(response.bytes().await.map_err(|e| eyre::eyre!("body read failed: {e:?}"))?.to_vec())
 }
 
 /// Why one relay did not complete a request
@@ -514,10 +526,10 @@ async fn do_poll(
     persister: PayjoinSessionPersister,
     relay: Url,
 ) {
-    let client = match cove_http::new_client() {
+    let client = match relay_client() {
         Ok(c) => c,
         Err(e) => {
-            warn!("payjoin poll: failed to create HTTP client: {e:?}");
+            warn!("payjoin poll: {e}");
             send!(addr.complete_with_fallback_msg());
             return;
         }
@@ -751,10 +763,10 @@ impl PayjoinActor {
         let candidates = self.config.relays().attempt_order();
 
         self.addr.send_fut_with(|addr| async move {
-            let client = match cove_http::new_client() {
+            let client = match relay_client() {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!("payjoin POST: failed to create HTTP client: {e:?}");
+                    warn!("payjoin POST: {e}");
                     send!(addr.complete_with_fallback_msg());
                     return;
                 }
