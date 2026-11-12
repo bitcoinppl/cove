@@ -1119,6 +1119,13 @@ pub(crate) mod test_support {
             last_poll_failure: None,
         }
     }
+
+    /// Whether the stored session has saved the directory's answer to its POST, the point
+    /// from which a relaunch resumes polling instead of falling back
+    pub(crate) fn session_is_polling(db: &WalletDataDb) -> bool {
+        let persister = PayjoinSessionPersister::new(db.clone());
+        matches!(replay_event_log(&persister), Ok((SendSession::PollingForProposal(_), _)))
+    }
 }
 
 #[cfg(test)]

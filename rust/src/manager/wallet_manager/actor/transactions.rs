@@ -1562,7 +1562,7 @@ pub(crate) mod test_support {
             Error,
             actor::{PayjoinPhase, WalletActor},
             payjoin::{
-                PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinSessionPersister,
+                self, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinSessionPersister,
                 unix_now_secs,
             },
         },
@@ -1630,6 +1630,11 @@ pub(crate) mod test_support {
             &mut self,
         ) -> ActorResult<Option<PayjoinSenderSession>> {
             Produces::ok(self.db.get_payjoin_sender_session().expect("payjoin session reads"))
+        }
+
+        /// Whether the stored Payjoin session has reached polling for the receiver's proposal
+        pub(crate) async fn payjoin_session_is_polling_for_test(&mut self) -> ActorResult<bool> {
+            Produces::ok(payjoin::test_support::session_is_polling(&self.db))
         }
     }
 }
