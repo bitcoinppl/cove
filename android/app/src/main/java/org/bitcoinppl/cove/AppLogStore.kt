@@ -4,6 +4,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.time.Instant
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -24,7 +26,8 @@ enum class AppLogLevel {
  * The diagnostics report used to read only the shared logcat tail, where other processes and
  * debug lines push useful app lines out. This store keeps them across launches in at most eight
  * 256 KiB files, matching iOS `SwiftLogStore`. Lines are written raw; the report redacts them
- * when it is built
+ * when it is built. A logged throwable keeps only its class and stack frames, and those of every
+ * cause and suppressed throwable, never a message
  *
  * Every disk access runs on [diskExecutor], which must run tasks one at a time in order. `record`
  * only queues its write, so it is safe on the main thread. `snapshot` and `clear` queue their work
@@ -172,10 +175,54 @@ class AppLogStore(
             message: String,
             throwable: Throwable?,
         ): String {
-            val body = if (throwable == null) message else "$message\n${throwable.stackTraceToString()}"
+            val body = if (throwable == null) message else "$message\n${throwable.messageFreeStackTrace()}"
             val normalized = body.replace("\r\n", "\n").replace('\r', '\n').trimEnd('\n')
 
             return "$timestamp ${level.name} $tag: ${normalized.truncatedAtTokenBoundary(MAX_ENTRY_CHARS)}\n"
+        }
+
+        // exception messages quote whatever the failing code was handed, such as pasted text, a
+        // file name or a card response, and many call sites pass throwables, so the store keeps
+        // only each throwable's class and frames. Logcat still gets the full throwable
+        private fun Throwable.messageFreeStackTrace(): String {
+            val text = StringBuilder()
+            val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+            appendWithoutMessage(text, caption = "", enclosingTrace = emptyArray(), seen = seen)
+
+            return text.toString()
+        }
+
+        // mirrors `printStackTrace`, including its elision of frames shared with the enclosing
+        // trace, with each throwable's message left out
+        private fun Throwable.appendWithoutMessage(
+            text: StringBuilder,
+            caption: String,
+            enclosingTrace: Array<StackTraceElement>,
+            seen: MutableSet<Throwable>,
+        ) {
+            if (!seen.add(this)) {
+                text.append("$caption[CIRCULAR REFERENCE: ${javaClass.name}]\n")
+                return
+            }
+
+            val trace = stackTrace
+            var last = trace.size - 1
+            var enclosingLast = enclosingTrace.size - 1
+            while (last >= 0 && enclosingLast >= 0 && trace[last] == enclosingTrace[enclosingLast]) {
+                last--
+                enclosingLast--
+            }
+
+            text.append("$caption${javaClass.name}\n")
+            for (index in 0..last) text.append("\tat ${trace[index]}\n")
+
+            val framesInCommon = trace.size - 1 - last
+            if (framesInCommon > 0) text.append("\t... $framesInCommon more\n")
+
+            for (suppressed in suppressed) {
+                suppressed.appendWithoutMessage(text, "Suppressed: ", trace, seen)
+            }
+            cause?.appendWithoutMessage(text, "Caused by: ", trace, seen)
         }
 
         // cutting inside a token could leave half an address or key that report redaction no
