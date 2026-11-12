@@ -112,7 +112,8 @@ mod workers;
 use enable::{DiscardTarget, EnableContinuation};
 
 pub(crate) use account_switch::{
-    DriveAccountSwitchReinitializationEnd, UnsavedDriveAccountSwitchCompletion,
+    AwaitedDriveAccountSwitchStep, DriveAccountSwitchReinitializationEnd,
+    UnsavedDriveAccountSwitchCompletion,
 };
 pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use verification::DeepVerificationContinuation;
@@ -322,6 +323,9 @@ pub(crate) struct CloudBackupSupervisor {
     /// A switch's reinitialize that ended while saving the switch's next phase failed; its run
     /// and claim are over, and the switch saves this before it reads its phase again
     drive_account_switch_unsaved: Option<UnsavedDriveAccountSwitchCompletion>,
+    /// The platform step the switch asked Android for and waits on; only its answer moves the
+    /// switch
+    drive_account_switch_awaited: AwaitedDriveAccountSwitchStep,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
@@ -407,6 +411,7 @@ impl CloudBackupSupervisor {
             runtime,
             enable_continuation: None,
             drive_account_switch_unsaved: None,
+            drive_account_switch_awaited: AwaitedDriveAccountSwitchStep::default(),
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,

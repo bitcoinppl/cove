@@ -61,6 +61,66 @@ enum PlatformStep {
     Rollback(DriveAccountSwitchId),
 }
 
+impl PlatformStep {
+    /// The step Android answers with `result`
+    fn answered_by(result: DriveAccountSwitchPlatformResult) -> Self {
+        use DriveAccountSwitchPlatformResult as R;
+
+        match result {
+            R::State(_) => Self::ReportState,
+            R::AccountSelected(id) | R::AccountUnchanged(id) | R::AccountSelectionFailed(id) => {
+                Self::SelectAccount(id.into())
+            }
+            R::Committed(id) | R::CommitFailed(id) => Self::Commit(id.into()),
+            R::Finalized(id) | R::FinalizeFailed(id) => Self::Finalize(id.into()),
+            R::RolledBack(id) | R::RollbackFailed(id) => Self::Rollback(id.into()),
+        }
+    }
+}
+
+/// The platform step the switch asked Android for and waits on
+///
+/// Rust asks for one step at a time, and Android answers it with a result carrying the
+/// transition the step was for. Only the answer to the awaited step moves the switch. Any other
+/// step result is for a step the switch no longer waits on: a late answer for a switch a reset
+/// retired, or a second answer to a step already answered. Acting on it would move or fail a
+/// switch that isn't there
+///
+/// The platform's state report is taken whatever the switch waits on: it describes the
+/// platform's durable state rather than one step's outcome, the reconcile reads it against the
+/// switch's record, and Android reports it at launch without being asked
+///
+/// Asking for a state report, as Try Again does, keeps the step the switch waits on: Android may
+/// still be carrying that step out, and dropping its answer would leave the switch waiting on a
+/// step Android already finished
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AwaitedDriveAccountSwitchStep(Option<PlatformStep>);
+
+impl AwaitedDriveAccountSwitchStep {
+    fn awaits(&mut self, step: PlatformStep) {
+        // a state report's answer is always taken, so it needs no place here
+        if step == PlatformStep::ReportState {
+            return;
+        }
+
+        self.0 = Some(step);
+    }
+
+    /// Takes `result` as the answer to the awaited step; false when the switch doesn't wait on
+    /// the step it answers
+    fn take_answer(&mut self, result: DriveAccountSwitchPlatformResult) -> bool {
+        let answered = PlatformStep::answered_by(result);
+        let took = self.0.take_if(|awaited| *awaited == answered).is_some();
+
+        took || answered == PlatformStep::ReportState
+    }
+
+    /// The switch the awaited step belongs to ended, so no answer to it moves anything
+    fn retire(&mut self) {
+        self.0 = None;
+    }
+}
+
 impl From<PlatformStep> for CloudBackupReconcileMessage {
     fn from(step: PlatformStep) -> Self {
         match step {
@@ -182,7 +242,7 @@ impl CloudBackupSupervisor {
         }
 
         if drained {
-            Self::request_platform_step(&manager, PlatformStep::SelectAccount(transition_id));
+            self.request_platform_step(&manager, PlatformStep::SelectAccount(transition_id));
             return Produces::ok(());
         }
 
@@ -213,6 +273,13 @@ impl CloudBackupSupervisor {
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         info!("Cloud Backup Google Drive account switch platform result: {result:?}");
+
+        if !self.drive_account_switch_awaited.take_answer(result) {
+            warn!(
+                "Cloud Backup is not waiting on the Google Drive account switch step {result:?} answers"
+            );
+            return Produces::ok(());
+        }
 
         match result {
             R::State(platform_state) => {
@@ -276,7 +343,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        Self::request_platform_step(manager, PlatformStep::ReportState);
+        self.request_platform_step(manager, PlatformStep::ReportState);
     }
 
     /// Cancel on a switch that needs attention, which dispatch admitted while the platform has
@@ -343,7 +410,7 @@ impl CloudBackupSupervisor {
         };
 
         match ready {
-            Ok(()) => Self::request_platform_step(manager, PlatformStep::Rollback(transition_id)),
+            Ok(()) => self.request_platform_step(manager, PlatformStep::Rollback(transition_id)),
             Err(error) => {
                 warn!("Google Drive account switch could not roll back: {error}");
                 Self::report_drive_account_switch_recovery_required(manager, FINISH_FAILED_MESSAGE);
@@ -357,7 +424,7 @@ impl CloudBackupSupervisor {
         transition_id: DriveAccountSwitchId,
     ) {
         match self.release_committed_drive_account_switch(manager.clone(), transition_id) {
-            Ok(()) => Self::request_platform_step(&manager, PlatformStep::Finalize(transition_id)),
+            Ok(()) => self.request_platform_step(&manager, PlatformStep::Finalize(transition_id)),
             Err(error) => {
                 error!("Failed to confirm Google Drive account commit: {error}");
                 Self::report_drive_account_switch_recovery_required(
@@ -509,7 +576,7 @@ impl CloudBackupSupervisor {
         }
 
         match self.reconciled_drive_account_switch_step(manager, platform_state) {
-            Some(step) => Self::request_platform_step(manager, step),
+            Some(step) => self.request_platform_step(manager, step),
             None => self.drive_account_switch_settled(),
         }
     }
@@ -674,7 +741,7 @@ impl CloudBackupSupervisor {
 
         match end {
             DriveAccountSwitchReinitializationEnd::Succeeded => {
-                Self::request_platform_step(manager, PlatformStep::Commit(transition_id));
+                self.request_platform_step(manager, PlatformStep::Commit(transition_id));
             }
             DriveAccountSwitchReinitializationEnd::Failed => {
                 self.runtime.finish(claim);
@@ -717,7 +784,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        Self::request_platform_step(manager, PlatformStep::Commit(transition_id));
+        self.request_platform_step(manager, PlatformStep::Commit(transition_id));
     }
 
     /// Saves the phase the switch's last reinitialize run ended in when that run could not; false,
@@ -934,15 +1001,20 @@ impl CloudBackupSupervisor {
     /// Retires what this process still held of a switch once a local reset left Cloud Backup off
     ///
     /// The reset cleared the switch's record with the rest of the lifecycle, so a step that
-    /// failed before it has no switch left to retry on this screen. Whatever the platform still
-    /// holds is reconciled from its next state report, which finalizes or rolls back a switch
-    /// Rust no longer records
+    /// failed before it has no switch left to retry on this screen, and the answer to a step
+    /// still in flight has no switch left to move. Whatever the platform still holds is
+    /// reconciled from its next state report, which finalizes or rolls back a switch Rust no
+    /// longer records
     pub(crate) fn drive_account_switch_ended_by_reset(&mut self, manager: &RustCloudBackupManager) {
         self.drive_account_switch_unsaved = None;
+        self.drive_account_switch_awaited.retire();
         Self::clear_drive_account_switch_recovery(manager);
     }
 
-    fn request_platform_step(manager: &RustCloudBackupManager, step: PlatformStep) {
+    /// Asks Android for `step`, which the switch then waits on in place of any step before it,
+    /// unless `step` only asks for a state report
+    fn request_platform_step(&mut self, manager: &RustCloudBackupManager, step: PlatformStep) {
+        self.drive_account_switch_awaited.awaits(step);
         manager.send(step.into());
     }
 

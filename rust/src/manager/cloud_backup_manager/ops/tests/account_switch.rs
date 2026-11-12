@@ -1,5 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::DriveAccountSwitchPlatformResult as PlatformResult;
+use crate::manager::cloud_backup_manager::DriveAccountSwitchPlatformState;
 use crate::manager::cloud_backup_manager::RequestedDriveAccountSwitchStep;
 use crate::manager::cloud_backup_manager::admission::UserIntent;
 
@@ -24,6 +25,22 @@ pub(crate) async fn start_drive_account_switch(manager: &RustCloudBackupManager)
     .await;
 
     transition_id
+}
+
+/// The platform reports the account it staged for a switch whose reinitialize succeeded, and the
+/// switch asks it to commit that account
+///
+/// The switch moves only on the answer to a step it asked for, so a test that put the switch in
+/// its commit phase directly has the platform report its state, as it does at launch
+async fn platform_asks_for_the_commit(manager: &RustCloudBackupManager, transition_id: u64) {
+    manager
+        .drive_account_switch_platform_result_handled(PlatformResult::State(
+            DriveAccountSwitchPlatformState::Staged(transition_id),
+        ))
+        .await;
+
+    let commit = RequestedDriveAccountSwitchStep::Commit(transition_id);
+    assert!(manager.drained_drive_account_switch_steps().contains(&commit));
 }
 
 #[derive(Clone, Copy)]
@@ -60,6 +77,7 @@ async fn assert_drive_account_switch_release_resumes_dirty_wallet(
                 PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded,
             ));
             Database::global().cloud_backup_state.set(&persisted).unwrap();
+            platform_asks_for_the_commit(&manager, transition_id).await;
 
             manager
                 .drive_account_switch_platform_result_handled(PlatformResult::Committed(
@@ -143,6 +161,7 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
     ));
 
     Database::global().cloud_backup_state.set(&persisted).unwrap();
+    platform_asks_for_the_commit(&manager, transition_id).await;
 
     manager
         .drive_account_switch_platform_result_handled(PlatformResult::Committed(transition_id))

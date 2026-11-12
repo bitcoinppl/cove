@@ -856,6 +856,9 @@ async fn drive_account_switch_holds_a_second_switch_and_an_unchanged_account_rel
         .expect("the switch is recorded");
     let transition_id = transition.transition_id.value();
     let claim = supervisor.runtime.claim().expect("the switch runs");
+    write_drain_completed(&mut supervisor, claim).await;
+
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![RequestedDriveAccountSwitchStep::SelectAccount(transition_id)]);
 
     // a second Switch is held off and leaves the first one's record and claim
     supervisor.dispatch(UserIntent::SwitchDriveAccount).await.unwrap().await.unwrap();
@@ -863,11 +866,12 @@ async fn drive_account_switch_holds_a_second_switch_and_an_unchanged_account_rel
     assert_eq!(RustCloudBackupManager::load_persisted_state().drive_account_switch(), Some(&transition));
     assert_eq!(supervisor.runtime.claim(), Some(claim));
 
-    // a commit for another transition moves nothing and asks the user to look
+    // the switch waits on the account picker, so a commit for another transition moves nothing
     platform_result(&mut supervisor, R::Committed(transition_id + 1)).await;
 
     assert_eq!(persisted_drive_account_switch_phase(), Some(PersistedDriveAccountSwitchPhase::AwaitingAccountSelection));
-    assert!(manager.state.read().drive_account_switch_recovery().is_some());
+    assert_eq!(manager.state.read().drive_account_switch_recovery(), None);
+    assert_eq!(manager.drained_drive_account_switch_steps(), vec![]);
 
     // the user backed out of the picker: the platform discards the staged account
     platform_result(&mut supervisor, R::AccountUnchanged(transition_id)).await;
@@ -5094,6 +5098,13 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
     assert_eq!(wallet_type(&wrapped_segwit.id), Some(WalletType::WatchOnly));
 }
 
+/// The write lane drained for the switch `claim` started, which asks the platform for an account
+///
+/// The supervisor under test has no actor address, so the drain's completion is handed to it here
+async fn write_drain_completed(supervisor: &mut CloudBackupSupervisor, claim: CloudBackupExclusiveOperationClaim) {
+    supervisor.complete_drive_account_switch_write_drain(claim, true).await.unwrap().await.unwrap();
+}
+
 /// Hands `result` to the supervisor under test and waits until it has handled it
 async fn platform_result(supervisor: &mut CloudBackupSupervisor, result: DriveAccountSwitchPlatformResult) {
     supervisor.drive_account_switch_platform_result(result).await.unwrap().await.unwrap();
@@ -5161,6 +5172,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         .transition_id;
     let claim = supervisor.runtime.claim().expect("the switch runs");
     assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
+    write_drain_completed(&mut supervisor, claim).await;
 
     // a selection staged for another transition moves nothing
     platform_result(
@@ -5192,7 +5204,8 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         Destructive::ReinitializingBackup
     );
 
-    // a repeated selection joins the running reinitialize rather than starting another
+    // a repeated selection answers no step the switch waits on, so the running reinitialize goes
+    // on alone
     platform_result(
         &mut supervisor,
         DriveAccountSwitchPlatformResult::AccountSelected(transition_id.value()),

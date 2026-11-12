@@ -185,8 +185,13 @@ its account-storage steps. Switch, Try Again and Cancel are dispatch actions.
 The supervisor asks for each platform step on the reconcile channel (choose an
 account, report the platform's state, commit, finalize, roll back), and Android
 answers each with a typed `DriveAccountSwitchPlatformResult` through
-`report_drive_account_switch_platform_result`. The supervisor records the
-switch's phase, decides the next step, and projects the switch's stage:
+`report_drive_account_switch_platform_result`. The supervisor keeps the one
+step it waits on and acts only on the answer to that step, matched by step and
+transition id; any other step result, such as a late answer for a switch a
+reset ended or a second answer to a step already answered, is logged and
+dropped. A state report is always taken, since the reconcile reads it against
+the switch's record, and asking for one, as Try Again does, keeps the step the
+switch waits on, whose answer may still come. The supervisor records the switch's phase, decides the next step, and projects the switch's stage:
 switching, or needing attention with a message for the reader. A switch
 paused on its saved passkey shows the saved-passkey confirmation instead. Android reports its state once at launch, so the supervisor
 picks up a switch a relaunch interrupted. A failed reinitialize is rerun only
@@ -200,8 +205,9 @@ out: Confirm Saved Passkey while paused, otherwise Try Again. A switch that roll
 discards the key material its stopped reinitialize kept on this device, so it
 can't come back at the next launch as a reinitialize of the previous backup.
 A local reset that leaves Cloud Backup off ends the switch with its record, a
-step that failed included, so the screen shows Cloud Backup off rather than the
-switch's Try Again. Android's next state report then finalizes or rolls back
+step that failed included, and with the step it waited on, so the screen shows
+Cloud Backup off rather than the switch's Try Again, and Android's late answer
+to that step moves nothing. Android's next state report then finalizes or rolls back
 whatever it still holds of a switch Rust no longer records. A reset that
 resumes the backup keeps the switch as it was, and runs the pending-enable
 journal's recovery, which hands the switch a reinitialize whose promotion it

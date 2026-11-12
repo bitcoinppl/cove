@@ -1045,6 +1045,190 @@ fn a_completed_reset_ends_a_switch_whose_step_failed() {
     });
 }
 
+/// Greptile P1 on #1113: a local reset that completes while the platform is still working on a
+/// switch step ends the switch, so the platform's late answer for it finds no step awaited and
+/// moves nothing
+///
+/// Before, a late failure republished the switch's recovery over the reset, which hid Enable and
+/// Restore until a retry or a relaunch
+fn a_late_answer_for_a_switch_a_reset_ended_moves_nothing(
+    app: &mut TestApp,
+    late_answer: impl FnOnce(u64) -> Platform,
+    transition_id: u64,
+) {
+    let manager = app.manager().clone();
+    let permit = app
+        .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+        .expect("reset permit");
+    app.event("the wipe completes", |app| finish_wipe(app, permit))
+        .then_can(&[N::Enable, N::RestoreFromCloudBackup])
+        .then_cannot(&[N::TurnOff]);
+    requested_steps(app);
+
+    platform_reports(app, late_answer(transition_id))
+        .then_can(&[N::Enable, N::RestoreFromCloudBackup])
+        .then_cannot(&[N::TurnOff]);
+    assert_eq!(app.manager().state.read().drive_account_switch_recovery(), None);
+    assert_eq!(switch_stage(app), None, "{}", app.describe());
+    assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::Disabled);
+    assert_eq!(requested_steps(app), vec![], "{}", app.describe());
+}
+
+/// A seeded backup whose switch has the account picker open, with the transition
+fn switch_choosing_an_account(app: &mut TestApp) -> u64 {
+    FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+    let transition_id =
+        persisted().drive_account_switch().expect("the switch is recorded").transition_id.value();
+    assert_eq!(requested_steps(app), vec![Step_::SelectAccount(transition_id)]);
+
+    transition_id
+}
+
+/// A seeded backup whose switch reinitialized in the new account and asked the platform to
+/// commit it, with the transition
+fn switch_committing_its_account(app: &mut TestApp) -> u64 {
+    FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    // the new account's backup is created under a passkey the platform already has
+    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![7; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let transition_id = switch_to_a_new_account(app);
+    assert_eq!(requested_steps(app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+
+    transition_id
+}
+
+#[test]
+fn a_selection_answered_after_a_completed_reset_moves_nothing() {
+    let test =
+        concat!(module_path!(), "::a_selection_answered_after_a_completed_reset_moves_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_choosing_an_account(&mut app);
+
+        a_late_answer_for_a_switch_a_reset_ended_moves_nothing(
+            &mut app,
+            Platform::AccountUnchanged,
+            transition_id,
+        );
+    });
+}
+
+#[test]
+fn a_commit_failed_after_a_completed_reset_moves_nothing() {
+    let test = concat!(module_path!(), "::a_commit_failed_after_a_completed_reset_moves_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_committing_its_account(&mut app);
+
+        a_late_answer_for_a_switch_a_reset_ended_moves_nothing(
+            &mut app,
+            Platform::CommitFailed,
+            transition_id,
+        );
+    });
+}
+
+#[test]
+fn a_finalize_failed_after_a_completed_reset_moves_nothing() {
+    let test = concat!(module_path!(), "::a_finalize_failed_after_a_completed_reset_moves_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_committing_its_account(&mut app);
+        platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::Finalize(transition_id)]);
+
+        a_late_answer_for_a_switch_a_reset_ended_moves_nothing(
+            &mut app,
+            Platform::FinalizeFailed,
+            transition_id,
+        );
+    });
+}
+
+#[test]
+fn a_rollback_failed_after_a_completed_reset_moves_nothing() {
+    let test = concat!(module_path!(), "::a_rollback_failed_after_a_completed_reset_moves_nothing");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_choosing_an_account(&mut app);
+        platform_reports(&mut app, Platform::AccountUnchanged(transition_id))
+            .then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::Rollback(transition_id)]);
+
+        a_late_answer_for_a_switch_a_reset_ended_moves_nothing(
+            &mut app,
+            Platform::RollbackFailed,
+            transition_id,
+        );
+    });
+}
+
+/// Model seed 20261511: after a relaunch the launch report asks for a rollback, and the user's
+/// Try Again asks for a state report before Android answers it. The rollback's answer still ends
+/// the switch
+///
+/// Before, the state report took the rollback's place as the awaited step, so Android's
+/// RolledBack was dropped, and each later Try Again did the same to the rollback the reconcile
+/// asked for again, leaving the switch stuck
+#[test]
+fn a_rollback_answered_after_try_again_asked_for_a_report_ends_the_switch() {
+    let test = concat!(
+        module_path!(),
+        "::a_rollback_answered_after_try_again_asked_for_a_report_ends_the_switch"
+    );
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            switch_choosing_an_account(&mut app);
+            return;
+        }
+
+        // the account picker didn't survive the process, so Android has nothing staged
+        let mut app = TestApp::launch();
+        let transition_id = persisted()
+            .drive_account_switch()
+            .expect("the switch is recorded")
+            .transition_id
+            .value();
+        platform_reports(&mut app, Platform::State(DriveAccountSwitchPlatformState::NoTransition))
+            .then_cannot(&[N::Enable]);
+        assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::AwaitingAccountRollback));
+        assert_eq!(
+            availability(&app, A::RetryDriveAccountSwitchRecovery),
+            Some(CloudBackupActionAvailability::Available),
+            "{}",
+            app.describe()
+        );
+
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(
+            requested_steps(&app),
+            vec![Step_::Rollback(transition_id), Step_::ReportState],
+            "{}",
+            app.describe()
+        );
+
+        // Android answers the two steps in the order Rust asked for them
+        platform_reports(&mut app, Platform::RolledBack(transition_id)).then_cannot(&[N::Enable]);
+        assert_eq!(switch_phase(), None, "{}", app.describe());
+        assert_eq!(switch_stage(&app), None, "{}", app.describe());
+
+        platform_reports(&mut app, Platform::State(DriveAccountSwitchPlatformState::NoTransition))
+            .then_cannot(&[N::Enable]);
+        assert_eq!(switch_phase(), None, "{}", app.describe());
+        assert_eq!(requested_steps(&app), vec![], "{}", app.describe());
+    });
+}
+
 /// The configured backup's reinitialize waits on its saved passkey, with Confirm and Discard
 fn assert_reinitialize_paused(app: &TestApp) {
     let paused = app
