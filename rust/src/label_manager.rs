@@ -329,6 +329,32 @@ impl LabelManager {
         Ok(())
     }
 
+    /// Label a transaction this wallet has no label for yet, returning whether it wrote one
+    ///
+    /// For labels Cove adds on its own, such as a transfer between the user's wallets found at
+    /// broadcast, which must never replace a label the user wrote
+    pub(crate) fn label_transaction_if_unlabeled(
+        &self,
+        tx_id: TxId,
+        label: String,
+    ) -> Result<bool> {
+        self.ensure_active()?;
+
+        let now = jiff::Timestamp::now().as_second() as u64;
+        let record = TransactionRecord { ref_: tx_id.0, label: Some(label), origin: None };
+        let inserted = self
+            .db
+            .labels
+            .insert_txn_label_if_absent(record, Timestamps::new(now, now))
+            .map_err_str(LabelManagerError::Save)?;
+
+        if inserted {
+            self.mark_cloud_backup_dirty();
+        }
+
+        Ok(inserted)
+    }
+
     pub(crate) fn import_without_cloud_backup_dirty(
         &self,
         jsonl: &str,
