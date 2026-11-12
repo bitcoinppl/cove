@@ -35,7 +35,7 @@ use crate::manager::cloud_backup_manager::ops::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupDisableConfirmation,
+    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupDisableScreen,
     CloudBackupFinishingDisableStage, CloudBackupInventoryControl, CloudBackupOutcome,
     CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRejection,
     CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
@@ -778,6 +778,65 @@ fn turn_off_reaches_a_review_and_a_commit_past_a_wallet_listing_that_never_answe
         assert!(!app.cloud.inner.has_namespace(&namespace));
         assert!(app.passkey.interactive_calls().is_empty());
     });
+}
+
+/// The Offline dialog's Try Again is Check Again: a review whose classification refresh waits out
+/// the detail rate limit is live work that quiescence gives the clock, so it reaches a review and
+/// a Turn Off that finishes, instead of quiescing while it prepares
+///
+/// Minimized from model seed 777799, whose escape tapped Turn Off on the Offline dialog and then
+/// joined the preparing review on every tap without ever moving the clock
+#[test]
+fn quiescence_moves_a_check_again_review_past_its_rate_limited_refresh() {
+    let test = concat!(
+        module_path!(),
+        "::quiescence_moves_a_check_again_review_past_its_rate_limited_refresh"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        app.event("the connection drops", |_| {
+            CONNECTIVITY_MANAGER.set_status_without_broadcast(ConnectivityStatus::Disconnected);
+        })
+        .then_can(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::TurnOff, N::CancelDisable])
+            .then_cannot(&[N::ConfirmDisable]);
+        assert_eq!(disable_screen(&app), CloudBackupDisableScreen::Offline, "{}", app.describe());
+
+        app.event("the connection returns", |app| {
+            CONNECTIVITY_MANAGER.set_status_without_broadcast(ConnectivityStatus::Connected);
+            app.manager().handle_connectivity_change(ConnectivityStatus::Connected);
+        })
+        .then_can(&[N::TurnOff]);
+
+        // a refresh started at this instant holds the next one behind the detail rate limit, so
+        // Check Again's classification waits on the clock
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_can(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::CancelDisable])
+            .then_cannot(&[N::ConfirmDisable, N::Enable]);
+        assert_eq!(disable_screen(&app), CloudBackupDisableScreen::Preparing, "{}", app.describe());
+        assert!(app.holds_live_work(), "a preparing review is live work\n{}", app.describe());
+
+        app.quiesce().then_can(&[N::ConfirmDisable, N::CancelDisable]).then_cannot(&[N::Enable]);
+        assert!(app.turn_off_review().is_some(), "no review after quiescence\n{}", app.describe());
+
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert!(!app.cloud.inner.has_namespace(&namespace));
+        assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// The Turn Off dialog the published configured body shows
+fn disable_screen(app: &TestApp) -> CloudBackupDisableScreen {
+    match app.manager().published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.disable,
+        other => panic!("expected the configured body, got {other:?}"),
+    }
 }
 
 /// The other-backups count is information for the dialog, so a count that never answers holds

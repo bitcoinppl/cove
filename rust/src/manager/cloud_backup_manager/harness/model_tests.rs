@@ -18,8 +18,8 @@
 //! Both rest on finite-time assumptions about the cooperative fakes the checks switch to: a
 //! released hold answers, the passkey provider answers `Succeeds`, the cloud has no scripted
 //! fault left, the platform and the user finish a Drive switch within [`PLATFORM_STEPS_LIMIT`]
-//! steps, and
-//! every operation timer fires within the clock advances [`TestApp::quiesce`] makes.
+//! steps, and every timer an operation or a preparing Turn Off review waits on fires within the
+//! clock advances [`TestApp::quiesce`] makes.
 //!
 //! Every case prints its seed and a compact trace. To replay one sequence case:
 //! `COVE_MODEL_SEED=<seed> COVE_MODEL_CASES=1 cargo test -p cove --lib -- model_sequences`
@@ -919,7 +919,9 @@ impl Case {
             println!("model escape step {step}: {}", body_name(&body));
             let step = match body {
                 CloudBackupScreenBody::Disabled => return,
-                _ if app.runs_operation() => app.quiesce(),
+                // a Turn Off tap on a review that is preparing joins it, so the escape gives the
+                // review the clock it waits on instead of tapping again
+                _ if app.holds_live_work() => app.quiesce(),
                 CloudBackupScreenBody::Configured(_) if app.turn_off_review().is_some() => {
                     app.confirm_turn_off()
                 }

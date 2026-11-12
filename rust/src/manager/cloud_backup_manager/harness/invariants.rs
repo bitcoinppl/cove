@@ -50,8 +50,8 @@ pub(crate) enum Boundary {
     /// An event settled, leaving this work for the test to move; an operation or a local reset
     /// may still be live, waiting on it
     Pending(PendingWork),
-    /// Every held fake call was released and the clock advanced until no operation waited on it:
-    /// nothing is left that could end an operation (invariant 4a)
+    /// Every held fake call was released and the clock advanced until no live work waited on it:
+    /// nothing is left that could end an operation or a preparing Turn Off review (invariant 4a)
     Quiescent,
 }
 
@@ -171,7 +171,11 @@ impl Invariants {
         self.check_operations(&view.owner.transitions, view.owner.claim, view.shown_operation)?;
         self.check_admissions(&view.dispatches)?;
         self.check_paused_writes(finishes)?;
-        let live = LiveWork { operation: view.owner.claim, resetting: view.resetting };
+        let live = LiveWork {
+            operation: view.owner.claim,
+            resetting: view.resetting,
+            preparing_review: view.preparing_turn_off_review,
+        };
         check_nothing_live(boundary, live)?;
 
         let Some(screen) = view.screen else {
@@ -554,16 +558,20 @@ struct LiveWork {
     operation: Option<CloudBackupExclusiveOperationClaim>,
     /// A local reset closes every exit on purpose until the platform's wipe finishes it
     resetting: bool,
+    /// A Turn Off review gathering its evidence or waiting on Check Again's classification; its
+    /// held calls and its evidence deadline end it
+    preparing_review: bool,
 }
 
 impl LiveWork {
     fn is_live(self) -> bool {
-        self.operation.is_some() || self.resetting
+        self.operation.is_some() || self.resetting || self.preparing_review
     }
 }
 
 /// 4a at quiescence: once every held call answered and the clock moved past every
-/// timer, no operation is live and no local reset holds the body
+/// timer, no operation is live, no Turn Off review is still preparing and no local reset holds
+/// the body
 ///
 /// At a pending boundary either may still wait on the work that boundary names; reaching
 /// quiescence is what proves that work ends it
@@ -575,6 +583,14 @@ fn check_nothing_live(boundary: &Boundary, live: LiveWork) -> Result<(), Violati
         return violation(format!(
             "{operation:?} is still live at quiescence, with no held call or timer left to end it"
         ));
+    }
+
+    if live.preparing_review {
+        return violation(
+            "a Turn Off review is still preparing at quiescence, with no held call or timer \
+             left to end it"
+                .into(),
+        );
     }
 
     if live.resetting {
@@ -616,7 +632,8 @@ fn check_exits(
         // the paused work goes on through Confirm, or ends through Discard where it may
         Body::SavedPasskeyConfirmation(_) => &[A::ConfirmSavedPasskey, A::DiscardPendingEnable],
         Body::Restoring(_) => &[A::CancelRestore],
-        // a Turn Off review that is preparing or shown holds Turn Off, and its Cancel leaves it
+        // a Turn Off review shown holds Turn Off, and its Cancel leaves it; one still preparing
+        // is live work, which only a pending boundary has
         Body::Configured(_) => &[A::TurnOff, A::CancelDisable],
         Body::FinishingDisable(_) => &[A::ResumeDisable, A::StopUsingOnThisDevice],
         // a switch that failed or stopped goes on through Try Again or Cancel
@@ -786,7 +803,8 @@ mod tests {
             CloudBackupExclusiveOperation::Restore,
             OperationId::next(),
         );
-        let orphaned = LiveWork { operation: Some(claim), resetting: false };
+        let orphaned =
+            LiveWork { operation: Some(claim), resetting: false, preparing_review: false };
 
         let pending = Boundary::Pending(PendingWork::PausedClock);
         assert!(check_nothing_live(&pending, orphaned).is_ok());

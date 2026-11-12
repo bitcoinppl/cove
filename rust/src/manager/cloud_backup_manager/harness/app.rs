@@ -191,13 +191,14 @@ pub(crate) struct TestApp {
 
 const SETTLE_ROUNDS: usize = 500;
 
-/// How far quiescence moves the clock at a time: past the longest single timer an operation waits
-/// on, a passkey authorization retry's 15 s budget or a restore's last namespace refresh at 15 s
+/// How far quiescence moves the clock at a time: past the longest single timer live work waits
+/// on, a passkey authorization retry's 15 s budget, a restore's last namespace refresh at 15 s or
+/// a Turn Off review's 20 s evidence deadline
 const QUIESCE_TICK: Duration = Duration::from_secs(61);
 
-/// The most clock advances quiescence makes for a live operation; an operation's timers run one
-/// after another, and none chains more than a few, so one still live after these has nothing
-/// left that would end it
+/// The most clock advances quiescence makes for live work; an operation's timers run one after
+/// another, and none chains more than a few, so work still live after these has nothing left
+/// that would end it
 const QUIESCE_ADVANCES: usize = 10;
 
 /// The most pending boundaries quiescence settles at, each releasing what is held or advancing
@@ -348,6 +349,16 @@ impl TestApp {
         .expect("the supervisor answers")
     }
 
+    /// Whether work that only held calls and timers end holds the runtime now: an operation, or
+    /// a Turn Off review preparing its evidence
+    pub(crate) fn holds_live_work(&self) -> bool {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("whether live work holds the runtime", async move {
+            call!(supervisor.harness_holds_live_work()).await
+        })
+        .expect("the supervisor answers")
+    }
+
     /// The interrupted-Enable recovery the runtime body holds now, apart from what is shown
     pub(crate) fn runtime_recovery(&self) -> Option<CloudBackupPendingEnableRecovery> {
         let supervisor = self.manager.supervisor.clone();
@@ -379,10 +390,15 @@ impl TestApp {
 
     /// Drives the app to quiescence and checks the invariants there, 4a with no exemption
     ///
-    /// Releases every held fake call and advances the clock while an operation is live, checking
-    /// each pending boundary on the way, until nothing is held and no operation is live or the
-    /// advances run out. At that boundary no operation may be live and the body must have a named
-    /// exit (PLAN §4.1); an operation still live there has nothing left that would end it
+    /// Releases every held fake call and advances the clock while work is live, checking each
+    /// pending boundary on the way, until nothing is held and no work is live or the advances run
+    /// out. At that boundary no work may be live and the body must have a named exit;
+    /// work still live there has nothing left that would end it
+    ///
+    /// Live work is an operation or a Turn Off review preparing its evidence
+    /// ([`Self::holds_live_work`]): a review is not an operation, but a Check Again's review waits
+    /// on the classification it asked for or on its evidence deadline, both timers on the paused
+    /// clock
     pub(crate) fn quiesce(&mut self) -> Step<'_> {
         self.begin_event("quiesce".into());
         let mut advances = 0;
@@ -394,7 +410,7 @@ impl TestApp {
             match work {
                 PendingWork::HeldCalls(_) => fakes::release_held_calls(),
                 PendingWork::PausedClock
-                    if advances < QUIESCE_ADVANCES && self.runs_operation() =>
+                    if advances < QUIESCE_ADVANCES && self.holds_live_work() =>
                 {
                     advances += 1;
                     self.block_on("the paused clock to advance", self.clock.advance(QUIESCE_TICK));

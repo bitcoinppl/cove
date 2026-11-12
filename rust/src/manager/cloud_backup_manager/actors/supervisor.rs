@@ -1756,6 +1756,7 @@ pub(crate) mod test_support {
     use super::verification::VerificationRun;
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
+    use crate::manager::cloud_backup_manager::turn_off::TurnOffReview;
     use crate::manager::{
         cloud_backup_manager::{
             CloudBackupPublishedScreen, CloudBackupReconcileMessage, CloudBackupScreenDelta,
@@ -1832,6 +1833,9 @@ pub(crate) mod test_support {
         pub(crate) screen: Option<ScreenView>,
         /// A local reset holds the body, so the screen's exits are closed on purpose
         pub(crate) resetting: bool,
+        /// A Turn Off review is gathering its evidence or waiting on Check Again's
+        /// classification, which its held calls and its evidence deadline end
+        pub(crate) preparing_turn_off_review: bool,
     }
 
     /// The published screen and the deltas that reached the platform, read in one handler so no
@@ -1926,7 +1930,15 @@ pub(crate) mod test_support {
                 uploads: self.uploads.addr_for_test().clone(),
                 screen,
                 resetting: matches!(*self.runtime, Runtime::Resetting { .. }),
+                preparing_turn_off_review: self.prepares_turn_off_review(),
             })
+        }
+
+        /// A preparing review is not an operation, but like one it waits only on held calls and
+        /// on timers: its listing and Check Again's classification, each bounded by the
+        /// evidence deadline
+        fn prepares_turn_off_review(&self) -> bool {
+            matches!(self.runtime.turn_off_review(), Some(TurnOffReview::Preparing { .. }))
         }
 
         /// The screen view at this boundary
@@ -2006,6 +2018,12 @@ pub(crate) mod test_support {
         /// Whether an operation holds the runtime now
         pub(crate) async fn harness_runs_operation(&mut self) -> ActorResult<bool> {
             Produces::ok(self.runtime.claim().is_some())
+        }
+
+        /// Whether work that only held calls and timers end holds the runtime now: an
+        /// operation, or a Turn Off review preparing its evidence
+        pub(crate) async fn harness_holds_live_work(&mut self) -> ActorResult<bool> {
+            Produces::ok(self.runtime.claim().is_some() || self.prepares_turn_off_review())
         }
 
         /// The interrupted-Enable recovery the runtime body holds now
