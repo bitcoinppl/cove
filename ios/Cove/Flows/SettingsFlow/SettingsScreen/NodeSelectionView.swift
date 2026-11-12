@@ -352,12 +352,7 @@ private struct NodeSelectionLanSection: View {
             }
 
             if let message {
-                HStack(spacing: 10) {
-                    if search == .searching { ProgressView() }
-                    Text(message)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                LanSearchStatusRow(message: message, isSearching: search == .searching)
             }
 
             Button(search == .notStarted ? "Find Nodes on This Network" : "Search Again", action: onSearch)
@@ -366,23 +361,43 @@ private struct NodeSelectionLanSection: View {
         } header: {
             Text("On This Network")
         } footer: {
-            // iOS doesn't say whether Local Network access was granted, and can refuse the first
-            // search's connections while it asks, so an empty result covers both cases. A denied
-            // prompt never comes back, so only Settings can undo it
-            if search == .finished([]) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("If you just allowed local network access, search again.")
-                    Text("If you didn't, turn on Local Network for Cove in Settings.")
-                    Button("Open Settings", action: openSettings)
-                }
-            }
+            if search == .finished([]) { LocalNetworkAccessHelp() }
         }
     }
 }
 
-private func openSettings() {
-    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-    UIApplication.shared.open(url)
+private struct LanSearchStatusRow: View {
+    let message: String
+    let isSearching: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if isSearching { ProgressView() }
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Shown when a search finds nothing
+///
+/// iOS doesn't say whether Local Network access was granted, and can refuse the first search's
+/// connections while it asks, so this covers both cases. A denied prompt never comes back, so
+/// only Settings can undo it
+private struct LocalNetworkAccessHelp: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("If you just allowed local network access, search again.")
+            Text("If you didn't, turn on Local Network for Cove in Settings.")
+            Button("Open Settings", action: openSettings)
+        }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
 }
 
 private struct DiscoveredNodeRow: View {
