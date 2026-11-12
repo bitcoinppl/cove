@@ -7,7 +7,7 @@ use std::time::Duration;
 use act_zero::call;
 use bitcoin::{Amount, FeeRate as BdkFeeRate};
 use cove_fake_node::Protocol;
-use cove_types::{address::AddressWithNetwork, fees::FeeRate};
+use cove_types::address::AddressWithNetwork;
 
 use super::fake_node_tests::{Fixture, fresh_mnemonic, receive_script};
 use crate::{
@@ -55,14 +55,23 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
     let uri = AddressWithNetwork::try_new(&receiver.pj_uri().to_string()).expect("pj URI parses");
     let endpoint = uri.payjoin.as_ref().expect("the URI carries a pj endpoint").endpoint.clone();
 
-    // a Max payment has no change output, which keeps this test clear of the change
-    // misdetection in recipient_output_index tracked in #1088
-    let fee_rate = FeeRate::from(BdkFeeRate::from_sat_per_vb(2).expect("a valid fee rate"));
-    let psbt = call!(manager.actor.build_ephemeral_drain_tx(Address::from(uri.address), fee_rate))
+    // pay part of the coin, so the Original has a change output that signing strips of its
+    // derivation paths and the sender must still recognise as its own
+    let recipient = Address::from(uri.address);
+    let recipient_script = recipient.script_pubkey();
+    let fee_rate = BdkFeeRate::from_sat_per_vb(2).expect("a valid fee rate");
+    let psbt = call!(manager.actor.build_tx(Amount::from_sat(40_000), recipient, fee_rate))
         .await
         .expect("the wallet actor answers")
-        .expect("the Max payment builds");
-    assert_eq!(psbt.unsigned_tx.output.len(), 1, "a Max payment has no change");
+        .expect("the payment builds");
+    let change_script = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .map(|output| output.script_pubkey.clone())
+        .find(|script| *script != recipient_script)
+        .expect("the payment has a change output");
+    assert_eq!(psbt.unsigned_tx.output.len(), 2, "the payment has a recipient and change");
 
     call!(
         manager.actor.set_payjoin_config_for_test(services.sender_config(Duration::from_secs(60)))
@@ -122,6 +131,10 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
         "the broadcast is the receiver's proposal, spending the receiver's coin"
     );
     assert!(payjoin.input.len() >= 2, "the proposal spends the sender's and receiver's coins");
+    assert!(
+        payjoin.output.iter().any(|output| output.script_pubkey == change_script),
+        "the proposal keeps the sender's change"
+    );
     assert!(
         payjoin
             .input
