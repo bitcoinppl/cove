@@ -187,21 +187,22 @@ class AppLogStore(
         private fun Throwable.messageFreeStackTrace(): String {
             val text = StringBuilder()
             val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
-            appendWithoutMessage(text, caption = "", enclosingTrace = emptyArray(), seen = seen)
+            appendWithoutMessage(text, prefix = "", caption = "", enclosingTrace = emptyArray(), seen = seen)
 
             return text.toString()
         }
 
         // mirrors `printStackTrace`, including its elision of frames shared with the enclosing
-        // trace, with each throwable's message left out
+        // trace and its indentation of suppressed branches, with each throwable's message left out
         private fun Throwable.appendWithoutMessage(
             text: StringBuilder,
+            prefix: String,
             caption: String,
             enclosingTrace: Array<StackTraceElement>,
             seen: MutableSet<Throwable>,
         ) {
             if (!seen.add(this)) {
-                text.append("$caption[CIRCULAR REFERENCE: ${javaClass.name}]\n")
+                text.append("$prefix$caption[CIRCULAR REFERENCE: ${javaClass.name}]\n")
                 return
             }
 
@@ -213,16 +214,16 @@ class AppLogStore(
                 enclosingLast--
             }
 
-            text.append("$caption${javaClass.name}\n")
-            for (index in 0..last) text.append("\tat ${trace[index]}\n")
+            text.append("$prefix$caption${javaClass.name}\n")
+            for (index in 0..last) text.append("$prefix\tat ${trace[index]}\n")
 
             val framesInCommon = trace.size - 1 - last
-            if (framesInCommon > 0) text.append("\t... $framesInCommon more\n")
+            if (framesInCommon > 0) text.append("$prefix\t... $framesInCommon more\n")
 
             for (suppressed in suppressed) {
-                suppressed.appendWithoutMessage(text, "Suppressed: ", trace, seen)
+                suppressed.appendWithoutMessage(text, "$prefix\t", "Suppressed: ", trace, seen)
             }
-            cause?.appendWithoutMessage(text, "Caused by: ", trace, seen)
+            cause?.appendWithoutMessage(text, prefix, "Caused by: ", trace, seen)
         }
 
         // cutting inside a token could leave half an address or key that report redaction no

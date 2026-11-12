@@ -150,7 +150,8 @@ class AppLogStoreTest {
     @Test
     fun throwableMessagesNeverReachTheStore() {
         val marker = "private-text-in-exception-message"
-        val suppressed = IllegalArgumentException("suppressed $marker")
+        val suppressed =
+            IllegalArgumentException("suppressed $marker", UnsupportedOperationException("nested $marker"))
         val cause = IllegalStateException("cause $marker")
         val throwable =
             RuntimeException("outer $marker", cause).apply { addSuppressed(suppressed) }
@@ -160,7 +161,9 @@ class AppLogStoreTest {
         val snapshot = store().snapshot()
         assertFalse("the store kept a throwable message: $snapshot", snapshot.contains(marker))
         assertTrue(snapshot.contains("ERROR failure: operation failed\njava.lang.RuntimeException\n"))
-        assertTrue(snapshot.contains("\nSuppressed: java.lang.IllegalArgumentException\n"))
+        // a suppressed branch is indented, so its own cause stays apart from the outer cause
+        assertTrue(snapshot.contains("\n\tSuppressed: java.lang.IllegalArgumentException\n"))
+        assertTrue(snapshot.contains("\n\tCaused by: java.lang.UnsupportedOperationException\n"))
         assertTrue(snapshot.contains("\nCaused by: java.lang.IllegalStateException\n"))
         assertTrue(snapshot.contains("\tat org.bitcoinppl.cove.AppLogStoreTest.throwableMessagesNeverReachTheStore("))
     }
