@@ -219,16 +219,16 @@ class ScanManager private constructor() {
         }
 
         val scan = latestAddressScan.incrementAndGet()
-        val alertBefore = app.alertState?.id
+        val alertChangesBefore = app.alertChanges
         mainScope.launch {
             val alert = foundAddressAlert(addressWithNetwork)
 
             // anything that happened while the lookup ran makes this alert stale: a newer address,
-            // another alert from any scan or error path, or a wallet or mode switch
+            // another alert shown or dismissed from any path, or a wallet or mode switch
             val selectedNow = Database().globalConfig().selectedWallet()
             val stale =
                 scan != latestAddressScan.get() ||
-                    app.alertState?.id != alertBefore ||
+                    app.alertChanges != alertChangesBefore ||
                     selectedNow != selectedWallet
             if (stale) return@launch
 
