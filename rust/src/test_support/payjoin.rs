@@ -14,6 +14,12 @@ use std::{
     time::Duration,
 };
 
+use axum::{
+    body::Bytes,
+    extract::State,
+    http::{HeaderMap, StatusCode, Uri, header::CONTENT_TYPE},
+    response::{IntoResponse as _, Response},
+};
 use bdk_wallet::{KeychainKind, SignOptions, Wallet as BdkWallet};
 use bitcoin::{Amount, FeeRate, OutPoint, Psbt, TxOut};
 use cove_fake_node::FakeChain;
@@ -172,6 +178,117 @@ impl SilentRelay {
 impl Drop for SilentRelay {
     fn drop(&mut self) {
         self.server.abort();
+    }
+}
+
+/// How a [`TestRelay`] answers the requests the sender sends it
+pub(crate) enum TestRelayBehavior {
+    /// Passes each request on to a real relay and returns its answer
+    Forward(Url),
+    /// Answers every request with 502, as a relay that cannot reach the directory does
+    Down,
+    /// Answers every request with 200 and a body that is not an OHTTP response, so the request
+    /// itself succeeds but the sender's `process_response` rejects the answer
+    Garbled,
+}
+
+/// A relay a sender is configured with in place of a real one, which counts the requests it
+/// gets, so a test can tell which relays a session used
+pub(crate) struct TestRelay {
+    url: Url,
+    requests: Arc<AtomicUsize>,
+    server: AbortHandle,
+}
+
+struct TestRelayState {
+    behavior: TestRelayBehavior,
+    client: reqwest::Client,
+    requests: Arc<AtomicUsize>,
+}
+
+impl TestRelay {
+    /// A relay that forwards to the services' relay at `index`
+    pub(crate) async fn forwarding_to(services: &PayjoinServices, index: usize) -> Self {
+        let upstream = services.relay_urls().into_iter().nth(index).expect("the relay exists");
+        Self::start(TestRelayBehavior::Forward(upstream), services.http_client()).await
+    }
+
+    /// Starts a relay on an IPv4 loopback port
+    pub(crate) async fn start(behavior: TestRelayBehavior, client: reqwest::Client) -> Self {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a loopback port for the test relay");
+        let port = listener.local_addr().expect("the test relay has an address").port();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let state = Arc::new(TestRelayState { behavior, client, requests: requests.clone() });
+
+        let app = axum::Router::new().fallback(relay_request).with_state(state);
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("the test relay serves");
+        });
+
+        let url = Url::parse(&format!("http://127.0.0.1:{port}")).expect("a valid URL");
+        Self { url, requests, server: server.abort_handle() }
+    }
+
+    pub(crate) fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// How many requests reached this relay
+    pub(crate) fn requests(&self) -> usize {
+        self.requests.load(Ordering::SeqCst)
+    }
+
+    /// A sender config that tries `relays` in the given order and waits up to `session_timeout`
+    pub(crate) fn sender_config(relays: &[&Self], session_timeout: Duration) -> PayjoinConfig {
+        let relays = OhttpRelays::loopback_for_test(relays.iter().map(|relay| relay.url.clone()))
+            .expect("loopback relays are allowed in tests")
+            .in_listed_order();
+
+        PayjoinConfig::new(relays, session_timeout)
+    }
+}
+
+impl Drop for TestRelay {
+    fn drop(&mut self) {
+        self.server.abort();
+    }
+}
+
+async fn relay_request(
+    State(state): State<Arc<TestRelayState>>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    state.requests.fetch_add(1, Ordering::SeqCst);
+
+    let upstream = match &state.behavior {
+        TestRelayBehavior::Forward(upstream) => upstream,
+        TestRelayBehavior::Down => return StatusCode::BAD_GATEWAY.into_response(),
+        TestRelayBehavior::Garbled => {
+            return (StatusCode::OK, "not an OHTTP response").into_response();
+        }
+    };
+
+    // the path carries the directory's origin, which the real relay forwards to
+    let path = uri.path_and_query().map_or("/", |path| path.as_str());
+    let url = format!("{}{path}", upstream.as_str().trim_end_matches('/'));
+    let mut request = state.client.post(url).body(body);
+    if let Some(content_type) = headers.get(CONTENT_TYPE) {
+        request = request.header(CONTENT_TYPE, content_type);
+    }
+
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
+    };
+
+    let status = response.status();
+    match response.bytes().await {
+        Ok(body) => (status, body).into_response(),
+        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
     }
 }
 

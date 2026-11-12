@@ -1470,6 +1470,7 @@ dependencies = [
  "arc-swap",
  "argon2",
  "async-trait",
+ "axum",
  "axum-server",
  "backon",
  "base64 0.22.1",
@@ -6593,6 +6594,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
