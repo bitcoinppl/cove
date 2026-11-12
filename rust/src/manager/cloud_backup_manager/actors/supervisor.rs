@@ -29,9 +29,11 @@ use crate::database::cloud_backup::{
 };
 use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, ContinuationOwner, ContinuationStage, PauseReason, Rejection, UserIntent,
+    Admission, AdmissionBody, ContinuationOwner, PauseReason, Rejection, UserIntent,
 };
-use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
+use crate::manager::cloud_backup_manager::keychain::{
+    CloudBackupKeychain, CloudBackupKeychainError, LocalStateOwner,
+};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
@@ -50,7 +52,7 @@ use crate::manager::cloud_backup_manager::verify::{
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, UnpersistedPrfKey, delay_before_new_passkey_auth,
+    CloudOnlyRestoreOutcome, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
@@ -77,8 +79,9 @@ use crate::manager::cloud_backup_manager::{
     InventoryScope, OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
     PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, RecoveryState, RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState,
-    VerificationState, WalletId, blocking_cloud_error, is_provider_wide_interruption,
+    PendingWork, RecoveryAction, RecoveryState, RustCloudBackupManager,
+    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
+    is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -106,7 +109,7 @@ mod undecryptable_wallets;
 mod verification;
 mod workers;
 
-use enable::EnableContinuation;
+use enable::{DiscardTarget, EnableContinuation};
 
 pub(crate) use account_switch::{
     DriveAccountSwitchReinitializationEnd, UnsavedDriveAccountSwitchCompletion,
@@ -2068,14 +2071,26 @@ pub(crate) mod test_support {
             owner: ContinuationOwner,
             session: PendingEnableSession,
         ) -> ActorResult<()> {
+            if let Some(manager) = self.manager() {
+                manager.pending_enable.adopt(owner);
+            }
+
             self.enable_continuation = Some(EnableContinuation::new(owner, session));
             Produces::ok(())
         }
 
         pub async fn has_awaiting_saved_passkey_confirmation_for_test(&self) -> ActorResult<bool> {
-            Produces::ok(self.enable_continuation.as_ref().is_some_and(|continuation| {
-                continuation.session().is_awaiting_saved_passkey_confirmation()
-            }))
+            Produces::ok(self.enable_continuation.is_some())
+        }
+
+        /// Runs Discard's cleanup on the held continuation, for journal states that are no
+        /// saved-passkey pause, so admission offers no Discard in them
+        pub async fn discard_held_continuation_for_test(&mut self) -> ActorResult<()> {
+            if let Some(continuation) = self.enable_continuation.take() {
+                self.discard_enable_continuation(continuation);
+            }
+
+            Produces::ok(())
         }
 
         /// Starts an exclusive operation and hands back its write client, for tests that run the

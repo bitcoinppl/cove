@@ -459,8 +459,6 @@ pub(crate) enum ContinuationOwner {
 pub(crate) enum ContinuationStage {
     /// A registered passkey waits for the user to confirm they saved it
     AwaitingSavedPasskey,
-    /// An upload failed after the passkey was ready, and keeps its material for a retry
-    RetryUpload,
     /// Enable asks the user how to go on, at the existing-backup prompt or the passkey choice;
     /// nothing is held
     EnablePrompt,
@@ -590,11 +588,7 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
                 None,
             ) => Accepted,
             (
-                Some(PausedContinuation {
-                    stage: ContinuationStage::RetryUpload | ContinuationStage::EnablePrompt,
-                    ..
-                })
-                | None,
+                Some(PausedContinuation { stage: ContinuationStage::EnablePrompt, .. }) | None,
                 None,
             ) => Rejected(Rejection::NothingToContinue),
         },

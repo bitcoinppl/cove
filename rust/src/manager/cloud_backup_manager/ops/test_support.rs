@@ -1757,6 +1757,13 @@ pub(crate) async fn replace_enable_continuation_for_test(
         .expect("replace enable continuation");
 }
 
+/// Runs Discard's cleanup on the held continuation without admission
+pub(crate) async fn discard_held_continuation_for_test(manager: &RustCloudBackupManager) {
+    call!(manager.supervisor.discard_held_continuation_for_test())
+        .await
+        .expect("discard held continuation");
+}
+
 pub(crate) async fn has_awaiting_saved_passkey_confirmation_for_test(
     manager: &RustCloudBackupManager,
 ) -> bool {

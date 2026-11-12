@@ -289,10 +289,7 @@ impl RustCloudBackupManager {
         pending: PendingEnableSession,
     ) -> CloudBackupSavedPasskeyConfirmation {
         let context = pending.context();
-        let (master_key, staged_passkey) = match pending.into_staged_parts() {
-            Ok(parts) => parts,
-            Err(error) => return CloudBackupSavedPasskeyConfirmation::Failed(error),
-        };
+        let (master_key, staged_passkey) = pending.into_staged_parts();
         let passkey_access = PasskeyAccess::global();
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
 

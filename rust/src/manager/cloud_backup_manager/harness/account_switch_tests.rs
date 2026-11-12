@@ -14,8 +14,9 @@ use cove_device::cloud_storage::CloudStorageError;
 use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyError};
 
 use super::app::Step;
+use super::process::checkpoint;
 use super::{
-    CloudCall, CloudFault, FakeAccount, NextAction as N, PhaseEnd, TestApp,
+    CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PhaseEnd, TestApp,
     assert_uploads_confirmed_in, keychain_namespace, load_detail, persisted, run_case,
     seed_an_uploaded_wallet, seed_verifiable_master_key,
 };
@@ -30,8 +31,9 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupManagerAction, DriveAccountSwitchPlatformResult as Platform,
-    DriveAccountSwitchPlatformState, RequestedDriveAccountSwitchStep as Step_,
+    CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupResetPermit,
+    DriveAccountSwitchPlatformResult as Platform, DriveAccountSwitchPlatformState,
+    RequestedDriveAccountSwitchStep as Step_,
 };
 
 /// How long a newly registered passkey is given before Cove asks the user to confirm it
@@ -402,7 +404,8 @@ fn switch_whose_reinitialize_fails(app: &mut TestApp) -> (u64, String) {
 
 /// A switch whose reinitialize failed is not a dead end, with or without a relaunch
 ///
-/// Without one, Try Again reruns the reinitialize. A relaunch restores the failed attempt's
+/// Without one, Try Again goes back to the failed attempt's registered passkey, the pause the
+/// journal records, and Confirm Saved Passkey uploads again under it. A relaunch restores the failed attempt's
 /// registered passkey for confirmation, and the switch shows that pause at once, before Android
 /// reports anything: Confirm Saved Passkey goes on as the switch's run and the platform commits.
 /// Cancel is never offered, since the failed reinitialize may have begun moving this device to
@@ -422,6 +425,11 @@ fn a_failed_switch_reinitialize_finishes_through_try_again() {
 
         app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
             .then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+        assert_eq!(requested_steps(&app), vec![], "{}", app.describe());
+
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
         assert_eq!(requested_steps(&app), vec![Step_::Commit(transition_id)], "{}", app.describe());
 
         platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
@@ -725,7 +733,8 @@ fn a_switch_whose_finished_reinitialize_was_not_saved_finishes_after_a_relaunch(
 }
 
 /// A reinitialize that failed and whose switch could not save that it waits for Try Again
-/// stops the same way; Try Again saves it and runs the reinitialize again
+/// stops the same way; Try Again saves it and goes back to the journal's pause, which Confirm
+/// continues
 #[test]
 fn a_switch_whose_failed_reinitialize_was_not_saved_reruns_through_try_again() {
     let test = concat!(
@@ -755,6 +764,10 @@ fn a_switch_whose_failed_reinitialize_was_not_saved_reruns_through_try_again() {
 
         app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
             .then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
         platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
     });
 }
@@ -842,6 +855,181 @@ fn a_confirm_goes_on_from_a_switch_pause_that_was_not_saved() {
         platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
         assert_eq!(app.passkey.inner.create_count(), 1);
     });
+}
+
+/// Scripts the new account's next master key upload to fail, as when it is offline
+fn fail_the_next_master_key_upload(app: &mut TestApp) {
+    app.event("script the new account's master key upload to fail", |app| {
+        let error = CloudStorageError::NotAvailable("the new account is offline".into());
+        app.cloud.script_next(CloudCall::UploadMasterKey, CloudFault::Fail(error));
+    })
+    .then_cannot(&[N::Enable]);
+}
+
+/// The switch's reinitialize stopped on its saved passkey, with Confirm as its way on
+fn assert_switch_paused_with_its_confirm(app: &TestApp) {
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(
+        switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingSavedPasskeyConfirmation),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(
+        paused_switch_controls(app),
+        Some(vec![CloudBackupSavedPasskeyControl::Confirm]),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(
+        availability(app, A::ConfirmSavedPasskey),
+        Some(CloudBackupActionAvailability::Available)
+    );
+}
+
+/// Model seed 54182536095460878, minimized: a switch killed while its reinitialize uploads, whose
+/// upload then fails after the relaunch and again on Try Again, is not a dead end
+///
+/// The relaunch restores the registered passkey from the pending-enable journal. A failed upload
+/// keeps no material in memory, but the journal stays, so each Try Again takes its pause up
+/// again instead of staging a second backup the journal refuses. Confirm then finishes the
+/// switch under the same passkey and leaves no journal behind
+#[test]
+fn a_switch_killed_during_its_reinitialize_upload_recovers_through_try_again() {
+    let test = concat!(
+        module_path!(),
+        "::a_switch_killed_during_its_reinitialize_upload_recovers_through_try_again"
+    );
+    run_case(test, &[PhaseEnd::KillAt("switch-uploading"), PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            FakeAccount::new(1, 0).seed(&app);
+            load_detail(&mut app);
+
+            // no passkey is discoverable, so the new account's reinitialize registers one
+            app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+            app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+            switch_to_a_new_account(&mut app);
+            app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[N::Enable]);
+            assert_switch_paused_with_its_confirm(&app);
+
+            let upload = Hold::default();
+            app.cloud.script_next(CloudCall::UploadMasterKey, CloudFault::Hold(upload.clone()));
+            app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+            app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+            app.block_on("the new account's master key upload to be held", upload.entered());
+
+            checkpoint("switch-uploading");
+            unreachable!("the parent kills this process while the switch uploads");
+        }
+
+        let mut app = TestApp::launch();
+        let old_namespace = keychain_namespace().expect("the kill kept the previous namespace");
+        let transition_id =
+            persisted().drive_account_switch().expect("the switch survived").transition_id.value();
+        platform_reports(
+            &mut app,
+            Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)),
+        )
+        .then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+
+        // the confirmed upload fails, and so does the next Confirm's, after Try Again's pause
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        fail_the_next_master_key_upload(&mut app);
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+        fail_the_next_master_key_upload(&mut app);
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        assert_eq!(
+            switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry),
+            "{}",
+            app.describe()
+        );
+        assert!(pending_enable_journal().is_some(), "{}", app.describe());
+
+        // Try Again takes up the journal's pause, and Confirm finishes the switch with it
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_switch_paused_with_its_confirm(&app);
+
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
+        assert_eq!(app.passkey.inner.create_count(), 0, "a second passkey was registered");
+        assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    });
+}
+
+/// Model seed 777791, minimized: a reset that fails before its wipe while a reinitialize waits
+/// for its saved passkey gives that pause back
+///
+/// The reset drops the paused reinitialize from memory, but its journal stays, and the abandoned
+/// reset takes it up again as a relaunch does. The pause holds the backup, so a Google Drive
+/// account switch can't stage a second backup beside it, and Confirm finishes the reinitialize
+/// with the passkey it registered
+#[test]
+fn a_failed_reset_gives_back_the_paused_reinitialize() {
+    let test = concat!(module_path!(), "::a_failed_reset_gives_back_the_paused_reinitialize");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let old_namespace = FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        // no passkey is discoverable, so the reinitialize registers one
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+        app.dispatch(CloudBackupManagerAction::ReinitializeBackup).then_cannot(&[N::Enable]);
+        app.advance_clock(PASSKEY_AVAILABILITY_WAIT).then_cannot(&[N::Enable]);
+        assert_reinitialize_paused(&app);
+
+        abandon_a_reset(&mut app);
+        assert_reinitialize_paused(&app);
+        assert!(pending_enable_journal().is_some(), "{}", app.describe());
+        assert_eq!(
+            app.admission_of(UserIntent::SwitchDriveAccount),
+            Admission::Rejected(Rejection::OperationRunning(Op::ReinitializeBackup))
+        );
+
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey)
+            .then_can(&[N::TurnOff])
+            .then_cannot(&[N::Enable]);
+        assert_ne!(keychain_namespace(), Some(old_namespace), "{}", app.describe());
+        assert_eq!(app.passkey.inner.create_count(), 1, "a second passkey was registered");
+        assert_eq!(pending_enable_journal(), None, "{}", app.describe());
+    });
+}
+
+/// The configured backup's reinitialize waits on its saved passkey, with Confirm and Discard
+fn assert_reinitialize_paused(app: &TestApp) {
+    let paused = app
+        .saved_passkey_confirmation()
+        .unwrap_or_else(|| panic!("the reinitialize is not paused\n{}", app.describe()));
+    assert_eq!(paused.lifecycle, CloudBackupSavedPasskeyLifecycle::Reinitialize);
+    assert_eq!(
+        paused.controls,
+        vec![CloudBackupSavedPasskeyControl::Confirm, CloudBackupSavedPasskeyControl::Discard]
+    );
+}
+
+/// A reset that fails before its wipe, after it dropped what Cloud Backup kept in memory
+fn abandon_a_reset(app: &mut TestApp) {
+    let manager = app.manager().clone();
+    let permit = app
+        .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+        .expect("reset permit");
+    abandon_reset_permit(app, permit);
+}
+
+fn abandon_reset_permit(app: &mut TestApp, permit: CloudBackupResetPermit) {
+    app.event("the wipe fails before its commit", |app| {
+        app.block_on("the reset to end", permit.resume_after_failed_reset())
+            .expect("abandon the reset");
+    })
+    .then_cannot(&[N::Enable]);
 }
 
 fn pending_enable_journal() -> Option<PendingEnableJournal> {

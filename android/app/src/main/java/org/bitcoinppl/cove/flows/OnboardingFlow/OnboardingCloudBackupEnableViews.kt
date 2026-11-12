@@ -38,6 +38,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupLastOutcomeNote
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.configured
 import org.bitcoinppl.cove.cloudbackup.draws
+import org.bitcoinppl.cove.cloudbackup.enableSheetOutcome
 import org.bitcoinppl.cove.cloudbackup.isAvailable
 import org.bitcoinppl.cove.cloudbackup.lookup
 import org.bitcoinppl.cove.cloudbackup.section
@@ -402,12 +403,16 @@ private fun OnboardingCloudBackupDetailsStepView(
             cancelButtonTitle = "Back",
             cancelButtonLeading = true,
             cancelEnabled = !showsBusyOverlay && !isPromptingForEnableChoice,
+            // the Enable step's outcome shows here whichever of its controls it answers, and Try
+            // Again's when the primary button verifies
             footer = {
-                CloudBackupLastOutcomeNote(
-                    outcome = screen.lastOutcome,
-                    target = CloudBackupOutcomeTarget.Action(primaryAction),
-                    onDispatch = backupManager::dispatch,
-                )
+                val outcome =
+                    screen.enableSheetOutcome()
+                        ?: screen.lastOutcome?.takeIf { it.target == CloudBackupOutcomeTarget.Action(primaryAction) }
+
+                outcome?.let {
+                    CloudBackupLastOutcomeNote(outcome = it, target = it.target, onDispatch = backupManager::dispatch)
+                }
             },
         )
 

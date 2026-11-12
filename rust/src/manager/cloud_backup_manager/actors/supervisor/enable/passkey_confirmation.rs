@@ -5,9 +5,12 @@ impl CloudBackupSupervisor {
     /// operation that paused it
     pub async fn confirm_saved_passkey(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let Some(continuation) = self.enable_continuation.take_if(|continuation| {
-            continuation.session().is_awaiting_saved_passkey_confirmation()
-        }) else {
+        if let Err(error) = self.take_up_paused_work(&manager) {
+            self.answer_failed(&manager, CloudBackupScreenAction::ConfirmSavedPasskey, &error);
+            return Produces::ok(());
+        }
+
+        let Some(continuation) = self.enable_continuation.take() else {
             return Produces::ok(());
         };
 
@@ -44,17 +47,9 @@ impl CloudBackupSupervisor {
         };
 
         match result {
+            // an upload that fails from here leaves the journal's pause, which Confirm continues
+            // with one more passkey tap
             CloudBackupSavedPasskeyConfirmation::Confirmed(confirmed) => {
-                self.keep_enable_continuation(
-                    claim,
-                    PendingEnableSession::retry_upload(
-                        cove_cspp::master_key::MasterKey::from_bytes(
-                            *confirmed.master_key.as_bytes(),
-                        ),
-                        confirmed.passkey.copy_for_retry(),
-                        confirmed.context,
-                    ),
-                );
                 manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
@@ -73,18 +68,21 @@ impl CloudBackupSupervisor {
 
     /// Pauses the work `claim` starts when its own lifecycle already has a registered passkey
     /// waiting for confirmation, so a second passkey is never created beside it
+    ///
+    /// A run whose paused work lost its material in memory goes on from the journal's record of
+    /// it; paused work of another owner stays its owner's, and the fresh stage refuses it
     pub(crate) fn finish_awaiting_saved_passkey_confirmation_if_present(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
-    ) -> bool {
-        let owner = ContinuationOwner::of(claim);
-        if !self.has_enable_continuation(owner, ContinuationStage::AwaitingSavedPasskey) {
-            return false;
+    ) -> Result<bool, CloudBackupError> {
+        self.take_up_paused_work(&manager)?;
+        if !self.has_enable_continuation(ContinuationOwner::of(claim)) {
+            return Ok(false);
         }
 
         self.pause_for_saved_passkey_confirmation(manager, claim);
-        true
+        Ok(true)
     }
 
     /// Ends the work `claim` runs where it waits for the user to confirm the passkey they saved
@@ -163,9 +161,7 @@ impl CloudBackupSupervisor {
             }
             SavedPasskeyConfirmationRetry::Automatic => {
                 let owner = ContinuationOwner::of(claim);
-                let pending = match self
-                    .take_enable_continuation(owner, ContinuationStage::AwaitingSavedPasskey)
-                {
+                let pending = match self.take_enable_continuation(owner) {
                     Some(continuation) => continuation.into_session(),
                     None => {
                         warn!("Automatic saved-passkey confirmation missing pending session");

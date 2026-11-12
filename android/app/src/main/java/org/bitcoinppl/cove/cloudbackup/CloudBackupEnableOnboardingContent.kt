@@ -58,7 +58,6 @@ import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
@@ -472,11 +471,9 @@ private fun CloudBackupSettingsEnableFooter(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
 ) {
-    CloudBackupLastOutcomeNote(
-        outcome = screen.lastOutcome,
-        target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.ENABLE),
-        onDispatch = manager::dispatch,
-    )
+    screen.enableSheetOutcome()?.let { outcome ->
+        CloudBackupLastOutcomeNote(outcome = outcome, target = outcome.target, onDispatch = manager::dispatch)
+    }
     CloudBackupActionButton(
         screen = screen,
         action = CloudBackupScreenAction.RESTORE_FROM_CLOUD_BACKUP,

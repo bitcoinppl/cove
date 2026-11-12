@@ -111,25 +111,63 @@ impl CloudBackupSupervisor {
     pub async fn resume_pending_enable_after_restart(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        if let Err(error) = self.recover_pending_enable_after_restart(&manager) {
-            error!("Failed to recover pending Cloud Backup enable state: {error}");
-            let assessment = Self::pending_enable_recovery_assessment().unwrap_or_else(|| {
-                Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence)
-            });
-            self.enter_pending_enable_recovery(assessment.public_state());
-        }
-
+        self.recover_journaled_enable(&manager);
         Produces::ok(())
     }
 
-    pub(crate) fn recover_pending_enable_after_restart(
+    /// Takes up what the pending-enable journal records, as a relaunch does: a registered passkey
+    /// becomes its pause again, a local promotion that no finalization owns any more commits or
+    /// rolls back by its durable completion, and staging that never registered a passkey is
+    /// discarded
+    ///
+    /// Evidence that doesn't fit puts the body in the interrupted-Enable recovery. A keychain
+    /// that can't be read leaves the coordinator's view unavailable instead, which offers Try
+    /// Again to run this again: the evidence is unknown, not unrecoverable. A lifecycle record
+    /// that can't be read leaves the journal untouched, and the Try Again that loads the record
+    /// runs this then
+    pub(crate) fn recover_journaled_enable(&mut self, manager: &RustCloudBackupManager) {
+        // the record says whose work a paused journal is and whether a started promotion
+        // commits, so while it is unknown the evidence waits rather than being read as Enable's
+        if self.runtime.admission_body() == AdmissionBody::LoadFailed {
+            info!("Cloud Backup will take up the pending enable journal once its record loads");
+            return;
+        }
+
+        let journal = match CloudBackupKeychain::global().load_pending_enable_journal() {
+            Ok(journal) => journal,
+            Err(CloudBackupKeychainError::Keychain(error)) => {
+                warn!("Cloud Backup could not read the pending enable journal: {error}");
+                manager.pending_enable.mark_unavailable();
+                manager.request_screen_publish();
+                return;
+            }
+            Err(error) => {
+                let error = CloudBackupError::internal_context("load pending enable", error);
+                self.enter_recovery_for_unrecoverable_enable(error);
+                return;
+            }
+        };
+
+        if let Err(error) = self.recover_loaded_journal(manager, journal) {
+            self.enter_recovery_for_unrecoverable_enable(error);
+        }
+    }
+
+    /// Puts the body in the interrupted-Enable recovery for journal evidence that `error` says
+    /// can't be taken up, as a relaunch does
+    pub(crate) fn enter_recovery_for_unrecoverable_enable(&mut self, error: CloudBackupError) {
+        error!("Failed to recover pending Cloud Backup enable state: {error}");
+        let assessment = Self::pending_enable_recovery_assessment()
+            .unwrap_or_else(|| Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence));
+        self.enter_pending_enable_recovery(assessment.public_state());
+    }
+
+    pub(crate) fn recover_loaded_journal(
         &mut self,
         manager: &RustCloudBackupManager,
+        journal: Option<PendingEnableJournal>,
     ) -> Result<(), CloudBackupError> {
         let cloud_keychain = CloudBackupKeychain::global();
-        let journal = cloud_keychain.load_pending_enable_journal().map_err(|source| {
-            CloudBackupError::internal_context("load pending enable during restart", source)
-        })?;
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         if let Some(journal) = journal.as_ref()
             && matches!(journal.phase(), PendingEnableJournalPhase::Staging)
@@ -246,6 +284,54 @@ impl CloudBackupSupervisor {
         journal: &PendingEnableJournal,
         promotion_status: MasterKeyPromotionStatus,
     ) -> Result<(), CloudBackupError> {
+        let session = Self::journaled_saved_passkey_session(cspp, journal, promotion_status)?;
+
+        // the journal does not record which work wrote it; the body restart loaded does, and a
+        // recorded switch names the switch its reinitialize belongs to
+        let switch = Self::drive_account_switch().map(|transition| transition.transition_id);
+        let owner = ContinuationOwner::of_body(self.runtime.admission_body(), switch);
+        manager.pending_enable.adopt(owner);
+        self.enable_continuation = Some(EnableContinuation::new(owner, session));
+        manager.project_enable_context_started(journal.context());
+        manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        ));
+
+        if let ContinuationOwner::DriveAccountSwitch(transition_id) = owner {
+            self.drive_account_switch_reinitialization_restored_paused(manager, transition_id);
+        }
+
+        Ok(())
+    }
+
+    /// The pause the pending-enable journal records, rebuilt as `owner`'s: a fresh Enable's
+    /// registered passkey waiting for the user to confirm it, or `None` when it records none
+    pub(crate) fn journaled_pause(
+        owner: ContinuationOwner,
+    ) -> Result<Option<EnableContinuation>, CloudBackupError> {
+        let journal = CloudBackupKeychain::global()
+            .load_pending_enable_journal()
+            .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?;
+        let Some(journal) = journal.filter(PendingEnableJournal::awaits_saved_passkey) else {
+            return Ok(None);
+        };
+
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        let promotion_status = cspp.master_key_promotion_status().map_err(|source| {
+            CloudBackupError::internal_context("inspect pending enable promotion", source)
+        })?;
+        let session = Self::journaled_saved_passkey_session(&cspp, &journal, promotion_status)?;
+
+        Ok(Some(EnableContinuation::new(owner, session)))
+    }
+
+    /// The session Confirm Saved Passkey continues from, rebuilt from a fresh Enable's journal
+    /// and the staged material it owns
+    fn journaled_saved_passkey_session(
+        cspp: &cove_cspp::Cspp<Keychain>,
+        journal: &PendingEnableJournal,
+        promotion_status: MasterKeyPromotionStatus,
+    ) -> Result<PendingEnableSession, CloudBackupError> {
         let valid_status = match journal.phase() {
             PendingEnableJournalPhase::PasskeyRegistered(_) => {
                 promotion_status == MasterKeyPromotionStatus::Staged
@@ -277,28 +363,11 @@ impl CloudBackupSupervisor {
             provider_hint: passkey.provider_hint.clone(),
         };
 
-        // the journal does not record which work wrote it; the body restart loaded does, and a
-        // recorded switch names the switch its reinitialize belongs to
-        let switch = Self::drive_account_switch().map(|transition| transition.transition_id);
-        let owner = ContinuationOwner::of_body(self.runtime.admission_body(), switch);
-        self.enable_continuation = Some(EnableContinuation::new(
-            owner,
-            PendingEnableSession::awaiting_saved_passkey_confirmation(
-                Zeroizing::new(master_key),
-                Zeroizing::new(passkey),
-                journal.context(),
-            ),
-        ));
-        manager.project_enable_context_started(journal.context());
-        manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-            SavedPasskeyConfirmationMode::Manual,
-        ));
-
-        if let ContinuationOwner::DriveAccountSwitch(transition_id) = owner {
-            self.drive_account_switch_reinitialization_restored_paused(manager, transition_id);
-        }
-
-        Ok(())
+        Ok(PendingEnableSession::awaiting_saved_passkey_confirmation(
+            Zeroizing::new(master_key),
+            Zeroizing::new(passkey),
+            journal.context(),
+        ))
     }
 
     fn recover_pending_enable_local_promotion(

@@ -291,7 +291,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         inventory: &InventoryFacts,
     ) -> AdmissionSnapshot {
-        let body = self.runtime.admission_body();
+        let body = self.admission_body(manager);
         let restore_all = match manager.projected_restore_all_state() {
             CloudBackupRestoreAllState::StartAvailable { .. } => {
                 RestoreAllAdmission::StartAvailable
@@ -325,18 +325,39 @@ impl CloudBackupSupervisor {
 
     /// The paused Enable or reinitialize admission decides Confirm Saved Passkey and Discard on
     ///
-    /// An Enable waiting on one of its prompts, the existing-backup prompt or the passkey choice,
-    /// is a paused Enable that holds no material; the reducer still holds those prompts until the
-    /// screen projection owns them
+    /// The coordinator's view of the journal says which work is paused and whose it is, whether or
+    /// not its material is in memory. An Enable waiting on one of its prompts, the existing-backup
+    /// prompt or the passkey choice, is a paused Enable that holds no material; the reducer still
+    /// holds those prompts until the screen projection owns them
     fn paused_continuation(&self, manager: &RustCloudBackupManager) -> Option<PausedContinuation> {
-        if let Some(continuation) = &self.enable_continuation {
-            return Some(continuation.paused());
+        if let PendingWork::Paused(owner) = manager.pending_enable.pending_work() {
+            return Some(PausedContinuation {
+                owner,
+                stage: ContinuationStage::AwaitingSavedPasskey,
+            });
         }
 
         manager.state.read().is_awaiting_enable_prompt().then_some(PausedContinuation {
             owner: ContinuationOwner::Enable,
             stage: ContinuationStage::EnablePrompt,
         })
+    }
+
+    /// The body admission decides on: the lifecycle's, unless journal evidence nobody has taken
+    /// up stands in the way while nothing runs
+    ///
+    /// Unknown evidence is never a saved passkey. It is the load failure it is, so the screen
+    /// offers Try Again, which runs the recovery again, and nothing replaces the configuration
+    /// the evidence may still restore
+    fn admission_body(&self, manager: &RustCloudBackupManager) -> AdmissionBody {
+        let body = self.runtime.admission_body();
+        let settled = self.runtime.claim().is_none()
+            && !matches!(body, AdmissionBody::PendingEnableRecovery | AdmissionBody::Resetting);
+        if settled && manager.pending_enable.pending_work() == PendingWork::Unavailable {
+            return AdmissionBody::LoadFailed;
+        }
+
+        body
     }
 
     /// Starts an admitted intent, and remembers which control started the operation it claimed,
@@ -385,15 +406,20 @@ impl CloudBackupSupervisor {
             I::ConfirmSavedPasskey => {
                 self.confirm_saved_passkey().await?;
             }
-            I::DiscardPendingEnable => {
-                // admitted with no continuation only for an Enable waiting on one of its prompts,
-                // which holds no material, so clearing the prompt ends it
-                if let Some(continuation) = self.enable_continuation.take() {
+            I::DiscardPendingEnable => match self.discard_target(&manager) {
+                Ok(DiscardTarget::Prompt) => manager.clear_enable_prompt(),
+                Ok(DiscardTarget::Work(continuation)) => {
                     self.discard_enable_continuation(continuation);
+                    manager.clear_enable_prompt();
                 }
-
-                manager.clear_enable_prompt();
-            }
+                Err(error) => {
+                    self.answer_failed(
+                        &manager,
+                        CloudBackupScreenAction::DiscardPendingEnable,
+                        &error,
+                    );
+                }
+            },
             I::ConfirmPendingEnableCleanup => {
                 self.confirm_pending_enable_cleanup().await?;
             }
@@ -525,6 +551,13 @@ impl CloudBackupSupervisor {
     /// The record's other owners reconcile from it the way they do at launch, and a committed
     /// Turn Off it reveals resumes as one would after a relaunch
     fn retry_load(&mut self, manager: &RustCloudBackupManager) {
+        // the lifecycle loaded, but the journal could not be read, so its recovery runs again
+        if self.runtime.admission_body() != AdmissionBody::LoadFailed {
+            self.recover_journaled_enable(manager);
+            manager.request_screen_publish();
+            return;
+        }
+
         if let Err(error) = self.runtime.retry_load() {
             warn!("Cloud Backup could not load its lifecycle record again: {error}");
             let error = CloudBackupError::internal_context("load cloud backup lifecycle", error);
@@ -537,6 +570,10 @@ impl CloudBackupSupervisor {
 
         info!("Cloud Backup loaded its lifecycle record on retry");
         manager.sync_persisted_state();
+
+        // the journal's recovery waited for the record, so it runs now, as a launch runs it
+        self.recover_journaled_enable(manager);
+        manager.request_screen_publish();
         manager.resume_persisted_disable_if_needed();
     }
 }

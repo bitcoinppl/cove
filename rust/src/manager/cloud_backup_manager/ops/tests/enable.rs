@@ -5,9 +5,10 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
 
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot,
+    PendingEnableLocalMetadataSnapshot, PendingWork,
 };
 
 fn seed_retained_active_master() -> ([u8; 32], PendingEnableLocalMetadataSnapshot) {
@@ -1069,7 +1070,12 @@ async fn fresh_start_new_upload_failure_preserves_prior_active_exactly() {
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::FreshOwned);
     assert!(matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)));
-    assert!(take_pending_enable_session_for_test(&manager).await.is_some());
+    // the failed upload goes back to the journal's pause, which keeps no material in memory
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert_eq!(
+        manager.pending_enable.pending_work(),
+        PendingWork::Paused(ContinuationOwner::Enable)
+    );
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 }
 

@@ -21,15 +21,6 @@ pub(crate) struct UnpersistedPrfKey {
 }
 
 impl UnpersistedPrfKey {
-    pub(crate) fn copy_for_retry(&self) -> Self {
-        Self {
-            prf_key: self.prf_key,
-            prf_salt: self.prf_salt,
-            credential_id: self.credential_id.clone(),
-            provider_hint: self.provider_hint.clone(),
-        }
-    }
-
     pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
         let credential_id = std::mem::take(&mut self.credential_id);
 

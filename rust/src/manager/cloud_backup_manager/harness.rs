@@ -23,13 +23,14 @@ mod runtime;
 mod tests;
 mod write_policy_tests;
 
-pub(crate) use self::app::{NextAction, TestApp, open_durable_state};
+pub(crate) use self::app::{NextAction, TestApp, launch_keychain, open_durable_state};
 pub(crate) use self::fakes::{
     CallId, CloudCall, CloudFault, HarnessCloud, HarnessPasskey, Hold, PasskeyCall, PasskeyMode,
 };
 pub(crate) use self::fixtures::{
     FakeAccount, SeededRecord, assert_uploads_confirmed_in, change_a_wallet, finish_wipe,
     keychain_namespace, load_detail, persisted, seed_an_uploaded_wallet, seed_corrupted_record,
-    seed_legacy_stuck_disabling, seed_verifiable_master_key, verifiable_wrapper,
+    seed_legacy_stuck_disabling, seed_verifiable_master_key, seed_wallet_backup_elsewhere,
+    verifiable_wrapper,
 };
 pub(crate) use self::process::{PhaseEnd, run_case};

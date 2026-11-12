@@ -137,6 +137,26 @@ pub(crate) struct SeededRecord {
     pub(crate) revision: String,
 }
 
+/// Put one wallet's backup in `namespace`, encrypted with `master_key`, for a wallet not on this
+/// device, so a Restore of that backup has a wallet to bring back
+pub(crate) fn seed_wallet_backup_elsewhere(
+    app: &TestApp,
+    namespace: &str,
+    master_key: &cove_cspp::master_key::MasterKey,
+) {
+    let target = Database::global().global_config.wallet_target();
+    let wallet = DistinctWallet::new(target.network);
+    let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+    let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+    entry.xpub = Some(wallet.xpub.to_string());
+
+    let backup = encrypted_wallet_backup_bytes_for_entry(&entry, master_key, 1);
+    app.cloud.inner.set_wallet_backup(namespace.to_owned(), record_id.clone(), backup);
+    app.cloud
+        .inner
+        .set_wallet_files(namespace.to_owned(), vec![wallet_filename_from_record_id(&record_id)]);
+}
+
 /// The passkey every verifiable wrapper opens
 pub(crate) const VERIFIABLE_PRF_KEY: [u8; 32] = [7; 32];
 const VERIFIABLE_PRF_SALT: [u8; 32] = [9; 32];

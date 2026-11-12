@@ -2,12 +2,14 @@ use cove_cspp::backup_data::PasskeyProviderHint;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use super::CloudBackupEnableContext;
 use super::wallets::{StagedPrfKey, UnpersistedPrfKey};
-use super::{CloudBackupEnableContext, CloudBackupError};
 
 mod coordinator;
+pub(crate) mod evidence;
 
 pub(crate) use coordinator::PendingEnableCoordinator;
+pub(crate) use evidence::PendingWork;
 
 pub(crate) const PENDING_ENABLE_JOURNAL_VERSION: u8 = 1;
 
@@ -116,6 +118,17 @@ impl PendingEnableJournal {
         }
     }
 
+    /// Whether this records a fresh Enable whose registered passkey waits for the user to confirm
+    /// it was saved, before any local promotion began
+    pub(crate) fn awaits_saved_passkey(&self) -> bool {
+        self.namespace_ownership == PendingEnableNamespaceOwnership::FreshOwned
+            && matches!(
+                self.phase,
+                PendingEnableJournalPhase::PasskeyRegistered(_)
+                    | PendingEnableJournalPhase::RemoteWritesStarted(_)
+            )
+    }
+
     pub(crate) fn previous_metadata(&self) -> &PendingEnableLocalMetadataSnapshot {
         &self.previous_metadata
     }
@@ -185,12 +198,6 @@ impl PendingEnableJournal {
     }
 }
 
-pub(crate) struct PendingEnableSessionMaterial {
-    master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-    passkey: Zeroizing<UnpersistedPrfKey>,
-    context: CloudBackupEnableContext,
-}
-
 pub(crate) struct PendingSavedPasskeySessionMaterial {
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
     passkey: Zeroizing<StagedPrfKey>,
@@ -198,9 +205,10 @@ pub(crate) struct PendingSavedPasskeySessionMaterial {
 }
 
 /// Tracks passkey material created during enable before the flow fully completes
+///
+/// Only a registered passkey waiting for the user's confirmation is kept: an upload that fails
+/// after it goes back to that pause, which the journal records
 pub(crate) enum PendingEnableSession {
-    /// Upload already started and should retry with the same staged passkey material
-    RetryUpload(PendingEnableSessionMaterial),
     /// A registered passkey is staged until targeted PRF auth confirms it can be used
     AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial),
 }
@@ -208,30 +216,6 @@ pub(crate) enum PendingEnableSession {
 impl std::fmt::Debug for PendingEnableSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PendingEnableSession").finish_non_exhaustive()
-    }
-}
-
-impl PendingEnableSessionMaterial {
-    pub(crate) fn new(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey), context }
-    }
-
-    pub(crate) fn into_parts(
-        self,
-    ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
-        (self.master_key, self.passkey)
-    }
-
-    pub(crate) fn namespace_id(&self) -> String {
-        self.master_key.namespace_id()
-    }
-
-    pub(crate) fn context(&self) -> CloudBackupEnableContext {
-        self.context
     }
 }
 
@@ -260,58 +244,24 @@ impl PendingSavedPasskeySessionMaterial {
 }
 
 impl PendingEnableSession {
-    pub(crate) fn retry_upload(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self::RetryUpload(PendingEnableSessionMaterial::new(master_key, passkey, context))
-    }
-
-    pub(crate) fn into_ready_parts(
-        self,
-    ) -> Result<
-        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>),
-        CloudBackupError,
-    > {
-        match self {
-            Self::RetryUpload(material) => Ok(material.into_parts()),
-            Self::AwaitingSavedPasskeyConfirmation(_) => Err(CloudBackupError::Internal(
-                "pending enable session did not contain authenticated passkey material".into(),
-            )),
-        }
-    }
-
     pub(crate) fn into_staged_parts(
         self,
-    ) -> Result<
-        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>),
-        CloudBackupError,
-    > {
+    ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
         match self {
-            Self::AwaitingSavedPasskeyConfirmation(material) => Ok(material.into_parts()),
-            Self::RetryUpload(_) => Err(CloudBackupError::Internal(
-                "pending enable session did not contain staged passkey material".into(),
-            )),
+            Self::AwaitingSavedPasskeyConfirmation(material) => material.into_parts(),
         }
     }
 
     pub(crate) fn namespace_id(&self) -> String {
         match self {
-            Self::RetryUpload(material) => material.namespace_id(),
             Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
         }
     }
 
     pub(crate) fn context(&self) -> CloudBackupEnableContext {
         match self {
-            Self::RetryUpload(material) => material.context(),
             Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
         }
-    }
-
-    pub(crate) fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
-        matches!(self, Self::AwaitingSavedPasskeyConfirmation(_))
     }
 
     pub(crate) fn awaiting_saved_passkey_confirmation(

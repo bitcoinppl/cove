@@ -52,7 +52,7 @@ async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey) = pending.into_staged_parts();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -82,7 +82,7 @@ async fn normal_enable_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey) = pending.into_staged_parts();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -112,7 +112,7 @@ async fn reinitialize_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey) = pending.into_staged_parts();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -142,7 +142,7 @@ async fn force_new_preserves_registered_passkey_confirmation_session() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey) = pending.into_staged_parts();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -169,7 +169,7 @@ async fn registered_passkey_stages_confirmation_without_duplicate_create() {
 
     let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
     assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    let (_, pending_passkey) = pending.into_staged_parts();
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
@@ -444,16 +444,25 @@ async fn install_pending_enable_discard_session(
     manager: &RustCloudBackupManager,
     fixture: &PendingEnableDiscardFixture,
 ) {
-    replace_enable_continuation_for_test(
-        manager,
-        ContinuationOwner::Enable,
-        PendingEnableSession::retry_upload(
-            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
-            fixture.passkey.copy_for_retry(),
+    replace_enable_continuation_for_test(manager, ContinuationOwner::Enable, fixture.session())
+        .await;
+}
+
+impl PendingEnableDiscardFixture {
+    /// The registered passkey's session, as it waits for the user's confirmation
+    fn session(&self) -> PendingEnableSession {
+        PendingEnableSession::awaiting_saved_passkey_confirmation(
+            zeroize::Zeroizing::new(cove_cspp::master_key::MasterKey::from_bytes(
+                self.staged_master_key,
+            )),
+            zeroize::Zeroizing::new(StagedPrfKey {
+                prf_salt: self.passkey.prf_salt,
+                credential_id: self.passkey.credential_id.clone(),
+                provider_hint: self.passkey.provider_hint.clone(),
+            }),
             CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
+        )
+    }
 }
 
 fn assert_active_master_key(expected: &[u8; 32]) {
@@ -473,7 +482,7 @@ async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+    discard_held_continuation_for_test(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert_active_master_key(&fixture.prior_master_key);
@@ -540,11 +549,7 @@ async fn discard_stopped_reinitialize_deletes_only_its_namespace() {
     replace_enable_continuation_for_test(
         &manager,
         ContinuationOwner::Reinitialize,
-        PendingEnableSession::retry_upload(
-            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
-            fixture.passkey.copy_for_retry(),
-            CloudBackupEnableContext::settings_manual(),
-        ),
+        fixture.session(),
     )
     .await;
 
@@ -721,7 +726,7 @@ async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespac
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+    discard_held_continuation_for_test(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -749,7 +754,7 @@ async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_mate
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+    discard_held_continuation_for_test(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -785,7 +790,14 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    discard_pending_enable_and_wait_for_remote_delete(&manager).await;
+    discard_held_continuation_for_test(&manager).await;
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "pending enable discard should finish its remote delete",
+        || CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none(),
+    )
+    .await;
+    supervisor_checkpoint(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(!globals.cloud.has_namespace(&fixture.namespace));
@@ -841,16 +853,12 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
     replace_enable_continuation_for_test(
         &manager,
         ContinuationOwner::Reinitialize,
-        PendingEnableSession::retry_upload(
-            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
-            fixture.passkey.copy_for_retry(),
-            CloudBackupEnableContext::settings_manual(),
-        ),
+        fixture.session(),
     )
     .await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+    discard_held_continuation_for_test(&manager).await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -910,7 +918,7 @@ async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journa
     install_pending_enable_discard_session(&manager, &fixture).await;
     globals.keychain.fail_delete_at(1);
 
-    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+    discard_held_continuation_for_test(&manager).await;
 
     wait_for_test_condition(
         Duration::from_secs(1),

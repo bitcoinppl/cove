@@ -2,6 +2,9 @@ use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus, master_
 use cove_device::keychain::Keychain;
 use tracing::warn;
 
+use super::evidence::{self, PendingWork};
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
+
 use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupError, CloudBackupKeychain, PendingEnableJournal,
@@ -188,6 +191,26 @@ impl PendingEnableCoordinator {
                 source,
             )
         })
+    }
+
+    /// The pending Enable-flow work the journal records, from memory
+    ///
+    /// Admission and the screen read this on every dispatch and publish, so it never reads the
+    /// keychain; the journal's accessors keep it current
+    pub(crate) fn pending_work(&self) -> PendingWork {
+        evidence::pending_work()
+    }
+
+    /// Names `owner` as the work the journal written next belongs to, for that work's pause;
+    /// paused work keeps its owner until its journal is gone
+    pub(crate) fn adopt(&self, owner: ContinuationOwner) {
+        evidence::adopt(owner);
+    }
+
+    /// Records that the recovery could not read the journal, so whether work is paused is
+    /// unknown until it reads it again
+    pub(crate) fn mark_unavailable(&self) {
+        evidence::mark_unreadable();
     }
 
     pub(crate) fn stage_fresh_enable_master(

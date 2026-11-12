@@ -268,8 +268,9 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         XCTAssertEqual(control.cloudNamespaces, namespaces, "the relaunch wrote another backup")
     }
 
-    /// A setup upload that fails is retried with the production Enable action, which reuses the
-    /// passkey, master key and namespace the failed attempt staged and leaves one backup in the cloud
+    /// A setup upload that fails goes back to the saved passkey's pause, and Confirm Passkey retries
+    /// it with the passkey, master key and namespace the failed attempt staged, leaving one backup
+    /// in the cloud
     func testFailedSetupUploadRetriesWithoutNewPasskey() throws {
         let control = try CloudBackupHostControl(script: .init(
             cloud: .freshEnable,
@@ -295,9 +296,20 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
             "the failed attempt's master key went to another namespace"
         )
 
+        // the failed upload leaves the passkey's pause, whose Confirm is the retry
+        let confirm = app.buttons["Confirm Passkey"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "the failed upload did not offer the saved passkey")
+        XCTAssertFalse(app.buttons["Enable Cloud Backup"].exists, "the failed upload offered a fresh Enable")
+        control.assertNextActions(
+            "the failed upload should wait for the saved passkey's confirmation",
+            body: "savedPasskeyConfirmation",
+            available: ["confirmSavedPasskey"]
+        )
+
         // the enable is still running while this upload is held, so no background work made it
         try control.holdNextWalletUpload(id: "retry-wallet-upload")
-        robot.tapEnableCloudBackup()
+        robot.scrollToHittable(confirm)
+        confirm.tap()
         control.waitForHold("retry-wallet-upload")
         XCTAssertFalse(app.staticTexts["Cloud Backup enabled"].exists)
         let retried = try XCTUnwrap(control.state.uploads.last { $0.kind == .wallet })
@@ -312,6 +324,11 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         // repeated writes to the same records are fine, a second namespace or record is not
         let state = control.state
         XCTAssertEqual(state.count(.passkeyCreate), 1, "retry created another passkey")
+        XCTAssertGreaterThan(
+            state.count(.passkeyAuthenticate),
+            failedAttempt.count(.passkeyAuthenticate),
+            "the retry did not ask for the saved passkey"
+        )
         XCTAssertEqual(Set(state.uploads.map(\.namespace)), [namespace], "an upload went to another namespace")
         XCTAssertEqual(control.cloudNamespaces, [namespace], "the cloud holds more than one backup")
         XCTAssertEqual(control.cloudWalletRecordIds(namespace: namespace), [walletRecordId])

@@ -296,7 +296,10 @@ impl CloudBackupSupervisor {
         let failed = manager.state.read().drive_account_switch_recovery().is_some();
         let stopped = self.runtime.admission_body() == AdmissionBody::DriveAccountSwitch
             && self.runtime.claim().is_none()
-            && !self.drive_account_switch_waits_on_saved_passkey();
+            && !matches!(
+                manager.pending_enable.pending_work(),
+                PendingWork::Paused(ContinuationOwner::DriveAccountSwitch(_))
+            );
         if !failed && !stopped {
             return SwitchAdmission::None;
         }
@@ -313,15 +316,6 @@ impl CloudBackupSupervisor {
         });
 
         SwitchAdmission::NeedsAttention { can_cancel }
-    }
-
-    /// Whether the switch's reinitialize is paused for the user to confirm its saved passkey
-    fn drive_account_switch_waits_on_saved_passkey(&self) -> bool {
-        self.enable_continuation.as_ref().is_some_and(|continuation| {
-            let paused = continuation.paused();
-            matches!(paused.owner, ContinuationOwner::DriveAccountSwitch(_))
-                && paused.stage == ContinuationStage::AwaitingSavedPasskey
-        })
     }
 
     /// Moves a switch the platform has not committed to its rollback, and asks Android to
@@ -411,29 +405,25 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         transition_id: DriveAccountSwitchId,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        // the switch's pause outlives its material in memory, so its journal goes whether or not
+        // that material is still held. A discard that fails keeps the pause, so Try Again rolls
+        // back again and retries it
         let owner = ContinuationOwner::DriveAccountSwitch(transition_id);
-        let Some(continuation) =
-            self.enable_continuation.take_if(|continuation| continuation.paused().owner == owner)
-        else {
+        if manager.pending_enable.pending_work() != PendingWork::Paused(owner) {
             return Ok(());
-        };
-
-        let discarded = CloudBackupKeychain::global()
-            .load_pending_enable_journal()
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)
-            .and_then(|journal| {
-                let Some(journal) = journal else { return Ok(()) };
-                manager
-                    .pending_enable
-                    .discard_pending_enable_local_state(&journal)
-                    .map_err_str(CloudBackupDriveAccountSwitchError::Internal)
-            });
-        if let Err(error) = discarded {
-            // kept, so Try Again rolls back again and retries the discard
-            self.enable_continuation = Some(continuation);
-            return Err(error);
         }
 
+        let journal = CloudBackupKeychain::global()
+            .load_pending_enable_journal()
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
+        if let Some(journal) = journal {
+            manager
+                .pending_enable
+                .discard_pending_enable_local_state(&journal)
+                .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
+        }
+
+        self.enable_continuation.take_if(|continuation| continuation.owner() == owner);
         manager.apply_enable_state(CloudBackupEnableState::Idle);
         Ok(())
     }

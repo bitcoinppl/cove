@@ -8,7 +8,7 @@ mod restart;
 mod start;
 mod upload_finalization;
 
-pub(crate) use continuation::EnableContinuation;
+pub(crate) use continuation::{DiscardTarget, EnableContinuation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
@@ -46,8 +46,6 @@ impl std::fmt::Debug for EnableRecoveryFinalization {
 }
 
 pub(crate) struct EnableUploadFinalization {
-    pub(crate) master_key: zeroize::Zeroizing<cove_cspp::master_key::MasterKey>,
-    pub(crate) passkey: zeroize::Zeroizing<UnpersistedPrfKey>,
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) pending_completion: PendingVerificationCompletion,
 }

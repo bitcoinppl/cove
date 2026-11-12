@@ -152,9 +152,10 @@ notice dispatches `DismissNotice(Heal)`, which clears it from the stored record.
 
 A record that failed to load shows `LoadFailed` with `RetryLoad`, which loads
 it again in place; a successful retry resumes as a launch would, including an
-unfinished Turn Off. A corrupted record shows `Corrupted` with
-`ResetOnThisDevice`, which runs the local reset and then stores Disabled, so
-Cloud Backup can be turned on again without reinstalling.
+unfinished Turn Off and the pending-enable journal's recovery. A corrupted
+record shows `Corrupted` with `ResetOnThisDevice`, which runs the local reset
+and then stores Disabled, so Cloud Backup can be turned on again without
+reinstalling.
 
 Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
 body and the main configured states, which the platform contract tests render.
@@ -365,8 +366,8 @@ writes the fact itself.
 | Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
 | Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |
 | Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
-| Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
-| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
+| Pending Enable journal (keychain), and the in-memory view of it admission and the screen read (`PendingWork`) | `PendingEnableCoordinator`; the journal's keychain accessors update the view on every write, read and delete | The Enable and recovery operations; the supervisor names the work that owns the journal when that work starts or the recovery takes it up |
+| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim; the restart and any Confirm, Discard or run that finds none held, which take it up from the journal |
 | Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, the other-backups scan |
 | Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
@@ -546,12 +547,43 @@ the platform for no commit, and its confirmed reinitialize goes on as that
 switch's run, which then asks the platform to commit the new account. A
 switch's paused reinitialize has no Discard, since the account it wrote to is
 the one the switch is moving to. Admission accepts Confirm Saved Passkey and
-Discard only for a continuation that belongs to the current lifecycle, and
+Discard only for paused work that belongs to the current lifecycle, and
 Discard also for an Enable waiting on one of its prompts, the existing-backup
 prompt or the passkey choice. A Discard that arrives after Enable finished is
 rejected and changes nothing. Discarding a stopped
 reinitialize deletes only the namespace it wrote, and the configured backup
 stays on its own.
+
+The pending-enable journal is the durable record of that paused work, and it
+lasts until the work finishes or is discarded. `PendingEnableCoordinator` keeps
+one in-memory view of it, `PendingWork`: nothing paused, work paused with its
+owner, or unavailable. The launch's recovery fills the view in, and the
+journal's keychain accessors keep it current for every writer, restart cleanup
+and reset included, so admission and the screen read the view and never the
+keychain. The recovery waits while the lifecycle record can't be read: the
+record says whose work a paused journal is, a reinitialize's on a configured
+backup or a fresh Enable's on an off one, and whether a started promotion
+commits. The Try Again that loads the record runs it then, so a paused
+reinitialize comes back as the reinitialize's, with its Confirm and Discard.
+The continuation only keeps the material in memory, so it can end first: a
+failed confirmation or upload drops it. A confirmed upload that fails
+goes back to the saved-passkey pause its journal records: the screen shows its
+Confirm and Discard, and Restore, a new Enable, Turn Off, a Google Drive account
+switch and every other intent that would replace the configuration are refused
+until one of them ends it. Confirm is the retry, with one more tap of the same
+passkey. Confirm and Discard take the pause up from the journal when no
+continuation holds its material, as do a relaunch and any Enable, reinitialize
+or switch reinitialize that starts with none held, instead of staging a second
+backup the journal would refuse. A take-up that can't read the journal shows
+why next to the control that sent it and keeps the pause, so the same tap works
+once the keychain reads again. A switch's rollback discards the switch's
+journal too. An Enable's prompts hold no material, so their Discard
+closes them without reading the journal.
+
+A journal the recovery can't read is unavailable, never a saved passkey. So is
+a started promotion no running finalization owns. While nothing runs, the
+screen shows the load failure with Try Again, which runs the recovery again
+and, once the keychain reads, gives the pause back without a relaunch.
 
 Work paused on its saved passkey owns the screen while nothing runs, whichever
 work it is: the body is `SavedPasskeyConfirmation`, with Rust's title and

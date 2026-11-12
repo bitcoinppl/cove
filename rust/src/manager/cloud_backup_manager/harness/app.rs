@@ -160,6 +160,11 @@ pub(crate) fn open_durable_state() {
     env();
 }
 
+/// This phase's keychain before the app launches, so a test can fault what the launch reads
+pub(crate) fn launch_keychain() -> HarnessKeychain {
+    env().keychain.clone()
+}
+
 fn bounded_block_on<T>(what: &str, future: impl Future<Output = T>) -> T {
     let _deadline = Deadline::arm(what);
     env().handle.block_on(future)
