@@ -73,8 +73,8 @@ impl BdkStore {
     /// Those tables are in every schema version Cove has written, so a store that has not been
     /// migrated to the current BDK schema still reads, and no store is created, migrated, or
     /// given new pragmas. SQLite may still create its `-wal` and `-shm` companion files, which
-    /// hold no wallet data and which wallet deletion removes. Returns `None` when the store file
-    /// does not exist
+    /// hold no wallet data and which wallet deletion removes. Returns `None` when the wallet has
+    /// no store, and an error when it still has only a legacy file store, which migrates on open
     pub(crate) fn read_address_chains(
         id: &WalletId,
         _operation: &crate::wallet_lifecycle::WalletPersistenceOperation,
@@ -91,7 +91,7 @@ impl BdkStore {
         // reported unchecked instead of searched from the keychain's shorter window
         let sqlite_data_path = sqlite_data_path(id);
         if !sqlite_data_path.try_exists().context("unable to check for the wallet store")? {
-            return Ok(None);
+            return no_sqlite_store(id);
         }
 
         let is_plaintext = crate::database::migration::is_plaintext_sqlite(&sqlite_data_path);
@@ -468,6 +468,19 @@ pub(crate) fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {
         name.push(suffix);
         PathBuf::from(name)
     }
+}
+
+/// The result for a wallet with no SQLite store
+///
+/// A wallet not opened since the upgrade from the file store still has its revealed addresses
+/// there, so it fails rather than being searched from the keychain's shorter window. Reading the
+/// file store would need a writable handle, and migrating it belongs to opening the wallet
+fn no_sqlite_store(id: &WalletId) -> Result<Option<PublishedAddressChains>> {
+    if file_store_data_path(id).try_exists().context("unable to check for a legacy wallet store")? {
+        eyre::bail!("wallet store has not been migrated from the file store");
+    }
+
+    Ok(None)
 }
 
 fn file_store_data_path(wallet_id: &WalletId) -> PathBuf {
