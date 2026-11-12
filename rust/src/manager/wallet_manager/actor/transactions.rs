@@ -679,7 +679,8 @@ impl WalletActor {
             return Ok(());
         };
 
-        let actor = PayjoinActor::new(self.addr.clone(), persister, sender, fallback_tx);
+        let config = self.payjoin_config.clone();
+        let actor = PayjoinActor::new(self.addr.clone(), persister, config, sender, fallback_tx);
         self.spawn_payjoin_actor(actor);
         Ok(())
     }
