@@ -85,6 +85,7 @@ fn a_known_distribution_uses_its_own_port_meanings_and_lists_first() {
             ("192.168.1.5", "tcp://192.168.1.5:50001"),
         ]
     );
+
     assert!(nodes.iter().all(|found| found.node.api_type == ApiType::Electrum));
 }
 

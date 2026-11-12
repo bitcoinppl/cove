@@ -312,6 +312,7 @@ mod tests {
             binding: LanBinding::InterfaceIndex { index: u32::MAX },
             ..client(destination)
         };
+
         let answers = unbindable.lookup(&["umbrel.local".to_string()], &[]).await;
 
         // a query sent over loopback would reach the responder well within this
@@ -373,6 +374,7 @@ mod tests {
                 120,
                 RData::A(rdata::A { address: Ipv4Addr::new(192, 168, 1, 20).into() }),
             ));
+
             socket.send_to(&reply.build_bytes_vec().unwrap(), from).unwrap();
         });
 
