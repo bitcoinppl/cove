@@ -783,8 +783,8 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         },
         I::DismissNotice(_) | I::LeaveDetail => Accepted,
         // Reconnect on a committed Turn Off the provider stopped for consent resumes it with the
-        // user's consent; on a configured backup it runs the detail verification, so a repeat
-        // joins the one already running
+        // user's consent; on a configured backup it is the tapped inventory refresh, whose
+        // listing may ask for consent, so it joins a refresh already loading as Check Again does
         I::ReconnectDrive => match (snapshot.body, snapshot.running, snapshot.turn_off) {
             (AdmissionBody::FinishingDisable, Some(Op::Disable), _) => {
                 Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Disable))
@@ -798,7 +798,11 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
                 Accepted
             }
             (AdmissionBody::FinishingDisable, None, _) => Rejected(Rejection::NothingToContinue),
-            _ => configured_and_idle(snapshot, Some(Op::Verify)),
+            (AdmissionBody::Configured, ..) if snapshot.detail_checking => {
+                Coalesced(CoalescibleIntent::RefreshDetail)
+            }
+            (AdmissionBody::Configured, ..) => Accepted,
+            (body, ..) => Rejected(not_configured(body)),
         },
 
         I::SyncUnsynced => match configured_and_idle(snapshot, None) {

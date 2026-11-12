@@ -16,7 +16,7 @@ pub(crate) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs
 pub(crate) enum DetailRefreshOrigin {
     /// Nobody tapped: launch discovery, a provider or wallet change, a new configuration
     Automatic,
-    /// The user opened Cloud Backup or tapped Check Again
+    /// The user opened Cloud Backup, or tapped Check Again or Reconnect Google Drive
     Tap,
 }
 

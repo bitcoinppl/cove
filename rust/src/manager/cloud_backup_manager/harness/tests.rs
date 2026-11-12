@@ -413,6 +413,81 @@ fn launch_discovery_never_asks_for_drive_consent_but_check_again_may() {
     });
 }
 
+/// Reconnect Google Drive on a configured backup authorizes the provider and nothing else: its
+/// tap lists the inventory with a client that may ask for consent and never asks for the
+/// passkey, so checking the backup stays the separate Verify tap
+#[test]
+fn reconnect_drive_on_a_configured_backup_asks_for_consent_and_never_the_passkey() {
+    let test = concat!(
+        module_path!(),
+        "::reconnect_drive_on_a_configured_backup_asks_for_consent_and_never_the_passkey"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
+        app.cloud.revoke_authorization();
+
+        app.event("launch discovery", |app| app.manager().start_background_inventory_discovery())
+            .then_can(&[N::ReconnectDrive, N::Verify]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::ReconnectDrive, N::Verify]);
+        assert_eq!(
+            inventory_progress(&app),
+            Some(CloudBackupProgressSection::InventoryIncomplete {
+                reason: CloudBackupInventoryIncompleteReason::AuthorizationRequired,
+                controls: vec![
+                    CloudBackupInventoryControl::ReconnectDrive,
+                    CloudBackupInventoryControl::CheckAgain,
+                ],
+            }),
+            "{}",
+            app.describe()
+        );
+
+        // the master key wrapper is readable, so a verification here would ask for the passkey
+        let before = app.cloud.calls().len();
+        app.dispatch(CloudBackupManagerAction::ReconnectDrive).then_can(&[N::Verify]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::Verify]);
+
+        assert_eq!(app.passkey.interactive_calls(), Vec::new(), "{}", app.describe());
+
+        let reconnected = call_policies(&app, before);
+        assert_eq!(
+            reconnected.iter().find(|(kind, _)| *kind == CloudCall::ListWalletFilesSnapshot),
+            Some(&(CloudCall::ListWalletFilesSnapshot, Some(CloudAccessPolicy::ConsentAllowed))),
+            "{reconnected:?}"
+        );
+        assert_eq!(app.cloud.consent_sheets(), 1);
+        assert!(
+            !matches!(
+                inventory_progress(&app),
+                Some(CloudBackupProgressSection::InventoryIncomplete { .. })
+            ),
+            "the reconnect left the inventory incomplete\n{}",
+            app.describe()
+        );
+        assert!(
+            !matches!(
+                verification_state(&app),
+                Some(
+                    CloudBackupVerificationState::Running
+                        | CloudBackupVerificationState::Verified { .. }
+                )
+            ),
+            "the reconnect verified the backup\n{}",
+            app.describe()
+        );
+
+        app.dispatch(verify()).then_can(&[N::Verify, N::TurnOff]);
+        assert!(
+            matches!(verification_state(&app), Some(CloudBackupVerificationState::Verified { .. })),
+            "{}",
+            app.describe()
+        );
+        assert!(!app.passkey.interactive_calls().is_empty());
+    });
+}
+
 /// The pending upload verifier resumes at launch with nobody tapping, so the listing it finishes
 /// with may not ask for Google Drive consent either
 #[test]
@@ -1607,6 +1682,14 @@ fn silent_inventory_paths_never_prompt() {
 fn passkey_card(app: &TestApp) -> Option<CloudBackupPasskeyState> {
     configured_sections(app).into_iter().find_map(|section| match section {
         CloudBackupSection::PasskeyCard(passkey) => Some(passkey),
+        _ => None,
+    })
+}
+
+/// The published screen's progress section, which draws the inventory loading or incomplete
+fn inventory_progress(app: &TestApp) -> Option<CloudBackupProgressSection> {
+    configured_sections(app).into_iter().find_map(|section| match section {
+        CloudBackupSection::Progress(progress) => Some(progress),
         _ => None,
     })
 }

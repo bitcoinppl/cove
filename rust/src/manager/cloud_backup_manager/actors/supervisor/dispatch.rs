@@ -483,14 +483,11 @@ impl CloudBackupSupervisor {
                     manager.request_screen_publish();
                 }
             }
-            // on a configured backup, Google Drive authorization runs through the detail
-            // verification, as it did before it had its own intent
+            // on a configured backup, Google Drive authorization is the tapped inventory refresh:
+            // its listing may show the provider's consent sheet, and nothing on its path asks
+            // for the passkey, so checking the backup stays the separate Verify tap
             I::ReconnectDrive => {
-                self.start_verification_intent(
-                    manager,
-                    CloudBackupVerificationSource::CloudBackupDetail,
-                    false,
-                );
+                self.start_refresh_detail().await?;
             }
             // the backstop for every dismissal path the platform might miss
             I::LeaveDetail => self.leave_turn_off_review(),

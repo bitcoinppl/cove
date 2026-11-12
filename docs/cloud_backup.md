@@ -520,11 +520,14 @@ must not present provider consent. User-initiated restore or enable work may use
 consent-allowed access; on Android, this is the boundary at which Google Drive
 authorization may appear.
 
-A detail refresh carries who started it. Opening Cloud Backup and Check Again
-are taps, so their listing may ask for consent. Launch discovery, a provider or
-wallet change, a new configuration and the refresh after a verification start
-with nobody tapping, so they list silently; one that needs consent ends as an
-incomplete inventory that offers Reconnect. A tap that joins a waiting or
+A detail refresh carries who started it. Opening Cloud Backup, Check Again and
+Reconnect Google Drive on a configured backup are taps, so their listing may ask
+for consent. Reconnect is that tapped refresh and nothing more: it authorizes
+Google Drive and reloads the inventory, never asks for the passkey, and leaves
+checking the backup to Verify. Launch discovery, a provider or wallet change, a
+new configuration and the refresh after a verification start with nobody
+tapping, so they list silently; one that needs consent ends as an incomplete
+inventory that offers Reconnect. A tap that joins a waiting or
 running refresh gives the refresh after it the tap's authority. A local reset
 closes the detail refresh, and nothing reopens it while the reset holds the
 runtime. The listing that finishes a pending upload verification also lists
