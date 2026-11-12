@@ -36122,7 +36122,8 @@ data class FeeBumpOptions (
     ,
     /**
      * Network rates raised to at least [`Self::minimum_fee_rate`], with the replacement's total
-     * fee at each when the wallet can pay it
+     * fee at each the wallet can pay. When it can pay none of them, the custom row holds the
+     * minimum rate instead
      */
     var `feeOptions`: FeeRateOptionsWithTotalFee
 
@@ -54153,6 +54154,10 @@ public object FfiConverterTypeFeeBumpError : FfiConverterRustBuffer<FeeBumpExcep
 
 sealed class FeeBumpManagerAction: Disposable  {
 
+    /**
+     * Select a preset, or a custom option from [`RustFeeBumpManager::custom_fee_option`],
+     * which then joins the options as their custom row
+     */
     data class SelectFeeRate(
         val v1: org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee) : FeeBumpManagerAction()
 
@@ -54163,6 +54168,13 @@ sealed class FeeBumpManagerAction: Disposable  {
     }
 
     object Continue : FeeBumpManagerAction()
+
+
+    /**
+     * The screen is showing again, such as after the user came back from the confirm screen,
+     * so continue can build a new replacement
+     */
+    object ScreenAppeared : FeeBumpManagerAction()
 
 
 
@@ -54178,6 +54190,8 @@ sealed class FeeBumpManagerAction: Disposable  {
 
             }
             is FeeBumpManagerAction.Continue -> {// Nothing to destroy
+            }
+            is FeeBumpManagerAction.ScreenAppeared -> {// Nothing to destroy
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
@@ -54200,6 +54214,7 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
                 FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
                 )
             2 -> FeeBumpManagerAction.Continue
+            3 -> FeeBumpManagerAction.ScreenAppeared
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -54218,6 +54233,12 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
                 4UL
             )
         }
+        is FeeBumpManagerAction.ScreenAppeared -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: FeeBumpManagerAction, buf: ByteBuffer) {
@@ -54229,6 +54250,10 @@ public object FfiConverterTypeFeeBumpManagerAction : FfiConverterRustBuffer<FeeB
             }
             is FeeBumpManagerAction.Continue -> {
                 buf.putInt(2)
+                Unit
+            }
+            is FeeBumpManagerAction.ScreenAppeared -> {
+                buf.putInt(3)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -54525,8 +54550,18 @@ sealed class FeeBumpUnavailable: Disposable  {
         companion object
     }
 
+    /**
+     * The fee server can't be reached, and the confirm screens need its rates as a new send
+     * does
+     */
+    object FeeRatesUnavailable : FeeBumpUnavailable()
+
+
+    /**
+     * Anything else, with a message safe to show the user
+     */
     data class Failed(
-        val v1: kotlin.String) : FeeBumpUnavailable()
+        val `message`: kotlin.String) : FeeBumpUnavailable()
 
     {
 
@@ -54554,10 +54589,12 @@ sealed class FeeBumpUnavailable: Disposable  {
     )
 
             }
+            is FeeBumpUnavailable.FeeRatesUnavailable -> {// Nothing to destroy
+            }
             is FeeBumpUnavailable.Failed -> {
 
     Disposable.destroy(
-        this.v1
+        this.`message`
     )
 
             }
@@ -54595,7 +54632,8 @@ public object FfiConverterTypeFeeBumpUnavailable : FfiConverterRustBuffer<FeeBum
                 FfiConverterTypeAmount.read(buf),
                 FfiConverterTypeAmount.read(buf),
                 )
-            3 -> FeeBumpUnavailable.Failed(
+            3 -> FeeBumpUnavailable.FeeRatesUnavailable
+            4 -> FeeBumpUnavailable.Failed(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -54618,11 +54656,17 @@ public object FfiConverterTypeFeeBumpUnavailable : FfiConverterRustBuffer<FeeBum
                 + FfiConverterTypeAmount.allocationSize(value.`available`)
             )
         }
+        is FeeBumpUnavailable.FeeRatesUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is FeeBumpUnavailable.Failed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterString.allocationSize(value.`message`)
             )
         }
     }
@@ -54640,9 +54684,13 @@ public object FfiConverterTypeFeeBumpUnavailable : FfiConverterRustBuffer<FeeBum
                 FfiConverterTypeAmount.write(value.`available`, buf)
                 Unit
             }
-            is FeeBumpUnavailable.Failed -> {
+            is FeeBumpUnavailable.FeeRatesUnavailable -> {
                 buf.putInt(3)
-                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is FeeBumpUnavailable.Failed -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
