@@ -373,6 +373,7 @@ async fn a_double_spend_paying_someone_else_keeps_no_label() {
         .iter_mut()
         .find(|output| !signer.is_mine(output.script_pubkey.clone()))
         .expect("the payment has a recipient");
+
     recipient.script_pubkey = someone_else;
 
     let double_spend = broadcast(&manager, &mut screen, sign(&signer, psbt)).await;

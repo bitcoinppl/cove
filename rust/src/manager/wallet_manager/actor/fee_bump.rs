@@ -384,6 +384,7 @@ impl WalletActor {
         for replaced in same_payment {
             let record =
                 labels.get_txn_label_record(replaced.txid).map_err(|error| error.to_string())?;
+
             if let Some(record) = record.filter(|record| record.item.label.is_some()) {
                 replaced_label = Some(record.item);
                 break;
