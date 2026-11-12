@@ -171,6 +171,10 @@ class WalletManager :
     // the wallet's payjoin send; each session has its own id, so a new session's status
     // always differs from the last one's
     var payjoinStatus by mutableStateOf<PayjoinStatus>(PayjoinStatus.Idle)
+        private set
+
+    // counts applied PayjoinStatusChanged deltas, so the initial read never overwrites a newer one
+    private var payjoinStatusDeltas = 0L
 
     // cached transaction detail presentations (observable for Compose)
     val transactionDetailsPresentations: SnapshotStateMap<TxId, TransactionDetailsPresentation> =
@@ -284,6 +288,7 @@ class WalletManager :
         this.unsignedTransactions = initialState.unsignedTransactions
 
         rustManager.listenForUpdates(this)
+        loadPayjoinStatus()
     }
 
     companion object {
@@ -960,6 +965,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.PayjoinStatusChanged -> {
+                payjoinStatusDeltas += 1
                 payjoinStatus = message.v1
             }
         }
@@ -977,6 +983,27 @@ class WalletManager :
         mainScope.launch {
             logDebug("reconcile_messages: ${messages.size} messages")
             messages.forEach { apply(it) }
+        }
+    }
+
+    // a session resumed after a relaunch reports no delta until it changes, so the wallet screen
+    // needs this first read to show it
+    private fun loadPayjoinStatus() {
+        mainScope.launch {
+            val deltasBeforeRead = payjoinStatusDeltas
+            val status =
+                try {
+                    withRustOrSuspend<PayjoinStatus?>(null) { payjoinStatus() }
+                } catch (e: WalletManagerException) {
+                    logError("Unable to read the payjoin status", e)
+                    null
+                } ?: return@launch
+
+            // once a delta arrives, later deltas keep the status current, while the read's
+            // answer may predate that delta
+            if (payjoinStatusDeltas == deltasBeforeRead) {
+                payjoinStatus = status
+            }
         }
     }
 

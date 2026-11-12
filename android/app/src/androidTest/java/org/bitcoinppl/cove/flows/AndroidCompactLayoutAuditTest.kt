@@ -27,8 +27,6 @@ import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletSelectScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.VerificationCompleteScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.VerifyWordsScreen
 import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
-import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
-import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.flows.SendFlow.SendState
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerAdvancedChainCode
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerChooseChainCode
@@ -67,7 +65,6 @@ class AndroidCompactLayoutAuditTest {
     private var importWalletManager: ImportWalletManager? = null
     private var wordValidator: WordValidator? = null
     private var wordVerifyStateMachine: WordVerifyStateMachine? = null
-    private val sendFlowManagers = mutableListOf<SendFlowManager>()
     private val walletManagers = mutableListOf<WalletManager>()
     private val tapSignerManagers = mutableListOf<TapSignerManager>()
     private val tapSigners = mutableListOf<TapSigner>()
@@ -89,8 +86,6 @@ class AndroidCompactLayoutAuditTest {
         wordValidator = null
         importWalletManager?.close()
         importWalletManager = null
-        sendFlowManagers.forEach { it.close() }
-        sendFlowManagers.clear()
         walletManagers.forEach { it.close() }
         walletManagers.clear()
     }
@@ -272,21 +267,16 @@ class AndroidCompactLayoutAuditTest {
         val app = AppManager.getInstance()
         val walletManager = WalletManager.previewNew()
         walletManagers.add(walletManager)
-        val sendFlowManager =
-            SendFlowManager(
-                walletManager.newSendFlowManager(walletManager.balance),
-                SendFlowPresenter(app, walletManager),
-            )
-        sendFlowManagers.add(sendFlowManager)
         val details = confirmDetailsPreviewNew()
 
         renderCompact(screenName) {
             SendFlowConfirmScreen(
                 app = app,
                 walletManager = walletManager,
-                sendFlowManager = sendFlowManager,
                 details = details,
                 sendState = SendState.Idle,
+                payjoinWaiting = null,
+                onSendWithoutPayjoin = {},
                 onBack = {},
                 onSwipeToSend = {},
             )
