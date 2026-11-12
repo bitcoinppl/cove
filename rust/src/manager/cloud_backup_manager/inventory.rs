@@ -25,6 +25,7 @@ pub(crate) struct InventoryFacts {
     readiness: DetailInventory,
     classified: bool,
     read_at: InventoryReadAt,
+    listing_generation: u64,
     detail: CloudBackupDetailState,
     restore_all: CloudBackupRestoreAllState,
     other_backups: CloudBackupOtherBackupsState,
@@ -39,6 +40,8 @@ pub(crate) struct InventoryView {
     pub(crate) classified: bool,
     /// The configuration and the local wallet changes the inventory reflects
     pub(crate) read_at: InventoryReadAt,
+    /// The cloud-only listing the rows were classified under
+    pub(crate) listing_generation: u64,
     /// Shown while the inventory loads or after a load failed
     pub(crate) progress: Option<InventoryProgress>,
     /// The rows of the last finished load, kept through a refresh or a failure
@@ -64,6 +67,8 @@ pub(crate) struct InventoryRows {
     pub(crate) needs_sync: Vec<CloudBackupOwnRow>,
     /// Cloud records this device doesn't back up, in listing order
     pub(crate) listed: Vec<ListedRecord>,
+    /// The namespace `listed` was listed in, or `None` while no listing is loaded
+    pub(crate) listed_namespace: Option<String>,
     pub(crate) last_sync: Option<u64>,
     /// What each own record's cloud copy holds, by record ID
     pub(crate) own_cloud_copies: HashMap<String, CloudCopySecret>,
@@ -219,6 +224,7 @@ impl InventoryFacts {
             readiness: owner.readiness(),
             classified: owner.classified().is_some(),
             read_at: owner.read_at(),
+            listing_generation: owner.cloud_only_listing_generation(),
             detail: owner.detail_state().clone(),
             restore_all: owner
                 .restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some()),
@@ -250,6 +256,7 @@ impl InventoryFacts {
         InventoryView {
             classified: self.classified,
             read_at: self.read_at,
+            listing_generation: self.listing_generation,
             progress,
             rows: loaded_detail(&self.detail).map(inventory_rows),
             restore_all: self.restore_all.clone(),
@@ -289,6 +296,7 @@ fn inventory_rows(loaded: &LoadedCloudBackupDetail) -> InventoryRows {
         up_to_date: loaded.detail.up_to_date.iter().map(own_row).collect(),
         needs_sync: loaded.detail.needs_sync.iter().map(own_row).collect(),
         listed,
+        listed_namespace: loaded.cloud_only.listed_namespace().map(str::to_owned),
         last_sync: loaded.detail.last_sync,
         own_cloud_copies: loaded.own_secrets.cloud_copies.clone(),
     }

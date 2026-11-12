@@ -5,7 +5,8 @@ use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::wallet::metadata::{WalletMode as LocalWalletMode, WalletType};
 
 use super::{
-    CloudBackupInventoryIncompleteReason, CloudBackupNoticeKind, CloudBackupVerificationSource,
+    CloudBackupBatchDeleteConsent, CloudBackupInventoryIncompleteReason, CloudBackupNoticeKind,
+    CloudBackupRowDeleteConsent, CloudBackupVerificationSource,
 };
 
 /// Shared settings row state projected for Swift and Kotlin presentation
@@ -115,8 +116,8 @@ pub enum CloudBackupManagerAction {
     StartRestoreAll,
     RetryRestoreAllRemaining,
     CancelRestoreAll,
-    DeleteCloudWallet(RecordId),
-    DeleteUndecryptableWalletBackups,
+    DeleteCloudWallet(CloudBackupRowDeleteConsent),
+    DeleteUndecryptableWalletBackups(CloudBackupBatchDeleteConsent),
     RecoverOtherBackups,
     DeleteOtherBackups,
     DisableCloudBackup,

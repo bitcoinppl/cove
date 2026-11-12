@@ -37,7 +37,7 @@ use crate::manager::cloud_backup_manager::model::{
 };
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupListedRecord, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
-    CloudBackupScreenBody, CloudBackupSection, undrawn_actions,
+    CloudBackupScreenBody, CloudBackupSection, mismatched_delete_consents, undrawn_actions,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupPendingEnableCleanupState, CloudBackupPublishedScreen, RecordId,
@@ -648,7 +648,7 @@ fn check_exits(
 
 /// 8: an extra copy names a wallet that covers it and offers Delete only while a covering wallet
 /// has a current own row (otherwise it says Back up first), and no record id is both
-/// a local wallet's own and a listed row
+/// a local wallet's own and a listed row, and every delete consents to the rows it is drawn with
 ///
 /// The screen names the covering wallet; `inventory` holds which wallets cover the copy, by their
 /// own record ids, so a renamed wallet or another with the same name can't stand in for them
@@ -658,6 +658,11 @@ fn check_inventory_rows(
 ) -> Result<(), Violation> {
     let violation = |detail: String| Err(Violation::new(Invariant::InventoryRows, detail));
     let CloudBackupScreenBody::Configured(configured) = &screen.body else { return Ok(()) };
+
+    let mismatched = mismatched_delete_consents(screen);
+    if !mismatched.is_empty() {
+        return violation(format!("the deletes of {mismatched:?} consent to other rows"));
+    }
 
     let mut own = Vec::new();
     let mut listed = Vec::new();
@@ -809,6 +814,8 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             listed: Vec::new(),
+            // the namespace the fixtures' consents name
+            listed_namespace: Some("fixture-namespace".into()),
             last_sync: None,
             own_cloud_copies: HashMap::new(),
         };

@@ -1,10 +1,13 @@
 package org.bitcoinppl.cove.cloudbackup
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
@@ -23,6 +26,7 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupActionEntry
 import org.bitcoinppl.cove_core.CloudBackupActions
+import org.bitcoinppl.cove_core.CloudBackupDeleteCategory
 import org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation
 import org.bitcoinppl.cove_core.CloudBackupLastOutcome
 import org.bitcoinppl.cove_core.CloudBackupListedRow
@@ -156,6 +160,29 @@ class CloudBackupDialogContractTest {
         assertEquals("deleted from a test", emptyList<CloudBackupManagerAction>(), dispatched)
     }
 
+    /**
+     * Delete sends back the consent of the delete its dialog shows: the one a dialog replaced for
+     * a stronger warning carries the consent Rust offered with it, never the one it opened with
+     */
+    @Test
+    fun aDeleteConfirmationSendsBackTheConsentOfTheDeleteItShows() {
+        showDetail(cloudBackupFixture("configured"))
+
+        val confirmTag = CloudBackupTags.rowConfirm(SPENDING_OLD, SPENDING_OLD_DELETE)
+        compose.onNodeWithTag(CloudBackupTags.walletRow(SPENDING_OLD)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(CloudBackupTags.row(SPENDING_OLD, SPENDING_OLD_DELETE)).performClick()
+        compose.waitForIdle()
+
+        val onlyCopy = cloudBackupFixture("configured-extra-copy-only-copy")
+        show(onlyCopy)
+        compose.onNodeWithTag(confirmTag).performClick()
+        compose.waitForIdle()
+
+        val offered = onlyCopy.listedRow(SPENDING_OLD)!!.delete().action as CloudBackupRowActionKind.Delete
+        assertEquals(listOf(CloudBackupManagerAction.DeleteCloudWallet(offered.consent)), dispatched)
+    }
+
     @Test
     fun anOpenPromptFollowsTheEntriesRustSendsNow() {
         val prompts =
@@ -216,7 +243,8 @@ class CloudBackupDialogContractTest {
     }
 
     // the listed-row sections and the row dialog host as the detail screen draws them, from the
-    // screen the test swaps
+    // screen the test swaps; the sections scroll as the detail screen's frame does, so a row is
+    // scrolled to before it is tapped
     private fun showDetail(start: CloudBackupScreen) {
         detail = start
         compose.setContent {
@@ -225,7 +253,7 @@ class CloudBackupDialogContractTest {
                 val manager = remember { CloudBackupManager(current) }
                 val rowDialogs = rememberCloudBackupRowDialogs()
 
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     current.configured?.sections.orEmpty().forEach { section ->
                         when (section) {
                             is CloudBackupSection.NotOnDevice ->
@@ -306,15 +334,32 @@ class CloudBackupDialogContractTest {
     private fun CloudBackupListedRow.withDelete(
         confirmation: CloudBackupDeleteConfirmation = (delete().action as CloudBackupRowActionKind.Delete).confirmation,
         availability: CloudBackupActionAvailability = CloudBackupActionAvailability.Available,
-    ): CloudBackupListedRow =
-        copy(
+    ): CloudBackupListedRow {
+        val offered = delete().action as CloudBackupRowActionKind.Delete
+
+        // Rust asks for another confirmation only with a delete of another category, so it
+        // offers a new consent with it
+        val category =
+            when (confirmation) {
+                CloudBackupDeleteConfirmation.STANDARD -> CloudBackupDeleteCategory.ExtraCopy
+                CloudBackupDeleteConfirmation.MAY_BE_ONLY_COPY -> CloudBackupDeleteCategory.NotOnDevice
+            }
+        val consent =
+            if (confirmation == offered.confirmation) {
+                offered.consent
+            } else {
+                offered.consent.copy(evidence = offered.consent.evidence.copy(category = category))
+            }
+
+        return copy(
             actions =
                 actions.map { rowAction ->
                     if (rowAction.action.control != CloudBackupRowControl.DELETE) return@map rowAction
 
-                    rowAction.copy(action = CloudBackupRowActionKind.Delete(confirmation), availability = availability)
+                    rowAction.copy(action = CloudBackupRowActionKind.Delete(confirmation, consent), availability = availability)
                 },
         )
+    }
 
     // the actions a prompt draws as choices: the entries Rust sends for this prompt
     private fun CloudBackupScreen.promptChoiceActions(): List<CloudBackupScreenAction> =
@@ -344,7 +389,10 @@ class CloudBackupDialogContractTest {
 
     private companion object {
         const val SPENDING_OLD = "record-spending-old"
-        val SPENDING_OLD_DELETE = CloudBackupRowActionKind.Delete(CloudBackupDeleteConfirmation.STANDARD)
+
+        // tags name a row control, not what its delete carries
+        val SPENDING_OLD_DELETE: CloudBackupRowActionKind
+            get() = cloudBackupFixture("configured").listedRow(SPENDING_OLD)!!.action(CloudBackupRowControl.DELETE)!!.action
 
         val BUSY_REASON: CloudBackupRejection = CloudBackupRejection.OperationRunning(CloudBackupOperationKind.VERIFY)
         val BUSY: CloudBackupActionAvailability = CloudBackupActionAvailability.Unavailable(BUSY_REASON)

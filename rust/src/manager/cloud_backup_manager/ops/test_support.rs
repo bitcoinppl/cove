@@ -129,6 +129,9 @@ pub(crate) fn complete_cloud_only_fetch(
             &wallets,
         ),
         listing_generation: manager.inventory.read().cloud_only_listing_generation(),
+        namespace_id:
+            crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE
+                .into(),
     }
 }
 

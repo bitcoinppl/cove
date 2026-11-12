@@ -29,12 +29,13 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
-    CloudBackupScreenAction, CloudBackupScreenBody,
+    CloudBackupRowActionKind, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRuntimeOwnership,
-    CloudBackupVerificationSource, RustCloudBackupManager, initialize_cloud_backup_manager_with,
+    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRowDeleteConsent,
+    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
+    initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -581,6 +582,29 @@ impl TestApp {
             | CloudBackupDisableScreen::Offline
             | CloudBackupDisableScreen::Draining => None,
         }
+    }
+
+    /// The consent the Delete on `record_id`'s row carries on the published screen
+    pub(crate) fn row_delete(&self, record_id: &str) -> Option<CloudBackupRowDeleteConsent> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        configured
+            .sections
+            .into_iter()
+            .flat_map(|section| match section {
+                CloudBackupSection::NotOnDevice(section) => section.rows,
+                CloudBackupSection::ExtraCopies(section) => section.rows,
+                _ => Vec::new(),
+            })
+            .filter(|row| row.record_id == RecordId::from(record_id.to_owned()))
+            .flat_map(|row| row.actions)
+            .find_map(|action| match action.action {
+                CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+                _ => None,
+            })
     }
 
     /// What admission says now for an intent no [`NextAction`] names, such as a platform call

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSettingsItem
+import org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupRecoveryKind
@@ -55,7 +56,8 @@ internal fun VerificationSection(
     onReinitialize: () -> Unit,
 ) {
     val view = section.view
-    var showUndecryptableDeletionConfirmation by remember { mutableStateOf(false) }
+    // the batch the open confirmation was opened for, which its Delete sends back unchanged
+    var undecryptableDeletion by remember { mutableStateOf<CloudBackupBatchDeleteConsent?>(null) }
     val verify = { manager.dispatch(verifyAction(view.state)) }
     val needsAttention = (view.state as? CloudBackupVerificationState.NeedsAttention)?.report
     val context =
@@ -67,7 +69,7 @@ internal fun VerificationSection(
             onVerify = verify,
             onRecreate = onRecreate,
             onReinitialize = onReinitialize,
-            onDeleteUndecryptable = { showUndecryptableDeletionConfirmation = true },
+            onDeleteUndecryptable = { undecryptableDeletion = it },
         )
     val controls: @Composable (VerifyControl) -> Unit = { verifyControl ->
         VerificationControls(controls = section.controls, verify = verifyControl, context = context)
@@ -144,8 +146,8 @@ internal fun VerificationSection(
         manager = manager,
         screen = screen,
         report = needsAttention,
-        isPresented = showUndecryptableDeletionConfirmation,
-        onDismiss = { showUndecryptableDeletionConfirmation = false },
+        consent = undecryptableDeletion,
+        onDismiss = { undecryptableDeletion = null },
     )
 }
 
@@ -170,7 +172,7 @@ private data class VerificationControlContext(
     val onVerify: () -> Unit,
     val onRecreate: () -> Unit,
     val onReinitialize: () -> Unit,
-    val onDeleteUndecryptable: () -> Unit,
+    val onDeleteUndecryptable: (CloudBackupBatchDeleteConsent) -> Unit,
 )
 
 /** The verification section's controls, in the order Rust names them */
@@ -189,12 +191,12 @@ private fun VerificationControls(
 
             is CloudBackupVerificationControl.Recover -> VerificationRecoverControl(control.kind, context)
 
-            CloudBackupVerificationControl.DeleteUnreadableBackups ->
+            is CloudBackupVerificationControl.DeleteUnreadableBackups ->
                 UndecryptableBackupsDeleteControl(
                     manager = manager,
                     screen = screen,
                     count = context.undecryptableCount,
-                    onClick = context.onDeleteUndecryptable,
+                    onClick = { context.onDeleteUndecryptable(control.consent) },
                 )
 
             CloudBackupVerificationControl.RetryUpload ->

@@ -780,6 +780,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: Vec::new(),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE.into(),
         }));
 
         InventoryFacts::new(&owner, &CloudBackupStateReducer::default()).view().impact_inputs()

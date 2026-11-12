@@ -4,6 +4,7 @@ mod blob_state;
 mod catastrophic_recovery;
 mod cloud_inventory;
 mod cspp_exports;
+mod delete_consent;
 mod detail;
 mod dto;
 mod error;
@@ -56,6 +57,9 @@ use self::actors::{
     CloudBackupSupervisor, CloudBackupWriteClient, CloudBackupWriteSupervisor, WriteTicket,
 };
 use self::admission::Rejection;
+pub use self::delete_consent::{
+    CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
+};
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupOtherBackupsOutcome,
@@ -253,8 +257,12 @@ pub enum CloudBackupManagerAction {
     StartRestoreAll,
     RetryRestoreAllRemaining,
     CancelRestoreAll,
-    DeleteCloudWallet(RecordId),
-    DeleteUndecryptableWalletBackups,
+    /// Delete on a listed row, with the consent the confirmation was opened for; a stale one is
+    /// rejected
+    DeleteCloudWallet(CloudBackupRowDeleteConsent),
+    /// Delete the backups the verified key couldn't decrypt, with the consent the confirmation was
+    /// opened for; a stale one is rejected
+    DeleteUndecryptableWalletBackups(CloudBackupBatchDeleteConsent),
     RecoverOtherBackups,
     DeleteOtherBackups,
     DisableCloudBackup,

@@ -39,7 +39,7 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupNoticeKind,
     CloudBackupPasskeyState, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure,
+    CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure, RecordId,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
@@ -416,10 +416,10 @@ fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_r
         app.dispatch(CloudBackupManagerAction::CancelDisable)
             .then_can(&[N::TurnOff, N::Verify])
             .then_cannot(&[N::ConfirmDisable, N::Enable]);
-        let delete = UserIntent::DeleteCloudWallet(elsewhere.clone().into());
+        let consent = app.row_delete(elsewhere).expect("the row's Delete");
+        let delete = UserIntent::DeleteCloudWallet(consent.clone());
         assert_eq!(app.admission_of(delete), Admission::Accepted, "{}", app.describe());
-        app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(elsewhere.clone().into()))
-            .then_can(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(consent)).then_can(&[N::TurnOff]);
         assert!(!app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
 
         // with the wallet gone nothing else is at risk, so the review asks once
@@ -430,6 +430,55 @@ fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_r
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
         assert!(!app.cloud.inner.has_namespace(&account.namespace));
         assert!(app.passkey.interactive_calls().is_empty());
+    });
+}
+
+/// A row's Delete runs only on the evidence the user confirmed it on: a confirmation sent after
+/// a wallet changed on this device is refused as stale next to the row and deletes nothing, and
+/// the Delete the republished row offers deletes the record
+///
+/// The dispatch half of the rule; `delete_consent`'s tests hold the listing, category and
+/// configuration halves
+#[test]
+fn a_row_delete_confirmed_before_a_wallet_change_is_refused_as_stale() {
+    let test = concat!(
+        module_path!(),
+        "::a_row_delete_confirmed_before_a_wallet_change_is_refused_as_stale"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let account = FakeAccount::new(1, 1).seed_records(&app);
+        let [elsewhere] = account.not_on_device.as_slice() else {
+            // nothing read from the account: a panic message reaches the test log
+            panic!("expected exactly one record not on this device");
+        };
+        load_detail(&mut app);
+
+        // the user opens the confirmation, then a wallet changes on this device
+        let confirmed = app.row_delete(elsewhere).expect("the row's Delete");
+        app.event("a local wallet change", |app| app.manager().handle_wallet_set_change())
+            .then_can(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(confirmed.clone()))
+            .then_can(&[N::TurnOff]);
+
+        let Some(outcome) = app.manager().published_screen().last_outcome else {
+            panic!("no rejection after {:?}: {}", app.last_outcome(), app.describe());
+        };
+        let CloudBackupOutcomeTarget::Row { target } = &outcome.target else {
+            panic!("a row delete's rejection targets its row: {outcome:?}");
+        };
+        assert_eq!(target.record_id, RecordId::from(elsewhere.clone()));
+        assert_eq!(
+            outcome.outcome,
+            CloudBackupOutcome::Rejected { reason: CloudBackupRejection::ReviewStale }
+        );
+        assert!(app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
+        assert_eq!(app.cloud.count(CloudCall::DeleteWallet), 0);
+
+        let current = app.row_delete(elsewhere).expect("the republished row's Delete");
+        assert_ne!(current, confirmed);
+        app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(current)).then_can(&[N::TurnOff]);
+        assert!(!app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
     });
 }
 

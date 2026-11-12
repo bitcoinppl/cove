@@ -242,7 +242,10 @@ internal fun CloudOnlyWalletActionSheetPreviewContent() {
                                 CloudBackupActionAvailability.Available,
                             ),
                             CloudBackupRowAction(
-                                CloudBackupRowActionKind.Delete(CloudBackupDeleteConfirmation.MAY_BE_ONLY_COPY),
+                                CloudBackupRowActionKind.Delete(
+                                    CloudBackupDeleteConfirmation.MAY_BE_ONLY_COPY,
+                                    previewDeleteConsent("preview"),
+                                ),
                                 CloudBackupActionAvailability.Available,
                             ),
                         ),

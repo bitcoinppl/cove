@@ -18,7 +18,7 @@ fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decrypt
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_failures() {
+async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_crypto_failures() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -37,12 +37,14 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     recovered_before_delete.network = crate::network::Network::Signet;
     let mut local_bad_wallet = xpub_only_wallet_metadata();
     local_bad_wallet.network = crate::network::Network::Testnet4;
+    let listed_after_confirmation = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![local_bad_wallet.clone()]);
 
     let good_record_id = wallet_record_id(good_wallet.id.as_ref());
     let bad_record_id = wallet_record_id(bad_wallet.id.as_ref());
     let recovered_record_id = wallet_record_id(recovered_before_delete.id.as_ref());
     let local_bad_record_id = wallet_record_id(local_bad_wallet.id.as_ref());
+    let listed_after_record_id = wallet_record_id(listed_after_confirmation.id.as_ref());
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         good_record_id.clone(),
@@ -69,6 +71,12 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
         local_bad_record_id.clone(),
         encrypted_wallet_backup_bytes(&local_bad_wallet, &other_master_key, "local-bad", 1).await,
     );
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        listed_after_record_id.clone(),
+        encrypted_wallet_backup_bytes(&listed_after_confirmation, &other_master_key, "after", 1)
+            .await,
+    );
     globals.cloud.set_wallet_files(
         namespace.clone(),
         vec![
@@ -76,15 +84,26 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
             wallet_filename_from_record_id(&bad_record_id),
             wallet_filename_from_record_id(&recovered_record_id),
             wallet_filename_from_record_id(&local_bad_record_id),
+            wallet_filename_from_record_id(&listed_after_record_id),
         ],
     );
-    mark_undecryptable_backups_reported(&manager, 3);
+    mark_undecryptable_backups_reported(&manager, 4);
 
+    // the confirmed batch: every record but the one listed after the user confirmed
+    let confirmed = vec![
+        good_record_id.clone(),
+        bad_record_id.clone(),
+        recovered_record_id.clone(),
+        local_bad_record_id.clone(),
+    ];
     let prepared = manager
-        .prepare_delete_undecryptable_wallet_backups(&unowned_writes(
-            &manager,
-            CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
-        ))
+        .prepare_delete_undecryptable_wallet_backups(
+            &unowned_writes(
+                &manager,
+                CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+            ),
+            confirmed,
+        )
         .await
         .unwrap();
     let candidates: HashSet<_> = prepared.record_ids().iter().cloned().collect();
@@ -116,4 +135,5 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     assert!(globals.cloud.has_wallet_backup(&namespace, &recovered_record_id));
     assert!(globals.cloud.has_wallet_backup(&namespace, &good_record_id));
     assert!(globals.cloud.has_wallet_backup(&namespace, &local_bad_record_id));
+    assert!(globals.cloud.has_wallet_backup(&namespace, &listed_after_record_id));
 }

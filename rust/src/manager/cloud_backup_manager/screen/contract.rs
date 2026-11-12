@@ -7,6 +7,10 @@
 //! projection that names a rebuild on a backup that verifies, or Sync Now with nothing to sync,
 //! fails here. The fixture test applies these to every named fixture, and harness invariant 4a
 //! applies [`undrawn_actions`] to every screen the harness publishes
+//!
+//! [`mismatched_delete_consents`] holds every delete to the rows it is drawn with: a row's
+//! Delete names that row, as the kind of record the row shows, and the batch delete names
+//! exactly the undecryptable rows on screen. The fixture test and harness invariant 8 apply it
 #![cfg(test)]
 
 use std::collections::HashSet;
@@ -15,17 +19,86 @@ use cove_device::cloud_storage::CloudSyncHealth;
 
 use super::types::{
     CloudBackupConfiguredScreen, CloudBackupControlSurface, CloudBackupDrawnControl,
-    CloudBackupFinishingDisableStage, CloudBackupInventoryControl, CloudBackupOtherBackupsControl,
-    CloudBackupOtherBackupsSection, CloudBackupProgressSection, CloudBackupRecoveryKind,
+    CloudBackupFinishingDisableStage, CloudBackupInventoryControl, CloudBackupListedRecord,
+    CloudBackupListedRow, CloudBackupOtherBackupsControl, CloudBackupOtherBackupsSection,
+    CloudBackupProgressSection, CloudBackupRecoveryKind, CloudBackupRowActionKind,
     CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
-    CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupVerificationSection,
-    CloudBackupWalletsControl, CloudBackupWalletsSection,
+    CloudBackupTurnOffFailure, CloudBackupUnreadableKind, CloudBackupVerificationControl,
+    CloudBackupVerificationSection, CloudBackupWalletsControl, CloudBackupWalletsSection,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSyncState,
-    CloudBackupVerificationState, DeepVerificationFailure,
+    CloudBackupVerificationState, DeepVerificationFailure, RecordId,
 };
+
+/// The records whose delete names something other than what the screen draws for them: a row
+/// whose Delete consent names another record, another kind of record or another confirmation,
+/// and every record a batch delete names that isn't an undecryptable row on screen, or that it
+/// leaves out
+pub(crate) fn mismatched_delete_consents(screen: &CloudBackupScreen) -> Vec<RecordId> {
+    let CloudBackupScreenBody::Configured(configured) = &screen.body else { return Vec::new() };
+
+    let rows: Vec<&CloudBackupListedRow> = configured
+        .sections
+        .iter()
+        .flat_map(|section| match section {
+            CloudBackupSection::NotOnDevice(section) => section.rows.as_slice(),
+            CloudBackupSection::ExtraCopies(section) => section.rows.as_slice(),
+            _ => &[],
+        })
+        .collect();
+
+    let mut mismatched: Vec<RecordId> = rows
+        .iter()
+        .filter(|row| {
+            row.actions.iter().any(|action| match &action.action {
+                CloudBackupRowActionKind::Delete { confirmation, consent } => {
+                    !consent.names(&row.record_id, &row.record)
+                        || *confirmation != consent.confirmation()
+                }
+                _ => false,
+            })
+        })
+        .map(|row| row.record_id.clone())
+        .collect();
+
+    let undecryptable: Vec<&RecordId> = rows
+        .iter()
+        .filter(|row| {
+            matches!(
+                row.record,
+                CloudBackupListedRecord::Unreadable {
+                    kind: CloudBackupUnreadableKind::Decrypt,
+                    ..
+                }
+            )
+        })
+        .map(|row| &row.record_id)
+        .collect();
+
+    let batches = configured.sections.iter().flat_map(|section| match section {
+        CloudBackupSection::Verification(section) => section.controls.as_slice(),
+        _ => &[],
+    });
+
+    for control in batches {
+        let CloudBackupVerificationControl::DeleteUnreadableBackups { consent } = control else {
+            continue;
+        };
+
+        let named: Vec<&RecordId> = consent.record_ids().collect();
+        mismatched.extend(
+            named
+                .iter()
+                .filter(|id| !undecryptable.contains(id))
+                .chain(undecryptable.iter().filter(|id| !named.contains(id)))
+                .map(|id| (*id).clone()),
+        );
+    }
+
+    mismatched
+}
 
 /// The actions `screen` offers with no well-placed control: nothing draws them, or only a
 /// control its surface's content does not allow
@@ -226,7 +299,7 @@ fn misplaced_verification_controls(
         C::Recover { kind: CloudBackupRecoveryKind::ReinitializeBackup } => {
             matches!(state, S::Failed(DeepVerificationFailure::ReinitializeBackup { .. }))
         }
-        C::DeleteUnreadableBackups => matches!(
+        C::DeleteUnreadableBackups { .. } => matches!(
             state,
             S::NeedsAttention { report, .. } if report.wallet_issues.decryption_failed > 0
         ),
@@ -331,7 +404,83 @@ mod tests {
 
             let repeated = repeated_section_kinds(screen);
             assert!(repeated.is_empty(), "{} lists {repeated:?} more than once", fixture.name);
+
+            let mismatched = mismatched_delete_consents(screen);
+            assert!(mismatched.is_empty(), "{} mismatches {mismatched:?}", fixture.name);
         }
+    }
+
+    /// A Delete whose consent names another row or another kind of record, and a batch that
+    /// names a record no undecryptable row shows or leaves one out, are caught
+    #[test]
+    fn a_delete_whose_consent_does_not_match_its_rows_is_caught() {
+        use super::super::super::{
+            CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
+        };
+        use super::super::types::CloudBackupDeleteConfirmation;
+
+        let delete = |record_id: &str, category| CloudBackupRowActionKind::Delete {
+            confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
+            consent: CloudBackupRowDeleteConsent::fixture(record_id, category),
+        };
+        let cold = RecordId::from("record-cold".to_owned());
+
+        let mut other_row = named("configured");
+        set_row_delete(
+            &mut other_row,
+            &cold,
+            delete("record-spending-old", CloudBackupDeleteCategory::NotOnDevice),
+        );
+        assert_eq!(mismatched_delete_consents(&other_row), vec![cold.clone()]);
+
+        let mut other_kind = named("configured");
+        set_row_delete(
+            &mut other_kind,
+            &cold,
+            delete("record-cold", CloudBackupDeleteCategory::Unsupported),
+        );
+        assert_eq!(mismatched_delete_consents(&other_kind), vec![cold]);
+
+        let mut short_batch = named("configured-needs-attention-undecryptable");
+        verification_section(&mut short_batch).controls[0] =
+            CloudBackupVerificationControl::DeleteUnreadableBackups {
+                consent: CloudBackupBatchDeleteConsent::fixture(&[
+                    "record-undecryptable-1",
+                    "record-elsewhere",
+                ]),
+            };
+        let ids = |ids: &[&str]| -> Vec<RecordId> {
+            ids.iter().map(|id| RecordId::from((*id).to_owned())).collect()
+        };
+        assert_eq!(
+            mismatched_delete_consents(&short_batch),
+            ids(&["record-elsewhere", "record-undecryptable-2"])
+        );
+    }
+
+    /// Replaces the Delete on `record_id`'s row with `delete`
+    fn set_row_delete(
+        screen: &mut CloudBackupScreen,
+        record_id: &RecordId,
+        delete: CloudBackupRowActionKind,
+    ) {
+        let Body::Configured(configured) = &mut screen.body else { panic!("a configured screen") };
+        let row = configured
+            .sections
+            .iter_mut()
+            .flat_map(|section| match section {
+                CloudBackupSection::NotOnDevice(section) => section.rows.as_mut_slice(),
+                CloudBackupSection::ExtraCopies(section) => section.rows.as_mut_slice(),
+                _ => &mut [],
+            })
+            .find(|row| row.record_id == *record_id)
+            .expect("the row");
+        let action = row
+            .actions
+            .iter_mut()
+            .find(|action| matches!(action.action, CloudBackupRowActionKind::Delete { .. }))
+            .expect("the row's Delete");
+        action.action = delete;
     }
 
     /// An entry with no control is caught, and so is a control with no entry

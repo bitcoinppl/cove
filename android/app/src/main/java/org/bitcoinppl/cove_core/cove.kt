@@ -32823,6 +32823,50 @@ public object FfiConverterTypeCloudBackupActions: FfiConverterRustBuffer<CloudBa
 
 
 /**
+ * Consent to delete the backups the verified key couldn't decrypt, frozen to the records the
+ * inventory listed as undecryptable when it was offered
+ *
+ * Opaque to the platform, which sends back the one its confirmation was opened with
+ */
+data class CloudBackupBatchDeleteConsent (
+    var `recordIds`: List<RecordId>
+    ,
+    var `evidence`: CloudBackupDeleteEvidence
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupBatchDeleteConsent: FfiConverterRustBuffer<CloudBackupBatchDeleteConsent> {
+    override fun read(buf: ByteBuffer): CloudBackupBatchDeleteConsent {
+        return CloudBackupBatchDeleteConsent(
+            FfiConverterSequenceTypeRecordId.read(buf),
+            FfiConverterTypeCloudBackupDeleteEvidence.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupBatchDeleteConsent) = (
+            FfiConverterSequenceTypeRecordId.allocationSize(value.`recordIds`) +
+            FfiConverterTypeCloudBackupDeleteEvidence.allocationSize(value.`evidence`)
+    )
+
+    override fun write(value: CloudBackupBatchDeleteConsent, buf: ByteBuffer) {
+            FfiConverterSequenceTypeRecordId.write(value.`recordIds`, buf)
+            FfiConverterTypeCloudBackupDeleteEvidence.write(value.`evidence`, buf)
+    }
+}
+
+
+
+/**
  * A configured backup, drawn as Rust's ordered sections
  */
 data class CloudBackupConfiguredScreen (
@@ -32883,6 +32927,89 @@ public object FfiConverterTypeCloudBackupConfiguredScreen: FfiConverterRustBuffe
             FfiConverterOptionalULong.write(value.`lastSync`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupDisableScreen.write(value.`disable`, buf)
+    }
+}
+
+
+
+/**
+ * The inventory evidence a delete was offered on
+ *
+ * Opaque to the platform. The generations are process-local counters, compared only with the
+ * ones the same process mints
+ */
+data class CloudBackupDeleteEvidence (
+    var `category`: CloudBackupDeleteCategory
+    ,
+    /**
+     * The namespace the records were listed in
+     *
+     * Carried apart from `configuration` because a reinitialize replaces the namespace inside
+     * one configuration generation
+     */
+    var `namespaceId`: kotlin.String
+    ,
+    /**
+     * The configuration in force
+     */
+    var `configuration`: kotlin.ULong
+    ,
+    /**
+     * The configuration whose inventory scope the records were read under, which trails
+     * `configuration` while a new scope's inventory loads
+     */
+    var `inventoryScope`: kotlin.ULong?
+    ,
+    /**
+     * The cloud-only listing the records were classified under
+     */
+    var `listingGeneration`: kotlin.ULong
+    ,
+    /**
+     * How many local wallet changes the inventory had applied when it classified them
+     */
+    var `localWalletsGeneration`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDeleteEvidence: FfiConverterRustBuffer<CloudBackupDeleteEvidence> {
+    override fun read(buf: ByteBuffer): CloudBackupDeleteEvidence {
+        return CloudBackupDeleteEvidence(
+            FfiConverterTypeCloudBackupDeleteCategory.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupDeleteEvidence) = (
+            FfiConverterTypeCloudBackupDeleteCategory.allocationSize(value.`category`) +
+            FfiConverterString.allocationSize(value.`namespaceId`) +
+            FfiConverterULong.allocationSize(value.`configuration`) +
+            FfiConverterOptionalULong.allocationSize(value.`inventoryScope`) +
+            FfiConverterULong.allocationSize(value.`listingGeneration`) +
+            FfiConverterULong.allocationSize(value.`localWalletsGeneration`)
+    )
+
+    override fun write(value: CloudBackupDeleteEvidence, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupDeleteCategory.write(value.`category`, buf)
+            FfiConverterString.write(value.`namespaceId`, buf)
+            FfiConverterULong.write(value.`configuration`, buf)
+            FfiConverterOptionalULong.write(value.`inventoryScope`, buf)
+            FfiConverterULong.write(value.`listingGeneration`, buf)
+            FfiConverterULong.write(value.`localWalletsGeneration`, buf)
     }
 }
 
@@ -34000,6 +34127,49 @@ public object FfiConverterTypeCloudBackupRowAction: FfiConverterRustBuffer<Cloud
     override fun write(value: CloudBackupRowAction, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupRowActionKind.write(value.`action`, buf)
             FfiConverterTypeCloudBackupActionAvailability.write(value.`availability`, buf)
+    }
+}
+
+
+
+/**
+ * Consent to delete one listed record, as its row's Delete offered it
+ *
+ * Opaque to the platform, which sends back the one its confirmation was opened with
+ */
+data class CloudBackupRowDeleteConsent (
+    var `recordId`: RecordId
+    ,
+    var `evidence`: CloudBackupDeleteEvidence
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRowDeleteConsent: FfiConverterRustBuffer<CloudBackupRowDeleteConsent> {
+    override fun read(buf: ByteBuffer): CloudBackupRowDeleteConsent {
+        return CloudBackupRowDeleteConsent(
+            FfiConverterTypeRecordId.read(buf),
+            FfiConverterTypeCloudBackupDeleteEvidence.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupRowDeleteConsent) = (
+            FfiConverterTypeRecordId.allocationSize(value.`recordId`) +
+            FfiConverterTypeCloudBackupDeleteEvidence.allocationSize(value.`evidence`)
+    )
+
+    override fun write(value: CloudBackupRowDeleteConsent, buf: ByteBuffer) {
+            FfiConverterTypeRecordId.write(value.`recordId`, buf)
+            FfiConverterTypeCloudBackupDeleteEvidence.write(value.`evidence`, buf)
     }
 }
 
@@ -42000,6 +42170,122 @@ public object FfiConverterTypeCloudBackupControlSurface: FfiConverterRustBuffer<
 
 
 /**
+ * What a confirmed delete removes, which its records must still be when it runs
+ */
+sealed class CloudBackupDeleteCategory {
+
+    /**
+     * A copy of a wallet on this device whose own backup is current
+     */
+    object ExtraCopy : CloudBackupDeleteCategory()
+
+
+    /**
+     * A wallet that isn't on this device, so this may be its only copy
+     */
+    object NotOnDevice : CloudBackupDeleteCategory()
+
+
+    /**
+     * Written by a newer version of Cove
+     */
+    object Unsupported : CloudBackupDeleteCategory()
+
+
+    /**
+     * The key of the configuration in force could not read it
+     */
+    data class Unreadable(
+        val `kind`: org.bitcoinppl.cove_core.CloudBackupUnreadableKind) : CloudBackupDeleteCategory()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDeleteCategory : FfiConverterRustBuffer<CloudBackupDeleteCategory>{
+    override fun read(buf: ByteBuffer): CloudBackupDeleteCategory {
+        return when(buf.getInt()) {
+            1 -> CloudBackupDeleteCategory.ExtraCopy
+            2 -> CloudBackupDeleteCategory.NotOnDevice
+            3 -> CloudBackupDeleteCategory.Unsupported
+            4 -> CloudBackupDeleteCategory.Unreadable(
+                FfiConverterTypeCloudBackupUnreadableKind.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupDeleteCategory): ULong = when(value) {
+        is CloudBackupDeleteCategory.ExtraCopy -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDeleteCategory.NotOnDevice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDeleteCategory.Unsupported -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDeleteCategory.Unreadable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupUnreadableKind.allocationSize(value.`kind`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupDeleteCategory, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupDeleteCategory.ExtraCopy -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupDeleteCategory.NotOnDevice -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupDeleteCategory.Unsupported -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupDeleteCategory.Unreadable -> {
+                buf.putInt(4)
+                FfiConverterTypeCloudBackupUnreadableKind.write(value.`kind`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * What the platform confirms before a row delete
  */
 
@@ -43248,8 +43534,12 @@ sealed class CloudBackupManagerAction {
     object CancelRestoreAll : CloudBackupManagerAction()
 
 
+    /**
+     * Delete on a listed row, with the consent the confirmation was opened for; a stale one is
+     * rejected
+     */
     data class DeleteCloudWallet(
-        val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.CloudBackupRowDeleteConsent) : CloudBackupManagerAction()
 
     {
 
@@ -43257,8 +43547,18 @@ sealed class CloudBackupManagerAction {
         companion object
     }
 
-    object DeleteUndecryptableWalletBackups : CloudBackupManagerAction()
+    /**
+     * Delete the backups the verified key couldn't decrypt, with the consent the confirmation was
+     * opened for; a stale one is rejected
+     */
+    data class DeleteUndecryptableWalletBackups(
+        val v1: org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent) : CloudBackupManagerAction()
 
+    {
+
+
+        companion object
+    }
 
     object RecoverOtherBackups : CloudBackupManagerAction()
 
@@ -43451,9 +43751,11 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             21 -> CloudBackupManagerAction.RetryRestoreAllRemaining
             22 -> CloudBackupManagerAction.CancelRestoreAll
             23 -> CloudBackupManagerAction.DeleteCloudWallet(
-                FfiConverterTypeRecordId.read(buf),
+                FfiConverterTypeCloudBackupRowDeleteConsent.read(buf),
                 )
-            24 -> CloudBackupManagerAction.DeleteUndecryptableWalletBackups
+            24 -> CloudBackupManagerAction.DeleteUndecryptableWalletBackups(
+                FfiConverterTypeCloudBackupBatchDeleteConsent.read(buf),
+                )
             25 -> CloudBackupManagerAction.RecoverOtherBackups
             26 -> CloudBackupManagerAction.DeleteOtherBackups
             27 -> CloudBackupManagerAction.DisableCloudBackup
@@ -43634,13 +43936,14 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeRecordId.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupRowDeleteConsent.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.DeleteUndecryptableWalletBackups -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupBatchDeleteConsent.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.RecoverOtherBackups -> {
@@ -43875,11 +44178,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.DeleteCloudWallet -> {
                 buf.putInt(23)
-                FfiConverterTypeRecordId.write(value.v1, buf)
+                FfiConverterTypeCloudBackupRowDeleteConsent.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DeleteUndecryptableWalletBackups -> {
                 buf.putInt(24)
+                FfiConverterTypeCloudBackupBatchDeleteConsent.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.RecoverOtherBackups -> {
@@ -45382,7 +45686,8 @@ sealed class CloudBackupRejection {
 
 
     /**
-     * The review the confirmation answers is no longer current
+     * What the confirmation answers is no longer current: the Turn Off review, or the rows and
+     * evidence a delete's consent names
      */
     object ReviewStale : CloudBackupRejection()
 
@@ -46048,8 +46353,12 @@ sealed class CloudBackupRowActionKind {
     object Restore : CloudBackupRowActionKind()
 
 
+    /**
+     * Delete, with what the platform confirms and the consent its confirmation sends back
+     */
     data class Delete(
-        val `confirmation`: org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation) : CloudBackupRowActionKind()
+        val `confirmation`: org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation,
+        val `consent`: org.bitcoinppl.cove_core.CloudBackupRowDeleteConsent) : CloudBackupRowActionKind()
 
     {
 
@@ -46101,6 +46410,7 @@ public object FfiConverterTypeCloudBackupRowActionKind : FfiConverterRustBuffer<
             1 -> CloudBackupRowActionKind.Restore
             2 -> CloudBackupRowActionKind.Delete(
                 FfiConverterTypeCloudBackupDeleteConfirmation.read(buf),
+                FfiConverterTypeCloudBackupRowDeleteConsent.read(buf),
                 )
             3 -> CloudBackupRowActionKind.BackUpFirst
             4 -> CloudBackupRowActionKind.CheckAgain
@@ -46121,6 +46431,7 @@ public object FfiConverterTypeCloudBackupRowActionKind : FfiConverterRustBuffer<
             (
                 4UL
                 + FfiConverterTypeCloudBackupDeleteConfirmation.allocationSize(value.`confirmation`)
+                + FfiConverterTypeCloudBackupRowDeleteConsent.allocationSize(value.`consent`)
             )
         }
         is CloudBackupRowActionKind.BackUpFirst -> {
@@ -46152,6 +46463,7 @@ public object FfiConverterTypeCloudBackupRowActionKind : FfiConverterRustBuffer<
             is CloudBackupRowActionKind.Delete -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupDeleteConfirmation.write(value.`confirmation`, buf)
+                FfiConverterTypeCloudBackupRowDeleteConsent.write(value.`consent`, buf)
                 Unit
             }
             is CloudBackupRowActionKind.BackUpFirst -> {
@@ -48000,10 +48312,17 @@ sealed class CloudBackupVerificationControl {
 
     /**
      * Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
-     * counts them
+     * counts them; its confirmation sends back `consent`, frozen to the records listed as
+     * undecryptable when it was drawn
      */
-    object DeleteUnreadableBackups : CloudBackupVerificationControl()
+    data class DeleteUnreadableBackups(
+        val `consent`: org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent) : CloudBackupVerificationControl()
 
+    {
+
+
+        companion object
+    }
 
     /**
      * Try Again on a latest upload Cove couldn't confirm
@@ -48037,7 +48356,9 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
             2 -> CloudBackupVerificationControl.Recover(
                 FfiConverterTypeCloudBackupRecoveryKind.read(buf),
                 )
-            3 -> CloudBackupVerificationControl.DeleteUnreadableBackups
+            3 -> CloudBackupVerificationControl.DeleteUnreadableBackups(
+                FfiConverterTypeCloudBackupBatchDeleteConsent.read(buf),
+                )
             4 -> CloudBackupVerificationControl.RetryUpload
             5 -> CloudBackupVerificationControl.ReconnectDrive
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -48062,6 +48383,7 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupBatchDeleteConsent.allocationSize(value.`consent`)
             )
         }
         is CloudBackupVerificationControl.RetryUpload -> {
@@ -48091,6 +48413,7 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
             }
             is CloudBackupVerificationControl.DeleteUnreadableBackups -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudBackupBatchDeleteConsent.write(value.`consent`, buf)
                 Unit
             }
             is CloudBackupVerificationControl.RetryUpload -> {
@@ -74177,6 +74500,34 @@ public object FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterSequenceTypeGroupedWord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRecordId: FfiConverterRustBuffer<List<RecordId>> {
+    override fun read(buf: ByteBuffer): List<RecordId> {
+        val len = buf.getInt()
+        return List<RecordId>(len) {
+            FfiConverterTypeRecordId.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RecordId>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRecordId.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RecordId>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRecordId.write(it, buf)
         }
     }
 }

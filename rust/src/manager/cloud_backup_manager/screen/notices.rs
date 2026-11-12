@@ -156,8 +156,8 @@ fn target_of(intent: &UserIntent) -> Option<CloudBackupOutcomeTarget> {
         I::RestoreCloudWallet(record_id) => {
             return Some(row_target(record_id, CloudBackupRowControl::Restore));
         }
-        I::DeleteCloudWallet(record_id) => {
-            return Some(row_target(record_id, CloudBackupRowControl::Delete));
+        I::DeleteCloudWallet(consent) => {
+            return Some(row_target(consent.record_id(), CloudBackupRowControl::Delete));
         }
         I::Enable(..) => A::Enable,
         I::RestoreFromCloudBackup => A::RestoreFromCloudBackup,
@@ -175,7 +175,7 @@ fn target_of(intent: &UserIntent) -> Option<CloudBackupOutcomeTarget> {
         I::StartRestoreAll => A::StartRestoreAll,
         I::RetryRestoreAllRemaining => A::RetryRestoreAllRemaining,
         I::CancelRestoreAll => A::CancelRestoreAll,
-        I::DeleteUndecryptableWalletBackups => A::DeleteUnreadableBackups,
+        I::DeleteUndecryptableWalletBackups(_) => A::DeleteUnreadableBackups,
         I::RecoverOtherBackups => A::RecoverOtherBackups,
         I::DeleteOtherBackups => A::DeleteOtherBackups,
         I::TurnOff => A::TurnOff,

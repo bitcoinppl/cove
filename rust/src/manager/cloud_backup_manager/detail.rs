@@ -747,7 +747,7 @@ mod tests {
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
-            CloudOnlyState::Loaded { rows: listed_rows(&[wallet_b]), incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&[wallet_b]), incomplete: false, namespace_id: crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE.into() }
         );
     }
 
@@ -776,7 +776,7 @@ mod tests {
 
         assert_eq!(
             manager.inventory.read().cloud_only(),
-            CloudOnlyState::Loaded { rows: listed_rows(&[]), incomplete: false }
+            CloudOnlyState::Loaded { rows: listed_rows(&[]), incomplete: false, namespace_id: crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE.into() }
         );
     }
 

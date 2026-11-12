@@ -1,7 +1,11 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_delete_undecryptable_wallet_backups_operation(&mut self) {
+    /// Deletes those of `record_ids`, the batch the user confirmed, that still fail to decrypt
+    pub(crate) fn begin_delete_undecryptable_wallet_backups_operation(
+        &mut self,
+        record_ids: Vec<String>,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(claim) = self.begin_exclusive_operation(
@@ -13,7 +17,8 @@ impl CloudBackupSupervisor {
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_delete_undecryptable_wallet_backups(&writes).await;
+            let result =
+                manager.prepare_delete_undecryptable_wallet_backups(&writes, record_ids).await;
             send!(addr.complete_delete_undecryptable_wallet_backups_preparation(claim, result));
         });
     }

@@ -569,7 +569,7 @@ impl CloudBackupSupervisor {
         let notices =
             Notices::new(&RustCloudBackupManager::load_persisted_state(), &self.screen_outcome);
 
-        ScreenInputs { admission, inventory, notices }
+        ScreenInputs { configuration: self.runtime.generation(), admission, inventory, notices }
     }
 
     /// Shows the runtime through the read-only adapter onto today's exported types
@@ -808,8 +808,12 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn start_delete_undecryptable_wallet_backups_operation(&mut self) -> ActorResult<()> {
-        self.begin_delete_undecryptable_wallet_backups_operation();
+    /// Deletes those of `record_ids`, the batch the user confirmed, that still fail to decrypt
+    pub async fn start_delete_undecryptable_wallet_backups_operation(
+        &mut self,
+        record_ids: Vec<String>,
+    ) -> ActorResult<()> {
+        self.begin_delete_undecryptable_wallet_backups_operation(record_ids);
         Produces::ok(())
     }
 

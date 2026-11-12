@@ -75,6 +75,11 @@ use cove_device::keychain::WalletSecret as KeychainWalletSecret;
 
 const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
 
+/// The namespace the keychain holds, which a cloud-only fetch lists its records in
+fn keychain_namespace() -> String {
+    CloudBackupKeychain::global().namespace_id().unwrap().expect("a namespace in the keychain")
+}
+
 /// A standalone supervisor with its own test writer, beside the manager's spawned one
 fn test_supervisor(
     manager: Weak<RustCloudBackupManager>,
@@ -1865,7 +1870,11 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     };
 
     assert_eq!(state.inventory_authority, CloudBackupInventoryAuthority::ProviderConfirmed);
-    assert_eq!(state.cloud_only, CloudOnlyState::Loaded { rows: listed_rows(&wallets), incomplete: false });
+    assert_eq!(state.cloud_only, CloudOnlyState::Loaded {
+            rows: listed_rows(&wallets),
+            incomplete: false,
+            namespace_id: crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE.into(),
+        });
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4155,7 +4164,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
     assert_eq!(
         public_cloud_only(&manager),
-        Some(CloudOnlyState::Loaded { rows: vec![unreadable], incomplete: true })
+        Some(CloudOnlyState::Loaded { rows: vec![unreadable], incomplete: true, namespace_id: keychain_namespace() })
     );
     assert_eq!(
         manager.projected_restore_all_state(),
@@ -4240,7 +4249,7 @@ async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_aga
         CloudOnlyRow::unreadable(record_id.into(), CloudBackupUnreadableKind::NotDownloadable);
     wait_for_test_condition(Duration::from_secs(5), "the incomplete list should load", || {
         public_cloud_only(&manager)
-            == Some(CloudOnlyState::Loaded { rows: vec![unreadable.clone()], incomplete: true })
+            == Some(CloudOnlyState::Loaded { rows: vec![unreadable.clone()], incomplete: true, namespace_id: keychain_namespace() })
     })
     .await;
     assert_eq!(
@@ -4590,7 +4599,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
     assert!(
         matches!(
             &cloud_only,
-            Some(CloudOnlyState::Loaded { rows, incomplete: false })
+            Some(CloudOnlyState::Loaded { rows, incomplete: false, .. })
                 if rows.len() == 1 && rows[0].record_id == local_record_id
         ),
         "the late listing should still match the cloud-only rows, got {cloud_only:?}"
@@ -4854,7 +4863,7 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the fetch should load", || {
         public_cloud_only(&manager)
-            == Some(CloudOnlyState::Loaded { rows: listed_rows(&Vec::new()), incomplete: true })
+            == Some(CloudOnlyState::Loaded { rows: listed_rows(&Vec::new()), incomplete: true, namespace_id: keychain_namespace() })
     })
     .await;
 
@@ -4870,7 +4879,7 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     call!(manager.supervisor.start_refresh_detail()).await.unwrap();
     wait_for_test_condition(Duration::from_secs(5), "the new listing should settle", || {
         public_cloud_only(&manager)
-            == Some(CloudOnlyState::Loaded { rows: listed_rows(&Vec::new()), incomplete: false })
+            == Some(CloudOnlyState::Loaded { rows: listed_rows(&Vec::new()), incomplete: false, namespace_id: keychain_namespace() })
             && RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none()
     })
     .await;

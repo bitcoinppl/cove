@@ -105,9 +105,9 @@ struct VerificationSection: View {
         presentationCoordinator.present(.dialog(.destructive(confirmation)))
     }
 
-    private func requestUndecryptableWalletDeletion() {
+    private func requestUndecryptableWalletDeletion(_ consent: CloudBackupBatchDeleteConsent) {
         presentationCoordinator.present(
-            .alert(.undecryptableWalletDeletion(undecryptableWalletCount))
+            .alert(.undecryptableWalletDeletion(undecryptableWalletCount, consent))
         )
     }
 }
@@ -127,7 +127,7 @@ struct CloudBackupVerificationControls: View {
     let recovery: CloudBackupRecoveryOperation
     let undecryptableCount: UInt32
     let onConfirmRecovery: (CloudBackupDestructiveConfirmation) -> Void
-    let onDeleteUndecryptable: () -> Void
+    let onDeleteUndecryptable: (CloudBackupBatchDeleteConsent) -> Void
     let onRetryUpload: () -> Void
 
     var body: some View {
@@ -146,11 +146,11 @@ struct CloudBackupVerificationControls: View {
                     onConfirm: onConfirmRecovery
                 )
 
-            case .deleteUnreadableBackups:
+            case let .deleteUnreadableBackups(consent):
                 CloudBackupUndecryptableWalletIssue(
                     count: undecryptableCount,
                     actions: actions,
-                    onDelete: onDeleteUndecryptable
+                    onDelete: { onDeleteUndecryptable(consent) }
                 )
 
             case .retryUpload:

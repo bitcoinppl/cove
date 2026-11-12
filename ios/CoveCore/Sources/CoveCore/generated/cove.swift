@@ -15919,6 +15919,66 @@ public func FfiConverterTypeCloudBackupActions_lower(_ value: CloudBackupActions
 
 
 /**
+ * Consent to delete the backups the verified key couldn't decrypt, frozen to the records the
+ * inventory listed as undecryptable when it was offered
+ *
+ * Opaque to the platform, which sends back the one its confirmation was opened with
+ */
+public struct CloudBackupBatchDeleteConsent: Equatable, Hashable {
+    public var recordIds: [RecordId]
+    public var evidence: CloudBackupDeleteEvidence
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recordIds: [RecordId], evidence: CloudBackupDeleteEvidence) {
+        self.recordIds = recordIds
+        self.evidence = evidence
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupBatchDeleteConsent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupBatchDeleteConsent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupBatchDeleteConsent {
+        return
+            try CloudBackupBatchDeleteConsent(
+                recordIds: FfiConverterSequenceTypeRecordId.read(from: &buf),
+                evidence: FfiConverterTypeCloudBackupDeleteEvidence.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupBatchDeleteConsent, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRecordId.write(value.recordIds, into: &buf)
+        FfiConverterTypeCloudBackupDeleteEvidence.write(value.evidence, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupBatchDeleteConsent_lift(_ buf: RustBuffer) throws -> CloudBackupBatchDeleteConsent {
+    return try FfiConverterTypeCloudBackupBatchDeleteConsent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupBatchDeleteConsent_lower(_ value: CloudBackupBatchDeleteConsent) -> RustBuffer {
+    return FfiConverterTypeCloudBackupBatchDeleteConsent.lower(value)
+}
+
+
+/**
  * A configured backup, drawn as Rust's ordered sections
  */
 public struct CloudBackupConfiguredScreen: Equatable, Hashable {
@@ -16004,6 +16064,120 @@ public func FfiConverterTypeCloudBackupConfiguredScreen_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeCloudBackupConfiguredScreen_lower(_ value: CloudBackupConfiguredScreen) -> RustBuffer {
     return FfiConverterTypeCloudBackupConfiguredScreen.lower(value)
+}
+
+
+/**
+ * The inventory evidence a delete was offered on
+ *
+ * Opaque to the platform. The generations are process-local counters, compared only with the
+ * ones the same process mints
+ */
+public struct CloudBackupDeleteEvidence: Equatable, Hashable {
+    public var category: CloudBackupDeleteCategory
+    /**
+     * The namespace the records were listed in
+     *
+     * Carried apart from `configuration` because a reinitialize replaces the namespace inside
+     * one configuration generation
+     */
+    public var namespaceId: String
+    /**
+     * The configuration in force
+     */
+    public var configuration: UInt64
+    /**
+     * The configuration whose inventory scope the records were read under, which trails
+     * `configuration` while a new scope's inventory loads
+     */
+    public var inventoryScope: UInt64?
+    /**
+     * The cloud-only listing the records were classified under
+     */
+    public var listingGeneration: UInt64
+    /**
+     * How many local wallet changes the inventory had applied when it classified them
+     */
+    public var localWalletsGeneration: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(category: CloudBackupDeleteCategory,
+        /**
+         * The namespace the records were listed in
+         *
+         * Carried apart from `configuration` because a reinitialize replaces the namespace inside
+         * one configuration generation
+         */namespaceId: String,
+        /**
+         * The configuration in force
+         */configuration: UInt64,
+        /**
+         * The configuration whose inventory scope the records were read under, which trails
+         * `configuration` while a new scope's inventory loads
+         */inventoryScope: UInt64?,
+        /**
+         * The cloud-only listing the records were classified under
+         */listingGeneration: UInt64,
+        /**
+         * How many local wallet changes the inventory had applied when it classified them
+         */localWalletsGeneration: UInt64) {
+        self.category = category
+        self.namespaceId = namespaceId
+        self.configuration = configuration
+        self.inventoryScope = inventoryScope
+        self.listingGeneration = listingGeneration
+        self.localWalletsGeneration = localWalletsGeneration
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDeleteEvidence: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDeleteEvidence: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDeleteEvidence {
+        return
+            try CloudBackupDeleteEvidence(
+                category: FfiConverterTypeCloudBackupDeleteCategory.read(from: &buf),
+                namespaceId: FfiConverterString.read(from: &buf),
+                configuration: FfiConverterUInt64.read(from: &buf),
+                inventoryScope: FfiConverterOptionUInt64.read(from: &buf),
+                listingGeneration: FfiConverterUInt64.read(from: &buf),
+                localWalletsGeneration: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupDeleteEvidence, into buf: inout [UInt8]) {
+        FfiConverterTypeCloudBackupDeleteCategory.write(value.category, into: &buf)
+        FfiConverterString.write(value.namespaceId, into: &buf)
+        FfiConverterUInt64.write(value.configuration, into: &buf)
+        FfiConverterOptionUInt64.write(value.inventoryScope, into: &buf)
+        FfiConverterUInt64.write(value.listingGeneration, into: &buf)
+        FfiConverterUInt64.write(value.localWalletsGeneration, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDeleteEvidence_lift(_ buf: RustBuffer) throws -> CloudBackupDeleteEvidence {
+    return try FfiConverterTypeCloudBackupDeleteEvidence.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDeleteEvidence_lower(_ value: CloudBackupDeleteEvidence) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDeleteEvidence.lower(value)
 }
 
 
@@ -17525,6 +17699,65 @@ public func FfiConverterTypeCloudBackupRowAction_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeCloudBackupRowAction_lower(_ value: CloudBackupRowAction) -> RustBuffer {
     return FfiConverterTypeCloudBackupRowAction.lower(value)
+}
+
+
+/**
+ * Consent to delete one listed record, as its row's Delete offered it
+ *
+ * Opaque to the platform, which sends back the one its confirmation was opened with
+ */
+public struct CloudBackupRowDeleteConsent: Equatable, Hashable {
+    public var recordId: RecordId
+    public var evidence: CloudBackupDeleteEvidence
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recordId: RecordId, evidence: CloudBackupDeleteEvidence) {
+        self.recordId = recordId
+        self.evidence = evidence
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupRowDeleteConsent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRowDeleteConsent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRowDeleteConsent {
+        return
+            try CloudBackupRowDeleteConsent(
+                recordId: FfiConverterTypeRecordId.read(from: &buf),
+                evidence: FfiConverterTypeCloudBackupDeleteEvidence.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupRowDeleteConsent, into buf: inout [UInt8]) {
+        FfiConverterTypeRecordId.write(value.recordId, into: &buf)
+        FfiConverterTypeCloudBackupDeleteEvidence.write(value.evidence, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowDeleteConsent_lift(_ buf: RustBuffer) throws -> CloudBackupRowDeleteConsent {
+    return try FfiConverterTypeCloudBackupRowDeleteConsent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRowDeleteConsent_lower(_ value: CloudBackupRowDeleteConsent) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRowDeleteConsent.lower(value)
 }
 
 
@@ -25361,6 +25594,104 @@ public func FfiConverterTypeCloudBackupControlSurface_lower(_ value: CloudBackup
 
 
 /**
+ * What a confirmed delete removes, which its records must still be when it runs
+ */
+
+public enum CloudBackupDeleteCategory: Equatable, Hashable {
+
+    /**
+     * A copy of a wallet on this device whose own backup is current
+     */
+    case extraCopy
+    /**
+     * A wallet that isn't on this device, so this may be its only copy
+     */
+    case notOnDevice
+    /**
+     * Written by a newer version of Cove
+     */
+    case unsupported
+    /**
+     * The key of the configuration in force could not read it
+     */
+    case unreadable(kind: CloudBackupUnreadableKind
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDeleteCategory: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDeleteCategory: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupDeleteCategory
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDeleteCategory {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .extraCopy
+
+        case 2: return .notOnDevice
+
+        case 3: return .unsupported
+
+        case 4: return .unreadable(kind: try FfiConverterTypeCloudBackupUnreadableKind.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupDeleteCategory, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .extraCopy:
+            writeInt(&buf, Int32(1))
+
+
+        case .notOnDevice:
+            writeInt(&buf, Int32(2))
+
+
+        case .unsupported:
+            writeInt(&buf, Int32(3))
+
+
+        case let .unreadable(kind):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeCloudBackupUnreadableKind.write(kind, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDeleteCategory_lift(_ buf: RustBuffer) throws -> CloudBackupDeleteCategory {
+    return try FfiConverterTypeCloudBackupDeleteCategory.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDeleteCategory_lower(_ value: CloudBackupDeleteCategory) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDeleteCategory.lower(value)
+}
+
+
+
+/**
  * What the platform confirms before a row delete
  */
 
@@ -26612,9 +26943,18 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     case startRestoreAll
     case retryRestoreAllRemaining
     case cancelRestoreAll
-    case deleteCloudWallet(RecordId
+    /**
+     * Delete on a listed row, with the consent the confirmation was opened for; a stale one is
+     * rejected
+     */
+    case deleteCloudWallet(CloudBackupRowDeleteConsent
     )
-    case deleteUndecryptableWalletBackups
+    /**
+     * Delete the backups the verified key couldn't decrypt, with the consent the confirmation was
+     * opened for; a stale one is rejected
+     */
+    case deleteUndecryptableWalletBackups(CloudBackupBatchDeleteConsent
+    )
     case recoverOtherBackups
     case deleteOtherBackups
     case disableCloudBackup
@@ -26754,10 +27094,11 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case 22: return .cancelRestoreAll
 
-        case 23: return .deleteCloudWallet(try FfiConverterTypeRecordId.read(from: &buf)
+        case 23: return .deleteCloudWallet(try FfiConverterTypeCloudBackupRowDeleteConsent.read(from: &buf)
         )
 
-        case 24: return .deleteUndecryptableWalletBackups
+        case 24: return .deleteUndecryptableWalletBackups(try FfiConverterTypeCloudBackupBatchDeleteConsent.read(from: &buf)
+        )
 
         case 25: return .recoverOtherBackups
 
@@ -26911,11 +27252,12 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case let .deleteCloudWallet(v1):
             writeInt(&buf, Int32(23))
-            FfiConverterTypeRecordId.write(v1, into: &buf)
+            FfiConverterTypeCloudBackupRowDeleteConsent.write(v1, into: &buf)
 
 
-        case .deleteUndecryptableWalletBackups:
+        case let .deleteUndecryptableWalletBackups(v1):
             writeInt(&buf, Int32(24))
+            FfiConverterTypeCloudBackupBatchDeleteConsent.write(v1, into: &buf)
 
 
         case .recoverOtherBackups:
@@ -28578,7 +28920,8 @@ public enum CloudBackupRejection: Equatable, Hashable {
     case nothingToCancel
     case nothingToContinue
     /**
-     * The review the confirmation answers is no longer current
+     * What the confirmation answers is no longer current: the Turn Off review, or the rows and
+     * evidence a delete's consent names
      */
     case reviewStale
     /**
@@ -29090,7 +29433,10 @@ public func FfiConverterTypeCloudBackupRootPrompt_lower(_ value: CloudBackupRoot
 public enum CloudBackupRowActionKind: Equatable, Hashable {
 
     case restore
-    case delete(confirmation: CloudBackupDeleteConfirmation
+    /**
+     * Delete, with what the platform confirms and the consent its confirmation sends back
+     */
+    case delete(confirmation: CloudBackupDeleteConfirmation, consent: CloudBackupRowDeleteConsent
     )
     /**
      * An extra copy whose replacement isn't confirmed yet: sync first
@@ -29133,7 +29479,7 @@ public struct FfiConverterTypeCloudBackupRowActionKind: FfiConverterRustBuffer {
 
         case 1: return .restore
 
-        case 2: return .delete(confirmation: try FfiConverterTypeCloudBackupDeleteConfirmation.read(from: &buf)
+        case 2: return .delete(confirmation: try FfiConverterTypeCloudBackupDeleteConfirmation.read(from: &buf), consent: try FfiConverterTypeCloudBackupRowDeleteConsent.read(from: &buf)
         )
 
         case 3: return .backUpFirst
@@ -29154,9 +29500,10 @@ public struct FfiConverterTypeCloudBackupRowActionKind: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case let .delete(confirmation):
+        case let .delete(confirmation,consent):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupDeleteConfirmation.write(confirmation, into: &buf)
+            FfiConverterTypeCloudBackupRowDeleteConsent.write(consent, into: &buf)
 
 
         case .backUpFirst:
@@ -30787,9 +31134,11 @@ public enum CloudBackupVerificationControl: Equatable, Hashable {
     )
     /**
      * Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
-     * counts them
+     * counts them; its confirmation sends back `consent`, frozen to the records listed as
+     * undecryptable when it was drawn
      */
-    case deleteUnreadableBackups
+    case deleteUnreadableBackups(consent: CloudBackupBatchDeleteConsent
+    )
     /**
      * Try Again on a latest upload Cove couldn't confirm
      */
@@ -30824,7 +31173,8 @@ public struct FfiConverterTypeCloudBackupVerificationControl: FfiConverterRustBu
         case 2: return .recover(kind: try FfiConverterTypeCloudBackupRecoveryKind.read(from: &buf)
         )
 
-        case 3: return .deleteUnreadableBackups
+        case 3: return .deleteUnreadableBackups(consent: try FfiConverterTypeCloudBackupBatchDeleteConsent.read(from: &buf)
+        )
 
         case 4: return .retryUpload
 
@@ -30847,8 +31197,9 @@ public struct FfiConverterTypeCloudBackupVerificationControl: FfiConverterRustBu
             FfiConverterTypeCloudBackupRecoveryKind.write(kind, into: &buf)
 
 
-        case .deleteUnreadableBackups:
+        case let .deleteUnreadableBackups(consent):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeCloudBackupBatchDeleteConsent.write(consent, into: &buf)
 
 
         case .retryUpload:
@@ -52042,6 +52393,31 @@ fileprivate struct FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRust
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterSequenceTypeGroupedWord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRecordId: FfiConverterRustBuffer {
+    typealias SwiftType = [RecordId]
+
+    public static func write(_ value: [RecordId], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRecordId.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RecordId] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RecordId]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRecordId.read(from: &buf))
         }
         return seq
     }

@@ -19,7 +19,10 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
+import org.bitcoinppl.cove_core.CloudBackupDeleteCategory
+import org.bitcoinppl.cove_core.CloudBackupDeleteEvidence
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupRowDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
@@ -180,7 +183,21 @@ class CloudBackupFirstInventoryFullLaunchTest {
         val localWalletsBefore = AppManager.getInstance().wallets.map { it.id }
         val downloadsBefore = ScriptedCloudStorageAccess.walletDownloadRecordIds()
         dispatchOnMain(CloudBackupManagerAction.RestoreCloudWallet(ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID))
-        dispatchOnMain(CloudBackupManagerAction.DeleteCloudWallet(ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID))
+        // no row is drawn yet, so the delete carries a consent no inventory minted, as a stale one
+        // would arrive
+        val unminted =
+            CloudBackupRowDeleteConsent(
+                ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID,
+                CloudBackupDeleteEvidence(
+                    category = CloudBackupDeleteCategory.NotOnDevice,
+                    namespaceId = "unminted-namespace",
+                    configuration = 0uL,
+                    inventoryScope = null,
+                    listingGeneration = 0uL,
+                    localWalletsGeneration = 0uL,
+                ),
+            )
+        dispatchOnMain(CloudBackupManagerAction.DeleteCloudWallet(unminted))
         Thread.sleep(ACTION_SETTLE_MS)
 
         // the gate still holds every listing, so nothing confirmed the inventory while the

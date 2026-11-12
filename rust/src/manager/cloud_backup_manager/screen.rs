@@ -23,7 +23,9 @@ use parking_lot::Mutex;
 use tracing::error;
 
 #[cfg(test)]
-pub(crate) use self::contract::{repeated_section_kinds, section_kind, undrawn_actions};
+pub(crate) use self::contract::{
+    mismatched_delete_consents, repeated_section_kinds, section_kind, undrawn_actions,
+};
 #[cfg(test)]
 pub(crate) use self::fixtures::cloud_backup_screen_fixtures;
 pub(crate) use self::notices::{LastOutcome, Notices};
@@ -31,11 +33,11 @@ pub(crate) use self::notices::{LastOutcome, Notices};
 pub(crate) use self::types::CloudBackupActionAvailability;
 use self::types::CloudBackupActions;
 pub(crate) use self::types::{
-    CloudBackupDisableConfirmation, CloudBackupDisableImpact, CloudBackupDisableNotStartedReason,
-    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
-    CloudBackupInventoryAssessment, CloudBackupKeyTrust, CloudBackupListedRecord,
-    CloudBackupNamedCount, CloudBackupOutcome, CloudBackupOwnRecord, CloudBackupOwnRow,
-    CloudBackupRejection, CloudBackupScreenAction, CloudBackupTurnOffFailure,
+    CloudBackupDeleteConfirmation, CloudBackupDisableConfirmation, CloudBackupDisableImpact,
+    CloudBackupDisableNotStartedReason, CloudBackupDisableReview, CloudBackupDisableScreen,
+    CloudBackupFinishingDisableStage, CloudBackupInventoryAssessment, CloudBackupKeyTrust,
+    CloudBackupListedRecord, CloudBackupNamedCount, CloudBackupOutcome, CloudBackupOwnRecord,
+    CloudBackupOwnRow, CloudBackupRejection, CloudBackupScreenAction, CloudBackupTurnOffFailure,
     CloudBackupUnreadableKind,
 };
 pub use self::types::{
@@ -51,6 +53,7 @@ pub(crate) use self::types::{
 use crate::database::cloud_backup::PersistedHealNotice;
 
 use super::actors::supervisor::Runtime;
+use super::actors::write::ConfigGeneration;
 use super::admission::AdmissionSnapshot;
 use super::inventory::InventoryFacts;
 use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
@@ -71,6 +74,8 @@ pub(crate) struct PublishedScreen {
 /// What the supervisor reads for one projection, besides its runtime
 #[derive(Debug)]
 pub(crate) struct ScreenInputs {
+    /// The configuration in force, which every delete consent the screen offers names
+    pub(crate) configuration: ConfigGeneration,
     /// The snapshot dispatch would decide on now, so the screen offers what dispatch accepts
     pub(crate) admission: AdmissionSnapshot,
     pub(crate) inventory: InventoryFacts,
@@ -140,8 +145,8 @@ impl RustCloudBackupManager {
         runtime: &Runtime,
         inputs: &ScreenInputs,
     ) -> CloudBackupScreen {
-        let ScreenInputs { admission, inventory, notices } = inputs;
-        project::project(runtime, admission, &self.state.read(), inventory, notices)
+        let ScreenInputs { configuration, admission, inventory, notices } = inputs;
+        project::project(runtime, *configuration, admission, &self.state.read(), inventory, notices)
     }
 
     /// Dismisses the persisted heal notice; the commit around it publishes the screen without it

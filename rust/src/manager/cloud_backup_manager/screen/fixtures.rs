@@ -28,14 +28,15 @@ mod debug {
         CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
         CloudBackupDriveAccountSwitchStage, CloudBackupExtraCopiesSection,
         CloudBackupFinishingDisableScreen, CloudBackupFinishingDisableStage, CloudBackupHealNotice,
-        CloudBackupInventoryAssessment, CloudBackupInventoryControl, CloudBackupListedRecord,
-        CloudBackupListedRow, CloudBackupMenuControl, CloudBackupNamedCount,
-        CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOtherBackupsControl,
-        CloudBackupOtherBackupsSection, CloudBackupOwnRecord, CloudBackupOwnRow,
-        CloudBackupProgressSection, CloudBackupRecoveryKind, CloudBackupRecoveryOperation,
-        CloudBackupRejection, CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen,
-        CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupScreenFixture,
-        CloudBackupSection, CloudBackupTurnOffFailure, CloudBackupVerificationControl,
+        CloudBackupInventoryAssessment, CloudBackupInventoryControl, CloudBackupKeyTrust,
+        CloudBackupListedRecord, CloudBackupListedRow, CloudBackupMenuControl,
+        CloudBackupNamedCount, CloudBackupNotOnDeviceSection, CloudBackupOperationKind,
+        CloudBackupOtherBackupsControl, CloudBackupOtherBackupsSection, CloudBackupOwnRecord,
+        CloudBackupOwnRow, CloudBackupProgressSection, CloudBackupRecoveryKind,
+        CloudBackupRecoveryOperation, CloudBackupRejection, CloudBackupRowAction,
+        CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
+        CloudBackupScreenBody, CloudBackupScreenFixture, CloudBackupSection,
+        CloudBackupTurnOffFailure, CloudBackupUnreadableKind, CloudBackupVerificationControl,
         CloudBackupVerificationSection, CloudBackupVerificationView, CloudBackupWalletsControl,
         CloudBackupWalletsSection,
     };
@@ -52,6 +53,9 @@ mod debug {
         CloudBackupWalletVerificationIssues, CloudOnlyOperation, DeepVerificationFailure,
         DeepVerificationReport, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
         RecordId,
+    };
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
     };
 
     /// Prefixes every fixture name; the release-seam check looks for it
@@ -292,6 +296,10 @@ mod debug {
                             CloudBackupRowActionKind::Restore,
                             CloudBackupRowActionKind::Delete {
                                 confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
+                                consent: CloudBackupRowDeleteConsent::fixture(
+                                    "record-cold",
+                                    CloudBackupDeleteCategory::NotOnDevice,
+                                ),
                             },
                         ],
                     ),
@@ -317,6 +325,10 @@ mod debug {
                     },
                     vec![CloudBackupRowActionKind::Delete {
                         confirmation: CloudBackupDeleteConfirmation::Standard,
+                        consent: CloudBackupRowDeleteConsent::fixture(
+                            "record-spending-old",
+                            CloudBackupDeleteCategory::ExtraCopy,
+                        ),
                     }],
                 )],
             }),
@@ -508,10 +520,35 @@ mod debug {
                     checked_at: Some(VERIFIED_AT),
                 },
                 vec![
-                    CloudBackupVerificationControl::DeleteUnreadableBackups,
+                    CloudBackupVerificationControl::DeleteUnreadableBackups {
+                        consent: CloudBackupBatchDeleteConsent::fixture(&[
+                            "record-undecryptable-1",
+                            "record-undecryptable-2",
+                        ]),
+                    },
                     CloudBackupVerificationControl::Verify,
                 ],
             ),
+            CloudBackupSection::NotOnDevice(CloudBackupNotOnDeviceSection {
+                rows: ["record-undecryptable-1", "record-undecryptable-2"]
+                    .into_iter()
+                    .map(|record_id| {
+                        row(
+                            record_id,
+                            CloudBackupListedRecord::Unreadable {
+                                kind: CloudBackupUnreadableKind::Decrypt,
+                                trust: CloudBackupKeyTrust::Unverified,
+                            },
+                            vec![
+                                CloudBackupRowActionKind::Verify,
+                                CloudBackupRowActionKind::CheckAgain,
+                            ],
+                        )
+                    })
+                    .collect(),
+                restore_all: CloudBackupRestoreAllState::NotShown,
+                operation: CloudOnlyOperation::Idle,
+            }),
             CloudBackupSection::TurnOff,
         ];
 
@@ -712,6 +749,10 @@ mod debug {
                 CloudBackupRowActionKind::Restore,
                 CloudBackupRowActionKind::Delete {
                     confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
+                    consent: CloudBackupRowDeleteConsent::fixture(
+                        "record-spending-old",
+                        CloudBackupDeleteCategory::NotOnDevice,
+                    ),
                 },
             ],
         );

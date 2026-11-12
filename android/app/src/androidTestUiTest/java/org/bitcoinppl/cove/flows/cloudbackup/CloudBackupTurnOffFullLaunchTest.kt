@@ -9,6 +9,7 @@ import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
+import org.bitcoinppl.cove.cloudbackup.action
 import org.bitcoinppl.cove.cloudbackup.caption
 import org.bitcoinppl.cove.cloudbackup.configured
 import org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffRobot.Companion.CANCEL
@@ -36,6 +37,8 @@ import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupRowActionKind
+import org.bitcoinppl.cove_core.CloudBackupRowControl
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
@@ -298,7 +301,9 @@ class CloudBackupTurnOffFullLaunchTest {
         // the row's own confirmation is covered by CloudBackupDeleteFromCloudFullLaunchTest, so the
         // delete is dispatched as its confirm button sends it
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            robot.manager.dispatch(CloudBackupManagerAction.DeleteCloudWallet(recordId))
+            val delete = robot.manager.screen.listedRow(recordId)?.action(CloudBackupRowControl.DELETE)?.action
+            val consent = requireNotNull(delete as? CloudBackupRowActionKind.Delete) { "the row offers no Delete" }.consent
+            robot.manager.dispatch(CloudBackupManagerAction.DeleteCloudWallet(consent))
         }
         assertTrue("the row delete never reached the provider", ScriptedCloudStorageAccess.awaitHeldWalletDelete())
 

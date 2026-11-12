@@ -144,6 +144,8 @@ pub(crate) struct CloudOnlyFetch {
     /// One row for every cloud-only record the fetch's own provider listing found
     pub(crate) rows: Vec<CloudOnlyRow>,
     pub(crate) listing_generation: u64,
+    /// The namespace the fetch listed the records in
+    pub(crate) namespace_id: String,
 }
 
 impl CloudOnlyFetch {

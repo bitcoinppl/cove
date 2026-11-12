@@ -346,8 +346,8 @@ private struct CloudBackupListedRowView: View {
         switch action {
         case .restore:
             manager.dispatch(action: .restoreCloudWallet(row.recordId))
-        case .delete:
-            presentationCoordinator.present(.alert(.rowDelete(row.recordId)))
+        case let .delete(_, consent):
+            presentationCoordinator.present(.alert(.rowDelete(row.recordId, consent)))
         case .backUpFirst:
             manager.dispatch(action: .syncUnsynced)
         case .checkAgain:

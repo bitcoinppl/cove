@@ -18,14 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -33,19 +25,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation
 import org.bitcoinppl.cove_core.CloudBackupExtraCopiesSection
 import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupNotOnDeviceSection
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
-import org.bitcoinppl.cove_core.CloudBackupRowAction
-import org.bitcoinppl.cove_core.CloudBackupRowActionKind
-import org.bitcoinppl.cove_core.CloudBackupRowControl
 import org.bitcoinppl.cove_core.CloudBackupRowTarget
 import org.bitcoinppl.cove_core.CloudBackupScreen
-import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 
 /** Backups of wallets missing from this device, and backups Cove couldn't read or check */
@@ -157,119 +144,6 @@ internal fun CloudBackupListedRows(
     )
 }
 
-/**
- * Which row dialog is up on the detail screen, by the row Rust owns
- *
- * Only the step and the record are kept; each frame reads the row's current actions from the
- * screen, so a dialog never shows an availability or a delete warning Rust has replaced
- */
-@Stable
-internal class CloudBackupRowDialogs {
-    var open by mutableStateOf<CloudBackupRowDialog?>(null)
-        private set
-
-    fun openSheet(recordId: String) {
-        open = CloudBackupRowDialog.Sheet(recordId)
-    }
-
-    fun confirmDelete(recordId: String) {
-        open = CloudBackupRowDialog.ConfirmDelete(recordId)
-    }
-
-    fun close() {
-        open = null
-    }
-}
-
-@Composable
-internal fun rememberCloudBackupRowDialogs(): CloudBackupRowDialogs = remember { CloudBackupRowDialogs() }
-
-internal sealed interface CloudBackupRowDialog {
-    val recordId: String
-
-    data class Sheet(
-        override val recordId: String,
-    ) : CloudBackupRowDialog
-
-    data class ConfirmDelete(
-        override val recordId: String,
-    ) : CloudBackupRowDialog
-}
-
-/**
- * The open row's action sheet or delete confirmation, drawn over the whole detail screen
- *
- * The row is found wherever Rust lists it now ([CloudBackupScreen.listedRow]), as on iOS, so an
- * extra copy that becomes the only copy keeps its confirmation, which then warns that it may be
- * the only copy
- */
-@Composable
-internal fun CloudBackupRowDialogHost(
-    screen: CloudBackupScreen,
-    dialogs: CloudBackupRowDialogs,
-    onDispatch: (CloudBackupManagerAction) -> Unit,
-) {
-    val dialog = dialogs.open
-    val coordinator = LocalCloudBackupPresentationCoordinator.current
-
-    val row = dialog?.let { screen.listedRow(it.recordId) }
-    val delete = row?.action(CloudBackupRowControl.DELETE)
-    val isCurrent =
-        when (dialog) {
-            null -> false
-            is CloudBackupRowDialog.Sheet -> row != null
-            is CloudBackupRowDialog.ConfirmDelete -> delete != null
-        }
-
-    // a row Rust dropped, or a delete it stopped offering, closes the dialog bound to it; nothing
-    // draws it meanwhile, and clearing it keeps the dialog from coming back if the row returns
-    LaunchedEffect(dialog, isCurrent) {
-        if (dialog != null && !isCurrent) dialogs.close()
-    }
-
-    DisposableEffect(coordinator, dialog) {
-        coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, dialog != null)
-        onDispose {
-            coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
-        }
-    }
-
-    if (!isCurrent || row == null) return
-
-    when (dialog) {
-        is CloudBackupRowDialog.Sheet ->
-            CloudBackupRowActionSheet(
-                row = row,
-                onDismiss = dialogs::close,
-                onAction = { kind ->
-                    when (kind) {
-                        is CloudBackupRowActionKind.Delete -> dialogs.confirmDelete(row.recordId)
-                        else -> {
-                            dialogs.close()
-                            onDispatch(kind.managerAction(row.recordId))
-                        }
-                    }
-                },
-            )
-        is CloudBackupRowDialog.ConfirmDelete -> {
-            val confirmation = (delete?.action as? CloudBackupRowActionKind.Delete)?.confirmation ?: return
-
-            // a new confirmation Rust asks for replaces the dialog, rather than changing the
-            // warning under a confirm button the user may already be reaching for
-            key(confirmation) {
-                CloudBackupRowDeleteDialog(
-                    row = row,
-                    delete = delete,
-                    confirmation = confirmation,
-                    onDispatch = onDispatch,
-                    onDismiss = dialogs::close,
-                )
-            }
-        }
-        null -> Unit
-    }
-}
-
 @Composable
 private fun CloudBackupListedRowsCard(
     screen: CloudBackupScreen,
@@ -306,28 +180,6 @@ private fun CloudBackupListedRowsCard(
 }
 
 @Composable
-private fun CloudBackupRowDeleteDialog(
-    row: CloudBackupListedRow,
-    delete: CloudBackupRowAction,
-    confirmation: CloudBackupDeleteConfirmation,
-    onDispatch: (CloudBackupManagerAction) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    CloudBackupConfirmationDialog(
-        title = "Delete ${row.title()}?",
-        message = cloudBackupRowDeleteMessage(confirmation),
-        confirmTitle = "Delete Forever",
-        availability = delete.availability,
-        confirmTag = CloudBackupTags.rowConfirm(row.recordId, delete.action),
-        onConfirm = {
-            onDismiss()
-            onDispatch(CloudBackupManagerAction.DeleteCloudWallet(row.recordId))
-        },
-        onDismiss = onDismiss,
-    )
-}
-
-@Composable
 private fun CloudBackupRowOutcomes(
     screen: CloudBackupScreen,
     row: CloudBackupListedRow,
@@ -341,27 +193,6 @@ private fun CloudBackupRowOutcomes(
         )
     }
 }
-
-internal fun cloudBackupRowDeleteMessage(confirmation: CloudBackupDeleteConfirmation): String =
-    when (confirmation) {
-        CloudBackupDeleteConfirmation.STANDARD ->
-            "This backup will be permanently removed from Cloud Backup. This can't be undone."
-        CloudBackupDeleteConfirmation.MAY_BE_ONLY_COPY ->
-            "This may be the only copy of this wallet. Without its recovery words, it can't be " +
-                "recovered after you delete it. This can't be undone."
-    }
-
-private fun CloudBackupRowActionKind.managerAction(recordId: String): CloudBackupManagerAction =
-    when (this) {
-        CloudBackupRowActionKind.Restore -> CloudBackupManagerAction.RestoreCloudWallet(recordId)
-        is CloudBackupRowActionKind.Delete -> CloudBackupManagerAction.DeleteCloudWallet(recordId)
-
-        // the extra copy's replacement isn't backed up yet, so syncing comes before the delete
-        CloudBackupRowActionKind.BackUpFirst -> CloudBackupManagerAction.SyncUnsynced
-        CloudBackupRowActionKind.CheckAgain -> CloudBackupManagerAction.RefreshDetail
-        CloudBackupRowActionKind.Verify ->
-            CloudBackupManagerAction.StartVerification(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)
-    }
 
 @Composable
 private fun CloudBackupListedRowItem(

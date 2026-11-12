@@ -14,10 +14,9 @@ use super::controls::drawn_controls;
 use super::notices::Notices;
 use super::types::{
     CloudBackupActionAvailability, CloudBackupActionEntry, CloudBackupActions,
-    CloudBackupConfiguredScreen, CloudBackupDeleteConfirmation, CloudBackupDisableScreen,
-    CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
-    CloudBackupDriveAccountSwitchStage, CloudBackupExtraCopiesSection,
-    CloudBackupFinishingDisableScreen, CloudBackupInventoryControl, CloudBackupKeyTrust,
+    CloudBackupConfiguredScreen, CloudBackupDisableScreen, CloudBackupDriveAccountSwitchRecovery,
+    CloudBackupDriveAccountSwitchScreen, CloudBackupDriveAccountSwitchStage,
+    CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen, CloudBackupInventoryControl,
     CloudBackupListedRecord, CloudBackupListedRow, CloudBackupMenuControl,
     CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOtherBackupsControl,
     CloudBackupOtherBackupsSection, CloudBackupProgressSection, CloudBackupRecoveryKind,
@@ -28,11 +27,13 @@ use super::types::{
     CloudBackupWalletsSection,
 };
 use crate::manager::cloud_backup_manager::actors::supervisor::Runtime;
+use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
     ContinuationStage, EnableIntent, Rejection, ReviewExit, SwitchAdmission, UserIntent,
     evaluate_admission,
 };
+use crate::manager::cloud_backup_manager::delete_consent::DeleteConsents;
 use crate::manager::cloud_backup_manager::inventory::{
     InventoryFacts, InventoryProgress, InventoryRows, InventoryView, ListedRecord,
 };
@@ -52,14 +53,20 @@ use crate::manager::cloud_backup_manager::{
 ///
 /// Pure: the same inputs give the same screen, so the harness can compare a fresh projection with
 /// what the platform was sent
+///
+/// Every delete it offers carries the consent minted from `inventory` under `configuration`, so
+/// the confirmation can hand back exactly what the user saw
 pub(crate) fn project(
     runtime: &Runtime,
+    configuration: ConfigGeneration,
     admission: &AdmissionSnapshot,
     presentation: &CloudBackupStateReducer,
     inventory: &InventoryFacts,
     notices: &Notices,
 ) -> CloudBackupScreen {
-    let body = body(runtime, admission, presentation, inventory);
+    let inventory = inventory.view();
+    let consents = inventory.delete_consents(configuration);
+    let body = body(runtime, admission, presentation, &inventory, &consents);
     let settings_row = settings_row(&body, notices, presentation);
     let root_prompt = match &body {
         CloudBackupScreenBody::Enabling(_) | CloudBackupScreenBody::Configured(_) => {
@@ -67,7 +74,7 @@ pub(crate) fn project(
         }
         _ => CloudBackupRootPrompt::None,
     };
-    let actions = global_actions(&body, &root_prompt, notices, admission);
+    let actions = global_actions(&body, &root_prompt, notices, admission, &consents);
 
     CloudBackupScreen {
         body,
@@ -84,7 +91,8 @@ fn body(
     runtime: &Runtime,
     admission: &AdmissionSnapshot,
     presentation: &CloudBackupStateReducer,
-    inventory: &InventoryFacts,
+    inventory: &InventoryView,
+    consents: &DeleteConsents<'_>,
 ) -> CloudBackupScreenBody {
     use AdmissionBody as B;
 
@@ -126,6 +134,7 @@ fn body(
             admission,
             presentation,
             inventory,
+            consents,
         )),
         B::FinishingDisable => {
             CloudBackupScreenBody::FinishingDisable(CloudBackupFinishingDisableScreen {
@@ -209,10 +218,10 @@ fn configured_screen(
     runtime: &Runtime,
     admission: &AdmissionSnapshot,
     presentation: &CloudBackupStateReducer,
-    inventory: &InventoryFacts,
+    inventory: &InventoryView,
+    consents: &DeleteConsents<'_>,
 ) -> CloudBackupConfiguredScreen {
     let configured = presentation.configured_presentation();
-    let inventory = inventory.view();
     let view = CloudBackupVerificationView {
         state: configured.verification.clone(),
         presentation: configured.verification_presentation.clone(),
@@ -241,13 +250,13 @@ fn configured_screen(
         sections.push(CloudBackupSection::Progress(progress));
     }
 
-    let controls = verification_controls(&configured);
+    let controls = verification_controls(&configured, consents);
     sections
         .push(CloudBackupSection::Verification(CloudBackupVerificationSection { view, controls }));
 
     let last_sync = inventory.rows.as_ref().and_then(|rows| rows.last_sync);
     if let Some(rows) = &inventory.rows {
-        push_inventory_sections(&mut sections, rows, &inventory, &configured, admission);
+        push_inventory_sections(&mut sections, rows, inventory, &configured, admission, consents);
     }
 
     if inventory.other_backups != CloudBackupOtherBackupsState::NotChecked {
@@ -296,14 +305,20 @@ fn inventory_progress(
 /// a newer Cove can read has none here
 fn verification_controls(
     configured: &CloudBackupConfiguredState,
+    consents: &DeleteConsents<'_>,
 ) -> Vec<CloudBackupVerificationControl> {
     use CloudBackupVerificationControl as C;
     use CloudBackupVerificationState as S;
 
     match &configured.verification {
         S::NotVerified | S::Required | S::Verified { .. } | S::NotCompleted => vec![C::Verify],
+        // the delete names the records the inventory listed as undecryptable, so it waits for
+        // the listing
         S::NeedsAttention { report, .. } if report.wallet_issues.decryption_failed > 0 => {
-            vec![C::DeleteUnreadableBackups, C::Verify]
+            match consents.undecryptable_batch() {
+                Some(consent) => vec![C::DeleteUnreadableBackups { consent }, C::Verify],
+                None => vec![C::Verify],
+            }
         }
         S::NeedsAttention { .. } => vec![C::Verify],
         // the progress section draws a running verification
@@ -370,11 +385,12 @@ fn push_inventory_sections(
     inventory: &InventoryView,
     configured: &CloudBackupConfiguredState,
     admission: &AdmissionSnapshot,
+    consents: &DeleteConsents<'_>,
 ) {
     let (extra_copies, not_on_device): (Vec<_>, Vec<_>) = rows
         .listed
         .iter()
-        .map(|listed| listed_row(listed, rows.copy_has_current_backup(listed), admission))
+        .map(|listed| listed_row(listed, rows.copy_has_current_backup(listed), admission, consents))
         .partition(|row| matches!(row.record, CloudBackupListedRecord::ExtraCopy { .. }));
 
     // the list of wallets waiting to upload offers to upload them
@@ -423,55 +439,57 @@ fn recovery_operation(
 
 /// A listed row with the controls its kind allows; `copy_replaced` says a wallet an
 /// extra copy copies has its own current backup
+///
+/// Whether a row offers Delete is the consent's rule, so the projection and dispatch decide it the
+/// same way, and the Delete carries the consent that names what it confirms
 fn listed_row(
     listed: &ListedRecord,
     copy_replaced: bool,
     admission: &AdmissionSnapshot,
+    consents: &DeleteConsents<'_>,
 ) -> CloudBackupListedRow {
     use CloudBackupRowActionKind as R;
+    use CloudBackupUnreadableKind::{Decrypt, NotDownloadable, Parse, Provider};
 
     let ListedRecord { record_id, record, .. } = listed.clone();
-    let restore = UserIntent::RestoreCloudWallet(record_id.clone());
-    let delete = UserIntent::DeleteCloudWallet(record_id.clone());
-    let only_copy_delete = R::Delete { confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy };
-    let verify = UserIntent::StartVerification {
-        source: CloudBackupVerificationSource::CloudBackupDetail,
-        discoverable: false,
-    };
+    let restore = (R::Restore, UserIntent::RestoreCloudWallet(record_id.clone()));
+    let check_again = (R::CheckAgain, UserIntent::RefreshDetail);
+    let verify = (
+        R::Verify,
+        UserIntent::StartVerification {
+            source: CloudBackupVerificationSource::CloudBackupDetail,
+            discoverable: false,
+        },
+    );
+    let delete = consents.row(listed, copy_replaced).map(|consent| {
+        let kind = R::Delete { confirmation: consent.confirmation(), consent: consent.clone() };
+        (kind, UserIntent::DeleteCloudWallet(consent))
+    });
 
     let controls = match &record {
         CloudBackupListedRecord::NotOnDevice { .. } => {
-            vec![(R::Restore, restore), (only_copy_delete, delete)]
+            std::iter::once(restore).chain(delete).collect()
         }
         // an extra copy may go only once a wallet it copies has its own current backup
-        CloudBackupListedRecord::ExtraCopy { .. } if copy_replaced => {
-            vec![(R::Delete { confirmation: CloudBackupDeleteConfirmation::Standard }, delete)]
+        CloudBackupListedRecord::ExtraCopy { .. } => match delete {
+            Some(delete) => vec![delete],
+            None => vec![(R::BackUpFirst, UserIntent::SyncUnsynced), check_again],
+        },
+        CloudBackupListedRecord::Unsupported => delete.into_iter().collect(),
+        // only a failure of the key this configuration verified can be deleted; otherwise the
+        // key is verified first
+        CloudBackupListedRecord::Unreadable { kind: Decrypt | Parse, .. } => {
+            vec![delete.unwrap_or(verify), check_again]
         }
-        CloudBackupListedRecord::ExtraCopy { .. } => {
-            vec![
-                (R::BackUpFirst, UserIntent::SyncUnsynced),
-                (R::CheckAgain, UserIntent::RefreshDetail),
-            ]
+        CloudBackupListedRecord::Unreadable { kind: NotDownloadable | Provider, .. } => {
+            vec![check_again]
         }
-        CloudBackupListedRecord::Unsupported => vec![(only_copy_delete, delete)],
-        CloudBackupListedRecord::Unreadable {
-            kind: CloudBackupUnreadableKind::Decrypt | CloudBackupUnreadableKind::Parse,
-            trust: CloudBackupKeyTrust::VerifiedCurrentKey,
-        } => vec![(only_copy_delete, delete), (R::CheckAgain, UserIntent::RefreshDetail)],
-        CloudBackupListedRecord::Unreadable {
-            kind: CloudBackupUnreadableKind::Decrypt | CloudBackupUnreadableKind::Parse,
-            trust: CloudBackupKeyTrust::Unverified,
-        } => vec![(R::Verify, verify), (R::CheckAgain, UserIntent::RefreshDetail)],
-        CloudBackupListedRecord::Unreadable {
-            kind: CloudBackupUnreadableKind::NotDownloadable | CloudBackupUnreadableKind::Provider,
-            ..
-        } => vec![(R::CheckAgain, UserIntent::RefreshDetail)],
-        CloudBackupListedRecord::Unchecked => vec![(R::Verify, verify)],
+        CloudBackupListedRecord::Unchecked => vec![verify],
     };
 
     let actions = controls
         .into_iter()
-        .map(|(action, intent)| CloudBackupRowAction {
+        .map(|(action, intent): (_, UserIntent)| CloudBackupRowAction {
             action,
             availability: availability(&intent, admission),
         })
@@ -487,31 +505,38 @@ fn global_actions(
     root_prompt: &CloudBackupRootPrompt,
     notices: &Notices,
     admission: &AdmissionSnapshot,
+    consents: &DeleteConsents<'_>,
 ) -> CloudBackupActions {
     let mut seen = HashSet::new();
     let entries = drawn_controls(body, root_prompt, notices.heal.as_ref())
         .into_iter()
         .map(|drawn| drawn.action)
         .filter(|action| seen.insert(*action))
-        .map(|action| CloudBackupActionEntry {
-            action,
-            availability: availability(&intent_for(action, admission), admission),
+        .filter_map(|action| {
+            let intent = intent_for(action, admission, consents)?;
+            Some(CloudBackupActionEntry { action, availability: availability(&intent, admission) })
         })
         .collect();
 
     CloudBackupActions { entries }
 }
 
-/// The intent a control dispatches, as admission sees it
+/// The intent a control dispatches, as admission sees it, or `None` for the batch delete with
+/// nothing listed, which draws no control
 ///
 /// Payloads that don't change admission take a fixed value: a verification source decides what
 /// the started work does, not whether it may start. A prompt choice and a review id do decide, so
-/// each Enable prompt choice has its own action, and Confirm carries the review under review
-fn intent_for(action: CloudBackupScreenAction, admission: &AdmissionSnapshot) -> UserIntent {
+/// each Enable prompt choice has its own action, and Confirm carries the review under review. The
+/// batch delete carries the consent its control draws
+fn intent_for(
+    action: CloudBackupScreenAction,
+    admission: &AdmissionSnapshot,
+    consents: &DeleteConsents<'_>,
+) -> Option<UserIntent> {
     use CloudBackupScreenAction as A;
     use UserIntent as I;
 
-    match action {
+    let intent = match action {
         A::Enable => I::Enable(EnableIntent::Standard, CloudBackupEnableContext::settings_manual()),
         A::RestoreFromCloudBackup => I::RestoreFromCloudBackup,
         A::CancelRestore => I::CancelRestore,
@@ -536,7 +561,9 @@ fn intent_for(action: CloudBackupScreenAction, admission: &AdmissionSnapshot) ->
         A::StartRestoreAll => I::StartRestoreAll,
         A::RetryRestoreAllRemaining => I::RetryRestoreAllRemaining,
         A::CancelRestoreAll => I::CancelRestoreAll,
-        A::DeleteUnreadableBackups => I::DeleteUndecryptableWalletBackups,
+        A::DeleteUnreadableBackups => {
+            I::DeleteUndecryptableWalletBackups(consents.undecryptable_batch()?)
+        }
         A::RecoverOtherBackups => I::RecoverOtherBackups,
         A::DeleteOtherBackups => I::DeleteOtherBackups,
         A::TurnOff => I::TurnOff,
@@ -561,7 +588,9 @@ fn intent_for(action: CloudBackupScreenAction, admission: &AdmissionSnapshot) ->
         A::CancelDriveAccountSwitch => I::CancelDriveAccountSwitch,
         A::RetryLoad => I::RetryLoad,
         A::ResetOnThisDevice => I::ResetOnThisDevice,
-    }
+    };
+
+    Some(intent)
 }
 
 /// Whether a control is enabled: a tap that would coalesce into the same running work shows that

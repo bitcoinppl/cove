@@ -51,6 +51,33 @@ their own row actions. An extra copy offers Delete only while the wallet it
 copies has its own current backup; until then it offers Back up first and Check
 Again.
 
+Every delete Rust offers carries a consent: each row's Delete carries a
+`CloudBackupRowDeleteConsent`, and the unreadable-backups control carries a
+`CloudBackupBatchDeleteConsent`. A consent names the records the delete covers,
+the category the inventory put them in (`ExtraCopy`, `NotOnDevice`,
+`Unsupported` or `Unreadable`), the namespace the records were listed in, and
+the configuration, cloud-only listing and local wallet changes it was read
+under. The platforms treat it as opaque: a
+confirmation keeps the consent of the delete it opened for and sends it back
+unchanged, as `DeleteCloudWallet(consent)` or
+`DeleteUndecryptableWalletBackups(consent)`. Dispatch mints the same delete
+again from the inventory at that moment, in the namespace the keychain holds
+then, and starts it only when the two are equal. A consent confirmed on evidence
+that has since moved, such as an extra copy that is now the only copy, a new
+listing, a wallet change on this device, a new configuration or another
+namespace, is rejected as `ReviewStale` next to its control, and the
+republished screen offers the delete with its current consent. The generations
+are counters of the running process, so a consent only means something to the
+process that minted it. The namespace is carried apart from the configuration,
+because a reinitialize replaces the namespace inside one configuration
+generation.
+
+The batch is frozen when it is offered: it names the undecryptable rows the
+inventory listed then, and its run reads only those records, so a backup found
+after the confirmation is never deleted under it. It needs the inventory loaded,
+since the rows are what it names, and the control is drawn only once the
+cloud-only records are listed.
+
 Every action is an entry with its availability, decided by the same admission
 dispatch uses. A platform draws a control only for an action in the list and
 enables it only when it is available; an unavailable action carries the reason
@@ -97,7 +124,9 @@ every screen to it. In particular:
   Again of an upload confirmation that failed. With every wallet up to date it
   isn't offered.
 - `DeleteUnreadableBackups` is offered with a verification report that counts
-  backups this key can't decrypt.
+  backups this key can't decrypt and once the cloud-only records are listed, and
+  its control carries the batch's consent.
+  The dialog's count comes from the report; the records come from the consent.
 - `RefreshDetail` is offered only with the Check Again of the incomplete
   inventory section or of an other-backups check that failed. Opening detail is
   `EnterDetail`, which loads inventory without a control, and a row's Check
@@ -297,13 +326,15 @@ item, both platforms show it at the top of the screen instead.
 
 An open dialog, sheet or prompt keeps only which Rust target it is for: the
 record and row control (`CloudBackupRowTarget`) for a row's sheet or delete
-confirmation, and the root prompt for a prompt. Each frame reads that target's
+confirmation, and the root prompt for a prompt. A delete confirmation also keeps
+the consent it opened with, which its confirm button sends. Each frame reads that target's
 current entry from the latest screen, through `CloudBackupScreen.listedRow` and
 `rowAction`, so a dialog never shows an availability or a warning Rust
 has replaced. A row Rust stops listing, or a control it stops offering, closes
-the dialog bound to it, and a changed delete confirmation replaces the dialog
-instead of changing the warning under a confirm button the user may already be
-reaching for. Both apps present a row's dialogs over the whole detail screen,
+the dialog bound to it, and a delete Rust offers with another consent, whether
+for a new confirmation or on new evidence, replaces the dialog with one bound
+to that consent instead of changing the warning under a confirm button the user
+may already be reaching for. Both apps present a row's dialogs over the whole detail screen,
 so a row that moves to another section, such as an extra copy that becomes the
 only copy, keeps its confirmation, which then warns with the new confirmation.
 

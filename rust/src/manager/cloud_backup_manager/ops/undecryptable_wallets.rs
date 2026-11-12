@@ -16,7 +16,8 @@ use crate::manager::cloud_backup_manager::{
 const DELETE_UNDECRYPTABLE_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before inaccessible wallet backups can be deleted";
 
-/// Rechecked cloud-only wallet records that may be removed by the confirmed operation
+/// The confirmed batch's records that a recheck found still undecryptable, which the operation
+/// may remove
 pub(crate) struct CloudBackupPreparedUndecryptableWalletDeletion {
     cloud: CloudStorageClient,
     namespace: String,
@@ -34,9 +35,15 @@ impl RustCloudBackupManager {
         );
     }
 
+    /// Rechecks the records of the confirmed batch, `record_ids`, keeping those that are still
+    /// not this device's own and still fail to decrypt
+    ///
+    /// Only the confirmed records are read, so a record listed after the confirmation is never
+    /// added to the batch
     pub(crate) async fn prepare_delete_undecryptable_wallet_backups(
         &self,
         writes: &CloudBackupWriteClient,
+        record_ids: Vec<String>,
     ) -> Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteUndecryptableWalletBackups)?;
 
@@ -64,13 +71,6 @@ impl RustCloudBackupManager {
         .await
         .map_err(|error| {
             blocking_cloud_error(BlockingCloudStep::DeleteUndecryptableWalletBackups, error)
-        })?;
-
-        let record_ids = cloud.list_wallet_backups(namespace.clone()).await.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::DeleteUndecryptableWalletBackups,
-                CloudBackupError::cloud_storage_context("list wallet backups", error),
-            )
         })?;
 
         let local_record_ids = CloudBackupStore::global().local_wallet_record_ids()?;

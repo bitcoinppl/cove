@@ -10,7 +10,9 @@ import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupActionEntry
 import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupConfiguredScreen
+import org.bitcoinppl.cove_core.CloudBackupDeleteCategory
 import org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation
+import org.bitcoinppl.cove_core.CloudBackupDeleteEvidence
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupListedRecord
@@ -24,6 +26,7 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupRowAction
 import org.bitcoinppl.cove_core.CloudBackupRowActionKind
+import org.bitcoinppl.cove_core.CloudBackupRowDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
@@ -182,6 +185,7 @@ private fun cloudBackupPreviewScreen(): CloudBackupScreen {
                                                         CloudBackupRowAction(
                                                             CloudBackupRowActionKind.Delete(
                                                                 CloudBackupDeleteConfirmation.MAY_BE_ONLY_COPY,
+                                                                previewDeleteConsent(notOnDevice.recordId),
                                                             ),
                                                             available,
                                                         ),
@@ -235,4 +239,22 @@ private fun cloudBackupPreviewWallet(
         syncStatus = status,
         restoreFailure = null,
         recordId = name,
+    )
+
+/**
+ * A consent for previews, which have no Rust inventory to mint one; only Rust reads its fields,
+ * and nothing a preview draws dispatches it
+ */
+internal fun previewDeleteConsent(recordId: String): CloudBackupRowDeleteConsent =
+    CloudBackupRowDeleteConsent(
+        recordId = recordId,
+        evidence =
+            CloudBackupDeleteEvidence(
+                category = CloudBackupDeleteCategory.NotOnDevice,
+                namespaceId = "preview-namespace",
+                configuration = 0uL,
+                inventoryScope = null,
+                listingGeneration = 0uL,
+                localWalletsGeneration = 0uL,
+            ),
     )

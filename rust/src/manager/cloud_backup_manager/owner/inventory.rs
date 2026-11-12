@@ -83,6 +83,8 @@ pub(crate) enum CloudOnlyState {
         /// The rows are not a complete read of the latest listing, so a record may be unread or
         /// missing
         incomplete: bool,
+        /// The namespace the rows were listed in, which a delete of one must still be in
+        namespace_id: String,
     },
     Failed {
         error: String,
@@ -94,6 +96,14 @@ impl CloudOnlyState {
     pub(crate) fn loaded_rows(&self) -> Option<&[CloudOnlyRow]> {
         match self {
             Self::Loaded { rows, .. } => Some(rows),
+            Self::NotFetched | Self::Loading | Self::Failed { .. } => None,
+        }
+    }
+
+    /// The namespace the loaded rows were listed in, or `None` while none are loaded
+    pub(crate) fn listed_namespace(&self) -> Option<&str> {
+        match self {
+            Self::Loaded { namespace_id, .. } => Some(namespace_id),
             Self::NotFetched | Self::Loading | Self::Failed { .. } => None,
         }
     }
@@ -111,6 +121,13 @@ pub(crate) struct InventoryScope(Option<ConfigGeneration>);
 impl InventoryScope {
     pub(crate) fn of(generation: ConfigGeneration) -> Self {
         Self(Some(generation))
+    }
+}
+
+/// The configuration generation a scope belongs to, or `None` before the owner entered one
+impl From<InventoryScope> for Option<u64> {
+    fn from(scope: InventoryScope) -> Self {
+        scope.0.map(u64::from)
     }
 }
 
@@ -246,6 +263,11 @@ impl InventoryReadAt {
     /// The configuration the evidence was read under
     pub(crate) fn scope(self) -> InventoryScope {
         self.scope
+    }
+
+    /// How many local wallet changes the owner had applied when the evidence was read
+    pub(crate) fn local_wallets(self) -> u64 {
+        self.local_wallets.0
     }
 }
 
@@ -728,7 +750,7 @@ impl InventoryOwner {
         }
 
         let (cloud_only, invalidated) = match previous_loaded.as_ref().map(|s| &s.cloud_only) {
-            Some(CloudOnlyState::Loaded { rows, .. }) => {
+            Some(CloudOnlyState::Loaded { rows, namespace_id, .. }) => {
                 let keep = match &cloud_only_listing {
                     CloudOnlyListingUpdate::Listed(_) => {
                         self.cloud_only_inventory.keep_loaded_for_listing(&row_ids(rows))
@@ -737,7 +759,9 @@ impl InventoryOwner {
                 };
 
                 if keep {
-                    (self.loaded_cloud_only(rows.clone()), false)
+                    // the rows keep the namespace they were read in; a delete checks it against
+                    // the namespace in force when it is confirmed
+                    (self.loaded_cloud_only(rows.clone(), namespace_id.clone()), false)
                 } else {
                     self.cloud_only_inventory.clear_loaded();
                     (CloudOnlyState::NotFetched, true)
@@ -790,7 +814,7 @@ impl InventoryOwner {
         }
 
         self.cloud_only_inventory.record_loaded(&fetch);
-        let cloud_only = self.loaded_cloud_only(fetch.rows);
+        let cloud_only = self.loaded_cloud_only(fetch.rows, fetch.namespace_id);
         self.resolve_cloud_only_state(cloud_only);
 
         true
@@ -812,10 +836,10 @@ impl InventoryOwner {
 
     /// Loaded rows marked incomplete by the same check the Restore All marker proof uses, so the
     /// retry stays visible whenever the marker cannot be cleared
-    fn loaded_cloud_only(&self, rows: Vec<CloudOnlyRow>) -> CloudOnlyState {
+    fn loaded_cloud_only(&self, rows: Vec<CloudOnlyRow>, namespace_id: String) -> CloudOnlyState {
         let incomplete = !self.cloud_only_inventory.loaded_is_complete_and_current(&row_ids(&rows));
 
-        CloudOnlyState::Loaded { rows, incomplete }
+        CloudOnlyState::Loaded { rows, incomplete, namespace_id }
     }
 
     /// Keeps a row whose recovery material a local wallet holds visible and deletable, without
@@ -832,7 +856,8 @@ impl InventoryOwner {
             return;
         }
 
-        let CloudOnlyState::Loaded { mut rows, incomplete } = self.cloud_only() else {
+        let CloudOnlyState::Loaded { mut rows, incomplete, namespace_id } = self.cloud_only()
+        else {
             return;
         };
 
@@ -842,7 +867,7 @@ impl InventoryOwner {
             *row = CloudOnlyRow::extra_copy(wallet.clone(), covered_by);
         }
 
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete });
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete, namespace_id });
     }
 
     fn mark_cloud_only_restore_failure(&mut self, record_id: &str, message: String) {
@@ -874,13 +899,14 @@ impl InventoryOwner {
 
     /// Removes a row whose record stopped being cloud-only, keeping the listing in step with it
     fn remove_cloud_only_row(&mut self, record_id: &str) {
-        let CloudOnlyState::Loaded { mut rows, incomplete } = self.cloud_only() else {
+        let CloudOnlyState::Loaded { mut rows, incomplete, namespace_id } = self.cloud_only()
+        else {
             return;
         };
 
         rows.retain(|row| row.record_id != record_id);
         self.cloud_only_inventory.forget_record(record_id);
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete });
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { rows, incomplete, namespace_id });
     }
 
     /// Drops the local rows of wallets that are gone, and resets the cloud-only rows so a fetch
@@ -1054,6 +1080,9 @@ pub(crate) mod test_support {
     use crate::wallet::metadata::WalletId;
     use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 
+    /// The namespace synthetic cloud-only fetches list their records in
+    pub(crate) const LISTED_NAMESPACE: &str = "listed-namespace";
+
     pub(crate) trait InventoryOwnerTestExt {
         /// Applies a result requested under the owner's current configuration
         fn apply_current(&mut self, result: InventoryResult) -> InventoryEffects;
@@ -1123,7 +1152,8 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::test_support::{
-        CloudOnlyStateTestExt as _, InventoryOwnerTestExt as _, listed_rows, test_covering_wallets,
+        CloudOnlyStateTestExt as _, InventoryOwnerTestExt as _, LISTED_NAMESPACE, listed_rows,
+        test_covering_wallets,
     };
     use super::*;
     use crate::manager::cloud_backup_manager::inventory::{InventoryFacts, InventoryRows};
@@ -1200,6 +1230,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows,
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
     }
 
@@ -1271,6 +1302,7 @@ mod tests {
             InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
                 rows: listed_rows(&wallets),
                 listing_generation: owner.cloud_only_listing_generation(),
+                namespace_id: LISTED_NAMESPACE.into(),
             }),
             InventoryResult::OtherBackupsStateResolved(CloudBackupOtherBackupsState::Checking),
         ];
@@ -1331,6 +1363,7 @@ mod tests {
                 CloudBackupWalletStatus::DeletedFromDevice,
             )]),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
 
         assert_eq!(
@@ -1374,6 +1407,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(std::slice::from_ref(&wallet)),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
         owner.apply(InventoryInput::CloudOnlyRowAlreadyOnDevice {
             record_id: wallet.record_id.clone(),
@@ -1475,6 +1509,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: Vec::new(),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
 
         // every listed record was read, but only the provider can say none is missing
@@ -1523,6 +1558,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&loaded_wallets),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
         let CloudBackupDetailState::Complete { state } = owner.detail_state().clone() else {
             panic!("expected complete detail after cloud-only fetch");
@@ -1530,7 +1566,11 @@ mod tests {
 
         assert_eq!(
             state.cloud_only,
-            CloudOnlyState::Loaded { rows: listed_rows(&loaded_wallets), incomplete: false }
+            CloudOnlyState::Loaded {
+                rows: listed_rows(&loaded_wallets),
+                incomplete: false,
+                namespace_id: LISTED_NAMESPACE.into()
+            }
         );
         assert_eq!(
             restore_all_state(&owner),
@@ -1551,6 +1591,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&loaded_wallets),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
         let CloudBackupDetailState::Complete { state: retained } = owner.detail_state().clone()
         else {
@@ -1558,7 +1599,11 @@ mod tests {
         };
         assert_eq!(
             retained.cloud_only,
-            CloudOnlyState::Loaded { rows: listed_rows(&loaded_wallets), incomplete: false }
+            CloudOnlyState::Loaded {
+                rows: listed_rows(&loaded_wallets),
+                incomplete: false,
+                namespace_id: LISTED_NAMESPACE.into()
+            }
         );
         assert_eq!(
             restore_all_state(&owner),
@@ -1823,6 +1868,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyFetchLoaded(CloudOnlyFetch {
             rows: listed_rows(&wallets),
             listing_generation: owner.cloud_only_listing_generation(),
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
 
         assert_eq!(
@@ -1842,7 +1888,11 @@ mod tests {
 
         assert_eq!(
             state.cloud_only,
-            CloudOnlyState::Loaded { rows: listed_rows(&wallets), incomplete: false }
+            CloudOnlyState::Loaded {
+                rows: listed_rows(&wallets),
+                incomplete: false,
+                namespace_id: LISTED_NAMESPACE.into()
+            }
         );
         assert_eq!(
             restore_all_state(&owner),
@@ -1933,6 +1983,7 @@ mod tests {
         owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loaded {
             rows,
             incomplete: false,
+            namespace_id: LISTED_NAMESPACE.into(),
         }));
 
         let facts = InventoryFacts::new(&owner, &CloudBackupStateReducer::default());

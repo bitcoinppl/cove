@@ -7,6 +7,9 @@
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::manager::cloud_backup_manager::{
+    CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent,
+};
+use crate::manager::cloud_backup_manager::{
     CloudBackupEnableFlow, CloudBackupEnablePromptChoice, CloudBackupInventoryIncompleteReason,
     CloudBackupOtherBackupsState, CloudBackupPasskeyState, CloudBackupPendingEnableRecovery,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupRootPrompt,
@@ -128,15 +131,16 @@ pub struct CloudBackupVerificationSection {
 }
 
 /// A control the verification section draws
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupVerificationControl {
     /// Verify Now, Verify Again, or Try Again after a failure another verification can fix
     Verify,
     /// The rebuild a failed verification names as the only way to recover the backup
     Recover { kind: CloudBackupRecoveryKind },
     /// Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
-    /// counts them
-    DeleteUnreadableBackups,
+    /// counts them; its confirmation sends back `consent`, frozen to the records listed as
+    /// undecryptable when it was drawn
+    DeleteUnreadableBackups { consent: CloudBackupBatchDeleteConsent },
     /// Try Again on a latest upload Cove couldn't confirm
     RetryUpload,
     /// Android only: the latest upload waits on Google Drive access
@@ -486,7 +490,8 @@ pub enum CloudBackupRejection {
     RestoreAllUnavailable,
     NothingToCancel,
     NothingToContinue,
-    /// The review the confirmation answers is no longer current
+    /// What the confirmation answers is no longer current: the Turn Off review, or the rows and
+    /// evidence a delete's consent names
     ReviewStale,
     /// A local reset is wiping Cloud Backup's local state
     Resetting,
@@ -641,11 +646,13 @@ pub struct CloudBackupRowAction {
 }
 
 /// What a row control does
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupRowActionKind {
     Restore,
+    /// Delete, with what the platform confirms and the consent its confirmation sends back
     Delete {
         confirmation: CloudBackupDeleteConfirmation,
+        consent: CloudBackupRowDeleteConsent,
     },
     /// An extra copy whose replacement isn't confirmed yet: sync first
     BackUpFirst,

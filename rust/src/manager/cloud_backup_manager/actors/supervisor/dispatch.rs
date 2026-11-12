@@ -3,6 +3,7 @@ use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionSnapshot, ContinuationOwner, ContinuationStage, EnableIntent,
     EnablePromptAnswers, PausedContinuation, RestoreAllAdmission, UserIntent, evaluate_admission,
 };
+use crate::manager::cloud_backup_manager::delete_consent::DeleteConsents;
 use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
 use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, ReviewId,
@@ -108,7 +109,7 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        match self.transition(intent) {
+        match self.transition(manager, intent) {
             Ok(admitted) => {
                 self.record_admission(manager, intent, Admission::Accepted);
                 Some(admitted)
@@ -129,10 +130,23 @@ impl CloudBackupSupervisor {
     }
 
     /// The start an accepted `intent` produces on the current body
-    fn transition(&mut self, intent: &UserIntent) -> Result<Admitted, Refused> {
+    fn transition(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+    ) -> Result<Admitted, Refused> {
         use UserIntent as I;
 
         match intent {
+            // a delete runs only on the evidence its confirmation showed
+            I::DeleteCloudWallet(consent) => {
+                self.consented_delete(manager, intent, |offered| offered.admits_row(consent))
+            }
+            I::DeleteUndecryptableWalletBackups(consent) => {
+                self.consented_delete(manager, intent, |offered| {
+                    offered.admits_undecryptable_batch(consent)
+                })
+            }
             I::ConfirmDisable { review_id } => self
                 .runtime
                 .admit_confirm(ReviewId::from(*review_id))
@@ -156,6 +170,34 @@ impl CloudBackupSupervisor {
             }
             intent => Ok(Admitted::Work(intent.clone())),
         }
+    }
+
+    /// Starts a delete whose consent is the one the inventory offers now
+    ///
+    /// The consent names the rows, category and generations the confirmation was drawn from, so
+    /// any change since makes it stale, the way a changed review makes its Confirm stale; the
+    /// screen published with the rejection carries the current consent
+    fn consented_delete(
+        &self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+        admits: impl FnOnce(&DeleteConsents<'_>) -> bool,
+    ) -> Result<Admitted, Refused> {
+        // a namespace that can't be read can't match the one the records were listed in
+        let namespace = manager
+            .current_namespace_id()
+            .inspect_err(|error| warn!("Read the namespace to check a delete's consent: {error}"))
+            .ok();
+
+        let view = manager.inventory_facts().view();
+        let consents =
+            view.delete_consents(self.runtime.generation()).in_namespace(namespace.as_deref());
+
+        if !admits(&consents) {
+            return Err(Refused::Rejected(Rejection::ReviewStale));
+        }
+
+        Ok(Admitted::Work(intent.clone()))
     }
 
     /// A finishing run the user tapped for, so the provider may ask for consent on the way
@@ -373,11 +415,13 @@ impl CloudBackupSupervisor {
             I::CancelRestoreAll => {
                 self.cancel_restore_all_operation().await?;
             }
-            I::DeleteCloudWallet(record_id) => {
-                self.start_delete_cloud_wallet_operation(record_id.into()).await?;
+            I::DeleteCloudWallet(consent) => {
+                self.start_delete_cloud_wallet_operation(consent.record_id().clone().into())
+                    .await?;
             }
-            I::DeleteUndecryptableWalletBackups => {
-                self.start_delete_undecryptable_wallet_backups_operation().await?;
+            I::DeleteUndecryptableWalletBackups(consent) => {
+                let record_ids = consent.record_ids().cloned().map(String::from).collect();
+                self.start_delete_undecryptable_wallet_backups_operation(record_ids).await?;
             }
             // started in this turn, so the operation is allocated with its admission
             I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),

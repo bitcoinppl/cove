@@ -145,7 +145,11 @@ impl RustCloudBackupManager {
             .collect();
 
         if orphan_ids.is_empty() {
-            return Ok(CloudOnlyFetch { rows: Vec::new(), listing_generation });
+            return Ok(CloudOnlyFetch {
+                rows: Vec::new(),
+                listing_generation,
+                namespace_id: namespace,
+            });
         }
 
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
@@ -162,7 +166,7 @@ impl RustCloudBackupManager {
             );
             let rows = orphan_ids.into_iter().map(CloudOnlyRow::unchecked).collect();
 
-            return Ok(CloudOnlyFetch { rows, listing_generation });
+            return Ok(CloudOnlyFetch { rows, listing_generation, namespace_id: namespace });
         };
 
         let reader = WalletBackupReader::new(
@@ -226,7 +230,7 @@ impl RustCloudBackupManager {
             rows.push(listed_wallet_row(wallet, record_id, &local_wallets));
         }
 
-        Ok(CloudOnlyFetch { rows, listing_generation })
+        Ok(CloudOnlyFetch { rows, listing_generation, namespace_id: namespace })
     }
 
     pub(crate) async fn do_restore_cloud_wallet(

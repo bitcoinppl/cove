@@ -11,6 +11,7 @@ use super::turn_off::FinishFailure;
 use crate::database::cloud_backup::DriveAccountSwitchId;
 
 use super::model::CloudBackupExclusiveOperationClaim;
+use super::{CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent};
 use super::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
     CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupVerificationSource, RecordId,
@@ -42,8 +43,10 @@ pub(crate) enum UserIntent {
     StartRestoreAll,
     RetryRestoreAllRemaining,
     CancelRestoreAll,
-    DeleteCloudWallet(RecordId),
-    DeleteUndecryptableWalletBackups,
+    /// A row's Delete, with the consent its confirmation was opened for
+    DeleteCloudWallet(CloudBackupRowDeleteConsent),
+    /// The batch delete of undecryptable backups, frozen to the records its consent names
+    DeleteUndecryptableWalletBackups(CloudBackupBatchDeleteConsent),
     RecoverOtherBackups,
     DeleteOtherBackups,
     TurnOff,
@@ -139,8 +142,10 @@ impl From<CloudBackupManagerAction> for UserIntent {
             A::StartRestoreAll => Self::StartRestoreAll,
             A::RetryRestoreAllRemaining => Self::RetryRestoreAllRemaining,
             A::CancelRestoreAll => Self::CancelRestoreAll,
-            A::DeleteCloudWallet(record_id) => Self::DeleteCloudWallet(record_id),
-            A::DeleteUndecryptableWalletBackups => Self::DeleteUndecryptableWalletBackups,
+            A::DeleteCloudWallet(consent) => Self::DeleteCloudWallet(consent),
+            A::DeleteUndecryptableWalletBackups(consent) => {
+                Self::DeleteUndecryptableWalletBackups(consent)
+            }
             A::RecoverOtherBackups => Self::RecoverOtherBackups,
             A::DeleteOtherBackups => Self::DeleteOtherBackups,
             A::DisableCloudBackup => Self::TurnOff,
@@ -213,7 +218,8 @@ pub(crate) enum Rejection {
     NothingToContinue,
     /// A local reset is wiping Cloud Backup's local state
     Resetting,
-    /// The Turn Off review the confirmation answers is no longer current
+    /// What the confirmation answers is no longer current: the Turn Off review, or the rows and
+    /// evidence a delete's consent names
     ReviewStale,
     /// Stop Using on This Device is offered only after a failed Try Again
     TryAgainFirst,
@@ -719,8 +725,9 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         },
         I::StartVerification { .. } => start_verification(snapshot),
         I::RepairPasskey { .. } => configured_and_idle(snapshot, Some(Op::RepairPasskey)),
-        I::DeleteUndecryptableWalletBackups => {
-            configured_and_idle(snapshot, Some(Op::DeleteUndecryptableWalletBackups))
+        // the batch is frozen to the undecryptable records the inventory lists, so it needs them
+        I::DeleteUndecryptableWalletBackups(_) => {
+            needs_inventory(snapshot, Op::DeleteUndecryptableWalletBackups, DetailInventory::Ready)
         }
         I::RecreateManifest => {
             needs_inventory(snapshot, Op::RecreateManifest, DetailInventory::Complete)

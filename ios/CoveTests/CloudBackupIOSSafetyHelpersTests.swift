@@ -1867,13 +1867,17 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: held), .keep)
         XCTAssertEqual(held.delete?.availability.isAvailable, false)
         XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: gone), .close)
+        guard case let .delete(confirmation, consent) = onlyCopy.delete?.action else {
+            return XCTFail("the only copy offers Delete")
+        }
         XCTAssertEqual(
             CloudBackupOpenRowDelete.follow(from: standard, to: onlyCopy),
-            .replace(recordId: "record-spending-old")
+            .replace(recordId: "record-spending-old", consent: consent),
+            "the replacing alert sends back the consent of the delete it shows"
         )
         XCTAssertEqual(
-            onlyCopy.delete?.action,
-            .delete(confirmation: .mayBeOnlyCopy),
+            confirmation,
+            .mayBeOnlyCopy,
             "the replacing alert reads the stronger warning from the screen"
         )
     }

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
+import org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOperationKind
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
@@ -45,10 +46,10 @@ internal fun UndecryptableWalletDeletionConfirmation(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
     report: DeepVerificationReport?,
-    isPresented: Boolean,
+    consent: CloudBackupBatchDeleteConsent?,
     onDismiss: () -> Unit,
 ) {
-    if (!isPresented) return
+    if (consent == null) return
 
     val count = report?.walletIssues?.decryptionFailed ?: 0u
     val backupNoun = if (count == 1u) "Backup" else "Backups"
@@ -64,7 +65,7 @@ internal fun UndecryptableWalletDeletionConfirmation(
         confirmTag = CloudBackupTags.confirm(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS),
         onConfirm = {
             onDismiss()
-            manager.dispatch(CloudBackupManagerAction.DeleteUndecryptableWalletBackups)
+            manager.dispatch(CloudBackupManagerAction.DeleteUndecryptableWalletBackups(consent))
         },
         onDismiss = onDismiss,
     )

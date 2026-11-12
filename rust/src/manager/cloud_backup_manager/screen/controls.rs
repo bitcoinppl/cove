@@ -190,7 +190,8 @@ impl Drawn {
             }
             CloudBackupSection::Progress(_) | CloudBackupSection::ExtraCopies(_) => {}
             CloudBackupSection::Verification(verification) => {
-                let actions = verification.controls.iter().map(|control| control.action());
+                let actions =
+                    verification.controls.iter().map(CloudBackupVerificationControl::action);
                 self.extend(Surface::Verification, actions);
             }
             CloudBackupSection::Wallets(wallets) => {
@@ -264,11 +265,13 @@ impl CloudBackupInventoryControl {
 }
 
 impl CloudBackupVerificationControl {
-    pub(crate) fn action(self) -> CloudBackupScreenAction {
+    pub(crate) fn action(&self) -> CloudBackupScreenAction {
         match self {
             Self::Verify => CloudBackupScreenAction::Verify,
             Self::Recover { kind } => kind.action(),
-            Self::DeleteUnreadableBackups => CloudBackupScreenAction::DeleteUnreadableBackups,
+            Self::DeleteUnreadableBackups { .. } => {
+                CloudBackupScreenAction::DeleteUnreadableBackups
+            }
             Self::RetryUpload => CloudBackupScreenAction::SyncUnsynced,
             Self::ReconnectDrive => CloudBackupScreenAction::ReconnectDrive,
         }

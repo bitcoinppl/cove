@@ -26,12 +26,16 @@ enum CloudBackupDetailDialog {
 }
 
 enum CloudBackupDetailAlert {
-    /// The delete confirmation of a listed row, by the row Rust owns
+    /// The delete confirmation of a listed row, by the row Rust owns, with the consent its Delete
+    /// carried when the alert opened
     ///
-    /// Only the record is kept here; the title, warning and button are read from the row's
-    /// current delete action, so the alert never shows a decision Rust has replaced
-    case rowDelete(RecordId)
-    case undecryptableWalletDeletion(UInt32)
+    /// The title, warning and button are read from the row's current delete action, so the alert
+    /// never shows a decision Rust has replaced; Delete sends back the consent unchanged, and Rust
+    /// refuses it if the row has moved on
+    case rowDelete(RecordId, CloudBackupRowDeleteConsent)
+    /// The batch delete of the backups the key couldn't decrypt, with the count the verification
+    /// found and the consent the control carried when the alert opened
+    case undecryptableWalletDeletion(UInt32, CloudBackupBatchDeleteConsent)
     case turnOff(CloudBackupTurnOffDialog)
     case otherBackupsRecoveryResult(OtherBackupsRecoveryResult)
     case otherBackupsDeleteConfirmation
@@ -139,7 +143,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
     /// The row control an open delete confirmation is bound to
     private var rowDeleteTarget: CloudBackupRowTarget? {
-        guard case let .rowDelete(recordId) = alert else { return nil }
+        guard case let .rowDelete(recordId, _) = alert else { return nil }
         return CloudBackupRowTarget(recordId: recordId, control: .delete)
     }
 
@@ -191,8 +195,8 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             return
         case .close:
             coordinator.dismissCurrentPresentation()
-        case let .replace(recordId):
-            coordinator.transition(to: .alert(.rowDelete(recordId)))
+        case let .replace(recordId, consent):
+            coordinator.transition(to: .alert(.rowDelete(recordId, consent)))
         }
     }
 
@@ -252,9 +256,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
     private func alertTitle(_ alert: CloudBackupDetailAlert) -> String {
         switch alert {
-        case let .rowDelete(recordId):
+        case let .rowDelete(recordId, _):
             "Delete \(screen.listedRow(recordId: recordId)?.record.wallet?.name ?? "This Backup")?"
-        case let .undecryptableWalletDeletion(count):
+        case let .undecryptableWalletDeletion(count, _):
             "Delete \(count) Inaccessible Wallet \(count == 1 ? "Backup" : "Backups")?"
         case let .turnOff(dialog):
             CloudBackupTurnOffCopy.title(dialog)
@@ -270,9 +274,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     @ViewBuilder
     private func alertActions(_ alert: CloudBackupDetailAlert) -> some View {
         switch alert {
-        case let .rowDelete(recordId):
+        case let .rowDelete(recordId, consent):
             Button("Delete Forever", role: .destructive) {
-                deleteRow(recordId)
+                deleteRow(consent)
             }
             .disabled(!(openRowDelete?.delete?.availability.isAvailable ?? false))
             .accessibilityIdentifier(
@@ -282,12 +286,10 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
             Button("Cancel", role: .cancel) {}
 
-        case .undecryptableWalletDeletion:
-            Button(
-                "Delete Backups",
-                role: .destructive,
-                action: deleteUndecryptableWalletBackups
-            )
+        case let .undecryptableWalletDeletion(_, consent):
+            Button("Delete Backups", role: .destructive) {
+                deleteUndecryptableWalletBackups(consent)
+            }
             .disabled(!actions.isAvailable(action: .deleteUnreadableBackups))
             .accessibilityIdentifier(CloudBackupUiElement.actionConfirm(action: .deleteUnreadableBackups).identifier)
 
@@ -327,7 +329,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         switch alert {
         case .rowDelete:
             switch openRowDelete?.delete?.action {
-            case .delete(.mayBeOnlyCopy):
+            case .delete(.mayBeOnlyCopy, _):
                 Text(
                     "This wallet isn't on this device, so this may be its only backup. Without its recovery words, it can't be recovered."
                 )
@@ -377,9 +379,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         manager.dispatch(action: .recoverOtherBackups)
     }
 
-    private func deleteRow(_ recordId: RecordId) {
+    private func deleteRow(_ consent: CloudBackupRowDeleteConsent) {
         coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteCloudWallet(recordId))
+        manager.dispatch(action: .deleteCloudWallet(consent))
     }
 
     private func verifyCurrentPasskey() {
@@ -396,9 +398,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         manager.dispatch(action: .deleteOtherBackups)
     }
 
-    private func deleteUndecryptableWalletBackups() {
+    private func deleteUndecryptableWalletBackups(_ consent: CloudBackupBatchDeleteConsent) {
         coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteUndecryptableWalletBackups)
+        manager.dispatch(action: .deleteUndecryptableWalletBackups(consent))
     }
 }
 
@@ -414,16 +416,18 @@ struct CloudBackupOpenRowDelete: Equatable {
         case keep
         /// Rust withdrew the delete, so nothing is left to confirm
         case close
-        /// Rust asks for another confirmation; a new alert replaces the old one rather than changing
-        /// the warning under a button the user may already be reaching for
-        case replace(recordId: String)
+        /// Rust asks for another confirmation, or offers the delete on new evidence; a new alert
+        /// bound to the new consent replaces the old one rather than changing the warning under a
+        /// button the user may already be reaching for
+        case replace(recordId: String, consent: CloudBackupRowDeleteConsent)
     }
 
     static func follow(from old: Self?, to new: Self?) -> Follow {
         guard let old, let new, old.target == new.target, let shown = old.delete else { return .keep }
         guard let current = new.delete else { return .close }
+        guard current.action != shown.action, case let .delete(_, consent) = current.action else { return .keep }
 
-        return current.action == shown.action ? .keep : .replace(recordId: new.target.recordId)
+        return .replace(recordId: new.target.recordId, consent: consent)
     }
 }
 
