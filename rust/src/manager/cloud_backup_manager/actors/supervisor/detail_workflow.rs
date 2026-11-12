@@ -1,4 +1,6 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use tokio::time::Instant;
 
 use crate::manager::cloud_backup_manager::owner::inventory::InventoryScope;
 
@@ -69,6 +71,12 @@ impl DetailRefreshCoordinator {
 
         self.owner = self.owner.wrapping_add(1);
         self.phase = RefreshPhase::Idle;
+    }
+
+    /// Drops the waiting or in-flight refresh; the next open takes a new owner, so the dropped
+    /// one's timer and claim match nothing
+    fn close(&mut self) {
+        self.phase = RefreshPhase::Closed;
     }
 
     pub(crate) fn request(&mut self, now: Duration) -> DetailRefreshPlan {
@@ -149,6 +157,7 @@ impl DetailRefreshCoordinator {
 #[derive(Debug)]
 pub(crate) struct DetailWorkflow {
     refresh: DetailRefreshCoordinator,
+    /// Tokio's clock, the one the rate limit's wait sleeps on, so a paused test clock moves both
     clock: Instant,
     next_result_generation: u64,
     newest_result_generation: Option<u64>,
@@ -172,6 +181,11 @@ impl DetailWorkflow {
 
     pub(crate) fn is_open(&self) -> bool {
         self.refresh.is_open()
+    }
+
+    /// Cancels the refresh cycle until the detail opens again
+    pub(crate) fn close(&mut self) {
+        self.refresh.close();
     }
 
     pub(crate) fn request_refresh(&mut self) -> DetailRefreshPlan {

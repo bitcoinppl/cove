@@ -1582,6 +1582,11 @@ impl CloudBackupSupervisor {
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
         self.clear_worker_runtime_state();
+
+        // the reset owns the work queued before it: a detail refresh still waiting on its rate
+        // limit, or in flight, would list the cloud through a client that may ask the user for
+        // consent, for a configuration the reset is clearing
+        self.detail_workflow.close();
         Produces::ok(Ok(receiver))
     }
 

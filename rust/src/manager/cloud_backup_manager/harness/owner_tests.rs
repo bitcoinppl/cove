@@ -452,3 +452,38 @@ fn a_reinitialize_waits_for_a_running_cleanup_delete_before_it_reads_the_namespa
         );
     });
 }
+
+/// A local reset owns the detail refresh queued before it: one still waiting on its rate limit
+/// when the reset begins never lists the cloud, so it can't ask the user for provider consent
+#[test]
+fn a_local_reset_cancels_the_detail_refresh_waiting_on_its_rate_limit() {
+    let test = concat!(
+        module_path!(),
+        "::a_local_reset_cancels_the_detail_refresh_waiting_on_its_rate_limit"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+
+        // the first refresh runs now, so the second one waits on the rate limit
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_can(&[N::TurnOff, N::Verify]);
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_can(&[N::TurnOff, N::Verify]);
+        let listings = app.cloud.count(CloudCall::ListWalletFilesSnapshot);
+        app.cloud.revoke_authorization();
+
+        let manager = app.manager().clone();
+        let _permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::TurnOff, N::Enable]);
+
+        assert_eq!(
+            app.cloud.count(CloudCall::ListWalletFilesSnapshot),
+            listings,
+            "the waiting refresh listed the cloud after the reset began\n{}",
+            app.describe()
+        );
+        assert_eq!(app.cloud.consent_sheets(), 0);
+    });
+}
