@@ -169,11 +169,16 @@ act-zero = { version = "0.4.0", features = ["default-tokio"] }
 act-zero-ext = "0.2.0"
 
 # async 
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "net", "time", "sync"] }
 tokio-util = "0.7.18"
 async-trait = { workspace = true }
 futures = "0.3.32"
 backon = "1.6.0"
+
+# local network node discovery
+ipnet = "2.12.0"
+simple-dns = "0.13.0"
+socket2 = "0.6.3"
 
 # crypto
 age = { workspace = true }

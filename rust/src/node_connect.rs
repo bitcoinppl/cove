@@ -5,6 +5,7 @@ use crate::{
     database::Database,
     network::Network,
     node::{ApiType, Node},
+    node_discovery::{self, DiscoveredNode, LanInterface, NodeDiscoveryError},
 };
 use cove_macros::impl_default_for;
 use cove_util::result_ext::ResultExt as _;
@@ -163,6 +164,19 @@ impl NodeSelector {
         Ok(node)
     }
 
+    /// Finds Electrum servers for the selected network on the local network
+    ///
+    /// Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
+    /// only opens and closes TCP connections, so no server receives a request until the person
+    /// picks one and it goes through `check_and_save_node`
+    #[uniffi::method]
+    pub async fn discover_lan_nodes(
+        &self,
+        interfaces: Vec<LanInterface>,
+    ) -> Result<Vec<DiscoveredNode>, NodeDiscoveryError> {
+        node_discovery::discover(self.network, &interfaces).await
+    }
+
     #[uniffi::method]
     /// Check the node url and set it as selected node if it is valid
     pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
@@ -299,13 +313,13 @@ impl NodeSelection {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use bitcoin::Network as BitcoinNetwork;
 
     use super::*;
     use crate::test_support::{ensure_tokio_runtime, fake_node::FakeNode, global_state_test_lock};
 
-    fn selector(network: Network) -> NodeSelector {
+    pub(crate) fn selector(network: Network) -> NodeSelector {
         NodeSelector { network }
     }
 
