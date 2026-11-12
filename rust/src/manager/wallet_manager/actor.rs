@@ -83,7 +83,7 @@ pub(crate) struct WalletActor {
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
-    payjoin_actor: Option<Addr<PayjoinActor>>,
+    payjoin_phase: PayjoinPhase,
 
     /// Relays and timeout every Payjoin session this wallet starts or resumes runs with
     payjoin_config: PayjoinConfig,
@@ -108,6 +108,41 @@ pub(crate) enum ActorState {
     FailedFullScan(FullScanType),
     FailedIncrementalScan,
     FailedSyncScan,
+}
+
+/// The wallet actor's single owner for an in-progress Payjoin send
+///
+/// The persisted session record survives restarts, while this phase says whether this actor
+/// already owns that record. Startup recovery, the send gate and late negotiation results all
+/// check it, so one session can never dispatch a second negotiation or terminal broadcast
+#[derive(Debug, Default)]
+enum PayjoinPhase {
+    /// No Payjoin work is running, a stored session record may still need recovery
+    #[default]
+    Idle,
+
+    /// A child actor is negotiating with the receiver
+    Negotiating(Addr<PayjoinActor>),
+
+    /// The committed terminal transaction is being broadcast and applied to the wallet
+    Broadcasting(Txid),
+}
+
+impl PayjoinPhase {
+    const fn is_idle(&self) -> bool {
+        matches!(self, Self::Idle)
+    }
+
+    /// Take the negotiating child actor, leaving any other phase unchanged
+    fn take_negotiator(&mut self) -> Option<Addr<PayjoinActor>> {
+        match std::mem::take(self) {
+            Self::Negotiating(actor) => Some(actor),
+            other => {
+                *self = other;
+                None
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
@@ -431,7 +466,7 @@ impl WalletActor {
             receive_address_refresh_timer: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
-            payjoin_actor: None,
+            payjoin_phase: PayjoinPhase::Idle,
             payjoin_config: PayjoinConfig::default(),
             db,
         }
@@ -444,40 +479,43 @@ impl WalletActor {
 
     /// Resumes a persisted payjoin session from a previous app run, if one exists
     pub async fn resume_payjoin_session(&mut self) -> ActorResult<()> {
-        if self.payjoin_actor.is_some() {
+        // a running negotiation or terminal broadcast already owns the stored record
+        if !self.payjoin_phase.is_idle() {
             return Produces::ok(());
         }
 
+        // start terminal work in this handler, a queued message would leave the phase idle
+        // and let a second resume dispatch the same session again
         match resume_session(self.db.clone(), self.addr.clone(), &self.payjoin_config) {
             SessionResumption::None => {}
 
-            SessionResumption::Resume(actor) => {
-                self.payjoin_actor = Some(spawn_actor(*actor));
-            }
+            SessionResumption::Resume(actor) => self.spawn_payjoin_actor(*actor),
 
             SessionResumption::BroadcastStoredProposal { proposal_tx } => {
-                send!(self.addr.handle_payjoin_proposal_broadcast(proposal_tx));
+                self.start_payjoin_terminal_broadcast(proposal_tx);
             }
 
             SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx } => {
-                send!(self.addr.handle_recovered_payjoin_success(proposal_psbt, fallback_tx));
+                self.recover_payjoin_success(proposal_psbt, fallback_tx).await;
             }
 
             SessionResumption::BroadcastFallback { fallback_tx } => {
-                send!(self.addr.handle_payjoin_fallback(fallback_tx));
+                self.start_payjoin_fallback_broadcast(fallback_tx);
             }
 
-            SessionResumption::ReportError { message } => {
-                send!(self.addr.notify_payjoin_error(message));
-            }
+            SessionResumption::ReportError { message } => self.report_payjoin_error(message),
         }
 
         Produces::ok(())
     }
 
     pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
-        self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(msg)));
+        self.report_payjoin_error(msg);
         Produces::ok(())
+    }
+
+    fn report_payjoin_error(&self, msg: String) {
+        self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(msg)));
     }
 
     #[into_actor_result]
@@ -830,13 +868,13 @@ impl WalletActor {
         match terminal_payjoin_authority {
             Some(authority) => {
                 let mut payjoin_quiesced = true;
-                if let Some(actor) = self.payjoin_actor.take()
+                if let Some(actor) = self.payjoin_phase.take_negotiator()
                     && let Err(error) =
                         call!(actor.cancel_and_fallback_for_terminal_shutdown(authority.clone()))
                             .await
                 {
                     first_error.get_or_insert_with(|| error.to_string());
-                    self.payjoin_actor = Some(actor);
+                    self.payjoin_phase = PayjoinPhase::Negotiating(actor);
                     payjoin_quiesced = false;
                 }
 
@@ -858,12 +896,12 @@ impl WalletActor {
                 }
             }
             None => {
-                if let Some(actor) = self.payjoin_actor.take() {
+                if let Some(actor) = self.payjoin_phase.take_negotiator() {
                     let terminal_fallback = match call!(actor.cancel_and_fallback()).await {
                         Ok(fallback) => fallback,
                         Err(error) => {
                             first_error.get_or_insert_with(|| error.to_string());
-                            self.payjoin_actor = Some(actor);
+                            self.payjoin_phase = PayjoinPhase::Negotiating(actor);
                             None
                         }
                     };
@@ -3094,12 +3132,12 @@ mod tests {
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
         persister.create_session(&terminal_tx).unwrap();
-        actor.payjoin_actor = Some(spawn_actor(
+        actor.spawn_payjoin_actor(
             crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
                 persister,
                 terminal_tx,
             ),
-        ));
+        );
         actor.db = db.clone();
 
         let (authority, preparation) =
@@ -3109,7 +3147,7 @@ mod tests {
         drop(preparation);
         failed_server.server.abort();
 
-        assert!(actor.payjoin_actor.is_none(), "the failed broadcast leaves no child actor");
+        assert!(actor.payjoin_phase.is_idle(), "the failed broadcast leaves no child actor");
         assert_eq!(
             db.get_payjoin_sender_session().unwrap().unwrap().pending_action,
             Some(crate::database::wallet_data::PendingAction::BroadcastFallback),
@@ -3170,6 +3208,53 @@ mod tests {
         pay_pj_v2_uri_once(CoveNetwork::Signet, &signet_address.to_string()).await;
     }
 
+    /// A wallet on `network` with one 100,000 sat coin, and a signed-ready PSBT paying a BIP 21
+    /// URI with a BIP 77 v2 pj= endpoint, so the payment has a recipient and a change output
+    struct PjV2Payment {
+        actor: super::WalletActor,
+        psbt: bitcoin::Psbt,
+        endpoint: String,
+        metadata: WalletMetadata,
+    }
+
+    impl PjV2Payment {
+        async fn new(network: CoveNetwork, address: &str) -> Self {
+            // the pj= endpoint comes from the payjoin crate's own test vectors
+            let uri = format!(
+                "bitcoin:{address}?amount=0.0005&pjos=0&pj=HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV"
+            );
+            let parsed =
+                cove_types::address::AddressWithNetwork::try_new(&uri).expect("URI parses");
+            let endpoint = parsed.payjoin.expect("the URI carries a payjoin endpoint").endpoint;
+            let amount =
+                Amount::from_sat(parsed.amount.expect("the URI carries an amount").as_sats());
+
+            let mut metadata = WalletMetadata::preview_new();
+            metadata.network = network;
+
+            let mut wallet = persisted_preview_wallet(metadata.clone());
+            mark_wallet_ledger_ready(&mut wallet);
+            insert_checkpoint(
+                &mut wallet.bdk,
+                BlockId { height: 1, hash: BlockHash::from_byte_array([1; 32]) },
+            );
+            receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(100_000));
+
+            // preview wallet skips keychain storage, so save the mnemonic manually for signing
+            Keychain::global()
+                .save_wallet_key(&metadata.id, test_mnemonic())
+                .expect("mnemonic stored in test keychain");
+
+            let (sender, _receiver) = flume::bounded(100);
+            let mut actor = new_test_wallet_actor(wallet, sender);
+
+            let result = actor.build_tx(amount, parsed.address, one_sat_vbyte_fee_rate()).await;
+            let psbt = actor_value(result).await.expect("psbt is built");
+
+            Self { actor, psbt, endpoint, metadata }
+        }
+    }
+
     /// Pays a BIP 21 URI with a BIP 77 v2 pj= endpoint from a funded wallet on `network`, and
     /// checks it is broadcast once as an ordinary payment
     async fn pay_pj_v2_uri_once(network: CoveNetwork, address: &str) {
@@ -3179,38 +3264,9 @@ mod tests {
             .expect("selected network is saved");
 
         let server = set_broadcast_esplora_node_for(network, 200).await;
-
-        // the pj= endpoint comes from the payjoin crate's own test vectors
-        let uri = format!(
-            "bitcoin:{address}?amount=0.0005&pjos=0&pj=HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV"
-        );
-        let parsed = cove_types::address::AddressWithNetwork::try_new(&uri).expect("URI parses");
-        let endpoint = parsed.payjoin.expect("the URI carries a payjoin endpoint").endpoint;
-        let amount = Amount::from_sat(parsed.amount.expect("the URI carries an amount").as_sats());
-
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.network = network;
-
-        let mut wallet = persisted_preview_wallet(metadata.clone());
-        mark_wallet_ledger_ready(&mut wallet);
-        insert_checkpoint(
-            &mut wallet.bdk,
-            BlockId { height: 1, hash: BlockHash::from_byte_array([1; 32]) },
-        );
-        receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(100_000));
-
-        // preview wallet skips keychain storage, so save the mnemonic manually for signing
-        Keychain::global()
-            .save_wallet_key(&metadata.id, test_mnemonic())
-            .expect("mnemonic stored in test keychain");
-
-        let (sender, _receiver) = flume::bounded(100);
-        let mut actor = new_test_wallet_actor(wallet, sender);
+        let PjV2Payment { actor, psbt, endpoint, metadata } =
+            PjV2Payment::new(network, address).await;
         let db = actor.db.clone();
-
-        let result = actor.build_tx(amount, parsed.address, one_sat_vbyte_fee_rate()).await;
-        let psbt = actor_value(result).await.expect("psbt is built");
-
         let addr = spawn_actor(actor);
 
         let result = call!(addr.initiate_payment(psbt, Some(endpoint)))
@@ -3238,6 +3294,120 @@ mod tests {
         assert!(
             payjoin_session.is_none(),
             "{network}: an ordinary payment leaves no payjoin session"
+        );
+    }
+
+    // regression for #1088: the fallback was dispatched once by the failed setup and again by
+    // the startup resume that found its session record
+    #[tokio::test(flavor = "current_thread")]
+    async fn payjoin_setup_fallback_broadcasts_once_with_resume_queued() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let server = set_broadcast_esplora_node(200).await;
+        let PjV2Payment { actor, psbt, metadata, .. } =
+            PjV2Payment::new(CoveNetwork::Bitcoin, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm")
+                .await;
+        let db = actor.db.clone();
+
+        // spawning queues the startup resume behind this payment, as in the issue
+        let addr = spawn_actor(actor);
+
+        // a v1 endpoint fails sender setup after the session record is saved, so the payment
+        // takes the fallback without contacting a payjoin directory
+        let result = call!(
+            addr.start_payjoin_payment_for_test(psbt, "https://payjoin.example/pj".to_string())
+        )
+        .await
+        .expect("initiate_payjoin_payment actor responds");
+
+        // the send gate and failed-quiesce recovery resume the same way
+        call!(addr.resume_payjoin_session()).await.expect("actor responds");
+
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(2));
+        while db.get_payjoin_sender_session().expect("payjoin session reads").is_some()
+            && !deadline.has_passed()
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // a duplicate dispatch would broadcast after the first one is applied
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        result.expect("payjoin payment falls back");
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1, "fallback broadcasts");
+        assert!(payjoin_session.is_none(), "the applied fallback clears its session record");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn duplicate_payjoin_terminal_dispatch_broadcasts_once() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let pending_server = set_pending_broadcast_esplora_node().await;
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        let (db, _tmp) = new_test_wallet_data_db(wallet.id.clone());
+        let fallback_tx = test_broadcast_transaction();
+        crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
+            .create_session(&fallback_tx)
+            .unwrap();
+
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
+
+        // the node holds the first broadcast, so a second dispatch cannot find it in the wallet
+        call!(addr.handle_payjoin_fallback(fallback_tx.clone())).await.expect("actor responds");
+        call!(addr.handle_payjoin_fallback(fallback_tx)).await.expect("actor responds");
+        wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let held_broadcasts = pending_server.broadcast_requests.load(Ordering::SeqCst);
+
+        pending_server.release.send(true).expect("pending broadcast request is listening");
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(2));
+        while db.get_payjoin_sender_session().expect("payjoin session reads").is_some()
+            && !deadline.has_passed()
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
+        pending_server.server.abort();
+        restore_default_bitcoin_node();
+
+        assert_eq!(held_broadcasts, 1, "the duplicate dispatch does not post again");
+        assert_eq!(pending_server.broadcast_requests.load(Ordering::SeqCst), 1);
+        assert!(payjoin_session.is_none(), "the applied broadcast clears its session record");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn payjoin_sender_accepts_signed_payment_with_change() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let PjV2Payment { mut actor, psbt, endpoint, metadata } =
+            PjV2Payment::new(CoveNetwork::Bitcoin, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm")
+                .await;
+
+        let signed = actor.build_payjoin_sender_for_test(psbt, endpoint).await;
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        let signed = signed.expect("payjoin sender builds for one recipient and change");
+        assert_eq!(signed.unsigned_tx.output.len(), 2, "the payment has a change output");
+        assert!(
+            signed.outputs.iter().all(|output| output.bip32_derivation.is_empty()),
+            "signing clears output derivations, so they cannot identify the change"
         );
     }
 
@@ -4682,7 +4852,7 @@ mod tests {
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
         call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
 
-        call!(addr.handle_payjoin_proposal_broadcast(terminal_tx)).await.expect("actor responds");
+        call!(addr.resume_payjoin_session()).await.expect("actor responds");
 
         let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_millis(500));
         while !deadline.has_passed() {
@@ -4731,8 +4901,7 @@ mod tests {
         })
         .unwrap();
 
-        let result = actor.handle_recovered_payjoin_success(proposal_psbt, fallback_tx).await;
-        actor_value(result).await;
+        actor.recover_payjoin_success(proposal_psbt, fallback_tx).await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
         assert!(session.is_some(), "session must be retained when signing fails");
