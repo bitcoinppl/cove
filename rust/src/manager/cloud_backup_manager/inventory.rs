@@ -13,8 +13,8 @@ use super::screen::{
 use super::{
     CloudBackupDetailState, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupRestoreAllState, CloudBackupStateReducer, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudCopySecret, CloudOnlyOperation, InventoryOwner, InventoryReadAt,
-    LoadedCloudBackupDetail, OtherBackupsOperation, OwnSecretFacts, RecordId,
+    CloudBackupWalletStatus, CloudCopySecret, CloudOnlyOperation, CloudOnlyState, InventoryOwner,
+    InventoryReadAt, LoadedCloudBackupDetail, OtherBackupsOperation, OwnSecretFacts, RecordId,
     RustCloudBackupManager,
 };
 use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallets};
@@ -250,7 +250,15 @@ impl InventoryFacts {
             CloudBackupDetailState::Failed { reason, .. } => {
                 Some(InventoryProgress::Incomplete(*reason))
             }
-            CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Complete { .. } => None,
+            // the backups not on this device load after the detail, so their failed fetch leaves
+            // the detail complete; without this the screen would draw them as absent
+            CloudBackupDetailState::Complete { state } => match state.cloud_only {
+                CloudOnlyState::Failed { reason } => Some(InventoryProgress::Incomplete(reason)),
+                CloudOnlyState::NotFetched
+                | CloudOnlyState::Loading
+                | CloudOnlyState::Loaded { .. } => None,
+            },
+            CloudBackupDetailState::NotLoaded => None,
         };
 
         InventoryView {

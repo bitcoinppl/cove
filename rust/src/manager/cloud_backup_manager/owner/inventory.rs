@@ -86,8 +86,9 @@ pub(crate) enum CloudOnlyState {
         /// The namespace the rows were listed in, which a delete of one must still be in
         namespace_id: String,
     },
+    /// The fetch failed; a Check Again or the next inventory load fetches again
     Failed {
-        error: String,
+        reason: CloudBackupInventoryIncompleteReason,
     },
 }
 
@@ -1617,7 +1618,7 @@ mod tests {
 
         owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Loading));
         owner.apply_current(InventoryResult::CloudOnlyStateResolved(CloudOnlyState::Failed {
-            error: "provider is still syncing".into(),
+            reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
         }));
         let CloudBackupDetailState::Complete { state } = owner.detail_state().clone() else {
             panic!("expected primary inventory to remain complete");
@@ -1625,7 +1626,9 @@ mod tests {
 
         assert_eq!(
             state.cloud_only,
-            CloudOnlyState::Failed { error: "provider is still syncing".into() }
+            CloudOnlyState::Failed {
+                reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending
+            }
         );
     }
 

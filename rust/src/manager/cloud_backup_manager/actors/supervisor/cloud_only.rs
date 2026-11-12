@@ -125,7 +125,9 @@ impl CloudBackupSupervisor {
                 error!("Failed to fetch cloud-only wallets: {error}");
                 manager.apply_cloud_only_fetch_outcome(
                     scope,
-                    CloudBackupCloudOnlyFetchOutcome::Failed(error.reader_message()),
+                    CloudBackupCloudOnlyFetchOutcome::Failed(
+                        CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(&error)),
+                    ),
                 );
             }
         }

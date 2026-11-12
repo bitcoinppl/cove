@@ -32,14 +32,16 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootst
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupActionAvailability, CloudBackupDisableConfirmation,
-    CloudBackupFinishingDisableStage, CloudBackupOutcome, CloudBackupOutcomeTarget,
-    CloudBackupRejection, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
-    CloudBackupTurnOffFailure, CloudBackupVerificationControl,
+    CloudBackupFinishingDisableStage, CloudBackupInventoryControl, CloudBackupOutcome,
+    CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRejection,
+    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
+    CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupNoticeKind,
-    CloudBackupPasskeyState, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure, RecordId,
+    CloudBackupEnableContext, CloudBackupInventoryIncompleteReason, CloudBackupManagerAction,
+    CloudBackupNoticeKind, CloudBackupPasskeyState, CloudBackupRootPrompt,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationSource, CloudBackupVerificationState,
+    DeepVerificationFailure, RecordId,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
@@ -479,6 +481,63 @@ fn a_row_delete_confirmed_before_a_wallet_change_is_refused_as_stale() {
         assert_ne!(current, confirmed);
         app.dispatch(CloudBackupManagerAction::DeleteCloudWallet(current)).then_can(&[N::TurnOff]);
         assert!(!app.cloud.inner.has_wallet_backup(&account.namespace, elsewhere));
+    });
+}
+
+/// The backups not on this device load after the detail, so a failed fetch of them leaves the
+/// detail complete. The screen shows that failure with Check Again instead of drawing those
+/// backups as absent, and Check Again fetches them again
+#[test]
+fn a_failed_fetch_of_backups_not_on_this_device_shows_check_again() {
+    let test =
+        concat!(module_path!(), "::a_failed_fetch_of_backups_not_on_this_device_shows_check_again");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let account = FakeAccount::new(1, 1).seed_records(&app);
+        let [elsewhere] = account.not_on_device.as_slice() else {
+            // nothing read from the account: a panic message reaches the test log
+            panic!("expected exactly one record not on this device");
+        };
+
+        // the fetch is tried again when the other supplemental loads finish, so the provider
+        // keeps failing it, as it would while its sync is pending
+        let listed = app.cloud.count(CloudCall::ListWalletFiles);
+        for nth in listed + 1..=listed + 4 {
+            app.cloud.script(
+                CallId::new(CloudCall::ListWalletFiles, nth),
+                CloudFault::Fail(CloudStorageError::SyncPending("scripted".into())),
+            );
+        }
+        load_detail(&mut app);
+
+        let failed = configured_sections(&app);
+        assert!(
+            failed.iter().any(|section| matches!(
+                section,
+                CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+                    controls,
+                }) if controls == &[CloudBackupInventoryControl::CheckAgain]
+            )),
+            "{}",
+            app.describe()
+        );
+        assert!(app.row_delete(elsewhere).is_none(), "{}", app.describe());
+
+        // the provider recovers, and the user taps Check Again
+        app.cloud.clear_scripts();
+        let listings = app.cloud.count(CloudCall::ListWalletFiles);
+        load_detail(&mut app);
+
+        assert!(app.cloud.count(CloudCall::ListWalletFiles) > listings, "{}", app.describe());
+        assert!(
+            !configured_sections(&app)
+                .iter()
+                .any(|section| matches!(section, CloudBackupSection::Progress(_))),
+            "{}",
+            app.describe()
+        );
+        assert!(app.row_delete(elsewhere).is_some(), "{}", app.describe());
     });
 }
 

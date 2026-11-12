@@ -112,7 +112,7 @@ pub(crate) enum CloudBackupCloudOnlyFetchOutcome {
     Reset,
     Started,
     Loaded(CloudOnlyFetch),
-    Failed(String),
+    Failed(CloudBackupInventoryIncompleteReason),
 }
 
 /// Whether a loaded fetch result became the cloud-only cache or was dropped as stale
@@ -494,8 +494,8 @@ impl RustCloudBackupManager {
                     CloudOnlyFetchApplication::Applied
                 };
             }
-            CloudBackupCloudOnlyFetchOutcome::Failed(error) => {
-                self.apply_cloud_only_state(scope, CloudOnlyState::Failed { error });
+            CloudBackupCloudOnlyFetchOutcome::Failed(reason) => {
+                self.apply_cloud_only_state(scope, CloudOnlyState::Failed { reason });
             }
         }
 
