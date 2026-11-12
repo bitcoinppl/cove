@@ -35,6 +35,7 @@ use crate::{
     },
     node::{Node, client::NodeClient},
     transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
+    transfer_labels::label_transfer,
     wallet::Address,
     wallet_secret::WalletSecretExt as _,
 };
@@ -811,6 +812,7 @@ impl WalletActor {
             });
 
         let txid = transaction.compute_txid();
+        self.label_transfer_in_background(transaction.clone());
 
         // insert the unconfirmed transaction into the local wallet
         self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
@@ -838,6 +840,27 @@ impl WalletActor {
         }
 
         send!(self.addr.start_transaction_watcher(txid));
+    }
+
+    /// Labels a send to another of the user's wallets on both sides
+    ///
+    /// The ownership lookup reads every wallet store on this network, so it runs on a blocking
+    /// thread and only the refresh of this wallet's transaction list comes back to the actor
+    fn label_transfer_in_background(&self, transaction: BdkTransaction) {
+        let sender = self.wallet.metadata.clone();
+
+        self.addr.send_fut_with(|addr| async move {
+            let txid = transaction.compute_txid();
+            let labeled =
+                cove_tokio::task::spawn_blocking(move || label_transfer(&sender, &transaction))
+                    .await;
+
+            match labeled {
+                Ok(true) => send!(addr.transaction_labels_changed(txid)),
+                Ok(false) => {}
+                Err(error) => warn!("transfer labelling stopped txid={txid}: {error}"),
+            }
+        });
     }
 
     fn start_payjoin_terminal_broadcast(&mut self, tx: BdkTransaction) {
@@ -942,6 +965,7 @@ impl WalletActor {
             });
 
         let txid = tx.compute_txid();
+        self.label_transfer_in_background(tx.clone());
 
         self.wallet.bdk.apply_unconfirmed_txs([(tx, now)]);
 

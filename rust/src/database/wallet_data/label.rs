@@ -384,6 +384,35 @@ impl LabelsTable {
         Ok(())
     }
 
+    /// Insert a transaction label unless the transaction already has one, returning whether it
+    /// inserted
+    ///
+    /// The check and the insert share one write transaction, so a label saved at the same time
+    /// is never replaced
+    pub fn insert_txn_label_if_absent(
+        &self,
+        label: TransactionRecord,
+        timestamps: Timestamps,
+    ) -> Result<bool, Error> {
+        let _persistence = self.begin_persistence()?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        let inserted = {
+            let mut table = write_txn.open_table(TXN_TABLE)?;
+            let key: TxId = label.ref_.into();
+            let absent = table.get(&key)?.is_none();
+            if absent {
+                table.insert(key, Record::with_timestamps(label, timestamps))?;
+            }
+
+            absent
+        };
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        Ok(inserted)
+    }
+
     pub fn insert_records(
         &self,
         records: impl IntoIterator<Item = Record<Label>>,
