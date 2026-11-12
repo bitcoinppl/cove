@@ -159,6 +159,12 @@ pub struct PayjoinSenderSession {
     pub fallback_tx: TransactionBytes,
     pub created_at_secs: Option<u64>,
     pub pending_action: Option<PendingAction>,
+    /// The OHTTP relay that carried the session's accepted POST, so a resumed session keeps
+    /// sending through it
+    ///
+    /// Saved in the same write as the event that records the POST as accepted, so it is `None`
+    /// only before that
+    pub ohttp_relay: Option<url::Url>,
 }
 
 /// A `PayjoinSenderSession` as any build saved it, including those before sessions had an id
@@ -172,6 +178,8 @@ struct StoredPayjoinSenderSession {
     created_at_secs: Option<u64>,
     #[serde(default)]
     pending_action: Option<PendingAction>,
+    #[serde(default)]
+    ohttp_relay: Option<url::Url>,
 }
 
 impl From<StoredPayjoinSenderSession> for PayjoinSenderSession {
@@ -182,6 +190,7 @@ impl From<StoredPayjoinSenderSession> for PayjoinSenderSession {
             fallback_tx,
             created_at_secs,
             pending_action,
+            ohttp_relay,
         } = stored;
 
         // a record without an id is read again on every poll event and terminal write until
@@ -189,7 +198,7 @@ impl From<StoredPayjoinSenderSession> for PayjoinSenderSession {
         let session_id = session_id
             .unwrap_or_else(|| PayjoinSessionId::for_legacy_session(fallback_tx.as_ref()));
 
-        Self { session_id, events, fallback_tx, created_at_secs, pending_action }
+        Self { session_id, events, fallback_tx, created_at_secs, pending_action, ohttp_relay }
     }
 }
 
@@ -988,6 +997,7 @@ mod tests {
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
+            ohttp_relay: Some(url::Url::parse("https://relay.example.com").unwrap()),
         };
 
         db.set_payjoin_sender_session(session.clone()).unwrap();
@@ -1032,6 +1042,30 @@ mod tests {
     }
 
     #[test]
+    fn payjoin_sender_session_without_a_relay_still_reads() {
+        // the shape records had before sessions saved their adopted OHTTP relay
+        let json = r#"{"PayjoinSenderSession":{"events":[],"fallback_tx":[2,0,0,0],"created_at_secs":7,"pending_action":"BroadcastFallback"}}"#;
+
+        let WalletData::PayjoinSenderSession(session) =
+            serde_json::from_str::<WalletData>(json).unwrap()
+        else {
+            panic!("expected a payjoin sender session");
+        };
+
+        assert_eq!(
+            session,
+            PayjoinSenderSession {
+                session_id: PayjoinSessionId::for_legacy_session(&[0x02, 0x00, 0x00, 0x00]),
+                events: vec![],
+                fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
+                created_at_secs: Some(7),
+                pending_action: Some(PendingAction::BroadcastFallback),
+                ohttp_relay: None,
+            }
+        );
+    }
+
+    #[test]
     fn delete_payjoin_sender_session_clears_session() {
         let wallet_id = WalletId::preview_new_random();
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
@@ -1041,6 +1075,7 @@ mod tests {
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
+            ohttp_relay: None,
         };
 
         db.set_payjoin_sender_session(session).unwrap();

@@ -1636,6 +1636,17 @@ pub(crate) mod test_support {
         pub(crate) async fn payjoin_session_is_polling_for_test(&mut self) -> ActorResult<bool> {
             Produces::ok(payjoin::test_support::session_is_polling(&self.db))
         }
+
+        /// Stops the running Payjoin session without ending it, as quitting the app does, then
+        /// resumes it from its saved record with `config`, as the next launch does
+        pub(crate) async fn restart_payjoin_session_for_test(
+            &mut self,
+            config: PayjoinConfig,
+        ) -> ActorResult<()> {
+            self.abandon_payjoin_negotiation_for_test().await?;
+            self.payjoin_config = config;
+            self.resume_payjoin_session().await
+        }
     }
 }
 
