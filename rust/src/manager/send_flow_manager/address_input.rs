@@ -230,7 +230,9 @@ mod tests {
             wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         },
         network::Network,
-        router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
+        router::{
+            Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs, UnsignedPaymentMode,
+        },
         test_support::hardware_signing::external_address,
         wallet::{balance::Balance, metadata::WalletMetadata},
     };
@@ -404,8 +406,11 @@ mod tests {
                 wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
 
                 let confirm = pushed_confirm_route().expect("confirm route was pushed");
-                assert_eq!(confirm.payjoin_endpoint, None, "{label}: no payjoin session starts");
-                assert_eq!(confirm.input, SendConfirmationInput::Unsigned, "{label}");
+                assert_eq!(
+                    confirm.input,
+                    SendConfirmationInput::Unsigned { mode: UnsignedPaymentMode::Standard },
+                    "{label}: no payjoin session starts"
+                );
                 assert_eq!(confirm.details.sending_to.to_string(), address, "{label}");
                 assert_eq!(confirm.details.sending_amount.as_sats(), AMOUNT_SATS, "{label}");
 

@@ -8,7 +8,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 - [Quarantined tests](#quarantined-tests)
 - [Hardware signer tests](#hardware-signer-tests)
 - [Running the Rust tests](#running-the-rust-tests)
-- [Payjoin end-to-end test](#payjoin-end-to-end-test)
+- [Payjoin end-to-end tests](#payjoin-end-to-end-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Features left out of release passes](#features-left-out-of-release-passes)
 - [Fixtures](#fixtures)
@@ -205,15 +205,20 @@ A flaky or hanging test can absorb hours. Debug it under these rules:
 2. When a hypothesis runs out without a fix, quarantine the test rather than starting another. Open an issue labeled `rust` (`ios` or `ui-tests` for UI tests) with the failure message, the runs it failed and passed in, and the hypotheses tried, then mark the test `#[ignore = "quarantined until YYYY-MM-DD: https://github.com/bitcoinppl/cove/issues/<n>"]` with an expiry at most 60 days ahead. `just test` and CI then skip it, and `cargo nextest run --run-ignored only <name>` still runs it. Fix it, delete it or extend the date, saying why in the issue, before it expires.
 3. Wrap every repro command in a hard timeout, and never loop a repro without one. nextest already kills a single hung test, so bound the loop: `timeout 20m cargo nextest run -p cove --stress-count 50 -E 'test(<name>)'` runs a test 50 times and stops after 20 minutes either way. Bound `cargo test` and scripts the same way, with `timeout <limit> <command>`.
 
-## Payjoin end-to-end test
+## Payjoin end-to-end tests
 
 `rust/src/manager/wallet_manager/payjoin_e2e_tests.rs` pays a BIP 77 receiver through Cove's real Payjoin sender, with every service running inside the test process. It needs no Docker, no bitcoind and no network access.
 
-- **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate.
+- **Directory and relays.** `rust/src/test_support/payjoin.rs` starts `payjoin-mailroom` instances on loopback ports: one directory that serves TLS with a self-signed `localhost` certificate, and two OHTTP relays that serve plain HTTP and trust that certificate. Its `SilentRelay` accepts connections and never answers, for tests that need a request still in flight.
 - **Receiver.** The test drives a v2 receiver step by step and signs its proposal with a BDK wallet. The receiver's coin is on the fake node, as is the sender's.
 - **Sender.** A hot wallet builds a payment with change to the receiver's pj URI and starts the session through `initiate_payjoin_payment`. Payjoin is still gated off in the send flow, so the test reaches it through a test-only entry point on the wallet actor.
 
-The test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone.
+The payment test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone. Every test also checks the `PayjoinStatus` sequence the screens receive and what `payjoin_status()` returns. The other tests cover:
+
+- Cancelling a negotiation, which broadcasts the Original exactly once while the wallet keeps answering.
+- Resuming a session after a relaunch, which reports the same id and deadline.
+- Cancelling after the broadcast has started, which changes nothing.
+- A session falling back at its reported deadline while a request to a silent relay hangs.
 
 Relays and the session timeout come from `PayjoinConfig`, which the wallet actor owns. The app uses the built-in `https` relays and a ten-minute timeout. Only tests can build a config with plain `http` relays, and only when they listen on a loopback host.
 

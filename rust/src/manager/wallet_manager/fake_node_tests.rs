@@ -18,7 +18,7 @@ use cove_types::BlockSizeLast;
 use rand::RngExt as _;
 
 use super::{
-    RustWalletManager, TransactionLockState, WalletLedgerState,
+    PayjoinStatus, RustWalletManager, TransactionLockState, WalletLedgerState,
     WalletManagerReconcileMessage as Msg,
 };
 use crate::{
@@ -126,7 +126,7 @@ impl ScreenUpdates {
 
     /// Waits for a message matching `done` among those seen since the screen was last cleared,
     /// returning its position in `seen`
-    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) -> usize {
+    pub(crate) async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) -> usize {
         self.until_after(0, what, done).await
     }
 
@@ -163,6 +163,22 @@ impl ScreenUpdates {
             matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
         })
         .await;
+    }
+
+    /// Forgets the messages seen so far, so later waits count only newer ones
+    pub(crate) fn clear(&mut self) {
+        self.seen.clear();
+    }
+
+    /// Every Payjoin status the screen was sent since it was last cleared, oldest first
+    pub(crate) fn payjoin_statuses(&self) -> Vec<PayjoinStatus> {
+        self.seen
+            .iter()
+            .filter_map(|message| match message {
+                Msg::PayjoinStatusChanged(status) => Some(status.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Waits for a scan to complete and the scan status to settle back to idle after it
