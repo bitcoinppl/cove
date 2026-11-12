@@ -31,11 +31,13 @@ use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     current_background_writes, wallet_entry_with_labels,
 };
+use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError,
     CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
-    CloudBackupStore, CloudBackupVerificationSource, DriveAccountSwitchPlatformResult,
-    DriveAccountSwitchPlatformState, RequestedDriveAccountSwitchStep,
+    CloudBackupResetPermit, CloudBackupStore, CloudBackupVerificationSource,
+    DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState,
+    RequestedDriveAccountSwitchStep, take_settled_off_count,
 };
 
 fn local_master_key_present() -> bool {
@@ -846,5 +848,108 @@ fn a_detail_refresh_from_before_an_account_switch_is_dropped() {
             "the old account's detail landed in the new configuration\n{}",
             app.describe()
         );
+    });
+}
+
+/// Starts a full wipe while a confirmed Turn Off drains an upload in flight
+///
+/// The reset cancels the Turn Off before it commits, and the screen shows Disabled while the
+/// reset runs. Returns once the reset is ready, with the times Cloud Backup settled off before
+/// it taken
+fn reset_during_a_draining_turn_off(app: &mut TestApp) -> CloudBackupResetPermit {
+    FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    let hold = Hold::default();
+    app.cloud.script_next(CloudCall::UploadWallet, CloudFault::Hold(hold.clone()));
+    app.event("a local wallet changes", |app| {
+        change_a_wallet(app).expect("the seeded wallet");
+    })
+    .then_can(&[N::TurnOff]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+    app.block_on("the upload to be held", hold.entered());
+
+    app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+    app.confirm_turn_off().then_can(&[N::CancelDisable]);
+    assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled, "Turn Off committed");
+    take_settled_off_count();
+
+    let manager = app.manager().clone();
+    let reset = cove_tokio::task::spawn(async move { manager.prepare_local_reset().await });
+    app.event("a full wipe begins", |_| {}).then_cannot(&[N::Enable, N::TurnOff]);
+    assert!(
+        matches!(app.manager().published_screen().body, CloudBackupScreenBody::Disabled),
+        "the running reset doesn't show Disabled\n{}",
+        app.describe()
+    );
+
+    app.event("release the held upload", |_| hold.release()).then_cannot(&[N::Enable]);
+    let permit =
+        app.block_on("the reset to be ready", reset).expect("reset task").expect("reset permit");
+
+    assert_eq!(take_settled_off_count(), 0, "a running reset settled Cloud Backup off");
+    permit
+}
+
+/// A wipe that starts while Turn Off drains and fails before its key clear resumes the backup,
+/// so Cloud Backup never settles off and the platform keeps what belongs to the backup, such as
+/// Android's Google Drive account binding, though the reset showed Disabled
+#[test]
+fn a_reset_during_a_draining_turn_off_abandoned_before_its_key_clear_never_settles_off() {
+    let test = concat!(
+        module_path!(),
+        "::a_reset_during_a_draining_turn_off_abandoned_before_its_key_clear_never_settles_off"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let permit = reset_during_a_draining_turn_off(&mut app);
+
+        app.event("the wipe fails before its key clear", |app| {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::Enable]);
+
+        assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
+        assert_eq!(take_settled_off_count(), 0, "the abandoned reset settled Cloud Backup off");
+    });
+}
+
+/// The same reset settles Cloud Backup off once when its wipe commits
+#[test]
+fn a_reset_during_a_draining_turn_off_that_wipes_settles_off_once() {
+    let test =
+        concat!(module_path!(), "::a_reset_during_a_draining_turn_off_that_wipes_settles_off_once");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let permit = reset_during_a_draining_turn_off(&mut app);
+
+        app.event("the wipe commits", |app| finish_wipe(app, permit)).then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 1, "the wipe didn't settle Cloud Backup off once");
+
+        app.advance_clock(Duration::from_secs(600)).then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 0, "settling off was sent again");
+    });
+}
+
+/// A committed Turn Off that finishes settles Cloud Backup off once, and a launch that finds it
+/// off reports that too, so a process killed between the two still releases what it held
+#[test]
+fn a_finished_turn_off_settles_off_once() {
+    let test = concat!(module_path!(), "::a_finished_turn_off_settles_off_once");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.current().then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 1, "the launch with Cloud Backup off wasn't sent");
+
+        FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        assert_eq!(take_settled_off_count(), 0, "the Turn Off review settled Cloud Backup off");
+
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+        assert_eq!(take_settled_off_count(), 1, "the Turn Off didn't settle Cloud Backup off once");
     });
 }

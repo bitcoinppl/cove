@@ -61,6 +61,15 @@ pub enum CloudBackupReconcileMessage {
     /// `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
     Screen(Box<CloudBackupScreenDelta>),
     EnableCompleted(CloudBackupEnableContext),
+    /// Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
+    /// and no local reset runs
+    ///
+    /// Sent once each time the owner settles there, such as when a committed Turn Off finishes,
+    /// a local reset ends with Cloud Backup off, or the app launches with it off. A running reset
+    /// shows the Disabled screen without this, since an abandoned reset may resume the backup it
+    /// found. Platform state that belongs to a backup, such as Android's Google Drive account
+    /// binding, is released on this and never on the screen alone
+    SettledOff,
     /// Android must show the account picker and stage the account the user picks
     DriveAccountSwitchSelectionRequired(u64),
     /// Android must report its durable switch state

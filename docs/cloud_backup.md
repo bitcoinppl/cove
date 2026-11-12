@@ -37,10 +37,21 @@ platform listens. The platform reads `state()` before it calls
 `listen_for_updates`, and the deltas published before that read are still
 queued for the listener. They are at or before the snapshot's revision, and
 `applying` skips them instead of replaying them over it, so the screen never
-goes back to an older or mixed one and no platform reaction, such as Android
-clearing its Drive account binding on a Turn Off reaching Disabled, fires for a
-transition the snapshot already includes. Messages that are events, such as
+goes back to an older or mixed one. Messages that are events, such as
 `EnableCompleted`, have no revision and arrive in the order they were sent.
+
+`SettledOff` is the event for Cloud Backup coming to rest off on this device:
+the owner's own body is `Disabled` and the screen shows Disabled, not an
+Enable waiting on the user. It is sent once each time the owner settles there,
+after the delta that shows it: when a committed Turn Off finishes, when a local
+reset ends with Cloud Backup off, when an Enable or restore ends with nothing
+kept, and on the first publish of a launch that finds Cloud Backup off, which
+covers a process killed before the platform handled the earlier one. A running
+local reset projects as Disabled too, but its body is `Resetting`, and a wipe
+that fails before its key clear resumes the backup it found, so the reset never
+sends it. Platform state that belongs to a backup, such as Android's Google
+Drive account binding, is released on `SettledOff` and never on the screen
+alone.
 
 The screen has a body (`Disabled`, `Enabling`, `Restoring`, `Configured`,
 `FinishingDisable`, `DriveAccountSwitch`, `PendingEnableRecovery`, `LoadFailed`

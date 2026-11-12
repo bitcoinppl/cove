@@ -55,7 +55,7 @@ use crate::database::cloud_backup::PersistedHealNotice;
 
 use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
-use super::admission::AdmissionSnapshot;
+use super::admission::{AdmissionBody, AdmissionSnapshot};
 use super::inventory::InventoryFacts;
 use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
 
@@ -64,7 +64,7 @@ use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager
 pub(crate) struct PublishedScreen {
     /// Written with its delta's send under this lock, so a snapshot read from it never runs
     /// ahead of the deltas queued for the platform
-    screen: Mutex<CloudBackupPublishedScreen>,
+    screen: Mutex<Published>,
     /// A publish is queued on the supervisor and has not started projecting yet
     ///
     /// A burst of changes, such as a reset's dozen reducer events or a restore's progress, queues
@@ -83,11 +83,46 @@ pub(crate) struct ScreenInputs {
     pub(crate) notices: Notices,
 }
 
+/// What the platform was last sent: the screen, and whether the owner rested off
+#[derive(Debug)]
+struct Published {
+    screen: CloudBackupPublishedScreen,
+    rest: Rest,
+}
+
+/// Whether the owner rests with Cloud Backup off on this device
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Rest {
+    /// A backup is configured, being set up or changed, or a local reset may still resume one
+    Holding,
+    /// Nothing on this device belongs to a backup any more
+    SettledOff,
+}
+
+impl Rest {
+    /// The rest the owner is at for one projection
+    ///
+    /// A running local reset projects as Disabled, but its own admission body tells it apart:
+    /// a wipe that fails before its key clear resumes the backup it found, so the reset is no
+    /// rest. A Disabled body whose Enable waits on the user projects as that Enable, which still
+    /// uses the account it started with
+    fn of(admission: &AdmissionSnapshot, screen: &CloudBackupScreen) -> Self {
+        let off = admission.body == AdmissionBody::Disabled
+            && matches!(screen.body, CloudBackupScreenBody::Disabled);
+
+        if off { Self::SettledOff } else { Self::Holding }
+    }
+}
+
 impl Default for PublishedScreen {
     fn default() -> Self {
         let screen =
             CloudBackupPublishedScreen { revision: 0, screen: CloudBackupScreen::initial() };
-        Self { screen: Mutex::new(screen), requested: AtomicBool::new(false) }
+
+        // nothing was sent yet, so a launch that finds Cloud Backup off reports it once; that
+        // releases what a process killed between a Turn Off's commit and its report still holds
+        let published = Published { screen, rest: Rest::Holding };
+        Self { screen: Mutex::new(published), requested: AtomicBool::new(false) }
     }
 }
 
@@ -108,7 +143,7 @@ impl CloudBackupScreen {
 impl RustCloudBackupManager {
     /// The screen last published with its revision, the snapshot a platform starts from
     pub(crate) fn published_snapshot(&self) -> CloudBackupPublishedScreen {
-        self.published_screen.screen.lock().clone()
+        self.published_screen.screen.lock().screen.clone()
     }
 
     /// Asks the supervisor to publish the screen
@@ -128,16 +163,27 @@ impl RustCloudBackupManager {
     ///
     /// Only the supervisor calls this, with its runtime and a reader of its other inputs. The
     /// inputs are read after the queued request is cleared, so a change made while they are read
-    /// queues another publish instead of being lost
+    /// queues another publish instead of being lost. Settling off is sent once, after the delta
+    /// that shows it
     pub(crate) fn publish_screen(&self, runtime: &Runtime, inputs: impl FnOnce() -> ScreenInputs) {
         self.published_screen.requested.store(false, Ordering::Release);
 
-        let next = self.project_screen(runtime, &inputs());
+        let inputs = inputs();
+        let next = self.project_screen(runtime, &inputs);
+        let rest = Rest::of(&inputs.admission, &next);
         let mut published = self.published_screen.screen.lock();
-        let Some(delta) = CloudBackupScreenDelta::between(&published, &next) else { return };
 
-        *published = CloudBackupPublishedScreen { revision: delta.revision, screen: next };
-        self.send(CloudBackupReconcileMessage::Screen(Box::new(delta)));
+        if let Some(delta) = CloudBackupScreenDelta::between(&published.screen, &next) {
+            published.screen =
+                CloudBackupPublishedScreen { revision: delta.revision, screen: next };
+            self.send(CloudBackupReconcileMessage::Screen(Box::new(delta)));
+        }
+
+        let settled_off = rest == Rest::SettledOff && published.rest != Rest::SettledOff;
+        published.rest = rest;
+        if settled_off {
+            self.send(CloudBackupReconcileMessage::SettledOff);
+        }
     }
 
     /// The screen for `runtime` and `inputs` with the reducer as it stands now
@@ -174,7 +220,7 @@ mod test_support {
     impl RustCloudBackupManager {
         /// The screen last published, which is what the platform shows
         pub(crate) fn published_screen(&self) -> CloudBackupScreen {
-            self.published_screen.screen.lock().screen.clone()
+            self.published_screen.screen.lock().screen.screen.clone()
         }
 
         /// Whether a publish is queued on the supervisor and has not started projecting yet

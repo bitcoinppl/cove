@@ -1066,7 +1066,7 @@ impl RustCloudBackupManager {
 
 #[cfg(test)]
 pub(crate) use manager_test_support::{
-    RequestedDriveAccountSwitchStep, set_aside_reconcile_messages,
+    RequestedDriveAccountSwitchStep, set_aside_reconcile_messages, take_settled_off_count,
 };
 #[cfg(test)]
 mod manager_test_support {
@@ -1104,6 +1104,18 @@ mod manager_test_support {
         messages: impl IntoIterator<Item = CloudBackupReconcileMessage>,
     ) {
         SET_ASIDE_RECONCILE_MESSAGES.lock().extend(messages);
+    }
+
+    /// Takes the times Cloud Backup settled off from the messages a harness boundary set aside,
+    /// keeping the rest for the reads that handle them
+    ///
+    /// The boundary's screen read drains the queue, so this reads what the last boundary saw
+    pub(crate) fn take_settled_off_count() -> usize {
+        let mut set_aside = SET_ASIDE_RECONCILE_MESSAGES.lock();
+        let before = set_aside.len();
+        set_aside.retain(|message| !matches!(message, CloudBackupReconcileMessage::SettledOff));
+
+        before - set_aside.len()
     }
 
     impl RustCloudBackupManager {

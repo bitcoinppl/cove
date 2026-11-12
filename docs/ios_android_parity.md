@@ -206,7 +206,9 @@ the shared recovery contract.
   Services outcome classification
 - Android owns Drive token/account binding, Drive API mechanics, and Credential
   Manager outcome classification; the generated Rust handle remains private to
-  the guarded platform manager
+  the guarded platform manager. Android releases the binding only on Rust's
+  `SettledOff` event, never on a Disabled screen; iOS has no binding and
+  ignores it
 
 Do not compensate for missing shared state in either UI. Add the state or action
 to Rust and regenerate both platform bindings.

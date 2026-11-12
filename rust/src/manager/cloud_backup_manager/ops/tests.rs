@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::Duration;
 
 use act_zero::call;
@@ -34,6 +34,9 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
+};
+use crate::manager::cloud_backup_manager::reconcile::{
+    CloudBackupManagerReconciler, CloudBackupReconcileMessage,
 };
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
@@ -445,9 +448,26 @@ async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBa
     supervisor_checkpoint(manager).await;
 }
 
+/// The app-wide manager, listened to as the app's platform listens to it
+///
+/// It outlives every test, and once a test resets it every later test's seeded record rebases it,
+/// so it sends far more than a manager one test builds. No test reads its messages, but its queue
+/// is bounded and its supervisor blocks on a full one, so they are consumed as a platform would
 fn global_manager() -> Arc<RustCloudBackupManager> {
+    static LISTENING: Once = Once::new();
+
     ensure_cloud_backup_test_tokio_runtime();
-    CLOUD_BACKUP_MANAGER.clone()
+    let manager = CLOUD_BACKUP_MANAGER.clone();
+    LISTENING.call_once(|| manager.listen_for_updates(Box::new(AbsentPlatform)));
+    manager
+}
+
+/// The platform side of the app-wide manager in tests, which has no screen to apply messages to
+#[derive(Debug)]
+struct AbsentPlatform;
+
+impl CloudBackupManagerReconciler for AbsentPlatform {
+    fn reconcile(&self, _message: CloudBackupReconcileMessage) {}
 }
 
 fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: impl Into<String>) {

@@ -28703,6 +28703,17 @@ public enum CloudBackupReconcileMessage: Equatable, Hashable {
     case enableCompleted(CloudBackupEnableContext
     )
     /**
+     * Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
+     * and no local reset runs
+     *
+     * Sent once each time the owner settles there, such as when a committed Turn Off finishes,
+     * a local reset ends with Cloud Backup off, or the app launches with it off. A running reset
+     * shows the Disabled screen without this, since an abandoned reset may resume the backup it
+     * found. Platform state that belongs to a backup, such as Android's Google Drive account
+     * binding, is released on this and never on the screen alone
+     */
+    case settledOff
+    /**
      * Android must show the account picker and stage the account the user picks
      */
     case driveAccountSwitchSelectionRequired(UInt64
@@ -28753,18 +28764,20 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case 2: return .enableCompleted(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 3: return .driveAccountSwitchSelectionRequired(try FfiConverterUInt64.read(from: &buf)
+        case 3: return .settledOff
+
+        case 4: return .driveAccountSwitchSelectionRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 4: return .driveAccountSwitchStateRequired
+        case 5: return .driveAccountSwitchStateRequired
 
-        case 5: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
+        case 6: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 6: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        case 7: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 7: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
+        case 8: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -28785,27 +28798,31 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
-        case let .driveAccountSwitchSelectionRequired(v1):
+        case .settledOff:
             writeInt(&buf, Int32(3))
+
+
+        case let .driveAccountSwitchSelectionRequired(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case .driveAccountSwitchStateRequired:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
 
 
         case let .driveAccountSwitchCommitRequired(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterUInt64.write(v1, into: &buf)
-
-
-        case let .driveAccountSwitchRollbackRequired(v1):
             writeInt(&buf, Int32(6))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
-        case let .driveAccountSwitchFinalizeRequired(v1):
+        case let .driveAccountSwitchRollbackRequired(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .driveAccountSwitchFinalizeRequired(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }

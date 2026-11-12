@@ -83,6 +83,10 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
 
+        // iCloud Drive has no account binding to release, so settling off needs nothing from iOS
+        case .settledOff:
+            break
+
         // drive account switching is Android-only and iOS never dispatches a switch, so Rust
         // never asks iOS for these platform steps
         case .driveAccountSwitchSelectionRequired,

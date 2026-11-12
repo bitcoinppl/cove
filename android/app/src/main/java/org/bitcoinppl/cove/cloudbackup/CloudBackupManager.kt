@@ -15,7 +15,6 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
@@ -69,8 +68,6 @@ class CloudBackupManager private constructor(
 
     var enableCompletion by mutableStateOf<TaggedItem<CloudBackupEnableContext>?>(null)
         private set
-
-    private var hasReconciledDisabledState = false
 
     init {
         refreshPersistedEnabledState()
@@ -188,7 +185,6 @@ class CloudBackupManager private constructor(
     }
 
     internal fun apply(message: CloudBackupReconcileMessage) {
-        val wasTurningOff = screen.isTurningOff
         when (message) {
             is CloudBackupReconcileMessage.Screen -> {
                 // a delta the snapshot already includes leaves it as it is, so a Turn Off that
@@ -203,6 +199,9 @@ class CloudBackupManager private constructor(
 
             is CloudBackupReconcileMessage.EnableCompleted ->
                 enableCompletion = TaggedItem(message.v1)
+            // Rust sends this only once nothing on this device belongs to a backup; a Disabled
+            // screen alone may be a reset that still resumes the backup it found
+            CloudBackupReconcileMessage.SettledOff -> notifyCloudBackupSettledOff()
             // the account picker is UI, so it runs on the main scope
             is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
                 val transitionId = message.v1
@@ -224,7 +223,7 @@ class CloudBackupManager private constructor(
             }
         }.let {}
 
-        refreshPersistedEnabledState(forceDisabledNotification = wasTurningOff)
+        refreshPersistedEnabledState()
     }
 
     /*
@@ -320,43 +319,27 @@ class CloudBackupManager private constructor(
             .onFailure { error -> Log.e(TAG, "failed to report drive account switch $result", error) }
     }
 
-    private fun refreshPersistedEnabledState(forceDisabledNotification: Boolean = false) {
+    private fun refreshPersistedEnabledState() {
         isCloudBackupEnabled = runCatching {
             withRustOr(isCloudBackupEnabled) {
                 isCloudBackupEnabled()
             }
         }
             .getOrDefault(isCloudBackupEnabled)
-
-        reconcileDisabledState(forceNotification = forceDisabledNotification)
     }
 
-    private fun reconcileDisabledState(forceNotification: Boolean = false) {
-        if (rust == null) return
-
-        if (screen.body !is CloudBackupScreenBody.Disabled) {
-            hasReconciledDisabledState = false
+    private fun notifyCloudBackupSettledOff() {
+        val callback = onCloudBackupSettledOff
+        if (callback == null) {
+            Log.w(TAG, "cloud backup settled off before its callback was registered")
             return
         }
-
-        if (isCloudBackupEnabled && !forceNotification) return
-        if (hasReconciledDisabledState) return
-
-        if (notifyCloudBackupDisabled()) {
-            hasReconciledDisabledState = true
-        }
-    }
-
-    private fun notifyCloudBackupDisabled(): Boolean {
-        val callback = onCloudBackupDisabled ?: return false
 
         try {
             callback()
         } catch (error: Exception) {
-            Log.e(TAG, "cloud backup disabled callback failed", error)
+            Log.e(TAG, "cloud backup settled off callback failed", error)
         }
-
-        return true
     }
 
     override fun close() {
@@ -370,28 +353,21 @@ class CloudBackupManager private constructor(
     companion object {
         private const val TAG = "CloudBackupManager"
 
-        // a Turn Off that drained or committed: reaching Disabled from here always notifies, even
-        // when the persisted flag was already off
-        private val CloudBackupScreen.isTurningOff: Boolean
-            get() =
-                when (val body = body) {
-                    is CloudBackupScreenBody.FinishingDisable -> true
-                    is CloudBackupScreenBody.Configured ->
-                        body.v1.disable is CloudBackupDisableScreen.Draining
-                    else -> false
-                }
-
         @Volatile
         private var instance: CloudBackupManager? = null
 
         @Volatile
-        private var onCloudBackupDisabled: (() -> Unit)? = null
+        private var onCloudBackupSettledOff: (() -> Unit)? = null
 
         @Volatile
         private var driveAccountSwitchCallbacks: DriveAccountSwitchCallbacks? = null
 
-        fun setOnCloudBackupDisabled(callback: () -> Unit) {
-            onCloudBackupDisabled = callback
+        /**
+         * Registers what Android releases when Rust reports Cloud Backup settled off on this
+         * device, such as the Google Drive account binding
+         */
+        fun setOnCloudBackupSettledOff(callback: () -> Unit) {
+            onCloudBackupSettledOff = callback
         }
 
         internal fun setDriveAccountSwitchCallbacks(

@@ -45421,6 +45421,19 @@ sealed class CloudBackupReconcileMessage {
     }
 
     /**
+     * Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
+     * and no local reset runs
+     *
+     * Sent once each time the owner settles there, such as when a committed Turn Off finishes,
+     * a local reset ends with Cloud Backup off, or the app launches with it off. A running reset
+     * shows the Disabled screen without this, since an abandoned reset may resume the backup it
+     * found. Platform state that belongs to a backup, such as Android's Google Drive account
+     * binding, is released on this and never on the screen alone
+     */
+    object SettledOff : CloudBackupReconcileMessage()
+
+
+    /**
      * Android must show the account picker and stage the account the user picks
      */
     data class DriveAccountSwitchSelectionRequired(
@@ -45496,17 +45509,18 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             2 -> CloudBackupReconcileMessage.EnableCompleted(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired(
+            3 -> CloudBackupReconcileMessage.SettledOff
+            4 -> CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired(
                 FfiConverterULong.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.DriveAccountSwitchStateRequired
-            5 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
+            5 -> CloudBackupReconcileMessage.DriveAccountSwitchStateRequired
+            6 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
                 FfiConverterULong.read(buf),
                 )
-            6 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
+            7 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
                 FfiConverterULong.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
+            8 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -45526,6 +45540,12 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.SettledOff -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
@@ -45576,27 +45596,31 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
+            is CloudBackupReconcileMessage.SettledOff -> {
                 buf.putInt(3)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
+                buf.putInt(4)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchStateRequired -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
-                buf.putInt(5)
-                FfiConverterULong.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 buf.putInt(6)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 buf.putInt(7)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+                buf.putInt(8)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
