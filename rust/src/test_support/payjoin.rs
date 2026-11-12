@@ -196,6 +196,8 @@ pub(crate) enum TestRelayBehavior {
     Garbled,
     /// Answers every request with a 307 redirect to the same path on another relay
     Redirect(Url),
+    /// Holds every request open without answering, as a relay that stops responding does
+    Silent,
 }
 
 /// A relay a sender is configured with in place of a real one, which counts the requests it
@@ -210,6 +212,7 @@ struct TestRelayState {
     behavior: parking_lot::Mutex<TestRelayBehavior>,
     client: reqwest::Client,
     requests: AtomicUsize,
+    held: AtomicUsize,
 }
 
 impl TestRelay {
@@ -229,6 +232,7 @@ impl TestRelay {
             behavior: parking_lot::Mutex::new(behavior),
             client,
             requests: AtomicUsize::new(0),
+            held: AtomicUsize::new(0),
         });
 
         let app = axum::Router::new().fallback(relay_request).with_state(state.clone());
@@ -247,6 +251,11 @@ impl TestRelay {
     /// How many requests reached this relay
     pub(crate) fn requests(&self) -> usize {
         self.state.requests.load(Ordering::SeqCst)
+    }
+
+    /// How many requests the relay is holding open without an answer
+    pub(crate) fn held(&self) -> usize {
+        self.state.held.load(Ordering::SeqCst)
     }
 
     /// Changes how the relay answers every later request
@@ -290,6 +299,10 @@ async fn relay_request(
         TestRelayBehavior::Redirect(target) => {
             let location = format!("{}{path}", target.as_str().trim_end_matches('/'));
             return (StatusCode::TEMPORARY_REDIRECT, [(LOCATION, location)]).into_response();
+        }
+        TestRelayBehavior::Silent => {
+            state.held.fetch_add(1, Ordering::SeqCst);
+            return std::future::pending().await;
         }
     };
 

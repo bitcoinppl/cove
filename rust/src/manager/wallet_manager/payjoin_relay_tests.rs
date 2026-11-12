@@ -13,7 +13,7 @@ use url::Url;
 use super::{
     RustWalletManager,
     fake_node_tests::{Fixture, fresh_mnemonic, receive_script},
-    payjoin::{PayjoinConfig, PayjoinIntent},
+    payjoin::{PayjoinConfig, PayjoinIntent, unix_now_secs},
 };
 use crate::{
     manager::import_wallet_manager::import_mnemonic_with_target,
@@ -194,6 +194,45 @@ async fn a_redirect_from_the_adopted_relay_is_not_followed() {
     assert_eq!(other.requests(), 0, "no request followed the redirect to the other relay");
 }
 
+/// The adopted relay stops answering mid-session, so a poll hangs on it. The session's
+/// deadline still falls back on time instead of waiting for that poll to give up, and the
+/// session never tries the other relay
+#[tokio::test(flavor = "current_thread")]
+async fn a_hanging_adopted_relay_still_falls_back_at_the_deadline() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let adopted = TestRelay::forwarding_to(&services, 0).await;
+    let other = TestRelay::forwarding_to(&services, 1).await;
+    let mut payment = Payment::prepare(&mut fx, &services).await;
+
+    // far shorter than the 35 seconds the sender lets a poll run
+    let session_timeout = Duration::from_secs(10);
+    payment.start(TestRelay::sender_config(&[&adopted, &other], session_timeout)).await;
+    payment.wait_for_original().await;
+    wait_until("a poll through the adopted relay", || adopted.requests() >= 2).await;
+    assert_eq!(payment.saved_relay().await.as_ref(), Some(adopted.url()));
+
+    let deadline = payment.created_at_secs().await + session_timeout.as_secs();
+    adopted.set_behavior(TestRelayBehavior::Silent);
+    wait_until("a poll to hang on the adopted relay", || adopted.held() == 1).await;
+    assert!(
+        unix_now_secs() < deadline,
+        "a poll was hanging on the adopted relay before the deadline {deadline}"
+    );
+
+    payment.wait_for_fallback(&fx).await;
+    let fell_back_at = unix_now_secs();
+
+    assert!(fell_back_at >= deadline, "the session waited for its deadline {deadline}");
+    assert!(
+        fell_back_at <= deadline + 2,
+        "the session fell back at its deadline {deadline}, not when the poll gave up: {fell_back_at}"
+    );
+    assert_eq!(adopted.held(), 1, "no poll started while one hung on the adopted relay");
+    assert_eq!(other.requests(), 0, "the session never switched to the other relay");
+}
+
 /// A funded hot wallet with a Max payment to a BIP 77 receiver, ready to start as a Payjoin
 struct Payment {
     manager: RustWalletManager,
@@ -272,6 +311,16 @@ impl Payment {
             .expect("the wallet actor answers")
             .expect("the session record exists")
             .ohttp_relay
+    }
+
+    /// When the session record says the session started, which its deadline counts from
+    async fn created_at_secs(&self) -> u64 {
+        call!(self.manager.actor.payjoin_session_for_test())
+            .await
+            .expect("the wallet actor answers")
+            .expect("the session record exists")
+            .created_at_secs
+            .expect("a new session records its start")
     }
 
     /// Waits for the sender to give up on the Payjoin and broadcast the original transaction
