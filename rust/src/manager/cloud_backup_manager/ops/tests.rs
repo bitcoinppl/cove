@@ -28,7 +28,7 @@ use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
-    supervisor::{DeepVerificationContinuation, VerificationAttempt},
+    write::ConfigGeneration,
 };
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
@@ -95,17 +95,17 @@ async fn deep_verify_for_test(
     manager: &RustCloudBackupManager,
     force_discoverable: bool,
 ) -> DeepVerificationResult {
-    let step = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
-    call!(manager.supervisor.complete_verification(
-        None,
-        step,
-        DeepVerificationContinuation::Manual {
+    let run = call!(manager.supervisor.begin_verification_run_for_test(force_discoverable))
+        .await
+        .unwrap();
+    let step = manager
+        .prepare_deep_verify_cloud_backup(
+            operation_writes(manager, run.claim),
+            run.basis.config(),
             force_discoverable,
-            attempt: VerificationAttempt::Initial,
-        }
-    ))
-    .await
-    .unwrap();
+        )
+        .await;
+    call!(manager.supervisor.complete_verification(run, step)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         let snapshot = manager.model_snapshot();
         let awaits_upload_confirmation = manager.pending_verification_completion().is_some()
@@ -373,14 +373,27 @@ fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
 
 fn init_manager() -> Arc<RustCloudBackupManager> {
     ensure_cloud_backup_test_tokio_runtime();
-    RustCloudBackupManager::init()
+    crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
 }
 
-fn operation_write_client_for_test(
-    manager: &RustCloudBackupManager,
-    claim: CloudBackupExclusiveOperationClaim,
-) -> CloudBackupWriteClient {
-    CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim)
+/// Dispatch runs on the supervisor; its mailbox barrier proves the intent was handled
+async fn dispatch_and_wait(manager: &RustCloudBackupManager, action: CloudBackupManagerAction) {
+    manager.dispatch(action);
+    supervisor_checkpoint(manager).await;
+}
+
+/// The discard's remote delete runs off the supervisor mailbox and reports back, so the test
+/// waits for the journal it clears and then for the completion message
+async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBackupManager) {
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "pending enable discard should finish its remote delete",
+        || CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none(),
+    )
+    .await;
+    supervisor_checkpoint(manager).await;
 }
 
 fn global_manager() -> Arc<RustCloudBackupManager> {

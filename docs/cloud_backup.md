@@ -26,7 +26,58 @@ operation claims, and UI reconciliation.
 restore, disable, repair, verification, sync, and cloud-only flows, then applies
 typed completions back through the manager. Exclusive operations carry a
 `CloudBackupExclusiveOperationClaim` so every async completion can prove it
-still belongs to the active operation.
+still belongs to the active operation. Each run gets its own `OperationId`. A
+Google Drive account switch's reinitialization also names the switch's persisted
+transition id, which platform callbacks match across a relaunch, but resuming
+the switch starts a run with a new `OperationId`. A completion from a run that a
+reset revoked therefore never matches the run that resumed the switch.
+
+Work that waits on the provider runs off the supervisor's mailbox, so the
+supervisor keeps answering admission and resets meanwhile. A recovered Enable
+with nothing left to upload settles its upload confirmation inside the
+supervisor's handler, because that read stays local while the Enable runs: the
+confirmation has no uploads to check, and its detail refresh skips the provider
+until the lifecycle leaves Enabling.
+
+The supervisor is also the only writer of the durable lifecycle record: it holds
+the one `LifecycleWriter`, which bootstrap moves into it. Work that runs off the
+actor, such as the write lane, upload confirmation, wallet changes and the
+integrity check, sends the supervisor a typed result message, and the supervisor
+applies the write and reconciles. Verification evidence is tied to the wallet set
+it read, so a wallet change that lands while a verification runs makes that
+verification's result stale. A stale result neither overwrites the reset nor
+shows on screen.
+
+Waits go one way only. The write supervisor and other workers may `call!` the
+supervisor, but the supervisor never waits on them. It sends the write
+supervisor a message and handles the reply as a later completion. It tells the
+upload, sync-health and cleanup workers what to do with `send!` and never
+awaits them. So no actor can deadlock waiting on another, and a busy worker
+can't hold a reset or a lifecycle completion behind its mailbox.
+
+Workers that prove a passkey or a master key off the actor don't write the
+keychain themselves. They hand the writes to the write lane with the authority
+they read before their work started: the running operation's claim, or the
+background configuration generation, and the namespace the keys were proven
+for. The lane decides the save at its queue head like any other command, so a
+save from an operation that ended or a configuration that was replaced is
+refused, and background saves wait while Turn Off, an account switch or a reset
+runs. The save then runs on a blocking thread as the lane's in-flight command and
+is refused if the keychain holds another namespace by then. Turn Off's drain and
+a reset's wait for an idle lane both wait for a save that already started, so a
+late proof can't restore wiped keys or replace the next backup's keys. An effect that can't be cancelled once it starts, such as Turn Off's local
+cleanup or a passkey registration, puts its operation in an `Effecting` stage,
+and the operation keeps the slot until the effect reports. A local reset, which
+a full wipe uses, closes admission, cancels running operations, waits for any
+in-flight effect to report, and then has the supervisor clear the Cloud Backup
+keychain namespace. Before that clear starts, the supervisor commits Cloud Backup
+off and records the clear, because even a partial clear can't be taken back. So
+every later load of the record, whether after a failed wipe, a relaunch or a
+crash mid-wipe, finds Cloud Backup off once its keys may be gone. If that commit
+fails, the supervisor refuses the clear and the keys stay. A wipe that fails
+before the clear leaves the backup as it was.
+Catastrophic recovery clears the namespace only while no
+Cloud Backup manager exists, so the namespace has one owner at a time.
 
 A finished reinitialize, including one at the end of a Google Drive account
 switch, hands its slot straight to a verification of the new backup under a new
@@ -46,6 +97,37 @@ The child actors under `cloud_backup_manager::actors` own narrower work:
 - `CloudBackupSyncHealthWorker` owns background sync health refreshes
 - `cleanup` owns namespace cleanup after merge or recovery flows
 - `write` owns serialized cloud writes and post-write local completion
+
+### Who Writes What
+
+Each fact has one writer. Other code sends that writer a typed result and never
+writes the fact itself.
+
+| Fact | Single writer | Typed inputs from producers |
+|---|---|---|
+| Durable lifecycle record (redb `PersistedCloudBackupState`): configuration, verification, sync fields, the Restore All marker, the pending upload confirmation, the account-switch phase and the committed disable | The supervisor's `OwnedRuntime`, which holds the only `LifecycleWriter` and reaches it through `commit`, which publishes the write policy after every write. One write skips that publish: a ready reset's `clear_keys_in_reset` commits Cloud Backup off before the key clear while the policy is already `Closed(LocalReset)`, which that write can't change, and `finish_reset` publishes the policy the reset ends with | Verification results, upload confirmations (carrying the configuration and wallet-set generation they read), write-lane completions, wallet changes, the integrity check, restore activation, the account switch |
+| Runtime operation (the body and the operation nested in it) | The supervisor's `OwnedRuntime` | Worker completions carrying the operation's claim |
+| Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
+| Cloud Backup keychain namespace | The supervisor, in a handler or an `Effecting` stage | — |
+| Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
+| Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
+| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
+| Detail inventory | The reducer | Detail refresh results |
+| Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
+| Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
+
+Ownership is enforced in types, not by convention. `LifecycleWriter` needs a
+`LifecycleCapability`, whose private field only `owner/lifecycle.rs` can
+construct. Bootstrap creates it once, inside the exclusive bootstrap phase that
+normalizes the stored record, and moves it into the supervisor. The database has
+no other production route that writes the Cloud Backup tables.
+
+The writer also keeps the record it last read or committed, and the supervisor
+derives its body, write policy and status from that record. A failed read gives
+the writer's copy instead of a default, so a transient database error can't turn
+a configured backup into an off one. A full wipe tells the writer the record is
+the default one. If no read has succeeded since the load, the body is
+`LoadFailed`, which admits nothing.
 
 ## Inventory
 
@@ -107,6 +189,12 @@ Enable behavior depends on what discovery proved:
 - an explicit Create New Backup path stages a fresh master key, new namespace,
   and passkey material without replacing the current active material
 
+Every way into Enable, onboarding's included, is an intent that admission
+decides against the runtime body, so an Enable can't start beside a running
+Restore. An answer to an Enable prompt is decided as the Enable it starts, and
+the supervisor clears the prompt and starts that Enable in the same turn. When
+the Enable can't start, the prompt stays.
+
 Fresh enable material is tracked by a durable pending-enable journal through
 passkey registration, remote writes, and local promotion. A newly saved passkey
 is targeted and confirmed before upload continues. Accepted provider writes are
@@ -115,6 +203,25 @@ confirmation work without leaving the lifecycle stranded in `Enabling`.
 Promotion happens only for journal-owned staged material. Failure or
 cancellation restores the prior local metadata and only cleans remote material
 that is proven to be incomplete and owned by that fresh attempt.
+
+A newly saved passkey, or an upload that failed, pauses the work that ran it.
+The supervisor keeps what that work needs to go on as one `EnableContinuation`,
+typed with its owner: a fresh Enable while backup is off, or a reinitialize of
+the configured backup. Confirm Saved Passkey restarts the owner's operation, so
+a paused reinitialize goes on as a reinitialize: it uploads the new backup,
+switches to it and verifies it. Admission accepts Confirm Saved Passkey and
+Discard only for a continuation that belongs to the current lifecycle, and
+Discard also for the existing-backup prompt. A Discard that arrives after
+Enable finished is rejected and changes nothing. Discarding a stopped
+reinitialize deletes only the namespace it wrote, and the configured backup
+stays on its own.
+
+When an interrupted Enable leaves that evidence behind, the supervisor holds it
+as its own runtime body, `PendingEnableRecovery`, which can run one recovery
+operation at a time. The screen only shows this body. The body ends when the
+supervisor finds the evidence gone. A status update from elsewhere can't end it.
+A local reset sets the recovery aside and keeps it on screen. A reset that is
+abandoned before its wipe returns to the recovery while its evidence remains.
 
 Automatic passkey retry is shared and bounded. It applies only to a typed
 platform-authorization failure that occurred before native presentation.
@@ -161,23 +268,94 @@ or persistent per-wallet batch history.
 
 ## Write Lane
 
-All cloud writes go through `CloudBackupWriteSupervisor`. The write supervisor
-queues one remote write at a time, rejects writes while disable is active, and
-checks persisted disabling state so restart recovery keeps the write fence.
+All cloud writes go through `CloudBackupWriteSupervisor`, remote deletes
+included. The write supervisor runs one remote write at a time, in the order
+they were queued.
 
-Operation-owned writes use `CloudBackupWriteClient::for_operation`. Their
-command context includes the active operation claim, which is checked before the
-write starts and again before local completion is applied. Background writes use
-`CloudBackupWriteClient::new` and are not tied to an exclusive operation.
+The lane does not keep its own record of who may write. The supervisor derives a
+`WritePolicy` from its runtime body (`Runtime::write_policy`) and sends a newer
+versioned policy to the lane each time the body changes. The policy is never
+stored. When the lane reaches a queued write, it decides that write against the
+latest policy, at that moment. Each write carries a command class, and the
+decision is one of three:
+
+- `Run`: the write starts
+- `Paused(PauseReason)`: the write answers `CloudBackupError::WritesPaused`. A
+  paused upload stays `Dirty` and sets no retry timer. Only a lost connection
+  defers an upload with a retry timer. A wallet batch paused part-way answers
+  the pause too, even when recording the uploads it finished is paused as well.
+- `Stale`: the write belongs to an operation that ended, or to an older
+  configuration. It is dropped with a debug log.
+
+| Class | Sent by | Runs when | Paused when |
+|---|---|---|---|
+| `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset |
+| `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
+| `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
+| `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
+| `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running | never |
+| `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
+| `EnableDiscard(claim)` | discarding the namespace of an interrupted Enable or a stopped reinitialize | that discard is running | never |
+
+For every class without a pause, a write that does not meet the "Runs when"
+condition is stale.
+
+The same rules by runtime body:
+
+| Runtime body | Policy body | Runs | Everything else |
+|---|---|---|---|
+| `Configured`, no operation | `Configured` | `Ordinary` and `SourceCleanup` of the current generation | stale |
+| `Configured`, Turn Off before its commit | `Configured` (Turn Off writer) | Turn Off's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`TurnOff`), the rest stale |
+| `Configured`, a reinitialize | `Configured` (reinitialize writer) | the reinitialize's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`Reinitialize`), the rest stale |
+| `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` | stale |
+| `Disabled`, `Corrupted`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
+| `FinishingDisable` | `FinishingDisable` | `TurnOffDelete` of the committed namespace and `Operation`, both of the running claim | `Ordinary` paused (`TurnOff`), the rest stale |
+| `DriveAccountSwitch` | `AccountSwitch` | `Operation` of the running claim | `Ordinary` paused (`AccountSwitch`), the rest stale |
+| `LoadFailed` | `Closed(LoadFailed)` | nothing | `Ordinary` paused, the rest stale |
+| `Resetting` | `Closed(LocalReset)` | nothing | `Ordinary` paused, the rest stale |
+
+A configuration generation is a process-local number. The supervisor starts a
+new one when the body changes kind, for example when backup turns on or off, or
+when a reinitialize ends. `Ordinary` and `SourceCleanup` writes from an older
+generation are stale. That covers cleanup jobs already queued or being prepared
+for a configuration that was replaced.
+
+When a new policy lets ordinary writes run again, the lane tells the supervisor
+(`ordinary_writes_resumed`). The supervisor then resumes uploads from the
+persisted dirty state and restarts the pending-upload verifier, so a paused
+upload runs exactly once. Upload confirmations carry the configuration and
+wallet-set generation they read (`EvidenceBasis`), and the supervisor drops one
+that a wallet change or a new configuration outdated, such as a Drive account
+switch that keeps the namespace.
+
+Operation-owned writes use `CloudBackupWriteClient::for_operation`, so their
+class carries the operation claim. Background writes take a ticket for the
+current generation.
 
 `CloudBackupWriteWorker` is intentionally small. It executes the remote storage
 command and reports the result back to the write supervisor. The supervisor then
 applies any local completion, such as marking uploaded blobs pending
-confirmation or persisting the enabled state after final upload.
+confirmation. It asks the supervisor to persist the enabled state after a final
+upload and waits for that answer before it marks the wallets uploaded. It
+re-decides the class before it applies the completion, so a write whose
+operation ended meanwhile is reported cancelled.
 
-Disable uses `block_until_drained` before deleting the namespace. That prevents
-an already-started upload from recreating remote data after disable removes the
-backup namespace.
+A reinitialize owns the namespaces from its start, the same way. Its policy
+pauses ordinary writes and source cleanup, so a cleanup whose proof was read
+before the reinitialize began never deletes a source it may recover. It then
+drains the lane before it lists the namespaces, so a cleanup delete that was
+already running finishes before the reinitialize reads what exists. When it
+ends, the new generation makes anything left from before stale.
+
+Turn Off pauses ordinary writes through the policy, then queues a drain barrier
+of its own. The barrier comes back only after the write in flight and those
+queued ahead of it have finished. Only then does Turn Off commit and delete the
+namespace, so an upload that already started can't recreate remote data after
+the delete. A Google Drive account switch drains the same way. A local reset
+publishes a closed policy first, then waits for the lane to go idle.
 
 ## Verification And Recovery
 
@@ -186,11 +364,28 @@ Pending upload verification confirms that blobs marked
 revision. Authorization failures pause the verifier without rewriting the blob
 state, so the app can resume after the platform cloud authorization is restored.
 
+A detail refresh or a verification pass that reads a wallet's revision can also
+confirm an upload waiting for it. The read is tagged with the namespace it read
+and the configuration generation its producer started under
+(`RemoteRevisionEvidence`), and the supervisor confirms only waiting rows in that
+namespace, only while that configuration is current. A read of one backup that
+outlives a reset and an Enable of another, or a Drive account switch, therefore
+confirms nothing in the backup that replaced it, even when both hold the same
+wallet revision.
+
 Deep verification checks the cloud master-key wrapper, local keychain state,
-wallet blobs, and pending uploads. Some verification results prepare follow-up
-work, such as repairing the passkey wrapper or uploading missing wallet blobs.
-The supervisor owns those continuations so each follow-up remains tied to the
-same exclusive-operation claim.
+wallet blobs, and pending uploads. A verification the user starts, from Verify,
+detail entry or a retry after the connection returns, is an exclusive operation
+like any other: it holds the slot from its admission until its result lands, so
+Turn Off and other operations wait for it, and a second Verify joins the one
+running. Verify only joins the pending upload confirmation when uploads already
+wait for it. Some verification results prepare follow-up work, such as
+repairing the passkey wrapper or uploading missing wallet blobs. The supervisor
+owns those continuations so each follow-up remains tied to the same
+exclusive-operation claim. Each run carries the configuration and wallet-set
+generation it read, including across a retry after lost connectivity, so its
+evidence is judged against its own read, never another run's or another
+configuration's.
 
 ## Related Notes
 

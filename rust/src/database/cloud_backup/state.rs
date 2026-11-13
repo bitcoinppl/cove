@@ -67,10 +67,6 @@ impl PersistedCloudBackupState {
         self.configured().is_some()
     }
 
-    pub fn is_disabling(&self) -> bool {
-        matches!(self, Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)))
-    }
-
     pub fn disabling(&self) -> Option<&PersistedDisablingCloudBackup> {
         match self {
             Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) => {
@@ -234,6 +230,7 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -250,6 +247,7 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -439,34 +437,6 @@ impl PersistedCloudBackupState {
         }
     }
 
-    pub(crate) fn begin_disabling(
-        &mut self,
-        namespace_id: String,
-        disable_generation: u64,
-        started_at: u64,
-    ) -> bool {
-        match std::mem::take(self) {
-            Self::Configured(configured) => {
-                *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(
-                    PersistedDisablingCloudBackup {
-                        previous_configured: configured,
-                        namespace_id,
-                        disable_generation,
-                        started_at,
-                        delete_started_at: None,
-                        last_error: None,
-                        retry_after: None,
-                    },
-                ));
-                true
-            }
-            other => {
-                *self = other;
-                false
-            }
-        }
-    }
-
     pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
         Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
     }
@@ -484,23 +454,6 @@ impl PersistedCloudBackupState {
                 false
             }
         }
-    }
-
-    pub(crate) fn update_disabling(&mut self, update: &PersistedDisablingCloudBackup) -> bool {
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) = self
-        else {
-            return false;
-        };
-        if disabling.disable_generation != update.disable_generation
-            || disabling.namespace_id != update.namespace_id
-        {
-            return false;
-        }
-
-        disabling.delete_started_at = update.delete_started_at;
-        disabling.last_error.clone_from(&update.last_error);
-        disabling.retry_after = update.retry_after;
-        true
     }
 }
 
@@ -527,6 +480,20 @@ pub struct PersistedConfiguredCloudBackup {
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_restore_all: Option<PersistedRestoreAllMarker>,
+    /// Set when load normalization healed a legacy Disabling record back to this configuration
+    ///
+    /// Older builds ignore the field, and a rewrite by an older build only drops the notice
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heal_notice: Option<PersistedHealNotice>,
+}
+
+/// Durable notice that Cloud Backup was healed from a disable that never deleted anything
+///
+/// It lives inside the configured record, so a notice while Cloud Backup is off cannot exist
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedHealNotice {
+    /// When load normalization healed the record
+    pub healed_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

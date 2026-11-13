@@ -4,6 +4,7 @@
 //! expected revision is visible remotely. Authorization failures pause this
 //! verifier without rewriting the persisted blob state
 
+use act_zero::call;
 use cove_cspp::backup_data::EncryptedWalletBackup;
 use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -18,6 +19,7 @@ use crate::database::cloud_backup::{
     CloudBlobUploadedPendingConfirmationState, CloudStorageIssue, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
+use crate::manager::cloud_backup_manager::verify::PendingVerificationSettlement;
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
 use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
@@ -132,8 +134,18 @@ impl PendingUploadVerifier {
             self.schedule_retry_if_needed(&next_state);
         }
 
-        if !blocked_on_authorization {
-            self.0.finalize_pending_verification_if_ready().await;
+        if !blocked_on_authorization
+            && let Some(settlement) = self.ready_pending_verification_settlement().await
+        {
+            // a worker may wait on the lifecycle owner, and waiting here means the pending state
+            // read below already reflects the settle
+            if let Err(error) =
+                call!(self.0.supervisor.settle_pending_verification(settlement)).await
+            {
+                warn!(
+                    "Pending upload verification: lifecycle owner stopped before settling: {error}"
+                );
+            }
         }
 
         let has_pending = self.0.has_pending_cloud_upload_verification();
@@ -167,6 +179,22 @@ impl PendingUploadVerifier {
             | PendingUploadRunOutcome::Confirmed
             | PendingUploadRunOutcome::Failed => PendingUploadVerificationState::Idle,
         }
+    }
+
+    /// Reads the owner's configuration and wallet set first, then the upload evidence under them,
+    /// so a wallet change or a new configuration after the read makes the settlement stale instead
+    /// of recording old evidence
+    async fn ready_pending_verification_settlement(&self) -> Option<PendingVerificationSettlement> {
+        // a worker may wait on the lifecycle owner
+        let basis = match call!(self.0.supervisor.evidence_basis_for_confirmation()).await {
+            Ok(basis) => basis,
+            Err(error) => {
+                warn!("Pending upload verification: lifecycle owner stopped: {error}");
+                return None;
+            }
+        };
+
+        self.0.ready_pending_verification_settlement(basis).await
     }
 
     fn run_outcome(

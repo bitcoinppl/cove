@@ -12,10 +12,7 @@ use super::cloud_inventory::LocalWalletSnapshot;
 use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
-use crate::database::cloud_backup::{
-    PersistedCloudBackupState, PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion,
-    PersistedRestoreAllMarker,
-};
+use crate::database::cloud_backup::PersistedCloudBlobSyncState;
 use crate::wallet::metadata::WalletMetadata;
 
 #[derive(Clone)]
@@ -28,47 +25,6 @@ impl CloudBackupStore {
 
     pub(crate) fn global() -> Self {
         Self::new(&Database::global())
-    }
-
-    pub(crate) fn persist_enabled(&self, wallet_count: u32) -> Result<(), CloudBackupError> {
-        self.persist_enabled_preserving_verification(wallet_count)
-    }
-
-    pub(crate) fn persist_enabled_reset_verification_with_pending_completion(
-        &self,
-        wallet_count: u32,
-        completion: PersistedPendingVerificationCompletion,
-    ) -> Result<(), CloudBackupError> {
-        let now = cove_util::time::unix_timestamp_secs_or_zero();
-        let mutation = self
-            .0
-            .cloud_backup_state
-            .mutate(|state| {
-                if matches!(
-                    state,
-                    PersistedCloudBackupState::Disabled
-                        | PersistedCloudBackupState::Corrupted { .. }
-                ) {
-                    *state = PersistedCloudBackupState::mark_enabled_reset_verification(
-                        now,
-                        wallet_count,
-                    );
-                } else if !state.reset_verification_after_successful_sync(now, wallet_count) {
-                    return false;
-                }
-
-                state.replace_pending_verification_completion(completion)
-            })
-            .map_err(|source| {
-                CloudBackupError::internal_context("persist cloud backup state", source)
-            })?;
-        if !mutation.outcome {
-            return Err(CloudBackupError::Internal(
-                "cannot persist successful sync while Cloud Backup is not configured".into(),
-            ));
-        }
-
-        Ok(())
     }
 
     pub(crate) fn last_sync(&self) -> Option<u64> {
@@ -97,38 +53,6 @@ impl CloudBackupStore {
 
     pub(crate) fn wallet_count(&self) -> Result<u32, CloudBackupError> {
         Ok(self.all_wallets()?.len() as u32)
-    }
-
-    pub(crate) fn persist_restore_all_marker(
-        &self,
-        namespace_id: String,
-    ) -> Result<(), CloudBackupError> {
-        let mutation = self
-            .0
-            .cloud_backup_state
-            .mutate(|state| {
-                state.replace_pending_restore_all(PersistedRestoreAllMarker { namespace_id })
-            })
-            .map_err(|source| {
-                CloudBackupError::internal_context("persist Restore All marker", source)
-            })?;
-        if !mutation.outcome {
-            return Err(CloudBackupError::Internal(
-                "cannot start Restore All while Cloud Backup is not configured".into(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn clear_restore_all_marker(&self) -> Result<bool, CloudBackupError> {
-        self.0
-            .cloud_backup_state
-            .mutate(PersistedCloudBackupState::clear_pending_restore_all)
-            .map(|mutation| mutation.outcome)
-            .map_err(|source| {
-                CloudBackupError::internal_context("clear Restore All marker", source)
-            })
     }
 
     pub(crate) async fn upload_all_wallets(
@@ -229,27 +153,6 @@ impl CloudBackupStore {
                     .collect::<HashMap<_, _>>()
             })
     }
-
-    fn persist_enabled_preserving_verification(
-        &self,
-        wallet_count: u32,
-    ) -> Result<(), CloudBackupError> {
-        let now = cove_util::time::unix_timestamp_secs_or_zero();
-        let mutation = self
-            .0
-            .cloud_backup_state
-            .mutate(|state| state.record_successful_sync(now, wallet_count))
-            .map_err(|source| {
-                CloudBackupError::internal_context("persist cloud backup state", source)
-            })?;
-        if !mutation.outcome {
-            return Err(CloudBackupError::Internal(
-                "cannot persist successful sync while Cloud Backup is not configured".into(),
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 fn all_local_wallets_from<F>(mut load_wallets: F) -> Result<Vec<WalletMetadata>, CloudBackupError>
@@ -272,14 +175,18 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
+    use crate::database::cloud_backup::PersistedRestoreAllMarker;
     use crate::database::cloud_backup::{
         DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
         PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedConfiguredCloudBackup,
         PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+    use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::capability as lifecycle_capability;
+    use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer as lifecycle_writer;
     use crate::manager::cloud_backup_manager::{
-        DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
+        DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+        PendingVerificationUpload,
     };
 
     fn setup_database_test() -> tokio::sync::MutexGuard<'static, ()> {
@@ -299,6 +206,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync: Some(10), wallet_count: Some(2) },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -329,7 +237,7 @@ mod tests {
         std::thread::scope(|scope| {
             let writer = scope.spawn(move || {
                 db.cloud_backup_state
-                    .mutate(|state| {
+                    .mutate(&lifecycle_capability(), |state| {
                         mutation(state);
                         entered_tx.send(()).unwrap();
                         release_rx.recv().unwrap();
@@ -375,7 +283,7 @@ mod tests {
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
 
-        CloudBackupStore::new(&db)
+        lifecycle_writer()
             .persist_enabled_reset_verification_with_pending_completion(7, pending_completion())
             .unwrap();
 
@@ -396,7 +304,7 @@ mod tests {
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
 
-        CloudBackupStore::new(&db).persist_enabled(7).unwrap();
+        lifecycle_writer().persist_enabled(7).unwrap();
 
         let state = db.cloud_backup_state.get().unwrap();
         assert_eq!(state.status(), PersistedCloudBackupStatus::Enabled);
@@ -414,7 +322,7 @@ mod tests {
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
-        let store = CloudBackupStore::new(&db);
+        let store = std::sync::Arc::new(lifecycle_writer());
         let first_marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
         let first_marker_for_write = first_marker.clone();
         let marker_store = store.clone();
@@ -475,7 +383,7 @@ mod tests {
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
-        let store = CloudBackupStore::new(&db);
+        let store = std::sync::Arc::new(lifecycle_writer());
         let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
         let marker_for_write = marker;
         let marker_store = store.clone();
@@ -501,7 +409,7 @@ mod tests {
             move || {
                 completion_db
                     .cloud_backup_state
-                    .mutate(|state| {
+                    .mutate(&lifecycle_capability(), |state| {
                         assert!(
                             state.replace_pending_verification_completion(completion_for_write,)
                         );
@@ -528,7 +436,7 @@ mod tests {
         }));
         assert!(initial.replace_pending_verification_completion(pending_completion()));
         db.cloud_backup_state.set(&initial).unwrap();
-        let store = CloudBackupStore::new(&db);
+        let store = std::sync::Arc::new(lifecycle_writer());
         let clear_store = store.clone();
         race_with_held_state_mutation(
             Arc::clone(&db),
@@ -547,7 +455,9 @@ mod tests {
             },
             move || {
                 db.cloud_backup_state
-                    .mutate(|state| state.mark_verification_required(Some(30)))
+                    .mutate(&lifecycle_capability(), |state| {
+                        state.mark_verification_required(Some(30))
+                    })
                     .unwrap();
             },
         );
@@ -565,9 +475,8 @@ mod tests {
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
 
-        let error = CloudBackupStore::new(&db)
-            .persist_restore_all_marker("namespace-1".into())
-            .unwrap_err();
+        let error =
+            lifecycle_writer().persist_restore_all_marker("namespace-1".into()).unwrap_err();
 
         assert!(
             matches!(error, CloudBackupError::Internal(message) if message.contains("not configured"))
@@ -583,7 +492,7 @@ mod tests {
         let _ = db.cloud_backup_state.delete();
         let completion = pending_completion();
 
-        CloudBackupStore::new(&db)
+        lifecycle_writer()
             .persist_enabled_reset_verification_with_pending_completion(3, completion.clone())
             .unwrap();
 
@@ -608,7 +517,7 @@ mod tests {
         db.cloud_backup_state.set(&initial).unwrap();
         let completion = pending_completion();
 
-        CloudBackupStore::new(&db)
+        lifecycle_writer()
             .persist_enabled_reset_verification_with_pending_completion(3, completion.clone())
             .unwrap();
 
@@ -618,5 +527,43 @@ mod tests {
         assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
         assert_eq!(state.wallet_count(), Some(3));
         let _ = db.cloud_backup_state.delete();
+    }
+
+    /// Writers: an upload confirmation settles only its own marker, so an old confirmation
+    /// that arrives after a new marker, or after a manual verification discarded it, is dropped
+    #[test]
+    fn only_the_stored_upload_confirmation_settles_its_marker() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let writer = lifecycle_writer();
+        let old = pending_completion();
+        let new = PendingVerificationCompletion::new(
+            old.report(),
+            "namespace-2".into(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        );
+        let verified = DeepVerificationResult::Verified(old.report());
+        writer.persist_enabled_reset_verification_with_pending_completion(2, new.clone()).unwrap();
+
+        let before = db.cloud_backup_state.get().unwrap();
+        let stale =
+            writer.settle_pending_verification_completion(&old, Some((&verified, 50))).unwrap();
+        assert!(!stale.outcome);
+        assert_eq!(db.cloud_backup_state.get().unwrap(), before);
+
+        let settled =
+            writer.settle_pending_verification_completion(&new, Some((&verified, 50))).unwrap();
+        assert!(settled.outcome);
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.pending_verification_completion(), None);
+        assert_eq!(state.last_verified_at(), Some(50));
+
+        // a manual verification supersedes the pending confirmation that then returns
+        assert!(writer.replace_pending_verification_completion(old.clone()).unwrap().outcome);
+        assert!(writer.discard_pending_verification_completion().unwrap().outcome);
+        let late =
+            writer.settle_pending_verification_completion(&old, Some((&verified, 90))).unwrap();
+        assert!(!late.outcome);
+        assert_eq!(db.cloud_backup_state.get().unwrap().last_verified_at(), Some(50));
     }
 }

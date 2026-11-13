@@ -80,7 +80,13 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     );
     mark_undecryptable_backups_reported(&manager, 3);
 
-    let prepared = manager.prepare_delete_undecryptable_wallet_backups().await.unwrap();
+    let prepared = manager
+        .prepare_delete_undecryptable_wallet_backups(&unowned_writes(
+            &manager,
+            CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+        ))
+        .await
+        .unwrap();
     let candidates: HashSet<_> = prepared.record_ids().iter().cloned().collect();
     assert_eq!(candidates, HashSet::from([bad_record_id.clone(), recovered_record_id.clone()]));
 
@@ -95,15 +101,15 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
         )
         .await,
     );
-    let claim = CloudBackupExclusiveOperationClaim::new(
+    let (claim, writes) = begin_operation_writes_for_test(
+        &manager,
         CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
-        1,
-    );
-    manager.project_exclusive_operation_started(claim);
-    let writes = operation_write_client_for_test(&manager, claim);
+    )
+    .await;
 
     let deleted =
         manager.delete_prepared_undecryptable_wallet_backups(prepared, writes).await.unwrap();
+    finish_operation_for_test(&manager, claim).await;
 
     assert_eq!(deleted, 1);
     assert!(!globals.cloud.has_wallet_backup(&namespace, &bad_record_id));

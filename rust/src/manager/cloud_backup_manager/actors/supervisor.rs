@@ -4,7 +4,7 @@
 //! child actors or spawned tasks. Each exclusive operation receives a claim that
 //! every async completion must present before it can update manager state
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 #[cfg(test)]
 use std::time::Duration;
@@ -13,27 +13,31 @@ use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, sen
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
-use cove_tokio::task::spawn_actor;
-use tracing::{error, info, warn};
+use tokio::sync::oneshot;
+use tracing::{debug, error, info, warn};
 
-use super::CloudBackupSyncHealthWorker;
-use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
+use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob};
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredNamespaceCommit};
-use super::uploads::CloudBackupUploadWorker;
 use super::write::{
-    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteBlocker,
-    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
+    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient,
+    CloudBackupWriteCompletion, CloudBackupWriteSupervisor, ConfigGeneration,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
-    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase,
+    PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
-use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
+use crate::database::error::DatabaseError;
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, ConfiguredAdmission, ContinuationOwner, ContinuationStage, PauseReason, Rejection,
+    UserIntent,
+};
+use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::verify::{
     CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationStep,
@@ -46,11 +50,10 @@ use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, UnpersistedPrfKey, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
-    CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
-    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome,
-    CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
+    BlockingCloudStep, CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
+    CloudBackupCloudOnlyOperationWarning, CloudBackupCloudOnlyWalletOutcome,
+    CloudBackupDetailInventorySnapshot, CloudBackupDetailInventorySnapshotResult,
+    CloudBackupDetailOutcome, CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
     CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupDisablePreparation,
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext,
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
@@ -64,17 +67,17 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
     CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
     CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
-    CloudBackupStatus, CloudBackupStore, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
-    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
-    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
-    blocking_cloud_error, is_provider_wide_interruption,
+    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
+    DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
+    DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
+    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
+    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
+    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
+    is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -82,12 +85,28 @@ mod account_switch;
 mod cloud_only;
 mod detail_workflow;
 mod disable;
+mod dispatch;
 mod enable;
+mod lifecycle_results;
 mod other_backups;
+mod owned_runtime;
 mod restore_all;
+mod runtime;
+
+use owned_runtime::OwnedRuntime;
+#[cfg(test)]
+pub(crate) use owned_runtime::{OpTransition, OwnerView};
+#[cfg(test)]
+pub(crate) use runtime::Finish;
+use runtime::{Effect, ResetStart, RestoreRun, Runtime};
+use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
+mod workers;
 
+use enable::EnableContinuation;
+
+pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
@@ -99,7 +118,19 @@ mod tests {
     include!("supervisor/tests.rs");
 }
 
-static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
+/// Proof that the lifecycle owner is changing Cloud Backup's local keychain state
+///
+/// Only the supervisor and its submodules can mint one: in a handler, or for an `Effecting`
+/// stage it started. Together with the recovery-cleanup permit, which can only exist while no
+/// supervisor does, it gives the keychain namespace one owner at any time
+#[derive(Debug)]
+pub(crate) struct OwnerToken(());
+
+impl OwnerToken {
+    fn mint() -> Self {
+        Self(())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DriveAccountSwitchReinitializationCompletion {
@@ -205,153 +236,99 @@ fn verification_needs_connectivity_retry(
         && should_retry_connectivity_failure(manager.connection_status())
 }
 
-/// Pending disable state held while the write lane drains before namespace delete
+/// Which local wallet set a verification checked
+///
+/// Process-local, like `OperationId`: verification evidence is only valid for the wallet set it
+/// read, and a wallet change that lands while a verification runs makes that evidence stale
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct WalletSetGeneration(u64);
+
+impl WalletSetGeneration {
+    fn next(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
+/// How a user's sync request ended
+///
+/// A pause is not a failure. The write lane stops the sync's writes while Turn Off, a
+/// reinitialize, an account switch or a reset holds the backup, and the wallets it didn't reach
+/// stay unsynced for the next sync, so the sync shows idle instead of an error
 #[derive(Debug)]
-struct PendingDisableWriteDrain {
-    claim: CloudBackupExclusiveOperationClaim,
-    blocker: CloudBackupWriteBlocker,
-    disabling: PersistedDisablingCloudBackup,
+pub(crate) enum SyncRequestOutcome {
+    Synced,
+    Paused(PauseReason),
+    Failed(CloudBackupError),
 }
 
-/// A restore or Restore All run, whose worker keeps draining until it observes cancellation
-#[derive(Debug)]
-struct RestoreRun {
-    claim: CloudBackupExclusiveOperationClaim,
-    cancellation: Arc<AtomicBool>,
-    /// Set once the run commits a local wallet, so cloud-only rows are reclassified when it ends
-    committed_local_wallet: bool,
-}
-
-impl RestoreRun {
-    fn new(claim: CloudBackupExclusiveOperationClaim, cancellation: Arc<AtomicBool>) -> Self {
-        Self { claim, cancellation, committed_local_wallet: false }
-    }
-}
-
-#[derive(Debug)]
-enum ActiveOperationRun {
-    Standard(CloudBackupExclusiveOperationClaim),
-    Restore(RestoreRun),
-    RestoreAll(RestoreRun),
-}
-
-#[derive(Debug, Default)]
-struct ActiveOperation(Option<ActiveOperationRun>);
-
-impl ActiveOperation {
-    fn is_some(&self) -> bool {
-        self.0.is_some()
-    }
-
-    fn is_restore_all(&self) -> bool {
-        matches!(self.0.as_ref(), Some(ActiveOperationRun::RestoreAll(_)))
-    }
-
-    fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Standard(claim) => Some(*claim),
-            ActiveOperationRun::Restore(run) => Some(run.claim),
-            ActiveOperationRun::RestoreAll(run) => Some(run.claim),
+impl From<Result<(), CloudBackupError>> for SyncRequestOutcome {
+    fn from(result: Result<(), CloudBackupError>) -> Self {
+        match result {
+            Ok(()) => Self::Synced,
+            Err(CloudBackupError::WritesPaused(reason)) => Self::Paused(reason),
+            Err(error) => Self::Failed(error),
         }
     }
+}
 
-    /// Whether `claim` still owns the active operation, so completions for superseded claims are ignored
-    fn is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        self.claim() == Some(claim)
-    }
+/// What verification evidence was read under: the backup configuration and the local wallet set
+///
+/// A producer reads it from the supervisor before it reads any evidence, and the supervisor
+/// records the evidence only while both are still current. A verification operation's claim
+/// already pins its configuration; background upload confirmation has no claim, so the
+/// configuration here is what keeps one backup's confirmation from settling another's
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct EvidenceBasis {
+    config: ConfigGeneration,
+    wallet_set: WalletSetGeneration,
+}
 
-    fn start_standard(&mut self, claim: CloudBackupExclusiveOperationClaim) {
-        self.0 = Some(ActiveOperationRun::Standard(claim));
-    }
-
-    fn start_restore(&mut self, run: RestoreRun) {
-        self.0 = Some(ActiveOperationRun::Restore(run));
-    }
-
-    fn start_restore_all(&mut self, run: RestoreRun) {
-        self.0 = Some(ActiveOperationRun::RestoreAll(run));
-    }
-
-    fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Restore(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    fn restore_all_mut(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> Option<&mut RestoreRun> {
-        match self.0.as_mut()? {
-            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    /// Cancels draining restore work but releases operations with no retained cancellation owner
-    fn prepare_local_reset(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Restore(run) | ActiveOperationRun::RestoreAll(run) => {
-                run.cancellation.store(true, Ordering::Release);
-                None
-            }
-            ActiveOperationRun::Standard(claim) => {
-                let claim = *claim;
-                self.clear();
-                Some(claim)
-            }
-        }
-    }
-
-    fn clear(&mut self) {
-        self.0 = None;
-    }
-
-    #[cfg(test)]
-    fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        let claim = self.claim();
-        self.clear();
-        claim
+impl EvidenceBasis {
+    /// The configuration generation this basis was read under
+    pub(crate) fn config(self) -> ConfigGeneration {
+        self.config
     }
 }
 
-impl PartialEq<Option<CloudBackupExclusiveOperationClaim>> for ActiveOperation {
-    fn eq(&self, other: &Option<CloudBackupExclusiveOperationClaim>) -> bool {
-        self.claim() == *other
-    }
-}
-
-/// Actor that owns Cloud Backup operation exclusivity and async completions
+/// Actor that owns Cloud Backup operation exclusivity, async completions and the durable
+/// lifecycle record
+///
+/// The supervisor is the lifecycle owner: it holds the only [`LifecycleWriter`], so every
+/// durable lifecycle write runs in one of its handlers. Producers off the actor (verification,
+/// the write lane, pending upload confirmation, platform calls) send it a typed message with
+/// their result and claim, and the supervisor applies the write and reconciles
+///
+/// Waiting calls go one way only. The write supervisor and other workers may `call!` the
+/// supervisor and wait for the write's outcome, but the supervisor never waits on the write
+/// supervisor: it `send!`s and handles the reply as a later completion message, matched with
+/// `Runtime::accepts_completion`. A wait in both directions would deadlock, because
+/// each actor runs one handler at a time
 #[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
-    cleanup: Addr<CloudBackupCleanupWorker>,
-    sync_health: Addr<CloudBackupSyncHealthWorker>,
-    uploads: Addr<CloudBackupUploadWorker>,
+    cleanup: CleanupWorker,
+    sync_health: SyncHealthWorker,
+    uploads: UploadWorker,
     write: Addr<CloudBackupWriteSupervisor>,
-    active_operation: ActiveOperation,
-    pending_enable_session: Option<PendingEnableSession>,
+    /// The lifecycle body with the running operation nested in it, and the only lifecycle
+    /// writer, both published to the write lane
+    runtime: OwnedRuntime,
+    /// The Enable or reinitialize that stopped before it finished, with the lifecycle it
+    /// belongs to
+    enable_continuation: Option<EnableContinuation>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
-    pending_disable_write_drain: Option<PendingDisableWriteDrain>,
+    /// Counts local wallet-set changes this process has seen; each verification run carries the
+    /// generation it read, so there is no supervisor-wide verification basis
+    wallet_set: WalletSetGeneration,
+    last_outcome: Option<DispatchOutcome>,
+    /// What the harness invariants read about dispatch since their last check
+    #[cfg(test)]
+    invariant_log: test_support::DispatchLog,
 }
 
 #[async_trait::async_trait]
@@ -365,6 +342,7 @@ impl Actor for CloudBackupSupervisor {
 impl CloudBackupSupervisor {
     fn commit_restored_namespace(
         manager: &RustCloudBackupManager,
+        lifecycle: &LifecycleWriter,
         commit: RestoredNamespaceCommit,
     ) -> Result<(), CloudBackupError> {
         let RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids } =
@@ -390,10 +368,7 @@ impl CloudBackupSupervisor {
         restore::save_restore_keychain_entries(&snapshot, master_key, passkey, namespace_id)?;
 
         // keychain, configured state, and dirty-wallet rows are one restore commit
-        if let Err(source) = Database::global()
-            .cloud_backup_state
-            .persist_restored_namespace_activation(&state, &dirty_states)
-        {
+        if let Err(source) = lifecycle.activate_restored_namespace(&state, &dirty_states) {
             let original =
                 CloudBackupError::internal_context("persist restored namespace activation", source);
 
@@ -409,23 +384,36 @@ impl CloudBackupSupervisor {
     pub(crate) fn new(
         manager: Weak<RustCloudBackupManager>,
         cloud_writes: Addr<CloudBackupWriteSupervisor>,
+        lifecycle: LifecycleWriter,
+        load_error: Option<DatabaseError>,
     ) -> Self {
+        let runtime =
+            OwnedRuntime::at_load(load_error, lifecycle, cloud_writes.clone(), manager.clone());
+
         Self {
             addr: WeakAddr::default(),
-            cleanup: spawn_actor(CloudBackupCleanupWorker::new(manager.clone())),
-            sync_health: spawn_actor(CloudBackupSyncHealthWorker::new(manager.clone())),
-            uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
+            cleanup: CleanupWorker::spawn(manager.clone()),
+            sync_health: SyncHealthWorker::spawn(manager.clone()),
+            uploads: UploadWorker::spawn(manager.clone()),
             write: cloud_writes,
             manager,
-            active_operation: ActiveOperation::default(),
-            pending_enable_session: None,
+            runtime,
+            enable_continuation: None,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
-            pending_disable_write_drain: None,
+            wallet_set: WalletSetGeneration::default(),
+            last_outcome: None,
+            #[cfg(test)]
+            invariant_log: test_support::DispatchLog::default(),
         }
+    }
+
+    /// The configuration and wallet set evidence read now would be judged against
+    pub(crate) fn evidence_basis(&self) -> EvidenceBasis {
+        EvidenceBasis { config: self.runtime.generation(), wallet_set: self.wallet_set }
     }
 
     fn manager(&self) -> Option<Arc<RustCloudBackupManager>> {
@@ -440,13 +428,13 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<Arc<RustCloudBackupManager>> {
-        if !self.active_operation.is_current(claim) {
+        if !self.runtime.accepts_completion(claim, "completion") {
             return None;
         }
 
         let manager = self.manager();
         if manager.is_none() {
-            self.active_operation.clear();
+            self.runtime.finish(claim);
         }
 
         manager
@@ -484,16 +472,6 @@ impl CloudBackupSupervisor {
         Ok(())
     }
 
-    async fn delete_cloud_backup_namespace_for_operation(
-        write: Addr<CloudBackupWriteSupervisor>,
-        namespace: String,
-        origin: CloudBackupExclusiveOperationClaim,
-    ) -> Result<(), CloudBackupError> {
-        CloudBackupWriteClient::for_operation(write, origin)
-            .delete_namespace(CloudStorage::global_explicit_client(), namespace)
-            .await
-    }
-
     async fn apply_cloud_backup_write_completion_for_operation(
         write: Addr<CloudBackupWriteSupervisor>,
         completion: CloudBackupWriteCompletion,
@@ -507,19 +485,22 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         operation: CloudBackupExclusiveOperation,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if self.active_operation.is_some() {
+        if self.runtime.is_some() {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
-        let claim = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
-        manager.project_exclusive_operation_started(claim);
-        if operation == CloudBackupExclusiveOperation::Restore {
-            self.active_operation
-                .start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+        let claim = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
+        let started = if operation == CloudBackupExclusiveOperation::Restore {
+            self.runtime.start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
         } else {
-            self.active_operation.start_standard(claim);
+            self.runtime.start_standard(claim)
+        };
+        if let Err(unstartable) = started {
+            warn!("Cloud Backup could not start {unstartable:?}");
+            return None;
         }
+
+        manager.project_exclusive_operation_started(claim);
         Some(claim)
     }
 
@@ -533,13 +514,16 @@ impl CloudBackupSupervisor {
         from: CloudBackupExclusiveOperationClaim,
         operation: CloudBackupExclusiveOperation,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if !self.active_operation.is_current(from) {
+        if !self.runtime.is_current(from) {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
-        let to = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
-        self.active_operation.start_standard(to);
+        let to = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
+        if let Err(unstartable) = self.runtime.hand_off(from, to) {
+            warn!("Cloud Backup could not hand off to {unstartable:?}");
+            return None;
+        }
+
         manager.project_exclusive_operation_handed_off(from, to);
         Some(to)
     }
@@ -547,19 +531,40 @@ impl CloudBackupSupervisor {
     fn begin_restore_all_exclusive_operation(
         &mut self,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if self.active_operation.is_some() {
+        if self.runtime.is_some() {
             return None;
         }
 
-        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            operation_id,
+            OperationId::next(),
         );
-        let cancellation = Arc::new(AtomicBool::new(false));
-        self.active_operation.start_restore_all(RestoreRun::new(claim, cancellation));
+        if let Err(unstartable) =
+            self.runtime.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
+        {
+            warn!("Cloud Backup could not start {unstartable:?}");
+            return None;
+        }
 
         Some(claim)
+    }
+
+    /// Shows the runtime through the read-only adapter onto today's exported types
+    ///
+    /// Bodies the reducer can't tell apart from the record alone, such as `LoadFailed` after a
+    /// failed read, get their exported shape here, so a load failure never shows as Disabled
+    pub async fn project_runtime(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        let exported = self.runtime.exported();
+        if let Some(status) = exported.status {
+            manager.reconcile_runtime_status(status);
+        }
+        if let Some(disable) = exported.disable {
+            manager.apply_disable_outcome(disable);
+        }
+
+        Produces::ok(())
     }
 
     fn next_request_id(&mut self) -> u64 {
@@ -572,19 +577,15 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
+        if !self.runtime.accepts_completion(claim, "completion") {
             return Produces::ok(());
         }
 
-        self.active_operation.clear();
+        // a finished restore configures the backup, and the write lane wakes uploads when the
+        // published policy lets them run
+        self.runtime.finish(claim);
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
-            if claim.operation() == CloudBackupExclusiveOperation::Restore
-                && let Err(error) =
-                    call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
-            {
-                warn!("Failed to resume wallet uploads after restore: {error}");
-            }
         }
 
         Produces::ok(())
@@ -595,11 +596,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
+        if !self.runtime.accepts_completion(claim, "failure") {
             return Produces::ok(());
         }
 
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -608,14 +609,14 @@ impl CloudBackupSupervisor {
     }
 
     fn restore_operation_is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        let Some(run) = self.active_operation.restore(claim) else { return false };
+        let Some(run) = self.runtime.restore(claim) else { return false };
 
         !run.cancellation.load(Ordering::Acquire)
     }
 
     /// The cancellation flag of a restore claim that was just started
     fn restore_cancellation(&self, claim: CloudBackupExclusiveOperationClaim) -> Arc<AtomicBool> {
-        self.active_operation
+        self.runtime
             .restore(claim)
             .map(|run| run.cancellation.clone())
             .expect("restore claim must carry a cancellation state")
@@ -679,11 +680,9 @@ impl CloudBackupSupervisor {
         Produces::ok(Ok(()))
     }
 
-    pub async fn persist_restore_cloud_backup_state(
+    pub async fn record_restore_without_backup(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        state: PersistedCloudBackupState,
-        context: String,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if !self.restore_operation_is_current(claim) {
             return Produces::ok(Err(CloudBackupError::Cancelled));
@@ -692,7 +691,12 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        let result = manager.persist_cloud_backup_state(&state, context);
+        let result = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "persist empty restored cloud backup state",
+                lifecycle.record_restore_without_backup(),
+            )
+        });
 
         Produces::ok(result)
     }
@@ -709,7 +713,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        Produces::ok(Self::commit_restored_namespace(&manager, commit))
+        Produces::ok(
+            self.runtime
+                .commit(|lifecycle| Self::commit_restored_namespace(&manager, lifecycle, commit)),
+        )
     }
 
     pub async fn start_enable_operation(
@@ -789,31 +796,21 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn start_recover_other_backups_operation(&mut self) -> ActorResult<()> {
-        self.begin_recover_other_backups_operation();
-        Produces::ok(())
-    }
-
-    pub async fn start_delete_other_backups_operation(&mut self) -> ActorResult<()> {
-        self.begin_delete_other_backups_operation();
-        Produces::ok(())
-    }
-
     fn start_sync_request(&mut self, manager: Arc<RustCloudBackupManager>) {
         let request_id = self.next_request_id();
         self.active_sync_request = Some(request_id);
         manager.apply_sync_state(SyncState::Syncing);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_sync_unsynced_wallets().await;
-            send!(addr.complete_sync_request(request_id, result));
+            let outcome = manager.do_sync_unsynced_wallets().await.into();
+            send!(addr.complete_sync_request(request_id, outcome));
         });
     }
 
     pub async fn complete_sync_request(
         &mut self,
         request_id: u64,
-        result: Result<(), CloudBackupError>,
+        outcome: SyncRequestOutcome,
     ) -> ActorResult<()> {
         if self.active_sync_request != Some(request_id) {
             return Produces::ok(());
@@ -823,12 +820,13 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(()) => {
+        match outcome {
+            SyncRequestOutcome::Synced => {
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_sync_request_refresh_detail(
                         request_id,
                         detail_claim,
@@ -836,7 +834,14 @@ impl CloudBackupSupervisor {
                     ));
                 });
             }
-            Err(error) => {
+
+            SyncRequestOutcome::Paused(reason) => {
+                info!("Cloud backup sync paused: {reason:?}");
+                manager.apply_sync_state(SyncState::Idle);
+                self.active_sync_request = None;
+            }
+
+            SyncRequestOutcome::Failed(error) => {
                 manager.apply_sync_state(SyncState::Failed(
                     error.logged_reader_message("Cloud backup sync failed"),
                 ));
@@ -956,9 +961,10 @@ impl CloudBackupSupervisor {
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
     ) {
+        let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
             let completion =
-                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot, config).await;
             send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim));
         });
     }
@@ -970,8 +976,10 @@ impl CloudBackupSupervisor {
         attempt: DetailRefreshAttempt,
         claim: DetailRefreshClaim,
     ) {
+        let config = self.runtime.generation();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.confirm_cloud_backup_detail_inventory(confirmation.clone()).await;
+            let result =
+                manager.confirm_cloud_backup_detail_inventory(confirmation.clone(), config).await;
             send!(addr.complete_confirm_refresh_detail(confirmation, result, attempt, claim));
         });
     }
@@ -1186,7 +1194,7 @@ impl CloudBackupSupervisor {
             apply_refresh_detail_result(&manager, &result);
         }
 
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
@@ -1198,10 +1206,12 @@ impl CloudBackupSupervisor {
         self.ensure_supplemental_inventory_discovery(manager.clone());
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
+            // started in this turn, so nothing takes the slot between entry and the verification;
+            // an operation already running reports its own result, and entry only refreshes
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
-                let addr = self.addr();
-                send!(addr.start_verification(force_discoverable));
-                return Produces::ok(());
+                if self.begin_manual_verification(manager.clone(), force_discoverable) {
+                    return Produces::ok(());
+                }
             }
             DetailEntryPlan::UseFreshEnableProof(authorization) => {
                 debug_assert_eq!(
@@ -1273,12 +1283,12 @@ impl CloudBackupSupervisor {
         &mut self,
         namespace_id: String,
     ) -> ActorResult<()> {
-        call!(self.sync_health.start_master_key_upload_confirmation_grace(namespace_id)).await?;
+        self.sync_health.start_master_key_upload_confirmation_grace(namespace_id);
         Produces::ok(())
     }
 
     pub async fn request_sync_health_refresh(&mut self) -> ActorResult<()> {
-        call!(self.sync_health.request_sync_health_refresh()).await?;
+        self.sync_health.request_sync_health_refresh();
         Produces::ok(())
     }
 
@@ -1290,40 +1300,61 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn clear_pending_verification_completion(&mut self) -> ActorResult<()> {
-        self.detail_workflow.clear_pending_completion();
-        Produces::ok(())
-    }
-
     pub async fn schedule_wallet_upload(
         &mut self,
         wallet_id: WalletId,
         immediate: bool,
     ) -> ActorResult<()> {
-        call!(self.uploads.schedule_wallet_upload(wallet_id, immediate)).await?;
+        self.uploads.schedule_wallet_upload(wallet_id, immediate);
+        Produces::ok(())
+    }
+
+    /// Restarts background work after the cloud may be reachable again, as the runtime allows
+    ///
+    /// A committed Turn Off that nothing is finishing resumes; any other background work
+    /// restarts only while the published policy runs ordinary writes
+    pub async fn cloud_reachable(&mut self, cause: CloudReachable) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if matches!(*self.runtime, Runtime::FinishingDisable { op: None, .. }) {
+            if cause != CloudReachable::PendingVerification {
+                manager.resume_persisted_disable_if_needed();
+            }
+            return Produces::ok(());
+        }
+
+        if !self.runtime.published_policy().policy.runs_ordinary() {
+            debug!("Cloud Backup left background work paused after {cause:?}");
+            return Produces::ok(());
+        }
+
+        manager.restart_background_work(cause);
+        Produces::ok(())
+    }
+
+    /// The write lane runs ordinary writes again, under this or a new configuration
+    ///
+    /// Paused uploads kept their rows Dirty with no retry timer, so one scheduler pass picks
+    /// every one of them up, and the pending upload verifier restarts with them. Both are sent,
+    /// not awaited, so this handler never waits on a worker
+    pub async fn ordinary_writes_resumed(&mut self) -> ActorResult<()> {
+        self.uploads.resume_wallet_uploads_from_persisted_state();
+        self.uploads.ensure_pending_upload_verification_loop();
         Produces::ok(())
     }
 
     pub async fn resume_wallet_uploads_from_persisted_state(&mut self) -> ActorResult<()> {
-        call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await?;
+        self.uploads.resume_wallet_uploads_from_persisted_state();
         Produces::ok(())
     }
 
     pub async fn ensure_pending_upload_verification_loop(&mut self) -> ActorResult<()> {
-        call!(self.uploads.ensure_pending_upload_verification_loop()).await?;
+        self.uploads.ensure_pending_upload_verification_loop();
         Produces::ok(())
     }
 
     pub async fn wake_pending_upload_verifier(&mut self) -> ActorResult<()> {
-        call!(self.uploads.wake_pending_upload_verifier()).await?;
-        Produces::ok(())
-    }
-
-    pub async fn unblock_cloud_backup_writes(
-        &mut self,
-        blocker: CloudBackupWriteBlocker,
-    ) -> ActorResult<()> {
-        call!(self.write.unblock(blocker)).await?;
+        self.uploads.wake_pending_upload_verifier();
         Produces::ok(())
     }
 
@@ -1353,10 +1384,14 @@ impl CloudBackupSupervisor {
                     tracing::info!("restore_from_cloud_backup: no cloud backups found");
                     let _ =
                         operation.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await;
+                    // off the actor: the owner's record isn't reachable, and an unreadable or
+                    // unnormalized record leaves the status to the owner's projection
                     let status = RustCloudBackupManager::runtime_status_for(
                         &RustCloudBackupManager::load_persisted_state(),
                     );
-                    let _ = operation.apply_status(status).await;
+                    if let Some(status) = status {
+                        let _ = operation.apply_status(status).await;
+                    }
                     send!(addr.complete_exclusive_operation(claim));
                 }
                 Err(error) => {
@@ -1375,10 +1410,17 @@ impl CloudBackupSupervisor {
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         let addr = self.addr();
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
-        else {
-            warn!("restore_from_cloud_backup called while another operation is active, ignoring");
+
+        // onboarding starts this outside dispatch, so it is admitted the same way: a configured
+        // backup or a running operation refuses it
+        let claim = match self.admit(&manager, &UserIntent::RestoreFromCloudBackup) {
+            Admission::Accepted => {
+                self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
+            }
+            Admission::Coalesced(_) | Admission::Rejected(_) => None,
+        };
+        let Some(claim) = claim else {
+            warn!("restore_from_cloud_backup was not admitted, ignoring");
             if let Err(error) = sender
                 .send_async(CloudBackupRestoreEvent::Failed("restore already in progress".into()))
                 .await
@@ -1410,10 +1452,14 @@ impl CloudBackupSupervisor {
                     tracing::info!("restore_from_cloud_backup: no cloud backups found");
                     let _ =
                         operation.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await;
+                    // off the actor: the owner's record isn't reachable, and an unreadable or
+                    // unnormalized record leaves the status to the owner's projection
                     let status = RustCloudBackupManager::runtime_status_for(
                         &RustCloudBackupManager::load_persisted_state(),
                     );
-                    let _ = operation.apply_status(status).await;
+                    if let Some(status) = status {
+                        let _ = operation.apply_status(status).await;
+                    }
                     operation.send_event_if_current(CloudBackupRestoreEvent::NoBackupFound).await;
                     send!(addr.complete_exclusive_operation(claim));
                 }
@@ -1433,7 +1479,7 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
-        let Some(ActiveOperationRun::Restore(run)) = self.active_operation.0.as_ref() else {
+        let Some(run) = self.runtime.claim().and_then(|claim| self.runtime.restore(claim)) else {
             return Produces::ok(());
         };
 
@@ -1445,52 +1491,356 @@ impl CloudBackupSupervisor {
 
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
-            &RustCloudBackupManager::load_persisted_state(),
-        ));
+        manager.reconcile_runtime_status(self.runtime.status());
         tracing::info!("restore_from_cloud_backup: cancellation requested for active restore");
         Produces::ok(())
     }
 
     pub async fn clear_upload_runtime_state(&mut self) -> ActorResult<()> {
-        self.pending_enable_session = None;
-        self.detail_workflow.clear_pending_completion();
-        call!(self.sync_health.clear_upload_runtime_state()).await?;
-        call!(self.uploads.clear_upload_runtime_state()).await?;
+        self.clear_worker_runtime_state();
         Produces::ok(())
     }
 
-    pub async fn prepare_local_reset_runtime(&mut self) -> ActorResult<()> {
-        if let Some(released_claim) = self.active_operation.prepare_local_reset()
-            && let Some(manager) = self.manager()
+    /// Clears the upload and sync-health workers' timers and retry state
+    ///
+    /// The workers handle their mailboxes in order, so each clears before any message the
+    /// supervisor sends it after this
+    fn clear_worker_runtime_state(&mut self) {
+        self.enable_continuation = None;
+        self.detail_workflow.clear_pending_completion();
+        self.sync_health.clear_upload_runtime_state();
+        self.uploads.clear_upload_runtime_state();
+    }
+
+    /// Closes admission for a local reset; the receiver answers once no effect is in flight
+    ///
+    /// A cancellable operation ends now. One in an `Effecting` stage keeps authority until its
+    /// completion message arrives, and the reset continues then. The caller awaits the
+    /// receiver, so this handler never waits and the actor still receives that completion
+    pub async fn begin_local_reset(
+        &mut self,
+    ) -> ActorResult<Result<oneshot::Receiver<()>, Rejection>> {
+        if let Some(manager) = self.manager()
+            && let Admission::Rejected(rejection) = self.admit(&manager, &UserIntent::LocalReset)
         {
-            manager.project_exclusive_operation_finished(released_claim);
+            return Produces::ok(Err(rejection));
         }
+
+        let (ready, receiver) = oneshot::channel();
+        let start = self.runtime.begin_reset(ready);
+        debug!("Cloud Backup local reset began: {start:?}");
+        if let Some(manager) = self.manager() {
+            match start {
+                ResetStart::Cancelled(claim) | ResetStart::AwaitingEffect(claim) => {
+                    manager.project_exclusive_operation_finished(claim);
+                }
+                ResetStart::Idle => {}
+            }
+        }
+
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
-        self.pending_disable_write_drain = None;
-        self.clear_upload_runtime_state().await
+        self.clear_worker_runtime_state();
+        Produces::ok(Ok(receiver))
+    }
+
+    /// Clears Cloud Backup's local keychain state for a full wipe, as the namespace's owner
+    pub async fn clear_local_state_for_reset(
+        &mut self,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        // the owner turns Cloud Backup off and records the clear before it starts, since even a
+        // partial clear is final
+        if let Err(refused) = self.runtime.clear_keys_in_reset() {
+            return Produces::ok(Err(refused.into()));
+        }
+
+        let owner = OwnerToken::mint();
+        let result = CloudBackupKeychain::global()
+            .clear_local_state(&LocalStateOwner::Lifecycle(&owner))
+            .map_err(|source| {
+                CloudBackupError::internal_context(
+                    "clear cloud backup local keychain state",
+                    source,
+                )
+            });
+
+        Produces::ok(result)
+    }
+
+    /// Ends a local reset with the body it left, and reopens admission; `None` when no reset ran
+    ///
+    /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
+    /// here so an idle body never waits for the next admission to catch up with the wipe
+    pub async fn finish_local_reset(
+        &mut self,
+        outcome: LocalResetOutcome,
+    ) -> ActorResult<Option<ResetEnd>> {
+        let end = self.runtime.finish_reset(outcome);
+        debug!("Cloud Backup local reset finished: {outcome:?}, {end:?}");
+
+        Produces::ok(end)
+    }
+}
+
+/// How a local reset ended
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalResetOutcome {
+    /// The database reset committed, so Cloud Backup is off
+    Wiped,
+    /// The wipe failed before its commit, so the stored record still holds
+    Abandoned,
+}
+
+/// What the owner left when a local reset ended
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResetEnd {
+    /// The database reset committed, so Cloud Backup is off
+    Wiped,
+    Abandoned(AbandonedReset),
+}
+
+/// What an abandoned local reset left
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AbandonedReset {
+    /// The local keys were kept, so the backup is as it was before the reset
+    Resumed,
+    /// The owner committed Cloud Backup off and the local keys were cleared
+    Disabled,
+}
+
+/// Why the owner didn't let a reset clear the local keys
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum KeyClearRefused {
+    #[error("cloud backup local state can only be cleared by a ready reset")]
+    NoReadyReset,
+    /// The keys stay because the record could not say Cloud Backup is off before they went
+    #[error("turn cloud backup off before clearing its local keys: {0}")]
+    NotTurnedOff(#[from] DatabaseError),
+}
+
+impl From<KeyClearRefused> for CloudBackupError {
+    fn from(refused: KeyClearRefused) -> Self {
+        Self::internal_context("clear cloud backup local state for a reset", refused)
     }
 }
 
 pub(crate) mod test_support {
     #![cfg(test)]
 
+    use super::verification::VerificationRun;
     use super::*;
+    use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
+
+    impl CloudBackupKeychain {
+        /// Clears local state the way the lifecycle owner does, for test setup
+        pub(crate) fn clear_local_state_for_test(
+            &self,
+        ) -> Result<(), crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError>
+        {
+            self.clear_local_state(&LocalStateOwner::Lifecycle(&OwnerToken::mint()))
+        }
+    }
+
+    /// What a test reset finds on one test's supervisor
+    pub(crate) enum LeftoverOperationForTest {
+        /// An off-actor effect is in flight; the receiver answers once it settles
+        Settling(oneshot::Receiver<()>),
+        /// No operation runs any more; `orphaned` when its test already dropped the manager,
+        /// so the supervisor can begin no operation again
+        Ended { orphaned: bool },
+    }
+
+    /// One dispatched intent, how many admissions its handler made, and what it started
+    #[derive(Debug, Clone)]
+    pub(crate) struct DispatchRecord {
+        pub(crate) intent: UserIntent,
+        pub(crate) admissions: u32,
+        /// What the dispatch's admission decided
+        pub(crate) admission: Option<Admission>,
+        /// The operation running when the dispatch began, and when its turn ended
+        pub(crate) running_before: Option<CloudBackupExclusiveOperationClaim>,
+        pub(crate) running_after: Option<CloudBackupExclusiveOperationClaim>,
+        /// A Verify that joined uploads already waiting for confirmation instead of starting
+        /// its own operation
+        pub(crate) joined_upload_confirmation: bool,
+    }
+
+    /// Admissions counted across every caller of `admit`, and the dispatches since the last read
+    #[derive(Debug, Default)]
+    pub(crate) struct DispatchLog {
+        pub(crate) admissions: u32,
+        /// Set by the dispatch in progress when its Verify joined an upload confirmation
+        pub(crate) joined_upload_confirmation: bool,
+        dispatches: Vec<DispatchRecord>,
+    }
+
+    /// Dispatch in progress: the intent and the admission count when its handler began
+    pub(crate) struct OpenDispatch(DispatchRecord);
+
+    /// What the harness invariants read from the supervisor at a settled boundary
+    #[derive(Debug)]
+    pub(crate) struct SupervisorView {
+        pub(crate) owner: OwnerView,
+        pub(crate) dispatches: Vec<DispatchRecord>,
+        /// The operation the reducer shows as running
+        pub(crate) shown_operation: Option<CloudBackupExclusiveOperationClaim>,
+        pub(crate) uploads: Addr<CloudBackupUploadWorker>,
+    }
 
     impl CloudBackupSupervisor {
+        pub(crate) fn begin_dispatch_record(&mut self, intent: &UserIntent) -> OpenDispatch {
+            self.invariant_log.joined_upload_confirmation = false;
+            OpenDispatch(DispatchRecord {
+                intent: intent.clone(),
+                admissions: self.invariant_log.admissions,
+                admission: None,
+                running_before: self.runtime.claim(),
+                running_after: None,
+                joined_upload_confirmation: false,
+            })
+        }
+
+        pub(crate) fn finish_dispatch_record(&mut self, OpenDispatch(mut record): OpenDispatch) {
+            record.admissions = self.invariant_log.admissions - record.admissions;
+            record.admission = self
+                .last_outcome
+                .as_ref()
+                .filter(|outcome| outcome.intent == record.intent)
+                .map(|outcome| outcome.admission);
+            record.running_after = self.runtime.claim();
+            record.joined_upload_confirmation =
+                std::mem::take(&mut self.invariant_log.joined_upload_confirmation);
+            self.invariant_log.dispatches.push(record);
+        }
+
+        /// Starts a verification operation outside dispatch, as detail entry does
+        pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
+            if let Some(manager) = self.manager() {
+                let started = self.begin_manual_verification(manager, force_discoverable);
+                assert!(started, "a test started a verification while {:?} runs", *self.runtime);
+            }
+
+            Produces::ok(())
+        }
+
+        /// Allocates a manual verification's operation and its run without running it, for tests
+        /// that run the verification pass themselves
+        pub async fn begin_verification_run_for_test(
+            &mut self,
+            force_discoverable: bool,
+        ) -> ActorResult<VerificationRun> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            let claim = self
+                .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
+                .expect("begin verification operation");
+
+            Produces::ok(VerificationRun {
+                claim,
+                continuation: DeepVerificationContinuation::Manual {
+                    force_discoverable,
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: self.evidence_basis(),
+            })
+        }
+
+        /// Reads the supervisor for the harness invariants, taking what it logged since the
+        /// last read
+        pub(crate) async fn harness_invariant_view(&mut self) -> ActorResult<SupervisorView> {
+            let shown_operation =
+                self.manager().and_then(|manager| manager.state.read().active_operation());
+
+            Produces::ok(SupervisorView {
+                owner: self.runtime.take_view(),
+                dispatches: std::mem::take(&mut self.invariant_log.dispatches),
+                shown_operation,
+                uploads: self.uploads.addr_for_test().clone(),
+            })
+        }
+
+        /// What dispatch would do with `intent` now, without doing it
+        pub(crate) async fn harness_admission(
+            &mut self,
+            intent: crate::manager::cloud_backup_manager::admission::UserIntent,
+        ) -> ActorResult<crate::manager::cloud_backup_manager::admission::Admission> {
+            use crate::manager::cloud_backup_manager::admission::Rejection;
+
+            let admission = match self.manager() {
+                Some(manager) => self.decide(&manager, &intent),
+                None => Admission::Rejected(Rejection::NotConfigured),
+            };
+            Produces::ok(admission)
+        }
+
+        /// The stage checkpoint: answers once no operation is waiting on an off-actor effect
+        pub(crate) async fn harness_effects_settled(
+            &mut self,
+        ) -> ActorResult<oneshot::Receiver<()>> {
+            let (settled, receiver) = oneshot::channel();
+            self.runtime.when_effects_settle(settled);
+            Produces::ok(receiver)
+        }
+
+        pub(crate) async fn harness_last_outcome(
+            &mut self,
+        ) -> ActorResult<Option<DispatchOutcome>> {
+            Produces::ok(self.last_outcome.clone())
+        }
+
+        /// The exclusive slot, for harness failure messages only
+        pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
+            Produces::ok(format!("{:?}", *self.runtime))
+        }
+
+        /// Whether an operation holds the runtime now
+        pub(crate) async fn harness_runs_operation(&mut self) -> ActorResult<bool> {
+            Produces::ok(self.runtime.claim().is_some())
+        }
+
+        /// The interrupted-Enable recovery the runtime body holds now
+        pub(crate) async fn harness_recovery(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupPendingEnableRecovery>> {
+            Produces::ok(self.runtime.pending_enable_recovery().cloned())
+        }
+
+        /// The running operation's claim, which carries its `OperationId`
+        pub(crate) async fn harness_running_claim(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupExclusiveOperationClaim>> {
+            Produces::ok(self.runtime.claim())
+        }
+
+        /// Finishes `claim` at the owner's finish boundary, as a duplicate completion would
+        pub(crate) async fn harness_finish(
+            &mut self,
+            claim: CloudBackupExclusiveOperationClaim,
+        ) -> ActorResult<Finish> {
+            Produces::ok(self.runtime.finish(claim))
+        }
+
         pub async fn run_wallet_upload_inline_for_test(
             &mut self,
             wallet_id: WalletId,
-        ) -> ActorResult<()> {
-            call!(self.uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
-            Produces::ok(())
+        ) -> ActorResult<bool> {
+            let uploads = self.uploads.addr_for_test();
+            let ran = call!(uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
+            Produces::ok(ran)
+        }
+
+        pub async fn wallet_upload_retry_count_for_test(
+            &mut self,
+            wallet_id: WalletId,
+        ) -> ActorResult<u32> {
+            let uploads = self.uploads.addr_for_test();
+            let count = call!(uploads.wallet_upload_retry_count_for_test(wallet_id)).await?;
+            Produces::ok(count)
         }
 
         pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
             let manager = self.manager().expect("cloud backup manager exists");
             let addr = self.addr();
-            if let Some(claim) = self.active_operation.take_claim() {
+            if let Some(claim) = self.runtime.take_claim() {
                 manager.project_exclusive_operation_finished(claim);
             }
             let claim = self
@@ -1509,27 +1859,122 @@ pub(crate) mod test_support {
         pub async fn take_pending_enable_session_for_test(
             &mut self,
         ) -> ActorResult<Option<PendingEnableSession>> {
-            Produces::ok(self.pending_enable_session.take())
+            Produces::ok(self.enable_continuation.take().map(EnableContinuation::into_session))
         }
 
-        pub async fn replace_pending_enable_session_for_test(
+        /// Stores `session` as the paused work of `owner`
+        pub async fn replace_enable_continuation_for_test(
             &mut self,
+            owner: ContinuationOwner,
             session: PendingEnableSession,
         ) -> ActorResult<()> {
-            self.pending_enable_session = Some(session);
+            self.enable_continuation = Some(EnableContinuation::new(owner, session));
             Produces::ok(())
         }
 
         pub async fn has_awaiting_saved_passkey_confirmation_for_test(&self) -> ActorResult<bool> {
-            Produces::ok(
-                self.pending_enable_session
-                    .as_ref()
-                    .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
-            )
+            Produces::ok(self.enable_continuation.as_ref().is_some_and(|continuation| {
+                continuation.session().is_awaiting_saved_passkey_confirmation()
+            }))
+        }
+
+        /// Starts an exclusive operation and hands back its write client, for tests that run the
+        /// operation's body directly
+        pub async fn begin_operation_writes_for_test(
+            &mut self,
+            operation: CloudBackupExclusiveOperation,
+        ) -> ActorResult<(CloudBackupExclusiveOperationClaim, CloudBackupWriteClient)> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            let claim = self
+                .begin_exclusive_operation(&manager, operation)
+                .expect("begin exclusive operation");
+
+            Produces::ok((claim, CloudBackupWriteClient::for_operation(self.write.clone(), claim)))
+        }
+
+        /// Ends the operation a previous test left running, once no off-actor effect is in flight
+        ///
+        /// While an effect runs, answers a receiver for its settling; the caller asks again
+        /// after it, so an effect a late completion began is waited out too. Once the claim is
+        /// gone, later completions are stale and start nothing
+        pub async fn end_leftover_operation_for_test(
+            &mut self,
+        ) -> ActorResult<LeftoverOperationForTest> {
+            let (settled, mut receiver) = oneshot::channel();
+            self.runtime.when_effects_settle(settled);
+            if receiver.try_recv().is_err() {
+                return Produces::ok(LeftoverOperationForTest::Settling(receiver));
+            }
+
+            let manager = self.manager();
+            if let Some(claim) = self.runtime.take_claim()
+                && let Some(manager) = &manager
+            {
+                manager.project_exclusive_operation_finished(claim);
+            }
+
+            self.runtime.rebase_after_test_write();
+            Produces::ok(LeftoverOperationForTest::Ended { orphaned: manager.is_none() })
+        }
+
+        /// Rebases on a record a test seeded without the owner
+        pub async fn rebase_after_test_write(&mut self) -> ActorResult<()> {
+            self.rebase_on_seeded_record();
+            Produces::ok(())
+        }
+
+        /// The same, for a supervisor a test drives directly instead of as an actor
+        pub(crate) fn rebase_on_seeded_record(&mut self) {
+            self.runtime.rebase_after_test_write();
+        }
+
+        /// Ends any operation a previous test left running and rebases on the reset record
+        pub async fn reset_runtime_for_test(&mut self) -> ActorResult<()> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            if let Some(claim) = self.runtime.take_claim() {
+                manager.project_exclusive_operation_finished(claim);
+            }
+
+            self.runtime.rebase_after_test_write();
+            Produces::ok(())
+        }
+
+        /// Answers once the upload and sync-health workers handled every message the supervisor
+        /// sent them before this, since the supervisor only sends to them
+        pub async fn workers_checkpoint_for_test(&mut self) -> ActorResult<()> {
+            let uploads = self.uploads.addr_for_test();
+            call!(uploads.checkpoint_for_test()).await?;
+            let sync_health = self.sync_health.addr_for_test();
+            call!(sync_health.checkpoint_for_test()).await?;
+            Produces::ok(())
+        }
+
+        /// Whether this supervisor's upload verifier is stopped and its sync-health worker has no
+        /// refresh in flight or queued
+        ///
+        /// Answers at once instead of waiting, so a refresh the verifier requests from this
+        /// supervisor while a test polls is never held behind the poll in the mailbox
+        pub(crate) async fn background_refreshes_idle_for_test(&mut self) -> ActorResult<bool> {
+            let uploads = self.uploads.addr_for_test();
+            if !call!(uploads.pending_upload_verifier_stopped_for_test()).await? {
+                return Produces::ok(false);
+            }
+
+            let sync_health = self.sync_health.addr_for_test();
+            let idle = call!(sync_health.sync_health_refresh_idle_for_test()).await?;
+            Produces::ok(idle)
+        }
+
+        /// The claim of the operation that holds the runtime now
+        pub(crate) async fn operation_claim_for_test(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupExclusiveOperationClaim>> {
+            Produces::ok(self.runtime.claim())
         }
 
         pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {
-            let idle = call!(self.cleanup.is_idle_for_test()).await?;
+            let cleanup = self.cleanup.addr_for_test();
+            let idle = call!(cleanup.is_idle_for_test()).await?;
             Produces::ok(idle)
         }
 
@@ -1537,7 +1982,8 @@ pub(crate) mod test_support {
             &mut self,
             job: CloudBackupCleanupJob,
         ) -> ActorResult<()> {
-            call!(self.cleanup.enqueue_cleanup(job)).await?;
+            let cleanup = self.cleanup.addr_for_test();
+            call!(cleanup.enqueue_cleanup(job)).await?;
             Produces::ok(())
         }
     }

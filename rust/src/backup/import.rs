@@ -1050,8 +1050,6 @@ mod tests {
     fn backup_import_restores_labels_and_output_locks_into_a_fresh_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::app::reconcile::test_support::init_noop_updater();
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
-
         let labeled_lock = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1";
         let lock_only = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2";
         let unlocked = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:3";

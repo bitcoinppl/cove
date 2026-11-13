@@ -1,5 +1,6 @@
 mod detail;
 mod queue_processor;
+mod remote_evidence;
 
 use std::time::Duration;
 
@@ -17,6 +18,7 @@ use crate::database::cloud_backup::{
 };
 
 pub(crate) use detail::remote_wallet_revision_matches;
+pub(crate) use remote_evidence::RemoteRevisionEvidence;
 
 pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
@@ -31,6 +33,15 @@ pub(crate) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
 }
 
 impl RustCloudBackupManager {
+    /// Hands remote revision evidence to the supervisor, the one owner that confirms uploads
+    /// from it
+    ///
+    /// Sent rather than awaited: an Enable recovery refreshes the detail inside a supervisor
+    /// handler, so waiting for the supervisor here would deadlock it
+    pub(crate) fn confirm_remote_revisions(&self, evidence: RemoteRevisionEvidence) {
+        send!(self.supervisor.confirm_remote_revisions(evidence));
+    }
+
     pub(crate) fn replace_blob_state_if_current(
         &self,
         current_state: &PersistedCloudBlobSyncState,
@@ -145,17 +156,21 @@ impl RustCloudBackupManager {
         )
     }
 
-    pub(crate) fn mark_blob_dirty_state(
+    /// Puts an upload's row back to Dirty, only while the row is still the one the upload wrote
+    ///
+    /// A reset or a newer upload may have replaced or removed the row while the upload ran, and
+    /// the newer row wins
+    pub(crate) fn mark_blob_dirty_if_current(
         &self,
         current_state: &PersistedCloudBlobSyncState,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<bool, CloudBackupError> {
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let dirty_state = current_state
-            .with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }));
 
-        Database::global().cloud_blob_sync_states.set(&dirty_state).map_err(|source| {
-            CloudBackupError::internal_context("persist dirty cloud blob state", source)
-        })
+        self.replace_blob_state_if_current(
+            current_state,
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+            "persist dirty cloud blob state",
+        )
     }
 
     pub(crate) fn remove_blob_sync_states<I>(&self, record_ids: I) -> Result<(), CloudBackupError>
@@ -189,5 +204,20 @@ impl RustCloudBackupManager {
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
         send!(self.supervisor.wake_pending_upload_verifier());
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use tokio::sync::MutexGuard;
+
+    use super::PENDING_UPLOAD_VERIFIER_LOCK;
+
+    /// Takes the one verifier pass, for a test that reads and settles a confirmation itself
+    ///
+    /// A manager's own verifier loop waits for the guard before its next pass, so it cannot settle
+    /// the marker under the test while the guard is held
+    pub(crate) async fn hold_verifier_pass() -> MutexGuard<'static, ()> {
+        PENDING_UPLOAD_VERIFIER_LOCK.lock().await
     }
 }

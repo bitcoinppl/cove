@@ -453,7 +453,7 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
     globals.cloud.fail_list_wallet_files_non_interactive("offline");
 
     let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
-        manager.refresh_cloud_backup_detail().await
+        manager.refresh_cloud_backup_detail(current_config(&manager).await).await
     else {
         panic!("expected cloud backup detail");
     };
@@ -484,7 +484,7 @@ async fn refresh_cloud_backup_detail_returns_access_error_when_wallet_listing_is
     );
 
     let Some(CloudBackupDetailResult::AccessError(error)) =
-        manager.refresh_cloud_backup_detail().await
+        manager.refresh_cloud_backup_detail(current_config(&manager).await).await
     else {
         panic!("expected cloud backup detail access error");
     };
@@ -527,7 +527,9 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
     globals.cloud.fail_list_wallet_files("metadata timed out");
     let Some(CloudBackupDetailSnapshotCompletion::Final(CloudBackupDetailResult::AccessError(
         error,
-    ))) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    ))) = manager
+        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .await
     else {
         panic!("expected authoritative inventory failure");
     };
@@ -561,7 +563,9 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
             authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             ..
         },
-    )) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    )) = manager
+        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .await
     else {
         panic!("expected complete cloud backup detail");
     };
@@ -617,8 +621,9 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
 
     let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     globals.cloud.fail_list_wallet_files("metadata query should not run");
-    let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) =
-        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) = manager
+        .complete_cloud_backup_detail_inventory_snapshot(snapshot, current_config(&manager).await)
+        .await
     else {
         panic!("expected detail from the trusted local snapshot");
     };
@@ -631,7 +636,9 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
     let Some(CloudBackupDetailResult::SuccessWithAuthority {
         authority: CloudBackupInventoryAuthority::ProviderConfirmed,
         ..
-    }) = manager.confirm_cloud_backup_detail_inventory(confirmation).await
+    }) = manager
+        .confirm_cloud_backup_detail_inventory(confirmation, current_config(&manager).await)
+        .await
     else {
         panic!("expected provider-confirmed cloud backup detail");
     };
@@ -647,9 +654,10 @@ async fn provider_confirmation_rejects_a_changed_namespace() {
     configure_enabled_cloud_backup(&manager, globals, 1);
 
     let Some(CloudBackupDetailResult::AccessError(error)) = manager
-        .confirm_cloud_backup_detail_inventory(CloudBackupDetailProviderConfirmation {
-            namespace: "different-namespace".into(),
-        })
+        .confirm_cloud_backup_detail_inventory(
+            CloudBackupDetailProviderConfirmation { namespace: "different-namespace".into() },
+            current_config(&manager).await,
+        )
         .await
     else {
         panic!("expected namespace mismatch error");
@@ -782,7 +790,7 @@ async fn refresh_cloud_backup_detail_marks_listed_wallet_unknown_when_master_key
     cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
 
     let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
-        manager.refresh_cloud_backup_detail().await
+        manager.refresh_cloud_backup_detail(current_config(&manager).await).await
     else {
         panic!("expected cloud backup detail");
     };

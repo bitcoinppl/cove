@@ -4,46 +4,96 @@ use cove_device::cloud_storage::CloudStorageClient;
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
+use super::keychain::OwnedKeychainWrite;
+use super::policy::{CommandClass, ConfigGeneration};
 use super::supervisor::{CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor};
 use super::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,
 };
 
-/// Operation-aware handle for submitting writes to the write supervisor
+/// Who a producer writes for, which gives every command or local effect it sends its class
 ///
-/// Background callers use [`CloudBackupWriteClient::new`]. Exclusive operations
-/// use [`CloudBackupWriteClient::for_operation`] so stale operation completions
-/// are rejected before local state is mutated
+/// Producers read it before anything they write depends on, so a configuration or operation that
+/// changes after that leaves their writes with an authority the owner no longer accepts
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteOwner {
+    /// Background work, read under this configuration generation
+    Background(ConfigGeneration),
+    /// The running exclusive operation with this claim
+    Operation(CloudBackupExclusiveOperationClaim),
+}
+
+impl WriteOwner {
+    /// The class the write policy decides this owner's writes under
+    fn class(self) -> CommandClass {
+        match self {
+            Self::Background(generation) => CommandClass::Ordinary { generation },
+            Self::Operation(claim) => CommandClass::Operation(claim),
+        }
+    }
+}
+
+/// Handle for submitting writes to the write supervisor
+///
+/// Background producers use [`CloudBackupWriteClient::background`] with the generation they read
+/// before their configuration. Exclusive operations use [`CloudBackupWriteClient::for_operation`],
+/// so the lane runs their commands only while the operation runs
 #[derive(Clone)]
 pub(crate) struct CloudBackupWriteClient {
     supervisor: Addr<CloudBackupWriteSupervisor>,
-    origin: Option<CloudBackupExclusiveOperationClaim>,
+    owner: WriteOwner,
 }
 
 impl CloudBackupWriteClient {
-    pub(crate) fn new(supervisor: Addr<CloudBackupWriteSupervisor>) -> Self {
-        Self { supervisor, origin: None }
+    pub(crate) fn background(
+        supervisor: Addr<CloudBackupWriteSupervisor>,
+        generation: ConfigGeneration,
+    ) -> Self {
+        Self { supervisor, owner: WriteOwner::Background(generation) }
     }
 
     pub(crate) fn for_operation(
         supervisor: Addr<CloudBackupWriteSupervisor>,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Self {
-        Self { supervisor, origin: Some(origin) }
+        Self { supervisor, owner: WriteOwner::Operation(origin) }
     }
 
-    async fn await_result<T>(
+    fn origin(&self) -> Option<CloudBackupExclusiveOperationClaim> {
+        match self.owner {
+            WriteOwner::Background(_) => None,
+            WriteOwner::Operation(claim) => Some(claim),
+        }
+    }
+
+    fn operation(
         &self,
-        receiver: CloudBackupWriteResultReceiver<T>,
-    ) -> Result<T, CloudBackupError> {
+        what: &str,
+    ) -> Result<CloudBackupExclusiveOperationClaim, CloudBackupError> {
+        self.origin().ok_or_else(|| {
+            CloudBackupError::Internal(format!("cloud backup {what} requires an operation").into())
+        })
+    }
+
+    /// Waits for a command's result; `receiver` is what `call!` gave when submitting it
+    async fn await_result<T, E>(
+        &self,
+        receiver: Result<CloudBackupWriteResultReceiver<T>, E>,
+    ) -> Result<T, CloudBackupError>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let receiver = receiver.map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
         let result = receiver.await.map_err(|source| {
             CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
         })?;
 
         let context = result.context();
         let context_id = context.id();
-        if context.origin() != self.origin {
+        if context.origin() != self.origin() {
             return Err(CloudBackupError::Internal(format!(
                 "cloud backup write supervisor returned mismatched operation origin for command {context_id:?}",
             )
@@ -60,26 +110,11 @@ impl CloudBackupWriteClient {
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudBackupError> {
-        let receiver = match self.origin {
-            // operation-owned writes carry the active claim so stale operation results are rejected
-            Some(origin) => {
-                call!(
-                    self.supervisor.upload_wallet_backup_for_operation(
-                        cloud, namespace, record_id, data, origin
-                    )
-                )
-                .await
-            }
-
-            // background writes are not tied to an exclusive operation claim
-            None => {
-                call!(self.supervisor.upload_wallet_backup(cloud, namespace, record_id, data)).await
-            }
-        }
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
+        let class = self.owner.class();
+        let receiver = call!(
+            self.supervisor.upload_wallet_backup(class, cloud, namespace, record_id, data, None)
+        )
+        .await;
         self.await_result(receiver).await
     }
 
@@ -91,24 +126,16 @@ impl CloudBackupWriteClient {
         data: Vec<u8>,
         completion: CloudBackupWriteCompletion,
     ) -> Result<(), CloudBackupError> {
-        let receiver = match self.origin {
-            Some(origin) => {
-                call!(self.supervisor.upload_wallet_backup_with_completion_for_operation(
-                    cloud, namespace, record_id, data, completion, origin
-                ))
-                .await
-            }
-            None => {
-                call!(self.supervisor.upload_wallet_backup_with_completion(
-                    cloud, namespace, record_id, data, completion
-                ))
-                .await
-            }
-        }
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
+        let class = self.owner.class();
+        let receiver = call!(self.supervisor.upload_wallet_backup(
+            class,
+            cloud,
+            namespace,
+            record_id,
+            data,
+            Some(completion)
+        ))
+        .await;
         self.await_result(receiver).await
     }
 
@@ -118,20 +145,10 @@ impl CloudBackupWriteClient {
         namespace: String,
         data: Vec<u8>,
     ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup master-key upload requires an operation origin".into(),
-            ));
-        };
-
-        let receiver = call!(
-            self.supervisor.upload_master_key_backup_for_operation(cloud, namespace, data, origin)
-        )
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
+        let class = CommandClass::Operation(self.operation("master-key upload")?);
+        let receiver =
+            call!(self.supervisor.upload_master_key_backup(class, cloud, namespace, data, None))
+                .await;
         self.await_result(receiver).await
     }
 
@@ -142,21 +159,15 @@ impl CloudBackupWriteClient {
         data: Vec<u8>,
         completion: CloudBackupWriteCompletion,
     ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup master-key upload completion requires an operation origin".into(),
-            ));
-        };
-
-        let receiver =
-            call!(self.supervisor.upload_master_key_backup_with_completion_for_operation(
-                cloud, namespace, data, completion, origin
-            ))
-            .await
-            .map_err(|source| {
-                CloudBackupError::internal_context("start cloud backup write supervisor", source)
-            })?;
-
+        let class = CommandClass::Operation(self.operation("master-key upload completion")?);
+        let receiver = call!(self.supervisor.upload_master_key_backup(
+            class,
+            cloud,
+            namespace,
+            data,
+            Some(completion)
+        ))
+        .await;
         self.await_result(receiver).await
     }
 
@@ -167,24 +178,15 @@ impl CloudBackupWriteClient {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         state_mode: CloudBackupUploadedWalletsStateMode,
     ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup wallet finalization requires an operation origin".into(),
-            ));
-        };
-
-        let receiver = call!(self.supervisor.finalize_uploaded_wallets_for_operation(
+        let class = CommandClass::Operation(self.operation("wallet finalization")?);
+        let receiver = call!(self.supervisor.finalize_uploaded_wallets(
+            class,
             cloud,
             namespace_id,
             uploaded_wallets,
-            state_mode,
-            origin
+            state_mode
         ))
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
+        .await;
         self.await_result(receiver).await
     }
 
@@ -195,96 +197,15 @@ impl CloudBackupWriteClient {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         count_refresh: CloudBackupWalletCountRefresh,
     ) -> Result<(), CloudBackupError> {
-        let receiver = match self.origin {
-            Some(origin) => {
-                call!(self.supervisor.complete_uploaded_wallet_batch_for_operation(
-                    cloud,
-                    namespace_id,
-                    uploaded_wallets,
-                    count_refresh,
-                    origin
-                ))
-                .await
-            }
-            None => {
-                call!(self.supervisor.complete_uploaded_wallet_batch(
-                    cloud,
-                    namespace_id,
-                    uploaded_wallets,
-                    count_refresh
-                ))
-                .await
-            }
-        }
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn delete_active_wallet_backup(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        record_id: String,
-    ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup active-wallet delete requires an operation origin".into(),
-            ));
-        };
-
-        let receiver = call!(
-            self.supervisor
-                .delete_active_wallet_backup_for_operation(cloud, namespace, record_id, origin)
-        )
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn delete_namespace(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-    ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup namespace delete requires an operation origin".into(),
-            ));
-        };
-
-        let receiver =
-            call!(self.supervisor.delete_namespace_for_operation(cloud, namespace, origin))
-                .await
-                .map_err(|source| {
-                CloudBackupError::internal_context("start cloud backup write supervisor", source)
-            })?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn delete_namespace_background(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-    ) -> Result<(), CloudBackupError> {
-        if self.origin.is_some() {
-            return Err(CloudBackupError::Internal(
-                "background cloud backup namespace delete cannot carry an operation origin".into(),
-            ));
-        }
-
-        let receiver = call!(self.supervisor.delete_namespace_background(cloud, namespace))
-            .await
-            .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
+        let class = self.owner.class();
+        let receiver = call!(self.supervisor.complete_uploaded_wallet_batch(
+            class,
+            cloud,
+            namespace_id,
+            uploaded_wallets,
+            count_refresh
+        ))
+        .await;
         self.await_result(receiver).await
     }
 
@@ -292,18 +213,100 @@ impl CloudBackupWriteClient {
         &self,
         completion: CloudBackupWriteCompletion,
     ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
+        let class = CommandClass::Operation(self.operation("write completion")?);
+        let receiver = call!(self.supervisor.apply_completion(class, completion)).await;
+        self.await_result(receiver).await
+    }
+
+    /// Row or batch delete of one wallet record in the active namespace
+    pub(crate) async fn delete_active_wallet_backup(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+        record_id: String,
+    ) -> Result<(), CloudBackupError> {
+        let class = CommandClass::RowDelete(self.operation("active-wallet delete")?);
+        let receiver =
+            call!(self.supervisor.delete_active_wallet_backup(class, cloud, namespace, record_id))
+                .await;
+        self.await_result(receiver).await
+    }
+
+    /// Turn Off's delete of the namespace it committed to delete
+    pub(crate) async fn delete_committed_namespace(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        let claim = self.operation("Turn Off namespace delete")?;
+        let class = CommandClass::TurnOffDelete { claim, namespace_id: namespace.clone() };
+        self.delete_namespace(class, cloud, namespace).await
+    }
+
+    /// Recover Other Backups or Delete Other Backups deleting another namespace
+    pub(crate) async fn delete_other_namespace(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        let class = CommandClass::OtherBackupDelete(self.operation("other backup delete")?);
+        self.delete_namespace(class, cloud, namespace).await
+    }
+
+    /// Discarding the namespace an interrupted Enable wrote
+    pub(crate) async fn delete_discarded_namespace(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        let class = CommandClass::EnableDiscard(self.operation("pending Enable discard")?);
+        self.delete_namespace(class, cloud, namespace).await
+    }
+
+    /// Deletes a namespace a merge made redundant, proven under this client's generation
+    pub(crate) async fn delete_source_namespace(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        let WriteOwner::Background(generation) = self.owner else {
             return Err(CloudBackupError::Internal(
-                "cloud backup write completion requires an operation origin".into(),
+                "merged namespace cleanup runs in the background, not in an operation".into(),
             ));
         };
 
-        let receiver = call!(self.supervisor.apply_completion_for_operation(completion, origin))
-            .await
-            .map_err(|source| {
-                CloudBackupError::internal_context("start cloud backup write supervisor", source)
-            })?;
+        self.delete_namespace(CommandClass::SourceCleanup { generation }, cloud, namespace).await
+    }
 
+    async fn delete_namespace(
+        &self,
+        class: CommandClass,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        let receiver = call!(self.supervisor.delete_namespace(class, cloud, namespace)).await;
+        self.await_result(receiver).await
+    }
+
+    /// Saves keys this client's owner proved for `namespace_id`
+    ///
+    /// The lane decides the save under the owner's authority and runs it off the actor, so it is
+    /// refused once the owner's operation ended or its configuration was replaced, and Turn Off and
+    /// a reset wait for a save that already started
+    pub(crate) async fn save_keychain(
+        &self,
+        namespace_id: String,
+        writes: Vec<OwnedKeychainWrite>,
+    ) -> Result<(), CloudBackupError> {
+        let class = self.owner.class();
+        let receiver = call!(self.supervisor.save_keychain(class, namespace_id, writes)).await;
+        self.await_result(receiver).await
+    }
+
+    /// Waits until every write queued before this one finished, while the operation runs
+    pub(crate) async fn drain(&self) -> Result<(), CloudBackupError> {
+        let class = CommandClass::Operation(self.operation("write drain")?);
+        let receiver = call!(self.supervisor.barrier(class)).await;
         self.await_result(receiver).await
     }
 }

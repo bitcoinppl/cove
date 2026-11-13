@@ -1,17 +1,14 @@
 use act_zero::send;
 use cove_device::cloud_storage::CloudSyncHealth;
 
-use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
-use super::model::{
-    CloudBackupStateReducerEffects, CloudBackupStateReducerEvent, PendingEnableEvidence,
-};
+use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupError, CloudBackupLifecycle,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
     PendingUploadVerificationState, RustCloudBackupManager,
@@ -111,21 +108,7 @@ impl RustCloudBackupManager {
             self.clear_runtime_passkey_authorization();
         }
 
-        // the keychain is read outside the state lock, and only when recovery shows; the reducer
-        // keeps a recovery projected after this check, since this status was read before it
-        let shows_recovery = self.state.read().shows_pending_enable_recovery();
-        let pending_enable_evidence = if !shows_recovery {
-            PendingEnableEvidence::NotChecked
-        } else if Self::pending_enable_evidence_remains() {
-            PendingEnableEvidence::Remains
-        } else {
-            PendingEnableEvidence::Gone
-        };
-
-        let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-            status,
-            pending_enable_evidence,
-        };
+        let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
         let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;
         self.send_model_effects(effects);
@@ -193,24 +176,10 @@ impl RustCloudBackupManager {
 
     /// Projects a just-persisted cloud backup state into runtime status and flags
     pub(crate) fn reconcile_persisted_state(&self, state: &PersistedCloudBackupState) {
-        self.reconcile_runtime_status(Self::runtime_status_for(state));
+        if let Some(status) = Self::runtime_status_for(state) {
+            self.reconcile_runtime_status(status);
+        }
         self.refresh_persisted_flags();
-    }
-
-    /// Persists `state`, then projects it into runtime status and flags
-    pub(crate) fn persist_cloud_backup_state(
-        &self,
-        state: &PersistedCloudBackupState,
-        context: impl std::fmt::Display,
-    ) -> Result<(), CloudBackupError> {
-        Database::global()
-            .cloud_backup_state
-            .set(state)
-            .map_err(|source| CloudBackupError::internal_context(context, source))?;
-
-        self.reconcile_persisted_state(state);
-
-        Ok(())
     }
 
     fn apply_pending_upload_verification_value(&self, pending: PendingUploadVerificationState) {

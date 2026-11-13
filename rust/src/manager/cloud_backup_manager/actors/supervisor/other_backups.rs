@@ -13,8 +13,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_recover_other_backups().await;
+            let result = manager.do_recover_other_backups(&writes).await;
             send!(addr.complete_recover_other_backups(claim, result));
         });
     }
@@ -31,8 +32,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_delete_other_backups().await;
+            let result = manager.do_delete_other_backups(&writes).await;
             send!(addr.complete_delete_other_backups(claim, result));
         });
     }
@@ -75,8 +77,9 @@ impl CloudBackupSupervisor {
                     failed_wallet_errors: report.failed_wallet_errors,
                 });
                 manager.apply_sync_state(SyncState::Syncing);
+                let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.do_sync_unsynced_wallets().await;
+                    let result = manager.sync_unsynced_wallets_with(&writes).await;
                     send!(addr.complete_operation_sync(claim, result));
                 });
             }
@@ -84,7 +87,7 @@ impl CloudBackupSupervisor {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
                     error.logged_reader_message("Failed to recover other cloud backups"),
                 ));
-                self.active_operation.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -106,8 +109,9 @@ impl CloudBackupSupervisor {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Deleted);
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
@@ -115,7 +119,7 @@ impl CloudBackupSupervisor {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
                     error.logged_reader_message("Failed to delete other cloud backups"),
                 ));
-                self.active_operation.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -136,8 +140,9 @@ impl CloudBackupSupervisor {
             Ok(()) => {
                 manager.refresh_sync_health();
                 let detail_claim = self.detail_workflow.start_operation_result();
+                let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
+                    let result = manager.refresh_cloud_backup_detail(config).await;
                     send!(addr.complete_operation_sync_refresh_detail(claim, detail_claim, result));
                 });
             }
@@ -145,7 +150,7 @@ impl CloudBackupSupervisor {
                 manager.apply_sync_state(SyncState::Failed(
                     error.logged_reader_message("Cloud backup sync failed"),
                 ));
-                self.active_operation.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -170,7 +175,7 @@ impl CloudBackupSupervisor {
         }
 
         manager.apply_sync_state(SyncState::Idle);
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }

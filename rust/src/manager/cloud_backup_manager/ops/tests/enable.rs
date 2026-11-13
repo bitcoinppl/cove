@@ -126,13 +126,12 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             preparation.recovered_passkey_metadata(),
         )
         .unwrap();
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
-    manager.project_exclusive_operation_started(claim);
-    let writes = operation_write_client_for_test(&manager, claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     let error = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap_err();
     let progress = manager.model_snapshot().progress.unwrap();
     assert_eq!((progress.completed, progress.total), (0, 1));
-    manager.project_exclusive_operation_finished(claim);
+    finish_operation_for_test(&manager, claim).await;
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(
         journal.phase(),
@@ -172,13 +171,13 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     let CloudBackupEnablePasskeyPreparation::Ready(ready) = preparation else {
         panic!("expected authenticated passkey material");
     };
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
-    manager.project_exclusive_operation_started(claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
-    let writes = operation_write_client_for_test(&manager, claim);
 
     let uploaded = manager.upload_ready_enable_backup(ready, writes).await.unwrap();
     let progress = manager.model_snapshot().progress.unwrap();
+    finish_operation_for_test(&manager, claim).await;
 
     assert_eq!(uploaded.uploaded_wallets.len(), 2);
     assert_eq!((progress.completed, progress.total), (3, 3));
@@ -234,11 +233,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         PendingEnableNamespaceOwnership::RecoveredExisting
     );
     assert!(matches!(staged_journal.phase(), PendingEnableJournalPhase::PasskeyRegistered(_)));
-    let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
-    manager.project_exclusive_operation_started(claim);
-    let writes = operation_write_client_for_test(&manager, claim);
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
     let completion = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap();
-    manager.project_exclusive_operation_finished(claim);
+    finish_operation_for_test(&manager, claim).await;
     globals.keychain.fail_save_at(7);
     let error = manager
         .pending_enable
@@ -272,14 +270,15 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
 async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
-    globals.reset();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
     globals.cloud.fail_master_key_upload("boom");
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: vec![7; 32],
         credential_id: vec![1, 2, 3],
     }));
 
-    let manager = init_manager();
     let error = enable_cloud_backup_create_new(&manager).await.unwrap_err();
     assert!(matches!(
         error,
@@ -298,14 +297,15 @@ async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
 async fn failed_no_discovery_confirmation_preserves_only_staged_material() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
-    globals.reset();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
         operation: PasskeyOperation::AuthenticateAssertion,
         reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
     }));
 
-    let manager = init_manager();
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
 
@@ -335,6 +335,10 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
+
+    // the cloud still reports the new master key as syncing, so the pending upload worker
+    // keeps Enable's upload confirmation pending instead of settling it mid-assertions
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
@@ -354,6 +358,12 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 
     assert_eq!(globals.passkey.discover_count(), discover_count);
     assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+
+    // once the cloud shows the upload, the worker settles the confirmation and its loop goes
+    // idle, so the test ends with no verifier still polling the shared database
+    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
+    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
+    assert!(manager.pending_verification_completion().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -374,13 +384,28 @@ async fn enable_create_new_recovers_from_corrupted_persisted_state() {
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
+
+    // the pending upload worker settles Enable's upload confirmation, and so verifies the new
+    // record, as soon as the cloud reports the master key uploaded; holding it as syncing keeps
+    // the record unverified while the test reads it
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
+    // a pass of the worker while the upload is still syncing leaves the record needing
+    // verification, whenever the background loop also runs
+    assert!(verify_pending_uploads_once_for_test_async(&manager).await);
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Unverified
-    );
+    let recovered = Database::global().cloud_backup_state.get().unwrap();
+    assert_eq!(recovered.status(), PersistedCloudBackupStatus::Unverified);
+    assert!(recovered.pending_verification_completion().is_some());
+
+    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
+    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
+
+    let verified = Database::global().cloud_backup_state.get().unwrap();
+    assert_eq!(verified.status(), PersistedCloudBackupStatus::Enabled);
+    assert!(verified.last_verified_at().is_some());
+    assert!(verified.pending_verification_completion().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -832,22 +857,6 @@ async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
     assert!(globals.cloud.has_namespace(&wallet_namespace));
 }
 
-#[test]
-fn clear_in_process_state_for_local_reset_clears_enable_state() {
-    let _guard = test_lock().lock();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-        SavedPasskeyConfirmationMode::Manual,
-    ));
-
-    manager.clear_in_process_state_for_local_reset();
-
-    assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorization() {
     let _guard = async_test_lock().lock().await;
@@ -940,6 +949,9 @@ async fn fresh_start_new_keeps_prior_active_until_durable_success() {
         CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery
     );
 
+    // the cloud still reports the new master key as syncing, so the upload confirmation Enable
+    // records stays pending instead of being settled by the pending upload worker mid-assertions
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     confirm_saved_passkey_session(&manager).await;
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
@@ -1761,4 +1773,35 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
     for wallet in &wallets {
         crate::wallet::delete_wallet_specific_data(&wallet.metadata.id).unwrap();
     }
+}
+
+/// A wipe while Enable waits for its saved-passkey confirmation ends that wait on screen: no
+/// operation runs during the wait, so only the reset's projection can clear it
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn wipe_while_enable_awaits_its_saved_passkey_returns_enable_to_idle() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    enable_cloud_backup_no_discovery(&manager).await.unwrap();
+    assert!(matches!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(_)
+    ));
+
+    let permit = manager.prepare_local_reset().await.unwrap();
+    permit.clear_local_state().await.unwrap();
+
+    // the wipe's commit point for Cloud Backup's tables; the production wipe resets the whole
+    // database, but this test shares its process database with other tests, so the wallet,
+    // config, cache, price and diagnostics tables stay
+    let db = Database::global();
+    db.cloud_backup_state.delete().unwrap();
+    db.cloud_blob_sync_states.delete_all().unwrap();
+    permit.complete_after_database_reset().await.unwrap();
+
+    assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
 }

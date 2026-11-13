@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 
-use cove_device::cloud_storage::{CloudStorage, CloudStorageInventorySnapshot};
-use tracing::{info, warn};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageInventorySnapshot};
+use tracing::info;
 
+use super::remote_evidence::RemoteRevisionEvidence;
 use crate::database::Database;
-use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
+use crate::database::cloud_backup::PersistedCloudBlobState;
+use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDetailInventorySnapshot,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
@@ -13,6 +15,14 @@ use crate::manager::cloud_backup_manager::{
     cloud_inventory::CloudWalletInventory, cloud_inventory::RemoteWalletTruth,
     offline_error_for_step,
 };
+
+/// Where a detail refresh reads the wallet backups from, and the configuration its producer
+/// started under
+struct DetailRead {
+    namespace: String,
+    config: ConfigGeneration,
+    cloud: CloudStorageClient,
+}
 
 impl RustCloudBackupManager {
     pub(crate) async fn load_cloud_backup_detail_inventory_snapshot(
@@ -68,9 +78,11 @@ impl RustCloudBackupManager {
         ))
     }
 
+    /// Finishes a detail refresh from `snapshot` for a producer started under `config`
     pub(crate) async fn complete_cloud_backup_detail_inventory_snapshot(
         &self,
         snapshot: CloudBackupDetailInventorySnapshot,
+        config: ConfigGeneration,
     ) -> Option<CloudBackupDetailSnapshotCompletion> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -107,19 +119,20 @@ impl RustCloudBackupManager {
             Some(CloudBackupInventoryAuthority::ProviderConfirmed) => {
                 Some(CloudBackupDetailSnapshotCompletion::Final(
                     self.finish_cloud_backup_detail_refresh(
+                        DetailRead { namespace: snapshot.namespace, config, cloud },
                         snapshot.wallet_record_ids,
                         CloudBackupInventoryAuthority::ProviderConfirmed,
-                        cloud,
                     )
                     .await,
                 ))
             }
             Some(CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount) => {
+                let read = DetailRead { namespace: snapshot.namespace.clone(), config, cloud };
                 let result = self
                     .finish_cloud_backup_detail_refresh(
+                        read,
                         snapshot.wallet_record_ids,
                         CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
-                        cloud,
                     )
                     .await;
 
@@ -138,12 +151,13 @@ impl RustCloudBackupManager {
                 })
             }
             Some(CloudBackupInventoryAuthority::Provisional) | None => {
-                let result = match cloud.list_wallet_backups(snapshot.namespace).await {
+                let result = match cloud.list_wallet_backups(snapshot.namespace.clone()).await {
                     Ok(record_ids) => {
+                        let read = DetailRead { namespace: snapshot.namespace, config, cloud };
                         self.finish_cloud_backup_detail_refresh(
+                            read,
                             record_ids,
                             CloudBackupInventoryAuthority::ProviderConfirmed,
-                            cloud,
                         )
                         .await
                     }
@@ -162,9 +176,12 @@ impl RustCloudBackupManager {
         }
     }
 
+    /// Confirms a trusted local inventory with the provider, for a producer started under
+    /// `config`
     pub(crate) async fn confirm_cloud_backup_detail_inventory(
         &self,
         confirmation: CloudBackupDetailProviderConfirmation,
+        config: ConfigGeneration,
     ) -> Option<CloudBackupDetailResult> {
         let current_namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
@@ -176,14 +193,19 @@ impl RustCloudBackupManager {
             )));
         }
 
-        self.refresh_cloud_backup_detail().await
+        self.refresh_cloud_backup_detail(config).await
     }
 
     /// List wallet backups in the current namespace and build detail
     ///
     /// Returns None if disabled. On access errors, returns AccessError so the UI can
-    /// surface an explicit recovery action instead of mutating backup state during refresh
-    pub(crate) async fn refresh_cloud_backup_detail(&self) -> Option<CloudBackupDetailResult> {
+    /// surface an explicit recovery action instead of mutating backup state during refresh.
+    /// `config` is the configuration generation the caller read before starting the refresh, so
+    /// the uploads the read confirms are confirmed only while that configuration is current
+    pub(crate) async fn refresh_cloud_backup_detail(
+        &self,
+        config: ConfigGeneration,
+    ) -> Option<CloudBackupDetailResult> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             info!("refresh_cloud_backup_detail: skipping, status={status:?}");
@@ -203,7 +225,7 @@ impl RustCloudBackupManager {
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
         let cloud = CloudStorage::global_explicit_client();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(error) => {
                 let error = blocking_cloud_error(
@@ -217,9 +239,9 @@ impl RustCloudBackupManager {
 
         Some(
             self.finish_cloud_backup_detail_refresh(
+                DetailRead { namespace, config, cloud },
                 wallet_record_ids,
                 CloudBackupInventoryAuthority::ProviderConfirmed,
-                cloud,
             )
             .await,
         )
@@ -227,17 +249,22 @@ impl RustCloudBackupManager {
 
     async fn finish_cloud_backup_detail_refresh(
         &self,
+        read: DetailRead,
         wallet_record_ids: Vec<String>,
         authority: CloudBackupInventoryAuthority,
-        cloud: cove_device::cloud_storage::CloudStorageClient,
     ) -> CloudBackupDetailResult {
+        let DetailRead { namespace, config, cloud } = read;
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, cloud).await {
+            match self.load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => return CloudBackupDetailResult::AccessError(error),
             };
 
-        self.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
+        self.confirm_remote_revisions(RemoteRevisionEvidence::new(
+            namespace,
+            config,
+            &remote_wallet_truth,
+        ));
 
         match self
             .build_cloud_backup_detail_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
@@ -296,75 +323,6 @@ impl RustCloudBackupManager {
         .await?;
 
         Ok(inventory.build_detail().detail)
-    }
-
-    pub(crate) fn cleanup_confirmed_pending_blobs(&self, remote_wallet_truth: &RemoteWalletTruth) {
-        let namespace_id = match self.current_namespace_id() {
-            Ok(namespace_id) => namespace_id,
-            Err(_) => return,
-        };
-
-        let table = &Database::global().cloud_blob_sync_states;
-        let states = match table.list() {
-            Ok(states) => states,
-            Err(error) => {
-                warn!(
-                    "cleanup_confirmed_pending_blobs: list cloud blob sync states failed: {error}"
-                );
-                return;
-            }
-        };
-
-        let confirmed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let mut updated = false;
-
-        for state in states {
-            if state.namespace_id != namespace_id {
-                continue;
-            }
-
-            let pending_state = match &state.state {
-                PersistedCloudBlobState::UploadedPendingConfirmation(pending_state) => {
-                    pending_state
-                }
-
-                _ => continue,
-            };
-
-            if !remote_wallet_revision_matches(
-                remote_wallet_truth,
-                state.record_id(),
-                &pending_state.revision_hash,
-            ) {
-                continue;
-            }
-
-            let confirmed_state =
-                state.with_state(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
-                    revision_hash: pending_state.revision_hash.clone(),
-                    confirmed_at,
-                }));
-
-            let persisted = match table.set_if_current(&state, &confirmed_state) {
-                Ok(persisted) => persisted,
-                Err(error) => {
-                    warn!(
-                        "cleanup_confirmed_pending_blobs: persist confirmed state failed: {error}"
-                    );
-                    continue;
-                }
-            };
-
-            if !persisted {
-                continue;
-            }
-
-            updated = true;
-        }
-
-        if updated {
-            self.refresh_pending_upload_verification_state();
-        }
     }
 }
 

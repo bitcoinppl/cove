@@ -5,12 +5,15 @@ use ::redb::{Database as RedbDatabase, ReadableTable as _, WriteTransaction};
 use cove_util::result_ext::ResultExt as _;
 
 use super::Error;
+use crate::manager::cloud_backup_manager::LifecycleCapability;
 
 mod compat;
 mod compatibility;
 pub(crate) mod restore_activation;
 mod state;
 mod tables;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub(crate) use compat::ensure_table_type_compatibility;
 pub use state::{
@@ -20,9 +23,10 @@ pub use state::{
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker, PersistedVerificationRequirement, PersistedWalletVerificationIssues,
+    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedHealNotice,
+    PersistedPasskeyState, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
+    PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -48,6 +52,10 @@ impl CloudBackupStateTable {
     }
 
     pub fn get(&self) -> Result<PersistedCloudBackupState, Error> {
+        // a test can fail reads of the record, as a transient redb read error would
+        #[cfg(test)]
+        Self::take_read_fault()?;
+
         let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
         let table =
             read_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
@@ -59,22 +67,12 @@ impl CloudBackupStateTable {
             .unwrap_or_default())
     }
 
-    pub fn set(&self, value: &PersistedCloudBackupState) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table =
-                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
-            table.insert(CURRENT_KEY, value).map_err_str(Error::TableAccess)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
-    }
-
+    /// Read, change and write the record in one transaction
+    ///
+    /// Only the lifecycle owner holds a capability, so this is the owner's write route
     pub(crate) fn mutate<T>(
         &self,
+        _owner: &LifecycleCapability,
         mutation: impl FnOnce(&mut PersistedCloudBackupState) -> T,
     ) -> Result<CommittedCloudBackupStateMutation<T>, Error> {
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
@@ -88,6 +86,11 @@ impl CloudBackupStateTable {
                 .map(|value| value.value())
                 .unwrap_or_default();
             let outcome = mutation(&mut state);
+
+            // a test can fail this write before it commits; the transaction then aborts
+            #[cfg(test)]
+            Self::take_write_fault(&state)?;
+
             table.insert(CURRENT_KEY, &state).map_err_str(Error::TableAccess)?;
             (outcome, state)
         };
@@ -95,21 +98,6 @@ impl CloudBackupStateTable {
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Ok(CommittedCloudBackupStateMutation { outcome, state })
-    }
-
-    #[cfg(test)]
-    pub fn delete(&self) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table =
-                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
-            table.remove(CURRENT_KEY).map_err_str(Error::TableAccess)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
     }
 }
 
@@ -256,6 +244,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
             pending_restore_all: None,
+            heal_notice: None,
         })
     }
 
@@ -321,11 +310,22 @@ mod tests {
             Some(10),
             Some(2),
         );
-        assert!(state.begin_disabling("namespace".into(), 7, 20));
+        let PersistedCloudBackupState::Configured(previous_configured) = state.clone() else {
+            panic!("configured fixture");
+        };
+        state = PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
+            previous_configured,
+            namespace_id: "namespace".into(),
+            disable_generation: 7,
+            started_at: 20,
+            delete_started_at: Some(20),
+            last_error: None,
+            retry_after: None,
+        });
 
         assert!(state.record_successful_sync(30, 3));
 
-        assert!(state.is_disabling());
+        assert!(state.disabling().is_some());
         assert_eq!(state.last_sync(), Some(30));
         assert_eq!(state.wallet_count(), Some(3));
         assert_eq!(state.disabling().map(|disabling| disabling.disable_generation), Some(7));

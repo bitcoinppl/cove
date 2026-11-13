@@ -1,6 +1,13 @@
+[profile.default]
+# a test that hangs is ended after two minutes; the slowest Cloud Backup test takes about 25s
+# on a loaded machine
+slow-timeout = { period = "60s", terminate-after = 2 }
+
 [test-groups]
 shared-root-data = { max-threads = 1 }
 
+# nextest runs each test in its own process, and every test process gets its own data root, so
+# Cloud Backup tests run in parallel; the remaining tests stay serial until they are measured
 [[profile.default.overrides]]
-filter = 'package(cove) & (test(manager::cloud_backup_manager::ops::tests::) | test(backup::) | test(address_type_switch) | test(app::tests::dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted))'
+filter = 'package(cove) & !test(cloud_backup) & (test(backup::) | test(address_type_switch) | test(app::tests::dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted))'
 test-group = 'shared-root-data'

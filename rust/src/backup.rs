@@ -118,7 +118,7 @@ impl BackupManager {
                 (state.payload_digest.clone(), requested_snapshots)
             };
 
-            let snapshots = tokio::task::spawn_blocking(move || {
+            let snapshots = cove_tokio::task::spawn_blocking(move || {
                 let mut snapshots = std::collections::HashMap::new();
                 for (wallet_id, expected) in requested_snapshots {
                     let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;

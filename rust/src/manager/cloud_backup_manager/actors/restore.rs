@@ -14,7 +14,9 @@ use zeroize::Zeroizing;
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::PersistedCloudBackupState;
-use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
+use crate::manager::cloud_backup_manager::ops::{
+    CLOUD_BACKUP_LOAD_FAILED_MESSAGE, try_restore_from_local_master_key,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
     NamespacePasskeyMatcher, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
@@ -287,18 +289,10 @@ impl RestoreOperation {
         }
     }
 
-    pub(crate) async fn persist_cloud_backup_state(
-        &self,
-        state: PersistedCloudBackupState,
-        context: String,
-    ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.persist_restore_cloud_backup_state(
-            self.operation_claim,
-            state,
-            context
-        ))
-        .await
-        .map_err(|_| CloudBackupError::Cancelled)?
+    pub(crate) async fn record_restore_without_backup(&self) -> Result<(), CloudBackupError> {
+        call!(self.supervisor.record_restore_without_backup(self.operation_claim))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
     }
 
     pub(crate) async fn commit_restored_namespace(
@@ -573,15 +567,14 @@ impl RestoreOperation {
                     return Ok(CloudBackupStatus::Enabled);
                 }
 
-                Ok(RustCloudBackupManager::runtime_status_for(&state))
+                // an unnormalized record admits no restore, so the fallback is never reached
+                Ok(RustCloudBackupManager::runtime_status_for(&state).unwrap_or_else(|| {
+                    CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())
+                }))
             }
 
             RestoreResolution::Nothing => {
-                self.persist_cloud_backup_state(
-                    PersistedCloudBackupState::default(),
-                    "persist empty restored cloud backup state".into(),
-                )
-                .await?;
+                self.record_restore_without_backup().await?;
 
                 Ok(CloudBackupStatus::Disabled)
             }
@@ -926,7 +919,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         ensure_cloud_backup_test_tokio_runtime();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
 
         let master_key = MasterKey::generate();
@@ -1110,7 +1103,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         ensure_cloud_backup_test_tokio_runtime();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
 
         let first_wallet = xpub_only_wallet_metadata();
@@ -1162,7 +1155,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         ensure_cloud_backup_test_tokio_runtime();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
 
         let previous = seed_previous_restore_activation();
@@ -1186,7 +1179,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         ensure_cloud_backup_test_tokio_runtime();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
 
         let previous = seed_previous_restore_activation();
@@ -1224,7 +1217,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         ensure_cloud_backup_test_tokio_runtime();
-        let manager = RustCloudBackupManager::init();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
         reset_cloud_backup_test_state(&manager, globals);
 
         Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();

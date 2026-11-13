@@ -101,7 +101,32 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        // a reinitialize owns the namespaces from its start: its policy pauses background writes
+        // and source cleanup, and this barrier waits out the write already in flight, so a cleanup
+        // delete that started before the reinitialize can't remove a namespace it may recover. The
+        // supervisor never waits on the write supervisor: the reply is
+        // `complete_reinitialize_write_drain`
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        self.addr().send_fut_with(move |addr| async move {
+            let drained = writes.drain().await;
+            send!(addr.complete_reinitialize_write_drain(claim, drained));
+        });
+    }
+
+    /// The writes queued before a reinitialize finished, so it can read the namespaces
+    pub async fn complete_reinitialize_write_drain(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        drained: Result<(), CloudBackupError>,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.current(claim) else { return Produces::ok(()) };
+        if let Err(error) = drained {
+            self.fail_enable_operation(&manager, claim, error);
+            return Produces::ok(());
+        }
+
         self.start_reinitialize_backup_operation_with_claim(manager, claim);
+        Produces::ok(())
     }
 
     pub(crate) fn start_reinitialize_backup_operation_with_claim(

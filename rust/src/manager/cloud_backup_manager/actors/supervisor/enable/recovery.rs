@@ -186,28 +186,32 @@ impl CloudBackupSupervisor {
             credential_id,
             prf_salt,
         });
-        if let Err(error) = call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
-            cloud: CloudStorage::global_explicit_client(),
-            active_namespace_id: namespace_id.clone(),
-            active_critical_key: *active_critical_key,
-            sources: cleanup_sources,
-        }))
-        .await
-        {
-            warn!(
-                "Recovered enable committed, but merge-source cleanup could not be scheduled; retaining source backups: {error}"
-            );
-        }
-
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
-        if should_finalize_now {
-            manager.finalize_pending_verification_if_ready().await;
+
+        // settling here can't hold this mailbox on the provider: the completion has no uploads to
+        // confirm, and its detail refresh skips the provider while the lifecycle shows this Enable
+        // running, so the read is local state only
+        if should_finalize_now
+            && let Some(settlement) =
+                manager.ready_pending_verification_settlement(self.evidence_basis()).await
+        {
+            self.apply_pending_verification_settlement(&manager, settlement);
         }
 
         info!("Cloud backup enabled (recovered existing namespace)");
         self.finish_enable_operation(manager, claim);
+
+        // queued after Enable ends, so the job carries the generation of the configuration it
+        // proved its sources under, and the lane drops its deletes once that changes
+        self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
+            generation: self.runtime.generation(),
+            cloud: CloudStorage::global_explicit_client(),
+            active_namespace_id: namespace_id.clone(),
+            active_critical_key: *active_critical_key,
+            sources: cleanup_sources,
+        });
 
         Produces::ok(())
     }

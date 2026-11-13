@@ -17,7 +17,7 @@ use super::{
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 mod cloud_only_inventory;
 mod events;
@@ -30,7 +30,7 @@ pub(crate) use self::events::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect,
     CloudBackupRestoreAllRuntimeState, CloudBackupStateReducerEffects,
-    CloudBackupStateReducerEvent, PendingEnableEvidence,
+    CloudBackupStateReducerEvent,
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
@@ -457,7 +457,28 @@ impl CloudBackupReducerState {
         &mut self,
         choice: CloudBackupEnablePromptChoice,
     ) -> Option<CloudBackupAcceptedEnablePrompt> {
-        let accepted = match (&self.phase, choice) {
+        let accepted = self.enable_prompt_answer(choice);
+        if accepted.is_some() {
+            // accept_enable_prompt deliberately routes every accepted choice through
+            // the CloudBackupLifecyclePhase::Enabling state with
+            // the CloudBackupEnableFlow::DiscoveringExistingBackup flow
+            // and CloudBackupConfiguredPrompt::None so discovery/preparation can choose
+            // the use-existing, force-new, or no-discovery follow-up
+            self.phase = CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::DiscoveringExistingBackup,
+            );
+            self.configured.prompt = CloudBackupConfiguredPrompt::None;
+        }
+
+        accepted
+    }
+
+    /// The Enable `choice` starts from the Enable prompt on screen, if one shows
+    fn enable_prompt_answer(
+        &self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
+        match (&self.phase, choice) {
             (
                 CloudBackupLifecyclePhase::Enabling(
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
@@ -489,21 +510,7 @@ impl CloudBackupReducerState {
                 CloudBackupEnablePromptChoice::CreateNew,
             ) => Some(CloudBackupAcceptedEnablePrompt::NoDiscovery(*context)),
             _ => None,
-        };
-
-        if accepted.is_some() {
-            // accept_enable_prompt deliberately routes every accepted choice through
-            // the CloudBackupLifecyclePhase::Enabling state with
-            // the CloudBackupEnableFlow::DiscoveringExistingBackup flow
-            // and CloudBackupConfiguredPrompt::None so discovery/preparation can choose
-            // the use-existing, force-new, or no-discovery follow-up
-            self.phase = CloudBackupLifecyclePhase::Enabling(
-                CloudBackupEnableFlow::DiscoveringExistingBackup,
-            );
-            self.configured.prompt = CloudBackupConfiguredPrompt::None;
         }
-
-        accepted
     }
 
     fn configured_root_prompt(&self) -> CloudBackupRootPrompt {
@@ -557,13 +564,14 @@ impl CloudBackupReducerState {
                 CloudBackupExclusiveOperation::RecreateManifest
                 | CloudBackupExclusiveOperation::VerifyReinitializedBackup
                 | CloudBackupExclusiveOperation::RepairPasskey
-                | CloudBackupExclusiveOperation::VerificationRepair
+                | CloudBackupExclusiveOperation::Verify
                 | CloudBackupExclusiveOperation::RecoverOtherBackups
                 | CloudBackupExclusiveOperation::DeleteOtherBackups
                 | CloudBackupExclusiveOperation::RestoreCloudWallet
                 | CloudBackupExclusiveOperation::RestoreAllCloudWallets
                 | CloudBackupExclusiveOperation::DeleteCloudWallet
-                | CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+                | CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups
+                | CloudBackupExclusiveOperation::DiscardPendingEnable,
             )
             | None => {}
         }
@@ -667,11 +675,11 @@ impl CloudBackupReducerState {
             return true;
         };
 
-        let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        let Some(now) = cove_util::time::unix_timestamp_secs() else {
             return false;
         };
 
-        now.as_secs().saturating_sub(last_verified_at) >= STALE_VERIFICATION_THRESHOLD.as_secs()
+        now.saturating_sub(last_verified_at) >= STALE_VERIFICATION_THRESHOLD.as_secs()
     }
 
     fn active_operation(&self) -> Option<CloudBackupExclusiveOperationClaim> {
@@ -833,7 +841,7 @@ impl CloudBackupReducerState {
                 self.resolve_recovery(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
             }
             CloudBackupExclusiveOperation::VerifyReinitializedBackup
-            | CloudBackupExclusiveOperation::VerificationRepair => {}
+            | CloudBackupExclusiveOperation::Verify => {}
             CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups => {
                 self.configured.undecryptable_wallet_deletion =
                     CloudBackupUndecryptableWalletDeletionState::Idle;
@@ -842,7 +850,8 @@ impl CloudBackupReducerState {
             | CloudBackupExclusiveOperation::DeleteOtherBackups
             | CloudBackupExclusiveOperation::RestoreCloudWallet
             | CloudBackupExclusiveOperation::RestoreAllCloudWallets
-            | CloudBackupExclusiveOperation::DeleteCloudWallet => {}
+            | CloudBackupExclusiveOperation::DeleteCloudWallet
+            | CloudBackupExclusiveOperation::DiscardPendingEnable => {}
         }
     }
 
@@ -1547,7 +1556,35 @@ impl CloudBackupStateReducer {
 
     /// Whether the lifecycle shows recovery for an incomplete enable
     pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
-        matches!(self.state.phase, CloudBackupLifecyclePhase::PendingEnableRecovery(_))
+        self.projected_pending_enable_recovery().is_some()
+    }
+
+    /// The Enable `choice` would start from the Enable prompt on screen, leaving the prompt
+    pub(crate) fn enable_prompt_answer(
+        &self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
+        self.state.enable_prompt_answer(choice)
+    }
+
+    /// Whether Enable stopped at the prompt that asks whether to replace an existing backup
+    pub(crate) fn shows_existing_backup_prompt(&self) -> bool {
+        matches!(
+            self.state.phase,
+            CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(..)
+            )
+        )
+    }
+
+    /// The recovery the lifecycle shows, as the supervisor last projected it
+    pub(crate) fn projected_pending_enable_recovery(
+        &self,
+    ) -> Option<&CloudBackupPendingEnableRecovery> {
+        match &self.state.phase {
+            CloudBackupLifecyclePhase::PendingEnableRecovery(recovery) => Some(recovery),
+            _ => None,
+        }
     }
 
     pub(crate) fn verification(&self) -> VerificationState {
@@ -1631,14 +1668,10 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::EnableContextStarted(context) => {
                 self.state.active_enable_context = Some(context);
             }
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-                status,
-                pending_enable_evidence,
-            } => {
-                // a status read before the recovery was projected, or while its evidence remains,
-                // is older than the recovery; an operation that now owns the lifecycle still wins
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled(status) => {
+                // the supervisor ends a recovery it projected, so a persisted status never
+                // replaces it; an operation that now owns the lifecycle still wins
                 let keeps_recovery = self.shows_pending_enable_recovery()
-                    && pending_enable_evidence != PendingEnableEvidence::Gone
                     && !matches!(
                         status,
                         CloudBackupStatus::Enabling
@@ -1653,6 +1686,11 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(recovery) => {
                 self.state.active_enable_context = None;
                 self.state.phase = CloudBackupLifecyclePhase::PendingEnableRecovery(recovery);
+            }
+            CloudBackupStateReducerEvent::PendingEnableRecoveryCleared(status) => {
+                if self.shows_pending_enable_recovery() {
+                    self.state.apply_status(status);
+                }
             }
             CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
                 context,
@@ -2033,6 +2071,7 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
     use crate::manager::cloud_backup_manager::{
         CloudBackupEnableContext, CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary,
         CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupVerificationMetadata,
@@ -2045,16 +2084,13 @@ mod tests {
         generation: u64,
     ) -> CloudBackupStateReducerEvent {
         CloudBackupStateReducerEvent::ExclusiveOperationStarted(
-            CloudBackupExclusiveOperationClaim::new(operation, generation),
+            CloudBackupExclusiveOperationClaim::new(operation, operation_id(generation)),
         )
     }
 
-    /// A status reconcile from a caller that found no recovery to check evidence for
+    /// A status reconcile, as the manager sends from the persisted record
     fn runtime_status_event(status: CloudBackupStatus) -> CloudBackupStateReducerEvent {
-        CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-            status,
-            pending_enable_evidence: PendingEnableEvidence::NotChecked,
-        }
+        CloudBackupStateReducerEvent::RuntimeStatusReconciled(status)
     }
 
     fn effect_lifecycle(effects: &CloudBackupStateReducerEffects) -> Option<&CloudBackupLifecycle> {
@@ -2570,7 +2606,7 @@ mod tests {
         ]);
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            1,
+            operation_id(1),
         );
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
@@ -2587,7 +2623,7 @@ mod tests {
         });
         let stale_claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-            0,
+            operation_id(0),
         );
         model.apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
             claim: stale_claim,
@@ -2957,7 +2993,10 @@ mod tests {
         model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1));
         model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Restore, 1),
+            CloudBackupExclusiveOperationClaim::new(
+                CloudBackupExclusiveOperation::Restore,
+                operation_id(1),
+            ),
         ));
 
         let effects = model.apply_event(operation_event(CloudBackupExclusiveOperation::Enable, 2));
@@ -2979,8 +3018,10 @@ mod tests {
     #[test]
     fn enable_completion_emits_context_after_operation_finishes() {
         let context = CloudBackupEnableContext::settings_manual();
-        let claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            operation_id(1),
+        );
         let mut model = CloudBackupStateReducer::default();
 
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
@@ -3013,7 +3054,7 @@ mod tests {
     fn releasing_the_enable_claim_republishes_the_settings_row() {
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::EnableNoDiscovery,
-            1,
+            operation_id(1),
         );
         let mut model = CloudBackupStateReducer::default();
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
@@ -3102,7 +3143,7 @@ mod tests {
     fn exclusive_operation_start_projects_latest_operation_without_locking() {
         let active_claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RecreateManifest,
-            1,
+            operation_id(1),
         );
         let cases = [
             CloudBackupExclusiveOperation::Enable,
@@ -3114,7 +3155,8 @@ mod tests {
             let mut model = CloudBackupStateReducer::default();
             model
                 .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(active_claim));
-            let next_claim = CloudBackupExclusiveOperationClaim::new(operation, index as u64 + 2);
+            let next_claim =
+                CloudBackupExclusiveOperationClaim::new(operation, operation_id(index as u64 + 2));
 
             model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(next_claim));
 
@@ -3136,10 +3178,14 @@ mod tests {
     #[test]
     fn stale_exclusive_operation_finish_does_not_clear_newer_operation() {
         let mut model = CloudBackupStateReducer::default();
-        let stale_claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 1);
-        let current_claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 2);
+        let stale_claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            operation_id(1),
+        );
+        let current_claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            operation_id(2),
+        );
 
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(stale_claim));
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim));
@@ -3209,8 +3255,10 @@ mod tests {
     #[test]
     fn matching_finish_releases_reconciled_background_status() {
         let mut model = CloudBackupStateReducer::default();
-        let claim =
-            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            operation_id(1),
+        );
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
         let runtime_effects = model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
@@ -3607,7 +3655,7 @@ mod tests {
     }
 
     #[test]
-    fn persisted_status_replaces_pending_enable_recovery_only_once_its_evidence_is_gone() {
+    fn only_the_owner_or_an_operation_ends_a_projected_pending_enable_recovery() {
         let recovering = || {
             let mut model = CloudBackupStateReducer::default();
             model.apply_event(CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(
@@ -3618,31 +3666,30 @@ mod tests {
             ));
             model
         };
-        let reconcile = |status, pending_enable_evidence| {
+        let after = |event| {
             let mut model = recovering();
-            model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled {
-                status,
-                pending_enable_evidence,
-            });
+            model.apply_event(event);
             model.public_state().lifecycle
         };
 
-        // not checked means the status was read before the recovery was projected
-        for evidence in [PendingEnableEvidence::NotChecked, PendingEnableEvidence::Remains] {
-            for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
-                assert!(matches!(
-                    reconcile(status, evidence),
-                    CloudBackupLifecycle::PendingEnableRecovery(_)
-                ));
-            }
+        // the persisted record can't see the keychain evidence the recovery stands on
+        for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
+            assert!(matches!(
+                after(CloudBackupStateReducerEvent::RuntimeStatusReconciled(status)),
+                CloudBackupLifecycle::PendingEnableRecovery(_)
+            ));
         }
 
         assert_eq!(
-            reconcile(CloudBackupStatus::Disabled, PendingEnableEvidence::Gone),
+            after(CloudBackupStateReducerEvent::PendingEnableRecoveryCleared(
+                CloudBackupStatus::Disabled
+            )),
             CloudBackupLifecycle::Disabled
         );
         assert!(matches!(
-            reconcile(CloudBackupStatus::Enabling, PendingEnableEvidence::Remains),
+            after(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+                CloudBackupStatus::Enabling
+            )),
             CloudBackupLifecycle::Enabling(_)
         ));
     }

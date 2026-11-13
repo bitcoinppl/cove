@@ -71,6 +71,24 @@ fn describe_restore_activation_failure(
     parts.into_iter().flatten().collect::<Vec<_>>().join(" and ")
 }
 
+/// Who may clear Cloud Backup's local keychain state, including its namespace
+///
+/// Only one of them can exist at a time: the recovery-cleanup permit is granted only while no
+/// Cloud Backup manager exists, and bootstrap waits while it is held. So the namespace has one
+/// owner at any moment, and `commit_disable` can read it before its transaction
+pub(crate) enum LocalStateOwner<'a> {
+    /// The lifecycle owner, in a handler or an `Effecting` stage
+    Lifecycle(
+        #[expect(dead_code, reason = "a witness: holding the token is the proof")]
+        &'a crate::manager::cloud_backup_manager::actors::supervisor::OwnerToken,
+    ),
+    /// Catastrophic recovery, before any Cloud Backup manager exists
+    RecoveryCleanup(
+        #[expect(dead_code, reason = "a witness: holding the permit is the proof")]
+        &'a crate::manager::cloud_backup_manager::CloudBackupRecoveryCleanupPermit,
+    ),
+}
+
 impl CloudBackupKeychain {
     pub(crate) fn global() -> Self {
         Self::new(Keychain::global().clone())
@@ -253,7 +271,7 @@ impl CloudBackupKeychain {
         Ok(())
     }
 
-    pub(crate) fn delete_namespace_id(&self) -> Result<(), CloudBackupKeychainError> {
+    fn delete_namespace_id(&self) -> Result<(), CloudBackupKeychainError> {
         self.delete_keychain_item_if_present(CSPP_NAMESPACE_ID_KEY)?;
         Ok(())
     }
@@ -268,7 +286,10 @@ impl CloudBackupKeychain {
         Ok(())
     }
 
-    pub(crate) fn clear_local_state(&self) -> Result<(), CloudBackupKeychainError> {
+    pub(crate) fn clear_local_state(
+        &self,
+        _owner: &LocalStateOwner<'_>,
+    ) -> Result<(), CloudBackupKeychainError> {
         let mut failed = false;
 
         if self.delete_master_key().is_err() {

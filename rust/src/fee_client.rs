@@ -568,7 +568,6 @@ mod tests {
 
     #[tokio::test]
     async fn fee_client_rejects_http_error_status() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener binds");
         let address = listener.local_addr().expect("listener has an address");
         let server = tokio::spawn(async move {
@@ -594,7 +593,6 @@ mod tests {
     #[cfg(debug_assertions)]
     #[tokio::test]
     async fn default_fee_client_fetches_from_cove_fee_url_override() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
         let node = crate::test_support::fake_node::FakeNode::start(bitcoin::Network::Signet);
         let url = format!("{}/api/v1/fees/recommended", node.esplora_url());

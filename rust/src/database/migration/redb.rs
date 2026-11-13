@@ -555,7 +555,6 @@ mod tests {
         recover_wallet_migration,
     };
     use super::*;
-    use crate::database::encrypted_backend::tests::set_test_encryption_key;
     use crate::database::{
         cloud_backup, encrypted_backend, global_cache, global_config, global_flag,
         historical_price, unsigned_transactions, wallet, wallet_data,
@@ -575,10 +574,6 @@ mod tests {
         ) -> Self {
             Self { dir, migration, known_wallet_ids }
         }
-    }
-
-    fn setup_test_key() {
-        set_test_encryption_key();
     }
 
     fn create_encrypted_redb_at(path: &Path) {
@@ -682,8 +677,6 @@ mod tests {
 
     #[test]
     fn copy_table_basic() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let src_path = dir.path().join("src.db");
         let dst_path = dir.path().join("dst.db");
@@ -713,8 +706,6 @@ mod tests {
 
     #[test]
     fn copy_table_missing_source_table() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let src_path = dir.path().join("src.db");
         let dst_path = dir.path().join("dst.db");
@@ -730,8 +721,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_roundtrip() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -763,8 +752,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_copies_cloud_backup_rows() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -812,8 +799,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_skips_historical_tables_and_preserves_source() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -844,8 +829,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_skips_unknown_tables_and_preserves_source() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -870,8 +853,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_preservation_failure_succeeds_after_promotion() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -897,8 +878,6 @@ mod tests {
 
     #[test]
     fn migrate_main_database_with_only_historical_tables_promotes_dest_and_preserves_source() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = dir.path().join(LEGACY_MAIN_DB);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -929,8 +908,6 @@ mod tests {
 
     #[test]
     fn migrate_wallet_database_roundtrip() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_wallet_db(&dir);
         let wallet_dir = source_path.parent().unwrap();
@@ -957,8 +934,6 @@ mod tests {
 
     #[test]
     fn migrate_wallet_database_skips_disposable_historical_tables_and_removes_source() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_wallet_db(&dir);
         let wallet_dir = source_path.parent().unwrap();
@@ -984,8 +959,6 @@ mod tests {
 
     #[test]
     fn migrate_wallet_database_skips_json_historical_tables_and_preserves_source() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_wallet_db(&dir);
         let wallet_dir = source_path.parent().unwrap();
@@ -1018,8 +991,6 @@ mod tests {
 
     #[test]
     fn wallet_current_table_verifier_fails_if_current_source_table_is_not_copied() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let src_path = dir.path().join("src.db");
         let dst_path = dir.path().join("dst.db");
@@ -1049,8 +1020,6 @@ mod tests {
 
     #[test]
     fn recover_main_crash_during_copy() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1070,8 +1039,6 @@ mod tests {
 
     #[test]
     fn recover_main_crash_after_copy_before_rename() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1091,8 +1058,6 @@ mod tests {
 
     #[test]
     fn recover_main_cleans_leftover_plaintext() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1109,8 +1074,6 @@ mod tests {
 
     #[test]
     fn recover_main_quarantines_corrupt_encrypted_when_plaintext_exists() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1130,8 +1093,6 @@ mod tests {
 
     #[test]
     fn recover_main_preserves_corrupt_encrypted_when_no_plaintext_exists() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1146,8 +1107,6 @@ mod tests {
 
     #[test]
     fn recover_wallet_crash_during_copy() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let wallet_dir = dir.path().join("wallet_id");
         std::fs::create_dir_all(&wallet_dir).unwrap();
@@ -1168,8 +1127,6 @@ mod tests {
 
     #[test]
     fn recover_wallet_crash_after_copy_before_rename() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let wallet_dir = dir.path().join("wallet_id");
         std::fs::create_dir_all(&wallet_dir).unwrap();
@@ -1190,8 +1147,6 @@ mod tests {
 
     #[test]
     fn recover_wallet_quarantines_corrupt_encrypted_when_plaintext_exists() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let wallet_dir = dir.path().join("wallet_id");
         std::fs::create_dir_all(&wallet_dir).unwrap();
@@ -1212,8 +1167,6 @@ mod tests {
 
     #[test]
     fn recover_interrupted_wallet_migrations_skips_orphan_artifacts() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let orphan_dir = dir.path().join("wallet_orphan");
         let known_dir = dir.path().join("wallet_known");
@@ -1243,8 +1196,6 @@ mod tests {
 
     #[test]
     fn recover_interrupted_wallet_migrations_skips_orphan_legacy_encrypted_rename() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let orphan_dir = dir.path().join("wallet_orphan");
         std::fs::create_dir_all(&orphan_dir).unwrap();
@@ -1261,8 +1212,6 @@ mod tests {
 
     #[test]
     fn recover_legacy_preserves_bak_when_main_db_corrupt() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let bak_path = dir.path().join("cove.db.bak");
@@ -1284,8 +1233,6 @@ mod tests {
 
     #[test]
     fn recover_legacy_deletes_bak_when_main_db_healthy() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let bak_path = dir.path().join("cove.db.bak");
@@ -1304,8 +1251,6 @@ mod tests {
 
     #[test]
     fn recover_legacy_bak_only() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let bak_path = dir.path().join("cove.db.bak");
@@ -1322,8 +1267,6 @@ mod tests {
 
     #[test]
     fn recover_legacy_tmp_only_promotes_valid_tmp() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let tmp_path = dir.path().join("cove.db.enc.tmp");
@@ -1339,8 +1282,6 @@ mod tests {
 
     #[test]
     fn recover_legacy_tmp_only_preserves_invalid_tmp() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let tmp_path = dir.path().join("cove.db.enc.tmp");
@@ -1357,8 +1298,6 @@ mod tests {
     #[test]
     fn copy_table_with_malformed_json_values() {
         use cove_types::redb::Json;
-
-        setup_test_key();
 
         let dir = TempDir::new().unwrap();
         let src_path = dir.path().join("src.db");
@@ -1422,8 +1361,6 @@ mod tests {
     fn migrate_main_database_copies_all_tables() {
         use redb::TableHandle as _;
 
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
@@ -1470,8 +1407,6 @@ mod tests {
 
     #[test]
     fn current_table_verifier_fails_if_current_source_table_is_not_copied() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let src_path = dir.path().join("src.db");
         let dst_path = dir.path().join("dst.db");
@@ -1497,8 +1432,6 @@ mod tests {
     #[test]
     fn migrate_wallet_database_copies_all_tables() {
         use redb::TableHandle as _;
-
-        setup_test_key();
 
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_wallet_db(&dir);
@@ -1543,8 +1476,6 @@ mod tests {
 
     #[test]
     fn known_wallet_ids_reads_wallet_metadata_from_main_database() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let path = dir.path().join(ENCRYPTED_MAIN_DB);
         create_encrypted_main_db_with_wallets(
@@ -1560,8 +1491,6 @@ mod tests {
 
     #[test]
     fn count_redb_wallets_needing_migration_ignores_orphan_dirs() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         create_plaintext_wallet_db_named(&dir, "wallet_good");
         create_plaintext_wallet_db_named(&dir, "wallet_orphan");
@@ -1574,8 +1503,6 @@ mod tests {
 
     #[test]
     fn wallet_migration_stops_on_cancellation() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
 
         // create multiple wallet subdirs with plaintext wallet_data.json
@@ -1612,8 +1539,6 @@ mod tests {
 
     #[test]
     fn wallet_migration_continues_past_bad_wallet() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
 
         // create a corrupt wallet (valid dir but corrupt DB file)
@@ -1676,8 +1601,6 @@ mod tests {
 
     #[test]
     fn wallet_migration_skips_orphan_wallet_dirs() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
 
         let orphan_dir = dir.path().join("wallet_orphan");
@@ -1706,8 +1629,6 @@ mod tests {
 
     #[test]
     fn wallet_migration_fails_known_corrupt_wallet_dir() {
-        setup_test_key();
-
         let dir = TempDir::new().unwrap();
         let bad_dir = dir.path().join("wallet_bad");
         std::fs::create_dir_all(&bad_dir).unwrap();

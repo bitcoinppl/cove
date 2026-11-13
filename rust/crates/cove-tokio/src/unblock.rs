@@ -1,3 +1,4 @@
+/// Run `f` on a blocking thread and wait for its result
 pub async fn run_blocking<F, R>(f: F) -> R
 where
     F: FnOnce() -> R + Send + 'static,

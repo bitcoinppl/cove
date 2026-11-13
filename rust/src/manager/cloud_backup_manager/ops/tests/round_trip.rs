@@ -99,7 +99,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
     let record_id = wallet_record_id(wallet.id.as_ref());
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
 
-    manager.do_backup_wallets(std::slice::from_ref(&wallet)).await.unwrap();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
     assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));
 
     // the uploaded blob carries the labels and the lock, but none of the source scan state
@@ -135,7 +135,13 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
     manager.do_upload_wallet_if_dirty(&wallet.id).await.unwrap();
     assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));
 
-    let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+        )
+        .await
+        .unwrap();
     assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None }));
 
     let restored = Database::global()

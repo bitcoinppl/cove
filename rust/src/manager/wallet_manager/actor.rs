@@ -3151,7 +3151,6 @@ mod tests {
     async fn payjoin_uri_completes_via_normal_broadcast_when_gated() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
-        let _ = rustls::crypto::ring::default_provider().install_default();
         test_keychain();
         crate::database::test_support::init_test_database();
 
@@ -3498,7 +3497,6 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn transaction_watcher_retries_after_initial_node_client_failure() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
 
         crate::database::test_support::init_test_database();
         set_invalid_bitcoin_electrum_node();
@@ -3568,7 +3566,6 @@ mod tests {
     async fn cancelled_watcher_quiescence_keeps_every_watcher_owned_for_resume() {
         // the actor opens its wallet database at the shared wallet-data root
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::database::test_support::init_test_database();
         test_keychain();
 
@@ -3623,7 +3620,6 @@ mod tests {
     async fn cancelled_or_failed_watcher_resume_retains_restart_ownership() {
         // the actor opens its wallet database at the shared wallet-data root
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        let _ = rustls::crypto::ring::default_provider().install_default();
         crate::database::test_support::init_test_database();
         test_keychain();
 

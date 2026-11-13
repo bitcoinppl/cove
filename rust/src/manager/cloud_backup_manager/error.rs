@@ -9,6 +9,7 @@ use tracing::{error, info, warn};
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
+use crate::manager::cloud_backup_manager::admission::{PauseReason, Rejection};
 
 const PASSKEY_ACCESS_RECOVERY_MESSAGE: &str = "Cove couldn't access your passkey. Check your connection and passkey account, then try again. If this keeps happening, choose another passkey provider or contact support.";
 const PASSKEY_NOT_FOUND_MESSAGE: &str =
@@ -18,8 +19,6 @@ const UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE: &str =
     "This passkey provider can't protect Cove backups. Choose another passkey provider.";
 pub(crate) const GENERIC_CLOUD_BACKUP_ERROR_MESSAGE: &str =
     "Cove couldn't complete this cloud backup request. Please try again.";
-pub(crate) const CLOUD_BACKUP_DISABLE_ERROR_MESSAGE: &str =
-    "Cove couldn't disable cloud backup. Please try again.";
 pub(crate) const CLOUD_BACKUP_LABELS_WARNING_MESSAGE: &str =
     "Cove restored the wallet, but couldn't restore its labels.";
 pub(crate) const CLOUD_BACKUP_RECREATE_MESSAGE: &str =
@@ -74,6 +73,28 @@ pub enum CloudBackupDriveAccountSwitchError {
     /// Persistence or actor coordination failed
     #[error("internal Google Drive account switch error: {0}")]
     Internal(String),
+}
+
+impl From<crate::manager::cloud_backup_manager::admission::Rejection>
+    for CloudBackupDriveAccountSwitchError
+{
+    fn from(rejection: crate::manager::cloud_backup_manager::admission::Rejection) -> Self {
+        use crate::manager::cloud_backup_manager::admission::Rejection as R;
+
+        match rejection {
+            R::CloudBackupOff | R::NotConfigured => Self::NotConfigured,
+            R::NothingToCancel | R::NothingToContinue => Self::InvalidTransition,
+            R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
+            // a committed Turn Off is still finishing, so the platform retries later
+            R::TurnOffCommitted
+            | R::OperationRunning(_)
+            | R::DetailInventoryNotLoaded
+            | R::OtherBackupsNotLoaded
+            | R::RestoreAllUnavailable
+            | R::KeepEnabledUnavailable
+            | R::Resetting => Self::Busy,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -267,6 +288,10 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             CloudBackupError::CloudStorage(error) => error.into(),
             CloudBackupError::CloudStorageContext { source, .. } => source.into(),
             CloudBackupError::Cloud(_) => Self::Other,
+            // never persisted: the upload path keeps a paused row Dirty before it classifies an
+            // error, so this arm only names paused work for callers that report it
+            CloudBackupError::WritesPaused(_) => Self::Other,
+            CloudBackupError::NotAdmitted(_) => Self::Other,
             CloudBackupError::NotSupported(_)
             | CloudBackupError::UnsupportedPasskeyProvider
             | CloudBackupError::RecoveryRequired(_)
@@ -393,6 +418,17 @@ pub(crate) enum CloudBackupError {
     #[error("deferred until connected: {0}")]
     Deferred(String),
 
+    /// The write lane did not run the write because its policy pauses that command class
+    ///
+    /// Pausing is not failing: a paused upload keeps its row Dirty, with no retry timer, and the
+    /// lane wakes the upload scheduler once the policy lets ordinary writes run again
+    #[error("cloud backup writes are paused: {0:?}")]
+    WritesPaused(PauseReason),
+
+    /// The lifecycle owner did not admit the request in its current state
+    #[error("cloud backup did not admit the request: {0:?}")]
+    NotAdmitted(Rejection),
+
     #[error("internal error: {0}")]
     Internal(#[source] CloudBackupInternalError),
 
@@ -468,6 +504,14 @@ impl CloudBackupError {
         Self::CloudStorageContext { context: context.into(), source }
     }
 
+    /// Adds `context` to a bare cloud storage error, such as one the write lane returned
+    pub(crate) fn with_cloud_storage_context(self, context: impl Into<String>) -> Self {
+        match self {
+            Self::CloudStorage(source) => Self::cloud_storage_context(context, source),
+            error => error,
+        }
+    }
+
     pub(crate) fn is_cloud_error(&self) -> bool {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
@@ -500,9 +544,11 @@ impl CloudBackupError {
             Self::NotSupported(_) => CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE.into(),
             Self::Crypto(_) => CLOUD_BACKUP_CRYPTO_MESSAGE.into(),
             Self::Compatibility(_) => CLOUD_BACKUP_COMPATIBILITY_MESSAGE.into(),
-            Self::Cloud(_) | Self::Deferred(_) | Self::Internal(_) => {
-                GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()
-            }
+            Self::Cloud(_)
+            | Self::Deferred(_)
+            | Self::WritesPaused(_)
+            | Self::NotAdmitted(_)
+            | Self::Internal(_) => GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
             Self::LocalWalletConflict(LocalWalletConflict::Mismatch) => {
                 LOCAL_WALLET_MISMATCH_MESSAGE.into()
             }
@@ -551,6 +597,8 @@ impl CloudBackupError {
             | Self::CloudStorageContext { .. }
             | Self::Offline(_)
             | Self::Deferred(_)
+            | Self::WritesPaused(_)
+            | Self::NotAdmitted(_)
             | Self::PasskeyMismatch
             | Self::NoBackupFound => warn!("{operation}: {self}"),
         }

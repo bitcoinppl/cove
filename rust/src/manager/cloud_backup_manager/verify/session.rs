@@ -8,6 +8,8 @@ use std::collections::HashSet;
 
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
 use cove_cspp::master_key::MasterKey;
+
+use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, OwnedKeychainWrite};
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -21,7 +23,10 @@ use super::wrapper_repair::{
     CloudBackupPasskeyWrapperRepairUpload, CloudBackupPreparedPasskeyWrapperRepair,
     WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy,
 };
-use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
+use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
+use crate::manager::cloud_backup_manager::pending::{
+    RemoteRevisionEvidence, remote_wallet_revision_matches,
+};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
@@ -228,8 +233,13 @@ impl CloudBackupDeepVerificationAutoSyncCompletion {
 /// One deep verification run with its cloud and keychain dependencies
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
+    /// The lane and the verification operation this pass writes for; any key it repairs is
+    /// saved under that operation's claim
+    pub(crate) writes: CloudBackupWriteClient,
+    /// The configuration generation the run started under, which the uploads its reads confirm
+    /// are judged against
+    pub(crate) config: ConfigGeneration,
     pub(crate) cloud_keychain: CloudBackupKeychain,
-    pub(crate) cspp: cove_cspp::Cspp<Keychain>,
     pub(crate) cloud: CloudStorageClient,
     pub(crate) passkey: PasskeyAccess,
     pub(crate) namespace: String,
@@ -351,19 +361,22 @@ impl WalletBackupReadPass {
 impl VerificationSession {
     pub(crate) fn new(
         manager: &RustCloudBackupManager,
+        writes: CloudBackupWriteClient,
+        config: ConfigGeneration,
         force_discoverable: bool,
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let cspp = cove_cspp::Cspp::new(keychain);
-        let local_master_key = cspp.load_master_key_from_store().map_err(|source| {
-            CloudBackupError::internal_context("load local master key", source)
-        })?;
+        let local_master_key =
+            cove_cspp::Cspp::new(keychain).load_master_key_from_store().map_err(|source| {
+                CloudBackupError::internal_context("load local master key", source)
+            })?;
 
         Ok(Self {
             manager: manager.clone(),
+            writes,
+            config,
             cloud_keychain,
-            cspp,
             cloud: CloudStorage::global_explicit_client(),
             passkey: PasskeyAccess::global().clone(),
             namespace: manager.current_namespace_id()?,
@@ -380,6 +393,21 @@ impl VerificationSession {
             wallets_missing: false,
             force_discoverable,
         })
+    }
+
+    /// Hands what this pass read from its namespace to the supervisor, which confirms the uploads
+    /// it proves while the run's configuration is current
+    fn confirm_remote_revisions(&self, truth: &RemoteWalletTruth) {
+        self.manager.confirm_remote_revisions(RemoteRevisionEvidence::new(
+            self.namespace.clone(),
+            self.config,
+            truth,
+        ));
+    }
+
+    /// Saves a keychain write this pass proved, under its operation and namespace
+    async fn save_owned(&self, write: OwnedKeychainWrite) -> Result<(), CloudBackupError> {
+        self.writes.save_keychain(self.namespace.clone(), vec![write]).await
     }
 
     pub(crate) async fn run(mut self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
@@ -412,7 +440,7 @@ impl VerificationSession {
         if let ContinuableMasterKeyResolution::Authenticated(authenticated_master) =
             &master_key_resolution
         {
-            self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+            self.apply_verified_cloud_master_key(&authenticated_master.master_key).await?;
         }
 
         let started = std::time::Instant::now();
@@ -568,9 +596,11 @@ impl VerificationSession {
         match master_key_crypto::decrypt_master_key(encrypted_master, &authenticated.prf_key) {
             // cloud wrapper decrypted, so this is the trusted master key for later wallet checks
             Ok(master_key) => {
-                if let Err(error) =
-                    self.cloud_keychain.save_passkey(&authenticated.credential_id, prf_salt)
-                {
+                let write = OwnedKeychainWrite::Passkey {
+                    credential_id: authenticated.credential_id.clone(),
+                    prf_salt,
+                };
+                if let Err(error) = self.save_owned(write).await {
                     return Ok(MasterKeyResolution::Finished(
                         self.retry_result(
                             CloudBackupError::internal_context("save cloud backup passkey", error)
@@ -605,25 +635,21 @@ impl VerificationSession {
         }
     }
 
-    fn apply_verified_cloud_master_key(
+    async fn apply_verified_cloud_master_key(
         &mut self,
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
         let repaired = match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
-                self.cspp.save_master_key(master_key).map_err(|source| {
-                    CloudBackupError::internal_context("repair local master key", source)
-                })?;
+                self.save_verified_master_key(master_key).await?;
                 info!("Repaired local master key from cloud");
                 true
             }
 
             // replace a stale local key after cloud decryption proves the cloud key is valid
             Some(local_key) if local_key.as_bytes() != master_key.as_bytes() => {
-                self.cspp.save_master_key(master_key).map_err(|source| {
-                    CloudBackupError::internal_context("repair local master key", source)
-                })?;
+                self.save_verified_master_key(master_key).await?;
                 info!("Repaired local master key to match cloud");
                 true
             }
@@ -638,6 +664,17 @@ impl VerificationSession {
         }
 
         Ok(())
+    }
+
+    async fn save_verified_master_key(
+        &self,
+        master_key: &MasterKey,
+    ) -> Result<(), CloudBackupError> {
+        let write = OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes()));
+        self.save_owned(write).await.map_err(|error| match error {
+            CloudBackupError::Cancelled => CloudBackupError::Cancelled,
+            error => CloudBackupError::internal_context("repair local master key", error),
+        })
     }
 
     async fn repair_wrapper_from_local_key(
@@ -728,7 +765,7 @@ impl VerificationSession {
         );
         self.report.wallets_verified = read_pass.verified;
         self.report.wallet_issues = read_pass.issues;
-        self.manager.cleanup_confirmed_pending_blobs(&read_pass.remote_wallet_truth);
+        self.confirm_remote_revisions(&read_pass.remote_wallet_truth);
 
         let inventory_result = CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -800,7 +837,7 @@ impl VerificationSession {
 
         let remote_wallet_truth = match self
             .manager
-            .load_remote_wallet_truth(&updated_ids, self.cloud.clone())
+            .load_remote_wallet_truth(&self.namespace, &updated_ids, self.cloud.clone())
             .await
         {
             Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -811,7 +848,7 @@ impl VerificationSession {
             }
         };
 
-        self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
+        self.confirm_remote_revisions(&remote_wallet_truth);
 
         let unconfirmed_pending_uploads = pending_uploads
             .iter()

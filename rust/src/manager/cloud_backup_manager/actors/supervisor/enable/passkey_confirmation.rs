@@ -1,24 +1,25 @@
 use super::*;
 
 impl CloudBackupSupervisor {
+    /// Continues the paused Enable or reinitialize admission accepted a confirmation for, as the
+    /// operation that paused it
     pub async fn confirm_saved_passkey(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let pending = match self.pending_enable_session.take() {
-            Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => session,
-            other => {
-                self.pending_enable_session = other;
-                return Produces::ok(());
-            }
-        };
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
-        else {
-            self.pending_enable_session = Some(pending);
+        let Some(continuation) = self.enable_continuation.take_if(|continuation| {
+            continuation.session().is_awaiting_saved_passkey_confirmation()
+        }) else {
             return Produces::ok(());
         };
 
+        let operation = continuation.owner().operation();
+        let Some(claim) = self.begin_exclusive_operation(&manager, operation) else {
+            self.enable_continuation = Some(continuation);
+            return Produces::ok(());
+        };
+
+        let pending = continuation.into_session();
         if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
-            self.active_operation.clear();
+            self.runtime.finish(claim);
             manager.project_exclusive_operation_finished(claim);
         }
 
@@ -36,24 +37,23 @@ impl CloudBackupSupervisor {
 
         match result {
             CloudBackupSavedPasskeyConfirmation::Confirmed(confirmed) => {
-                self.pending_enable_session = Some(PendingEnableSession::retry_upload(
-                    cove_cspp::master_key::MasterKey::from_bytes(*confirmed.master_key.as_bytes()),
-                    confirmed.passkey.copy_for_retry(),
-                    confirmed.context,
-                ));
+                self.keep_enable_continuation(
+                    claim,
+                    PendingEnableSession::retry_upload(
+                        cove_cspp::master_key::MasterKey::from_bytes(
+                            *confirmed.master_key.as_bytes(),
+                        ),
+                        confirmed.passkey.copy_for_retry(),
+                        confirmed.context,
+                    ),
+                );
                 manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
                 warn!("Confirm saved passkey requires manual retry: {error}");
-                self.pending_enable_session = Some(pending);
-                manager.apply_enable_state(
-                    CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                        SavedPasskeyConfirmationMode::Manual,
-                    ),
-                );
-                self.active_operation.clear();
-                manager.project_exclusive_operation_finished(claim);
+                self.keep_enable_continuation(claim, pending);
+                self.pause_for_saved_passkey_confirmation(manager, claim);
             }
             CloudBackupSavedPasskeyConfirmation::Failed(error) => {
                 self.fail_enable_operation(&manager, claim, error);
@@ -63,39 +63,66 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    /// Pauses the work `claim` starts when its own lifecycle already has a registered passkey
+    /// waiting for confirmation, so a second passkey is never created beside it
     pub(crate) fn finish_awaiting_saved_passkey_confirmation_if_present(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> bool {
-        if !self
-            .pending_enable_session
-            .as_ref()
-            .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation)
-        {
+        let owner = ContinuationOwner::of(claim.operation());
+        if !self.has_enable_continuation(owner, ContinuationStage::AwaitingSavedPasskey) {
             return false;
         }
 
+        self.pause_for_saved_passkey_confirmation(manager, claim);
+        true
+    }
+
+    /// Ends the work `claim` runs where it waits for the user to confirm the passkey they saved
+    ///
+    /// The continuation keeps the material, so this is not the work's success: a reinitialize
+    /// that pauses has replaced nothing yet, so it shows no recovery running and does not go on
+    /// to verify. Confirm Saved Passkey continues it as the same kind of operation
+    pub(crate) fn pause_for_saved_passkey_confirmation(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
         manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
             SavedPasskeyConfirmationMode::Manual,
         ));
-        self.finish_enable_operation(manager, claim);
-        true
+
+        match ContinuationOwner::of(claim.operation()) {
+            ContinuationOwner::Enable => {}
+            ContinuationOwner::Reinitialize => {
+                // an account switch reports its reinitialize's end to the switch, which decides
+                // what the switch does next
+                match self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+                    DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+                    DriveAccountSwitchReinitializationCompletion::Stale
+                    | DriveAccountSwitchReinitializationCompletion::Handled => return,
+                }
+
+                manager.apply_recovery_state(RecoveryState::Idle);
+            }
+        }
+
+        self.runtime.finish(claim);
+        manager.project_exclusive_operation_finished(claim);
     }
 
     pub(crate) fn schedule_enable_saved_passkey_wait(
         &self,
         claim: CloudBackupExclusiveOperationClaim,
         mode: SavedPasskeyConfirmationMode,
-    ) -> bool {
+    ) {
         let addr = self.addr();
 
         cove_tokio::task::spawn(async move {
             delay_before_new_passkey_auth().await;
             send!(addr.complete_enable_saved_passkey_wait(claim, mode));
         });
-
-        true
     }
 
     pub async fn complete_enable_saved_passkey_wait(
@@ -121,19 +148,15 @@ impl CloudBackupSupervisor {
 
         match retry {
             SavedPasskeyConfirmationRetry::Manual => {
-                manager.apply_enable_state(
-                    CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                        SavedPasskeyConfirmationMode::Manual,
-                    ),
-                );
-                self.finish_enable_operation(manager, claim);
+                self.pause_for_saved_passkey_confirmation(manager, claim);
             }
             SavedPasskeyConfirmationRetry::Automatic => {
-                let pending = match self.pending_enable_session.take() {
-                    Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => {
-                        session
-                    }
-                    _ => {
+                let owner = ContinuationOwner::of(claim.operation());
+                let pending = match self
+                    .take_enable_continuation(owner, ContinuationStage::AwaitingSavedPasskey)
+                {
+                    Some(continuation) => continuation.into_session(),
+                    None => {
                         warn!("Automatic saved-passkey confirmation missing pending session");
                         self.clear_abandoned_enable_progress(&manager, claim);
                         self.finish_enable_operation(manager, claim);

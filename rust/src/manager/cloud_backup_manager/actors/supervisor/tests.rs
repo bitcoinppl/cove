@@ -1,9 +1,15 @@
 
 use super::*;
+use cove_tokio::task::spawn_actor;
+use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
+use crate::manager::cloud_backup_manager::ops::DisableAttempt;
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommittedDisable, DisableCommitReview, DisablingRecord,
+};
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
 };
-use super::verification::DeepVerificationContinuation;
+use super::verification::{DeepVerificationContinuation, VerificationRun};
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_tokio::FutureTimeoutExt as _;
 use crate::test_support::loaded_host_wait;
@@ -15,11 +21,13 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
+    begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
-    configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry, listed_detail,
+    configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
+    hold_wallet_upload_in_flight, listed_detail, wait_for_queued_lane_write,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
     seed_verifiable_cloud_master_key, test_globals,
-    staged_pending_enable_journal, wait_for_test_condition, wallet_entry_with_labels,
+    staged_pending_enable_journal, unowned_writes, wait_for_background_refreshes, wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
@@ -30,7 +38,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle, CloudBackupListedDetail,
     CloudBackupOtherBackupsSummary,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
     PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
 };
@@ -44,13 +52,26 @@ use cove_device::keychain::WalletSecret as KeychainWalletSecret;
 
 const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
 
+/// A standalone supervisor with its own test writer, beside the manager's spawned one
+fn test_supervisor(
+    manager: Weak<RustCloudBackupManager>,
+    writes: Addr<CloudBackupWriteSupervisor>,
+) -> CloudBackupSupervisor {
+    CloudBackupSupervisor::new(
+        manager,
+        writes,
+        crate::manager::cloud_backup_manager::owner::lifecycle::test_support::owner_writer(),
+        None,
+    )
+}
+
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     let globals = test_globals();
 
     // a new manager resumes any persisted transition on init and blocks its writes for it, so a
     // transition an earlier test left behind must be gone first
     let _ = Database::global().cloud_backup_state.delete();
-    let manager = RustCloudBackupManager::init();
+    let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
     reset_cloud_backup_test_state(&manager, globals);
     manager
 }
@@ -60,6 +81,27 @@ fn persist_enabled_for_supervisor_test() {
         .cloud_backup_state
         .set(&PersistedCloudBackupState::mark_enabled_reset_verification(0, 0))
         .unwrap();
+}
+
+/// Seeds a Configured record under a supervisor the test drives directly; it rebases on the
+/// seed as it would on its own commit
+fn persist_enabled_under(supervisor: &mut CloudBackupSupervisor) {
+    persist_enabled_for_supervisor_test();
+    supervisor.rebase_on_seeded_record();
+}
+
+fn test_committed_disable() -> CommittedDisable {
+    match CommittedDisable::from_record(&test_disabling_state()) {
+        DisablingRecord::Committed(committed) => committed,
+        DisablingRecord::Unnormalized => panic!("the test record is committed"),
+    }
+}
+
+fn test_uncommitted_attempt() -> DisableAttempt {
+    DisableAttempt::Uncommitted {
+        review: DisableCommitReview { namespace_id: VALID_NAMESPACE_ID.into() },
+        attempt_id: 7,
+    }
 }
 
 fn test_disabling_state() -> PersistedDisablingCloudBackup {
@@ -96,10 +138,20 @@ fn prepare_restore_all_marker(manager: &RustCloudBackupManager) {
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
     CloudBackupKeychain::global().save_namespace_id(VALID_NAMESPACE_ID).unwrap();
-    CloudBackupStore::global()
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer()
         .persist_restore_all_marker(VALID_NAMESPACE_ID.into())
         .unwrap();
     manager.sync_persisted_state();
+}
+
+/// Starts Restore All the way the supervisor does, with the test's cancellation flag
+fn begin_test_restore_all(
+    supervisor: &mut CloudBackupSupervisor,
+    cancellation: Arc<AtomicBool>,
+) -> CloudBackupExclusiveOperationClaim {
+    let claim = supervisor.begin_restore_all_exclusive_operation().unwrap();
+    supervisor.runtime.restore_all_mut(claim).unwrap().cancellation = cancellation;
+    claim
 }
 
 fn test_cloud_only_wallet(record_id: &str) -> CloudBackupWalletItem {
@@ -376,7 +428,7 @@ async fn seed_local_wallet_with_cloud_duplicate(
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(manager, CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -710,7 +762,7 @@ fn enable_recovery_completion_debug_redacts_nested_items() {
 async fn supervisor_rejects_second_exclusive_operation_while_active() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -722,30 +774,34 @@ async fn supervisor_rejects_second_exclusive_operation_while_active() {
         supervisor.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore);
 
     assert!(second.is_none());
-    assert_eq!(supervisor.active_operation, Some(first));
+    assert_eq!(supervisor.runtime, Some(first));
     assert_eq!(manager.projected_exclusive_operation(), Some(first));
 
     supervisor.complete_exclusive_operation(first).await.unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
 #[test]
-fn local_reset_cancels_restore_without_releasing_its_claim() {
+fn local_reset_cancels_restore_and_revokes_its_claim() {
     let claim = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::Restore,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
     let cancellation = Arc::new(AtomicBool::new(false));
-    let mut active = ActiveOperation::default();
-    active.start_restore(RestoreRun::new(claim, Arc::clone(&cancellation)));
+    let mut active = Runtime::Disabled { op: None };
+    active.start_restore(RestoreRun::new(claim, Arc::clone(&cancellation))).unwrap();
 
-    let released_claim = active.prepare_local_reset();
+    let (ready, mut effects_settled) = oneshot::channel();
+    let start = active.begin_reset(ready);
 
-    assert!(released_claim.is_none());
+    // a restore is cancellable, so the reset neither waits for it nor lets it report again
+    assert_eq!(start, ResetStart::Cancelled(claim));
     assert!(cancellation.load(Ordering::Acquire));
-    assert_eq!(active, Some(claim));
+    assert!(effects_settled.try_recv().is_ok());
+    assert!(!active.accepts_completion(claim, "restore completion"));
+    assert!(active.restore(claim).is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -753,7 +809,7 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     persist_enabled_for_supervisor_test();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -801,7 +857,7 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
         .unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().drive_account_switch().is_none());
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
@@ -817,7 +873,7 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -851,7 +907,7 @@ async fn drive_account_switch_restart_preserves_failed_reinitialization_for_retr
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -893,12 +949,15 @@ async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
-    supervisor.active_operation.start_standard(claim);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
+    supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
     let action = supervisor
@@ -910,7 +969,7 @@ async fn drive_account_switch_reconcile_does_not_restart_live_reinitialization()
         .unwrap();
 
     assert_eq!(action, DriveAccountSwitchReconcileAction::None);
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
     assert_eq!(
         RustCloudBackupManager::load_persisted_state().drive_account_switch(),
         Some(&transition)
@@ -929,18 +988,21 @@ async fn stale_drive_account_switch_completion_cannot_finish_live_operation() {
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
-    supervisor.active_operation.start_standard(claim);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
+    supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
     supervisor.finish_enable_operation(manager.clone(), claim);
     supervisor.finish_enable_operation(manager.clone(), claim);
 
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
     assert_eq!(
         RustCloudBackupManager::load_persisted_state()
@@ -983,12 +1045,15 @@ async fn failed_drive_account_reinitialization_does_not_request_account_commit()
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
-    supervisor.active_operation.start_standard(claim);
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(
+        transition.transition_id,
+        OperationId::next(),
+    );
+    supervisor.runtime.start_standard(claim).expect("test runtime body admits the operation");
     manager.project_exclusive_operation_started(claim);
 
     assert_eq!(
@@ -1002,7 +1067,7 @@ async fn failed_drive_account_reinitialization_does_not_request_account_commit()
             .map(|account_switch| account_switch.phase),
         Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry)
     );
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert!(!manager.reconciler.receiver().try_iter().any(|messages| match messages {
         SingleOrMany::Single(message) => matches!(
@@ -1025,7 +1090,7 @@ async fn drive_account_switch_reports_busy_while_disable_is_persisted() {
         .cloud_backup_state
         .set(&PersistedCloudBackupState::disabling_transition(disabling))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1039,7 +1104,7 @@ async fn drive_account_switch_reports_busy_while_disable_is_persisted() {
         .unwrap_err();
 
     assert_eq!(error, CloudBackupDriveAccountSwitchError::Busy);
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
@@ -1048,7 +1113,7 @@ async fn drive_account_switch_restart_finalizes_platform_only_commit() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     persist_enabled_for_supervisor_test();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1076,7 +1141,7 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
     Database::global().cloud_backup_state.set(&persisted).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -1095,7 +1160,7 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
         Some(&transition)
     );
     assert_eq!(
-        supervisor.active_operation.claim().and_then(CloudBackupExclusiveOperationClaim::drive_account_switch_id),
+        supervisor.runtime.claim().and_then(CloudBackupExclusiveOperationClaim::drive_account_switch_id),
         None
     );
     assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
@@ -1123,6 +1188,17 @@ fn begin_exclusive(
     move |supervisor, manager| supervisor.begin_exclusive_operation(manager, operation).unwrap()
 }
 
+/// Starts an operation on a configured backup, which only a Configured record has a place for
+fn begin_configured(
+    operation: CloudBackupExclusiveOperation,
+) -> impl FnOnce(&mut CloudBackupSupervisor, &Arc<RustCloudBackupManager>) -> CloudBackupExclusiveOperationClaim
+{
+    move |supervisor, manager| {
+        persist_enabled_under(supervisor);
+        supervisor.begin_exclusive_operation(manager, operation).unwrap()
+    }
+}
+
 /// Replays one completion handler with a stale claim and then the live claim, so a handler that
 /// skips the claim check clears the operation on the stale call and fails here
 async fn assert_completion_ignores_stale_claim(
@@ -1134,22 +1210,22 @@ async fn assert_completion_ignores_stale_claim(
 ) {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
     let current = begin(&mut supervisor, &manager);
-    let stale = CloudBackupExclusiveOperationClaim::new(current.operation(), u64::MAX);
+    let stale = CloudBackupExclusiveOperationClaim::new(current.operation(), operation_id(u64::MAX));
 
     complete(&mut supervisor, stale).await;
 
-    assert_eq!(supervisor.active_operation, Some(current));
+    assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
     complete(&mut supervisor, current).await;
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
@@ -1163,7 +1239,7 @@ async fn supervisor_ignores_stale_exclusive_operation_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_cloud_wallet_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
             supervisor
                 .complete_delete_cloud_wallet(claim, "wallet-record".into(), Err(CloudBackupError::Internal("completion".into())))
                 .await
@@ -1174,7 +1250,7 @@ async fn supervisor_ignores_stale_delete_cloud_wallet_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RestoreCloudWallet), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RestoreCloudWallet), async |supervisor, claim| {
             let outcome = Err(CloudBackupError::Internal("completion".into()));
             supervisor
                 .complete_restore_cloud_wallet(claim, "wallet-record".into(), 0, outcome)
@@ -1186,7 +1262,7 @@ async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_wrapper_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
             supervisor.complete_repair_passkey_wrapper(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1194,7 +1270,7 @@ async fn supervisor_ignores_stale_repair_passkey_wrapper_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
             let finalization = Err(CloudBackupError::Internal("completion".into()));
             supervisor.complete_repair_passkey_finalization(claim, finalization).await.unwrap();
     })
@@ -1203,7 +1279,7 @@ async fn supervisor_ignores_stale_repair_passkey_finalization_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_wrapper_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
             let upload = Err(CloudBackupError::Internal("completion".into()));
             supervisor.complete_repair_passkey_wrapper_upload(claim, upload).await.unwrap();
     })
@@ -1212,7 +1288,7 @@ async fn supervisor_ignores_stale_repair_passkey_wrapper_upload_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_recovery_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor.complete_recreate_manifest_recovery(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1220,7 +1296,7 @@ async fn supervisor_ignores_stale_recreate_manifest_recovery_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor.complete_recreate_manifest_finalization(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1228,14 +1304,17 @@ async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor
                 .complete_verification(
-                    Some(claim),
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                    DeepVerificationContinuation::RecreateManifest {
-                        attempt: VerificationAttempt::Initial,
+                    VerificationRun {
+                        claim,
+                        continuation: DeepVerificationContinuation::RecreateManifest {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                        basis: supervisor.evidence_basis(),
                     },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1245,13 +1324,13 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(claim, continuation, Err(CloudBackupError::Internal("completion".into())))
+                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.evidence_basis() }, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1260,15 +1339,14 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
                 .complete_deep_verification_wrapper_repair_resume(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1279,15 +1357,14 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
                 .complete_deep_verification_auto_sync_upload(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1298,15 +1375,14 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
                 .complete_deep_verification_auto_sync_finalization(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1317,15 +1393,14 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Verify), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
                 .complete_deep_verification_auto_sync_resume(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.evidence_basis() },
                     CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
@@ -1338,7 +1413,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_reinitialize_backup_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::ReinitializeBackup), async |supervisor, claim| {
             supervisor.complete_enable_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1346,14 +1421,17 @@ async fn supervisor_ignores_stale_reinitialize_backup_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_reinitialize_verification_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
             supervisor
                 .complete_verification(
-                    Some(claim),
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                    DeepVerificationContinuation::ReinitializeBackup {
-                        attempt: VerificationAttempt::Initial,
+                    VerificationRun {
+                        claim,
+                        continuation: DeepVerificationContinuation::ReinitializeBackup {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                        basis: supervisor.evidence_basis(),
                     },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1504,7 +1582,7 @@ async fn supervisor_ignores_stale_enable_upload_finalization_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor.complete_disable_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1512,9 +1590,9 @@ async fn supervisor_ignores_stale_disable_preparation_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_blocker_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_blocker_check(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_blocker_check(claim, test_uncommitted_attempt(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1523,9 +1601,9 @@ async fn supervisor_ignores_stale_disable_blocker_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_delete_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_namespace_delete(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_namespace_delete(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1534,9 +1612,9 @@ async fn supervisor_ignores_stale_disable_delete_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
-                .complete_disable_local_cleanup(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
+                .complete_disable_local_cleanup(claim, test_committed_disable(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1546,6 +1624,7 @@ async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recover_other_backups_completion() {
     assert_completion_ignores_stale_claim(|supervisor, manager| {
+            persist_enabled_under(supervisor);
             CloudBackupSupervisor::begin_other_backups_operation(
                 supervisor,
                 manager,
@@ -1561,7 +1640,7 @@ async fn supervisor_ignores_stale_recover_other_backups_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
             supervisor.complete_delete_cloud_wallet_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
     })
     .await;
@@ -1570,6 +1649,7 @@ async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_other_backups_completion() {
     assert_completion_ignores_stale_claim(|supervisor, manager| {
+            persist_enabled_under(supervisor);
             CloudBackupSupervisor::begin_other_backups_operation(
                 supervisor,
                 manager,
@@ -1593,17 +1673,18 @@ async fn supervisor_ignores_stale_delete_other_backups_completion() {
 async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
+    persist_enabled_under(&mut supervisor);
     let current = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
         .unwrap();
     let stale = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::RepairPasskey,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
 
     let detail_claim = supervisor.detail_workflow.start_operation_result();
@@ -1612,7 +1693,7 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, Some(current));
+    assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
     supervisor
@@ -1620,7 +1701,7 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
@@ -1629,7 +1710,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1693,7 +1774,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1747,7 +1828,7 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1784,7 +1865,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1835,7 +1916,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1866,7 +1947,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1901,21 +1982,27 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
 async fn supervisor_ignores_stale_sync_request_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     supervisor.active_sync_request = Some(7);
 
     supervisor
-        .complete_sync_request(6, Err(CloudBackupError::Internal("stale completion".into())))
+        .complete_sync_request(
+            6,
+            SyncRequestOutcome::Failed(CloudBackupError::Internal("stale completion".into())),
+        )
         .await
         .unwrap();
 
     assert_eq!(supervisor.active_sync_request, Some(7));
 
     supervisor
-        .complete_sync_request(7, Err(CloudBackupError::Internal("current completion".into())))
+        .complete_sync_request(
+            7,
+            SyncRequestOutcome::Failed(CloudBackupError::Internal("current completion".into())),
+        )
         .await
         .unwrap();
 
@@ -1926,7 +2013,7 @@ async fn supervisor_ignores_stale_sync_request_completion() {
 async fn supervisor_ignores_stale_sync_refresh_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1952,7 +2039,7 @@ async fn supervisor_ignores_stale_sync_refresh_completion() {
 async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -1988,11 +2075,7 @@ async fn enable_recovery_finalization_requires_durable_pending_completion_before
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace_id = master_key.namespace_id();
     let finalization = test_enable_recovery_finalization(&namespace_id);
-    Database::global()
-        .cloud_backup_state
-        .set(&persisted_enabled_cloud_backup_state(Some(0)))
-        .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2000,6 +2083,11 @@ async fn enable_recovery_finalization_requires_durable_pending_completion_before
     manager.project_enable_context_started(context);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
+        .unwrap();
+    // the Enable worker writes the Configured record while its operation runs
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
     prepare_test_enable_recovery_local_promotion(&manager, &finalization, &master_key);
 
@@ -2011,7 +2099,7 @@ async fn enable_recovery_finalization_requires_durable_pending_completion_before
     assert!(matches!(manager.model_snapshot().status, CloudBackupStatus::Error(_)));
     assert!(manager.pending_verification_completion().is_none());
     assert!(!emitted_enable_completed(&manager));
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert!(matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_)));
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
@@ -2032,11 +2120,7 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
     let recovered_master_key = cove_cspp::master_key::MasterKey::generate();
     let finalization =
         test_enable_recovery_finalization(&recovered_master_key.namespace_id());
-    Database::global()
-        .cloud_backup_state
-        .set(&persisted_enabled_cloud_backup_state(Some(0)))
-        .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2044,6 +2128,11 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
     manager.project_enable_context_started(context);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
+        .unwrap();
+    // the Enable worker writes the Configured record while its operation runs
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
     prepare_test_enable_recovery_local_promotion(
         &manager,
@@ -2073,7 +2162,7 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
     assert!(matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)));
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
     assert!(!emitted_enable_completed(&manager));
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2087,8 +2176,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
     assert!(persisted_state.replace_pending_verification_completion(
         finalization.pending_completion.clone()
     ));
-    Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2097,6 +2185,8 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
         .unwrap();
+    // the Enable worker writes the Configured record while its operation runs
+    Database::global().cloud_backup_state.set(&persisted_state).unwrap();
     prepare_test_enable_recovery_local_promotion(&manager, &finalization, &master_key);
 
     supervisor
@@ -2107,7 +2197,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
     assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabled);
     assert!(manager.pending_verification_completion().is_some());
     assert!(emitted_enable_completed(&manager));
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
     assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().as_deref(), Some(namespace_id.as_str()));
     assert_eq!(
@@ -2126,7 +2216,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
 async fn supervisor_accepts_registered_enable_passkey_confirmation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2151,9 +2241,9 @@ async fn supervisor_accepts_registered_enable_passkey_confirmation() {
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, Some(current));
+    assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
-    let pending = supervisor.pending_enable_session.take().unwrap();
+    let pending = supervisor.enable_continuation.take().unwrap().into_session();
     let (pending_master_key, pending_passkey) = pending.into_staged_parts().unwrap();
     assert_eq!(pending_master_key.namespace_id(), expected_namespace);
     assert_eq!(pending_passkey.credential_id, expected_credential_id);
@@ -2163,7 +2253,7 @@ async fn supervisor_accepts_registered_enable_passkey_confirmation() {
 async fn supervisor_consumes_retry_pending_enable_upload() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2171,20 +2261,23 @@ async fn supervisor_consumes_retry_pending_enable_upload() {
     let expected_namespace = master_key.namespace_id();
     let expected_credential_id = vec![1, 2, 3];
 
-    supervisor.pending_enable_session = Some(PendingEnableSession::retry_upload(
-        master_key,
-        test_enable_passkey(expected_credential_id.clone()),
-        CloudBackupEnableContext::settings_manual(),
+    supervisor.enable_continuation = Some(EnableContinuation::new(
+        ContinuationOwner::Enable,
+        PendingEnableSession::retry_upload(
+            master_key,
+            test_enable_passkey(expected_credential_id.clone()),
+            CloudBackupEnableContext::settings_manual(),
+        ),
     ));
 
     let ready = supervisor
-        .take_ready_enable_upload()
+        .take_ready_enable_upload(ContinuationOwner::Enable)
         .unwrap()
         .unwrap();
 
     assert_eq!(ready.master_key.namespace_id(), expected_namespace);
     assert_eq!(ready.passkey.credential_id, expected_credential_id);
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
 }
 
 
@@ -2195,11 +2288,7 @@ async fn supervisor_consumes_retry_pending_enable_upload() {
 async fn enable_upload_finalization_requires_durable_pending_completion_before_success() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    Database::global()
-        .cloud_backup_state
-        .set(&persisted_enabled_cloud_backup_state(Some(0)))
-        .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2207,6 +2296,11 @@ async fn enable_upload_finalization_requires_durable_pending_completion_before_s
     manager.project_enable_context_started(context);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
+        .unwrap();
+    // the Enable worker writes the Configured record while its operation runs
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
         .unwrap();
 
     supervisor
@@ -2217,7 +2311,7 @@ async fn enable_upload_finalization_requires_durable_pending_completion_before_s
     assert!(matches!(manager.model_snapshot().status, CloudBackupStatus::Error(_)));
     assert!(manager.pending_verification_completion().is_none());
     assert!(!emitted_enable_completed(&manager));
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2230,11 +2324,7 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
     assert!(persisted_state.replace_pending_verification_completion(
         finalization.pending_completion.clone()
     ));
-    Database::global()
-        .cloud_backup_state
-        .set(&persisted_state)
-        .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2242,6 +2332,11 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
     manager.project_enable_context_started(context);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
+        .unwrap();
+    // the Enable worker writes the Configured record while its operation runs
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_state)
         .unwrap();
 
     supervisor
@@ -2252,7 +2347,7 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
     assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabled);
     assert!(manager.pending_verification_completion().is_some());
     assert!(emitted_enable_completed(&manager));
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2271,7 +2366,7 @@ async fn pending_enable_restart_discards_stage_interrupted_after_ownership_claim
         ))
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2304,7 +2399,7 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
             previous_metadata.clone(),
         ))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2342,14 +2437,14 @@ async fn pending_enable_restart_hydrates_registered_passkey_for_manual_confirmat
         provider_hint: passkey.provider_hint.clone(),
     }));
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    let pending = supervisor.pending_enable_session.take().unwrap();
+    let pending = supervisor.enable_continuation.take().unwrap().into_session();
     assert!(pending.is_awaiting_saved_passkey_confirmation());
     assert_eq!(pending.namespace_id(), expected_namespace);
     assert_eq!(
@@ -2389,14 +2484,14 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
     }));
     assert!(journal.mark_remote_writes_started());
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
@@ -2434,7 +2529,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
@@ -2458,7 +2553,7 @@ async fn pending_enable_restart_finishes_promoted_state_with_matching_completion
         finalization.pending_completion.clone()
     ));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2504,7 +2599,7 @@ async fn pending_enable_restart_finishes_after_commit_cleared_staging_slot() {
     );
 
     cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2541,7 +2636,7 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
     let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     let (finalization, staged_master_key) = test_enable_upload_finalization();
     prepare_test_enable_local_promotion(&manager, &finalization, &staged_master_key);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2560,9 +2655,9 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
     );
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(supervisor
-        .pending_enable_session
+        .enable_continuation
         .as_ref()
-        .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation));
+        .is_some_and(|continuation| continuation.session().is_awaiting_saved_passkey_confirmation()));
     assert!(matches!(
         cloud_keychain.load_pending_enable_journal().unwrap().unwrap().phase(),
         PendingEnableJournalPhase::RemoteWritesStarted(_)
@@ -2581,7 +2676,7 @@ async fn pending_enable_restart_fails_closed_on_conflicting_completion() {
         vec![PendingVerificationUpload::master_key_wrapper()],
     )));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2623,7 +2718,7 @@ async fn pending_enable_restart_fails_closed_on_unowned_cspp_staging() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2643,7 +2738,7 @@ async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2666,15 +2761,14 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
 
-    supervisor.resume_pending_enable_after_restart().await.unwrap();
+    // the manager's own supervisor resumes, since the sync below asks it to project its runtime;
+    // a second supervisor would leave that runtime empty and the projection would undo recovery
+    call!(manager.supervisor.resume_pending_enable_after_restart()).await.unwrap();
 
     // both platforms sync persisted state after bootstrap, which can land after the projection
     manager.sync_persisted_state();
+    crate::manager::cloud_backup_manager::ops::test_support::supervisor_checkpoint(&manager).await;
 
     assert!(matches!(
         manager.state().lifecycle,
@@ -2685,7 +2779,7 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     ));
     assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
 
-    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+    call!(manager.supervisor.confirm_pending_enable_cleanup()).await.unwrap();
 
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Disabled));
@@ -2698,7 +2792,7 @@ async fn pending_enable_recovery_survives_persisted_state_reconcile() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2734,7 +2828,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2768,7 +2862,7 @@ async fn no_journal_staged_cleanup_revalidates_before_discarding() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2818,7 +2912,7 @@ async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
     }));
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
     cspp.promote_staged_master_key().unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2843,7 +2937,7 @@ async fn pending_enable_restart_projects_unreadable_evidence_without_diagnostics
         crate::manager::cloud_backup_manager::keychain::CSPP_PENDING_ENABLE_JOURNAL_KEY,
         "not valid journal json",
     )]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2885,7 +2979,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
         ))
         .unwrap();
     let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2919,7 +3013,7 @@ async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
             cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2954,7 +3048,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
         ))
         .unwrap();
     globals.keychain.fail_delete_at(3);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -2974,71 +3068,112 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
 
 
 #[tokio::test(flavor = "current_thread")]
-async fn supervisor_ignores_disable_blocker_completion_after_keep_enabled_restores_configured() {
+async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
+    persist_enabled_under(&mut supervisor);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
-        .unwrap();
+    test_disabling_state();
+    Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
 
-    assert!(manager.restore_configured_cloud_backup_after_disable(&disabling).unwrap());
+    supervisor.complete_disable_blocker_check(claim, test_uncommitted_attempt(), Ok(())).await.unwrap();
 
-    supervisor.complete_disable_blocker_check(claim, disabling, Ok(())).await.unwrap();
-
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Configured(_)
-    ));
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap(), PersistedCloudBackupState::Disabled);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn stale_completion_is_discarded_without_touching_the_running_operation() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    call!(manager.supervisor.rebase_after_test_write()).await.unwrap();
+
+    let (finished, _) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::RecreateManifest)
+            .await;
+    finish_operation_for_test(&manager, finished).await;
+    let (running, _) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+            .await;
+
+    // the reset and the upload verifier each request a sync-health refresh that lands later
+    wait_for_background_refreshes(&manager).await;
+
+    // background refreshes drive sync health and completions never do, and a refresh requested
+    // before the snapshot can still land after it, so the comparison leaves sync health out;
+    // the state has no PartialEq, so its debug form stands in for it
+    let operation_state = || {
+        let mut state = manager.state();
+        if let CloudBackupLifecycle::Configured(configured) = &mut state.lifecycle {
+            configured.sync_health = cove_device::cloud_storage::CloudSyncHealth::Unknown;
+        }
+
+        format!("{state:?}")
+    };
+    let before = operation_state();
+
+    // the finished operation's late failure and success both arrive while the next one runs
+    call!(
+        manager
+            .supervisor
+            .fail_exclusive_operation(finished, CloudBackupError::Internal("late failure".into()))
+    )
+    .await
+    .unwrap();
+    call!(manager.supervisor.complete_exclusive_operation(finished)).await.unwrap();
+
+    let claim = call!(manager.supervisor.operation_claim_for_test()).await.unwrap();
+    let last_outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap();
+    assert_eq!(claim, Some(running));
+    assert_eq!(manager.projected_exclusive_operation(), Some(running));
+    assert_eq!(operation_state(), before);
+    assert_eq!(last_outcome, None, "a stale completion is never a rejection");
+
+    call!(manager.supervisor.complete_exclusive_operation(running)).await.unwrap();
+
+    let claim = call!(manager.supervisor.operation_claim_for_test()).await.unwrap();
+    assert_eq!(claim, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn keep_enabled_finishes_active_disable_operation() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    let claim = supervisor
-        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
-        .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
+    persist_enabled_under(&mut supervisor);
+    supervisor.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable).unwrap();
+    let disabling = test_disabling_state();
     Database::global()
         .cloud_backup_state
         .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
         .unwrap();
-    supervisor.pending_disable_write_drain = Some(PendingDisableWriteDrain {
-        claim,
-        blocker: CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation },
-        disabling: disabling.clone(),
-    });
-
+    let DisablingRecord::Committed(committed) = CommittedDisable::from_record(&disabling) else {
+        panic!("the test record is committed");
+    };
     supervisor
         .complete_keep_cloud_backup_enabled(Ok(CloudBackupKeepEnabledPreparation::Ready(Box::new(
-            disabling,
+            committed,
         ))))
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
-    assert!(supervisor.pending_disable_write_drain.is_none());
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert!(matches!(
         Database::global().cloud_backup_state.get().unwrap(),
@@ -3047,83 +3182,37 @@ async fn keep_enabled_finishes_active_disable_operation() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn disable_runtime_drain_failure_remains_pre_delete() {
+async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.sync_health = Addr::detached();
 
+    persist_enabled_under(&mut supervisor);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
-    let mut disabling = test_disabling_state();
-    disabling.delete_started_at = None;
-    Database::global()
-        .cloud_backup_state
-        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
+    test_disabling_state();
+    let attempt = test_uncommitted_attempt();
+
+    supervisor
+        .complete_disable_write_drain(
+            claim,
+            attempt,
+            Err(CloudBackupError::Internal("write lane stopped".into())),
+        )
+        .await
         .unwrap();
-    let blocker =
-        CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
-    supervisor.pending_disable_write_drain =
-        Some(PendingDisableWriteDrain { claim, blocker, disabling });
 
-    supervisor.complete_disable_write_drain(claim, blocker).await.unwrap();
-
-    assert_eq!(supervisor.active_operation, None);
+    // nothing was committed, so the record is still configured and nothing can be kept
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
-    let state = Database::global().cloud_backup_state.get().unwrap();
-    let disabling = state.disabling().expect("expected persisted disabling state");
-    assert!(disabling.delete_started_at.is_none());
-    assert!(disabling.last_error.is_some());
-    assert!(manager.disable_can_keep_enabled());
-}
-
-
-
-
-
-
-#[tokio::test(flavor = "current_thread")]
-async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
-    let _guard = async_test_lock().lock().await;
-    let manager = test_supervisor_manager();
-    let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
-    let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
-    let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 9 };
-    let namespace = "0123456789abcdef0123456789abcdef";
-
-    call!(writes.block(blocker)).await.unwrap();
-
-    let blocked_write = call!(writes.upload_wallet_backup(
-        CloudStorage::global_explicit_client(),
-        namespace.into(),
-        "record".into(),
-        vec![1, 2, 3]
-    ))
-    .await
-    .unwrap()
-    .await
-    .unwrap();
-    let blocked_write = blocked_write.into_result();
-    assert!(matches!(blocked_write, Err(CloudBackupError::Deferred(_))));
-
-    supervisor.unblock_cloud_backup_writes(blocker).await.unwrap();
-
-    let allowed_write = call!(writes.upload_wallet_backup(
-        CloudStorage::global_explicit_client(),
-        namespace.into(),
-        "record".into(),
-        vec![1, 2, 3]
-    ))
-    .await
-    .unwrap()
-    .await
-    .unwrap();
-    let allowed_write = allowed_write.into_result();
-    assert!(allowed_write.is_ok());
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Configured(_)
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3131,7 +3220,7 @@ async fn restore_all_restart_marker_enters_detail_without_passkey_verification()
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let supervisor = CloudBackupSupervisor::new(
+    let supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3147,7 +3236,7 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3164,17 +3253,11 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     manager.apply_restore_all_started(claim, 2);
     supervisor.active_cloud_only_fetch_request = Some(10);
 
@@ -3185,7 +3268,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
         manager.projected_restore_all_state(),
         CloudBackupRestoreAllState::Running { total: 2, .. }
     ));
-    assert_eq!(supervisor.active_operation, Some(claim));
+    assert_eq!(supervisor.runtime, Some(claim));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3193,7 +3276,7 @@ async fn cloud_only_refetch_retains_restore_all_marker_when_wallets_remain() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3215,7 +3298,7 @@ async fn cloud_only_refetch_failure_retains_restore_all_marker() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3244,14 +3327,11 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
         test_cloud_only_wallet("a"),
         test_cloud_only_wallet("b"),
     ]));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets)
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     // the listing replaced wallet a with c at the same count
@@ -3277,7 +3357,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
 }
 
@@ -3294,7 +3374,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
         test_cloud_only_wallet(b),
     ]));
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3333,7 +3413,7 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
         test_cloud_only_wallet(second),
     ]));
     list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[second, third]);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3368,21 +3448,15 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
     prepare_restore_all_marker(&manager);
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 }
 
@@ -3390,23 +3464,19 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
 async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
+    let claim = begin_test_restore_all(&mut supervisor, cancellation.clone());
+    manager.apply_restore_all_started(claim, 1);
 
     supervisor.request_restore_all_cancellation();
 
     assert!(cancellation.load(Ordering::Acquire));
-    assert_eq!(supervisor.active_operation, Some(claim));
+    assert_eq!(supervisor.runtime, Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
 }
 
@@ -3414,23 +3484,19 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
 async fn supplemental_inventory_does_not_cancel_restore_all() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
+    let claim = begin_test_restore_all(&mut supervisor, cancellation.clone());
+    manager.apply_restore_all_started(claim, 1);
 
     supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
     assert!(!cancellation.load(Ordering::Acquire));
-    assert_eq!(supervisor.active_operation, Some(claim));
+    assert_eq!(supervisor.runtime, Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
 }
 
@@ -3439,7 +3505,7 @@ async fn supplemental_inventory_does_not_cancel_restore_all() {
 async fn completed_other_backups_scan_remains_cached() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3706,18 +3772,12 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
     let cancellation = Arc::new(AtomicBool::new(true));
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
+    let claim = begin_test_restore_all(&mut supervisor, cancellation.clone());
 
     supervisor
         .complete_restore_all_preparation(
@@ -3727,7 +3787,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 }
 
@@ -3735,19 +3795,16 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
 async fn stale_restore_all_record_dispatch_does_not_mutate_current_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let current = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
+    let current = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
+    manager.apply_restore_all_started(current, 1);
     let stale = CloudBackupExclusiveOperationClaim::new(
         CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        u64::MAX,
+        operation_id(u64::MAX),
     );
 
     let applied = supervisor
@@ -3758,7 +3815,7 @@ async fn stale_restore_all_record_dispatch_does_not_mutate_current_claim() {
         .unwrap();
 
     assert!(!applied);
-    assert_eq!(supervisor.active_operation, Some(current));
+    assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 }
 
@@ -3767,17 +3824,11 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     let should_continue = supervisor
@@ -3794,7 +3845,7 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
         .unwrap();
 
     assert!(!should_continue);
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
 }
 
@@ -3811,17 +3862,11 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         wallet.clone(),
     ]));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
 
     let listing_generation = manager.state.read().cloud_only_listing_generation();
     let should_continue = supervisor
@@ -3838,7 +3883,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
         .unwrap();
 
     assert!(should_continue);
-    assert_eq!(supervisor.active_operation, Some(claim));
+    assert_eq!(supervisor.runtime, Some(claim));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3849,7 +3894,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
     let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
@@ -3880,7 +3925,7 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the provider lists the record but its download is not available yet
@@ -3892,14 +3937,21 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
         record_id.as_str(),
     ])));
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     supervisor.active_cloud_only_fetch_request = Some(3);
     let generation = manager.state.read().cloud_only_listing_generation();
     let fetch = manager
-        .do_fetch_cloud_only_wallets_with_client(CloudStorage::global_silent_client(), generation)
+        .do_fetch_cloud_only_wallets_with_client(
+            &CloudBackupWriteClient::background(
+                supervisor.write.clone(),
+                supervisor.runtime.generation(),
+            ),
+            CloudStorage::global_silent_client(),
+            generation,
+        )
         .await
         .unwrap();
     assert_eq!(fetch.unresolved_record_ids, vec![record_id]);
@@ -3924,7 +3976,7 @@ async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_aga
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the provider lists the record before its download is available
@@ -3967,7 +4019,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the selected wallet is listed but its download fails, so preparation queues nothing
@@ -3981,23 +4033,19 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
     ])));
     let generation = manager.state.read().cloud_only_listing_generation();
     let prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(&record_id)], generation)
+        .prepare_restore_all_cloud_wallets(
+&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
+vec![test_cloud_only_wallet(&record_id)], generation)
         .await;
 
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     supervisor.complete_restore_all_preparation(claim, prepared).await.unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
 }
 
@@ -4007,7 +4055,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     let manager = test_supervisor_manager();
     let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
     let duplicate_record_id = fixture.duplicate_record_id.as_str();
-    CloudBackupStore::global().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
     manager.sync_persisted_state();
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
         duplicate_record_id,
@@ -4016,6 +4064,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     let generation = manager.state.read().cloud_only_listing_generation();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![test_cloud_only_wallet(duplicate_record_id)],
             generation,
         )
@@ -4029,20 +4078,14 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
     );
     assert!(prepared.ordered_queue().is_empty());
 
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let claim = supervisor
-        .begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        )
-        .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+    let claim = begin_test_restore_all(&mut supervisor, Arc::new(AtomicBool::new(false)));
     supervisor.complete_restore_all_preparation(claim, Ok(prepared)).await.unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
     let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
         panic!("expected the duplicate row to stay loaded");
@@ -4077,7 +4120,7 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     let cloud = CloudStorage::global_silent_client();
     let disabling = disabling_for_current_namespace(&manager);
     assert!(matches!(
-        manager.check_disable_blockers(&cloud, &disabling).await,
+        manager.check_disable_blockers(&cloud, &disabling.namespace_id).await,
         Err(CloudBackupError::RecoveryRequired(_))
     ));
 
@@ -4095,7 +4138,41 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
     // only the cloud record went away, the local wallet and its own backup stay
     assert!(local_wallet_exists(&fixture.local_wallet));
     assert!(globals.cloud.has_wallet_backup(&fixture.namespace, &fixture.local_record_id));
-    assert!(manager.check_disable_blockers(&cloud, &disabling).await.is_ok());
+    assert!(manager.check_disable_blockers(&cloud, &disabling.namespace_id).await.is_ok());
+}
+
+/// A row delete is a lane command: it waits behind the upload in flight and runs after it
+#[tokio::test(flavor = "current_thread")]
+async fn row_delete_waits_for_the_write_in_flight() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let duplicate_record_id = fixture.duplicate_record_id.as_str();
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        duplicate_record_id,
+    ])));
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
+
+    let (upload_gate, upload) =
+        hold_wallet_upload_in_flight(&manager, globals, fixture.local_wallet.id.clone()).await;
+    call!(manager.supervisor.start_delete_cloud_wallet_operation(
+        fixture.duplicate_record_id.clone()
+    ))
+    .await
+    .unwrap();
+    wait_for_queued_lane_write(&manager).await;
+
+    assert!(globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id));
+
+    upload_gate.release();
+    upload.await.unwrap().unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the row delete runs after the upload", || {
+        !globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id)
+            && manager.projected_exclusive_operation().is_none()
+    })
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4147,7 +4224,7 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     list_test_wallet_files(&namespace, &[local_record_id.as_str()]);
 
@@ -4192,7 +4269,7 @@ async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again()
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
 
     // a refresh and a verification both read the wallet as local before it is deleted
@@ -4355,7 +4432,7 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let secret = test_seed_secret();
 
     let (local_wallet, local_record_id) = upload_test_seed_backup(&namespace, &secret);
-    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -4425,7 +4502,7 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     let namespace = manager.current_namespace_id().unwrap();
-    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer().persist_restore_all_marker(namespace.clone()).unwrap();
     manager.sync_persisted_state();
 
     // the detail lists a record that another device deletes before the fetch lists again
@@ -4553,13 +4630,19 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
 
     // nothing on the device held the second copy anymore, so it was restored rather than skipped
     assert!(local_wallet_exists(&second_wallet));
-    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 
     // the deleted wallet's record is cloud-only again, and the second wallet now covers it
     wait_for_cloud_only_statuses(&manager, &[(
         first_record_id,
         CloudBackupWalletStatus::AlreadyOnDevice,
     )])
+    .await;
+
+    // the deletion reset the cloud-only rows mid-run, so the run can end before the replacement
+    // fetch proves nothing is left, and then that fetch clears the marker rather than the run
+    wait_for_test_condition(Duration::from_secs(5), "the Restore All marker should clear", || {
+        RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none()
+    })
     .await;
 }
 
@@ -4671,7 +4754,7 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
         save_local_watch_only_wallet_with_address_type(&secret, WalletAddressType::WrappedSegwit);
     let (seed_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
 
-    let prepared = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let prepared = manager.prepare_active_namespace_wallet_restore(&unowned_writes(&manager,CloudBackupExclusiveOperation::RestoreCloudWallet)).await.unwrap();
     let outcome = prepared.restore_record(&seed_record_id).await.unwrap();
 
     // both watch-only wallets match the seed, so it becomes its own hot wallet
@@ -4736,7 +4819,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     seed_verifiable_cloud_master_key(test_globals());
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
@@ -4748,7 +4831,8 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         .await
         .unwrap()
         .unwrap();
-    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
+    let claim = supervisor.runtime.claim().expect("the switch runs");
+    assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
 
     let stale = supervisor
         .continue_drive_account_switch((transition_id.value() + 1).into())
@@ -4777,7 +4861,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         persisted_drive_account_switch_phase(),
         Some(PersistedDriveAccountSwitchPhase::Reinitializing)
     );
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
     assert_eq!(
         configured_cloud_backup_state(&manager).destructive_operation,
@@ -4807,19 +4891,23 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         persisted_drive_account_switch_phase(),
         Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry)
     );
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 0);
 
-    // try again on the recovery prompt restarts the same switch, not a plain reinitialize
+    // try again on the recovery prompt restarts the same switch in a new run, not a plain
+    // reinitialize
     supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+    let failed_run = claim;
+    let claim = supervisor.runtime.claim().expect("the retry runs");
 
+    assert_ne!(claim, failed_run);
+    assert_eq!(claim.drive_account_switch_id(), Some(transition_id));
     assert_eq!(
         persisted_drive_account_switch_phase(),
         Some(PersistedDriveAccountSwitchPhase::Reinitializing)
     );
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
     assert_eq!(
         configured_cloud_backup_state(&manager).destructive_operation,
@@ -4834,7 +4922,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         Some(PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded)
     );
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 1);
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(supervisor.runtime.claim(), Some(claim));
 
     // once the platform commits, the switch ends like any reinitialize and the new account's backup
     // is verified
@@ -4858,13 +4946,13 @@ async fn reinitialize_backup_verification_reads_the_new_backup() {
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     seed_verifiable_cloud_master_key(test_globals());
-    let mut supervisor = CloudBackupSupervisor::new(
+    let mut supervisor = test_supervisor(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
     supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
-    let claim = supervisor.active_operation.claim().unwrap();
+    let claim = supervisor.runtime.claim().unwrap();
 
     assert_eq!(claim.operation(), CloudBackupExclusiveOperation::ReinitializeBackup);
     assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
@@ -4904,7 +4992,16 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     );
 
     let master_key_reads = globals.cloud.master_key_download_attempt_count();
-    let step = manager.prepare_deep_verify_cloud_backup(false).await;
+    let step = manager
+        .prepare_deep_verify_cloud_backup(
+            CloudBackupWriteClient::for_operation(
+                supervisor.write.clone(),
+                supervisor.runtime.claim().unwrap(),
+            ),
+            supervisor.runtime.generation(),
+            false,
+        )
+        .await;
 
     assert!(
         !matches!(step, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled)),
@@ -4915,7 +5012,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
 
     // it could read the cloud because the backup reads as enabled again, while the verification
     // holds the slot under its own claim and the reinitialize stays on screen
-    let verification_claim = supervisor.active_operation.claim().unwrap();
+    let verification_claim = supervisor.runtime.claim().unwrap();
 
     assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabled);
     assert_ne!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::SettingUp);
@@ -4929,35 +5026,165 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     // a completion still carrying the reinitialize claim is stale
     supervisor
         .complete_verification(
-            Some(reinitialize_claim),
-            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
+            VerificationRun {
+                claim: reinitialize_claim,
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: supervisor.evidence_basis(),
             },
+            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
         )
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation.claim(), Some(verification_claim));
+    assert_eq!(supervisor.runtime.claim(), Some(verification_claim));
 
     // the verification's own result reports the new backup verified, and releases the slot and
     // the spinner
     supervisor
         .complete_verification(
-            Some(verification_claim),
-            step,
-            DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
+            VerificationRun {
+                claim: verification_claim,
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: supervisor.evidence_basis(),
             },
+            step,
         )
         .await
         .unwrap();
 
-    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(supervisor.runtime, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(configured_cloud_backup_state(manager).destructive_operation, Destructive::Idle);
     assert!(matches!(
         configured_cloud_backup_state(manager).verification,
         CloudBackupVerificationState::Verified { .. }
     ));
+}
+
+fn persisted_verification() -> crate::database::cloud_backup::PersistedBackupVerificationState {
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected a configured Cloud Backup record");
+    };
+
+    configured.verification
+}
+
+/// Verification evidence that arrives after a wallet change has one writer: the owner drops it
+#[tokio::test(flavor = "current_thread")]
+async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_reset() {
+    use crate::database::cloud_backup::PersistedBackupVerificationState;
+    use crate::manager::cloud_backup_manager::model::CloudBackupVerificationState;
+
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let verified = || {
+        CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::Verified(
+            test_pending_completion(VALID_NAMESPACE_ID.into(), Vec::new()).report(),
+        ))
+    };
+
+    // a manual verification reads the wallets, then a wallet is added before its evidence lands
+    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
+    else {
+        panic!("verification run was not produced");
+    };
+    supervisor.require_verification_after_wallet_change(20).await.unwrap();
+    supervisor.complete_verification(run, verified()).await.unwrap();
+
+    assert!(
+        matches!(
+            persisted_verification(),
+            PersistedBackupVerificationState::Required { requested_at: Some(20), .. }
+        ),
+        "old evidence overwrote the wallet-change reset: {:?}",
+        persisted_verification()
+    );
+
+    // nor does the screen show the older result as verified
+    assert!(
+        !matches!(
+            configured_cloud_backup_state(&manager).verification,
+            CloudBackupVerificationState::Verified { .. }
+        ),
+        "old evidence showed as verified: {:?}",
+        configured_cloud_backup_state(&manager).verification
+    );
+
+    // a verification that starts after the change reads the new wallet set, so it counts
+    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
+    else {
+        panic!("verification run was not produced");
+    };
+    supervisor.complete_verification(run, verified()).await.unwrap();
+
+    assert!(matches!(persisted_verification(), PersistedBackupVerificationState::Verified { .. }));
+    assert!(matches!(
+        configured_cloud_backup_state(&manager).verification,
+        CloudBackupVerificationState::Verified { .. }
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn write_lane_result_for_an_ended_operation_is_discarded() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let wallet_count = || RustCloudBackupManager::load_persisted_state().wallet_count();
+    let before = wallet_count();
+
+    let ended = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
+        .unwrap();
+    supervisor.complete_exclusive_operation(ended).await.unwrap();
+    let running = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+        .unwrap();
+
+    // the ended operation's upload finished late; the owner refuses it and the write lane
+    // reports it cancelled instead of marking wallets uploaded
+    let Produces::Value(late) = supervisor
+        .record_uploaded_wallets(
+            Some(ended),
+            9,
+            CloudBackupUploadedWalletsStateMode::PreserveVerification,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("the supervisor answers the write lane");
+    };
+
+    assert!(matches!(late, Err(CloudBackupError::Cancelled)));
+    assert_eq!(wallet_count(), before);
+    assert_eq!(supervisor.runtime, Some(running));
+
+    let Produces::Value(current) = supervisor
+        .record_uploaded_wallets(
+            Some(running),
+            9,
+            CloudBackupUploadedWalletsStateMode::PreserveVerification,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("the supervisor answers the write lane");
+    };
+
+    current.unwrap();
+    assert_eq!(wallet_count(), Some(9));
 }

@@ -11,7 +11,7 @@ use crate::{
     database::Database,
     manager::{
         cloud_backup_manager::{
-            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext,
+            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
             CloudBackupOnboardingCompletionReadiness, CloudBackupPasskeyChoiceIntent,
             CloudBackupPasskeyHint, CloudBackupRestoreEvent, CloudBackupRestoreFlow,
             CloudBackupRestoreReport, CloudBackupVerificationSource, CloudStorageIssue,
@@ -513,7 +513,7 @@ impl RustOnboardingManager {
                 self.start_restore_attempt(attempt_id);
             }
             TransitionCommand::BeginCloudBackupEnable { discovery } => {
-                self.begin_cloud_backup_enable(discovery);
+                Self::begin_cloud_backup_enable(discovery);
             }
             TransitionCommand::CompleteOnboarding(target) => self.complete_onboarding(target),
         }
@@ -577,7 +577,11 @@ impl RustOnboardingManager {
         })
     }
 
-    fn begin_cloud_backup_enable(&self, discovery: CloudRestoreDiscovery) {
+    /// Starts onboarding's Cloud Backup enable for what restore discovery found
+    ///
+    /// It reads only the Cloud Backup manager, so the Cloud Backup harness drives it as
+    /// onboarding does
+    pub(crate) fn begin_cloud_backup_enable(discovery: CloudRestoreDiscovery) {
         info!("Onboarding: begin cloud backup enable discovery={discovery:?}");
         let context = CloudBackupEnableContext {
             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
@@ -613,7 +617,9 @@ impl RustOnboardingManager {
             }
             OnboardingCloudBackupEnableStart::CreateNewPasskey => {
                 info!("Onboarding: enabling cloud backup without passkey discovery");
-                CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(context);
+                // through dispatch, so admission decides it like a tap and a busy slot rejects it
+                CLOUD_BACKUP_MANAGER
+                    .dispatch(CloudBackupManagerAction::EnableCloudBackupNoDiscovery(context));
             }
         }
     }

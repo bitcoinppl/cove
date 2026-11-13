@@ -31,6 +31,7 @@ where
     handle.block_on(task)
 }
 
+/// Run `f` on a blocking thread; the returned handle answers with its result
 pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
 where
     F: FnOnce() -> R + Send + 'static,

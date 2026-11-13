@@ -213,7 +213,11 @@ fn attempt_bdk_migration(pre_recovery_bdk_count: u32) -> eyre::Result<()> {
     crate::database::migration::BdkMigration::new(migration).run()
 }
 
-fn ensure_rustls_provider_installed() {
+/// Installs ring as the process-wide rustls provider unless one is already installed
+///
+/// The `ring` feature alone does not select a process default, and any TLS client built
+/// without one panics
+pub(crate) fn ensure_rustls_provider_installed() {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
@@ -465,15 +469,34 @@ pub fn bootstrap_progress() -> BootstrapStep {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
+    use crate::database::encrypted_backend::{
+        encryption_key, set_encryption_key, tests::TEST_ENCRYPTION_KEY,
+    };
     use crate::database::error::DatabaseError;
 
-    /// Pre-seed the bootstrap OnceLock with a test encryption key, skipping
-    /// keychain access and migrations
-    pub(crate) fn set_test_bootstrapped() {
-        crate::database::encrypted_backend::tests::set_test_encryption_key();
+    /// Install the test encryption key and mark storage bootstrapped before any test runs
+    ///
+    /// The key is first-set and process-global, and a real bootstrap would derive a fresh random
+    /// key from the test keychain. Installing it once at process start, through the same first-set
+    /// path bootstrap uses, gives every test in a process the same key whatever the runner or test
+    /// order, so no test trips the different-key assert in `set_encryption_key`
+    #[ctor::ctor(unsafe)]
+    fn install_process_test_storage() {
+        set_encryption_key(TEST_ENCRYPTION_KEY);
         STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
+    }
+
+    // a test that reaches the storage bootstrap without its own database setup, as manual backup
+    // export does through the persistent wallet store, must keep the process key
+    #[test]
+    fn storage_bootstrap_keeps_the_process_test_key() {
+        crate::test_support::init_test_keychain();
+
+        ensure_storage_bootstrapped().expect("storage bootstrap succeeds in a test process");
+
+        assert_eq!(encryption_key(), Some(TEST_ENCRYPTION_KEY));
     }
 
     #[test]

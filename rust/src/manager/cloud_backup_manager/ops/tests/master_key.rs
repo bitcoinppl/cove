@@ -73,7 +73,7 @@ async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear(
     cspp.save_master_key(&master_key).unwrap();
     globals.cloud.set_wallet_files(namespace_id, vec!["wallet-test.json".into()]);
 
-    CloudBackupKeychain::global().clear_local_state().unwrap();
+    CloudBackupKeychain::global().clear_local_state_for_test().unwrap();
 
     let fallback =
         try_restore_from_local_master_key(&CloudStorage::global_explicit_client(), &cspp)
@@ -126,8 +126,9 @@ async fn cancelled_master_key_recovery_keeps_cancel_reader_message() {
     globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
+    let writes = current_background_writes(&manager).await;
     let Err(error) =
-        manager.recover_local_master_key_from_cloud(&namespace, "recovery required").await
+        manager.recover_local_master_key_from_cloud(&writes, &namespace, "recovery required").await
     else {
         panic!("cancelled passkey recovered a master key");
     };

@@ -44,11 +44,16 @@ impl CloudBackupSupervisor {
     }
 
     pub(crate) fn schedule_create_new_enable_passkey(
-        &self,
+        &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
     ) {
+        // a created credential must be recorded, so a reset waits for this request to answer
+        if !self.runtime.begin_effect(claim, Effect::PasskeyRegistration) {
+            return;
+        }
+
         let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
@@ -68,11 +73,14 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(CloudBackupEnablePasskeyPreparation::Ready(ready)) => {
-                self.pending_enable_session = Some(PendingEnableSession::retry_upload(
-                    cove_cspp::master_key::MasterKey::from_bytes(*ready.master_key.as_bytes()),
-                    ready.passkey.copy_for_retry(),
-                    ready.context,
-                ));
+                self.keep_enable_continuation(
+                    claim,
+                    PendingEnableSession::retry_upload(
+                        cove_cspp::master_key::MasterKey::from_bytes(*ready.master_key.as_bytes()),
+                        ready.passkey.copy_for_retry(),
+                        ready.context,
+                    ),
+                );
                 manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, ready);
             }
@@ -120,7 +128,7 @@ impl CloudBackupSupervisor {
             }) => {
                 manager.present_existing_backup_found_prompt(context, passkey_hint);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -133,12 +141,17 @@ impl CloudBackupSupervisor {
     }
 
     pub(crate) fn schedule_enable_passkey_registration(
-        &self,
+        &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
     ) {
+        // a created credential must be recorded, so a reset waits for this request to answer
+        if !self.runtime.begin_effect(claim, Effect::PasskeyRegistration) {
+            return;
+        }
+
         let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
@@ -165,7 +178,7 @@ impl CloudBackupSupervisor {
                     context, None,
                 ));
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation.clear();
+                self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -184,20 +197,16 @@ impl CloudBackupSupervisor {
         registered: CloudBackupRegisteredEnablePasskey,
     ) {
         let saved_passkey_confirmation = registered.context.saved_passkey_confirmation;
-        self.pending_enable_session =
-            Some(PendingEnableSession::awaiting_saved_passkey_confirmation(
+        self.keep_enable_continuation(
+            claim,
+            PendingEnableSession::awaiting_saved_passkey_confirmation(
                 registered.master_key,
                 registered.passkey,
                 registered.context,
-            ));
+            ),
+        );
         manager.apply_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
-        if !self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation) {
-            manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                SavedPasskeyConfirmationMode::Manual,
-            ));
-            self.active_operation.clear();
-            manager.project_exclusive_operation_finished(claim);
-        }
+        self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation);
     }
 
     pub(crate) fn start_ready_enable_upload_if_present(
@@ -205,7 +214,8 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Result<bool, CloudBackupError> {
-        let Some(ready) = self.take_ready_enable_upload()? else {
+        let owner = ContinuationOwner::of(claim.operation());
+        let Some(ready) = self.take_ready_enable_upload(owner)? else {
             return Ok(false);
         };
 
@@ -214,18 +224,18 @@ impl CloudBackupSupervisor {
         Ok(true)
     }
 
+    /// Takes `owner`'s upload that stopped after its passkey was ready, to retry it
     pub(crate) fn take_ready_enable_upload(
         &mut self,
+        owner: ContinuationOwner,
     ) -> Result<Option<CloudBackupReadyEnableUpload>, CloudBackupError> {
-        let Some(pending) = self.pending_enable_session.take() else {
+        let Some(continuation) =
+            self.take_enable_continuation(owner, ContinuationStage::RetryUpload)
+        else {
             return Ok(None);
         };
 
-        if !pending.is_retry_upload() {
-            self.pending_enable_session = Some(pending);
-            return Ok(None);
-        }
-
+        let pending = continuation.into_session();
         let context = pending.context();
         let (master_key, passkey) = pending.into_ready_parts()?;
         Ok(Some(CloudBackupReadyEnableUpload { master_key, passkey, context }))
@@ -290,7 +300,12 @@ impl CloudBackupSupervisor {
             .pending_enable
             .begin_pending_enable_local_promotion(&upload.master_key, &upload.passkey)
         {
-            self.retain_pending_enable_upload(&upload.master_key, &upload.passkey, upload.context);
+            self.retain_pending_enable_upload(
+                claim,
+                &upload.master_key,
+                &upload.passkey,
+                upload.context,
+            );
 
             return Err(error);
         }
@@ -373,7 +388,7 @@ impl CloudBackupSupervisor {
         );
         match (result, activation) {
             (Err(error), Err(_)) => {
-                self.retain_pending_enable_upload(&master_key, &passkey, context);
+                self.retain_pending_enable_upload(claim, &master_key, &passkey, context);
                 if let Err(rollback) =
                     manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
                 {
@@ -393,7 +408,7 @@ impl CloudBackupSupervisor {
                 return Produces::ok(());
             }
             (Ok(()), Err(error)) => {
-                self.retain_pending_enable_upload(&master_key, &passkey, context);
+                self.retain_pending_enable_upload(claim, &master_key, &passkey, context);
                 self.fail_enable_operation(&manager, claim, error);
                 return Produces::ok(());
             }
@@ -408,7 +423,7 @@ impl CloudBackupSupervisor {
         // reset verification while the pending-enable journal still owns completion
         manager.apply_verification_state(VerificationState::Idle);
         if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
-            self.retain_pending_enable_upload(&master_key, &passkey, context);
+            self.retain_pending_enable_upload(claim, &master_key, &passkey, context);
             self.fail_enable_operation(&manager, claim, error);
             return Produces::ok(());
         }
@@ -418,7 +433,7 @@ impl CloudBackupSupervisor {
             credential_id: passkey.credential_id.clone(),
             prf_salt: passkey.prf_salt,
         });
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
         info!("Cloud backup enabled successfully");
@@ -429,14 +444,18 @@ impl CloudBackupSupervisor {
 
     fn retain_pending_enable_upload(
         &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
         master_key: &cove_cspp::master_key::MasterKey,
         passkey: &UnpersistedPrfKey,
         context: CloudBackupEnableContext,
     ) {
-        self.pending_enable_session = Some(PendingEnableSession::retry_upload(
-            cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-            passkey.copy_for_retry(),
-            context,
-        ));
+        self.keep_enable_continuation(
+            claim,
+            PendingEnableSession::retry_upload(
+                cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
+                passkey.copy_for_retry(),
+                context,
+            ),
+        );
     }
 }

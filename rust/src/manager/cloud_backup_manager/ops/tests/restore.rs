@@ -686,8 +686,7 @@ async fn restore_missing_wallet_listing_fails_closed_without_finalizing_empty_st
     let globals = test_globals();
     let manager = init_manager();
 
-    configure_enabled_cloud_backup(&manager, globals, 7);
-    let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    reset_cloud_backup_test_state(&manager, globals);
 
     let prf_key = [7u8; 32];
     let master_key = cove_cspp::master_key::MasterKey::generate();
@@ -710,8 +709,11 @@ async fn restore_missing_wallet_listing_fails_closed_without_finalizing_empty_st
     let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
 
     assert!(error.to_string().contains("wallet files missing"), "{error}");
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(existing_namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), None);
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -813,41 +815,30 @@ async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_u
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-async fn restore_all_duplicate_wallets_preserves_existing_configured_state() {
+async fn onboarding_restore_is_rejected_while_backup_is_configured() {
+    use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
+
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
 
     configure_enabled_cloud_backup(&manager, globals, 7);
     let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let duplicate_wallet = xpub_only_wallet_metadata();
-    persist_xpub_wallets(vec![duplicate_wallet.clone()]);
 
-    let prf_key = [7u8; 32];
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let namespace = master_key.namespace_id();
-    let encrypted =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
-    let record_id = cove_cspp::backup_data::wallet_record_id(duplicate_wallet.id.as_ref());
-    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
-    globals.cloud.set_wallet_backup(
-        namespace.clone(),
-        record_id.clone(),
-        encrypted_wallet_backup_bytes(&duplicate_wallet, &master_key, "duplicate-revision", 1)
-            .await,
-    );
-    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
-    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
-        prf_output: prf_key.to_vec(),
-        credential_id: vec![1, 2, 3],
-    }));
-    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+    let (sender, receiver) = flume::bounded(1);
+    call!(manager.supervisor.start_restore_from_cloud_backup_with_events(sender)).await.unwrap();
+    let event = receiver
+        .recv_async()
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
+        .await
+        .expect("restore rejection response")
+        .expect("restore rejection event");
 
-    let operation = new_restore_operation_for_test(&manager).await;
-    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
-
-    assert_eq!(report.wallets_restored, 0);
-    assert_eq!(report.wallets_failed, 0);
+    assert!(matches!(event, CloudBackupRestoreEvent::Failed(_)), "{event:?}");
+    let outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap().unwrap();
+    assert_eq!(outcome.admission, Admission::Rejected(Rejection::NotConfigured));
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_eq!(globals.passkey.discover_count(), 0);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Enabled
@@ -908,13 +899,12 @@ async fn restore_all_duplicate_wallets_activates_namespace_when_persisted_state_
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-async fn restore_duplicate_wallets_with_failures_preserves_existing_configured_state() {
+async fn restore_duplicate_wallets_with_failures_activates_namespace_and_reports_missing() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
 
-    configure_enabled_cloud_backup(&manager, globals, 7);
-    let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    reset_cloud_backup_test_state(&manager, globals);
     let duplicate_wallet = xpub_only_wallet_metadata();
     let missing_wallet = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![duplicate_wallet.clone()]);
@@ -935,7 +925,7 @@ async fn restore_duplicate_wallets_with_failures_preserves_existing_configured_s
             .await,
     );
     globals.cloud.set_wallet_files(
-        namespace,
+        namespace.clone(),
         vec![
             wallet_filename_from_record_id(&duplicate_record_id),
             wallet_filename_from_record_id(&missing_record_id),
@@ -957,8 +947,8 @@ async fn restore_duplicate_wallets_with_failures_preserves_existing_configured_s
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Enabled
     );
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(existing_namespace));
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(namespace));
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -1598,7 +1588,13 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
         encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1),
     );
 
-    let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+        )
+        .await
+        .unwrap();
 
     let CloudOnlyRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
@@ -1648,7 +1644,13 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let individual_outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
+    let individual_outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+        )
+        .await
+        .unwrap();
     let individual_wallet = Database::global()
         .wallets()
         .get(&wallet.id, wallet.network, wallet.wallet_mode)
@@ -1665,6 +1667,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
 
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
         )
@@ -1735,8 +1738,16 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
         ],
     );
 
+    // recovering the missing local key needs a running operation to own the keychain save
+    let (_claim, writes) = begin_operation_writes_for_test(
+        &manager,
+        CloudBackupExclusiveOperation::RestoreCloudWallet,
+    )
+    .await;
+
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &writes,
             vec![
                 frozen_restore_all_wallet(
                     &first_wallet,
@@ -1869,7 +1880,14 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
         frozen_restore_all_wallet(&stale_wallet, CloudBackupWalletStatus::DeletedFromDevice),
         frozen_restore_all_wallet(&first_wallet, CloudBackupWalletStatus::DeletedFromDevice),
     ];
-    let prepared = manager.prepare_restore_all_cloud_wallets(frozen_wallets, 0).await.unwrap();
+    let prepared = manager
+        .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
+            frozen_wallets,
+            0,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
@@ -1917,6 +1935,7 @@ async fn restore_all_preparation_propagates_wallet_authorization_failure() {
 
     let result = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
         )
@@ -1950,6 +1969,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
     let frozen_wallet = xpub_only_wallet_metadata();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets),
             vec![frozen_restore_all_wallet(
                 &frozen_wallet,
                 CloudBackupWalletStatus::DeletedFromDevice,
@@ -2171,6 +2191,9 @@ async fn restore_after_reinstall_adopts_surviving_keychain_items() {
         );
     }
 
+    // a restore only starts while backup is off, so the second run finds the wallets the first
+    // one restored already on the device
+    Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
     let second_operation = new_restore_operation_for_test(&manager).await;
     let second_report = second_operation.restore_from_cloud_backup(&manager).await.unwrap();
 

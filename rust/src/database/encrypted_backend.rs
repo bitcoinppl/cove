@@ -642,12 +642,12 @@ pub(crate) mod tests {
     use redb::{ReadableTableMetadata as _, StorageBackend as _};
     use tempfile::TempDir;
 
-    pub(crate) fn set_test_encryption_key() {
-        ENCRYPTION_KEY.store(Some(Arc::new([0xAB; 32])));
-    }
+    /// The one database encryption key of a test process, which `bootstrap::tests` installs
+    /// before any test runs
+    pub(crate) const TEST_ENCRYPTION_KEY: [u8; 32] = [0xAB; 32];
 
     fn test_key() -> [u8; 32] {
-        [0xAB; 32]
+        TEST_ENCRYPTION_KEY
     }
 
     fn test_path(dir: &TempDir, name: &str) -> PathBuf {
@@ -850,8 +850,6 @@ pub(crate) mod tests {
 
     #[test]
     fn global_key_init_path() {
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "init_path.enc");
         let key = encryption_key().expect("test key should be set");
@@ -1204,7 +1202,6 @@ pub(crate) mod tests {
 
     #[test]
     fn empty_file_not_rejected_as_plaintext() {
-        set_test_encryption_key();
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "race_window.enc");
 
@@ -1225,7 +1222,6 @@ pub(crate) mod tests {
 
     #[test]
     fn open_or_create_database_creates_missing_parent_dir() {
-        set_test_encryption_key();
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("missing").join("nested.enc");
 
@@ -1253,8 +1249,6 @@ pub(crate) mod tests {
 
     #[test]
     fn plaintext_database_rejected() {
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "plaintext.redb");
 
@@ -1275,9 +1269,6 @@ pub(crate) mod tests {
 
     #[test]
     fn key_mismatch_detected_by_verify() {
-        // ensure global key is set to test_key ([0xAB; 32])
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "verify_mismatch.enc");
 
@@ -1301,8 +1292,6 @@ pub(crate) mod tests {
 
     #[test]
     fn verify_database_key_succeeds_with_correct_key() {
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "verify_ok.enc");
 
@@ -1318,8 +1307,6 @@ pub(crate) mod tests {
 
     #[test]
     fn verify_database_key_nonexistent_file_is_ok() {
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "does_not_exist.enc");
 
@@ -1328,8 +1315,6 @@ pub(crate) mod tests {
 
     #[test]
     fn verify_database_key_rejects_v1_database_with_wrong_key_without_mutating_header() {
-        set_test_encryption_key();
-
         let dir = TempDir::new().unwrap();
         let path = test_path(&dir, "verify_v1_mismatch.enc");
         let original_key = [0xFF; 32];

@@ -116,7 +116,7 @@ impl CloudBackupSupervisor {
             let assessment = Self::pending_enable_recovery_assessment().unwrap_or_else(|| {
                 Self::support_only(PendingEnableRecoveryReason::UnreadableEvidence)
             });
-            manager.project_pending_enable_recovery(assessment.public_state());
+            self.enter_pending_enable_recovery(assessment.public_state());
         }
 
         Produces::ok(())
@@ -277,12 +277,17 @@ impl CloudBackupSupervisor {
             provider_hint: passkey.provider_hint.clone(),
         };
 
-        self.pending_enable_session =
-            Some(PendingEnableSession::awaiting_saved_passkey_confirmation(
+        // the journal does not record which work wrote it; the body restart loaded does
+        let owner =
+            ContinuationOwner::of_body(self.runtime.admission_body(ConfiguredAdmission::Ready));
+        self.enable_continuation = Some(EnableContinuation::new(
+            owner,
+            PendingEnableSession::awaiting_saved_passkey_confirmation(
                 Zeroizing::new(master_key),
                 Zeroizing::new(passkey),
                 journal.context(),
-            ));
+            ),
+        ));
         manager.project_enable_context_started(journal.context());
         manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
             SavedPasskeyConfirmationMode::Manual,
@@ -405,7 +410,7 @@ impl CloudBackupSupervisor {
             )
         })?;
 
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress_report();
         manager.sync_persisted_state();
 
@@ -577,11 +582,11 @@ impl CloudBackupSupervisor {
         };
         let public_assessment = assessment.public_state();
         let Some(plan) = assessment.cleanup_plan else {
-            manager.project_pending_enable_recovery(public_assessment);
+            self.enter_pending_enable_recovery(public_assessment);
             return Produces::ok(());
         };
 
-        manager.project_pending_enable_recovery(CloudBackupPendingEnableRecovery {
+        self.enter_pending_enable_recovery(CloudBackupPendingEnableRecovery {
             support_code: assessment.reason.support_code().into(),
             cleanup: CloudBackupPendingEnableCleanupState::Cleaning,
         });
@@ -593,18 +598,29 @@ impl CloudBackupSupervisor {
                 .map_or(CloudBackupPendingEnableCleanupState::SupportOnly, |_| {
                     CloudBackupPendingEnableCleanupState::Available
                 });
-            manager.project_pending_enable_recovery(CloudBackupPendingEnableRecovery {
+            self.enter_pending_enable_recovery(CloudBackupPendingEnableRecovery {
                 support_code: PendingEnableRecoveryReason::CleanupFailed.support_code().into(),
                 cleanup,
             });
             return Produces::ok(());
         }
 
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress_report();
+
+        // only the keychain changed, which no record write publishes: the evidence is gone, so
+        // the rebase leaves the recovery and ends its projection
+        self.runtime.rebase_on_keychain();
         manager.sync_persisted_state();
 
         Produces::ok(())
+    }
+
+    /// Holds an interrupted Enable in the runtime, which projects it
+    fn enter_pending_enable_recovery(&mut self, recovery: CloudBackupPendingEnableRecovery) {
+        if !self.runtime.enter_pending_enable_recovery(recovery) {
+            warn!("Cloud Backup body outranks the pending Enable recovery: {:?}", *self.runtime);
+        }
     }
 
     fn clean_pending_enable_local_evidence(

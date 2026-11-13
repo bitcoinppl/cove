@@ -40,7 +40,13 @@ async fn deep_verify_corrupted_persisted_state_short_circuits() {
     globals.cloud.fail_list_namespaces("verify should not read cloud storage");
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
-    let step = manager.prepare_deep_verify_cloud_backup(true).await;
+    let step = manager
+        .prepare_deep_verify_cloud_backup(
+            unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
+            current_config(&manager).await,
+            true,
+        )
+        .await;
 
     assert!(matches!(
         step,
@@ -339,20 +345,18 @@ async fn deep_verify_reads_each_wallet_backup_once() {
 
     let downloads_before = globals.cloud.wallet_backup_download_attempt_count();
 
-    let step = manager.prepare_deep_verify_cloud_backup(true).await;
+    let run = call!(manager.supervisor.begin_verification_run_for_test(true)).await.unwrap();
+    let step = manager
+        .prepare_deep_verify_cloud_backup(
+            operation_writes(&manager, run.claim),
+            run.basis.config(),
+            true,
+        )
+        .await;
 
     assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
 
-    call!(manager.supervisor.complete_verification(
-        None,
-        step,
-        DeepVerificationContinuation::Manual {
-            force_discoverable: true,
-            attempt: VerificationAttempt::Initial,
-        }
-    ))
-    .await
-    .unwrap();
+    call!(manager.supervisor.complete_verification(run, step)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         matches!(manager.model_snapshot().verification, VerificationState::Verified(_))
     })
@@ -580,7 +584,13 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
     for key in unreadable_keys {
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
         globals.keychain.fail_reads_for(key);
-        let step = manager.prepare_deep_verify_cloud_backup(false).await;
+        let step = manager
+            .prepare_deep_verify_cloud_backup(
+                unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
+                current_config(&manager).await,
+                false,
+            )
+            .await;
         globals.keychain.clear_read_failures();
 
         let CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::Failed(failure)) =

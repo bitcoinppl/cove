@@ -1,9 +1,11 @@
+use act_zero::send;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError;
 use crate::manager::cloud_backup_manager::{
@@ -52,6 +54,16 @@ impl RustCloudBackupManager {
             return None;
         }
 
+        // the write generation is read before the namespace, so uploads this check starts are
+        // dropped if the configuration changes meanwhile
+        let writes = match self.background_writes().await {
+            Ok(writes) => writes,
+            Err(error) => {
+                warn!("Skipping backup integrity check, write lane unavailable: {error}");
+                return None;
+            }
+        };
+
         let mut issues = Vec::new();
 
         let keychain = Keychain::global();
@@ -95,12 +107,13 @@ impl RustCloudBackupManager {
             return self.finish_backup_integrity_check(&issues, downgrade);
         }
 
-        self.verify_wallet_backups_for_integrity_check(namespace, &mut issues).await;
+        self.verify_wallet_backups_for_integrity_check(&writes, namespace, &mut issues).await;
         self.finish_backup_integrity_check(&issues, downgrade)
     }
 
     async fn verify_wallet_backups_for_integrity_check(
         &self,
+        writes: &CloudBackupWriteClient,
         namespace: String,
         issues: &mut Vec<BackupIntegrityIssue>,
     ) {
@@ -115,15 +128,17 @@ impl RustCloudBackupManager {
             }
         };
 
-        let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
-                Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => {
-                    warn!("Backup integrity: remote truth refresh failed: {error}");
-                    issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
-                    return;
-                }
-            };
+        let remote_wallet_truth = match self
+            .load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud.clone())
+            .await
+        {
+            Ok(remote_wallet_truth) => remote_wallet_truth,
+            Err(error) => {
+                warn!("Backup integrity: remote truth refresh failed: {error}");
+                issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
+                return;
+            }
+        };
 
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -146,7 +161,7 @@ impl RustCloudBackupManager {
 
         let mut backup_failed = false;
         if handled_unsynced {
-            let backup_result = self.do_backup_wallets(&unsynced).await;
+            let backup_result = self.do_backup_wallets(writes, &unsynced).await;
             self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = backup_result {
                 error!("Backup integrity: auto-sync failed: {error}");
@@ -169,7 +184,7 @@ impl RustCloudBackupManager {
         };
 
         if has_local_wallets {
-            let sync_result = self.do_sync_unsynced_wallets().await;
+            let sync_result = self.sync_unsynced_wallets_with(writes).await;
             self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = sync_result {
                 error!("Backup integrity: auto-sync failed: {error}");
@@ -194,7 +209,8 @@ impl RustCloudBackupManager {
         };
 
         let remote_wallet_truth =
-            match self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await {
+            match self.load_remote_wallet_truth(namespace, &wallet_record_ids, cloud.clone()).await
+            {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => {
                     warn!("Backup integrity: detail remote truth refresh failed: {error}");
@@ -242,19 +258,7 @@ impl RustCloudBackupManager {
         };
 
         info!("Cloud backup integrity: applying downgrade={downgrade:?}");
-
-        let persisted =
-            self.mutate_persisted_cloud_backup_state("persist backup integrity state", |state| {
-                let Some(new_state) = downgrade.apply_to(state) else {
-                    return false;
-                };
-
-                *state = new_state;
-                true
-            });
-        if let Err(error) = persisted {
-            error!("Failed to persist backup integrity state: {error}");
-        };
+        send!(self.supervisor.apply_integrity_downgrade(downgrade));
     }
 }
 

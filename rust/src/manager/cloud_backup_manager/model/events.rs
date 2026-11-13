@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::DriveAccountSwitchId;
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
@@ -15,20 +16,6 @@ use crate::manager::cloud_backup_manager::{
 
 use super::cloud_only_inventory::{CloudOnlyFetch, CloudOnlyListingUpdate};
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
-
-/// What a status reconcile knew of an incomplete enable's local evidence, a pending enable
-/// journal or staged master key material
-///
-/// Restart recovery is projected from that evidence, which the persisted status can't see, so a
-/// persisted status replaces the recovery only once the evidence is known to be gone
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PendingEnableEvidence {
-    /// The lifecycle showed no recovery when the status was read, so nothing was checked
-    NotChecked,
-    /// The evidence remains, or the keychain couldn't be read
-    Remains,
-    Gone,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupAcceptedEnablePrompt {
@@ -54,13 +41,22 @@ pub(crate) enum CloudBackupExclusiveOperation {
     /// only reads the cloud for an enabled backup
     VerifyReinitializedBackup,
     RepairPasskey,
-    VerificationRepair,
+    /// A verification the user started, with the passkey-wrapper repair and auto-sync it leads to
+    ///
+    /// It holds the exclusive slot from its admission, so nothing else starts while it reads the
+    /// backup and its evidence belongs to this one run
+    Verify,
     RecoverOtherBackups,
     DeleteOtherBackups,
     RestoreCloudWallet,
     RestoreAllCloudWallets,
     DeleteCloudWallet,
     DeleteUndecryptableWalletBackups,
+    /// Discarding an interrupted Enable, whose remote delete runs off the supervisor mailbox
+    ///
+    /// Only the supervisor's runtime holds it; it is never projected as an exclusive operation,
+    /// since the recovery screen already shows the discard
+    DiscardPendingEnable,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -77,31 +73,37 @@ pub(crate) enum CloudBackupRestoreAllRuntimeState {
     RetryRemaining,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CloudBackupExclusiveOperationOwner {
-    Generation(u64),
-    DriveAccountSwitch(DriveAccountSwitchId),
-}
-
 /// Ownership proof for an exclusive operation
 ///
 /// Async completions must present the claim they started with before the
 /// reducer or supervisor accepts their result
+///
+/// Every run gets its own `OperationId`, and completions match on it. A Google Drive account
+/// switch's reinitialization also carries the switch's persisted transition id, which platform
+/// callbacks name across a relaunch. The transition id says which switch a run works for, never
+/// which run it is: resuming the switch after a relaunch or an abandoned reset starts a run with
+/// a fresh id, so a completion from the run a reset revoked never matches the one that resumed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupExclusiveOperationClaim {
     operation: CloudBackupExclusiveOperation,
-    owner: CloudBackupExclusiveOperationOwner,
+    id: OperationId,
+    drive_account_switch: Option<DriveAccountSwitchId>,
 }
 
 impl CloudBackupExclusiveOperationClaim {
-    pub(crate) fn new(operation: CloudBackupExclusiveOperation, generation: u64) -> Self {
-        Self { operation, owner: CloudBackupExclusiveOperationOwner::Generation(generation) }
+    pub(crate) fn new(operation: CloudBackupExclusiveOperation, id: OperationId) -> Self {
+        Self { operation, id, drive_account_switch: None }
     }
 
-    pub(crate) fn drive_account_switch(transition_id: DriveAccountSwitchId) -> Self {
+    /// One run of the reinitialization for the Drive account switch `transition_id`
+    pub(crate) fn drive_account_switch(
+        transition_id: DriveAccountSwitchId,
+        id: OperationId,
+    ) -> Self {
         Self {
             operation: CloudBackupExclusiveOperation::ReinitializeBackup,
-            owner: CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id),
+            id,
+            drive_account_switch: Some(transition_id),
         }
     }
 
@@ -110,12 +112,7 @@ impl CloudBackupExclusiveOperationClaim {
     }
 
     pub(crate) fn drive_account_switch_id(self) -> Option<DriveAccountSwitchId> {
-        match self.owner {
-            CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id) => {
-                Some(transition_id)
-            }
-            CloudBackupExclusiveOperationOwner::Generation(_) => None,
-        }
+        self.drive_account_switch
     }
 }
 
@@ -130,11 +127,11 @@ pub(crate) enum CloudBackupStateReducerEvent {
         to: CloudBackupExclusiveOperationClaim,
     },
     EnableContextStarted(CloudBackupEnableContext),
-    RuntimeStatusReconciled {
-        status: CloudBackupStatus,
-        pending_enable_evidence: PendingEnableEvidence,
-    },
+    RuntimeStatusReconciled(CloudBackupStatus),
+    /// The supervisor holds an interrupted Enable; only it decides when the recovery ends
     PendingEnableRecoveryProjected(CloudBackupPendingEnableRecovery),
+    /// The supervisor's runtime left the recovery; the lifecycle shows this status instead
+    PendingEnableRecoveryCleared(CloudBackupStatus),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,
         passkey_hint: Option<CloudBackupPasskeyHint>,

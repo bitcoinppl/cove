@@ -11,8 +11,9 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_delete_undecryptable_wallet_backups().await;
+            let result = manager.prepare_delete_undecryptable_wallet_backups(&writes).await;
             send!(addr.complete_delete_undecryptable_wallet_backups_preparation(claim, result));
         });
     }
@@ -61,8 +62,19 @@ impl CloudBackupSupervisor {
         manager.apply_undecryptable_wallet_deletion_state(
             CloudBackupUndecryptableWalletDeletionState::Idle,
         );
-        self.active_operation.clear();
-        manager.project_exclusive_operation_finished(claim);
+
+        // the deletion hands its slot to the verification that checks what is left, so nothing
+        // starts in between
+        let Some(verification) = self.hand_off_exclusive_operation(
+            &manager,
+            claim,
+            CloudBackupExclusiveOperation::Verify,
+        ) else {
+            self.runtime.finish(claim);
+            manager.project_exclusive_operation_finished(claim);
+            return Produces::ok(());
+        };
+
         manager.apply_verification_effect(
             CloudBackupVerificationCoordinator::begin_manual_presentation(
                 CloudBackupVerificationSource::CloudBackupDetail,
@@ -70,7 +82,7 @@ impl CloudBackupSupervisor {
         );
         self.start_verification_with_context(
             manager,
-            None,
+            verification,
             DeepVerificationContinuation::Manual {
                 force_discoverable: false,
                 attempt: VerificationAttempt::Initial,
@@ -90,7 +102,7 @@ impl CloudBackupSupervisor {
                 error.logged_reader_message("Failed to delete undecryptable wallet backups"),
             ),
         );
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 }

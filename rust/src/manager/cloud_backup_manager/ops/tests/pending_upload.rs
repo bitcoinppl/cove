@@ -1,5 +1,8 @@
 use super::*;
-use crate::database::cloud_backup::CloudBlobConfirmedState;
+use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedBackupVerificationState};
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::test_support::loaded_host_wait;
+use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
@@ -9,6 +12,8 @@ async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
     configure_enabled_cloud_backup(&manager, globals, 3);
 
     manager.backup_new_wallet(xpub_only_wallet_metadata());
+
+    supervisor_checkpoint(&manager).await;
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
     manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
@@ -41,6 +46,8 @@ async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_d
     configure_enabled_cloud_backup(&manager, globals, 3);
 
     manager.backup_new_wallet(xpub_only_wallet_metadata());
+
+    supervisor_checkpoint(&manager).await;
     manager.reconcile_verification_presentation(CloudBackupVerificationPresentation::Hidden {
         source: Some(CloudBackupVerificationSource::Settings),
     });
@@ -69,9 +76,11 @@ async fn dismiss_verification_prompt_hides_pending_decision() {
     configure_enabled_cloud_backup(&manager, globals, 3);
 
     manager.backup_new_wallet(xpub_only_wallet_metadata());
+
+    supervisor_checkpoint(&manager).await;
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.dispatch(CloudBackupManagerAction::DismissVerificationPrompt);
+    dispatch_and_wait(&manager, CloudBackupManagerAction::DismissVerificationPrompt).await;
 
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
@@ -94,6 +103,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(metadata.id.as_ref());
     manager.backup_new_wallet(metadata.clone());
+    supervisor_checkpoint(&manager).await;
     manager
         .mark_blob_uploaded_pending_confirmation(
             &namespace_id,
@@ -104,9 +114,11 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
         .unwrap();
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.dispatch(CloudBackupManagerAction::StartVerification(
-        CloudBackupVerificationSource::RootPrompt,
-    ));
+    dispatch_and_wait(
+        &manager,
+        CloudBackupManagerAction::StartVerification(CloudBackupVerificationSource::RootPrompt),
+    )
+    .await;
 
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
@@ -195,18 +207,21 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
     manager
-        .replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: false,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            namespace_id.clone(),
-            vec![PendingVerificationUpload::master_key_wrapper()],
-        ))
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id.clone(),
+                vec![PendingVerificationUpload::master_key_wrapper()],
+            ),
+        )
         .unwrap();
     globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
     globals
@@ -290,18 +305,21 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
     persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision);
     globals.cloud.set_master_key_backup(namespace_id.clone(), vec![4, 5, 6]);
     manager
-        .replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: false,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            namespace_id,
-            vec![PendingVerificationUpload::master_key_wrapper()],
-        ))
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                vec![PendingVerificationUpload::master_key_wrapper()],
+            ),
+        )
         .unwrap();
 
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
@@ -361,18 +379,21 @@ async fn pending_upload_verification_expires_stale_completion() {
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     manager
-        .replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: false,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            namespace_id,
-            vec![PendingVerificationUpload::master_key_wrapper()],
-        ))
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                vec![PendingVerificationUpload::master_key_wrapper()],
+            ),
+        )
         .unwrap();
 
     let mut state = RustCloudBackupManager::load_persisted_state();
@@ -388,7 +409,7 @@ async fn pending_upload_verification_expires_stale_completion() {
     }
     Database::global().cloud_backup_state.set(&state).unwrap();
 
-    manager.finalize_pending_verification_if_ready().await;
+    finalize_pending_verification_for_test(&manager).await;
 
     assert!(manager.pending_verification_completion().is_none());
     assert_eq!(
@@ -415,29 +436,32 @@ async fn pending_verification_stays_pending_while_the_master_key_is_unreadable()
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     manager
-        .replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: false,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            namespace_id,
-            Vec::new(),
-        ))
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
         .unwrap();
     let verification_before = manager.model_snapshot().verification;
 
     globals.keychain.fail_reads_for("cspp::v1::master_key");
-    manager.finalize_pending_verification_if_ready().await;
+    finalize_pending_verification_for_test(&manager).await;
     globals.keychain.clear_read_failures();
 
     assert!(manager.pending_verification_completion().is_some());
     assert_eq!(manager.model_snapshot().verification, verification_before);
 
-    manager.finalize_pending_verification_if_ready().await;
+    finalize_pending_verification_for_test(&manager).await;
     assert!(manager.pending_verification_completion().is_none());
 }
 
@@ -482,21 +506,24 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
         )
         .unwrap();
     manager
-        .replace_pending_verification_completion(PendingVerificationCompletion::new(
-            DeepVerificationReport {
-                master_key_wrapper_repaired: false,
-                local_master_key_repaired: false,
-                credential_recovered: false,
-                wallets_verified: 0,
-                wallet_issues: Default::default(),
-                detail: None,
-            },
-            namespace_id,
-            vec![
-                PendingVerificationUpload::master_key_wrapper(),
-                PendingVerificationUpload::new(record_id, prepared.revision_hash),
-            ],
-        ))
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                vec![
+                    PendingVerificationUpload::master_key_wrapper(),
+                    PendingVerificationUpload::new(record_id, prepared.revision_hash),
+                ],
+            ),
+        )
         .unwrap();
 
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
@@ -560,6 +587,10 @@ async fn pending_upload_verification_survives_restart() {
     assert!(!restarted_manager.has_pending_cloud_upload_verification());
 }
 
+// the upload starts the verifier loop, which is the only thing that runs passes in the app. The
+// loop reads silently and deep verification doesn't, so holding the next silent read parks the
+// loop's pass; the test answers each read and checks the state between passes without running a
+// pass itself
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_retries_until_expected_revision_is_readable() {
     let _guard = async_test_lock().lock().await;
@@ -581,28 +612,34 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
     .revision_hash;
 
     hold_wallet_upload_confirmation(globals, &metadata).await;
+    let first_check =
+        globals.cloud.gate_next_silent_wallet_backup_download(namespace.clone(), record_id.clone());
+
+    // deep verification finishing while the silent read is held proves it isn't the reader the
+    // hold parks
     let result = deep_verify_for_test(&manager, true).await;
 
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
-    globals.cloud.set_wallet_backup_download_override(
-        namespace.clone(),
-        record_id.clone(),
-        encrypted_wallet_backup_bytes(&metadata, &master_key, "stale-revision", 1).await,
-    );
+    let uploads_after_deep_verify = globals.cloud.wallet_backup_upload_attempt_count();
+    wait_until_read_parks(&first_check, "the loop's first pass reads the uploaded wallet").await;
 
-    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
+    // the first check reads a stale revision; the loop's next pass parks on its read once the
+    // first has persisted
+    let second_check =
+        globals.cloud.gate_next_silent_wallet_backup_download(namespace.clone(), record_id.clone());
+    first_check.release();
+    manager.wake_pending_upload_verifier();
+    wait_until_read_parks(&second_check, "the loop runs a second pass after a stale read").await;
 
-    assert!(has_more_pending);
     assert!(manager.pending_verification_completion().is_some());
     assert!(manager.has_pending_cloud_upload_verification());
-    assert!(matches!(
-        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+    match Database::global().cloud_blob_sync_states.get(&record_id).unwrap() {
         Some(PersistedCloudBlobSyncState {
-            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                | PersistedCloudBlobState::Confirmed(_),
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(pending),
             ..
-        })
-    ));
+        }) => assert_eq!(pending.attempt_count, 1, "one stale check, below the re-upload limit"),
+        other => panic!("expected the upload still pending confirmation, got {other:?}"),
+    }
     assert!(!matches!(
         manager.model_snapshot().verification,
         VerificationState::Verified(_) | VerificationState::Failed(_)
@@ -610,13 +647,18 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
 
     globals.cloud.set_wallet_backup_download_override(
         namespace,
-        record_id,
+        record_id.clone(),
         encrypted_wallet_backup_bytes(&metadata, &master_key, &current_revision, 1).await,
     );
+    second_check.release();
+    wait_for_background_refreshes(&manager).await;
 
-    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
-
-    assert!(!has_more_pending);
+    // the second check confirmed it, so the limit of 3 checks never sent the wallet up again
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+    ));
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), uploads_after_deep_verify);
     assert!(manager.pending_verification_completion().is_none());
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
@@ -626,6 +668,14 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
         other => panic!("expected verified result after retry, got {other:?}"),
     }
     assert!(!manager.has_pending_cloud_upload_verification());
+}
+
+/// Waits for a pass to park on the held provider read
+async fn wait_until_read_parks(read: &MockCloudDownloadGate, what: &str) {
+    read.wait_until_blocked()
+        .with_timeout(loaded_host_wait(Duration::from_secs(5)))
+        .await
+        .unwrap_or_else(|_| panic!("{what}"));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -803,4 +853,161 @@ async fn terminally_failed_pending_upload_finishes_verification_without_waiting_
         }
         other => panic!("expected terminal upload verification failure, got {other:?}"),
     }
+}
+
+/// A recovered Enable with nothing to upload settles its confirmation inside the supervisor's
+/// handler. That handler never waits on the provider only because the read stays local while the
+/// Enable runs: the confirmation has no uploads to check, and its detail refresh skips the
+/// provider until the lifecycle leaves Enabling
+#[tokio::test(flavor = "current_thread")]
+async fn empty_confirmation_reads_no_provider_while_an_enable_runs() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+    let enable = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Enable,
+        OperationId::next(),
+    );
+    manager.project_exclusive_operation_started(enable);
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
+    let listings = globals.cloud.list_wallet_files_attempt_count();
+
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    assert!(matches!(settlement.result, DeepVerificationResult::Verified(_)));
+    assert_eq!(
+        globals.cloud.list_wallet_files_attempt_count(),
+        listings,
+        "the read listed the provider while the Enable ran"
+    );
+}
+
+/// An upload confirmation read before a wallet change no longer covers the wallet set, so the
+/// settle is dropped: the backup stays required to verify and the marker stays for a new read
+#[tokio::test(flavor = "current_thread")]
+async fn pending_upload_settle_read_before_a_wallet_change_is_dropped() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    // the wallet set changes while the confirmation is on its way to the supervisor
+    call!(manager.supervisor.require_verification_after_wallet_change(1)).await.unwrap();
+    call!(manager.supervisor.settle_pending_verification(settlement)).await.unwrap();
+
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    assert!(
+        matches!(configured.verification, PersistedBackupVerificationState::Required { .. }),
+        "the stale settle verified the changed wallet set: {:?}",
+        configured.verification
+    );
+    assert!(manager.pending_verification_completion().is_some());
+}
+
+/// An upload confirmation read before the configuration changed was read from a backup that may
+/// no longer be the one configured, such as the same namespace on another Drive account, so the
+/// settle is dropped even though the wallet set and the marker are unchanged
+#[tokio::test(flavor = "current_thread")]
+async fn pending_upload_settle_read_before_a_configuration_change_is_dropped() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    // this test is the verifier pass whose settle goes stale, so it holds the pass the manager's
+    // own loop would otherwise run; that loop's settle under the newer configuration is valid
+    let _verifier_pass =
+        crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass().await;
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(
+            &crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+            PendingVerificationCompletion::new(
+                DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallet_issues: Default::default(),
+                    detail: None,
+                },
+                namespace_id,
+                Vec::new(),
+            ),
+        )
+        .unwrap();
+
+    let basis = call!(manager.supervisor.evidence_basis_for_confirmation()).await.unwrap();
+    let settlement =
+        manager.ready_pending_verification_settlement(basis).await.expect("ready settlement");
+
+    // a Drive account switch starts and rolls back while the confirmation is on its way to the
+    // supervisor, which moves the configuration on twice and keeps the marker
+    let transition_id = manager.begin_drive_account_switch().await.unwrap();
+    manager.cancel_drive_account_switch(transition_id).await.unwrap();
+    manager.confirm_drive_account_switch_rolled_back(transition_id).await.unwrap();
+    let marker = manager.pending_verification_completion();
+    assert_eq!(marker.as_ref(), Some(&settlement.completion), "the switch replaced the marker");
+
+    call!(manager.supervisor.settle_pending_verification(settlement)).await.unwrap();
+
+    let PersistedCloudBackupState::Configured(configured) =
+        RustCloudBackupManager::load_persisted_state()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    assert!(
+        !matches!(configured.verification, PersistedBackupVerificationState::Verified { .. }),
+        "a settle read under the older configuration verified this one: {:?}",
+        configured.verification
+    );
+    assert!(manager.pending_verification_completion().is_some());
 }

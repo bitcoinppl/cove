@@ -317,6 +317,8 @@ serde_bytes = "0.11.17"
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
+# the Cloud Backup harness pins wall-clock time behind `retry_after` and verification age
+cove-util = { path = "./crates/cove-util", features = ["test-clock"] }
 ctor = "1.0.13"
 dtor = "1.0.6"
 

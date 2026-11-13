@@ -1,11 +1,14 @@
 use super::*;
 
+mod continuation;
 mod discard;
 mod passkey_confirmation;
 mod recovery;
 mod restart;
 mod start;
 mod upload_finalization;
+
+pub(crate) use continuation::EnableContinuation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
@@ -90,7 +93,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::Idle);
         manager
             .reconcile_runtime_status(RustCloudBackupManager::status_for_operation_error(&error));
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -111,9 +114,7 @@ impl CloudBackupSupervisor {
                 );
             }
             error => {
-                let runtime_status = RustCloudBackupManager::runtime_status_for(
-                    &RustCloudBackupManager::load_persisted_state(),
-                );
+                let runtime_status = self.runtime.status();
                 manager.reconcile_runtime_status(runtime_status);
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::ReinitializeBackup,
@@ -128,7 +129,7 @@ impl CloudBackupSupervisor {
             | DriveAccountSwitchReinitializationCompletion::Handled => return,
         }
 
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -148,7 +149,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -162,9 +163,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         manager.apply_recovery_state(RecoveryState::Idle);
-        let runtime_status = RustCloudBackupManager::runtime_status_for(
-            &RustCloudBackupManager::load_persisted_state(),
-        );
+        let runtime_status = self.runtime.status();
 
         if matches!(runtime_status, CloudBackupStatus::Enabled) {
             // the reinitialize claim reports the backup as still enabling, and verification only
@@ -179,7 +178,7 @@ impl CloudBackupSupervisor {
 
             self.start_verification_with_context(
                 manager,
-                Some(verification_claim),
+                verification_claim,
                 DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },
@@ -187,7 +186,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.active_operation.clear();
+        self.runtime.finish(claim);
         manager.project_exclusive_operation_finished(claim);
     }
 }

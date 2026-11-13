@@ -369,7 +369,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restoring_one_of_three_copies_leaves_the_others_already_on_device",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_local_wallet",
-  "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_all_duplicate_wallets_preserves_existing_configured_state",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::onboarding_restore_is_rejected_while_backup_is_configured",
   "rust:rust/src/manager/cloud_backup_manager/model.rs::restore_all_runtime_events_project_progress_and_cancellation",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::runningStateProjectsBoundedDeterminateProgressAndCurrentWallet",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation",
