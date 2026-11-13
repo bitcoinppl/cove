@@ -19,11 +19,13 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
+import org.bitcoinppl.cove_core.CloudBackupDeleteCategory
+import org.bitcoinppl.cove_core.CloudBackupDeleteEvidence
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupRowDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
@@ -100,7 +102,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
         waitUntil("the provider should confirm both cloud-only rows before the relaunch") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
+            manager.isInventoryComplete &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
         }
@@ -119,8 +121,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
             ),
         )
 
-        // both holds are set before the activity starts, so bootstrap's discovery, sync health and
-        // passkey verification all wait at the gate and the detail's snapshot is the first snapshot
+        // both holds are set before the activity starts, so bootstrap's discovery and sync health
+        // wait at the gate and the detail's snapshot is the first snapshot
         ScriptedCloudStorageAccess.closeWalletListGate()
         ScriptedCloudStorageAccess.blockNextWalletListSnapshot()
         launchFullApp(resetData = false)
@@ -141,21 +143,25 @@ class CloudBackupFirstInventoryFullLaunchTest {
         ScriptedCloudStorageAccess.releaseWalletListGate()
         ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
 
-        // the gate also held passkey verification, which finishes after the release and can
-        // redraw the detail, so the rows are tapped only once it has settled
+        // the released listings can still redraw the detail, so the rows are tapped only once the
+        // inventory has settled; nothing verifies on its own, so the restored backup stays not verified
         waitUntil("the provider's answer should confirm both cloud-only rows") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
-                manager.isDetailInventoryReady &&
-                !manager.isDetailInventoryChecking &&
-                manager.verificationState is CloudBackupVerificationState.Verified &&
+            manager.isInventoryComplete &&
+                !manager.isInventoryChecking &&
+                manager.verificationState is CloudBackupVerificationState.NotVerified &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
         }
 
         device.waitForIdle()
         assertRowOpensEnabledActions(WALLET_TWO)
+
+        // loading the inventory and opening a row never ask for the passkey
+        for (invocation in listOf(ScriptedPasskeyProvider.Invocation.AUTHENTICATE, ScriptedPasskeyProvider.Invocation.DISCOVER)) {
+            assertEquals("the relaunch asked for the passkey ($invocation)", 0, ScriptedPasskeyProvider.callCount(invocation))
+        }
     }
 
     /**
@@ -165,7 +171,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     private fun assertNothingCanRestoreOrDeleteWhileHeld() {
         val manager = CloudBackupManager.getInstance()
         waitUntil("the held first listing should leave the inventory checking") {
-            manager.isDetailInventoryChecking
+            manager.isInventoryChecking
         }
 
         assertInventoryStillWaits("before the provider answers")
@@ -177,7 +183,21 @@ class CloudBackupFirstInventoryFullLaunchTest {
         val localWalletsBefore = AppManager.getInstance().wallets.map { it.id }
         val downloadsBefore = ScriptedCloudStorageAccess.walletDownloadRecordIds()
         dispatchOnMain(CloudBackupManagerAction.RestoreCloudWallet(ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID))
-        dispatchOnMain(CloudBackupManagerAction.DeleteCloudWallet(ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID))
+        // no row is drawn yet, so the delete carries a consent no inventory minted, as a stale one
+        // would arrive
+        val unminted =
+            CloudBackupRowDeleteConsent(
+                ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID,
+                CloudBackupDeleteEvidence(
+                    category = CloudBackupDeleteCategory.NotOnDevice,
+                    namespaceId = "unminted-namespace",
+                    configuration = 0uL,
+                    inventoryScope = null,
+                    listingGeneration = 0uL,
+                    localWalletsGeneration = 0uL,
+                ),
+            )
+        dispatchOnMain(CloudBackupManagerAction.DeleteCloudWallet(unminted))
         Thread.sleep(ACTION_SETTLE_MS)
 
         // the gate still holds every listing, so nothing confirmed the inventory while the
@@ -206,8 +226,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     private fun assertInventoryStillWaits(phase: String) {
         val manager = CloudBackupManager.getInstance()
 
-        assertFalse("the inventory must not be ready $phase", manager.isDetailInventoryReady)
-        assertFalse("the inventory must not be complete $phase", manager.isDetailInventoryComplete)
+        assertFalse("the inventory must not be complete $phase", manager.isInventoryComplete)
         assertFalse(
             "Restore All must not be available $phase",
             manager.restoreAllState is CloudBackupRestoreAllState.StartAvailable ||
@@ -256,9 +275,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
     }
 
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     private fun UiDevice.waitForText(
         value: String,
@@ -310,8 +327,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "lifecycle=${manager.state.lifecycle}, ready=${manager.isDetailInventoryReady}, " +
-                "complete=${manager.isDetailInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
+            "screen=${manager.describeScreen()}, " +
+                "complete=${manager.isInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "restoreAll=${manager.restoreAllState}, verification=${manager.verificationState}, " +
                 "walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
 

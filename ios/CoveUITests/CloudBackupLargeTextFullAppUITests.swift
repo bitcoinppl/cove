@@ -20,6 +20,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
     private var layout: LargeTextLayout!
+    /// The app state of a test launched into a named scenario, nil for one with a control
+    private var scenarioState: CloudBackupScenarioAppState?
 
     override func setUp() {
         super.setUp()
@@ -32,13 +34,14 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
 
     override func tearDown() {
         CloudBackupHostControl.tearDown(self, app: app)
+        scenarioState?.remove()
         super.tearDown()
     }
 
     func testSetupDescriptionAcknowledgementsAndEnableAreReachable() {
         // MAN-03 starts with an empty cloud, so onboarding offers to enable Cloud Backup; the
         // native passkey it wires up is only used after Enable, which this test never taps
-        robot.launch(scenario: "MAN-03", arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        let scenarioState = launchScenario("MAN-03")
 
         let getStarted = app.buttons["Get Started"]
         robot.scrollToHittable(getStarted)
@@ -69,12 +72,13 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         let enable = app.buttons["Enable Cloud Backup"]
         robot.scrollToHittable(enable)
         XCTAssertTrue(enable.isEnabled, "Enable Cloud Backup stayed disabled after every acknowledgement")
+        scenarioState.assertNextActions("onboarding should offer Enable", body: "disabled", available: ["enable"])
     }
 
     /// The inventory's header, its on-device and cloud-only rows, Restore All, and the verified
     /// result with its actions
     func testInventoryCloudOnlyRowsAndVerificationActionsAreReachable() {
-        openCloudBackupDetail(scenario: "SC-U02")
+        let scenarioState = openCloudBackupDetail(scenario: "SC-U02")
 
         layout.assertTextFits(layout.headerTitle, "inventory header title")
         // an on-device row only shows details, so it takes no taps
@@ -93,7 +97,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts["Backup verified"], "verified result", initialWait: 30)
         layout.assertTextFits(layout.staticText(endingWith: "wallet(s) verified"), "verified summary")
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again")
-        layout.assertActionFits(app.buttons["Disable Cloud Backup"], "Disable Cloud Backup")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off")
+        scenarioState.assertNextActions(
+            "the verified inventory should offer what the screen draws",
+            available: ["verify", "startRestoreAll", "turnOff"]
+        )
     }
 
     func testRestoreAllProgressKeepsCancelReachable() throws {
@@ -111,6 +119,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         )
         screen.tapRestoreAll(count: 2)
         control.waitForHold("wallet-two")
+        control.assertNextActions("a running batch should offer Cancel", available: ["cancelRestoreAll"])
 
         screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
         layout.assertReportFits(
@@ -122,11 +131,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.release("wallet-two")
     }
 
-    /// A passkey repair started from a cancelled verification shows the missing passkey screen
-    /// while it runs and, once the new passkey's registration fails, again with the error and Add
-    /// Passkey to try once more
+    /// A cancelled verification offers only Verify. A verification that finds no passkey and can't
+    /// register a new one leaves the missing passkey card, whose Add Passkey shows the card again
+    /// while its repair runs and, once that registration fails too, with the error and Add Passkey
     ///
-    /// The screen also shows for a backup whose saved state lost its passkey, which only older
+    /// The card also shows for a backup whose saved state lost its passkey, which only older
     /// databases hold; both cases draw the same view
     func testMissingPasskeyRecoveryKeepsAddPasskeyReachable() throws {
         let control = try CloudBackupHostControl(
@@ -137,28 +146,52 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.detail == "complete" && $0.inventoryComplete && $0.verification == "verified"
-                && !$0.pendingUploadVerification
+            $0.inventoryLoaded && $0.verification == "verified"
+                && !$0.awaitingUploadConfirmation
         }
 
+        // a cancel shows nothing about the passkey being gone, so Verify is the only way on
         try control.answerNextPasskeyAssertions([.userCancelled])
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again").tap()
-        control.waitForAppState("cancelling the passkey should leave verification cancelled") {
-            $0.verification == "cancelled"
+        control.waitForAppState("cancelling the passkey should leave verification not completed") {
+            $0.verification == "notCompleted"
         }
+        control.assertNextActions(
+            "a cancelled verification should offer Verify, not a passkey repair",
+            available: ["verify", "turnOff"],
+            unavailable: ["repairPasskey"]
+        )
 
         layout.assertTextFits(app.staticTexts["Cloud Backup Not Verified"], "cancelled verification")
-        layout.assertTextFits(robot.staticText(containing: "If your passkey was deleted"), "cancelled verification help")
-        layout.assertActionFits(app.buttons["Verify Now"], "cancelled verification: Verify Now")
+        let verifyNow = layout.assertActionFits(app.buttons["Verify Now"], "cancelled verification: Verify Now")
+        XCTAssertFalse(app.buttons["Add New Passkey"].exists, "a cancelled verification offered a passkey repair")
+        XCTAssertFalse(
+            robot.staticText(containing: "If your passkey was deleted").exists,
+            "a cancelled verification said the passkey may be deleted"
+        )
 
-        // the repair registers a new passkey, which the host holds and then fails as a provider
-        // would after its sheet showed
-        let createsSoFar = control.state.count(.passkeyCreate)
+        // neither the saved passkey nor discovery answers, so verification registers a new passkey
+        // to protect the master key again, and the host fails it as a provider would after its
+        // sheet showed
+        let createsBeforeVerify = control.state.count(.passkeyCreate)
+        try control.answerNextPasskeyAssertions([.noCredential, .noCredential])
         try control.update {
-            $0.createResults = Array(repeating: .success, count: createsSoFar) + [.postPresentationFailure]
-            $0.holds.append(.init(id: "repair-create", point: .passkeyCreate, matchingCallsToSkip: createsSoFar))
+            $0.createResults = Array(repeating: .success, count: createsBeforeVerify) + [.postPresentationFailure]
         }
-        layout.assertActionFits(app.buttons["Add New Passkey"], "cancelled verification: Add New Passkey").tap()
+        verifyNow.tap()
+        control.assertNextActions(
+            "a verification that failed on the passkey should offer its repair",
+            available: ["repairPasskey", "turnOff"]
+        )
+        assertMissingPasskeyScreenFits("verification failed on the passkey")
+
+        // the card's own repair registers once more, held so the running card can be checked
+        let createsBeforeRepair = control.state.count(.passkeyCreate)
+        try control.update {
+            $0.createResults = Array(repeating: .success, count: createsBeforeRepair) + [.postPresentationFailure]
+            $0.holds.append(.init(id: "repair-create", point: .passkeyCreate, matchingCallsToSkip: createsBeforeRepair))
+        }
+        layout.assertActionFits(app.buttons["Add Passkey"], "missing passkey: Add Passkey").tap()
         control.waitForHold("repair-create")
 
         assertMissingPasskeyScreenFits("repair running")
@@ -169,11 +202,12 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts.matching(NSPredicate(format: "label == %@", Self.passkeyAccessRecoveryMessage)).firstMatch, "repair failed: error", initialWait: 30)
         assertMissingPasskeyScreenFits("repair failed")
         layout.assertActionFits(app.buttons["Add Passkey"], "repair failed: Add Passkey")
-        layout.assertActionFits(app.buttons["Disable Cloud Backup"], "repair failed: Disable Cloud Backup")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "repair failed: Turn Off")
     }
 
     /// A verification the provider can't serve the master key backup to fails with Try Again and
-    /// a passkey repair
+    /// no passkey card, since the passkey is fine; one that finds no passkey and can't register a
+    /// new one offers the passkey repair
     func testFailedVerificationKeepsRecoveryActionsReachable() throws {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [firstRecordId])
@@ -183,8 +217,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.detail == "complete" && $0.inventoryComplete && $0.verification == "verified"
-                && !$0.pendingUploadVerification
+            $0.inventoryLoaded && $0.verification == "verified"
+                && !$0.awaitingUploadConfirmation
         }
 
         let downloadsSoFar = control.state.count(.masterDownload)
@@ -195,10 +229,31 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.waitForAppState("the unavailable master key backup should fail verification", timeout: 30) {
             $0.verification == "failed"
         }
+        control.assertNextActions(
+            "a failed download should offer Verify again, not a passkey repair",
+            available: ["verify", "turnOff"],
+            unavailable: ["repairPasskey"]
+        )
 
         layout.assertTextFits(robot.staticText(containing: "temporarily unavailable"), "failed verification: error")
-        layout.assertActionFits(robot.button(startingWith: "Try Again"), "failed verification: Try Again")
-        layout.assertActionFits(app.buttons["Add New Passkey"], "failed verification: Add New Passkey")
+        let tryAgain = layout.assertActionFits(robot.button(startingWith: "Try Again"), "failed verification: Try Again")
+        XCTAssertFalse(app.buttons["Add Passkey"].exists, "a failed download offered a passkey repair")
+
+        // the download answers again, but neither the saved passkey nor discovery does, and the
+        // replacement passkey fails as a provider would after its sheet showed
+        let createsBeforeRetry = control.state.count(.passkeyCreate)
+        try control.answerNextPasskeyAssertions([.noCredential, .noCredential])
+        try control.update {
+            $0.masterDownloadFailure = nil
+            $0.createResults = Array(repeating: .success, count: createsBeforeRetry) + [.postPresentationFailure]
+        }
+        tryAgain.tap()
+        control.assertNextActions(
+            "a verification that failed on the passkey should offer its repair",
+            available: ["repairPasskey", "turnOff"]
+        )
+        assertMissingPasskeyScreenFits("verification failed on the passkey")
+        layout.assertActionFits(app.buttons["Add Passkey"], "missing passkey: Add Passkey")
     }
 
     /// An interrupted setup whose staged key the keychain lost can't be resumed, so the relaunched
@@ -218,19 +273,21 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
             XCTAssertGreaterThan(removed, 0, "the interrupted setup staged no master key")
         }
 
-        control.waitForAppState("the relaunch should hold the interrupted setup for recovery") {
-            $0.lifecycle == "pendingEnableRecovery"
-        }
+        control.assertNextActions(
+            "the relaunch should hold the interrupted setup for recovery",
+            body: "pendingEnableRecovery",
+            available: ["confirmPendingEnableCleanup"]
+        )
         layout.assertTextFits(app.staticTexts["Cloud Backup Needs Recovery"], "recovery title", initialWait: 30)
         layout.assertTextFits(robot.staticText(containing: "setup was interrupted"), "recovery description")
         layout.assertTextFits(robot.staticText(containing: "incomplete local setup can be removed"), "recovery explanation")
         layout.assertTextFits(app.staticTexts["Support code"], "support code title")
-        layout.assertTextFits(app.staticTexts["cloudBackup.recovery.supportCode"], "support code")
+        layout.assertTextFits(app.staticTexts[CloudBackupUIIdentifier.recoverySupportCode], "support code")
         layout.assertActionFits(robot.button(startingWith: "Copy Code"), "Copy Code")
         layout.assertActionFits(robot.button(startingWith: "Contact Support"), "Contact Support")
         layout.assertActionFits(app.buttons["Cancel"], "recovery Cancel")
 
-        let removeSetupIdentifier = "cloudBackup.recovery.removeIncompleteSetup"
+        let removeSetupIdentifier = CloudBackupUIIdentifier.action("confirmPendingEnableCleanup")
         layout.assertActionFits(app.buttons[removeSetupIdentifier], "Remove Incomplete Setup").tap()
 
         // the screen's own button has the same label and sits under the dialog, so match the
@@ -244,14 +301,127 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         XCTAssertTrue(confirmRemoval.isHittable, "the removal confirmation is not reachable")
     }
 
+    /// The Turn Off review that asks twice, its confirmation and the offline dialog keep their
+    /// text and every button reachable; iOS draws them as system alerts, which scroll their
+    /// content at this size and which the truncation probe can't reach
+    func testTurnOffDialogsKeepTheirActionsReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: true)
+
+        let turnOff = layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off")
+        turnOff.tap()
+        let review = layout.assertAlertFits(app.alerts["Turn Off Cloud Backup?"], containing: "Fixture Wallet Two", "review")
+        control.assertNextActions("the review should be confirmable", available: ["confirmDisable", "cancelDisable"])
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("restoreFirst")), in: review, "review: Restore Them First")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: review, "review: Cancel")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.turnOffContinue), in: review, "review: Continue").tap()
+
+        let confirmation = layout.assertAlertFits(
+            app.alerts["Delete These Backups and Turn Off Cloud Backup?"],
+            containing: "can't be undone",
+            "confirmation"
+        )
+        layout.assertAlertActionReachable(confirmation.alertButton(CloudBackupUIIdentifier.action("confirmDisable")), in: confirmation, "confirmation: Delete and Turn Off")
+        layout.assertAlertActionReachable(confirmation.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: confirmation, "confirmation: Cancel").tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 10))
+
+        try control.setNetworkConnected(false)
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off offline").tap()
+        let offline = layout.assertAlertFits(app.alerts["Can't Reach iCloud"], containing: "needs a connection", "offline")
+        layout.assertAlertActionReachable(offline.alertButton(CloudBackupUIIdentifier.turnOffOfflineTryAgain), in: offline, "offline: Try Again")
+        layout.assertAlertActionReachable(offline.alertButton(CloudBackupUIIdentifier.action("cancelDisable")), in: offline, "offline: Cancel").tap()
+        XCTAssertEqual(control.state.count(.namespaceDelete), 0, "checking the dialogs deleted a backup")
+    }
+
+    /// The notice a healed legacy Turn Off leaves keeps its text whole and Turn Off and Dismiss
+    /// reachable
+    func testHealNoticeKeepsTurnOffAndDismissReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
+
+        try control.requestLegacyStuckRecordOnNextLaunch()
+        robot.killAndRelaunch()
+        control.waitForLegacyStuckRecordSeeded()
+        robot.openSettings()
+        control.assertNextActions("the healed backup should offer Turn Off and Dismiss", available: ["turnOff", "dismissHealNotice"])
+
+        layout.assertTextFits(app.staticTexts["Cloud Backup Turned On Again"], "Settings row: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "backing up your wallets again"), "Settings row: message")
+        robot.openCloudBackupDetailFromSettingsRow()
+
+        // the title carries the notice's identifier, so it is found by its label
+        layout.assertTextFits(robot.staticText(containing: "Cloud Backup is on again"), "heal notice: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "An earlier Turn Off didn't finish"), "heal notice: description")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.healNoticeTurnOff], "heal notice: Turn Off")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("dismissHealNotice")], "heal notice: Dismiss")
+    }
+
+    /// A Turn Off whose delete failed after the confirmation keeps the Settings row's status and
+    /// the panel's text whole, with Try Again reachable
+    func testTurnOffIncompleteRowAndPanelKeepTryAgainReachable() throws {
+        let control = try restoreWalletOneAndOpenDetail(listingOthers: false)
+        try control.failNamespaceDelete(attempt: 1)
+
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("turnOff")], "Turn Off").tap()
+        let review = layout.assertAlertFits(app.alerts["Turn Off Cloud Backup?"], containing: "This deletes the backups", "review")
+        layout.assertAlertActionReachable(review.alertButton(CloudBackupUIIdentifier.action("confirmDisable")), in: review, "review: Turn Off and Delete Backups").tap()
+        control.assertNextActions(
+            "the failed delete should leave Turn Off unfinished",
+            body: "finishingDisable",
+            available: ["resumeDisable"],
+            timeout: 60
+        )
+
+        layout.assertTextFits(robot.staticText(containing: "Cloud Backup is being turned off"), "panel: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "couldn't finish deleting your backups"), "panel: description")
+        layout.assertActionFits(app.buttons[CloudBackupUIIdentifier.action("resumeDisable")], "panel: Try Again")
+
+        robot.goBack()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
+        layout.assertTextFits(app.staticTexts["Cloud Backup Is Being Turned Off"], "Settings row: title", initialWait: 15)
+        layout.assertTextFits(robot.staticText(containing: "Open to finish turning off"), "Settings row: message")
+    }
+
+    /// Restores Fixture Wallet One at the largest text size and opens Cloud Backup once it is
+    /// verified, with wallets two and three listed only in the cloud when `listingOthers`
+    private func restoreWalletOneAndOpenDetail(listingOthers: Bool) throws -> CloudBackupHostControl {
+        let control = try CloudBackupHostControl(
+            script: .init(cloud: .fixture, listedWalletRecordIds: [firstRecordId])
+        )
+        robot.launch(control: control, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        robot.restoreFromCloudBackup()
+        if listingOthers {
+            try control.update { $0.listedWalletRecordIds = nil }
+        }
+
+        let notOnDevice = listingOthers ? [secondRecordId, thirdRecordId] : []
+        robot.openSettings()
+        robot.openCloudBackupDetail()
+        control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
+            $0.inventoryLoaded && $0.verification == "verified" && !$0.awaitingUploadConfirmation
+                && $0.notOnDeviceRecordIds == notOnDevice
+        }
+
+        return control
+    }
+
     private func assertMissingPasskeyScreenFits(_ screen: String) {
         layout.assertTextFits(app.staticTexts["Cloud Backup Passkey Missing"], "\(screen): title", initialWait: 15)
         layout.assertTextFits(robot.staticText(containing: "is not accessible until you use an existing passkey"), "\(screen): description")
         layout.assertTextFits(robot.staticText(containing: "to make your cloud backup accessible again"), "\(screen): help")
+        layout.assertTextFits(robot.staticText(containing: "If your passkey was deleted"), "\(screen): deleted passkey help")
     }
 
-    private func openCloudBackupDetail(scenario: String) {
+    /// Launches the host into `scenario` at the largest text size, with its app state read from
+    /// the file the scenario host writes
+    private func launchScenario(_ scenario: String) -> CloudBackupScenarioAppState {
+        let state = CloudBackupScenarioAppState(app: app)
+        scenarioState = state
         robot.launch(scenario: scenario, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+
+        return state
+    }
+
+    private func openCloudBackupDetail(scenario: String) -> CloudBackupScenarioAppState {
+        let state = launchScenario(scenario)
         robot.restoreFromCloudBackup()
         robot.openSettings()
 
@@ -259,6 +429,8 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.scrollToHittable(cloudBackup)
         cloudBackup.tap()
         XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
+
+        return state
     }
 }
 
@@ -320,7 +492,7 @@ private struct LargeTextLayout {
     /// Scrolls a wallet row wholly into view, checks a row that is an action takes a tap there and
     /// is enabled, and fails unless every text in it draws whole
     func assertRowFits(recordId: String, _ name: String, isAction: Bool = true, initialWait: TimeInterval = 10) {
-        let row = app.descendants(matching: .any)["cloudBackup.wallet.\(recordId)"]
+        let row = app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(recordId)]
         scrollWhollyIntoView(row, name, needsHit: isAction, initialWait: initialWait)
         if isAction {
             XCTAssertTrue(row.isEnabled, "\(name) is disabled")
@@ -334,6 +506,37 @@ private struct LargeTextLayout {
     func assertReportFits(_ element: XCUIElement, report: String, _ name: String) {
         scrollWhollyIntoView(element, name, needsHit: false, initialWait: 10)
         assertProbeFits(app.descendants(matching: .any)[report], name)
+    }
+
+    /// Waits for a system alert and fails unless one of its texts contains `fragment`
+    ///
+    /// A system alert's text is drawn by iOS, which scrolls it rather than truncating it, so the
+    /// text only has to be there
+    @discardableResult
+    func assertAlertFits(_ alert: XCUIElement, containing fragment: String, _ name: String) -> XCUIElement {
+        XCTAssertTrue(alert.waitForExistence(timeout: 20), "\(name) never showed")
+        let text = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", fragment)).firstMatch
+        XCTAssertTrue(text.exists, "\(name) doesn't say '\(fragment)'")
+
+        return alert
+    }
+
+    /// Scrolls a system alert's content until `button` takes a tap, and fails if it never does
+    @discardableResult
+    func assertAlertActionReachable(_ button: XCUIElement, in alert: XCUIElement, _ name: String) -> XCUIElement {
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "\(name) is missing")
+        for _ in 0 ..< 6 where !button.isHittable {
+            alert.swipeUp(velocity: .slow)
+        }
+        for _ in 0 ..< 6 where !button.isHittable {
+            alert.swipeDown(velocity: .slow)
+        }
+
+        if !button.isHittable { robot.attachScreen(named: "\(name) unreachable") }
+        XCTAssertTrue(button.isHittable, "\(name) takes no tap in its alert")
+        XCTAssertTrue(button.isEnabled, "\(name) is disabled")
+
+        return button
     }
 
     /// Fails when the action is no taller than at the default text size, so a launch that ignored

@@ -438,11 +438,16 @@ impl RustCloudBackupManager {
 
         let PreparedDirtyWalletUpload { prepared, wallet_json } = prepared_upload;
         let cloud = CloudStorage::global_silent_client();
-        let uploading_state =
-            current_state.with_state(PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+
+        // the row names the namespace this upload writes to, so its confirmation, and a failure
+        // recorded from it, describe this upload even when the row began in a replaced namespace
+        let uploading_state = current_state.uploaded_to(
+            &namespace,
+            PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: prepared.revision_hash.clone(),
                 started_at: cove_util::time::unix_timestamp_secs_or_zero(),
-            }));
+            }),
+        );
 
         let wrote_uploading = Database::global()
             .cloud_blob_sync_states
@@ -457,6 +462,7 @@ impl RustCloudBackupManager {
         let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
         let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
             uploading_state.clone(),
+            namespace.clone(),
             prepared.revision_hash.clone(),
             uploaded_at,
         );
@@ -660,6 +666,7 @@ impl RustCloudBackupManager {
         if let Some(current_state) = current_state {
             let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
                 &current_state,
+                namespace_id,
                 revision_hash,
                 uploaded_at,
             )?;

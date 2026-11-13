@@ -23,7 +23,6 @@ import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
@@ -174,7 +173,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
         waitUntil("the failed refresh should keep both rows and disable Restore All") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.detailError != null &&
+            manager.isInventoryIncomplete &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState is CloudBackupRestoreAllState.StartDisabled
         }
@@ -184,15 +183,14 @@ class CloudBackupInventoryActionsFullLaunchTest {
         waitUntil("the held listing should leave the known rows checking") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryChecking &&
-                !manager.isDetailInventoryReady &&
+            manager.isInventoryChecking &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS
         }
     }
 
     private fun waitForConfirmedInventory() {
         waitUntil("the provider should confirm both cloud-only rows") {
-            CloudBackupManager.getInstance().isDetailInventoryComplete &&
+            CloudBackupManager.getInstance().isInventoryComplete &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS
         }
     }
@@ -348,9 +346,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
     }
 
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     private fun UiDevice.waitForText(
         value: String,
@@ -429,8 +425,8 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "detail=${manager.state.lifecycle}, ready=${manager.isDetailInventoryReady}, " +
-                "complete=${manager.isDetailInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
+            "screen=${manager.describeScreen()}, " +
+                "complete=${manager.isInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "restoreAll=${manager.restoreAllState}, walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
 
         assertTrue("$message; $diagnostics", condition())

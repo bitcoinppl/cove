@@ -64,7 +64,7 @@ open class CoveApplication : Application() {
             val createdCloudStorageAccess = services.cloudStorageAccess()
             cloudStorageAccess = createdCloudStorageAccess as? AndroidCloudStorageAccess
             cloudStorage = CloudStorage(createdCloudStorageAccess)
-            CloudBackupManager.setOnCloudBackupDisabled {
+            CloudBackupManager.setOnCloudBackupSettledOff {
                 clearCloudBackupDriveAccountBinding(this)
             }
             cloudStorageAccess?.let { access ->

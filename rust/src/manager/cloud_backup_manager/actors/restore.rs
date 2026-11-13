@@ -1142,7 +1142,7 @@ mod tests {
             PersistedCloudBackupStatus::Enabled
         );
         assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
         assert_eq!(
             dirty_restore_wallet_ids(),
             sorted_wallet_ids(&[first_wallet.id.clone(), second_wallet.id.clone()])
@@ -1237,7 +1237,7 @@ mod tests {
             PersistedCloudBackupStatus::Disabled
         );
         assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Restoring(_)));
         assert!(dirty_restore_wallet_ids().is_empty());
     }
 
@@ -1278,7 +1278,7 @@ mod tests {
             PersistedCloudBackupStatus::Disabled
         );
         assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
-        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+        assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Restoring(_)));
     }
 
     async fn activate_new_restore_namespace(

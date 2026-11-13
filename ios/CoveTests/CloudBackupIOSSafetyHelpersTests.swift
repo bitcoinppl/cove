@@ -1,5 +1,6 @@
 @testable import Cove
 import CoveCore
+import SwiftUI
 import XCTest
 
 final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
@@ -29,10 +30,35 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertEqual(failure, .fatal(error.localizedDescription))
     }
 
-    func testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly() {
-        XCTAssertTrue(cloudBackupPendingEnableCleanupIsAvailable(.available))
-        XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.supportOnly))
-        XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.cleaning))
+    /// Recovery offers Remove Incomplete Setup only while Rust offers the cleanup, so a support-only
+    /// setup shows its support code with no way to remove what Cove can't safely remove
+    func testPendingEnableRecoveryOffersCleanupOnlyWhenRustDoes() async throws {
+        let fixture = try XCTUnwrap(cloudBackupScreenFixtures().first { $0.name.hasSuffix(":pending-enable-recovery") })
+        guard case let .pendingEnableRecovery(recovery) = fixture.screen.body else {
+            return XCTFail("the pending-enable-recovery fixture has a \(fixture.screen.body) body")
+        }
+
+        let offered = try await render(CloudBackupPendingEnableRecoveryView(
+            recovery: recovery,
+            actions: fixture.screen.actions,
+            onRemoveIncompleteSetup: {},
+            onCancel: {}
+        ))
+        XCTAssertEqual(offered.actions[.confirmPendingEnableCleanup], true, "cleanup Rust offers has no enabled control")
+
+        var supportOnly = recovery
+        supportOnly.cleanup = .supportOnly
+        let withoutCleanup = CloudBackupActions(
+            entries: fixture.screen.actions.entries.filter { $0.action != .confirmPendingEnableCleanup }
+        )
+
+        let notOffered = try await render(CloudBackupPendingEnableRecoveryView(
+            recovery: supportOnly,
+            actions: withoutCleanup,
+            onRemoveIncompleteSetup: {},
+            onCancel: {}
+        ))
+        XCTAssertNil(notOffered.actions[.confirmPendingEnableCleanup], "a support-only setup drew a cleanup control")
     }
 
     func testPendingEnableRecoverySupportEmailContainsOnlySafeContext() throws {
@@ -52,177 +78,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
     func testPendingUploadAccessibilityStatusDistinguishesActionableStates() {
         XCTAssertEqual(
-            cloudBackupPendingUploadAccessibilityStatus(
-                verificationState: .awaitingUploadConfirmation,
-                syncState: .blocked("iCloud authorization required")
-            ),
+            cloudBackupPendingUploadAccessibilityStatus(syncState: .blocked("iCloud authorization required")),
             .authorizationRequired
         )
         XCTAssertEqual(
-            cloudBackupPendingUploadAccessibilityStatus(
-                verificationState: .awaitingUploadConfirmation,
-                syncState: .failed("upload confirmation failed")
-            ),
+            cloudBackupPendingUploadAccessibilityStatus(syncState: .failed("upload confirmation failed")),
             .failed
         )
-        XCTAssertEqual(
-            cloudBackupPendingUploadAccessibilityStatus(
-                verificationState: .awaitingUploadConfirmation,
-                syncState: .syncing
-            ),
-            .confirming
-        )
-        XCTAssertEqual(
-            cloudBackupPendingUploadAccessibilityStatus(
-                verificationState: .required,
-                syncState: .failed("not a pending upload")
-            ),
-            .hidden
-        )
-    }
-
-    func testCloudBackupProgressPresentationShowsOneVerificationIndicator() {
-        XCTAssertEqual(
-            cloudBackupDetailProgressPresentation(
-                verificationState: .running,
-                isInventoryChecking: true,
-                hasRetainedDetail: true,
-                hasVisibleWalletRows: false
-            ),
-            .verificationCard
-        )
-        XCTAssertEqual(
-            cloudBackupDetailProgressPresentation(
-                verificationState: .running,
-                isInventoryChecking: true,
-                hasRetainedDetail: true,
-                hasVisibleWalletRows: true
-            ),
-            .verificationInline
-        )
-        XCTAssertEqual(
-            cloudBackupDetailProgressPresentation(
-                verificationState: .required,
-                isInventoryChecking: true,
-                hasRetainedDetail: true,
-                hasVisibleWalletRows: true
-            ),
-            .inventoryInline
-        )
-    }
-
-    func testCloudBackupVisibleRowsRequireDetailAndIgnoreCountOnlyState() {
-        let detail = CloudBackupDetail(
-            lastSync: nil,
-            upToDate: [],
-            needsSync: [],
-            cloudOnlyCount: 1
-        )
-        let wallet = CloudBackupWalletItem(
-            name: "Savings",
-            network: .bitcoin,
-            walletMode: nil,
-            walletType: nil,
-            fingerprint: nil,
-            labelCount: nil,
-            backupUpdatedAt: nil,
-            syncStatus: .confirmed,
-            restoreFailure: nil,
-            recordId: "wallet-record"
-        )
-
-        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
-            detail: detail,
-            cloudOnly: .notFetched
-        ))
-        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
-            detail: nil,
-            cloudOnly: .loaded(wallets: [wallet], incomplete: false)
-        ))
-        XCTAssertTrue(cloudBackupHasVisibleWalletRows(
-            detail: detail,
-            cloudOnly: .loaded(wallets: [wallet], incomplete: false)
-        ))
-        XCTAssertTrue(cloudBackupHasVisibleWalletRows(
-            detail: detail,
-            cloudOnly: .loaded(wallets: [], incomplete: true)
-        ))
-        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
-            detail: detail,
-            cloudOnly: .loaded(wallets: [], incomplete: false)
-        ))
-    }
-
-    func testCloudBackupSupplementalSectionsRequireNonemptyLoadedInventory() {
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.notFetched))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loading))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.failed(error: "cloud inventory failed")))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: false)))
-        XCTAssertEqual(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: true))?.count, 0)
-        XCTAssertEqual(
-            cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [cloudBackupTestWallet], incomplete: false))?.count,
-            1
-        )
-
-        let emptySummary = CloudBackupOtherBackupsSummary(
-            namespaceCount: 0,
-            walletCount: 0,
-            passkeyHints: []
-        )
-        let loadedSummary = CloudBackupOtherBackupsSummary(
-            namespaceCount: 1,
-            walletCount: 2,
-            passkeyHints: []
-        )
-
-        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.notChecked))
-        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.checking))
-        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.loadFailed(reason: .offline)))
-        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.loaded(summary: emptySummary)))
-        XCTAssertEqual(
-            cloudBackupVisibleOtherBackupsSummary(.loaded(summary: loadedSummary))?.namespaceCount,
-            1
-        )
-    }
-
-    func testCloudBackupSupplementalFailuresRemainVisibleWithoutWalletRows() {
-        XCTAssertEqual(
-            cloudBackupCloudOnlyFailureMessage(.failed(error: "Cloud inventory unavailable")),
-            "Cloud inventory unavailable"
-        )
-        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.notFetched))
-        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loading))
-        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loaded(wallets: [], incomplete: false)))
-        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.notChecked))
-        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.checking))
-        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.loaded(summary: CloudBackupOtherBackupsSummary(
-            namespaceCount: 0,
-            walletCount: 0,
-            passkeyHints: []
-        ))))
-
-        for reason: CloudBackupInventoryIncompleteReason in [
-            .providerSyncPending, .offline, .authorizationRequired, .providerUnavailable, .unknown,
-        ] {
-            let message = cloudBackupOtherBackupsFailureMessage(.loadFailed(reason: reason))
-            XCTAssertNotNil(message)
-            XCTAssertTrue(message?.contains("another key") == true)
-        }
-    }
-
-    private var cloudBackupTestWallet: CloudBackupWalletItem {
-        CloudBackupWalletItem(
-            name: "Savings",
-            network: .bitcoin,
-            walletMode: nil,
-            walletType: nil,
-            fingerprint: nil,
-            labelCount: nil,
-            backupUpdatedAt: nil,
-            syncStatus: .confirmed,
-            restoreFailure: nil,
-            recordId: "wallet-record"
-        )
+        XCTAssertEqual(cloudBackupPendingUploadAccessibilityStatus(syncState: .syncing), .confirming)
+        XCTAssertEqual(cloudBackupPendingUploadAccessibilityStatus(syncState: nil), .confirming)
     }
 
     func testWalletAccessibilityLabelCombinesIdentityStatusAndAction() {
@@ -255,33 +119,41 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertTrue(label.contains("Try again"))
     }
 
-    func testRestoreAllPresentationUsesRustOwnedAvailabilityAndCount() {
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .notShown),
-            .hidden
+    /// A wallet whose secret left this device says so, so its row doesn't read as fully backed up
+    func testSecretMissingLocallyRowSaysTheCloudCopyRestoresIt() throws {
+        let fixture = try XCTUnwrap(
+            cloudBackupScreenFixtures().first { $0.name.hasSuffix(":configured-secret-missing-locally") }
         )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .startAvailable(walletCount: 3)),
-            .action(CloudBackupRestoreAllActionPresentation(
-                title: "Restore All (3)",
-                intent: .start
-            ))
+        guard case let .configured(configured) = fixture.screen.body else {
+            return XCTFail("the fixture is configured")
+        }
+        let rows = configured.sections.flatMap { section -> [CloudBackupOwnRow] in
+            guard case let .wallets(wallets) = section else { return [] }
+            return wallets.upToDate + wallets.needsSync
+        }
+        let row = try XCTUnwrap(rows.first)
+        XCTAssertEqual(row.record, .secretMissingLocally)
+
+        let label = cloudBackupWalletAccessibilityLabel(item: row.wallet, record: row.record)
+        XCTAssertTrue(label.contains(cloudBackupSecretMissingLocallyMessage), label)
+        XCTAssertFalse(
+            cloudBackupWalletAccessibilityLabel(item: row.wallet, record: .current)
+                .contains(cloudBackupSecretMissingLocallyMessage)
         )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .startDisabled(walletCount: 3)),
-            .disabled(title: "Restore All (3)")
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .retryAvailable(walletCount: 1)),
-            .action(CloudBackupRestoreAllActionPresentation(
-                title: "Retry Remaining (1)",
-                intent: .retry
-            ))
-        )
-        XCTAssertEqual(
-            cloudBackupRestoreAllPresentation(state: .retryDisabled(walletCount: 1)),
-            .disabled(title: "Retry Remaining (1)")
-        )
+    }
+
+    /// Restore All titles carry Rust's wallet count whether or not the action can run now, since
+    /// availability comes from the screen's actions and draws as a disabled control with its reason
+    func testRestoreAllPresentationTitlesCarryRustsCount() {
+        XCTAssertEqual(cloudBackupRestoreAllPresentation(state: .notShown), .hidden)
+
+        for state in [CloudBackupRestoreAllState.startAvailable(walletCount: 3), .startDisabled(walletCount: 3)] {
+            XCTAssertEqual(cloudBackupRestoreAllPresentation(state: state), .start(title: "Restore All (3)"))
+        }
+
+        for state in [CloudBackupRestoreAllState.retryAvailable(walletCount: 1), .retryDisabled(walletCount: 1)] {
+            XCTAssertEqual(cloudBackupRestoreAllPresentation(state: state), .retry(title: "Retry Remaining (1)"))
+        }
     }
 
     func testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation() {
@@ -298,7 +170,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 title: "Restoring Savings",
                 detail: "Completed 1 of 3",
                 accessibilityValue: "Restoring Savings, Completed 1 of 3",
-                canCancel: true
+                cancellationRequested: false
             ))
         )
 
@@ -312,7 +184,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             return XCTFail("expected running presentation")
         }
 
-        XCTAssertFalse(progress.canCancel)
+        XCTAssertTrue(progress.cancellationRequested)
         XCTAssertTrue(progress.accessibilityValue.contains("Cancel requested"))
         XCTAssertTrue(progress.accessibilityValue.contains("current wallet will finish"))
     }
@@ -425,6 +297,56 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertEqual(firstRecords, [record])
         XCTAssertEqual(secondRecords, [record])
         XCTAssertEqual(source.startCount, 1)
+    }
+
+    /// What was queued before the manager read its snapshot, a Turn Off finishing, then a new
+    /// Enable and its completion, is skipped by revision instead of replayed over the snapshot:
+    /// the screen never goes back to Finishing or Disabled, and the completion event, which has
+    /// no revision, still arrives in order. The next delta after the snapshot applies
+    func testScreenDeltasQueuedBeforeTheSnapshotAreSkipped() throws {
+        let fixtures = cloudBackupScreenFixtures()
+        let screen = { (name: String) in
+            try XCTUnwrap(fixtures.first { $0.name.hasSuffix(":\(name)") }?.screen)
+        }
+        let configured = try screen("configured")
+        let finishing = try screen("finishing-disable")
+        let disabled = try screen("disabled")
+        let delta = { (revision: UInt64, body: CloudBackupScreenBody) in
+            CloudBackupScreenDelta(
+                revision: revision,
+                body: body,
+                settingsRow: nil,
+                healNotice: nil,
+                lastOutcome: nil,
+                rootPrompt: nil,
+                actions: nil
+            )
+        }
+        let snapshot = CloudBackupPublishedScreen(revision: 3, screen: configured)
+
+        // the fake handle is never called: the manager is not listening, and nothing dispatches
+        let manager = CloudBackupManager(rust: RustCloudBackupManager(noHandle: .init()), published: snapshot)
+
+        manager.apply(.screen(delta(1, finishing.body)))
+        XCTAssertEqual(manager.published, snapshot)
+
+        manager.apply(.screen(delta(2, disabled.body)))
+        XCTAssertEqual(manager.published, snapshot)
+
+        manager.apply(.enableCompleted(CloudBackupEnableContext(
+            savedPasskeyConfirmation: .manual,
+            verificationSource: .settings
+        )))
+        XCTAssertNotNil(manager.enableCompletion)
+
+        manager.apply(.screen(delta(3, configured.body)))
+        XCTAssertEqual(manager.published, snapshot)
+        XCTAssertNotNil(manager.enableCompletion)
+
+        manager.apply(.screen(delta(4, disabled.body)))
+        XCTAssertEqual(manager.published.revision, 4)
+        XCTAssertEqual(manager.screen.body, .disabled)
+        XCTAssertNil(manager.enableCompletion)
     }
 }
 
@@ -928,43 +850,6 @@ extension CloudBackupIOSSafetyHelpersTests {
                 metadata: .failure(CloudStorageError.Offline("metadata unavailable"))
             )
         )
-    }
-
-    func testCloudBackupDetailStateRetainsRowsButOnlyCompleteEnablesActions() {
-        let detail = CloudBackupDetail(
-            lastSync: nil,
-            upToDate: [],
-            needsSync: [],
-            cloudOnlyCount: 0
-        )
-        let loaded = LoadedCloudBackupDetail(
-            detail: detail,
-            inventoryAuthority: .providerConfirmed,
-            cloudOnly: .notFetched,
-            cloudOnlyOperation: .idle,
-            otherBackupsOperation: .idle
-        )
-
-        let checking = CloudBackupDetailState.checking(retained: loaded)
-        XCTAssertTrue(checking.isChecking)
-        XCTAssertFalse(checking.isComplete)
-        XCTAssertEqual(checking.retainedDetailState?.detail, detail)
-
-        let failed = CloudBackupDetailState.failed(
-            reason: .offline,
-            error: "iCloud inventory is unavailable",
-            retained: loaded
-        )
-        XCTAssertFalse(failed.isComplete)
-        XCTAssertEqual(
-            failed.inventoryError,
-            "This device is offline. Connect to the internet, then check iCloud Drive again."
-        )
-        XCTAssertEqual(failed.retainedDetailState?.detail, detail)
-
-        let complete = CloudBackupDetailState.complete(state: loaded)
-        XCTAssertTrue(complete.isComplete)
-        XCTAssertNil(complete.inventoryError)
     }
 
     func testCatastrophicProbeMappingDistinguishesInconclusiveStates() {
@@ -1896,6 +1781,303 @@ extension CloudBackupIOSSafetyHelpersTests {
             .provider(currentURL, metadataPath: currentURL.resolvingSymlinksInPath().path)
         )
         XCTAssertEqual(fixture.source.startCount, 1)
+    }
+
+    /// Every fixture Rust names renders on the detail screen with an enabled control for each
+    /// available action and row action, and no enabled control for anything else
+    ///
+    /// An action is skipped only when every control Rust names for it is Android's, or when iOS
+    /// draws it off the detail form (`isDrawnOffDetail`)
+    func testEveryScreenFixtureDrawsItsAvailableActionsOnTheDetail() async throws {
+        let fixtures = cloudBackupScreenFixtures()
+        XCTAssertFalse(fixtures.isEmpty, "debug builds must ship the screen fixtures")
+        try await waitForBootstrap()
+
+        for fixture in fixtures {
+            let recorder = try await renderDetail(fixture.screen)
+            let actions = fixture.screen.actions
+
+            for entry in actions.entries where fixture.screen.drawsOnIOS(entry.action) {
+                let drawnEnabled = recorder.actions[entry.action]
+                switch entry.availability {
+                case .available:
+                    guard !Self.isDrawnOffDetail(entry.action, on: fixture.screen) else { continue }
+                    XCTAssertEqual(drawnEnabled, true, "\(fixture.name): \(entry.action) is available with no enabled control")
+                case .unavailable:
+                    XCTAssertNotEqual(drawnEnabled, true, "\(fixture.name): unavailable \(entry.action) is enabled")
+                }
+            }
+
+            for (action, enabled) in recorder.actions where enabled {
+                XCTAssertTrue(actions.isAvailable(action: action), "\(fixture.name): \(action) is enabled without Rust offering it")
+            }
+
+            for row in listedRows(fixture.screen) {
+                for rowAction in row.actions {
+                    let control = CloudBackupControlRecorder.RowControl(recordId: row.recordId, action: rowAction.action)
+                    XCTAssertEqual(
+                        recorder.rowActions[control],
+                        rowAction.availability.isAvailable,
+                        "\(fixture.name): row \(row.recordId) \(rowAction.action) doesn't match its availability"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Every prompt fixture's alert draws a choice for each entry Rust sends for its actions, enabled
+    /// only when available, and no choice Rust sent no entry for
+    func testEveryPromptFixtureDrawsItsChoicesFromTheirEntries() async throws {
+        let prompts = cloudBackupScreenFixtures().compactMap { fixture in
+            promptChoices(fixture.screen.rootPrompt).map { (fixture, $0) }
+        }
+        XCTAssertGreaterThanOrEqual(prompts.count, 2, "the fixtures must include the Enable prompts")
+
+        for (fixture, choices) in prompts {
+            let recorder = try await render(VStack {
+                CloudBackupPromptChoiceButtons(
+                    choices: choices.offered(on: fixture.screen),
+                    choose: { _ in },
+                    cancel: {}
+                )
+            })
+
+            for action in Set(choices.map(\.action)) {
+                let availability = fixture.screen.actions.availability(action: action)
+                XCTAssertEqual(
+                    recorder.actions[action],
+                    availability.map(\.isAvailable),
+                    "\(fixture.name): the \(action) choice doesn't follow its entry"
+                )
+            }
+        }
+    }
+
+    /// An alert has no room under its buttons, so a disabled choice's reason and a rejected
+    /// choice's outcome are in its message
+    func testPromptMessageCarriesTheReasonAndTheRejection() throws {
+        let fixture = try XCTUnwrap(cloudBackupScreenFixtures().first { $0.name.hasSuffix(":enabling-existing-backup-prompt") })
+        let running = CloudBackupRejection.operationRunning(operation: .restore)
+        var screen = fixture.screen
+        screen.actions = CloudBackupActions(entries: screen.actions.entries.map { entry in
+            entry.action == .acceptEnablePromptCreateNew
+                ? CloudBackupActionEntry(action: entry.action, availability: .unavailable(reason: running))
+                : entry
+        })
+        screen.lastOutcome = CloudBackupLastOutcome(
+            target: .action(.acceptEnablePromptUseExisting),
+            outcome: .failed(message: "The passkey request failed")
+        )
+
+        let message = CloudBackupPromptChoice.existingBackup.offered(on: screen).message("Base", on: screen)
+
+        XCTAssertEqual(message, "Base\n\n\(running.caption)\n\nThe passkey request failed")
+    }
+
+    /// An open delete confirmation follows the row's delete through each screen Rust sends
+    func testOpenRowDeleteFollowsTheRowsDelete() throws {
+        let target = CloudBackupRowTarget(recordId: "record-spending-old", control: .delete)
+        let open = { (name: String) throws -> CloudBackupOpenRowDelete in
+            let fixture = try XCTUnwrap(cloudBackupScreenFixtures().first { $0.name.hasSuffix(":\(name)") })
+            return CloudBackupOpenRowDelete(target: target, delete: fixture.screen.rowAction(target: target))
+        }
+
+        let standard = try open("configured")
+        let held = try open("configured-rows-held")
+        let onlyCopy = try open("configured-extra-copy-only-copy")
+        let gone = try open("configured-extra-copy-gone")
+
+        XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: held), .keep)
+        XCTAssertEqual(held.delete?.availability.isAvailable, false)
+        XCTAssertEqual(CloudBackupOpenRowDelete.follow(from: standard, to: gone), .close)
+        guard case let .delete(confirmation, consent) = onlyCopy.delete?.action else {
+            return XCTFail("the only copy offers Delete")
+        }
+        XCTAssertEqual(
+            CloudBackupOpenRowDelete.follow(from: standard, to: onlyCopy),
+            .replace(recordId: "record-spending-old", consent: consent),
+            "the replacing alert sends back the consent of the delete it shows"
+        )
+        XCTAssertEqual(
+            confirmation,
+            .mayBeOnlyCopy,
+            "the replacing alert reads the stronger warning from the screen"
+        )
+    }
+
+    /// The UI tests' identifier helper, which can't link Rust, names every element as Rust does
+    func testUITestIdentifierHelperMatchesRust() {
+        let elements = cloudBackupUiElements()
+        XCTAssertFalse(elements.isEmpty)
+
+        for element in elements {
+            XCTAssertEqual(uiTestIdentifier(element), element.accessibilityIdentifier(), "\(element)")
+        }
+
+        // the UI tests name an action by its Swift case name
+        for case let .action(action) in elements {
+            XCTAssertEqual(String(describing: action), action.identifierName())
+        }
+    }
+
+    private func promptChoices(_ prompt: CloudBackupRootPrompt) -> [CloudBackupPromptChoice]? {
+        switch prompt {
+        case .existingBackupFound: CloudBackupPromptChoice.existingBackup
+        case let .passkeyChoice(intent): CloudBackupPasskeyChoicePresentation(intent: intent).choices
+        case .none, .missingPasskeyReminder, .verification: nil
+        }
+    }
+
+    // one exhaustive arm per element, so an element Rust adds fails to compile here; splitting it
+    // to lower the count would need a default arm, which would hide that
+    // swiftlint:disable:next cyclomatic_complexity
+    private func uiTestIdentifier(_ element: CloudBackupUiElement) -> String {
+        typealias Id = CloudBackupUIIdentifier
+
+        switch element {
+        case let .action(action): return Id.action(action.identifierName())
+        case let .actionUnavailable(action): return Id.unavailable(action.identifierName())
+        case let .actionConfirm(action): return Id.confirm(action.identifierName())
+        case let .rowAction(target): return Id.row(target.recordId, target.control.identifierName())
+        case let .rowConfirm(target): return Id.rowConfirm(target.recordId, target.control.identifierName())
+        case let .walletRow(recordId): return Id.wallet(recordId)
+        case .rowsUnavailable: return Id.rowsUnavailable
+        case .lastOutcome: return Id.lastOutcome
+        case .lastOutcomeDismiss: return Id.lastOutcomeDismiss
+        case .healNotice: return Id.healNotice
+        case .healNoticeTurnOff: return Id.healNoticeTurnOff
+        case .turnOffPreparing: return Id.turnOffPreparing
+        case .turnOffOffline: return Id.turnOffOffline
+        case .turnOffOfflineTryAgain: return Id.turnOffOfflineTryAgain
+        case .turnOffReview: return Id.turnOffReview
+        case .turnOffContinue: return Id.turnOffContinue
+        case .turnOffCheckAgain: return Id.turnOffCheckAgain
+        case .turnOffFinal: return Id.turnOffFinal
+        case .turnOffDraining: return Id.turnOffDraining
+        case .finishingDisable: return Id.finishingDisable
+        case .loadFailed: return Id.loadFailed
+        case .corrupted: return Id.corrupted
+        case .driveAccountSwitch: return Id.driveAccountSwitch
+        case .inventoryChecking: return Id.inventoryChecking
+        case .inventoryIncomplete: return Id.inventoryIncomplete
+        case .recoverySupportCode: return Id.recoverySupportCode
+        case .menu: return Id.menu
+        case .promptExistingBackupFound: return Id.promptExistingBackupFound
+        case .promptPasskeyChoice: return Id.promptPasskeyChoice
+        case .promptPasskeyChoiceCreateNewPasskey: return Id.promptPasskeyChoiceCreateNewPasskey
+        case .promptMissingPasskeyReminder: return Id.promptMissingPasskeyReminder
+        case .promptVerification: return Id.promptVerification
+        }
+    }
+
+    /// Actions whose control iOS draws somewhere other than the detail screen's form, and where
+    private static let drawnOffDetail: [CloudBackupScreenAction: String] = [
+        .enable: "the Settings row and the Enable sheet",
+        .restoreFromCloudBackup: "onboarding",
+        .cancelRestore: "the onboarding restore screen",
+        .acceptEnablePromptUseExisting: "the root prompts",
+        .acceptEnablePromptCreateNew: "the root prompts",
+        .confirmPendingEnableCleanup: "the Enable sheet",
+        .confirmDisable: "the Turn Off dialogs",
+        .cancelDisable: "the Turn Off dialogs, and the detail only while Turn Off prepares or drains",
+        .restoreFirst: "the Turn Off review dialog",
+        .verifyFirst: "the Turn Off review dialog",
+    ]
+
+    /// Whether iOS draws an available action's control somewhere other than the detail form
+    ///
+    /// Discard is off the form only while Enable waits on the Existing Backup Found prompt or the
+    /// passkey choice, where the root prompts' Cancel draws it. Saved Passkey Confirmation draws its
+    /// Cancel on the form, so that one stays checked
+    private static func isDrawnOffDetail(_ action: CloudBackupScreenAction, on screen: CloudBackupScreen) -> Bool {
+        guard action == .discardPendingEnable else { return drawnOffDetail[action] != nil }
+        guard case let .enabling(flow) = screen.body else { return false }
+
+        switch flow {
+        case .awaitingForceNewConfirmation, .awaitingPasskeyChoice: return true
+        default: return false
+        }
+    }
+
+    private func renderDetail(_ screen: CloudBackupScreen) async throws -> CloudBackupControlRecorder {
+        try await render(Form {
+            CloudBackupDetailBody(
+                screen: screen,
+                manager: .shared,
+                presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
+            )
+        })
+    }
+
+    private func render(_ view: some View) async throws -> CloudBackupControlRecorder {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let recorder = CloudBackupControlRecorder()
+        let window = UIWindow(windowScene: scene)
+
+        // tall enough that the form builds every row, since it only builds rows near the screen
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 12000)
+        window.rootViewController = UIHostingController(
+            rootView: view.environment(\.cloudBackupControlRecorder, recorder)
+        )
+        window.isHidden = false
+        defer { window.isHidden = true }
+
+        window.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        return recorder
+    }
+
+    /// The shared manager spawns Rust actors, which need the app's bootstrap to have finished
+    private func waitForBootstrap() async throws {
+        let deadline = Date().addingTimeInterval(30)
+        while bootstrapProgress() != .complete, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+
+        XCTAssertEqual(bootstrapProgress(), .complete, "the app never finished its bootstrap")
+    }
+
+    private func listedRows(_ screen: CloudBackupScreen) -> [CloudBackupListedRow] {
+        guard case let .configured(configured) = screen.body else { return [] }
+
+        return configured.sections.flatMap { section -> [CloudBackupListedRow] in
+            switch section {
+            case let .notOnDevice(notOnDevice): notOnDevice.rows
+            case let .extraCopies(extraCopies): extraCopies.rows
+            default: []
+            }
+        }
+    }
+
+    /// A review's Continue keeps its confirmation through a sync that runs while the review alert
+    /// dismisses, and a sync for no dialog drops the queued confirmation too
+    func testTurnOffSyncKeepsAQueuedConfirmationWhileTheReviewDismisses() throws {
+        let coordinator = PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
+        coordinator.syncTurnOffDialog(.review(reviewId: 2))
+        XCTAssertEqual(coordinator.currentPresentation?.item.turnOffDialog, .review(reviewId: 2))
+
+        // Continue on the review
+        coordinator.transition(to: .alert(.turnOff(.confirm(reviewId: 2))))
+        let readiness = try XCTUnwrap(coordinator.readinessRequestID)
+
+        // the scene comes back to active before the review alert has finished dismissing
+        coordinator.syncTurnOffDialog(.review(reviewId: 2))
+        coordinator.presenterDidBecomeReady(readiness)
+
+        XCTAssertEqual(
+            coordinator.currentPresentation?.item.turnOffDialog,
+            .confirm(reviewId: 2),
+            "the sync replaced the queued confirmation with the review"
+        )
+
+        // Rust leaves the review while the confirmation is queued behind another dismissal
+        coordinator.transition(to: .alert(.turnOff(.confirm(reviewId: 2))))
+        let next = try XCTUnwrap(coordinator.readinessRequestID)
+        coordinator.syncTurnOffDialog(.none)
+        coordinator.presenterDidBecomeReady(next)
+
+        XCTAssertNil(coordinator.currentPresentation, "a dialog Rust no longer calls for came up")
+        XCTAssertNil(coordinator.queuedPresentation)
     }
 
     private func writeEmptyFile(_ name: String, in directory: URL) throws {

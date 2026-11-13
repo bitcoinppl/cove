@@ -49,12 +49,15 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 
 @Composable
 internal fun CloudBackupPendingEnableRecoveryContent(
     recovery: CloudBackupPendingEnableRecovery,
+    cleanup: CloudBackupActionAvailability?,
     onConfirmCleanup: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -63,6 +66,7 @@ internal fun CloudBackupPendingEnableRecoveryContent(
 
     RecoveryScreen(
         recovery = recovery,
+        cleanup = cleanup,
         onCancel = onCancel,
         onCopySupportCode = { copySupportCode(context, recovery.supportCode) },
         onContactSupport = { contactSupport(context, recovery.supportCode) },
@@ -83,13 +87,13 @@ internal fun CloudBackupPendingEnableRecoveryContent(
 @Composable
 private fun RecoveryScreen(
     recovery: CloudBackupPendingEnableRecovery,
+    cleanup: CloudBackupActionAvailability?,
     onCancel: () -> Unit,
     onCopySupportCode: () -> Unit,
     onContactSupport: () -> Unit,
     onRequestCleanup: () -> Unit,
 ) {
     val isCleaning = recovery.cleanup == CloudBackupPendingEnableCleanupState.CLEANING
-    val canRemove = recovery.cleanup == CloudBackupPendingEnableCleanupState.AVAILABLE
 
     OnboardingBackground {
         Column(
@@ -103,7 +107,7 @@ private fun RecoveryScreen(
         ) {
             CancelButton(isCleaning = isCleaning, onCancel = onCancel)
             RecoveryHeader()
-            RecoveryExplanation(canRemove = canRemove)
+            RecoveryExplanation(canRemove = cleanup != null)
             SupportCodeCard(
                 supportCode = recovery.supportCode,
                 onCopySupportCode = onCopySupportCode,
@@ -111,7 +115,7 @@ private fun RecoveryScreen(
             )
             RecoveryAction(
                 isCleaning = isCleaning,
-                canRemove = canRemove,
+                cleanup = cleanup,
                 onRequestCleanup = onRequestCleanup,
             )
         }
@@ -128,6 +132,7 @@ private fun CancelButton(isCleaning: Boolean, onCancel: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             modifier =
                 Modifier
+                    // cleanup has no cancel action, so leaving waits until it finishes, the same as iOS
                     .clickable(enabled = !isCleaning, onClick = onCancel)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
         )
@@ -192,7 +197,7 @@ private fun SupportCodeCard(
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.testTag("cloudBackup.recovery.supportCode"),
+            modifier = Modifier.testTag(CloudBackupTags.RECOVERY_SUPPORT_CODE),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -211,7 +216,7 @@ private fun SupportCodeCard(
 @Composable
 private fun RecoveryAction(
     isCleaning: Boolean,
-    canRemove: Boolean,
+    cleanup: CloudBackupActionAvailability?,
     onRequestCleanup: () -> Unit,
 ) {
     when {
@@ -226,15 +231,21 @@ private fun RecoveryAction(
                 Text("Removing incomplete setup...", color = Color.White)
             }
 
-        canRemove ->
-            TextButton(
-                onClick = onRequestCleanup,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag("cloudBackup.recovery.removeIncompleteSetup"),
-            ) {
-                Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
+        cleanup != null ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = onRequestCleanup,
+                    enabled = cleanup.isAvailable,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)),
+                ) {
+                    Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
+                }
+                cleanup.caption?.let {
+                    Text(it, color = OnboardingTextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
             }
     }
 }
@@ -253,7 +264,10 @@ private fun CleanupConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Un
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
-                modifier = Modifier.testTag("cloudBackup.recovery.confirmRemoveIncompleteSetup"),
+                modifier =
+                    Modifier.testTag(
+                        CloudBackupTags.confirm(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP),
+                    ),
             ) {
                 Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
             }

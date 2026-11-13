@@ -69,8 +69,10 @@ pub(crate) enum CloudBackupWriteCompletion {
         revision_hash: String,
         uploaded_at: u64,
     },
+    /// The upload to `namespace_id` landed, while its row is still `current_state`
     MarkUploadedPendingConfirmationIfCurrent {
         current_state: PersistedCloudBlobSyncState,
+        namespace_id: String,
         revision_hash: String,
         uploaded_at: u64,
     },
@@ -93,10 +95,16 @@ impl CloudBackupWriteCompletion {
 
     pub(crate) fn mark_uploaded_pending_confirmation_if_current(
         current_state: PersistedCloudBlobSyncState,
+        namespace_id: String,
         revision_hash: String,
         uploaded_at: u64,
     ) -> Self {
-        Self::MarkUploadedPendingConfirmationIfCurrent { current_state, revision_hash, uploaded_at }
+        Self::MarkUploadedPendingConfirmationIfCurrent {
+            current_state,
+            namespace_id,
+            revision_hash,
+            uploaded_at,
+        }
     }
 
     pub(crate) async fn apply(
@@ -119,11 +127,13 @@ impl CloudBackupWriteCompletion {
             }
             Self::MarkUploadedPendingConfirmationIfCurrent {
                 current_state,
+                namespace_id,
                 revision_hash,
                 uploaded_at,
             } => {
                 let _ = manager.mark_blob_uploaded_pending_confirmation_if_current(
                     &current_state,
+                    &namespace_id,
                     revision_hash,
                     uploaded_at,
                 )?;

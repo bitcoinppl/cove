@@ -26,7 +26,7 @@ fn committed_at() -> Option<u64> {
 /// exactly once in this process and without a passkey prompt
 fn next_launch_finishes_the_committed_disable(namespace: &str, deletes_this_launch: usize) {
     let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-    app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::KeepEnabled, N::Verify]);
+    app.current().then_can(&[N::Enable]).then_cannot(&[N::TurnOff, N::Verify]);
 
     assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
     assert_eq!(keychain_namespace(), None);
@@ -59,7 +59,12 @@ fn killed_during_the_turn_off_drain_keeps_the_backup_and_turns_off_later() {
             app.block_on("the upload to be held", hold.entered());
 
             app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-                .then_cannot(&[N::Enable, N::Verify]);
+                .then_can(&[N::ConfirmDisable]);
+            app.confirm_turn_off().then_can(&[N::CancelDisable]).then_cannot(&[
+                N::Enable,
+                N::Verify,
+                N::TurnOff,
+            ]);
             assert_eq!(committed_at(), None, "Turn Off committed before its drain finished");
             assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
@@ -76,9 +81,8 @@ fn killed_during_the_turn_off_drain_keeps_the_backup_and_turns_off_later() {
         assert!(app.cloud.inner.has_namespace(&namespace));
         load_detail(&mut app);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
         assert!(!app.cloud.inner.has_namespace(&namespace));
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 1);
@@ -100,7 +104,9 @@ fn killed_after_commit_before_the_delete_resumes_to_disabled() {
             );
             load_detail(&mut app);
 
-            let _killed = app.dispatch(CloudBackupManagerAction::DisableCloudBackup);
+            app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+                .then_can(&[N::ConfirmDisable]);
+            let _killed = app.confirm_turn_off();
             unreachable!("the parent kills this process before the namespace delete");
         }
 
@@ -128,11 +134,9 @@ fn delete_that_succeeded_with_its_response_lost_finishes_after_a_kill() {
             app.cloud.script_next(CloudCall::DeleteNamespace, CloudFault::SucceedThenFail(lost));
             load_detail(&mut app);
 
-            app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[
-                N::Enable,
-                N::KeepEnabled,
-                N::Verify,
-            ]);
+            app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+                .then_can(&[N::ConfirmDisable]);
+            app.confirm_turn_off().then_cannot(&[N::Enable, N::Verify]);
             assert!(committed_at().is_some(), "the failed response undid the commit");
             assert!(!app.cloud.inner.has_namespace(&namespace), "the delete did not land");
 

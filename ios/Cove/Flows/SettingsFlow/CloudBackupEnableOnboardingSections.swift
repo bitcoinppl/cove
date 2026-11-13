@@ -14,6 +14,7 @@ struct CloudBackupEnableCancelButton: View {
             .foregroundStyle(.white)
             .font(.headline)
             .frame(minWidth: 44, minHeight: 44)
+            // the sheet stays up while Enable runs; Enable has no cancel, so it runs to its bound
             .disabled(isBusy)
         }
         .padding(.horizontal)
@@ -148,7 +149,7 @@ struct CloudBackupEnableButton: View {
 
     let title: String
     let allChecked: Bool
-    let isBusy: Bool
+    let availability: CloudBackupActionAvailability?
     let onEnable: () -> Void
 
     var body: some View {
@@ -158,7 +159,7 @@ struct CloudBackupEnableButton: View {
             Text(title)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
-        .disabled(!allChecked || isBusy)
+        .disabled(!allChecked || !availability.isAvailable)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: allChecked)
     }
 }
@@ -224,9 +225,12 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
     }
 }
 
+/// An Enable paused on its saved passkey, drawn with Rust's copy and the controls it names
 struct CloudBackupEnableConfirmationView: View {
-    let onContinue: () -> Void
-    let onCancel: () -> Void
+    let paused: CloudBackupSavedPasskeyScreen
+    let actions: CloudBackupActions
+    let onConfirm: () -> Void
+    let onDiscard: () -> Void
 
     var body: some View {
         VStack(spacing: 22) {
@@ -237,25 +241,35 @@ struct CloudBackupEnableConfirmationView: View {
                     .font(.system(size: 42, weight: .semibold))
                     .foregroundStyle(.yellow)
 
-                Text("Confirm your passkey")
+                Text(paused.title)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text("Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.")
+                Text(paused.message)
                     .font(.body)
                     .foregroundStyle(.coveLightGray)
                     .multilineTextAlignment(.center)
             }
 
             VStack(spacing: 12) {
-                Button("Continue", action: onContinue)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                ForEach(paused.controls, id: \.self) { control in
+                    switch control {
+                    case .confirm:
+                        Button("Confirm Passkey", action: onConfirm)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .disabled(!actions.isAvailable(action: .confirmSavedPasskey))
+                            .accessibilityIdentifier(CloudBackupScreenAction.confirmSavedPasskey.accessibilityIdentifier)
 
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                    case .discard:
+                        Button("Cancel", role: .cancel, action: onDiscard)
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .disabled(!actions.isAvailable(action: .discardPendingEnable))
+                            .accessibilityIdentifier(CloudBackupScreenAction.discardPendingEnable.accessibilityIdentifier)
+                    }
+                }
             }
 
             Spacer()

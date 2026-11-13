@@ -133,14 +133,14 @@ class CloudBackupSyncNowFullLaunchTest {
         val createsBefore = ScriptedPasskeyProvider.callCount(Invocation.CREATE)
         val assertionsBefore = passkeyAssertionCount()
         val authenticationsBefore = ScriptedPasskeyProvider.authenticatedCredentialIds().size
-        ScriptedPasskeyProvider.configureResults(Invocation.AUTHENTICATE, Result.USER_CANCELLED, Result.SUCCESS)
-        ScriptedPasskeyProvider.configureResults(Invocation.DISCOVER, Result.USER_CANCELLED, Result.SUCCESS)
+        ScriptedPasskeyProvider.configureResults(Invocation.AUTHENTICATE, Result.NOT_COMPLETED, Result.SUCCESS)
+        ScriptedPasskeyProvider.configureResults(Invocation.DISCOVER, Result.NOT_COMPLETED, Result.SUCCESS)
 
         device.clickText("Verify Again")
 
         device.scrollUntilText("Cloud Backup Not Verified")
-        waitUntil("cancelling the passkey should leave verification cancelled") {
-            CloudBackupManager.getInstance().verificationState == CloudBackupVerificationState.Cancelled
+        waitUntil("cancelling the passkey should leave verification not completed") {
+            CloudBackupManager.getInstance().verificationState == CloudBackupVerificationState.NotCompleted
         }
         assertEquals(assertionsBefore + 1, passkeyAssertionCount())
 
@@ -182,8 +182,8 @@ class CloudBackupSyncNowFullLaunchTest {
         // upload's persisted failure; the failure itself requests no detail refresh, so a refresh
         // that ran before it keeps showing the dirty wallet until the detail is opened again
         val showsFailure = {
-            CloudBackupManager.getInstance().detail?.needsSync?.any { item ->
-                item.name == wallet.name && item.syncStatus == CloudBackupWalletStatus.FAILED
+            CloudBackupManager.getInstance().walletsSection?.needsSync?.any { row ->
+                row.wallet.name == wallet.name && row.wallet.syncStatus == CloudBackupWalletStatus.FAILED
             } == true
         }
         var reopens = 0
@@ -205,12 +205,12 @@ class CloudBackupSyncNowFullLaunchTest {
     private fun assertSyncedDetailShows(walletName: String) {
         waitUntil("the sync should finish and the detail refresh to show the wallet up to date") {
             val manager = CloudBackupManager.getInstance()
-            val detail = manager.detail
+            val wallets = manager.walletsSection
 
             manager.syncState == CloudBackupSyncState.Idle &&
-                manager.isDetailInventoryComplete &&
-                detail?.needsSync?.isEmpty() == true &&
-                detail.upToDate.any { it.name == walletName }
+                manager.isInventoryComplete &&
+                wallets?.needsSync?.isEmpty() == true &&
+                wallets.upToDate.any { it.wallet.name == walletName }
         }
 
         // the screen must show the refresh too: no Needs Sync section or Sync Now anywhere in the
@@ -306,10 +306,10 @@ class CloudBackupSyncNowFullLaunchTest {
             val manager = CloudBackupManager.getInstance()
 
             ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeEntry &&
-                manager.isDetailInventoryComplete &&
-                !manager.isDetailInventoryChecking &&
+                manager.isInventoryComplete &&
+                !manager.isInventoryChecking &&
                 !manager.hasPendingUploadVerification &&
-                manager.detail?.needsSync?.isEmpty() == true
+                manager.walletsSection?.needsSync?.isEmpty() == true
         }
     }
 
@@ -475,7 +475,7 @@ class CloudBackupSyncNowFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "detail=${manager.detail}, sync=${manager.syncState}, verification=${manager.verificationState}, " +
+            "screen=${manager.describeScreen()}, sync=${manager.syncState}, " +
                 "uploads=${ScriptedCloudStorageAccess.acceptedNewWalletUploadCount()}, " +
                 "rejected=${ScriptedCloudStorageAccess.rejectedNewWalletUploadCount()}, " +
                 "create=${ScriptedPasskeyProvider.callCount(Invocation.CREATE)}, " +

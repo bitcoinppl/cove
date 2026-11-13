@@ -20,13 +20,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
+import org.bitcoinppl.cove.cloudbackup.cloudBackupFixture
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
-import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
-import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
-import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
@@ -251,18 +249,7 @@ class OnboardingBranchScreensTest {
     @Test
     fun pendingEnableRecoveryReplacesOnboardingEnableAndRoutesCleanupAndSkip() {
         var selected = ""
-        val manager =
-            CloudBackupManager(
-                CloudBackupState(
-                    CloudBackupLifecycle.PendingEnableRecovery(
-                        CloudBackupPendingEnableRecovery(
-                            supportCode = "CB-PE-001",
-                            cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
-                        ),
-                    ),
-                    CloudBackupSettingsRowStatus.RecoveryRequired,
-                ),
-            )
+        val manager = CloudBackupManager(cloudBackupFixture("pending-enable-recovery"))
 
         compose.setOnboardingContent {
             OnboardingCloudBackupStepContent(
@@ -279,10 +266,10 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Cloud Backup Needs Recovery").assertIsDisplayed()
-        compose.onNodeWithText("CB-PE-001").assertIsDisplayed()
+        compose.onNodeWithText("CB-0000").assertIsDisplayed()
         compose.onAllNodesWithTag("onboarding.cloudBackup.enable").assertCountEquals(0)
-        compose.onNodeWithTag("cloudBackup.recovery.removeIncompleteSetup").performClick()
-        compose.onNodeWithTag("cloudBackup.recovery.confirmRemoveIncompleteSetup").performClick()
+        compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)).performClick()
+        compose.onNodeWithTag(CloudBackupTags.confirm(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)).performClick()
         assertEquals("cleanup", selected)
 
         selected = ""

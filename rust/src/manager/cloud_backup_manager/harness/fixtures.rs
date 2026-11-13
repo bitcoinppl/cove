@@ -1,6 +1,9 @@
 //! Small per-case accounts, plus the lived-in account for the incident replay
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use bdk_wallet::bitcoin::bip32::Xpub;
 
 use cove_cspp::Cspp;
 use cove_cspp::backup_data::{wallet_filename_from_record_id, wallet_record_id};
@@ -9,15 +12,20 @@ use cove_device::passkey::DiscoveredPasskeyResult;
 
 use super::app::{NextAction, TestApp};
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
+use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
     wallet_entry_with_labels, xpub_only_wallet_metadata,
 };
+use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupStore,
+    CloudBackupKeychain, CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupStore,
 };
+use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
+use crate::network::Network;
+use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::WalletId;
+use crate::wallet::metadata::WalletMetadata;
 
 /// The records an account has in its active namespace
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,27 +71,34 @@ impl FakeAccount {
             .expect("read master key")
             .expect("seeded master key");
 
-        // real encrypted backups, so the detail inventory loads as it does for a user
+        // real encrypted backups of distinct wallets, so the detail inventory loads and sorts
+        // them as it does for a user: each local wallet backs up its own record, and each record
+        // not on this device matches no local wallet
         let target = Database::global().global_config.wallet_target();
-        let wallet = || {
-            let mut wallet = xpub_only_wallet_metadata();
-            wallet.network = target.network;
-            wallet
-        };
-        let local: Vec<_> = (0..self.local_wallets).map(|_| wallet()).collect();
-        let elsewhere: Vec<_> = (0..self.not_on_device).map(|_| wallet()).collect();
+        let local: Vec<_> =
+            (0..self.local_wallets).map(|_| DistinctWallet::new(target.network)).collect();
+        let elsewhere: Vec<_> =
+            (0..self.not_on_device).map(|_| DistinctWallet::new(target.network)).collect();
         let not_on_device =
-            elsewhere.iter().map(|wallet| wallet_record_id(wallet.id.as_ref())).collect();
+            elsewhere.iter().map(|wallet| wallet_record_id(wallet.metadata.id.as_ref())).collect();
+        for wallet in &local {
+            Keychain::global()
+                .save_wallet_xpub(&wallet.metadata.id, wallet.xpub)
+                .expect("save local wallet xpub");
+        }
+
+        let local_metadata = local.iter().map(|wallet| wallet.metadata.clone()).collect();
         Database::global()
             .wallets()
-            .save_all_wallets(target.network, target.mode, local.clone())
+            .save_all_wallets(target.network, target.mode, local_metadata)
             .expect("save local wallets");
 
         let mut files = Vec::with_capacity(self.record_count());
         let mut local_records = Vec::with_capacity(local.len());
-        for (index, wallet) in local.iter().cloned().chain(elsewhere).enumerate() {
-            let record_id = wallet_record_id(wallet.id.as_ref());
-            let entry = wallet_entry_with_labels(&wallet, None);
+        for (index, wallet) in local.into_iter().chain(elsewhere).enumerate() {
+            let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+            let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+            entry.xpub = Some(wallet.xpub.to_string());
             if index < self.local_wallets {
                 local_records.push(SeededRecord {
                     record_id: record_id.clone(),
@@ -122,6 +137,26 @@ pub(crate) struct SeededRecord {
     pub(crate) revision: String,
 }
 
+/// Put one wallet's backup in `namespace`, encrypted with `master_key`, for a wallet not on this
+/// device, so a Restore of that backup has a wallet to bring back
+pub(crate) fn seed_wallet_backup_elsewhere(
+    app: &TestApp,
+    namespace: &str,
+    master_key: &cove_cspp::master_key::MasterKey,
+) {
+    let target = Database::global().global_config.wallet_target();
+    let wallet = DistinctWallet::new(target.network);
+    let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+    let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+    entry.xpub = Some(wallet.xpub.to_string());
+
+    let backup = encrypted_wallet_backup_bytes_for_entry(&entry, master_key, 1);
+    app.cloud.inner.set_wallet_backup(namespace.to_owned(), record_id.clone(), backup);
+    app.cloud
+        .inner
+        .set_wallet_files(namespace.to_owned(), vec![wallet_filename_from_record_id(&record_id)]);
+}
+
 /// The passkey every verifiable wrapper opens
 pub(crate) const VERIFIABLE_PRF_KEY: [u8; 32] = [7; 32];
 const VERIFIABLE_PRF_SALT: [u8; 32] = [9; 32];
@@ -158,10 +193,24 @@ pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
     app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
 }
 
+/// A watch-only wallet with its own key, so no two seeded wallets share an identity
+struct DistinctWallet {
+    metadata: WalletMetadata,
+    xpub: Xpub,
+}
+
+impl DistinctWallet {
+    fn new(network: Network) -> Self {
+        let xpub = NumberOfBip39Words::Twelve.generate_mnemonic().xpub(network.into());
+        let mut metadata = xpub_only_wallet_metadata();
+        metadata.network = network;
+        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(xpub.fingerprint())));
+
+        Self { metadata, xpub }
+    }
+}
+
 /// Persist the reporter's stuck record: a disable that never deleted anything
-///
-/// Only builds before the fix wrote this shape (`begin_disabling` with no commit time); the
-/// exact `last_error` on the reporter's device is not known
 pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     let table = &Database::global().cloud_backup_state;
     let PersistedCloudBackupState::Configured(previous_configured) =
@@ -171,16 +220,16 @@ pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     };
 
     table
-        .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
-            previous_configured,
-            namespace_id: namespace.to_string(),
-            disable_generation: 1,
-            started_at,
-            delete_started_at: None,
-            last_error: None,
-            retry_after: None,
-        }))
+        .set(&legacy_stuck_record(previous_configured, namespace.to_string(), started_at))
         .expect("persist legacy disabling record");
+}
+
+/// Persist a lifecycle record that no longer decodes, as a damaged database leaves it
+pub(crate) fn seed_corrupted_record(error: &str) {
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::corrupted(error))
+        .expect("persist corrupted record");
 }
 
 /// Changes the first local wallet's backed-up metadata the way the wallet screens report it, and
@@ -206,6 +255,44 @@ pub(crate) fn change_a_wallet(app: &TestApp) -> Option<WalletId> {
     Some(after.id)
 }
 
+/// Seeds a configured backup of one wallet and uploads a change to that wallet, so the wallet has
+/// an upload row in the seeded namespace, which this returns
+pub(crate) fn seed_an_uploaded_wallet(app: &mut TestApp) -> String {
+    let namespace = FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    app.event("a local wallet changed", |app| {
+        change_a_wallet(app).expect("a seeded wallet changed");
+    })
+    .then_can(&[NextAction::TurnOff]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[NextAction::TurnOff]);
+
+    let rows = Database::global().cloud_blob_sync_states.list().expect("read the upload rows");
+    assert!(
+        rows.iter().any(|row| row.wallet_id().is_some() && row.namespace_id == namespace),
+        "the changed wallet has an upload row in {namespace}: {rows:#?}"
+    );
+
+    namespace
+}
+
+/// Every upload row names `namespace`, and every wallet's upload there is confirmed
+pub(crate) fn assert_uploads_confirmed_in(app: &TestApp, namespace: &str) {
+    let rows = Database::global().cloud_blob_sync_states.list().expect("read the upload rows");
+    assert!(rows.iter().any(|row| row.wallet_id().is_some()), "no wallet upload row: {rows:#?}");
+
+    for row in rows {
+        assert_eq!(row.namespace_id, namespace, "{row:#?}\n{}", app.describe());
+        if row.wallet_id().is_some() {
+            assert!(
+                matches!(row.state, PersistedCloudBlobState::Confirmed(_)),
+                "{row:#?}\n{}",
+                app.describe()
+            );
+        }
+    }
+}
+
 /// The lifecycle record as the database holds it now
 pub(crate) fn persisted() -> PersistedCloudBackupState {
     Database::global().cloud_backup_state.get().expect("read cloud backup state")
@@ -220,4 +307,16 @@ pub(crate) fn keychain_namespace() -> Option<String> {
 pub(crate) fn load_detail(app: &mut TestApp) {
     app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[NextAction::Enable]);
     app.advance_clock(Duration::from_secs(60)).then_can(&[NextAction::TurnOff]);
+}
+
+/// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset
+/// commits, and the reset finishes
+pub(crate) fn finish_wipe(app: &TestApp, permit: CloudBackupResetPermit) {
+    app.block_on("the owner to clear local state", permit.clear_local_state())
+        .expect("clear local state");
+    // the wipe's commit point: `wipe_all_data_with_tier` resets the whole database, so every
+    // Cloud Backup table, the blob sync rows included, is gone before the reset finishes
+    Database::global().dangerous_reset_all_data().expect("reset the database");
+    app.block_on("the reset to finish", permit.complete_after_database_reset())
+        .expect("finish the reset");
 }

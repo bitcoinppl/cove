@@ -2,8 +2,8 @@ import CoveCore
 import Foundation
 import Observation
 
-/// Writes the cloud backup manager's state whenever it changes, so a UI test can check what the
-/// app holds rather than what the lazily built Cloud Backup form happens to have on screen
+/// Writes the Cloud Backup screen whenever it changes, so a UI test can check what the app may do
+/// next rather than what the lazily built Cloud Backup form happens to have on screen
 ///
 /// A scenario test that names `COVE_CLOUD_BACKUP_UI_DELETE_LOG` gets it in
 /// `<COVE_CLOUD_BACKUP_UI_DELETE_LOG>.state`, and a test with a control directory gets it in that
@@ -70,114 +70,141 @@ enum CloudBackupUITestStateProbe {
     }
 
     private static func snapshot(_ manager: CloudBackupManager) -> CloudBackupUITestAppState {
-        let detail = switch manager.configuredState?.detail {
-        case nil: "none"
-        case .notLoaded: "notLoaded"
-        case .checking: "checking"
-        case .complete: manager.isDetailInventoryComplete ? "complete" : "completeUnconfirmed"
-        case .failed: "failed"
+        let screen = manager.screen
+        let configured = screen.configured
+        let notOnDevice = configured?.sections.lazy.compactMap(\.notOnDevice).first
+        let wallets = configured?.wallets
+
+        return CloudBackupUITestAppState(
+            screen: screenDescription(screen),
+            inventory: inventoryDescription(configured),
+            inventoryError: inventoryError(configured),
+            operation: operationDescription(notOnDevice?.operation),
+            rows: listedRows(configured),
+            restoreAll: restoreAllDescription(notOnDevice?.restoreAll ?? .notShown),
+            verification: verificationDescription(screen.verification?.state),
+            sync: syncDescription(wallets?.sync),
+            syncError: syncError(wallets?.sync),
+            wallets: walletRows(wallets),
+            settingsRow: settingsRowDescription(screen.settingsRow)
+        )
+    }
+
+    private static func screenDescription(_ screen: CloudBackupScreen) -> CloudBackupUITestAppState.Screen {
+        var available: [String] = []
+        var unavailable: [String: String] = [:]
+        for entry in screen.actions.entries {
+            switch entry.availability {
+            case .available:
+                available.append(caseName(entry.action))
+            case let .unavailable(reason):
+                unavailable[caseName(entry.action)] = String(describing: reason)
+            }
         }
 
-        let operation = switch manager.cloudOnlyOperation {
-        case .idle: "idle"
+        var notices: [String] = []
+        if screen.healNotice != nil {
+            notices.append("heal")
+        }
+        if let lastOutcome = screen.lastOutcome {
+            notices.append("lastOutcome:\(outcomeTarget(lastOutcome.target)):\(caseName(lastOutcome.outcome))")
+        }
+
+        return .init(
+            body: caseName(screen.body),
+            actions: available,
+            unavailable: unavailable,
+            disable: screen.configured.map { caseName($0.disable) },
+            notices: notices
+        )
+    }
+
+    private static func outcomeTarget(_ target: CloudBackupOutcomeTarget) -> String {
+        switch target {
+        case let .action(action): caseName(action)
+        case let .row(target): "\(target.recordId).\(target.control.identifierName())"
+        }
+    }
+
+    private static func inventoryDescription(_ configured: CloudBackupConfiguredScreen?) -> String {
+        guard let configured else { return "notLoaded" }
+
+        for case let .progress(progress) in configured.sections {
+            switch progress {
+            case .inventoryChecking: return "checking"
+            case .inventoryIncomplete: return "incomplete"
+            case .verificationCard, .verificationInline: continue
+            }
+        }
+
+        return configured.wallets == nil ? "notLoaded" : "loaded"
+    }
+
+    private static func inventoryError(_ configured: CloudBackupConfiguredScreen?) -> String? {
+        for case let .progress(.inventoryIncomplete(reason, _)) in configured?.sections ?? [] {
+            return caseName(reason)
+        }
+
+        return nil
+    }
+
+    private static func operationDescription(_ operation: CloudOnlyOperation?) -> String {
+        switch operation {
+        case nil, .idle: "idle"
         case .operating: "operating"
         case .warning: "warning"
         case .failed: "failed"
         }
-
-        var cloudOnly: [String] = []
-        var cloudOnlyIncomplete = false
-        if case let .loaded(wallets, incomplete) = manager.cloudOnly {
-            cloudOnly = wallets.map(\.recordId)
-            cloudOnlyIncomplete = incomplete
-        }
-
-        return CloudBackupUITestAppState(
-            detail: detail,
-            operation: operation,
-            cloudOnly: cloudOnly,
-            cloudOnlyIncomplete: cloudOnlyIncomplete,
-            inventoryReady: manager.isDetailInventoryReady,
-            inventoryComplete: manager.isDetailInventoryComplete,
-            inventoryError: manager.detailError,
-            restoreAll: restoreAllDescription(manager.restoreAllState),
-            verification: verificationDescription(manager.verificationState),
-            pendingUploadVerification: manager.hasPendingUploadVerification,
-            sync: syncDescription(manager.syncState),
-            syncError: manager.syncError,
-            wallets: walletRows(manager.detail),
-            lifecycle: lifecycleDescription(manager.lifecycle),
-            settingsRow: settingsRowDescription(manager.settingsRowStatus)
-        )
     }
 
-    private static func walletRows(_ detail: CloudBackupDetail?) -> [CloudBackupUITestAppState.Wallet] {
-        guard let detail else { return [] }
+    private static func listedRows(_ configured: CloudBackupConfiguredScreen?) -> [CloudBackupUITestAppState.Row] {
+        var rows: [CloudBackupListedRow] = []
+        for section in configured?.sections ?? [] {
+            switch section {
+            case let .notOnDevice(notOnDevice): rows += notOnDevice.rows
+            case let .extraCopies(extraCopies): rows += extraCopies.rows
+            default: continue
+            }
+        }
 
-        let upToDate = detail.upToDate.map { walletRow($0, needsSync: false) }
-        let needsSync = detail.needsSync.map { walletRow($0, needsSync: true) }
+        return rows.map { row in
+            .init(
+                recordId: row.recordId,
+                record: caseName(row.record),
+                actions: row.actions.filter(\.availability.isAvailable).map { $0.action.control().identifierName() }
+            )
+        }
+    }
+
+    private static func walletRows(_ wallets: CloudBackupWalletsSection?) -> [CloudBackupUITestAppState.Wallet] {
+        guard let wallets else { return [] }
+
+        let upToDate = wallets.upToDate.map { walletRow($0.wallet, needsSync: false) }
+        let needsSync = wallets.needsSync.map { walletRow($0.wallet, needsSync: true) }
         return upToDate + needsSync
     }
 
     private static func walletRow(_ item: CloudBackupWalletItem, needsSync: Bool) -> CloudBackupUITestAppState.Wallet {
-        let status = switch item.syncStatus {
-        case .dirty: "dirty"
-        case .uploading: "uploading"
-        case .uploadedPendingConfirmation: "uploadedPendingConfirmation"
-        case .confirmed: "confirmed"
-        case .failed: "failed"
-        case .deletedFromDevice: "deletedFromDevice"
-        case .alreadyOnDevice: "alreadyOnDevice"
-        case .unsupportedVersion: "unsupportedVersion"
-        case .remoteStateUnknown: "remoteStateUnknown"
-        }
-
-        return .init(recordId: item.recordId, name: item.name, status: status, needsSync: needsSync)
-    }
-
-    private static func lifecycleDescription(_ lifecycle: CloudBackupLifecycle) -> String {
-        switch lifecycle {
-        case .disabled: "disabled"
-        case .enabling: "enabling"
-        case .restoring: "restoring"
-        case .pendingEnableRecovery: "pendingEnableRecovery"
-        case .failed: "failed"
-        case .configured: "configured"
-        }
+        .init(recordId: item.recordId, name: item.name, status: caseName(item.syncStatus), needsSync: needsSync)
     }
 
     private static func settingsRowDescription(_ status: CloudBackupSettingsRowStatus) -> String {
-        // payload-free cases describe themselves by their case name, which keeps this switch
-        // under the lint's complexity limit; the two message-carrying cases drop the message
-        switch status {
-        case .error: "error"
-        case .authorizationRequired: "authorizationRequired"
-        default: String(describing: status)
-        }
+        caseName(status)
     }
 
     private static func syncDescription(_ state: CloudBackupSyncState?) -> String {
+        state.map { caseName($0) } ?? "none"
+    }
+
+    private static func syncError(_ state: CloudBackupSyncState?) -> String? {
         switch state {
-        case nil: "none"
-        case .idle: "idle"
-        case .syncing: "syncing"
-        case .blocked: "blocked"
-        case .failed: "failed"
+        case let .blocked(message), let .failed(message): message
+        case nil, .idle, .syncing: nil
         }
     }
 
     private static func verificationDescription(_ state: CloudBackupVerificationState?) -> String {
-        switch state {
-        case nil: "none"
-        case .notVerified: "notVerified"
-        case .verified: "verified"
-        case .needsAttention: "needsAttention"
-        case .required: "required"
-        case .running: "running"
-        case .awaitingUploadConfirmation: "awaitingUploadConfirmation"
-        case .cancelled: "cancelled"
-        case .failed: "failed"
-        }
+        state.map { caseName($0) } ?? "none"
     }
 
     private static func restoreAllDescription(_ state: CloudBackupRestoreAllState) -> String {
@@ -189,5 +216,18 @@ enum CloudBackupUITestStateProbe {
         case let .retryAvailable(count): "retryAvailable(\(count))"
         case let .running(completed, total, _, _): "running(\(completed)/\(total))"
         }
+    }
+
+    /// The enum case's name without its payload, such as `configured` for `.configured(...)`
+    private static func caseName(_ value: some Any) -> String {
+        let description = String(describing: value)
+        return String(description.prefix { $0 != "(" })
+    }
+}
+
+private extension CloudBackupSection {
+    var notOnDevice: CloudBackupNotOnDeviceSection? {
+        guard case let .notOnDevice(section) = self else { return nil }
+        return section
     }
 }

@@ -25,94 +25,81 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
-import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.CloudBackupActionAvailability
+import org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupUndecryptableWalletDeletionState
-import org.bitcoinppl.cove_core.CloudBackupVerificationSource
-import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupOperationKind
+import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
+import org.bitcoinppl.cove_core.CloudBackupRejection
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupWalletVerificationIssues
 import org.bitcoinppl.cove_core.DeepVerificationReport
 
 @Composable
 internal fun UndecryptableWalletDeletionConfirmation(
     manager: CloudBackupManager,
-    isPresented: Boolean,
+    screen: CloudBackupScreen,
+    report: DeepVerificationReport?,
+    consent: CloudBackupBatchDeleteConsent?,
     onDismiss: () -> Unit,
 ) {
-    if (!isPresented) return
+    if (consent == null) return
 
-    val count =
-        (manager.verificationState as? CloudBackupVerificationState.NeedsAttention)
-            ?.report
-            ?.walletIssues
-            ?.decryptionFailed ?: 0u
+    val count = report?.walletIssues?.decryptionFailed ?: 0u
     val backupNoun = if (count == 1u) "Backup" else "Backups"
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete $count Inaccessible Wallet $backupNoun?") },
-        text = {
-            Text(
-                "Cove will check these files again and delete only backups for wallets " +
-                    "that are not on this device and still cannot be decrypted. " +
-                    "This cannot be undone.",
-            )
+    CloudBackupConfirmationDialog(
+        title = "Delete $count Inaccessible Wallet $backupNoun?",
+        message =
+            "Cove will check these files again and delete only backups for wallets " +
+                "that are not on this device and still cannot be decrypted. " +
+                "This cannot be undone.",
+        confirmTitle = "Delete Backups",
+        availability = screen.actions.lookup(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS),
+        confirmTag = CloudBackupTags.confirm(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS),
+        onConfirm = {
+            onDismiss()
+            manager.dispatch(CloudBackupManagerAction.DeleteUndecryptableWalletBackups(consent))
         },
-        confirmButton = {
-            TextButton(
-                enabled = count > 0u && !manager.isPerformingDestructiveAction,
-                onClick = {
-                    onDismiss()
-                    manager.dispatch(
-                        CloudBackupManagerAction.DeleteUndecryptableWalletBackups,
-                    )
-                },
-            ) { Text("Delete Backups") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
+        onDismiss = onDismiss,
     )
 }
 
 @Composable
-internal fun VerificationRepeatAction(manager: CloudBackupManager) {
-    val canVerifyAgain =
-        when (manager.verificationState) {
-            is CloudBackupVerificationState.Verified,
-            is CloudBackupVerificationState.NeedsAttention,
-            -> true
+internal fun VerificationRepeatAction(
+    screen: CloudBackupScreen,
+    onVerify: () -> Unit,
+) {
+    val availability = screen.actions.lookup(CloudBackupScreenAction.VERIFY) ?: return
 
-            else -> false
-        }
-    if (!canVerifyAgain) return
-
-    VerifyAgainButton(
-        onClick = {
-            manager.dispatch(
-                CloudBackupManagerAction.StartVerification(
-                    CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                ),
-            )
-        },
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        VerifyAgainButton(enabled = availability.isAvailable, onClick = onVerify)
+        CloudBackupUnavailableCaption(availability.caption, CloudBackupTags.unavailable(CloudBackupScreenAction.VERIFY))
+    }
 }
 
 @Composable
-private fun VerifyAgainButton(onClick: () -> Unit) {
+private fun VerifyAgainButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     val colors = cloudBackupVisualColors()
 
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = 14.dp)
+                .testTag(CloudBackupTags.action(CloudBackupScreenAction.VERIFY)),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.5.dp, colors.outlineButtonBorder),
         colors =
@@ -131,11 +118,7 @@ private fun VerifyAgainButton(onClick: () -> Unit) {
 }
 
 @Composable
-internal fun NeedsAttentionSectionContent(
-    report: DeepVerificationReport,
-    deletionState: CloudBackupUndecryptableWalletDeletionState,
-    onDeleteUndecryptable: () -> Unit,
-) {
+internal fun NeedsAttentionSectionContent(report: DeepVerificationReport) {
     val colors = cloudBackupVisualColors()
 
     CloudBackupGlassCard(
@@ -174,51 +157,62 @@ internal fun NeedsAttentionSectionContent(
                 color = colors.secondaryText,
             )
 
-            WalletVerificationIssueMessages(
-                issues = report.walletIssues,
-                deletionState = deletionState,
-                onDeleteUndecryptable = onDeleteUndecryptable,
-            )
+            WalletVerificationIssueMessages(issues = report.walletIssues)
         }
     }
 }
 
+/**
+ * Deletes the backups this key can't decrypt; drawn when the verification section names it, and
+ * lists how many there are
+ */
 @Composable
-private fun WalletVerificationIssueMessages(
-    issues: CloudBackupWalletVerificationIssues,
-    deletionState: CloudBackupUndecryptableWalletDeletionState,
-    onDeleteUndecryptable: () -> Unit,
+internal fun UndecryptableBackupsDeleteControl(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    count: UInt,
+    onClick: () -> Unit,
 ) {
+    Column(modifier = Modifier.padding(horizontal = 14.dp)) {
+        UndecryptableVerificationIssueMessage(
+            count = count,
+            delete = screen.actions.lookup(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS),
+            onClick = onClick,
+        )
+        CloudBackupLastOutcomeNote(
+            outcome = screen.lastOutcome,
+            target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS),
+            onDispatch = manager::dispatch,
+        )
+    }
+}
+
+@Composable
+private fun WalletVerificationIssueMessages(issues: CloudBackupWalletVerificationIssues) {
     VerificationIssueMessage(issues.missing, "wallet backup file(s) are missing from cloud storage")
     VerificationIssueMessage(issues.downloadFailed, "wallet backup(s) could not be downloaded")
     VerificationIssueMessage(issues.invalid, "wallet backup file(s) contain invalid data")
-    UndecryptableVerificationIssueMessage(
-        count = issues.decryptionFailed,
-        deletionState = deletionState,
-        onClick = onDeleteUndecryptable,
-    )
     VerificationIssueMessage(issues.unsupported, "wallet backup(s) use a newer backup format")
     VerificationIssueMessage(issues.unreadable, "wallet backup(s) could not be read")
-
-    if (deletionState is CloudBackupUndecryptableWalletDeletionState.Failed) {
-        ErrorInlineMessage(deletionState.v1)
-    }
 }
 
 @Composable
 private fun UndecryptableVerificationIssueMessage(
     count: UInt,
-    deletionState: CloudBackupUndecryptableWalletDeletionState,
+    delete: CloudBackupActionAvailability?,
     onClick: () -> Unit,
 ) {
-    if (count == 0u) return
-
+    // the delete is running when Rust says the only thing in its way is a running delete
     val isDeleting =
-        deletionState is CloudBackupUndecryptableWalletDeletionState.Deleting
+        (delete as? CloudBackupActionAvailability.Unavailable)?.reason ==
+            CloudBackupRejection.OperationRunning(CloudBackupOperationKind.DELETE_RECORDS)
     TextButton(
         onClick = onClick,
-        enabled = !isDeleting,
-        modifier = Modifier.fillMaxWidth(),
+        enabled = delete?.isAvailable == true,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(CloudBackupTags.action(CloudBackupScreenAction.DELETE_UNREADABLE_BACKUPS)),
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
     ) {
         if (isDeleting) {

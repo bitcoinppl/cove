@@ -157,7 +157,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_projects_promotion_mismatch_as_support_only",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/enable/restart.rs::recovery_support_codes_are_stable_and_privacy_safe",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::pendingEnableRecoveryShowsSupportCodeAndSafeCleanupAction",
-  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryOffersCleanupOnlyWhenRustDoes",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledEnableRecoversThroughRelaunchWithoutNewPasskey",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyRegistrationStartsOverOnRelaunch",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyConfirmationRecoversWithoutNewPasskey",
@@ -199,13 +199,13 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_stages_confirmation_without_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::confirm_saved_passkey_reuses_original_credential_id",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming",
-  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::supervisor_consumes_retry_pending_enable_upload",
+  "rust:rust/src/manager/cloud_backup_manager/harness/continuation_tests.rs::a_failed_upload_goes_back_to_the_saved_passkey_pause",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::startup_resume_retries_interrupted_uploading_wallets",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testFailedSetupUploadRetriesWithoutNewPasskey",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRetryInterruptedSetupFullLaunchTest.kt::failedSetupUploadRetriesWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms fail a setup upload at the provider and retry it through the production Enable action with the same passkey, leaving one namespace and one copy of each wallet. ci runs the ios retry test by name, since the same class's background verification test fails on master
+# ui tests on both platforms fail a setup upload at the provider, which goes back to the saved passkey's pause, and retry it through Confirm Passkey with the same passkey, leaving one namespace and one copy of each wallet. ci runs the ios retry test by name, since the same class's background verification test fails on master
 
 [[row]]
 id = "s12-cancel-incomplete-setup-preserves-active-data"
@@ -237,7 +237,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_remote_data",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/enable/restart.rs::cleanup_compatibility_rejects_incomplete_or_active_promotion_before_phase",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::supportOnlyRecoveryDoesNotOfferCleanup",
-  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryOffersCleanupOnlyWhenRustDoes",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 
@@ -293,7 +293,7 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPresentationHost.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -324,7 +324,7 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPresentationHost.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -362,7 +362,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -396,7 +396,7 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
@@ -428,13 +428,13 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_provider_failure_stops_before_scheduling_the_next_wallet",
-  "rust:rust/src/manager/cloud_backup_manager/model.rs::restore_all_retry_allows_one_remaining_wallet_only_when_complete",
+  "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::restore_all_retry_allows_one_remaining_wallet_only_when_complete",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::retryAvailabilityNeverRetainsAStartAction",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
@@ -455,11 +455,11 @@ paths = [
   "ios/Cove/CloudBackupManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
-  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllPresentation.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restart_marker_enters_detail_without_passkey_verification",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::detail_entry_after_restart_never_asks_for_the_passkey",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read",
   "rust:rust/src/manager/cloud_backup_manager/store.rs::atomic_state_mutations_preserve_restore_marker_count_and_verification",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRelaunchAfterKillOffersRetryRemainingWithoutAutomaticWork",

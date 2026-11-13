@@ -13,9 +13,9 @@ use crate::database::Database;
 use crate::database::Error as DatabaseError;
 use crate::database::cloud_backup::{
     CommittedCloudBackupStateMutation, DriveAccountSwitchId, PersistedCloudBackupState,
-    PersistedCloudBackupTransition, PersistedCloudBlobSyncState, PersistedDisablingCloudBackup,
-    PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedHealNotice,
-    PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
+    PersistedCloudBackupTransition, PersistedCloudBlobSyncState, PersistedDisableDisposition,
+    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
+    PersistedHealNotice, PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
 };
 
 use super::super::verify::{IntegrityDowngrade, apply_persisted_verification_result};
@@ -68,6 +68,31 @@ pub(crate) struct CommittedDisable {
     pub(crate) committed_at: u64,
     pub(crate) last_error: Option<String>,
     pub(crate) retry_after: Option<u64>,
+    /// What finishing still has to do, as the record holds it
+    pub(crate) disposition: DisableDisposition,
+    /// A Try Again the user tapped has failed since the commit
+    pub(crate) try_again_failed: bool,
+}
+
+/// What a committed disable still has to do to finish
+///
+/// The record holds it, so the choice to keep the remote backups survives a failed finish and a
+/// process death, and no later run can turn it back into a remote delete
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DisableDisposition {
+    /// Delete the namespace, then clean up this device
+    DeleteRemote,
+    /// Clean up this device only and leave the remote backups
+    LocalOnly,
+}
+
+impl From<PersistedDisableDisposition> for DisableDisposition {
+    fn from(disposition: PersistedDisableDisposition) -> Self {
+        match disposition {
+            PersistedDisableDisposition::DeleteRemote => Self::DeleteRemote,
+            PersistedDisableDisposition::LocalOnly => Self::LocalOnly,
+        }
+    }
 }
 
 /// What a stored Disabling record is once load normalization has run
@@ -115,6 +140,8 @@ impl CommittedDisable {
                 committed_at,
                 last_error: record.last_error.clone(),
                 retry_after: record.retry_after,
+                disposition: record.disposition.into(),
+                try_again_failed: record.try_again_failed,
             }),
             None => DisablingRecord::Unnormalized,
         }
@@ -138,6 +165,11 @@ impl LifecycleWriter {
         Self::bootstrap_with_heal(ownership, Self::heal_legacy_disabling)
     }
 
+    /// Reads and normalizes the record again after a failed load, as a launch would
+    pub(crate) fn retry_load(&self) -> LifecycleLoad {
+        self.normalize_on_load(Self::heal_legacy_disabling)
+    }
+
     // the heal is a parameter so tests can make its write fail without a seam in this path
     fn bootstrap_with_heal(
         ownership: &CloudBackupRuntimeOwnership,
@@ -146,6 +178,12 @@ impl LifecycleWriter {
         debug_assert!(ownership.manager_initialized && !ownership.recovery_cleanup_active);
 
         let writer = Self::with_capability(LifecycleCapability(()));
+
+        // a UI test's legacy record is written as an older build would have left it, before the
+        // load that heals it
+        #[cfg(any(test, debug_assertions))]
+        super::ui_test_legacy_record::seed_requested_legacy_stuck_record(&writer.capability);
+
         let load = writer.normalize_on_load(heal);
         (writer, load)
     }
@@ -285,6 +323,16 @@ impl LifecycleWriter {
 
             *state = new_state;
             true
+        })
+    }
+
+    /// The user dismissed the heal notice
+    pub(crate) fn dismiss_heal_notice(&self) -> Result<Committed<bool>, DatabaseError> {
+        self.mutate(|state| match state {
+            PersistedCloudBackupState::Configured(configured) => {
+                configured.heal_notice.take().is_some()
+            }
+            _ => false,
         })
     }
 
@@ -546,6 +594,8 @@ impl LifecycleWriter {
             committed_at,
             last_error: None,
             retry_after: None,
+            disposition: DisableDisposition::DeleteRemote,
+            try_again_failed: false,
         };
 
         // the namespace this configuration uses lives in the keychain, outside the record
@@ -573,6 +623,8 @@ impl LifecycleWriter {
                         delete_started_at: Some(committed.committed_at),
                         last_error: None,
                         retry_after: None,
+                        disposition: PersistedDisableDisposition::DeleteRemote,
+                        try_again_failed: false,
                     },
                 );
                 Ok(CommitDisable::Committed(committed.clone()))
@@ -590,6 +642,7 @@ impl LifecycleWriter {
         committed: &CommittedDisable,
         message: String,
         retry_after: u64,
+        try_again_failed: bool,
     ) -> Result<bool, DatabaseError> {
         self.mutate(|state| {
             let PersistedCloudBackupState::ExclusiveTransition(
@@ -606,9 +659,50 @@ impl LifecycleWriter {
 
             disabling.last_error = Some(message);
             disabling.retry_after = Some(retry_after);
+            disabling.try_again_failed |= try_again_failed;
             true
         })
         .map(|mutation| mutation.outcome)
+    }
+
+    /// The user chose to stop using Cloud Backup on this device: the committed disable finishes
+    /// with local cleanup only, from now on; false when the record moved on from `committed`
+    pub(crate) fn choose_local_only(
+        &self,
+        committed: &CommittedDisable,
+    ) -> Result<bool, DatabaseError> {
+        self.mutate(|state| {
+            let PersistedCloudBackupState::ExclusiveTransition(
+                PersistedCloudBackupTransition::Disabling(disabling),
+            ) = state
+            else {
+                return false;
+            };
+            if disabling.disable_generation != committed.attempt_id
+                || disabling.namespace_id != committed.namespace_id
+            {
+                return false;
+            }
+
+            disabling.disposition = PersistedDisableDisposition::LocalOnly;
+            true
+        })
+        .map(|mutation| mutation.outcome)
+    }
+
+    /// Replaces a corrupted record with Cloud Backup off; false when the record isn't corrupted
+    ///
+    /// Only a corrupted record is replaced, so a reset that raced a repair never turns a readable
+    /// configuration off
+    pub(crate) fn reset_corrupted(&self) -> Result<Committed<bool>, DatabaseError> {
+        self.mutate(|state| {
+            if !matches!(state, PersistedCloudBackupState::Corrupted { .. }) {
+                return false;
+            }
+
+            *state = PersistedCloudBackupState::Disabled;
+            true
+        })
     }
 
     /// A committed disable deleted the namespace and cleaned up locally
@@ -618,17 +712,6 @@ impl LifecycleWriter {
     ) -> Result<Committed<()>, DatabaseError> {
         info!("Cloud Backup finished disable attempt {}", committed.attempt_id);
         self.mutate(|state| *state = PersistedCloudBackupState::Disabled)
-    }
-
-    /// Keep Enabled after a committed disable whose namespace still exists
-    ///
-    /// Routed through the owner like every other record write
-    pub(crate) fn keep_enabled_after_disable(
-        &self,
-        attempt_id: u64,
-    ) -> Result<bool, DatabaseError> {
-        self.mutate(|state| state.restore_configured_after_disable(attempt_id))
-            .map(|mutation| mutation.outcome)
     }
 }
 

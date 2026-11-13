@@ -4,12 +4,11 @@ use cove_cspp::backup_data::wallet_record_id;
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use super::model::{
-    CloudBackupConfiguredState, CloudBackupDetailState, CloudBackupPasskeyState,
-    CloudBackupVerificationState,
+    CloudBackupConfiguredState, CloudBackupPasskeyState, CloudBackupVerificationState,
 };
 use super::{
-    CloudBackupInventoryAuthority, CloudBackupKeychain, CloudBackupStatus, CloudBackupWalletStatus,
-    RustCloudBackupManager,
+    CloudBackupDetailState, CloudBackupInventoryAuthority, CloudBackupKeychain, CloudBackupStatus,
+    CloudBackupWalletStatus, RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -17,6 +16,13 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState, PersistedPasskeyState, PersistedVerificationRequirement,
 };
 use crate::wallet::metadata::{WalletMetadata, WalletType};
+
+/// The live Cloud Backup state coverage is proven against
+#[derive(Debug, Clone)]
+struct LiveCoverageState {
+    configured: CloudBackupConfiguredState,
+    detail: CloudBackupDetailState,
+}
 
 /// Confirmed cloud recovery copies, separate from recovery-word verification
 #[derive(Debug, Default)]
@@ -32,9 +38,13 @@ impl CloudBackupRecoveryCoverage {
                 return Self::default();
             }
 
-            state.configured_state()
+            // the reducer's lock is taken first, as every reader holding both does
+            state.configured_state().map(|configured| LiveCoverageState {
+                configured,
+                detail: manager.inventory.read().detail_state().clone(),
+            })
         };
-        let Some(live_configured) = live_configured else {
+        let Some(live) = live_configured else {
             return Self::default();
         };
 
@@ -51,11 +61,11 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         };
 
-        Self::from_states(&live_configured, &persisted, &namespace, &sync_states)
+        Self::from_states(&live, &persisted, &namespace, &sync_states)
     }
 
     fn from_states(
-        live_configured: &CloudBackupConfiguredState,
+        live: &LiveCoverageState,
         persisted: &PersistedCloudBackupState,
         namespace: &str,
         sync_states: &[PersistedCloudBlobSyncState],
@@ -63,6 +73,7 @@ impl CloudBackupRecoveryCoverage {
         let PersistedCloudBackupState::Configured(persisted_configured) = persisted else {
             return Self::default();
         };
+        let live_configured = &live.configured;
 
         if persisted_configured.passkey != PersistedPasskeyState::Available
             || persisted_configured.pending_verification_completion.is_some()
@@ -81,7 +92,7 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         }
 
-        let CloudBackupDetailState::Complete { state: loaded } = &live_configured.detail else {
+        let CloudBackupDetailState::Complete { state: loaded } = &live.detail else {
             return Self::default();
         };
 
@@ -136,12 +147,13 @@ fn verification_proof_is_usable(
     matches!(
         (live, persisted),
         (
-            CloudBackupVerificationState::Verified { .. } | CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::Verified { .. }
+                | CloudBackupVerificationState::NotCompleted,
             PersistedBackupVerificationState::Verified { .. },
         ) | (
             CloudBackupVerificationState::Verified { .. }
                 | CloudBackupVerificationState::Required
-                | CloudBackupVerificationState::Cancelled,
+                | CloudBackupVerificationState::NotCompleted,
             PersistedBackupVerificationState::Required {
                 reason: PersistedVerificationRequirement::WalletSetChanged,
                 last_verified_at: Some(_),
@@ -157,15 +169,16 @@ mod tests {
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedConfiguredCloudBackup, PersistedRestoreAllMarker,
     };
+    use crate::manager::cloud_backup_manager::LoadedCloudBackupDetail;
     use crate::manager::cloud_backup_manager::model::{
-        CloudBackupDestructiveOperationState, CloudBackupRestoreAllState, CloudBackupSyncState,
-        CloudBackupUndecryptableWalletDeletionState, LoadedCloudBackupDetail,
+        CloudBackupDestructiveOperationState, CloudBackupSyncState,
+        CloudBackupUndecryptableWalletDeletionState,
     };
     use crate::manager::cloud_backup_manager::verify::test_support::{
         apply_startup_integrity_downgrade, apply_verification_result,
     };
     use crate::manager::cloud_backup_manager::{
-        CloudBackupOtherBackupsState, CloudBackupVerificationPresentation, DeepVerificationResult,
+        CloudBackupVerificationPresentation, DeepVerificationResult,
     };
 
     fn persisted_verified_state() -> PersistedCloudBackupState {
@@ -183,7 +196,7 @@ mod tests {
         })
     }
 
-    fn cloud_state(detail: CloudBackupDetailState) -> CloudBackupConfiguredState {
+    fn cloud_state(detail: CloudBackupDetailState) -> LiveCoverageState {
         cloud_state_with_verification(
             detail,
             CloudBackupVerificationState::Verified { report: None, last_verified_at: Some(10) },
@@ -195,20 +208,19 @@ mod tests {
         detail: CloudBackupDetailState,
         verification: CloudBackupVerificationState,
         sync_health: CloudSyncHealth,
-    ) -> CloudBackupConfiguredState {
-        CloudBackupConfiguredState {
+    ) -> LiveCoverageState {
+        let configured = CloudBackupConfiguredState {
             passkey: CloudBackupPasskeyState::Available,
             verification,
             sync: CloudBackupSyncState::Idle,
             destructive_operation: CloudBackupDestructiveOperationState::Idle,
             undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState::Idle,
-            detail,
-            other_backups: CloudBackupOtherBackupsState::NotChecked,
-            restore_all: CloudBackupRestoreAllState::NotShown,
             root_prompt: super::super::CloudBackupRootPrompt::None,
             sync_health,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
-        }
+        };
+
+        LiveCoverageState { configured, detail }
     }
 
     fn loaded_detail(
@@ -233,12 +245,12 @@ mod tests {
                         record_id: record_id.into(),
                     }],
                     needs_sync: Vec::new(),
-                    cloud_only_count: 0,
                 },
                 inventory_authority: authority,
                 cloud_only: super::super::CloudOnlyState::NotFetched,
                 cloud_only_operation: super::super::CloudOnlyOperation::Idle,
                 other_backups_operation: super::super::OtherBackupsOperation::Idle,
+                own_secrets: super::super::OwnSecretFacts::default(),
             },
         }
     }
@@ -269,7 +281,7 @@ mod tests {
     type CoverageChange<'a> = (&'a str, Box<dyn Fn(&mut CoverageCase) + 'a>);
 
     struct CoverageCase {
-        live: CloudBackupConfiguredState,
+        live: LiveCoverageState,
         persisted: PersistedCloudBackupState,
         sync_states: Vec<PersistedCloudBlobSyncState>,
     }
@@ -378,16 +390,17 @@ mod tests {
             ),
             (
                 "unknown sync health",
-                Box::new(|case| case.live.sync_health = CloudSyncHealth::Unknown),
+                Box::new(|case| case.live.configured.sync_health = CloudSyncHealth::Unknown),
             ),
             (
                 "uploading sync health",
-                Box::new(|case| case.live.sync_health = CloudSyncHealth::Uploading),
+                Box::new(|case| case.live.configured.sync_health = CloudSyncHealth::Uploading),
             ),
             (
                 "failed sync health",
                 Box::new(|case| {
-                    case.live.sync_health = CloudSyncHealth::Failed("missing master key".into());
+                    case.live.configured.sync_health =
+                        CloudSyncHealth::Failed("missing master key".into());
                 }),
             ),
             (
@@ -437,7 +450,7 @@ mod tests {
             (
                 "wallet set changed without a prior verification",
                 Box::new(|case| {
-                    case.live.verification = CloudBackupVerificationState::Required;
+                    case.live.configured.verification = CloudBackupVerificationState::Required;
                     case.persisted = persisted_required_state(
                         PersistedVerificationRequirement::WalletSetChanged,
                         None,
@@ -447,7 +460,7 @@ mod tests {
             (
                 "integrity issue",
                 Box::new(|case| {
-                    case.live.verification = CloudBackupVerificationState::Required;
+                    case.live.configured.verification = CloudBackupVerificationState::Required;
                     case.persisted = persisted_required_state(
                         PersistedVerificationRequirement::IntegrityIssue,
                         Some(10),
@@ -508,7 +521,7 @@ mod tests {
                 CloudBackupWalletStatus::Confirmed,
                 &record_id,
             ),
-            CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::NotCompleted,
             CloudSyncHealth::AllUploaded,
         );
         let mut wallet_set_changed = persisted_verified_state();
@@ -516,7 +529,7 @@ mod tests {
 
         for persisted in [persisted_verified_state(), wallet_set_changed] {
             let cancelled =
-                apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+                apply_verification_result(&persisted, &DeepVerificationResult::NotCompleted(None));
 
             assert_eq!(cancelled, persisted);
             assert!(
@@ -533,14 +546,14 @@ mod tests {
         let persisted =
             persisted_required_state(PersistedVerificationRequirement::IntegrityIssue, Some(10));
         let cancelled =
-            apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+            apply_verification_result(&persisted, &DeepVerificationResult::NotCompleted(None));
         let live = cloud_state_with_verification(
             loaded_detail(
                 CloudBackupInventoryAuthority::ProviderConfirmed,
                 CloudBackupWalletStatus::Confirmed,
                 &record_id,
             ),
-            CloudBackupVerificationState::Cancelled,
+            CloudBackupVerificationState::NotCompleted,
             CloudSyncHealth::AllUploaded,
         );
 

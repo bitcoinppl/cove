@@ -57,9 +57,10 @@ const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "If this keeps happening, update Cove or contact support."
 );
 
-/// Failure to coordinate an Android Google Drive account transition
-#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-#[uniffi::export(Display)]
+/// Why a step of an Android Google Drive account switch could not run
+///
+/// Internal to the switch's owner, which turns each into what the screen shows
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum CloudBackupDriveAccountSwitchError {
     /// Another exclusive Cloud Backup operation owns the supervisor
     #[error("another cloud backup operation is already in progress")]
@@ -73,28 +74,6 @@ pub enum CloudBackupDriveAccountSwitchError {
     /// Persistence or actor coordination failed
     #[error("internal Google Drive account switch error: {0}")]
     Internal(String),
-}
-
-impl From<crate::manager::cloud_backup_manager::admission::Rejection>
-    for CloudBackupDriveAccountSwitchError
-{
-    fn from(rejection: crate::manager::cloud_backup_manager::admission::Rejection) -> Self {
-        use crate::manager::cloud_backup_manager::admission::Rejection as R;
-
-        match rejection {
-            R::CloudBackupOff | R::NotConfigured => Self::NotConfigured,
-            R::NothingToCancel | R::NothingToContinue => Self::InvalidTransition,
-            R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
-            // a committed Turn Off is still finishing, so the platform retries later
-            R::TurnOffCommitted
-            | R::OperationRunning(_)
-            | R::DetailInventoryNotLoaded
-            | R::OtherBackupsNotLoaded
-            | R::RestoreAllUnavailable
-            | R::KeepEnabledUnavailable
-            | R::Resetting => Self::Busy,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -386,6 +365,16 @@ pub(crate) enum BlockingCloudStep {
     DetailRefresh,
 }
 
+/// How a passkey request ended without a usable credential
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PasskeyRequestFailure {
+    /// The user dismissed the request, or no window could present it yet; neither says
+    /// anything about the passkey
+    NotCompleted,
+    /// The provider couldn't create or use a passkey
+    Failed,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CloudBackupError {
     #[error("not supported: {0}")]
@@ -512,6 +501,30 @@ impl CloudBackupError {
         }
     }
 
+    /// The user didn't finish a passkey request; nothing changed and nothing is wrong
+    pub(crate) fn is_passkey_not_completed(&self) -> bool {
+        matches!(self, Self::Passkey(error) if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)))
+    }
+
+    /// What this error says about a passkey request, or `None` when it isn't a passkey error
+    pub(crate) fn passkey_request_failure(&self) -> Option<PasskeyRequestFailure> {
+        match self {
+            Self::PasskeyDiscoveryCancelled => Some(PasskeyRequestFailure::NotCompleted),
+            Self::Passkey(error)
+                if matches!(
+                    error.passkey_error(),
+                    Some(PasskeyError::NotCompleted | PasskeyError::NotReady { .. })
+                ) =>
+            {
+                Some(PasskeyRequestFailure::NotCompleted)
+            }
+            Self::Passkey(_) | Self::UnsupportedPasskeyProvider => {
+                Some(PasskeyRequestFailure::Failed)
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn is_cloud_error(&self) -> bool {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
@@ -529,7 +542,7 @@ impl CloudBackupError {
                     operation: PasskeyOperation::Registration,
                     reason: PasskeyFailureReason::DeviceNotConfigured,
                 }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
-                Some(PasskeyError::UserCancelled) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+                Some(PasskeyError::NotCompleted) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
                 Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
                 Some(PasskeyError::PrfUnsupportedProvider) => {
                     UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
@@ -577,7 +590,7 @@ impl CloudBackupError {
 
             // the passkey sheet was dismissed, which is an expected outcome
             Self::Passkey(error)
-                if matches!(error.passkey_error(), Some(PasskeyError::UserCancelled)) =>
+                if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)) =>
             {
                 info!("{operation}: {self}");
             }
@@ -725,7 +738,7 @@ mod tests {
 
     #[test]
     fn reader_message_keeps_distinct_passkey_outcomes() {
-        let cancellation = CloudBackupError::from(PasskeyError::UserCancelled).reader_message();
+        let cancellation = CloudBackupError::from(PasskeyError::NotCompleted).reader_message();
         let missing = CloudBackupError::from(PasskeyError::NoCredentialFound).reader_message();
         let unsupported =
             CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();

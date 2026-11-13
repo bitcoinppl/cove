@@ -1,35 +1,19 @@
 import SwiftUI
 
-private extension CloudOnlyOperation {
-    var operatingRecordId: String? {
-        if case let .operating(recordId) = self { return recordId }
-        return nil
-    }
-}
-
-enum CloudBackupRestoreAllIntent: Equatable {
-    case start
-    case retry
-}
-
-struct CloudBackupRestoreAllActionPresentation: Equatable {
-    let title: String
-    let intent: CloudBackupRestoreAllIntent
-}
-
 struct CloudBackupRestoreAllProgressPresentation: Equatable {
     let completed: UInt32
     let total: UInt32
     let title: String
     let detail: String
     let accessibilityValue: String
-    let canCancel: Bool
+    let cancellationRequested: Bool
 }
 
+/// What the Restore All control shows; whether it can be tapped is the screen's actions
 enum CloudBackupRestoreAllPresentation: Equatable {
     case hidden
-    case disabled(title: String)
-    case action(CloudBackupRestoreAllActionPresentation)
+    case start(title: String)
+    case retry(title: String)
     case running(CloudBackupRestoreAllProgressPresentation)
 }
 
@@ -39,20 +23,10 @@ func cloudBackupRestoreAllPresentation(
     switch state {
     case .notShown:
         return .hidden
-    case let .startDisabled(walletCount):
-        return .disabled(title: "Restore All (\(walletCount))")
-    case let .startAvailable(walletCount):
-        return .action(CloudBackupRestoreAllActionPresentation(
-            title: "Restore All (\(walletCount))",
-            intent: .start
-        ))
-    case let .retryDisabled(walletCount):
-        return .disabled(title: "Retry Remaining (\(walletCount))")
-    case let .retryAvailable(walletCount):
-        return .action(CloudBackupRestoreAllActionPresentation(
-            title: "Retry Remaining (\(walletCount))",
-            intent: .retry
-        ))
+    case let .startDisabled(walletCount), let .startAvailable(walletCount):
+        return .start(title: "Restore All (\(walletCount))")
+    case let .retryDisabled(walletCount), let .retryAvailable(walletCount):
+        return .retry(title: "Retry Remaining (\(walletCount))")
     case let .running(completed, total, currentWalletName, cancellationRequested):
         let title = currentWalletName.map { "Restoring \($0)" } ?? "Preparing wallet restores"
         let detail = "Completed \(completed) of \(total)"
@@ -68,200 +42,182 @@ func cloudBackupRestoreAllPresentation(
             accessibilityValue: [title, detail, cancellation]
                 .filter { !$0.isEmpty }
                 .joined(separator: ", "),
-            canCancel: !cancellationRequested
+            cancellationRequested: cancellationRequested
         ))
     }
 }
 
-struct CloudOnlySection: View {
-    let wallets: [CloudBackupWalletItem]
-    let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+/// The reason every disabled row action in a section shares, shown once on the section rather
+/// than on each row
+func cloudBackupSharedRowReason(_ rows: [CloudBackupListedRow]) -> CloudBackupRejection? {
+    let reasons = rows.flatMap(\.actions).compactMap(\.availability.unavailableReason)
+    guard let first = reasons.first, reasons.allSatisfy({ $0 == first }) else { return nil }
 
-    private var isOperating: Bool {
-        manager.cloudOnlyOperation.operatingRecordId != nil
-    }
-
-    var body: some View {
-        CloudOnlyFormSection(
-            wallets: wallets,
-            manager: manager,
-            isOperating: isOperating,
-            presentationCoordinator: presentationCoordinator
-        )
-    }
+    return first
 }
 
-private struct CloudOnlyFormSection: View {
-    let wallets: [CloudBackupWalletItem]
+/// Backups of wallets that aren't on this device, and backups Cove can't match to one
+struct CloudBackupNotOnDeviceSectionView: View {
+    let section: CloudBackupNotOnDeviceSection
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
-    let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
+    private var sharedReason: CloudBackupRejection? {
+        cloudBackupSharedRowReason(section.rows)
+    }
+
     var body: some View {
-        Section(header: Text("Not on This Device").uiTestTruncationProbe()) {
-            CloudOnlySectionContent(
-                wallets: wallets,
+        Section {
+            CloudOnlyRestoreAllControl(
+                state: section.restoreAll,
+                actions: actions,
+                manager: manager
+            )
+
+            CloudBackupListedRows(
+                rows: section.rows,
+                sharedReason: sharedReason,
                 manager: manager,
-                isOperating: isOperating,
                 presentationCoordinator: presentationCoordinator
             )
+
+            CloudOnlyOperationMessage(operation: section.operation)
+        } header: {
+            Text("Not on This Device").uiTestTruncationProbe()
+        } footer: {
+            CloudBackupSharedRowReasonFooter(reason: sharedReason)
         }
     }
 }
 
-private struct CloudOnlySectionContent: View {
-    let wallets: [CloudBackupWalletItem]
+/// More backups of wallets this device already holds, kept out of Not on This Device
+struct CloudBackupExtraCopiesSectionView: View {
+    let section: CloudBackupExtraCopiesSection
     let manager: CloudBackupManager
-    let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
+    private var sharedReason: CloudBackupRejection? {
+        cloudBackupSharedRowReason(section.rows)
+    }
+
     var body: some View {
-        CloudOnlyRestoreAllControl(manager: manager)
-
-        CloudOnlyWalletRows(
-            manager: manager,
-            wallets: wallets,
-            operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
-            isOperating: isOperating || manager.restoreAllState.isRunning
-                || !manager.isDetailInventoryReady,
-            presentationCoordinator: presentationCoordinator,
-            onRetryWallet: { item in
-                manager.dispatch(action: .restoreCloudWallet(item.recordId))
+        Section {
+            CloudBackupListedRows(
+                rows: section.rows,
+                sharedReason: sharedReason,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
+        } header: {
+            Text("Extra Copies in iCloud").uiTestTruncationProbe()
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("These wallets are already on this device under another backup. You can delete these extra copies from iCloud.")
+                    .uiTestTruncationProbe()
+                CloudBackupSharedRowReasonFooter(reason: sharedReason)
             }
-        )
-
-        if case .loaded(wallets: _, incomplete: true) = manager.cloudOnly {
-            CloudOnlyIncompleteNotice(manager: manager)
         }
+    }
+}
 
-        if case let .failed(error) = manager.cloudOnlyOperation {
+private struct CloudBackupSharedRowReasonFooter: View {
+    let reason: CloudBackupRejection?
+
+    var body: some View {
+        if let reason {
+            Text(reason.caption)
+                .uiTestTruncationProbe()
+                .accessibilityIdentifier(CloudBackupUiElement.rowsUnavailable.identifier)
+        }
+    }
+}
+
+private struct CloudOnlyOperationMessage: View {
+    let operation: CloudOnlyOperation
+
+    var body: some View {
+        switch operation {
+        case let .failed(error):
             Text(error)
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
-        } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
+        case let .warning(message, _):
             Text(message)
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusWarning)
+        case .idle, .operating:
+            EmptyView()
         }
-    }
-}
-
-/// Some listed backups could not be read, so the rows above may be missing wallets
-private struct CloudOnlyIncompleteNotice: View {
-    let manager: CloudBackupManager
-
-    var body: some View {
-        Text("Some backups could not be read.")
-            .font(.caption)
-            .uiTestTruncationProbe()
-            .foregroundStyle(Color.statusWarning)
-
-        Button {
-            manager.dispatch(action: .refreshDetail)
-        } label: {
-            Text("Check Again").uiTestTruncationProbe()
-        }
-    }
-}
-
-private extension CloudBackupRestoreAllState {
-    var isRunning: Bool {
-        guard case .running = self else { return false }
-        return true
     }
 }
 
 private struct CloudOnlyRestoreAllControl: View {
+    let state: CloudBackupRestoreAllState
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
 
-    private var presentation: CloudBackupRestoreAllPresentation {
-        cloudBackupRestoreAllPresentation(state: manager.restoreAllState)
-    }
-
     var body: some View {
-        switch presentation {
+        switch cloudBackupRestoreAllPresentation(state: state) {
         case .hidden:
             EmptyView()
 
-        case let .disabled(title):
-            CloudOnlyRestoreAllDisabledControl(title: title)
+        case let .start(title):
+            CloudBackupActionControl(
+                action: .startRestoreAll,
+                actions: actions,
+                perform: { manager.dispatch(action: .startRestoreAll) }
+            ) {
+                ProbedLabel(title, systemImage: "square.stack.3d.up")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .accessibilityHint("Restores eligible wallets sequentially to this device")
 
-        case let .action(action):
-            CloudOnlyRestoreAllActionControl(
-                presentation: action,
-                onStart: manager.startRestoreAll,
-                onRetry: manager.retryRestoreAllRemaining
-            )
+        case let .retry(title):
+            CloudBackupActionControl(
+                action: .retryRestoreAllRemaining,
+                actions: actions,
+                perform: { manager.dispatch(action: .retryRestoreAllRemaining) }
+            ) {
+                ProbedLabel(title, systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .accessibilityHint("Restores eligible wallets sequentially to this device")
 
         case let .running(progress):
             CloudOnlyRestoreAllProgressControl(
                 presentation: progress,
-                onCancel: manager.cancelRestoreAll
+                actions: actions,
+                manager: manager
             )
-        }
-    }
-}
-
-private struct CloudOnlyRestoreAllDisabledControl: View {
-    let title: String
-
-    var body: some View {
-        ProbedLabel(title, systemImage: "icloud.and.arrow.down")
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .accessibilityLabel("\(title), unavailable while Cloud Backup is checking")
-    }
-}
-
-private struct CloudOnlyRestoreAllActionControl: View {
-    let presentation: CloudBackupRestoreAllActionPresentation
-    let onStart: () -> Void
-    let onRetry: () -> Void
-
-    private var systemImage: String {
-        presentation.intent == .start
-            ? "square.stack.3d.up"
-            : "arrow.clockwise"
-    }
-
-    var body: some View {
-        Button(action: performAction) {
-            ProbedLabel(presentation.title, systemImage: systemImage)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        }
-        .accessibilityHint("Restores eligible wallets sequentially to this device")
-    }
-
-    private func performAction() {
-        switch presentation.intent {
-        case .start:
-            onStart()
-        case .retry:
-            onRetry()
         }
     }
 }
 
 private struct CloudOnlyRestoreAllProgressControl: View {
     let presentation: CloudBackupRestoreAllProgressPresentation
-    let onCancel: () -> Void
+    let actions: CloudBackupActions
+    let manager: CloudBackupManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             CloudOnlyRestoreAllProgressDetails(presentation: presentation)
 
-            if presentation.canCancel {
-                Button(action: onCancel) {
-                    Text("Cancel").uiTestTruncationProbe()
-                }
-                .frame(minHeight: 44)
-                .accessibilityHint("Stops after the current wallet finishes")
-            } else {
+            if presentation.cancellationRequested {
                 CloudOnlyRestoreAllCancellationPending()
             }
+
+            CloudBackupActionControl(
+                action: .cancelRestoreAll,
+                actions: actions,
+                perform: { manager.dispatch(action: .cancelRestoreAll) }
+            ) {
+                Text("Cancel").uiTestTruncationProbe()
+            }
+            .frame(minHeight: 44)
+            .accessibilityHint("Stops after the current wallet finishes")
         }
         .padding(.vertical, 4)
     }
@@ -309,92 +265,130 @@ private struct CloudOnlyRestoreAllCancellationPending: View {
     }
 }
 
-private struct CloudOnlyWalletRows: View {
+private struct CloudBackupListedRows: View {
+    let rows: [CloudBackupListedRow]
+    let sharedReason: CloudBackupRejection?
     let manager: CloudBackupManager
-    let wallets: [CloudBackupWalletItem]
-    let operatingRecordId: String?
-    let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-    let onRetryWallet: (CloudBackupWalletItem) -> Void
 
     var body: some View {
-        ForEach(wallets, id: \.recordId) { item in
-            VStack(alignment: .leading, spacing: 8) {
-                CloudOnlyWalletActionButton(
-                    item: item,
-                    manager: manager,
-                    isOperating: isOperating,
-                    isCurrentOperation: operatingRecordId == item.recordId,
-                    presentationCoordinator: presentationCoordinator
-                )
-                .uiTestTruncationReport("cloudBackup.wallet.\(item.recordId).truncation")
+        ForEach(rows, id: \.recordId) { row in
+            CloudBackupListedRowView(
+                row: row,
+                sharedReason: sharedReason,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
+        }
+    }
+}
 
-                if item.restoreFailure != nil {
-                    Button {
-                        onRetryWallet(item)
-                    } label: {
-                        ProbedLabel("Restore", systemImage: "arrow.clockwise")
+/// One listed backup with the actions Rust gave it
+private struct CloudBackupListedRowView: View {
+    @Environment(\.cloudBackupOutcomes) private var outcomes
+
+    let row: CloudBackupListedRow
+    let sharedReason: CloudBackupRejection?
+    let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    /// a reason the section already shows once is not repeated on each row
+    private var rowReasons: [CloudBackupRejection] {
+        let reasons = row.actions.compactMap(\.availability.unavailableReason)
+        return reasons.filter { $0 != sharedReason }.uniqued()
+    }
+
+    private var rowOutcome: CloudBackupOutcome? {
+        guard let outcomes else { return nil }
+        return row.actions.lazy.compactMap { outcomes.outcome(forRow: row.recordId, $0.action) }.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            CloudBackupListedRowLabel(record: row.record)
+                .uiTestTruncationReport("cloudBackup.wallet.\(row.recordId).truncation")
+
+            HStack(spacing: 16) {
+                ForEach(row.actions, id: \.action) { rowAction in
+                    CloudBackupRowActionControl(
+                        recordId: row.recordId,
+                        rowAction: rowAction,
+                        role: rowAction.isDelete ? .destructive : nil,
+                        perform: { perform(rowAction.action) }
+                    ) {
+                        ProbedLabel(rowAction.action.title, systemImage: rowAction.action.systemImage)
+                            .font(.subheadline)
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.borderless)
-                    .disabled(isOperating)
-                    .accessibilityLabel("Retry restoring \(item.name)")
+                    .accessibilityLabel("\(rowAction.action.title) \(rowName)")
                 }
             }
-        }
-    }
-}
 
-private struct CloudOnlyWalletActionButton: View {
-    let item: CloudBackupWalletItem
-    let manager: CloudBackupManager
-    let isOperating: Bool
-    let isCurrentOperation: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-
-    var body: some View {
-        Button {
-            presentationCoordinator.present(.cloudOnlyWalletDialog(item))
-        } label: {
-            CloudOnlyWalletActionLabel(
-                item: item,
-                isCurrentOperation: isCurrentOperation
-            )
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
-        .disabled(isOperating)
-        .cloudOnlyWalletActionDialog(
-            wallet: item,
-            manager: manager,
-            coordinator: presentationCoordinator
-        )
-    }
-}
-
-private struct CloudOnlyWalletActionLabel: View {
-    let item: CloudBackupWalletItem
-    let isCurrentOperation: Bool
-
-    private var accessibilityAction: String {
-        switch item.syncStatus {
-        case .unsupportedVersion:
-            "Restore requires a newer version of Cove; delete is available"
-        case .alreadyOnDevice:
-            "Already on this device; delete is available"
-        default:
-            "Restore or delete from iCloud"
-        }
-    }
-
-    var body: some View {
-        HStack {
-            if isCurrentOperation {
-                ProgressView()
-                    .padding(.trailing, 8)
+            ForEach(rowReasons, id: \.self) { reason in
+                Text(reason.caption)
+                    .font(.caption)
+                    .uiTestTruncationProbe()
+                    .foregroundStyle(.secondary)
             }
 
-            WalletItemRow(item: item, accessibilityAction: accessibilityAction)
+            if let rowOutcome, let outcomes {
+                CloudBackupOutcomeNotice(outcome: rowOutcome, dismiss: outcomes.dismiss)
+            }
         }
+    }
+
+    private var rowName: String {
+        row.record.wallet?.name ?? row.record.unnamedTitle
+    }
+
+    private func perform(_ action: CloudBackupRowActionKind) {
+        switch action {
+        case .restore:
+            manager.dispatch(action: .restoreCloudWallet(row.recordId))
+        case let .delete(_, consent):
+            presentationCoordinator.present(.alert(.rowDelete(row.recordId, consent)))
+        case .backUpFirst:
+            manager.dispatch(action: .syncUnsynced)
+        case .checkAgain:
+            manager.dispatch(action: .refreshDetail)
+        case .verify:
+            manager.dispatch(action: .startVerification(.cloudBackupDetail))
+        }
+    }
+}
+
+private struct CloudBackupListedRowLabel: View {
+    let record: CloudBackupListedRecord
+
+    var body: some View {
+        if let wallet = record.wallet {
+            WalletItemRow(item: wallet)
+        } else {
+            ProbedLabel(record.unnamedTitle, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Color.statusWarning)
+        }
+
+        if let caption = record.caption {
+            Text(caption)
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private extension CloudBackupRowAction {
+    var isDelete: Bool {
+        if case .delete = action { return true }
+        return false
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }

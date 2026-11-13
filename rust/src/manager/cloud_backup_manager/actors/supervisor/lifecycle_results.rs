@@ -119,7 +119,6 @@ impl CloudBackupSupervisor {
             }
         };
 
-        self.detail_workflow.clear_pending_completion();
         if cleared {
             manager.refresh_pending_upload_verification_state();
         }
@@ -157,7 +156,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         settlement: PendingVerificationSettlement,
     ) {
-        let PendingVerificationSettlement { basis, completion, result } = settlement;
+        let PendingVerificationSettlement { basis, read_at, completion, result } = settlement;
         if basis != self.evidence_basis() {
             debug!("Dropped an upload confirmation read before a wallet or configuration change");
             return;
@@ -175,10 +174,7 @@ impl CloudBackupSupervisor {
         });
 
         match settled {
-            Ok(true) => {
-                self.detail_workflow.clear_pending_completion();
-                manager.apply_settled_verification_result(result);
-            }
+            Ok(true) => manager.apply_settled_verification_result(result, read_at),
             Ok(false) => debug!("Dropped an upload confirmation that is no longer pending"),
             Err(error) => error!("Failed to settle pending verification completion: {error}"),
         }
@@ -250,6 +246,7 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: &RustCloudBackupManager,
         basis: EvidenceBasis,
+        read_at: InventoryReadAt,
         result: DeepVerificationResult,
     ) {
         if basis != self.evidence_basis() {
@@ -259,6 +256,6 @@ impl CloudBackupSupervisor {
         }
 
         self.runtime.commit(|lifecycle| manager.persist_verification_result(lifecycle, &result));
-        manager.handle_deep_verification_result(result);
+        manager.handle_deep_verification_result(result, read_at);
     }
 }

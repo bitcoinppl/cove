@@ -6,13 +6,19 @@
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto::encrypt_master_key;
 
-use super::{CloudCall, CloudFault, Hold, NextAction as N, PhaseEnd, TestApp, run_case};
+use super::{
+    CloudCall, CloudFault, Hold, NextAction as N, PasskeyMode, PhaseEnd, TestApp, run_case,
+};
 use crate::manager::cloud_backup_manager::admission::{
     Admission, EnableIntent, Rejection, UserIntent,
 };
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupScreenAction, CloudBackupScreenBody,
+};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation as Op,
-    CloudBackupManagerAction, CloudBackupRootPrompt,
+    CloudBackupEnableContext, CloudBackupEnableFlow, CloudBackupEnablePromptChoice,
+    CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent,
+    CloudBackupRootPrompt,
 };
 use crate::manager::onboarding_manager::{CloudRestoreDiscovery, RustOnboardingManager};
 
@@ -94,5 +100,53 @@ fn a_restore_queued_behind_a_prompt_answer_finds_its_enable_running() {
         let outcome = app.last_outcome().expect("the Restore was decided");
         assert_eq!(outcome.intent, UserIntent::RestoreFromCloudBackup);
         assert_eq!(outcome.admission, Admission::Rejected(Rejection::OperationRunning(Op::Enable)));
+    });
+}
+
+/// An Enable whose passkey sheet the user closed waits on the passkey-choice prompt with nothing
+/// running or held, and the Discard its screen offers ends that prompt like the existing-backup
+/// prompt's, back to off
+#[test]
+fn discard_ends_an_enable_waiting_on_its_passkey_choice() {
+    let test = concat!(module_path!(), "::discard_ends_an_enable_waiting_on_its_passkey_choice");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.passkey.set_mode(PasskeyMode::NotCompleted);
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(
+            CloudBackupEnableContext::settings_manual(),
+        ))
+        .then_cannot(&[N::TurnOff]);
+
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(
+                screen.body,
+                CloudBackupScreenBody::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent::Enable(..)
+                ))
+            ),
+            "{}",
+            app.describe()
+        );
+        assert!(
+            screen.actions.is_available(CloudBackupScreenAction::DiscardPendingEnable),
+            "{}",
+            app.describe()
+        );
+
+        app.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup)
+            .then_can(&[N::Enable]);
+
+        let outcome = app.last_outcome().expect("the Discard was decided");
+        assert_eq!(outcome.intent, UserIntent::DiscardPendingEnable);
+        assert_eq!(outcome.admission, Admission::Accepted);
+        assert_eq!(
+            app.manager().published_screen().body,
+            CloudBackupScreenBody::Disabled,
+            "{}",
+            app.describe()
+        );
+        assert_eq!(app.manager().model_snapshot().root_prompt, CloudBackupRootPrompt::None);
     });
 }

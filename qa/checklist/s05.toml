@@ -35,9 +35,9 @@ coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testHeldReconnectCheckKeepsKnownRowsDisabledUntilTheProviderConfirmsThem",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupFirstInventoryFullLaunchTest.kt::stage2RelaunchKeepsActionsDisabledUntilTheFirstListingAnswers",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayDisabledWhileAKnownInventoryIsCheckedAgain",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::provisional_detail_is_visible_without_becoming_complete",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::provisional_detail_is_visible_without_becoming_complete",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::trusted_local_snapshot_is_confirmed_by_provider_in_background",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests cover inventory staying incomplete until the provider confirms it; the cloud-only fetch starts only once the inventory is ready, so neither app lists cloud-only rows during a first load
@@ -63,13 +63,11 @@ paths = [
 coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testOfflineInventoryKeepsKnownRowsAndDisablesTheirActions",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupReconnectFullLaunchTest.kt::offlineInventoryKeepsKnownRowsAndDisablesTheirActions",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::offline_failure_keeps_confirmed_rows_without_individual_wallet_actions",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::offline_failure_keeps_confirmed_rows_without_individual_wallet_actions",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::authoritative_failure_retains_provisional_rows_in_failed_state",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::provider_confirmation_failure_marks_trusted_local_detail_incomplete",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::initial_detail_refresh_failure_never_projects_confirmed_zero",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::detail_refresh_failure_retains_last_known_rows",
-    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::failedInventoryShowsRetryStateInsteadOfLoadingOrZero",
-    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::offlineFailureKeepsTrustedRowsButDisablesTheirActions",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::initial_detail_refresh_failure_never_projects_confirmed_zero",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::detail_refresh_failure_retains_last_known_rows",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # ui tests on both platforms drop the scripted network and reopen Cloud Backup: the known rows stay listed under the offline error instead of an empty cloud, Restore All is disabled, and each cloud-only row is disabled and opens neither Restore nor Delete. an offline failure makes the retained rows not ready in rust and in both apps, while other provider failures keep them actionable
@@ -148,7 +146,7 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails",
-    "rust:rust/src/manager/cloud_backup_manager/model.rs::deleted_wallet_is_listed_once_when_the_detail_refresh_fails",
+    "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::deleted_wallet_is_listed_once_when_the_detail_refresh_fails",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
@@ -258,7 +256,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impact",
     "ios-ui:ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift::testCancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDeleteFromCloudFullLaunchTest.kt::cancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
 ]

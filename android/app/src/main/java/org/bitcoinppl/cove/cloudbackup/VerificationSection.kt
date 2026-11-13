@@ -2,12 +2,9 @@ package org.bitcoinppl.cove.cloudbackup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.WarningAmber
@@ -19,125 +16,108 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
-import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
-import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.CloudBackupBatchDeleteConsent
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
+import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
+import org.bitcoinppl.cove_core.CloudBackupRecoveryKind
+import org.bitcoinppl.cove_core.CloudBackupRecoveryOperation
 import org.bitcoinppl.cove_core.CloudBackupRetryAction
-import org.bitcoinppl.cove_core.CloudBackupSyncState
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupVerificationControl
+import org.bitcoinppl.cove_core.CloudBackupVerificationSection
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.DeepVerificationReport
 
-@Composable
-internal fun CancelledVerificationRecoveryContent(
-    manager: CloudBackupManager,
-) {
-    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        ErrorStateCard(
-            icon = Icons.Default.WarningAmber,
-            title = "Cloud Backup Not Verified",
-            body = "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey.",
-        )
+// the same words as iOS, which says only that verification didn't finish
+private const val NOT_COMPLETED_EXPLANATION =
+    "Verification didn't finish. Verify again to confirm your cloud backup can be restored."
 
-        SectionHeader("Verification")
-        MaterialSection {
-            Column {
-                CancelledVerificationActions(manager = manager)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PasskeyConfirmedSectionContent(
-    manager: CloudBackupManager,
-) {
-    CloudBackupSimpleActionCard(
-        title = "Passkey verified",
-        icon = Icons.Default.Security,
-        tint = cloudBackupVisualColors().success,
-        onClick = {
-            manager.dispatch(
-                CloudBackupManagerAction.StartVerification(
-                    CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                ),
-            )
-        },
-    )
-}
-
+/**
+ * Verification, drawn from Rust's verification section
+ *
+ * Each state draws its own content, then the controls the section names, in Rust's order; the
+ * state only chooses how its Verify looks, never which controls exist
+ */
 @Composable
 internal fun VerificationSection(
     manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    section: CloudBackupVerificationSection,
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
 ) {
-    val colors = cloudBackupVisualColors()
-    var showUndecryptableDeletionConfirmation by remember { mutableStateOf(false) }
+    val view = section.view
+    // the batch the open confirmation was opened for, which its Delete sends back unchanged
+    var undecryptableDeletion by remember { mutableStateOf<CloudBackupBatchDeleteConsent?>(null) }
+    val verify = { manager.dispatch(verifyAction(view.state)) }
+    val needsAttention = (view.state as? CloudBackupVerificationState.NeedsAttention)?.report
+    val context =
+        VerificationControlContext(
+            manager = manager,
+            screen = screen,
+            undecryptableCount = needsAttention?.walletIssues?.decryptionFailed ?: 0u,
+            rebuildWarning = (view.state as? CloudBackupVerificationState.Failed)?.v1?.warning(),
+            onVerify = verify,
+            onRecreate = onRecreate,
+            onReinitialize = onReinitialize,
+            onDeleteUndecryptable = { undecryptableDeletion = it },
+        )
+    val controls: @Composable (VerifyControl) -> Unit = { verifyControl ->
+        VerificationControls(controls = section.controls, verify = verifyControl, context = context)
+    }
 
     Column(
         modifier = Modifier.padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        when (val verification = manager.verificationState) {
-            null,
+        when (view.recovery) {
+            CloudBackupRecoveryOperation.IDLE -> Unit
+            CloudBackupRecoveryOperation.RECREATING_MANIFEST ->
+                CloudBackupProgressCard(
+                    title = "Recreating backup index",
+                    message = "Cove is rebuilding the backup index from wallets on this device",
+                )
+            CloudBackupRecoveryOperation.REINITIALIZING_BACKUP ->
+                CloudBackupProgressCard(
+                    title = "Reinitializing Cloud Backup",
+                    message = "Cove is replacing the cloud backup with wallets on this device",
+                )
+        }
+
+        when (val verification = view.state) {
             CloudBackupVerificationState.NotVerified,
             CloudBackupVerificationState.Required,
-            -> {
-                CloudBackupSimpleActionCard(
-                    title = "Verify Now",
-                    icon = Icons.Default.Security,
-                    tint = colors.cloudBlue,
-                    onClick = {
-                        manager.dispatch(
-                            CloudBackupManagerAction.StartVerification(
-                                CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                            ),
-                        )
-                    },
-                )
-            }
+            -> controls(VerifyControl.Card("Verify Now"))
 
-            CloudBackupVerificationState.Running -> {
-                Unit
-            }
+            CloudBackupVerificationState.Running -> Unit
 
             is CloudBackupVerificationState.Verified -> {
-                val report = verification.report
-                if (report != null) {
-                    VerifiedSectionContent(report = report)
-                } else {
-                    PasskeyConfirmedSectionContent(manager)
-                }
+                verification.report?.let { VerifiedSectionContent(report = it) }
+                controls(VerifyControl.Repeat)
             }
 
             is CloudBackupVerificationState.NeedsAttention -> {
-                NeedsAttentionSectionContent(
-                    report = verification.report,
-                    deletionState = manager.undecryptableWalletDeletionState,
-                    onDeleteUndecryptable = {
-                        showUndecryptableDeletionConfirmation = true
-                    },
-                )
+                NeedsAttentionSectionContent(report = verification.report)
+                controls(VerifyControl.Repeat)
             }
 
             CloudBackupVerificationState.AwaitingUploadConfirmation -> {
                 UploadConfirmationPendingContent()
+                controls(VerifyControl.Card("Verify Now"))
             }
 
-            CloudBackupVerificationState.Cancelled -> {
-                CancelledVerificationRecoveryContent(manager)
+            CloudBackupVerificationState.NotCompleted -> {
+                NotCompletedVerificationContent()
+                controls(VerifyControl.Card("Verify Now"))
             }
 
             is CloudBackupVerificationState.Failed -> {
@@ -147,70 +127,231 @@ internal fun VerificationSection(
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp),
                 ) {
-                    VerificationFailureContent(
-                        failure = verification.v1,
-                        manager = manager,
-                        onRecreate = onRecreate,
-                        onReinitialize = onReinitialize,
-                    )
+                    Column {
+                        ErrorInlineMessage(verification.v1.message(), modifier = Modifier.padding(16.dp))
+                        controls(VerifyControl.Item("Try Again"))
+                    }
                 }
             }
         }
 
-        when (val sync = manager.syncState) {
-            is CloudBackupSyncState.Failed -> {
-                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
-            }
-
-            is CloudBackupSyncState.Blocked -> {
-                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
-            }
-
-            else -> Unit
-        }
-
-        val hasNeedsSync = manager.detail?.needsSync?.isNotEmpty() == true
-        if (shouldShowCloudBackupSyncAction(hasNeedsSync, manager.syncState)) {
-            CloudBackupSimpleActionCard(
-                title = "Sync Now",
-                icon = Icons.Default.Refresh,
-                tint = colors.cloudBlue,
-                onClick = { manager.dispatch(CloudBackupManagerAction.SyncUnsynced) },
-            )
-        }
-
-        VerificationRepeatAction(manager)
+        CloudBackupLastOutcomeNote(
+            outcome = screen.lastOutcome,
+            target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.VERIFY),
+            onDispatch = manager::dispatch,
+        )
     }
 
     UndecryptableWalletDeletionConfirmation(
         manager = manager,
-        isPresented = showUndecryptableDeletionConfirmation,
-        onDismiss = { showUndecryptableDeletionConfirmation = false },
+        screen = screen,
+        report = needsAttention,
+        consent = undecryptableDeletion,
+        onDismiss = { undecryptableDeletion = null },
     )
 }
 
+/** How a state draws its Verify control */
+private sealed interface VerifyControl {
+    /** A card, where Verify is the section's main control */
+    data class Card(val title: String) : VerifyControl
+
+    /** The outlined Verify Again under a result */
+    data object Repeat : VerifyControl
+
+    /** A settings-style row inside a failure card */
+    data class Item(val title: String) : VerifyControl
+}
+
+/** What the verification section's controls draw from, and what each one runs */
+private data class VerificationControlContext(
+    val manager: CloudBackupManager,
+    val screen: CloudBackupScreen,
+    val undecryptableCount: UInt,
+    val rebuildWarning: String?,
+    val onVerify: () -> Unit,
+    val onRecreate: () -> Unit,
+    val onReinitialize: () -> Unit,
+    val onDeleteUndecryptable: (CloudBackupBatchDeleteConsent) -> Unit,
+)
+
+/** The verification section's controls, in the order Rust names them */
 @Composable
-private fun CancelledVerificationActions(
-    manager: CloudBackupManager,
+private fun VerificationControls(
+    controls: List<CloudBackupVerificationControl>,
+    verify: VerifyControl,
+    context: VerificationControlContext,
 ) {
-    MaterialSettingsItem(
-        title = "Verify Now",
-        subtitle = "Try again with your current passkey",
-        onClick = {
-            manager.dispatch(
-                CloudBackupManagerAction.StartVerification(
-                    CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                ),
+    val manager = context.manager
+    val screen = context.screen
+
+    controls.forEach { control ->
+        when (control) {
+            CloudBackupVerificationControl.Verify -> VerificationVerifyControl(verify, context)
+
+            is CloudBackupVerificationControl.Recover -> VerificationRecoverControl(control.kind, context)
+
+            is CloudBackupVerificationControl.DeleteUnreadableBackups ->
+                UndecryptableBackupsDeleteControl(
+                    manager = manager,
+                    screen = screen,
+                    count = context.undecryptableCount,
+                    onClick = { context.onDeleteUndecryptable(control.consent) },
+                )
+
+            CloudBackupVerificationControl.RetryUpload ->
+                CloudBackupActionButton(
+                    screen = screen,
+                    action = CloudBackupScreenAction.SYNC_UNSYNCED,
+                    title = "Try Again",
+                    onDispatch = manager::dispatch,
+                    onClick = { manager.dispatch(CloudBackupManagerAction.SyncUnsynced) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+
+            CloudBackupVerificationControl.ReconnectDrive ->
+                CloudBackupActionButton(
+                    screen = screen,
+                    action = CloudBackupScreenAction.RECONNECT_DRIVE,
+                    title = "Reconnect Google Drive",
+                    onDispatch = manager::dispatch,
+                    onClick = { manager.dispatch(CloudBackupManagerAction.ReconnectDrive) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+        }
+    }
+}
+
+/** The Verify control, drawn the way the current state asks for */
+@Composable
+private fun VerificationVerifyControl(
+    verify: VerifyControl,
+    context: VerificationControlContext,
+) {
+    when (verify) {
+        is VerifyControl.Card ->
+            CloudBackupActionCard(
+                screen = context.screen,
+                action = CloudBackupScreenAction.VERIFY,
+                title = verify.title,
+                icon = Icons.Default.Security,
+                tint = cloudBackupVisualColors().cloudBlue,
+                onDispatch = context.manager::dispatch,
+                onClick = context.onVerify,
             )
-        },
-        leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = CoveColor.WarningOrange) },
-    )
-    MaterialDivider()
+
+        VerifyControl.Repeat -> VerificationRepeatAction(screen = context.screen, onVerify = context.onVerify)
+
+        is VerifyControl.Item ->
+            VerificationActionItem(
+                screen = context.screen,
+                action = CloudBackupScreenAction.VERIFY,
+                title = verify.title,
+                subtitle = null,
+                icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                onClick = context.onVerify,
+                divided = true,
+            )
+    }
+}
+
+/** The recovery a failed verification offers, with the rebuild warning under it */
+@Composable
+private fun VerificationRecoverControl(
+    kind: CloudBackupRecoveryKind,
+    context: VerificationControlContext,
+) {
+    when (kind) {
+        CloudBackupRecoveryKind.RECREATE_MANIFEST ->
+            VerificationActionItem(
+                screen = context.screen,
+                action = CloudBackupScreenAction.RECREATE_MANIFEST,
+                title = "Recreate Backup Index",
+                subtitle = context.rebuildWarning,
+                icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                onClick = context.onRecreate,
+                divided = true,
+            )
+
+        CloudBackupRecoveryKind.REINITIALIZE_BACKUP ->
+            VerificationActionItem(
+                screen = context.screen,
+                action = CloudBackupScreenAction.REINITIALIZE_BACKUP,
+                title = "Reinitialize Cloud Backup",
+                subtitle = context.rebuildWarning,
+                icon = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
+                onClick = context.onReinitialize,
+                divided = true,
+            )
+    }
+}
+
+/** The rebuild warning a failure carries, shown with its recovery */
+private fun DeepVerificationFailure.warning(): String? =
+    when (this) {
+        is DeepVerificationFailure.RecreateManifest -> warning
+        is DeepVerificationFailure.ReinitializeBackup -> warning
+        is DeepVerificationFailure.Retry,
+        is DeepVerificationFailure.UnsupportedVersion,
+        -> null
+    }
+
+/**
+ * The verification the Verify button starts: discoverable when Rust's failure asks for it,
+ * otherwise the current passkey
+ */
+private fun verifyAction(state: CloudBackupVerificationState): CloudBackupManagerAction {
+    val failure = (state as? CloudBackupVerificationState.Failed)?.v1 as? DeepVerificationFailure.Retry
+    if (failure?.retryAction == CloudBackupRetryAction.VERIFY_DISCOVERABLE) {
+        return CloudBackupManagerAction.StartVerificationDiscoverable(
+            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+        )
+    }
+
+    return CloudBackupManagerAction.StartVerification(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)
+}
+
+/**
+ * The passkey request didn't finish; nothing showed the passkey is gone, so the way forward is
+ * Verify, which the section's controls draw
+ */
+@Composable
+private fun NotCompletedVerificationContent() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        ErrorStateCard(
+            icon = Icons.Default.WarningAmber,
+            title = "Cloud Backup Not Verified",
+            body = NOT_COMPLETED_EXPLANATION,
+        )
+    }
+}
+
+/** One settings-style row for a control the section names, enabled when its action is */
+@Composable
+private fun VerificationActionItem(
+    screen: CloudBackupScreen,
+    action: CloudBackupScreenAction,
+    title: String,
+    subtitle: String?,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    divided: Boolean = false,
+) {
+    val availability = screen.actions.lookup(action) ?: return
+
+    if (divided) {
+        MaterialDivider()
+    }
+
     MaterialSettingsItem(
-        title = "Add New Passkey",
-        subtitle = "Use this if your previous passkey was deleted",
-        onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
-        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+        title = title,
+        subtitle = availability.subtitle(subtitle),
+        onClick = if (availability.isAvailable) onClick else null,
+        leadingContent = icon,
+        modifier =
+            Modifier
+                .cloudBackupActionEnabled(availability.isAvailable)
+                .testTag(CloudBackupTags.action(action)),
     )
 }
 
@@ -243,169 +384,3 @@ private fun UploadConfirmationPendingContent() {
         }
     }
 }
-
-@Composable
-private fun VerifiedSectionContent(
-    report: DeepVerificationReport,
-) {
-    val colors = cloudBackupVisualColors()
-    val summaryItems = buildVerifiedSummaryItems(report)
-
-    CloudBackupGlassCard(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, top = 10.dp, end = 14.dp),
-        fill = colors.verifiedFill,
-        border = colors.verifiedBorder,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Default.Security,
-                    contentDescription = null,
-                    tint = colors.success,
-                    modifier = Modifier.size(32.dp),
-                )
-                Text(
-                    "Backup verified",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.primaryText,
-                )
-            }
-
-            VerifiedSummary(
-                items = summaryItems,
-                color = colors.secondaryText,
-            )
-
-        }
-    }
-}
-
-@Composable
-private fun VerifiedSummary(
-    items: List<String>,
-    color: Color,
-) {
-    if (items.size > 2) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            items.forEach { item ->
-                Text(
-                    item,
-                    style = MaterialTheme.typography.caption,
-                    color = color,
-                )
-            }
-        }
-
-        return
-    }
-
-    Text(
-        items.joinToString(" • "),
-        style = MaterialTheme.typography.caption,
-        color = color,
-    )
-}
-
-private fun buildVerifiedSummaryItems(report: DeepVerificationReport): List<String> =
-    buildList {
-        if (report.credentialRecovered) {
-            add("passkey recovered")
-        }
-        if (report.masterKeyWrapperRepaired) {
-            add("cloud master key protection repaired")
-        }
-        if (report.localMasterKeyRepaired) {
-            add("local backup credentials repaired")
-        }
-        add("${report.walletsVerified} wallet(s) verified")
-    }
-
-@Composable
-private fun VerificationFailureContent(
-    failure: DeepVerificationFailure,
-    manager: CloudBackupManager,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
-) {
-    Column {
-        when (failure) {
-        is DeepVerificationFailure.Retry -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Try Again",
-                onClick = {
-                    manager.dispatch(
-                        verificationRetryAction(failure),
-                    )
-                },
-                leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            )
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Create New Passkey",
-                onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
-                leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-            )
-        }
-
-        is DeepVerificationFailure.RecreateManifest -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Recreate Backup Index",
-                subtitle = failure.warning,
-                onClick = if (manager.isDetailInventoryComplete) onRecreate else null,
-                leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                modifier = Modifier.cloudBackupActionEnabled(manager.isDetailInventoryComplete),
-            )
-        }
-
-        is DeepVerificationFailure.ReinitializeBackup -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Reinitialize Cloud Backup",
-                subtitle = failure.warning,
-                onClick = if (manager.isDetailInventoryComplete) onReinitialize else null,
-                leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
-                modifier = Modifier.cloudBackupActionEnabled(manager.isDetailInventoryComplete),
-            )
-        }
-
-        is DeepVerificationFailure.UnsupportedVersion -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-        }
-        }
-
-        val repairState = manager.passkeyRepairState
-        if (repairState is CloudBackupPasskeyRepairState.Failed) {
-            MaterialDivider()
-            ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
-        }
-    }
-}
-
-private fun verificationRetryAction(failure: DeepVerificationFailure.Retry): CloudBackupManagerAction =
-    if (failure.retryAction == CloudBackupRetryAction.VERIFY_DISCOVERABLE) {
-        CloudBackupManagerAction.StartVerificationDiscoverable(
-            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-        )
-    } else {
-        CloudBackupManagerAction.StartVerification(
-            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-        )
-    }

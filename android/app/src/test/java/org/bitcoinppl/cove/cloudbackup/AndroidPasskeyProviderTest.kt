@@ -153,7 +153,7 @@ class AndroidPasskeyProviderTest {
     fun createCredentialExceptionsMapFromTypedAndroidxExceptions() {
         assertTrue(
             mapPasskeyCreateError(CreateCredentialCancellationException())
-                is PasskeyException.UserCancelled,
+                is PasskeyException.NotCompleted,
         )
         assertTrue(
             mapPasskeyCreateError(CreateCredentialUnsupportedException())
@@ -168,10 +168,10 @@ class AndroidPasskeyProviderTest {
         val foregroundTimeout = mapPasskeyCreateError(
             ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
         )
-        assertTrue(foregroundTimeout is PasskeyException.RequestFailed)
+        assertTrue(foregroundTimeout is PasskeyException.NotReady)
         assertEquals(
-            PasskeyFailureReason.TimedOut,
-            (foregroundTimeout as PasskeyException.RequestFailed).reason,
+            PasskeyOperation.REGISTRATION,
+            (foregroundTimeout as PasskeyException.NotReady).operation,
         )
 
         val timedOut = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(TimeoutError()))
@@ -205,7 +205,7 @@ class AndroidPasskeyProviderTest {
     fun getCredentialExceptionsMapFromTypedAndroidxExceptions() {
         assertTrue(
             mapPasskeyGetError(GetCredentialCancellationException())
-                is PasskeyException.UserCancelled,
+                is PasskeyException.NotCompleted,
         )
         assertTrue(
             mapPasskeyGetError(GetCredentialUnsupportedException())
@@ -228,10 +228,10 @@ class AndroidPasskeyProviderTest {
             ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
             PasskeyOperation.DISCOVER_ASSERTION,
         )
-        assertTrue(foregroundTimeout is PasskeyException.RequestFailed)
+        assertTrue(foregroundTimeout is PasskeyException.NotReady)
         assertEquals(
-            PasskeyFailureReason.TimedOut,
-            (foregroundTimeout as PasskeyException.RequestFailed).reason,
+            PasskeyOperation.DISCOVER_ASSERTION,
+            (foregroundTimeout as PasskeyException.NotReady).operation,
         )
 
         assertGetCredentialDomExceptionMappings()

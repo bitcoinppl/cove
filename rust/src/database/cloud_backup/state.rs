@@ -440,21 +440,6 @@ impl PersistedCloudBackupState {
     pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
         Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
     }
-
-    pub(crate) fn restore_configured_after_disable(&mut self, disable_generation: u64) -> bool {
-        match std::mem::take(self) {
-            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
-                if disabling.disable_generation == disable_generation =>
-            {
-                *self = Self::Configured(disabling.previous_configured);
-                true
-            }
-            other => {
-                *self = other;
-                false
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -469,6 +454,40 @@ pub struct PersistedDisablingCloudBackup {
     pub last_error: Option<String>,
     #[serde(default)]
     pub retry_after: Option<u64>,
+    /// What finishing the committed disable still has to do
+    ///
+    /// Written before the local-only finish starts, so a failure or a process death after the
+    /// user chose to keep the remote backups can never resume a remote delete. Absent in records
+    /// written before the choice existed, which all delete the remote backups
+    #[serde(default, skip_serializing_if = "PersistedDisableDisposition::is_delete_remote")]
+    pub disposition: PersistedDisableDisposition,
+    /// A Try Again the user tapped has failed since the commit, so Stop Using on This Device is
+    /// offered; kept across relaunches and by every later failure of the same attempt
+    ///
+    /// A bool beside `last_error` and `retry_after` rather than one typed failure field: those two
+    /// are already in the stored JSON that older builds read, so folding them in would change that
+    /// shape. The failure write sets all three together. The typed reason isn't stored because a
+    /// launch resumes at once and its own failure replaces it, so a stored reason would only be
+    /// stale
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub try_again_failed: bool,
+}
+
+/// What a committed disable still has to do to finish
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedDisableDisposition {
+    /// Delete the namespace, then clean up this device
+    #[default]
+    DeleteRemote,
+    /// The user chose to stop using Cloud Backup on this device: clean up this device only and
+    /// leave the remote backups
+    LocalOnly,
+}
+
+impl PersistedDisableDisposition {
+    fn is_delete_remote(&self) -> bool {
+        *self == Self::DeleteRemote
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -541,6 +560,9 @@ pub enum PersistedDriveAccountSwitchPhase {
     #[serde(rename = "AwaitingAccountCommitFailed")]
     AwaitingReinitializationRetry,
     AwaitingAccountRollback,
+    /// The switch's reinitialize registered a passkey and waits for the user to confirm they
+    /// saved it; nothing exists in the new account yet
+    AwaitingSavedPasskeyConfirmation,
 }
 
 impl PersistedConfiguredCloudBackup {
@@ -822,8 +844,22 @@ impl PersistedCloudBlobSyncState {
         self.record_key.wallet_id()
     }
 
+    /// This record in the namespace the row already names, with `state`
+    ///
+    /// For changes within one namespace, such as a confirmation's result or a return to Dirty. An
+    /// upload names its own namespace through [`Self::uploaded_to`]
     pub fn with_state(&self, state: PersistedCloudBlobState) -> Self {
         Self { namespace_id: self.namespace_id.clone(), record_key: self.record_key.clone(), state }
+    }
+
+    /// This record once an upload to `namespace_id` started or landed, with `state`
+    ///
+    /// The upload owns the row's namespace, because its confirmation reads the namespace the row
+    /// names. A reinitialize or a Drive account switch moves the backup to a new namespace, so a
+    /// row created before it would otherwise send the confirmation to the replaced backup, which
+    /// the new master key can't decrypt
+    pub fn uploaded_to(&self, namespace_id: &str, state: PersistedCloudBlobState) -> Self {
+        Self { namespace_id: namespace_id.to_string(), record_key: self.record_key.clone(), state }
     }
 
     pub fn is_master_key_wrapper(&self) -> bool {

@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.testconfig
 
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.FixtureWalletDownloadResult
+import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.NamespaceDeleteError
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess.NamespaceResult
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Result
@@ -11,6 +12,7 @@ import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyFailureReason
 import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
+import org.bitcoinppl.cove_core.device.RemoteBackupLocation
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -219,6 +221,74 @@ class ScriptedProviderTest {
                 valid,
             )
         }
+
+    @Test
+    fun fixtureNamespaceDeleteRemovesTheWholeBackupUntilAMasterKeyUpload() =
+        runBlocking {
+            val namespace = ScriptedCloudBackupFixture.NAMESPACE
+            ScriptedCloudStorageAccess.configureProductionFixtureRestore()
+
+            ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT)
+
+            assertTrue(ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT).isEmpty())
+            assertTrue(
+                runCatching {
+                    ScriptedCloudStorageAccess.downloadMasterKeyBackup(namespace, emptyList(), CloudAccessPolicy.SILENT)
+                }.exceptionOrNull() is CloudStorageException.NotFound,
+            )
+            assertTrue(
+                runCatching {
+                    ScriptedCloudStorageAccess.listWalletFiles(namespace, CloudAccessPolicy.SILENT)
+                }.exceptionOrNull() is CloudStorageException.NotFound,
+            )
+            assertEquals(1, ScriptedCloudStorageAccess.namespaceDeleteCount())
+
+            // enabling again writes the master key first, which brings the namespace back
+            ScriptedCloudStorageAccess.uploadMasterKeyBackup(
+                namespace,
+                RemoteBackupLocation("cspp-master-key-v1.json"),
+                byteArrayOf(1),
+                CloudAccessPolicy.SILENT,
+            )
+            assertEquals(listOf(namespace), ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT))
+        }
+
+    @Test
+    fun namespaceDeleteFailsByAttemptAndWaitsOnAHoldUntilReleased() {
+        val namespace = ScriptedCloudBackupFixture.NAMESPACE
+        ScriptedCloudStorageAccess.configureProductionFixtureRestore()
+        ScriptedCloudStorageAccess.failNamespaceDelete(attempt = 1, NamespaceDeleteError.AUTHORIZATION_REQUIRED)
+
+        val failed =
+            runCatching {
+                runBlocking { ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT) }
+            }.exceptionOrNull()
+        assertTrue(failed is CloudStorageException.AuthorizationRequired)
+        assertEquals(
+            listOf(namespace),
+            runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) },
+        )
+
+        ScriptedCloudStorageAccess.holdNextNamespaceDelete()
+        val delete =
+            Thread {
+                runBlocking { ScriptedCloudStorageAccess.deleteNamespace(namespace, CloudAccessPolicy.SILENT) }
+            }
+        delete.start()
+
+        assertTrue(ScriptedCloudStorageAccess.awaitHeldNamespaceDelete())
+        assertTrue(delete.isAlive)
+        assertEquals(
+            listOf(namespace),
+            runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) },
+        )
+
+        ScriptedCloudStorageAccess.releaseHeldNamespaceDelete()
+        delete.join()
+
+        assertTrue(runBlocking { ScriptedCloudStorageAccess.listNamespaces(CloudAccessPolicy.SILENT) }.isEmpty())
+        assertEquals(2, ScriptedCloudStorageAccess.namespaceDeleteCount())
+    }
 
     private fun ByteArray.sha256(): String =
         MessageDigest

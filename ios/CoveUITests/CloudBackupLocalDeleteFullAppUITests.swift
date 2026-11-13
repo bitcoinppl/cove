@@ -37,6 +37,7 @@ final class CloudBackupLocalDeleteFullAppUITests: XCTestCase {
             expectedConfirmations: 2,
             expectedRecordId: Self.walletOneRecordId
         )
+        control.assertNextActions("with the wallet back on this device, nothing is left to restore", unavailable: ["startRestoreAll"])
     }
 
     /// A new hot wallet whose words were never verified needs the Final Warning, the only
@@ -49,10 +50,11 @@ final class CloudBackupLocalDeleteFullAppUITests: XCTestCase {
 
         control.releaseVisibility()
         control.waitForAppState("the fresh backup never confirmed", timeout: 60) {
-            !$0.pendingUploadVerification && $0.verification == "verified"
+            !$0.awaitingUploadConfirmation && $0.verification == "verified"
         }
 
         try deleteThroughWalletSettingsThenRestore(control, expectedConfirmations: 3, expectedRecordId: nil)
+        control.assertNextActions("with the wallet back on this device, nothing is left to restore", unavailable: ["startRestoreAll"])
     }
 
     // MARK: - Flow
@@ -65,7 +67,7 @@ final class CloudBackupLocalDeleteFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the provider should hold the wallet's backup and nothing should be cloud-only") {
-            $0.detail == "complete" && $0.inventoryComplete && $0.cloudOnly.isEmpty && $0.wallets.count == 1
+            $0.inventoryLoaded && $0.notOnDeviceRecordIds.isEmpty && $0.wallets.count == 1
                 && (expectedRecordId == nil || $0.wallets.first?.recordId == expectedRecordId)
         }
 
@@ -88,24 +90,24 @@ final class CloudBackupLocalDeleteFullAppUITests: XCTestCase {
         robot.openSettings()
         robot.openCloudBackupDetail()
         control.waitForAppState("the provider should still list the deleted wallet's backup as restorable") {
-            $0.detail == "complete" && $0.inventoryComplete && $0.inventoryReady && $0.operation == "idle"
-                && $0.cloudOnly == [wallet.recordId] && $0.wallets.isEmpty
+            $0.inventoryLoaded && $0.operation == "idle"
+                && $0.notOnDeviceRecordIds == [wallet.recordId] && $0.wallets.isEmpty
         }
 
-        let row = app.descendants(matching: .any)["cloudBackup.wallet.\(wallet.recordId)"]
+        let row = app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(wallet.recordId)]
         robot.scrollToHittable(row)
         XCTAssertTrue(app.staticTexts["Not on This Device"].exists, "the cloud copy is not in Not on This Device")
         XCTAssertTrue(row.label.contains(wallet.name), "the cloud-only row is not the deleted wallet: \(row.label)")
         XCTAssertTrue(row.label.contains("Not on device"), "the cloud-only row is not restorable: \(row.label)")
         XCTAssertFalse(row.label.contains("Restore failed"), "the cloud-only row shows a failure: \(row.label)")
 
-        row.tap()
-        let restore = app.buttons["Restore to This Device"]
-        XCTAssertTrue(restore.waitForExistence(timeout: 10), "the cloud-only row offered no restore")
+        let restore = robot.rowAction(wallet.recordId, "restore")
+        robot.scrollToHittable(restore)
+        XCTAssertTrue(restore.isEnabled, "the cloud-only row offered no restore")
         restore.tap()
 
         control.waitForAppState("restoring the cloud-only row should bring the wallet back") {
-            $0.cloudOnly.isEmpty && $0.wallets.contains { $0.recordId == wallet.recordId && $0.name == wallet.name }
+            $0.notOnDeviceRecordIds.isEmpty && $0.wallets.contains { $0.recordId == wallet.recordId && $0.name == wallet.name }
         }
         XCTAssertTrue(
             app.staticTexts["Not on This Device"].waitForNonExistence(timeout: 10),

@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.caption
+import org.bitcoinppl.cove_core.CloudBackupOwnRecord
+import org.bitcoinppl.cove_core.CloudBackupOwnRow
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.WalletMode
@@ -53,18 +55,25 @@ import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.bitcoinppl.cove_core.types.Network
 
+/**
+ * What a row says when this device no longer holds the wallet's secret, which may be recovery
+ * words, an extended private key or a TapSigner backup
+ */
+internal const val CLOUD_BACKUP_SECRET_MISSING_LOCALLY_MESSAGE =
+    "This device no longer has what it needs to restore this wallet. Cloud Backup still has a copy."
+
 @Composable
 private fun WalletRowsSection(
     title: String,
     wallets: List<CloudBackupWalletItem>,
     modifier: Modifier = Modifier,
+    ownRecords: Map<String, CloudBackupOwnRecord> = emptyMap(),
     icon: ImageVector? = null,
     tint: Color? = null,
     bitcoinIcon: Boolean = false,
     onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
     showChevron: Boolean = onWalletClick != null,
     operatingRecordId: String? = null,
-    rowsEnabled: Boolean = true,
 ) {
     CloudBackupTitledContentSection(
         title = title,
@@ -75,10 +84,10 @@ private fun WalletRowsSection(
     ) {
         WalletRowsCard(
             wallets = wallets,
+            ownRecords = ownRecords,
             onWalletClick = onWalletClick,
             showChevron = showChevron,
             operatingRecordId = operatingRecordId,
-            rowsEnabled = rowsEnabled,
         )
     }
 }
@@ -86,10 +95,11 @@ private fun WalletRowsSection(
 @Composable
 internal fun WalletRowsCard(
     wallets: List<CloudBackupWalletItem>,
+    // this device's record of each wallet by record id; a backup not on this device has none
+    ownRecords: Map<String, CloudBackupOwnRecord> = emptyMap(),
     onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
     showChevron: Boolean = onWalletClick != null,
     operatingRecordId: String? = null,
-    rowsEnabled: Boolean = true,
 ) {
     val colors = cloudBackupVisualColors()
 
@@ -105,10 +115,12 @@ internal fun WalletRowsCard(
 
                 WalletItemRow(
                     item = item,
-                    onClick = onWalletClick?.let { onClick -> { onClick(item) } },
-                    showChevron = showChevron,
+                    ownRecord = ownRecords[item.recordId],
+                    action =
+                        onWalletClick?.let { onClick ->
+                            WalletRowAction(onClick = { onClick(item) }, showChevron = showChevron)
+                        },
                     isOperating = isOperating,
-                    enabled = rowsEnabled,
                 )
                 if (index != wallets.lastIndex) {
                     HorizontalDivider(
@@ -226,11 +238,11 @@ internal fun cloudBackupHeaderTitle(syncHealth: CloudSyncHealth): String =
 @Composable
 internal fun WalletSections(
     title: String,
-    wallets: List<CloudBackupWalletItem>,
+    rows: List<CloudBackupOwnRow>,
 ) {
     val grouped =
-        wallets
-            .groupBy { GroupKey(it.network?.cloudBackupDisplayName() ?: "Unsupported", it.walletMode) }
+        rows
+            .groupBy { GroupKey(it.wallet.network?.cloudBackupDisplayName() ?: "Unsupported", it.wallet.walletMode) }
             .toSortedMap()
 
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupSectionTitleContentSpacing)) {
@@ -238,7 +250,8 @@ internal fun WalletSections(
             val sectionTitle = if (title == "Up to Date") group.title else "${group.title} — $title"
             WalletRowsSection(
                 title = sectionTitle,
-                wallets = items,
+                wallets = items.map { it.wallet },
+                ownRecords = items.associate { it.wallet.recordId to it.record },
                 icon = if (group.network == "Bitcoin") null else Icons.Default.AccountBalanceWallet,
                 bitcoinIcon = group.network == "Bitcoin",
             )
@@ -286,11 +299,17 @@ internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): Strin
         else -> "Show restore and delete actions for ${item.name}"
     }
 
+/** What tapping a wallet row does; a row without one has no chevron */
+internal data class WalletRowAction(
+    val onClick: () -> Unit,
+    val showChevron: Boolean = false,
+)
+
 @Composable
-private fun WalletItemRow(
+internal fun WalletItemRow(
     item: CloudBackupWalletItem,
-    onClick: (() -> Unit)? = null,
-    showChevron: Boolean = false,
+    ownRecord: CloudBackupOwnRecord? = null,
+    action: WalletRowAction? = null,
     isOperating: Boolean = false,
     enabled: Boolean = true,
 ) {
@@ -304,6 +323,7 @@ private fun WalletItemRow(
     val labelText = "${item.labelCount ?: 0UL} labels"
     val updatedAt = item.backupUpdatedAt?.let(::cloudBackupFormattedDate)
     val restoreFailure = item.restoreFailure
+    val secretMissingLocally = ownRecord == CloudBackupOwnRecord.SECRET_MISSING_LOCALLY
     val shape = RoundedCornerShape(18.dp)
 
     Row(
@@ -312,14 +332,14 @@ private fun WalletItemRow(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .clip(shape)
-                .cloudBackupActionEnabled(enabled || onClick == null)
+                .cloudBackupActionEnabled(enabled || action == null)
                 .then(
-                    if (onClick != null) {
+                    if (action != null) {
                         Modifier.clickable(
                             enabled = enabled,
                             onClickLabel = cloudBackupWalletRowActionLabel(item),
                             role = Role.Button,
-                            onClick = onClick,
+                            onClick = action.onClick,
                         )
                     } else {
                         Modifier
@@ -327,12 +347,13 @@ private fun WalletItemRow(
                 )
                 // matches the row identifier iOS UI tests read, so tests can tell rows apart by record
                 // even when two backups share a wallet name
-                .testTag("cloudBackup.wallet.${item.recordId}")
+                .testTag(CloudBackupTags.walletRow(item.recordId))
                 .semantics(mergeDescendants = true) {
                     when {
                         isOperating -> stateDescription = "Restore in progress"
                         restoreFailure != null ->
                             stateDescription = "Restore failed. ${restoreFailure.message}"
+                        secretMissingLocally -> stateDescription = CLOUD_BACKUP_SECRET_MISSING_LOCALLY_MESSAGE
                     }
                 }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -366,7 +387,7 @@ private fun WalletItemRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 StatusBadge(status = item.syncStatus)
-                if (showChevron) {
+                if (action?.showChevron == true) {
                     Icon(
                         Icons.AutoMirrored.Default.KeyboardArrowRight,
                         contentDescription = null,
@@ -429,7 +450,34 @@ private fun WalletItemRow(
                     }
                 }
             }
+
+            if (secretMissingLocally) {
+                SecretMissingLocallyNotice()
+            }
         }
+    }
+}
+
+@Composable
+private fun SecretMissingLocallyNotice() {
+    val colors = cloudBackupVisualColors()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            Icons.Default.WarningAmber,
+            contentDescription = null,
+            tint = colors.warning,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            CLOUD_BACKUP_SECRET_MISSING_LOCALLY_MESSAGE,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.primaryText,
+        )
     }
 }
 

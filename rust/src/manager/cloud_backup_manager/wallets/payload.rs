@@ -336,28 +336,52 @@ fn prepare_cloud_labels(labels_jsonl: &str) -> Result<PreparedCloudLabels, Cloud
     })
 }
 
+/// Whether this device holds a wallet's key material, read from the keychain now
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalSecret {
+    /// The wallet's key or TAPSIGNER backup is in the keychain
+    Held,
+    /// The wallet's kind keeps key material, but the keychain has none for it, which a watch-only
+    /// wallet always counts as since it may be a hot wallet downgraded after its key was lost
+    Missing,
+    /// The wallet's kind never keeps key material on this device, such as an xpub or a hardware
+    /// wallet other than a TAPSIGNER
+    NeverHeld,
+    /// The keychain couldn't be read, so whether it holds the key material isn't known
+    Unreadable,
+}
+
+impl LocalSecret {
+    pub(crate) fn read(keychain: &Keychain, metadata: &WalletMetadata) -> Self {
+        let id = &metadata.id;
+        let present = match metadata.wallet_type {
+            WalletType::Hot => keychain.get_wallet_secret(id).map(|secret| secret.is_some()),
+            WalletType::Cold
+                if metadata.hardware_metadata.as_ref().is_some_and(
+                    crate::wallet::metadata::HardwareWalletMetadata::is_tap_signer,
+                ) =>
+            {
+                keychain.get_tap_signer_backup(id).map(|backup| backup.is_some())
+            }
+            WalletType::WatchOnly => return Self::Missing,
+            WalletType::Cold | WalletType::XpubOnly => return Self::NeverHeld,
+        };
+
+        match present {
+            Ok(true) => Self::Held,
+            Ok(false) => Self::Missing,
+            Err(_) => Self::Unreadable,
+        }
+    }
+}
+
 /// Whether uploading this wallet could replace key material its cloud copy still holds
 ///
 /// An upload carries a watch-only record when the wallet's key or TAPSIGNER backup is missing
 /// from the local keychain, and always for a watch-only wallet, which may be a hot wallet
 /// downgraded after its key was lost locally. A keychain read error counts as missing
 pub(crate) fn upload_may_drop_cloud_secret(keychain: &Keychain, metadata: &WalletMetadata) -> bool {
-    let id = &metadata.id;
-    let present = match metadata.wallet_type {
-        WalletType::Hot => keychain.get_wallet_secret(id).map(|secret| secret.is_some()),
-        WalletType::Cold
-            if metadata
-                .hardware_metadata
-                .as_ref()
-                .is_some_and(crate::wallet::metadata::HardwareWalletMetadata::is_tap_signer) =>
-        {
-            keychain.get_tap_signer_backup(id).map(|backup| backup.is_some())
-        }
-        WalletType::WatchOnly => return true,
-        WalletType::Cold | WalletType::XpubOnly => return false,
-    };
-
-    !matches!(present, Ok(true))
+    matches!(LocalSecret::read(keychain, metadata), LocalSecret::Missing | LocalSecret::Unreadable)
 }
 
 pub(crate) fn wallet_metadata_change_requires_upload(
@@ -404,7 +428,12 @@ where
 async fn export_wallet_labels_jsonl(
     wallet_id: &crate::wallet::metadata::WalletId,
 ) -> Result<String, CloudBackupError> {
-    let manager = LabelManager::try_new(wallet_id.clone())
+    // opening a label database can create and commit it, which takes long enough on a device
+    // with many wallets to stall every task on the runtime, so it opens on the blocking pool
+    let wallet_id = wallet_id.clone();
+    let manager = cove_tokio::task::spawn_blocking(move || LabelManager::try_new(wallet_id))
+        .await
+        .map_err(|error| CloudBackupError::internal_context("open labels db", error))?
         .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}").into()))?;
 
     manager.export().await.map_err(CloudBackupError::internal)

@@ -587,7 +587,7 @@ impl RustOnboardingManager {
             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
             verification_source: CloudBackupVerificationSource::Onboarding,
         };
-        CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
+        CLOUD_BACKUP_MANAGER.clear_enable_prompt();
         CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
 
         let Some(start) = OnboardingCloudBackupEnableStart::from_discovery(discovery) else {

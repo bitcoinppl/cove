@@ -6,11 +6,19 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
     private let thirdRecordId = "fa5eab18295a70b89491f347427099da2dd9d528e59d85b8934084fa01119914"
 
     private var app: XCUIApplication!
+    private var appState: CloudBackupScenarioAppState!
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
+        appState = CloudBackupScenarioAppState(app: app)
+    }
+
+    override func tearDown() {
+        app.terminate()
+        appState.remove()
+        super.tearDown()
     }
 
     func testSCU02ProvisionalSnapshotAdvancesToAuthoritativeInventoryUnion() {
@@ -25,6 +33,10 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
         XCTAssertTrue(walletRow(recordId: thirdRecordId).exists)
         XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 5))
         XCTAssertFalse(inventoryIncomplete.exists)
+        appState.assertNextActions(
+            "the full inventory should offer Restore All and Turn Off",
+            available: ["startRestoreAll", "turnOff"]
+        )
     }
 
     func testSCU03TimeoutRetainsKnownRowAndCheckAgainCompletesInventory() {
@@ -39,7 +51,8 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
         XCTAssertFalse(walletRow(recordId: secondRecordId).exists)
         XCTAssertFalse(walletRow(recordId: thirdRecordId).exists)
 
-        let checkAgain = app.buttons["cloudBackup.inventory.checkAgain"]
+        appState.assertNextActions("an incomplete inventory should offer Check Again", available: ["refreshDetail"])
+        let checkAgain = app.buttons[CloudBackupUIIdentifier.action("refreshDetail")]
         XCTAssertTrue(checkAgain.waitForExistence(timeout: 5))
         XCTAssertTrue(checkAgain.isHittable)
         checkAgain.tap()
@@ -49,6 +62,10 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
         XCTAssertTrue(knownRow.exists)
         XCTAssertTrue(inventoryIncomplete.waitForNonExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["No iCloud backup files uploaded yet"].exists)
+        appState.assertNextActions(
+            "the completed inventory should offer Restore All",
+            available: ["startRestoreAll", "turnOff"]
+        )
     }
 
     func testMAN03NativePasskeyCreateAssertAndPrfSmoke() {
@@ -91,6 +108,7 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
         continueNativePasskeySheetIfNeeded()
 
         XCTAssertTrue(app.staticTexts["Cloud Backup enabled"].waitForExistence(timeout: 30))
+        appState.assertNextActions("the enabled backup should offer Turn Off", available: ["turnOff"])
     }
 
     private func launchAndOpenCloudBackupDetail(scenario: String) {
@@ -157,15 +175,15 @@ final class CloudBackupInventoryFullAppUITests: XCTestCase {
     }
 
     private var inventoryChecking: XCUIElement {
-        element(identifier: "cloudBackup.inventory.checking")
+        element(identifier: CloudBackupUIIdentifier.inventoryChecking)
     }
 
     private var inventoryIncomplete: XCUIElement {
-        element(identifier: "cloudBackup.inventory.incomplete")
+        element(identifier: CloudBackupUIIdentifier.inventoryIncomplete)
     }
 
     private func walletRow(recordId: String) -> XCUIElement {
-        element(identifier: "cloudBackup.wallet.\(recordId)")
+        element(identifier: CloudBackupUIIdentifier.wallet(recordId))
     }
 
     private func element(identifier: String) -> XCUIElement {

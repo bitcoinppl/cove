@@ -89,7 +89,7 @@ impl PlatformAuthorizationRetrier {
         Self::with_cancellation(Arc::default())
     }
 
-    /// A retrier that stops with `UserCancelled` once `cancellation` is set
+    /// A retrier that stops with `NotCompleted` once `cancellation` is set
     pub(crate) fn with_cancellation(cancellation: Arc<AtomicBool>) -> Self {
         Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform(), cancellation)
     }
@@ -146,7 +146,7 @@ impl PlatformAuthorizationRetrier {
         OperationFuture: Future<Output = Result<T, PasskeyError>>,
     {
         if self.cancelled() {
-            return Err(PasskeyError::UserCancelled);
+            return Err(PasskeyError::NotCompleted);
         }
 
         let available_delay = self.deadline.saturating_duration_since(Instant::now());
@@ -159,7 +159,7 @@ impl PlatformAuthorizationRetrier {
 
             async move {
                 if self.cancelled() {
-                    return Err(PasskeyError::UserCancelled);
+                    return Err(PasskeyError::NotCompleted);
                 }
 
                 attempt.await
@@ -179,7 +179,7 @@ impl PlatformAuthorizationRetrier {
                 );
             })
             .await
-            .map_err(|error| if self.cancelled() { PasskeyError::UserCancelled } else { error })
+            .map_err(|error| if self.cancelled() { PasskeyError::NotCompleted } else { error })
     }
 
     pub(crate) async fn discover(
@@ -287,7 +287,7 @@ mod tests {
     fn does_not_retry_cancellation_or_post_presentation_failure() {
         let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
 
-        assert!(!policy.retries(&PasskeyError::UserCancelled));
+        assert!(!policy.retries(&PasskeyError::NotCompleted));
         assert!(!policy.retries(&PasskeyError::RequestFailed {
             operation: PasskeyOperation::AuthenticateAssertion,
             reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
 
         for error in [
-            PasskeyError::UserCancelled,
+            PasskeyError::NotCompleted,
             PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
                 reason: PasskeyFailureReason::InvalidResponse,

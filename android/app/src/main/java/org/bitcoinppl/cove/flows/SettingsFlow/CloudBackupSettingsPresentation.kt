@@ -22,6 +22,7 @@ internal fun cloudBackupSettingsSeverity(
     when (status) {
         is CloudBackupSettingsRowStatus.Disabled -> CloudBackupSettingsSeverity.NEUTRAL
         is CloudBackupSettingsRowStatus.Disabling,
+        is CloudBackupSettingsRowStatus.TurnedOnAgain,
         is CloudBackupSettingsRowStatus.SettingUp,
         is CloudBackupSettingsRowStatus.Restoring,
         is CloudBackupSettingsRowStatus.Confirming,
@@ -37,6 +38,7 @@ internal fun cloudBackupSettingsSeverity(
         is CloudBackupSettingsRowStatus.DriveUnavailable,
         is CloudBackupSettingsRowStatus.AuthorizationRequired,
         is CloudBackupSettingsRowStatus.RecoveryRequired,
+        is CloudBackupSettingsRowStatus.TurnOffIncomplete,
         -> CloudBackupSettingsSeverity.WARNING
         is CloudBackupSettingsRowStatus.Error -> CloudBackupSettingsSeverity.ERROR
     }

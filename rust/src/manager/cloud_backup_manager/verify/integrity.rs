@@ -8,8 +8,9 @@ use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError;
+use crate::manager::cloud_backup_manager::owner::inventory::InventoryReadAt;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetailOutcome, CloudBackupKeychain, CloudBackupStore,
+    CloudBackupDetailOutcome, CloudBackupError, CloudBackupKeychain, CloudBackupStore,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,10 +55,10 @@ impl RustCloudBackupManager {
             return None;
         }
 
-        // the write generation is read before the namespace, so uploads this check starts are
-        // dropped if the configuration changes meanwhile
-        let writes = match self.background_writes().await {
-            Ok(writes) => writes,
+        // the basis is read before the namespace, so a configuration change after it leaves the
+        // check's uploads and detail with an authority their owners no longer accept
+        let basis = match self.integrity_read_basis().await {
+            Ok(basis) => basis,
             Err(error) => {
                 warn!("Skipping backup integrity check, write lane unavailable: {error}");
                 return None;
@@ -107,16 +108,29 @@ impl RustCloudBackupManager {
             return self.finish_backup_integrity_check(&issues, downgrade);
         }
 
-        self.verify_wallet_backups_for_integrity_check(&writes, namespace, &mut issues).await;
+        let context = basis.bind(namespace);
+        self.verify_wallet_backups_for_integrity_check(&context, &mut issues).await;
         self.finish_backup_integrity_check(&issues, downgrade)
+    }
+
+    /// The write client and the inventory read point a check binds before it reads its namespace
+    ///
+    /// The write generation is read first, then the read point, so neither is newer than the
+    /// namespace the check reads after them
+    async fn integrity_read_basis(&self) -> Result<IntegrityReadBasis, CloudBackupError> {
+        let writes = self.background_writes().await?;
+        let read_at = self.inventory_read_at();
+
+        Ok(IntegrityReadBasis { writes, read_at })
     }
 
     async fn verify_wallet_backups_for_integrity_check(
         &self,
-        writes: &CloudBackupWriteClient,
-        namespace: String,
+        context: &IntegrityReadContext,
         issues: &mut Vec<BackupIntegrityIssue>,
     ) {
+        let IntegrityReadContext { writes, namespace, .. } = context;
+
         // use a silent client because startup integrity checks must not present iCloud UI
         let cloud = CloudStorage::global_silent_client();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
@@ -128,17 +142,16 @@ impl RustCloudBackupManager {
             }
         };
 
-        let remote_wallet_truth = match self
-            .load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud.clone())
-            .await
-        {
-            Ok(remote_wallet_truth) => remote_wallet_truth,
-            Err(error) => {
-                warn!("Backup integrity: remote truth refresh failed: {error}");
-                issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
-                return;
-            }
-        };
+        let remote_wallet_truth =
+            match self.load_remote_wallet_truth(namespace, &wallet_record_ids, cloud.clone()).await
+            {
+                Ok(remote_wallet_truth) => remote_wallet_truth,
+                Err(error) => {
+                    warn!("Backup integrity: remote truth refresh failed: {error}");
+                    issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
+                    return;
+                }
+            };
 
         let inventory = match CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -154,7 +167,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(inventory.build_detail()));
+        self.apply_integrity_detail(context, &inventory);
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -162,7 +175,7 @@ impl RustCloudBackupManager {
         let mut backup_failed = false;
         if handled_unsynced {
             let backup_result = self.do_backup_wallets(writes, &unsynced).await;
-            self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
+            self.refresh_integrity_check_detail(context, &wallet_record_ids).await;
             if let Err(error) = backup_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -185,7 +198,7 @@ impl RustCloudBackupManager {
 
         if has_local_wallets {
             let sync_result = self.sync_unsynced_wallets_with(writes).await;
-            self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
+            self.refresh_integrity_check_detail(context, &wallet_record_ids).await;
             if let Err(error) = sync_result {
                 error!("Backup integrity: auto-sync failed: {error}");
                 issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
@@ -193,14 +206,20 @@ impl RustCloudBackupManager {
         }
     }
 
+    /// Lists the check's namespace again after its uploads, under the check's own read context
+    ///
+    /// A configuration that replaced the check's own needs its own read, which its new scope
+    /// starts; this one, with the fallback listing it was given, belongs to the old namespace
     async fn refresh_integrity_check_detail(
         &self,
-        namespace: &str,
+        context: &IntegrityReadContext,
         fallback_wallet_record_ids: &[String],
     ) {
+        let namespace = &context.namespace;
+
         // use a silent client because startup integrity checks must not present iCloud UI
         let cloud = CloudStorage::global_silent_client();
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.to_string()).await {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(wallet_record_ids) => wallet_record_ids,
             Err(error) => {
                 warn!("Backup integrity: detail relist failed: {error}");
@@ -231,7 +250,23 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(inventory.build_detail()));
+        self.apply_integrity_detail(context, &inventory);
+    }
+
+    /// Hands the inventory owner a detail the check read, under the scope and wallet basis the
+    /// check bound before its first read
+    fn apply_integrity_detail(
+        &self,
+        context: &IntegrityReadContext,
+        inventory: &CloudWalletInventory,
+    ) {
+        let read_at = context.read_at;
+        let listed = inventory.build_detail();
+
+        self.apply_detail_outcome(
+            read_at.scope(),
+            CloudBackupDetailOutcome::Verified { listed, read_at },
+        );
     }
 
     fn finish_backup_integrity_check(
@@ -260,6 +295,38 @@ impl RustCloudBackupManager {
         info!("Cloud backup integrity: applying downgrade={downgrade:?}");
         send!(self.supervisor.apply_integrity_downgrade(downgrade));
     }
+}
+
+/// What a launch integrity check writes and reads under, before it knows its namespace
+///
+/// Only [`RustCloudBackupManager::integrity_read_basis`] makes one, reading the write generation
+/// and then the inventory read point, and only [`Self::bind`] turns it into the check's context
+struct IntegrityReadBasis {
+    writes: CloudBackupWriteClient,
+    read_at: InventoryReadAt,
+}
+
+impl IntegrityReadBasis {
+    /// Binds the namespace the check read after this basis
+    fn bind(self, namespace: String) -> IntegrityReadContext {
+        let Self { writes, read_at } = self;
+        IntegrityReadContext { writes, read_at, namespace }
+    }
+}
+
+/// The one context a launch integrity check runs under: its upload authority, the inventory
+/// scope and local wallet basis it read at, and the namespace it reads
+///
+/// Bound once before any remote work and carried through the first listing, the uploads, the
+/// follow-up listing and its fallback, so every detail the check hands the inventory owner pairs
+/// a namespace with the scope it was read under. A configuration change during the check leaves
+/// the uploads with a generation the write lane refuses and the details with a scope the owner
+/// drops, and a local wallet change leaves them with a basis the owner drops; that change already
+/// asked for the refresh that replaces them
+struct IntegrityReadContext {
+    writes: CloudBackupWriteClient,
+    read_at: InventoryReadAt,
+    namespace: String,
 }
 
 /// The local keychain entries the integrity check needs

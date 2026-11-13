@@ -113,7 +113,8 @@ async fn turn_off_mid_batch_pauses_the_rest_of_the_batch() {
         tokio::spawn(async move { backup_wallets_for_test(&batching, &[first, second]).await });
     gate.wait_until_blocked().await;
 
-    call!(manager.supervisor.start_disable_operation()).await.unwrap();
+    review_turn_off(&manager).await;
+    confirm_turn_off(&manager).await;
     wait_for_queued_lane_write(&manager).await;
     gate.release();
 

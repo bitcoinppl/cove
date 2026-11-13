@@ -141,6 +141,14 @@ enum Commands {
     #[command(name = "android-ui-first-inventory")]
     AndroidUiFirstInventory,
 
+    /// Run the staged Android Turn Off scenarios that span a relaunch
+    #[command(name = "android-ui-turn-off")]
+    AndroidUiTurnOff {
+        /// Run only this scenario
+        #[arg(long, value_enum)]
+        only: Option<android::TurnOffRelaunch>,
+    },
+
     /// Print a CI shard's share of a flavour's Android instrumented tests, as `run=` and `tests=`
     /// lines for `$GITHUB_OUTPUT`; shards split by whole class, weighed by the checked-in timings
     #[command(name = "android-ui-shard")]
@@ -496,6 +504,8 @@ fn run(cli: Cli) -> Result<()> {
         }
 
         Commands::AndroidUiFirstInventory => android::run_first_inventory_ui_test(),
+
+        Commands::AndroidUiTurnOff { only } => android::run_turn_off_relaunch_ui_test(only),
 
         Commands::AndroidUiShard { flavour, shard, tests } => {
             android_ui_shard::print_plan(&flavour, shard, &tests)

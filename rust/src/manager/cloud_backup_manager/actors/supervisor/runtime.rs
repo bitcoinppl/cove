@@ -2,11 +2,14 @@
 //!
 //! There is no operation slot beside the lifecycle. Each body names the operations that can run
 //! in it, so "Turn Off while backup is off" and "verify during a committed disable" have no
-//! value: `DisabledOp` has no Turn Off and `FinishingDisable` holds only `ResumeDisable`
+//! value: `DisabledOp` has no Turn Off and `FinishingDisable` holds only `ResumeDisable`. A
+//! configured body is either idle, where the Turn Off review lives, or running one operation, so
+//! a review beside a running operation has no value either
 //!
 //! The body moves in three ways only:
-//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch.
-//!   An idle body with no record the owner ever read becomes `LoadFailed` the same way
+//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which only a load that succeeds leaves,
+//!   at launch or when the user retries it. An idle body with no record the owner ever read
+//!   becomes `LoadFailed` the same way
 //! - while idle: the supervisor rebases the body on its own committed record when it starts work
 //! - while an operation runs, the operation holds its body until it ends or hands off
 //! - a local reset replaces the body with `Resetting`, which nothing can start in, and the owner
@@ -31,14 +34,22 @@ use crate::manager::cloud_backup_manager::actors::write::{
     ConfigGeneration, ConfiguredWriter, ConfiguredWrites, OffWrites, PolicyBody, WritePolicy,
 };
 use crate::manager::cloud_backup_manager::admission::{
-    AdmissionBody, ConfiguredAdmission, PauseReason,
+    AdmissionBody, PauseReason, Rejection, ReviewExit, UserIntent,
 };
 use crate::manager::cloud_backup_manager::model::{
-    CloudBackupDisableOutcome, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupPendingEnableRecovery, CloudBackupStatus,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, DisablingRecord};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommitDisable, CommittedDisable, DisablingRecord,
+};
+use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
+use crate::manager::cloud_backup_manager::turn_off::{
+    AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, FinishStart,
+    RetryWake, ReviewId, TurnOffCommit, TurnOffReview,
+};
 
 /// The lifecycle body and the operation running in it
 #[derive(Debug)]
@@ -46,12 +57,14 @@ pub(crate) enum Runtime {
     Disabled {
         op: Option<DisabledOp>,
     },
-    Configured {
-        op: Option<ConfiguredOp>,
-    },
+    Configured(ConfiguredBody),
     FinishingDisable {
         committed: CommittedDisable,
         op: Option<ResumeDisable>,
+        /// Why the last finishing run stopped, while nothing runs
+        failure: Option<FinishFailure>,
+        /// The automatic retry armed for the last failure's `retry_after`, while nothing runs
+        wake: Option<RetryWake>,
     },
     DriveAccountSwitch {
         op: Option<SwitchOp>,
@@ -66,10 +79,10 @@ pub(crate) enum Runtime {
     LoadFailed {
         error: DatabaseError,
     },
-    /// The stored record can't be read as a backup; Enable or Restore replaces it, as from off
+    /// The stored record can't be read as a backup; nothing runs on it, and its one exit is a
+    /// local reset of Cloud Backup on this device, after which the body is off
     Corrupted {
         error: String,
-        op: Option<DisabledOp>,
     },
     /// A local reset closed admission; an effect that was in flight finishes here, and nothing
     /// else can start until the owner sets the body the reset left
@@ -147,6 +160,23 @@ pub(crate) enum DisabledOp {
     DiscardEnable(OpRun),
 }
 
+/// A configured backup: idle, where the Turn Off review lives, or running one operation
+///
+/// The review holds no operation and is bound to evidence any operation may change, so a body
+/// never holds both: starting an operation replaces the idle body and the review with it
+#[derive(Debug)]
+pub(crate) enum ConfiguredBody {
+    Idle {
+        /// Turn Off between the tap and consent
+        review: Option<TurnOffReview>,
+    },
+    Running(ConfiguredOp),
+}
+
+impl ConfiguredBody {
+    const IDLE: Self = Self::Idle { review: None };
+}
+
 /// Work on a configured backup
 #[derive(Debug)]
 pub(crate) enum ConfiguredOp {
@@ -167,6 +197,8 @@ pub(crate) enum ConfiguredOp {
 }
 
 /// A committed Turn Off going forward; nothing else runs during one
+///
+/// How the run started travels with its [`FinishRun`], so the body holds only the operation
 #[derive(Debug)]
 pub(crate) struct ResumeDisable(OpRun);
 
@@ -245,6 +277,13 @@ pub(crate) enum Finish {
     NotCurrent { running: Option<CloudBackupExclusiveOperationClaim> },
 }
 
+/// What an idle body holds beyond its record, carried across a rebase on the same body
+enum IdlePresentation {
+    None,
+    Review(TurnOffReview),
+    Finishing { attempt_id: u64, failure: Option<FinishFailure>, wake: Option<RetryWake> },
+}
+
 /// The running operation, taken out of its body
 enum TakenOp {
     Standard(OpRun),
@@ -311,8 +350,13 @@ impl Runtime {
         match facts.record {
             State::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)) => {
                 match DisablingRecord::of(facts.record) {
+                    // a Try Again that failed before a relaunch still offers Stop Using; why it
+                    // failed is a typed fact of the runtime that saw it
                     Some(DisablingRecord::Committed(committed)) => {
-                        Self::FinishingDisable { committed, op: None }
+                        let failure = committed.try_again_failed.then_some(
+                            FinishFailure::TryAgainFailed(CloudBackupTurnOffFailure::Other),
+                        );
+                        Self::FinishingDisable { committed, op: None, failure, wake: None }
                     }
                     // only a failed load heal leaves this record, and `LoadFailed` never rebases
                     Some(DisablingRecord::Unnormalized) | None => Self::LoadFailed {
@@ -325,9 +369,16 @@ impl Runtime {
             State::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(_)) => {
                 Self::DriveAccountSwitch { op: None }
             }
-            State::Corrupted { error } => Self::Corrupted { error: error.clone(), op: None },
-            State::Configured(_) => Self::Configured { op: None },
+            State::Corrupted { error } => Self::Corrupted { error: error.clone() },
+            State::Configured(_) => Self::Configured(ConfiguredBody::IDLE),
             State::Disabled => Self::Disabled { op: None },
+        }
+    }
+
+    /// Leaves `LoadFailed` for the body the record loads as, once the owner read it again
+    pub(crate) fn loaded(&mut self, facts: Result<IdleFacts<'_>, DatabaseError>) {
+        if matches!(self, Self::LoadFailed { .. }) {
+            *self = Self::idle(facts);
         }
     }
 
@@ -339,7 +390,48 @@ impl Runtime {
             return;
         }
 
+        let held = self.idle_presentation();
         *self = Self::idle(facts);
+        self.keep_idle_presentation(held);
+    }
+
+    /// What an idle body holds beyond its record: the Turn Off review, or why a committed Turn
+    /// Off last stopped and the retry it keeps armed
+    fn idle_presentation(&mut self) -> IdlePresentation {
+        match self {
+            Self::Configured(ConfiguredBody::Idle { review }) => {
+                review.take().map_or(IdlePresentation::None, IdlePresentation::Review)
+            }
+            Self::FinishingDisable { committed, failure, wake, .. }
+                if failure.is_some() || wake.is_some() =>
+            {
+                IdlePresentation::Finishing {
+                    attempt_id: committed.attempt_id,
+                    failure: *failure,
+                    wake: *wake,
+                }
+            }
+            _ => IdlePresentation::None,
+        }
+    }
+
+    /// Puts back what [`Self::idle_presentation`] took, while the body is still the one it
+    /// belongs to: a review stays with a configured body, a failure and a wake with the same
+    /// attempt
+    fn keep_idle_presentation(&mut self, held: IdlePresentation) {
+        match (self, held) {
+            (Self::Configured(body), IdlePresentation::Review(held)) => {
+                *body = ConfiguredBody::Idle { review: Some(held) };
+            }
+            (
+                Self::FinishingDisable { committed, failure, wake, .. },
+                IdlePresentation::Finishing { attempt_id, failure: held, wake: armed },
+            ) if committed.attempt_id == attempt_id => {
+                *failure = held;
+                *wake = armed;
+            }
+            _ => {}
+        }
     }
 
     /// Loads an idle body again from a record a test seeded, as a launch on it would
@@ -402,11 +494,11 @@ impl Runtime {
     ) -> bool {
         match self {
             Self::PendingEnableRecovery { recovery, .. } => *recovery = next,
-            Self::Disabled { op: None } | Self::Configured { op: None } => {
+            Self::Disabled { op: None } | Self::Configured(ConfiguredBody::Idle { .. }) => {
                 *self = Self::PendingEnableRecovery { recovery: next, op: None };
             }
             Self::Disabled { op: Some(_) }
-            | Self::Configured { op: Some(_) }
+            | Self::Configured(ConfiguredBody::Running(_))
             | Self::Corrupted { .. }
             | Self::FinishingDisable { .. }
             | Self::DriveAccountSwitch { .. }
@@ -418,19 +510,16 @@ impl Runtime {
     }
 
     /// The body admission decides on, with the running operation's kind
-    pub(crate) fn admission_body(&self, configured: ConfiguredAdmission) -> AdmissionBody {
+    pub(crate) fn admission_body(&self) -> AdmissionBody {
         match self {
-            Self::Disabled { op: None | Some(DisabledOp::DiscardEnable(_)) }
-            | Self::Corrupted { op: None | Some(DisabledOp::DiscardEnable(_)), .. } => {
+            Self::Disabled { op: None | Some(DisabledOp::DiscardEnable(_)) } => {
                 AdmissionBody::Disabled
             }
-            Self::Disabled { op: Some(DisabledOp::Enable(_)) }
-            | Self::Corrupted { op: Some(DisabledOp::Enable(_)), .. } => AdmissionBody::Enabling,
-            Self::Disabled { op: Some(DisabledOp::Restore(_)) }
-            | Self::Corrupted { op: Some(DisabledOp::Restore(_)), .. } => AdmissionBody::Restoring,
-            Self::Configured { .. } | Self::DriveAccountSwitch { .. } => {
-                AdmissionBody::Configured(configured)
-            }
+            Self::Disabled { op: Some(DisabledOp::Enable(_)) } => AdmissionBody::Enabling,
+            Self::Disabled { op: Some(DisabledOp::Restore(_)) } => AdmissionBody::Restoring,
+            Self::Corrupted { .. } => AdmissionBody::Corrupted,
+            Self::Configured(_) => AdmissionBody::Configured,
+            Self::DriveAccountSwitch { .. } => AdmissionBody::DriveAccountSwitch,
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
             Self::PendingEnableRecovery { .. } => AdmissionBody::PendingEnableRecovery,
             Self::LoadFailed { .. } => AdmissionBody::LoadFailed,
@@ -443,21 +532,20 @@ impl Runtime {
     }
 
     pub(crate) fn is_restore_all(&self) -> bool {
-        matches!(self, Self::Configured { op: Some(ConfiguredOp::RestoreAll(_)) })
+        matches!(self, Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(_))))
     }
 
     /// The claim of the running operation, which carries its `OperationId`
     pub(crate) fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => {
-                op.as_ref().map(DisabledOp::claim)
-            }
-            Self::Configured { op } => op.as_ref().map(ConfiguredOp::claim),
+            Self::Disabled { op } => op.as_ref().map(DisabledOp::claim),
+            Self::Configured(ConfiguredBody::Running(op)) => Some(op.claim()),
+            Self::Configured(ConfiguredBody::Idle { .. }) => None,
             Self::FinishingDisable { op, .. } => op.as_ref().map(|op| op.0.claim),
             Self::DriveAccountSwitch { op } => op.as_ref().map(|op| op.0.claim),
             Self::PendingEnableRecovery { op, .. } => op.as_ref().map(RecoveryOp::claim),
             // the held effect answers only through `accepts_completion`; nothing else may use it
-            Self::LoadFailed { .. } | Self::Resetting { .. } => None,
+            Self::Corrupted { .. } | Self::LoadFailed { .. } | Self::Resetting { .. } => None,
         }
     }
 
@@ -467,31 +555,24 @@ impl Runtime {
             Self::Disabled {
                 op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
             }
-            | Self::Corrupted {
-                op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
-                ..
-            }
             | Self::FinishingDisable { op: Some(ResumeDisable(run)), .. }
             | Self::DriveAccountSwitch { op: Some(SwitchOp(run)) }
             | Self::PendingEnableRecovery {
                 op: Some(RecoveryOp::Continue(run) | RecoveryOp::Discard(run)),
                 ..
             }
-            | Self::Configured {
-                op:
-                    Some(
-                        ConfiguredOp::TurnOff(run)
-                        | ConfiguredOp::Verify(run)
-                        | ConfiguredOp::RepairPasskey(run)
-                        | ConfiguredOp::RestoreCloudWallet(run)
-                        | ConfiguredOp::DeleteRecords(run)
-                        | ConfiguredOp::RecoverOtherBackups(run)
-                        | ConfiguredOp::DeleteOtherBackups(run)
-                        | ConfiguredOp::Reinitialize(run)
-                        | ConfiguredOp::RecreateManifest(run)
-                        | ConfiguredOp::DiscardReinitialize(run),
-                    ),
-            } => Some(run),
+            | Self::Configured(ConfiguredBody::Running(
+                ConfiguredOp::TurnOff(run)
+                | ConfiguredOp::Verify(run)
+                | ConfiguredOp::RepairPasskey(run)
+                | ConfiguredOp::RestoreCloudWallet(run)
+                | ConfiguredOp::DeleteRecords(run)
+                | ConfiguredOp::RecoverOtherBackups(run)
+                | ConfiguredOp::DeleteOtherBackups(run)
+                | ConfiguredOp::Reinitialize(run)
+                | ConfiguredOp::RecreateManifest(run)
+                | ConfiguredOp::DiscardReinitialize(run),
+            )) => Some(run),
             Self::Resetting { held, .. } => held.as_mut(),
             _ => None,
         }
@@ -590,43 +671,39 @@ impl Runtime {
         use CloudBackupExclusiveOperation as Op;
 
         let operation = new.claim().operation();
-        let unstartable = |runtime: &Self| Unstartable {
-            body: runtime.admission_body(ConfiguredAdmission::Ready),
-            operation,
-        };
+        let unstartable =
+            |runtime: &Self| Unstartable { body: runtime.admission_body(), operation };
         if self.is_some() {
             return Err(unstartable(self));
         }
 
         match (&mut *self, new) {
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Standard(run))
+            (Self::Disabled { op }, NewOp::Standard(run))
                 if matches!(operation, Op::Enable | Op::EnableForceNew | Op::EnableNoDiscovery) =>
             {
                 *op = Some(DisabledOp::Enable(run));
             }
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Standard(run))
+            (Self::Disabled { op }, NewOp::Standard(run))
                 if operation == Op::DiscardPendingEnable =>
             {
                 *op = Some(DisabledOp::DiscardEnable(run));
             }
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Restore(run))
-                if operation == Op::Restore =>
-            {
+            (Self::Disabled { op }, NewOp::Restore(run)) if operation == Op::Restore => {
                 *op = Some(DisabledOp::Restore(run));
             }
-            (Self::Configured { op }, NewOp::Restore(run))
+            (Self::Configured(body), NewOp::Restore(run))
                 if operation == Op::RestoreAllCloudWallets =>
             {
-                *op = Some(ConfiguredOp::RestoreAll(run));
+                *body = ConfiguredBody::Running(ConfiguredOp::RestoreAll(run));
             }
             // an account switch's reinitialize runs in the switch body, which holds background
             // writes until the switch ends
-            (Self::Configured { .. }, NewOp::Standard(run))
+            (Self::Configured(_), NewOp::Standard(run))
                 if run.claim.drive_account_switch_id().is_some() =>
             {
                 *self = Self::DriveAccountSwitch { op: Some(SwitchOp(run)) };
             }
-            (Self::Configured { op }, NewOp::Standard(run)) => {
+            (Self::Configured(body), NewOp::Standard(run)) => {
                 let configured = match operation {
                     Op::Disable => ConfiguredOp::TurnOff(run),
                     Op::VerifyReinitializedBackup | Op::Verify => ConfiguredOp::Verify(run),
@@ -646,12 +723,7 @@ impl Runtime {
                     | Op::Restore
                     | Op::RestoreAllCloudWallets => return Err(unstartable(self)),
                 };
-                *op = Some(configured);
-            }
-            (Self::FinishingDisable { op, .. }, NewOp::Standard(run))
-                if operation == Op::Disable =>
-            {
-                *op = Some(ResumeDisable(run));
+                *body = ConfiguredBody::Running(configured);
             }
             (Self::DriveAccountSwitch { op }, NewOp::Standard(run))
                 if operation == Op::ReinitializeBackup =>
@@ -687,7 +759,7 @@ impl Runtime {
             (
                 Self::Disabled { .. }
                 | Self::Corrupted { .. }
-                | Self::Configured { .. }
+                | Self::Configured(_)
                 | Self::FinishingDisable { .. }
                 | Self::DriveAccountSwitch { .. }
                 | Self::PendingEnableRecovery { .. }
@@ -700,20 +772,183 @@ impl Runtime {
         Ok(())
     }
 
-    /// The Turn Off with `claim` committed: its body becomes the committed disable, and the same
-    /// operation keeps running there as the resume, so nothing configured can start beside it
-    pub(crate) fn commit_turn_off(
+    /// Commits the Turn Off with `claim` through `write`, and on a commit makes its body the
+    /// committed disable, where the same operation keeps running as the run that deletes, so
+    /// nothing configured can start beside it
+    ///
+    /// The run is taken out of the body before the write, so a Turn Off that no longer runs
+    /// writes nothing, and a commit always moves the body: the run it moves is already in hand.
+    /// Nothing else reads the body during the write, which runs inside this call
+    pub(crate) fn commit_turn_off<E>(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        committed: CommittedDisable,
-    ) {
-        let Self::Configured { op } = self else { return };
-        if !matches!(op, Some(ConfiguredOp::TurnOff(run)) if run.claim == claim) {
-            return;
+        write: impl FnOnce() -> Result<CommitDisable, E>,
+    ) -> Result<TurnOffCommit, E> {
+        let Self::Configured(body) = self else { return Ok(TurnOffCommit::NotCurrent) };
+        let run = match std::mem::replace(body, ConfiguredBody::IDLE) {
+            ConfiguredBody::Running(ConfiguredOp::TurnOff(run)) if run.claim == claim => run,
+            other => {
+                *body = other;
+                return Ok(TurnOffCommit::NotCurrent);
+            }
+        };
+
+        let refused = match write() {
+            Ok(CommitDisable::Committed(committed)) => {
+                let start = FinishStart::of(committed.disposition, DeleteAuthority::Commit);
+                *self = Self::FinishingDisable {
+                    committed: committed.clone(),
+                    op: Some(ResumeDisable(run)),
+                    failure: None,
+                    wake: None,
+                };
+
+                return Ok(TurnOffCommit::Committed { run: FinishRun { claim, start }, committed });
+            }
+            Ok(CommitDisable::StaleReview) => Ok(TurnOffCommit::StaleReview),
+            Ok(CommitDisable::NotConfigured) => Ok(TurnOffCommit::NotConfigured),
+            Err(error) => Err(error),
+        };
+
+        // nothing was committed, so the Turn Off runs on as it did, for its caller to end
+        *body = ConfiguredBody::Running(ConfiguredOp::TurnOff(run));
+        refused
+    }
+
+    /// Consent to the review `review_id`: takes it out of the idle configured body and starts
+    /// Turn Off in its place, in one step
+    ///
+    /// The review and the claim travel together from here, so a confirmed Turn Off always has
+    /// its operation and an operation never runs beside a review
+    pub(crate) fn admit_confirm(
+        &mut self,
+        review_id: ReviewId,
+    ) -> Result<ConfirmedTurnOff, Rejection> {
+        let Self::Configured(ConfiguredBody::Idle { review }) = self else {
+            return Err(Rejection::ReviewStale);
+        };
+        let shown = review.take_if(|held| held.reviewing_id() == Some(review_id));
+        let Some(TurnOffReview::Reviewing(review)) = shown else {
+            return Err(Rejection::ReviewStale);
+        };
+
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            OperationId::next(),
+        );
+        *self = Self::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(OpRun::new(claim))));
+        Ok(ConfirmedTurnOff { claim, review: *review })
+    }
+
+    /// Starts a finishing run of the committed Turn Off this body holds, with `authority`
+    ///
+    /// The run's start comes from the record's disposition as well: a committed local-only
+    /// finish starts as one whoever resumes it. The armed retry ends, since this run is the
+    /// retry
+    pub(crate) fn start_finish(
+        &mut self,
+        authority: DeleteAuthority,
+    ) -> Result<AdmittedFinish, Rejection> {
+        let Self::FinishingDisable { committed, op, wake, .. } = self else {
+            return Err(Rejection::NothingToContinue);
+        };
+        if let Some(running) = op {
+            return Err(Rejection::OperationRunning(running.0.claim.operation()));
         }
 
-        let Some(ConfiguredOp::TurnOff(run)) = op.take() else { return };
-        *self = Self::FinishingDisable { committed, op: Some(ResumeDisable(run)) };
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            OperationId::next(),
+        );
+        let start = FinishStart::of(committed.disposition, authority);
+        *op = Some(ResumeDisable(OpRun::new(claim)));
+        *wake = None;
+
+        Ok(AdmittedFinish { run: FinishRun { claim, start }, committed: committed.clone() })
+    }
+
+    /// The finishing run `run` stopped for `reason`; the committed Turn Off waits for the next
+    /// resume
+    ///
+    /// Returns the failure the body now holds, or `None` when `run` is no longer running
+    pub(crate) fn fail_finish(
+        &mut self,
+        run: FinishRun,
+        reason: CloudBackupTurnOffFailure,
+    ) -> Option<FinishFailure> {
+        let Self::FinishingDisable { op, failure, .. } = self else { return None };
+        if !op.as_ref().is_some_and(|op| op.0.claim == run.claim) {
+            return None;
+        }
+
+        *op = None;
+        *failure = Some(FinishFailure::after(*failure, run.start, reason));
+        *failure
+    }
+
+    /// Arms the automatic retry for `at`, the idle committed Turn Off's `retry_after`
+    ///
+    /// Returns the wake to schedule, or `None` when the same one is already armed or nothing is
+    /// waiting to finish; a wake for an earlier deadline is replaced, so its timer finds nothing
+    pub(crate) fn arm_retry_wake(&mut self, at: u64) -> Option<RetryWake> {
+        let Self::FinishingDisable { committed, op: None, wake, .. } = self else { return None };
+        let armed = RetryWake { attempt_id: committed.attempt_id, at };
+        if *wake == Some(armed) {
+            return None;
+        }
+
+        *wake = Some(armed);
+        Some(armed)
+    }
+
+    /// Disarms `fired` if it is still the retry this idle body keeps armed
+    pub(crate) fn take_retry_wake(&mut self, fired: RetryWake) -> bool {
+        let Self::FinishingDisable { op: None, wake, .. } = self else { return false };
+        wake.take_if(|armed| *armed == fired).is_some()
+    }
+
+    /// The Turn Off review an idle configured body holds
+    pub(crate) fn turn_off_review(&self) -> Option<&TurnOffReview> {
+        match self {
+            Self::Configured(ConfiguredBody::Idle { review }) => review.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Replaces the Turn Off review; only an idle configured body holds one
+    ///
+    /// Admission starts a review only in an idle configured body, and a review that completes
+    /// late finds its own `Preparing` there first, so only a clear reaches another body, where
+    /// there is no review to clear
+    pub(crate) fn set_turn_off_review(&mut self, next: Option<TurnOffReview>) {
+        let Self::Configured(ConfiguredBody::Idle { review }) = self else {
+            debug_assert!(next.is_none(), "Cloud Backup showed a Turn Off review in {self:?}");
+            return;
+        };
+
+        *review = next;
+    }
+
+    /// A review button left the review `review_id`: the review ends, and this returns the work
+    /// the button names, which the caller starts in the same turn
+    pub(crate) fn leave_review(
+        &mut self,
+        review_id: ReviewId,
+        to: ReviewExit,
+    ) -> Result<UserIntent, Rejection> {
+        let Self::Configured(ConfiguredBody::Idle { review }) = self else {
+            return Err(Rejection::ReviewStale);
+        };
+        let Some(TurnOffReview::Reviewing(held)) =
+            review.as_ref().filter(|held| held.reviewing_id() == Some(review_id))
+        else {
+            return Err(Rejection::ReviewStale);
+        };
+
+        // admission rejects Restore Them First on a review that names nothing to restore
+        let target = held.impact.exit_intent(to).ok_or(Rejection::RestoreAllUnavailable)?;
+        *review = None;
+        Ok(target)
     }
 
     /// Moves the running operation from `from` to `to` without ever leaving the slot free
@@ -741,7 +976,6 @@ impl Runtime {
     pub(crate) fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
         match self {
             Self::Disabled { op: Some(DisabledOp::Restore(run)) }
-            | Self::Corrupted { op: Some(DisabledOp::Restore(run)), .. }
             | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)), .. }
                 if run.claim == claim =>
             {
@@ -756,7 +990,9 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<&RestoreRun> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::RestoreAll(run)) } if run.claim == claim => {
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(run)))
+                if run.claim == claim =>
+            {
                 Some(run)
             }
             _ => None,
@@ -768,7 +1004,9 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<&mut RestoreRun> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::RestoreAll(run)) } if run.claim == claim => {
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(run)))
+                if run.claim == claim =>
+            {
                 Some(run)
             }
             _ => None,
@@ -836,23 +1074,26 @@ impl Runtime {
 
     fn take_op(&mut self) -> Option<TakenOp> {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => op.take().map(|op| match op {
+            Self::Disabled { op } => op.take().map(|op| match op {
                 DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run) => TakenOp::Standard(run),
                 DisabledOp::Restore(run) => TakenOp::Restore(run),
             }),
-            Self::Configured { op } => op.take().map(|op| match op {
-                ConfiguredOp::RestoreAll(run) => TakenOp::Restore(run),
-                ConfiguredOp::TurnOff(run)
-                | ConfiguredOp::Verify(run)
-                | ConfiguredOp::RepairPasskey(run)
-                | ConfiguredOp::RestoreCloudWallet(run)
-                | ConfiguredOp::DeleteRecords(run)
-                | ConfiguredOp::RecoverOtherBackups(run)
-                | ConfiguredOp::DeleteOtherBackups(run)
-                | ConfiguredOp::Reinitialize(run)
-                | ConfiguredOp::RecreateManifest(run)
-                | ConfiguredOp::DiscardReinitialize(run) => TakenOp::Standard(run),
-            }),
+            Self::Configured(body) => match std::mem::replace(body, ConfiguredBody::IDLE) {
+                ConfiguredBody::Idle { .. } => None,
+                ConfiguredBody::Running(op) => Some(match op {
+                    ConfiguredOp::RestoreAll(run) => TakenOp::Restore(run),
+                    ConfiguredOp::TurnOff(run)
+                    | ConfiguredOp::Verify(run)
+                    | ConfiguredOp::RepairPasskey(run)
+                    | ConfiguredOp::RestoreCloudWallet(run)
+                    | ConfiguredOp::DeleteRecords(run)
+                    | ConfiguredOp::RecoverOtherBackups(run)
+                    | ConfiguredOp::DeleteOtherBackups(run)
+                    | ConfiguredOp::Reinitialize(run)
+                    | ConfiguredOp::RecreateManifest(run)
+                    | ConfiguredOp::DiscardReinitialize(run) => TakenOp::Standard(run),
+                }),
+            },
             Self::FinishingDisable { op, .. } => op.take().map(|op| TakenOp::Standard(op.0)),
             Self::DriveAccountSwitch { op } => op.take().map(|op| TakenOp::Standard(op.0)),
             Self::PendingEnableRecovery { op, .. } => op.take().map(|op| match op {
@@ -860,7 +1101,7 @@ impl Runtime {
                 RecoveryOp::Restore(run) => TakenOp::Restore(run),
             }),
             Self::Resetting { held, .. } => held.take().map(TakenOp::Standard),
-            Self::LoadFailed { .. } => None,
+            Self::Corrupted { .. } | Self::LoadFailed { .. } => None,
         }
     }
 
@@ -881,8 +1122,10 @@ impl Runtime {
     /// Ends the running operation, whichever it is
     fn clear(&mut self) {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => *op = None,
-            Self::Configured { op } => *op = None,
+            Self::Disabled { op } => *op = None,
+            // an idle body keeps its review; a running one has none to keep
+            Self::Configured(body @ ConfiguredBody::Running(_)) => *body = ConfiguredBody::IDLE,
+            Self::Configured(ConfiguredBody::Idle { .. }) => {}
             Self::FinishingDisable { op, .. } => *op = None,
             Self::DriveAccountSwitch { op } => *op = None,
             Self::PendingEnableRecovery { op, .. } => *op = None,
@@ -891,7 +1134,7 @@ impl Runtime {
                     run.effect_reported();
                 }
             }
-            Self::LoadFailed { .. } => {}
+            Self::Corrupted { .. } | Self::LoadFailed { .. } => {}
         }
     }
 
@@ -909,7 +1152,8 @@ impl Runtime {
     /// Derived, never stored: the supervisor publishes it after every runtime change
     pub(crate) fn write_policy(&self, generation: ConfigGeneration) -> WritePolicy {
         let body = match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => PolicyBody::Off {
+            Self::Corrupted { .. } => PolicyBody::Off { op: None },
+            Self::Disabled { op } => PolicyBody::Off {
                 op: op.as_ref().map(|op| match op {
                     DisabledOp::Enable(run) => OffWrites::Enable(run.claim),
                     DisabledOp::DiscardEnable(run) => OffWrites::Discard(run.claim),
@@ -923,10 +1167,15 @@ impl Runtime {
                     RecoveryOp::Restore(run) => OffWrites::Restore(run.claim),
                 }),
             },
-            Self::Configured { op } => PolicyBody::Configured {
-                op: op.as_ref().map(|op| ConfiguredWrites { claim: op.claim(), kind: op.writer() }),
+            Self::Configured(body) => PolicyBody::Configured {
+                op: match body {
+                    ConfiguredBody::Idle { .. } => None,
+                    ConfiguredBody::Running(op) => {
+                        Some(ConfiguredWrites { claim: op.claim(), kind: op.writer() })
+                    }
+                },
             },
-            Self::FinishingDisable { committed, op } => PolicyBody::FinishingDisable {
+            Self::FinishingDisable { committed, op, .. } => PolicyBody::FinishingDisable {
                 namespace_id: committed.namespace_id.clone(),
                 op: op.as_ref().map(|op| op.0.claim),
             },
@@ -946,67 +1195,49 @@ impl Runtime {
     /// the configuration generation changes when it ends
     pub(crate) fn replacing_configuration(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self {
-            Self::Configured { op: Some(ConfiguredOp::Reinitialize(run)) } => Some(run.claim),
+            Self::Configured(ConfiguredBody::Running(ConfiguredOp::Reinitialize(run))) => {
+                Some(run.claim)
+            }
             _ => None,
         }
     }
 }
 
-/// What the runtime shows through today's exported types
+/// What the runtime shows through the reducer's status
 ///
-/// Read-only: it never feeds back into `Runtime`. `None` fields leave the projection to the
-/// reducer, which still owns presentation detail for bodies the exported types can't express
+/// Read-only: it never feeds back into `Runtime`. `None` leaves the status to the reducer's
+/// record projection; a committed Turn Off's failure is the runtime's own, read by the screen
+/// projection through [`Runtime::finishing_disable_stage`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExportedRuntime {
     pub(crate) status: Option<CloudBackupStatus>,
-    /// A committed Turn Off that failed, shown as today's `DisableFailed`
-    pub(crate) disable: Option<CloudBackupDisableOutcome>,
 }
 
 impl Runtime {
-    /// The adapter from the stored runtime onto today's exported types
-    ///
-    /// Each body that has no exported variant of its own shows as the nearest one today's
-    /// platforms already render
+    /// The status only the runtime can give: a failed load, and a committed Turn Off finishing
     pub(crate) fn exported(&self) -> ExportedRuntime {
-        let (status, disable) = match self {
+        let status = match self {
             Self::LoadFailed { error } => {
                 debug!("Cloud Backup runtime is LoadFailed: {error}");
-                (Some(CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into())), None)
+                Some(CloudBackupStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into()))
             }
-            // a committed failure only goes forward, so Keep Enabled is never offered for it
-            Self::FinishingDisable {
-                committed: CommittedDisable { last_error: Some(message), .. },
-                op: None,
-            } => (
-                None,
-                Some(CloudBackupDisableOutcome::Failed {
-                    message: message.clone(),
-                    can_keep_enabled: false,
-                }),
-            ),
-            Self::FinishingDisable { op: Some(_), .. } => {
-                (Some(CloudBackupStatus::Disabling), None)
-            }
+            Self::FinishingDisable { op: Some(_), .. } => Some(CloudBackupStatus::Disabling),
             // the record alone gives these statuses, and the record projection is their one writer;
             // repeating them here would let a late projection overwrite a status set after it
             Self::Corrupted { error, .. } => {
                 debug!("Cloud Backup runtime is Corrupted: {error}");
-                (None, None)
+                None
             }
             Self::Disabled { .. }
-            | Self::FinishingDisable {
-                committed: CommittedDisable { last_error: None, .. },
-                op: None,
-            }
-            | Self::Configured { .. }
+            | Self::FinishingDisable { op: None, .. }
+            | Self::Configured(_)
             | Self::DriveAccountSwitch { .. }
             | Self::PendingEnableRecovery { .. }
             // the reset's own projection shows the wipe
-            | Self::Resetting { .. } => (None, None),
+            | Self::Resetting { .. } => None,
         };
 
-        ExportedRuntime { status, disable }
+        ExportedRuntime { status }
     }
 }
 
@@ -1067,5 +1298,72 @@ impl RecoveryOp {
             Self::Continue(run) | Self::Discard(run) => run.claim,
             Self::Restore(run) => run.claim,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manager::cloud_backup_manager::owner::lifecycle::DisableDisposition;
+
+    fn turn_off_claim() -> CloudBackupExclusiveOperationClaim {
+        CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Disable,
+            OperationId::next(),
+        )
+    }
+
+    fn running_turn_off(claim: CloudBackupExclusiveOperationClaim) -> Runtime {
+        Runtime::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(OpRun::new(claim))))
+    }
+
+    fn committed() -> CommittedDisable {
+        CommittedDisable {
+            namespace_id: "namespace".into(),
+            attempt_id: 1,
+            committed_at: 1,
+            last_error: None,
+            retry_after: None,
+            disposition: DisableDisposition::DeleteRemote,
+            try_again_failed: false,
+        }
+    }
+
+    /// A commit that writes always moves the body and returns the run that finishes it, a
+    /// refused write leaves the Turn Off running for its caller to end, and a Turn Off that no
+    /// longer runs is refused before anything is written
+    #[test]
+    fn a_turn_off_commit_moves_the_body_with_its_run_and_a_stale_one_writes_nothing() {
+        let claim = turn_off_claim();
+
+        let mut stale = running_turn_off(claim);
+        let mut wrote = false;
+        let refused = stale.commit_turn_off::<()>(turn_off_claim(), || {
+            wrote = true;
+            Ok(CommitDisable::Committed(committed()))
+        });
+        assert_eq!(refused, Ok(TurnOffCommit::NotCurrent));
+        assert!(!wrote, "a stale claim reached the durable write");
+        assert_eq!(stale.claim(), Some(claim));
+
+        let mut runtime = running_turn_off(claim);
+        let commit =
+            runtime.commit_turn_off::<()>(claim, || Ok(CommitDisable::Committed(committed())));
+        let Ok(TurnOffCommit::Committed { run, committed: moved }) = commit else {
+            panic!("expected a commit, got {commit:?}");
+        };
+        assert_eq!(run, FinishRun { claim, start: FinishStart::Delete(DeleteAuthority::Commit) });
+        assert_eq!(moved, committed());
+        assert!(matches!(runtime, Runtime::FinishingDisable { .. }));
+        assert_eq!(runtime.claim(), Some(claim));
+
+        let mut kept = running_turn_off(claim);
+        let stale_review = kept.commit_turn_off::<()>(claim, || Ok(CommitDisable::StaleReview));
+        assert_eq!(stale_review, Ok(TurnOffCommit::StaleReview));
+        assert!(matches!(
+            kept,
+            Runtime::Configured(ConfiguredBody::Running(ConfiguredOp::TurnOff(_)))
+        ));
+        assert_eq!(kept.claim(), Some(claim));
     }
 }

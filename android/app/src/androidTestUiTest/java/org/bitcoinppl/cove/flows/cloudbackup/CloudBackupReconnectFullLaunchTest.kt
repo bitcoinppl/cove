@@ -22,7 +22,6 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.junit.After
@@ -77,9 +76,7 @@ class CloudBackupReconnectFullLaunchTest {
         waitUntil("reopening the detail offline should fail the refresh and keep the known rows") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.detailError == OFFLINE_DETAIL_MESSAGE &&
-                !manager.isDetailInventoryComplete &&
-                !manager.isDetailInventoryReady &&
+            manager.isInventoryOffline &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartDisabled(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
         }
@@ -126,8 +123,7 @@ class CloudBackupReconnectFullLaunchTest {
         waitUntil("reopening the detail offline should fail the refresh and keep the known rows") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.detailError == OFFLINE_DETAIL_MESSAGE &&
-                !manager.isDetailInventoryComplete &&
+            manager.isInventoryOffline &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartDisabled(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
         }
@@ -149,8 +145,7 @@ class CloudBackupReconnectFullLaunchTest {
             val manager = CloudBackupManager.getInstance()
 
             ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeReconnect &&
-                manager.detailError == null &&
-                manager.isDetailInventoryComplete &&
+                manager.isInventoryComplete &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
         }
@@ -213,8 +208,8 @@ class CloudBackupReconnectFullLaunchTest {
             val manager = CloudBackupManager.getInstance()
 
             ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeEntry &&
-                manager.isDetailInventoryComplete &&
-                !manager.isDetailInventoryChecking &&
+                manager.isInventoryComplete &&
+                !manager.isInventoryChecking &&
                 !manager.hasPendingUploadVerification &&
                 manager.verificationState is CloudBackupVerificationState.Verified &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u) &&
@@ -230,9 +225,7 @@ class CloudBackupReconnectFullLaunchTest {
         Invocation.entries.associateWith(ScriptedPasskeyProvider::callCount)
 
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     private fun UiDevice.openSettings() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
@@ -307,8 +300,7 @@ class CloudBackupReconnectFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "detail=${manager.state.lifecycle}, detailError=${manager.detailError}, " +
-                "verification=${manager.verificationState}, " +
+            "screen=${manager.describeScreen()}, " +
                 "restoreAll=${manager.restoreAllState}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "passkeyCalls=${passkeyCallCounts()}, walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
         assertTrue("$message; $diagnostics", condition())

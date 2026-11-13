@@ -1,16 +1,20 @@
 //! The safety properties every harness event is checked against; `docs/testing.md` lists them
 //!
-//! [`TestApp`] calls [`Invariants::check`] after each event has settled, which is the only
-//! transition boundary: every message the event caused has been handled, and no effect is in
-//! flight except one waiting on a held fake call. Production code never calls it; the actors
+//! [`TestApp`] calls [`Invariants::check`] at two kinds of [`Boundary`]. After each event has
+//! settled it is at a pending boundary: every message the event caused has been handled, no
+//! effect is in flight except one waiting on a held fake call, and the [`PendingWork`] left is
+//! named. [`TestApp::quiesce`] reaches the quiescent boundary, where every held call was released
+//! and the clock advanced until nothing is left. Production code never calls it; the actors
 //! only keep test-only logs of what they decided, which each check takes.
 //!
-//! Turned on: 1, 2, 5 and 7; the others need the screen projection, the passkey permit and the
-//! inventory owner. A state that is legitimately between two actors, such as a
+//! Turned on: 1, 2, 3, 4a, 5, 7 and 8; 4b runs at the end of each model case
+//! (`model_tests.rs`), since it drives the app out of the state it checks, and 6 needs the
+//! passkey permit.
+//! A state that is legitimately between two actors, such as a
 //! policy the owner pushed and the lane has not applied yet, is tracked as pending, never
 //! reported as a violation, and must be acknowledged by the next boundary
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use act_zero::call;
 
@@ -18,17 +22,52 @@ use super::app::TestApp;
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::actors::UploadFinish;
-use crate::manager::cloud_backup_manager::actors::supervisor::test_support::DispatchRecord;
+use crate::manager::cloud_backup_manager::actors::supervisor::test_support::{
+    DispatchRecord, ScreenView,
+};
 use crate::manager::cloud_backup_manager::actors::supervisor::{Finish, OpTransition, OwnerView};
 use crate::manager::cloud_backup_manager::actors::write::{
     CommandClass, ConfiguredWriter, ConfiguredWrites, Decision, LaneDecision, OffWrites,
     PolicyBody, VersionedPolicy, WritePolicy,
 };
 use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
+use crate::manager::cloud_backup_manager::inventory::InventoryRows;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupListedRecord, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, mismatched_delete_consents, undrawn_actions,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupPendingEnableCleanupState, CloudBackupPublishedScreen, RecordId,
+};
 use crate::wallet::metadata::WalletId;
+
+/// A settled point the invariants are checked at
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Boundary {
+    /// An event settled, leaving this work for the test to move; an operation or a local reset
+    /// may still be live, waiting on it
+    Pending(PendingWork),
+    /// Every held fake call was released and the clock advanced until no live work waited on it:
+    /// nothing is left that could end an operation or a preparing Turn Off review (invariant 4a)
+    Quiescent,
+}
+
+/// What a settled event leaves for the test to move
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PendingWork {
+    /// Fake calls waiting on holds the test releases, by name, oldest first; an operation's
+    /// off-actor effect may be waiting on one
+    HeldCalls(Vec<String>),
+    /// Nothing is held and nothing runs off the runtime, so the only work left is a timer on the
+    /// paused clock, which moves only when the test advances it
+    ///
+    /// Tokio exposes no armed timers, so this boundary can't tell an operation waiting on a timer
+    /// from one nothing will end; the quiescent boundary tells them apart by advancing the clock
+    PausedClock,
+}
 
 /// Which invariant a violation broke, numbered as in `docs/testing.md`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,8 +78,17 @@ pub(crate) enum Invariant {
     WritePolicy = 2,
     /// Each operation finishes at most once, and each dispatched intent gets one admission
     OneFinishOneAdmission = 5,
+    /// The platform's copy, started from a `state()` snapshot and built from every screen delta
+    /// after it, is the published screen, and that is what a projection gives now
+    ScreenDelta = 3,
+    /// Every control the screen offers is drawn, and at quiescence no operation is live and the
+    /// body has an exit the user can take
+    Exits = 4,
     /// A paused write leaves no Failed row and arms no retry
     PausedWrite = 7,
+    /// An extra copy offers Delete only while the wallet it names has a current own row, and no
+    /// record is both a local wallet's own and listed beside them
+    InventoryRows = 8,
 }
 
 /// Tracked state across boundaries for one running app
@@ -61,6 +109,9 @@ pub(crate) struct Invariants {
     dispatched: Vec<UserIntent>,
     /// Wallets whose last upload the lane paused
     paused_wallets: HashSet<WalletId>,
+    /// The screen a platform has after starting from a snapshot and applying every delta the
+    /// manager sent
+    platform_screen: Option<CloudBackupPublishedScreen>,
 }
 
 /// One broken invariant, with what broke it
@@ -89,8 +140,8 @@ impl Invariants {
         *self = Self { started, ..Self::default() };
     }
 
-    /// Checks every invariant turned on against the settled app
-    pub(crate) fn check(&mut self, app: &TestApp) -> Result<(), Violation> {
+    /// Checks every invariant turned on against the app settled at `boundary`
+    pub(crate) fn check(&mut self, app: &TestApp, boundary: &Boundary) -> Result<(), Violation> {
         let supervisor = app.manager().supervisor.clone();
         let view = app
             .block_on("the supervisor's invariant view", async move {
@@ -119,7 +170,79 @@ impl Invariants {
         self.check_write_policy(&view.owner, &lane.applied, &lane.decisions)?;
         self.check_operations(&view.owner.transitions, view.owner.claim, view.shown_operation)?;
         self.check_admissions(&view.dispatches)?;
-        self.check_paused_writes(finishes)
+        self.check_paused_writes(finishes)?;
+        let live = LiveWork {
+            operation: view.owner.claim,
+            resetting: view.resetting,
+            preparing_review: view.preparing_turn_off_review,
+        };
+        check_nothing_live(boundary, live)?;
+
+        let Some(screen) = view.screen else {
+            return Ok(());
+        };
+
+        self.check_screen_deltas(&screen)?;
+        check_exits(&screen.published, boundary, live)?;
+        check_inventory_rows(&screen.published, screen.inventory.as_ref())
+    }
+
+    /// 3: a platform that starts from a `state()` snapshot and applies every delta sent so far
+    /// reaches the published screen, each delta it applies follows the revision it holds, and
+    /// the published screen is what a projection gives now
+    ///
+    /// The platform starts at the first boundary after a launch, from the snapshot read before
+    /// that boundary's publish and drain, so the deltas launch sent before it are still queued
+    /// and reach the copy after it, as they reach a platform that starts listening late
+    fn check_screen_deltas(&mut self, screen: &ScreenView) -> Result<(), Violation> {
+        let violation = |detail: String| Err(Violation::new(Invariant::ScreenDelta, detail));
+        let mut copy = self.platform_screen.take().unwrap_or_else(|| screen.snapshot.clone());
+
+        for delta in &screen.sent {
+            let revision = delta.revision;
+            let next = copy.applying(delta.clone());
+
+            // a delta the snapshot already includes is skipped, not replayed over it
+            if revision <= copy.revision && next != copy {
+                let replayed = screen_differences(&copy.screen, &next.screen);
+                return violation(format!(
+                    "delta {revision} replayed over the copy at revision {} changed {replayed}",
+                    copy.revision
+                ));
+            }
+
+            if revision > copy.revision + 1 {
+                return violation(format!(
+                    "delta {revision} reached a platform copy at revision {}",
+                    copy.revision
+                ));
+            }
+
+            copy = next;
+        }
+
+        let differs = screen_differences(&copy.screen, &screen.published);
+        let revision = copy.revision;
+        self.platform_screen = Some(copy);
+        if revision != screen.revision {
+            return violation(format!(
+                "the platform's copy is at revision {revision}, the published screen at {}",
+                screen.revision
+            ));
+        }
+
+        if !differs.is_empty() {
+            return violation(format!(
+                "the platform's copy differs from the published screen in {differs}"
+            ));
+        }
+
+        let stale = screen_differences(&screen.published, &screen.fresh);
+        if !stale.is_empty() {
+            return violation(format!("published differs from a projection now in {stale}"));
+        }
+
+        Ok(())
     }
 
     /// 1: the runtime holds a committed disable only with the commit the record holds, and a
@@ -402,6 +525,220 @@ fn verify_without_its_operation(record: &DispatchRecord) -> Option<String> {
     }
 }
 
+/// The parts of two screens that differ, each with both values
+fn screen_differences(left: &CloudBackupScreen, right: &CloudBackupScreen) -> String {
+    let mut differences = Vec::new();
+    if left.body != right.body {
+        differences.push(format!("body: {:#?}\nvs {:#?}", left.body, right.body));
+    }
+    if left.settings_row != right.settings_row {
+        differences
+            .push(format!("settings_row: {:?} vs {:?}", left.settings_row, right.settings_row));
+    }
+    if left.heal_notice != right.heal_notice {
+        differences.push(format!("heal_notice: {:?} vs {:?}", left.heal_notice, right.heal_notice));
+    }
+    if left.last_outcome != right.last_outcome {
+        differences
+            .push(format!("last_outcome: {:?} vs {:?}", left.last_outcome, right.last_outcome));
+    }
+    if left.root_prompt != right.root_prompt {
+        differences.push(format!("root_prompt: {:?} vs {:?}", left.root_prompt, right.root_prompt));
+    }
+    if left.actions != right.actions {
+        differences.push(format!("actions: {:?}\nvs {:?}", left.actions, right.actions));
+    }
+
+    differences.join("\n")
+}
+
+/// What holds the body at a boundary instead of an exit the user takes
+#[derive(Debug, Clone, Copy)]
+struct LiveWork {
+    operation: Option<CloudBackupExclusiveOperationClaim>,
+    /// A local reset closes every exit on purpose until the platform's wipe finishes it
+    resetting: bool,
+    /// A Turn Off review gathering its evidence or waiting on Check Again's classification; its
+    /// held calls and its evidence deadline end it
+    preparing_review: bool,
+}
+
+impl LiveWork {
+    fn is_live(self) -> bool {
+        self.operation.is_some() || self.resetting || self.preparing_review
+    }
+}
+
+/// 4a at quiescence: once every held call answered and the clock moved past every
+/// timer, no operation is live, no Turn Off review is still preparing and no local reset holds
+/// the body
+///
+/// At a pending boundary either may still wait on the work that boundary names; reaching
+/// quiescence is what proves that work ends it
+fn check_nothing_live(boundary: &Boundary, live: LiveWork) -> Result<(), Violation> {
+    let violation = |detail: String| Err(Violation::new(Invariant::Exits, detail));
+    let Boundary::Quiescent = boundary else { return Ok(()) };
+
+    if let Some(operation) = live.operation {
+        return violation(format!(
+            "{operation:?} is still live at quiescence, with no held call or timer left to end it"
+        ));
+    }
+
+    if live.preparing_review {
+        return violation(
+            "a Turn Off review is still preparing at quiescence, with no held call or timer \
+             left to end it"
+                .into(),
+        );
+    }
+
+    if live.resetting {
+        return violation("a local reset still holds the body at quiescence".into());
+    }
+
+    Ok(())
+}
+
+/// 4a: every control the screen offers is drawn, and with nothing live the body has an exit
+/// the user can take now, or is on the allowlist with its reason
+///
+/// Only a pending boundary can have live work, which waits on what that boundary names, so it
+/// needs no exit yet; [`check_nothing_live`] rules live work out at quiescence
+fn check_exits(
+    screen: &CloudBackupScreen,
+    boundary: &Boundary,
+    live: LiveWork,
+) -> Result<(), Violation> {
+    use CloudBackupScreenAction as A;
+    use CloudBackupScreenBody as Body;
+
+    let violation = |detail: String| Err(Violation::new(Invariant::Exits, detail));
+
+    let undrawn = undrawn_actions(screen);
+    if !undrawn.is_empty() {
+        return violation(format!("the screen offers {undrawn:?}, which nothing draws"));
+    }
+
+    if matches!(boundary, Boundary::Pending(_)) && live.is_live() {
+        return Ok(());
+    }
+
+    let exits: &[CloudBackupScreenAction] = match &screen.body {
+        Body::Disabled => &[A::Enable, A::RestoreFromCloudBackup],
+        // with nothing live an Enable waits on one of its prompts, and the prompt's choices go
+        // on with it; only Discard leaves it
+        Body::Enabling(_) => &[A::DiscardPendingEnable],
+        // the paused work goes on through Confirm, or ends through Discard where it may
+        Body::SavedPasskeyConfirmation(_) => &[A::ConfirmSavedPasskey, A::DiscardPendingEnable],
+        Body::Restoring(_) => &[A::CancelRestore],
+        // a Turn Off review shown holds Turn Off, and its Cancel leaves it; one still preparing
+        // is live work, which only a pending boundary has
+        Body::Configured(_) => &[A::TurnOff, A::CancelDisable],
+        Body::FinishingDisable(_) => &[A::ResumeDisable, A::StopUsingOnThisDevice],
+        // a switch that failed or stopped goes on through Try Again or Cancel
+        Body::DriveAccountSwitch(_) => {
+            &[A::RetryDriveAccountSwitchRecovery, A::CancelDriveAccountSwitch]
+        }
+        // allowlisted: support-only cleanup has no safe automatic exit, so the user contacts
+        // support with the code the body shows
+        Body::PendingEnableRecovery(recovery)
+            if recovery.cleanup != CloudBackupPendingEnableCleanupState::Available =>
+        {
+            return Ok(());
+        }
+        Body::PendingEnableRecovery(_) => &[A::ConfirmPendingEnableCleanup],
+        Body::LoadFailed => &[A::RetryLoad],
+        Body::Corrupted => &[A::ResetOnThisDevice],
+    };
+
+    if exits.iter().any(|exit| screen.actions.is_available(*exit)) {
+        return Ok(());
+    }
+
+    violation(format!(
+        "at {boundary:?} nothing is live and none of {exits:?} is available on {:#?}",
+        screen.body
+    ))
+}
+
+/// 8: an extra copy names a wallet that covers it and offers Delete only while a covering wallet
+/// has a current own row (otherwise it says Back up first), and no record id is both
+/// a local wallet's own and a listed row, and every delete consents to the rows it is drawn with
+///
+/// The screen names the covering wallet; `inventory` holds which wallets cover the copy, by their
+/// own record ids, so a renamed wallet or another with the same name can't stand in for them
+fn check_inventory_rows(
+    screen: &CloudBackupScreen,
+    inventory: Option<&InventoryRows>,
+) -> Result<(), Violation> {
+    let violation = |detail: String| Err(Violation::new(Invariant::InventoryRows, detail));
+    let CloudBackupScreenBody::Configured(configured) = &screen.body else { return Ok(()) };
+
+    let mismatched = mismatched_delete_consents(screen);
+    if !mismatched.is_empty() {
+        return violation(format!("the deletes of {mismatched:?} consent to other rows"));
+    }
+
+    let mut own = Vec::new();
+    let mut listed = Vec::new();
+    for section in &configured.sections {
+        match section {
+            CloudBackupSection::Wallets(wallets) => {
+                own.extend(wallets.up_to_date.iter().chain(&wallets.needs_sync));
+            }
+            CloudBackupSection::NotOnDevice(section) => listed.extend(&section.rows),
+            CloudBackupSection::ExtraCopies(section) => listed.extend(&section.rows),
+            _ => {}
+        }
+    }
+
+    for row in &listed {
+        if own.iter().any(|own| RecordId::from(own.wallet.record_id.clone()) == row.record_id) {
+            return violation(format!(
+                "{:?} is both a local wallet's own and listed",
+                row.record_id
+            ));
+        }
+
+        let CloudBackupListedRecord::ExtraCopy { covered_by, .. } = &row.record else { continue };
+        let Some(listed) = inventory
+            .and_then(|rows| rows.listed.iter().find(|listed| listed.record_id == row.record_id))
+        else {
+            return violation(format!(
+                "the extra copy {:?} is drawn, but the inventory doesn't list it",
+                row.record_id
+            ));
+        };
+
+        let names_a_covering_wallet = own.iter().any(|own| {
+            own.wallet.name == *covered_by
+                && listed.covered_by().contains(&RecordId::from(own.wallet.record_id.clone()))
+        });
+        if !names_a_covering_wallet {
+            return violation(format!(
+                "the extra copy {:?} names {covered_by:?}, which isn't a wallet covering it",
+                row.record_id
+            ));
+        }
+
+        let deletable = row
+            .actions
+            .iter()
+            .any(|action| matches!(action.action, CloudBackupRowActionKind::Delete { .. }));
+        let current = inventory.is_some_and(|rows| rows.copy_has_current_backup(listed));
+
+        if deletable && !current {
+            return violation(format!(
+                "the extra copy {:?} offers Delete, but {covered_by:?} has no current backup",
+                row.record_id
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Whether `policy` owns `class` enough to run it: background work only in its own
 /// configuration while ordinary writes run, never beside a Turn Off or a reinitialize replacing
 /// the configuration, and operation work only for its running operation
@@ -437,5 +774,111 @@ fn running_claim(body: &PolicyBody) -> Option<CloudBackupExclusiveOperationClaim
         }),
         PolicyBody::FinishingDisable { op, .. } | PolicyBody::AccountSwitch { op } => *op,
         PolicyBody::Closed(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manager::cloud_backup_manager::inventory::{
+        CopyCover, InventoryListedClass, ListedRecord,
+    };
+    use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
+    use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+    use crate::manager::cloud_backup_manager::screen::{
+        CloudBackupListedRow, cloud_backup_screen_fixtures,
+    };
+    use crate::wallet_identity::BackupRecoveryMaterial;
+
+    /// 4a: a restore whose last completion was lost passes a pending boundary, which may still
+    /// hold work it waits on, and fails at quiescence, where nothing is left to end it
+    #[test]
+    fn an_operation_left_live_at_quiescence_breaks_4a() {
+        let restoring = cloud_backup_screen_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.name.ends_with(":restoring"))
+            .expect("the restoring fixture")
+            .screen;
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Restore,
+            OperationId::next(),
+        );
+        let orphaned =
+            LiveWork { operation: Some(claim), resetting: false, preparing_review: false };
+
+        let pending = Boundary::Pending(PendingWork::PausedClock);
+        assert!(check_nothing_live(&pending, orphaned).is_ok());
+        assert!(check_exits(&restoring, &pending, orphaned).is_ok());
+
+        let violation = check_nothing_live(&Boundary::Quiescent, orphaned)
+            .expect_err("an operation live at quiescence");
+        assert_eq!(violation.invariant, Invariant::Exits, "{}", violation.detail);
+    }
+
+    /// The configured fixture's screen and the inventory rows it was drawn from, with its extra
+    /// copy covered by the wallet whose own record is `covering`
+    fn drawn_from(covering: &str) -> (CloudBackupScreen, InventoryRows) {
+        let screen = cloud_backup_screen_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.name.ends_with(":configured"))
+            .expect("the configured fixture")
+            .screen;
+        let CloudBackupScreenBody::Configured(configured) = &screen.body else {
+            panic!("the configured fixture is configured")
+        };
+
+        let mut rows = InventoryRows {
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            listed: Vec::new(),
+            // the namespace the fixtures' consents name
+            listed_namespace: Some("fixture-namespace".into()),
+            last_sync: None,
+            own_cloud_copies: HashMap::new(),
+        };
+        let listed = |row: &CloudBackupListedRow| ListedRecord {
+            record_id: row.record_id.clone(),
+            record: row.record.clone(),
+            // only an extra copy's covering wallets matter to these checks
+            class: match row.record {
+                CloudBackupListedRecord::ExtraCopy { .. } => {
+                    InventoryListedClass::ExtraCopy(CopyCover {
+                        covered_by: vec![RecordId::from(covering.to_owned())],
+                        material: BackupRecoveryMaterial::Secret,
+                    })
+                }
+                _ => InventoryListedClass::Unchecked,
+            },
+        };
+        for section in &configured.sections {
+            match section {
+                CloudBackupSection::Wallets(wallets) => {
+                    rows.up_to_date.clone_from(&wallets.up_to_date);
+                    rows.needs_sync.clone_from(&wallets.needs_sync);
+                }
+                CloudBackupSection::NotOnDevice(section) => {
+                    rows.listed.extend(section.rows.iter().map(listed));
+                }
+                CloudBackupSection::ExtraCopies(section) => {
+                    rows.listed.extend(section.rows.iter().map(listed));
+                }
+                _ => {}
+            }
+        }
+
+        (screen, rows)
+    }
+
+    /// An extra copy must name a wallet that covers it: the name alone matches the wrong wallet
+    /// once a rename or a namesake is involved
+    #[test]
+    fn an_extra_copy_names_a_wallet_that_covers_it() {
+        let (screen, rows) = drawn_from("record-spending");
+        assert!(check_inventory_rows(&screen, Some(&rows)).is_ok());
+
+        // the copy still says "Spending", but the wallet covering it is another one
+        let (screen, rows) = drawn_from("record-savings");
+        let violation = check_inventory_rows(&screen, Some(&rows)).expect_err("a wrong name");
+        assert_eq!(violation.invariant, Invariant::InventoryRows, "{}", violation.detail);
     }
 }

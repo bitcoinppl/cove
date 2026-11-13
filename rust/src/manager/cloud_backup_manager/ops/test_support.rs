@@ -40,9 +40,10 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupKeychain,
     CloudBackupListedDetail, CloudBackupRestoreReport, CloudBackupStateReducer, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWriteClient, CloudOnlyFetch, PendingEnableCoordinator,
-    PendingEnableJournal, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnableSession, PendingUploadVerificationState,
+    CloudBackupWalletItem, CloudBackupWriteClient, CloudOnlyFetch, InventoryOwner,
+    PendingEnableCoordinator, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PublishedScreen,
     actors::restore::RestoreOperation,
     actors::supervisor::{CloudBackupSupervisor, test_support::LeftoverOperationForTest},
     master_key_wrapper_revision_hash,
@@ -63,7 +64,9 @@ use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
 pub(crate) fn manager_without_actors() -> Arc<RustCloudBackupManager> {
     Arc::new(RustCloudBackupManager {
         state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
+        inventory: Arc::new(RwLock::new(InventoryOwner::default())),
         reconciler: ReconcileChannel::new(1000),
+        published_screen: Arc::new(PublishedScreen::default()),
         pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
         cloud_writes: Addr::detached(),
         supervisor: Addr::detached(),
@@ -122,9 +125,13 @@ pub(crate) fn complete_cloud_only_fetch(
     wallets: Vec<CloudBackupWalletItem>,
 ) -> CloudOnlyFetch {
     CloudOnlyFetch {
-        wallets,
-        unresolved_record_ids: Vec::new(),
-        listing_generation: manager.state.read().cloud_only_listing_generation(),
+        rows: crate::manager::cloud_backup_manager::owner::inventory::test_support::listed_rows(
+            &wallets,
+        ),
+        listing_generation: manager.inventory.read().cloud_only_listing_generation(),
+        namespace_id:
+            crate::manager::cloud_backup_manager::owner::inventory::test_support::LISTED_NAMESPACE
+                .into(),
     }
 }
 
@@ -142,12 +149,12 @@ pub(crate) fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListed
             last_sync: None,
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
-            cloud_only_count: cloud_only_record_ids.len() as u32,
         },
         cloud_only_record_ids: cloud_only_record_ids
             .iter()
             .map(|record_id| (*record_id).to_owned())
             .collect(),
+        own_secrets: Default::default(),
     }
 }
 
@@ -1748,6 +1755,13 @@ pub(crate) async fn replace_enable_continuation_for_test(
     call!(manager.supervisor.replace_enable_continuation_for_test(owner, session))
         .await
         .expect("replace enable continuation");
+}
+
+/// Runs Discard's cleanup on the held continuation without admission
+pub(crate) async fn discard_held_continuation_for_test(manager: &RustCloudBackupManager) {
+    call!(manager.supervisor.discard_held_continuation_for_test())
+        .await
+        .expect("discard held continuation");
 }
 
 pub(crate) async fn has_awaiting_saved_passkey_confirmation_for_test(

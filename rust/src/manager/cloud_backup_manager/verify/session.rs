@@ -32,8 +32,8 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
     CloudBackupError, CloudBackupKeychain, CloudBackupRetryAction, CloudBackupStore,
     CloudBackupWalletVerificationIssues, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager,
+    DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PasskeyRequestFailure,
+    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
     actors::CloudBackupUploadedWallet,
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
@@ -75,7 +75,36 @@ enum MasterKeyResolution {
 
 enum ContinuableMasterKeyResolution {
     Authenticated(AuthenticatedMasterKey),
-    NeedsWrapperRepair { reuse_credential_id: Option<Vec<u8>> },
+    NeedsWrapperRepair(WrapperRepairCause),
+}
+
+/// Why verification rebuilds the cloud wrapper from the local master key
+///
+/// Only the stored passkey's own failure proves it missing, so only that cause can end in the
+/// needs-repair card; the others reach the same rebuild with a passkey that was never shown to
+/// be gone
+enum WrapperRepairCause {
+    /// The cloud has no wrapper, so nothing was asked of the passkey
+    WrapperMissing,
+    /// Neither the stored credential nor discovery found a passkey
+    PasskeyNotFound,
+    /// The passkey answered but no longer opens the wrapper, so the rebuild reuses it
+    StaleWrapper { credential_id: Vec<u8> },
+}
+
+impl WrapperRepairCause {
+    fn proves_passkey_missing(&self) -> bool {
+        matches!(self, Self::PasskeyNotFound)
+    }
+
+    fn strategy(self) -> WrapperRepairStrategy {
+        match self {
+            Self::WrapperMissing | Self::PasskeyNotFound => WrapperRepairStrategy::CreateNew,
+            Self::StaleWrapper { credential_id } => {
+                WrapperRepairStrategy::ReuseExisting(credential_id)
+            }
+        }
+    }
 }
 
 enum RepairedMasterKeyResolution {
@@ -457,8 +486,8 @@ impl VerificationSession {
                 authenticated_master
             }
 
-            ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
-                match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
+            ContinuableMasterKeyResolution::NeedsWrapperRepair(cause) => {
+                match self.repair_wrapper_from_local_key(cause).await? {
                     RepairedMasterKeyResolution::PreparedWrapperRepair(prepared) => {
                         return Ok(CloudBackupDeepVerificationStep::PreparedWrapperRepair(
                             prepared,
@@ -565,7 +594,9 @@ impl VerificationSession {
     ) -> Result<MasterKeyResolution, CloudBackupError> {
         let Some(encrypted_master) = encrypted_master else {
             return Ok(MasterKeyResolution::Continue(
-                ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id: None },
+                ContinuableMasterKeyResolution::NeedsWrapperRepair(
+                    WrapperRepairCause::WrapperMissing,
+                ),
             ));
         };
 
@@ -579,9 +610,9 @@ impl VerificationSession {
                 if self.local_master_key.is_some() {
                     info!("Verify: no passkey found for the master key, repairing from local key");
                     return Ok(MasterKeyResolution::Continue(
-                        ContinuableMasterKeyResolution::NeedsWrapperRepair {
-                            reuse_credential_id: None,
-                        },
+                        ContinuableMasterKeyResolution::NeedsWrapperRepair(
+                            WrapperRepairCause::PasskeyNotFound,
+                        ),
                     ));
                 }
 
@@ -622,9 +653,11 @@ impl VerificationSession {
                     "Verify: passkey did not decrypt the master key ({error}), repairing wrapper"
                 );
                 Ok(MasterKeyResolution::Continue(
-                    ContinuableMasterKeyResolution::NeedsWrapperRepair {
-                        reuse_credential_id: Some(authenticated.credential_id),
-                    },
+                    ContinuableMasterKeyResolution::NeedsWrapperRepair(
+                        WrapperRepairCause::StaleWrapper {
+                            credential_id: authenticated.credential_id,
+                        },
+                    ),
                 ))
             }
 
@@ -679,7 +712,7 @@ impl VerificationSession {
 
     async fn repair_wrapper_from_local_key(
         self,
-        reuse_credential_id: Option<Vec<u8>>,
+        cause: WrapperRepairCause,
     ) -> Result<RepairedMasterKeyResolution, CloudBackupError> {
         let Some(local_master_key) = self.local_master_key.as_ref() else {
             return Ok(RepairedMasterKeyResolution::Finished(
@@ -689,11 +722,8 @@ impl VerificationSession {
         let local_master_key = MasterKey::from_bytes(*local_master_key.as_bytes());
 
         let repair = WrapperRepairOperation::new(&self.cloud, &self.passkey, &self.namespace);
-
-        let strategy = match reuse_credential_id {
-            Some(credential_id) => WrapperRepairStrategy::ReuseExisting(credential_id),
-            None => WrapperRepairStrategy::CreateNew,
-        };
+        let proves_passkey_missing = cause.proves_passkey_missing();
+        let strategy = cause.strategy();
 
         let wallet_record_ids = self.wallet_record_ids.as_deref().unwrap_or(&[]);
         match repair.prepare(&local_master_key, wallet_record_ids, strategy).await {
@@ -713,7 +743,21 @@ impl VerificationSession {
                 self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
             )),
 
-            Err(WrapperRepairError::Operation(error)) => Err(error),
+            // a request that didn't complete, dismissed or not presentable yet, says nothing
+            // about the passkey; a failed one leaves the backup needing a passkey repair only
+            // when the stored passkey's own failure already proved it missing
+            Err(WrapperRepairError::Operation(error)) => match error.passkey_request_failure() {
+                Some(PasskeyRequestFailure::NotCompleted) => {
+                    Ok(RepairedMasterKeyResolution::Finished(self.resolve_cancellation_outcome()))
+                }
+                Some(PasskeyRequestFailure::Failed) if proves_passkey_missing => {
+                    warn!("Passkey replacement during verification failed: {error}");
+                    Ok(RepairedMasterKeyResolution::Finished(
+                        DeepVerificationResult::PasskeyMissing(self.detail()),
+                    ))
+                }
+                Some(PasskeyRequestFailure::Failed) | None => Err(error),
+            },
         }
     }
 
@@ -1077,6 +1121,6 @@ impl VerificationSession {
 
     fn resolve_cancellation_outcome(&self) -> DeepVerificationResult {
         info!("Passkey verification cancelled by user");
-        DeepVerificationResult::UserCancelled(self.detail())
+        DeepVerificationResult::NotCompleted(self.detail())
     }
 }

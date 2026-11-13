@@ -28,12 +28,24 @@ use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
+use crate::manager::cloud_backup_manager::admission::{Rejection, ReviewExit, UserIntent};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, LifecycleWriter};
-use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
+#[cfg(test)]
+use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    DisableCommitReview, LifecycleLoad, LifecycleWriter,
+};
+use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
+use crate::manager::cloud_backup_manager::turn_off::{
+    AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, RetryWake,
+    ReviewId, TurnOffCommit, TurnOffReview,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupStatus, InventoryScope, RustCloudBackupManager,
+};
 
 /// The stored runtime, the only lifecycle writer, and the write policy last published for them
 #[derive(Debug)]
@@ -115,13 +127,21 @@ impl OwnedRuntime {
         result
     }
 
-    /// Rebases an idle body on the owner's record, then publishes the policy if it changed
+    /// Rebases an idle body on the owner's record, then publishes the policy if it changed and
+    /// asks for the screen to be projected again
+    ///
+    /// The screen reads the runtime, so a runtime change is a screen change as much as a reducer
+    /// change is; the request queues behind the handler making this change
     fn publish(&mut self) {
         let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
         self.runtime.rebase_idle(IdleFacts::of(&record, pending_enable_recovery));
         self.publish_policy();
         self.project_pending_enable_recovery(&record);
+
+        if let Some(manager) = self.manager.upgrade() {
+            manager.request_screen_publish();
+        }
     }
 
     /// The status the owner's body and record give
@@ -194,10 +214,15 @@ impl OwnedRuntime {
         let replaced = self.replacing.is_some() && replacing != self.replacing;
         self.replacing = replacing;
 
-        // a new body kind, or a reinitialize that ended, starts a new configuration
+        // a new body kind, or a reinitialize that ended, starts a new configuration, and the
+        // inventory of the old one is dropped with every result still in flight for it
         if self.published.version > 0 && (body_changed || replaced) {
             self.generation = ConfigGeneration::next();
             policy.generation = self.generation;
+
+            if let Some(manager) = self.manager.upgrade() {
+                manager.enter_inventory_scope(InventoryScope::of(self.generation));
+            }
         }
 
         if self.published.version > 0 && policy == self.published.policy {
@@ -236,6 +261,18 @@ impl OwnedRuntime {
         self.publish();
     }
 
+    /// Reads the record again after a failed load and leaves `LoadFailed` once it reads
+    pub(crate) fn retry_load(&mut self) -> Result<(), DatabaseError> {
+        if let LifecycleLoad::Failed(error) = self.lifecycle.retry_load() {
+            return Err(error);
+        }
+
+        let record = self.lifecycle.record();
+        self.mutate(|runtime| runtime.loaded(IdleFacts::of(&record, None)));
+
+        Ok(())
+    }
+
     /// Ends the operation `claim` names; the one place an operation finishes
     ///
     /// Finishing an operation that no longer runs changes nothing, and the harness ledger
@@ -269,12 +306,74 @@ impl OwnedRuntime {
         self.mutate(|runtime| runtime.start_restore_all(run))
     }
 
+    /// Commits the confirmed Turn Off `claim` runs and moves its body to the committed disable
+    /// in one step, then publishes
+    ///
+    /// The record write and the body change are one call, so the record can't move to Disabling
+    /// without the body that deletes, and a Turn Off that no longer runs writes nothing
     pub(crate) fn commit_turn_off(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        committed: CommittedDisable,
-    ) {
-        self.mutate(|runtime| runtime.commit_turn_off(claim, committed));
+        review: &DisableCommitReview,
+        attempt_id: u64,
+    ) -> Result<TurnOffCommit, CloudBackupError> {
+        #[cfg(test)]
+        let before = self.runtime.claim();
+
+        let lifecycle = &self.lifecycle;
+        let commit =
+            self.runtime.commit_turn_off(claim, || lifecycle.commit_disable(review, attempt_id));
+
+        #[cfg(test)]
+        self.record_transition(before);
+
+        self.publish();
+        commit
+    }
+
+    /// Replaces the Turn Off review an idle configured body holds
+    pub(crate) fn set_turn_off_review(&mut self, review: Option<TurnOffReview>) {
+        self.mutate(|runtime| runtime.set_turn_off_review(review));
+    }
+
+    /// Consent to the review on screen: takes it and starts Turn Off in one step
+    pub(crate) fn admit_confirm(
+        &mut self,
+        review_id: ReviewId,
+    ) -> Result<ConfirmedTurnOff, Rejection> {
+        self.mutate(|runtime| runtime.admit_confirm(review_id))
+    }
+
+    /// Ends the review on screen for the work the button `to` names
+    pub(crate) fn leave_review(
+        &mut self,
+        review_id: ReviewId,
+        to: ReviewExit,
+    ) -> Result<UserIntent, Rejection> {
+        self.mutate(|runtime| runtime.leave_review(review_id, to))
+    }
+
+    pub(crate) fn start_finish(
+        &mut self,
+        authority: DeleteAuthority,
+    ) -> Result<AdmittedFinish, Rejection> {
+        self.mutate(|runtime| runtime.start_finish(authority))
+    }
+
+    pub(crate) fn fail_finish(
+        &mut self,
+        run: FinishRun,
+        reason: CloudBackupTurnOffFailure,
+    ) -> Option<FinishFailure> {
+        self.mutate(|runtime| runtime.fail_finish(run, reason))
+    }
+
+    pub(crate) fn arm_retry_wake(&mut self, at: u64) -> Option<RetryWake> {
+        self.mutate(|runtime| runtime.arm_retry_wake(at))
+    }
+
+    pub(crate) fn take_retry_wake(&mut self, fired: RetryWake) -> bool {
+        self.mutate(|runtime| runtime.take_retry_wake(fired))
     }
 
     pub(crate) fn hand_off(

@@ -3,7 +3,7 @@ mod payload;
 mod restore;
 mod upload;
 
-use cove_cspp::backup_data::WalletEntry;
+use cove_cspp::backup_data::{WalletEntry, WalletSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::wallet::metadata::WalletMetadata;
@@ -21,15 +21,6 @@ pub(crate) struct UnpersistedPrfKey {
 }
 
 impl UnpersistedPrfKey {
-    pub(crate) fn copy_for_retry(&self) -> Self {
-        Self {
-            prf_key: self.prf_key,
-            prf_salt: self.prf_salt,
-            credential_id: self.credential_id.clone(),
-            provider_hint: self.provider_hint.clone(),
-        }
-    }
-
     pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
         let credential_id = std::mem::take(&mut self.credential_id);
 
@@ -65,6 +56,7 @@ pub(crate) struct RemoteWalletBackupSummary {
     pub(crate) revision_hash: String,
     pub(crate) label_count: u32,
     pub(crate) updated_at: Option<u64>,
+    pub(crate) secret: BackupSecret,
 }
 
 impl RemoteWalletBackupSummary {
@@ -73,6 +65,26 @@ impl RemoteWalletBackupSummary {
             revision_hash: entry.content_revision_hash.clone(),
             label_count: entry.labels_count,
             updated_at: (entry.updated_at != 0).then_some(entry.updated_at),
+            secret: BackupSecret::from(&entry.secret),
+        }
+    }
+}
+
+/// Whether a wallet backup carries key material that can sign, or only public keys
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BackupSecret {
+    Held,
+    WatchOnly,
+}
+
+impl From<&WalletSecret> for BackupSecret {
+    fn from(secret: &WalletSecret) -> Self {
+        match secret {
+            WalletSecret::WatchOnly => Self::WatchOnly,
+            WalletSecret::Mnemonic(_)
+            | WalletSecret::Xprv(_)
+            | WalletSecret::TapSignerBackup(_)
+            | WalletSecret::Descriptor(_) => Self::Held,
         }
     }
 }
@@ -92,10 +104,10 @@ pub(crate) use passkey::{
 #[cfg(test)]
 pub(crate) use payload::test_support as payload_test_support;
 pub(crate) use payload::{
-    decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
+    LocalSecret, decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
     upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
-    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReadError, WalletBackupReader,
+    WalletRestoreOutcome, WalletRestoreSession,
 };

@@ -10,9 +10,9 @@ struct MainSettingsCloudBackupSection: View {
     var body: some View {
         if isVisible {
             Section(header: Text("Cloud Backup")) {
-                MainSettingsCloudBackupLifecycleContent(
-                    lifecycle: manager.lifecycle,
-                    status: manager.settingsRowStatus,
+                MainSettingsCloudBackupBodyContent(
+                    body: manager.screen.body,
+                    status: manager.screen.settingsRow,
                     onEnable: onEnable,
                     onOpenDetail: onOpenDetail
                 )
@@ -21,16 +21,16 @@ struct MainSettingsCloudBackupSection: View {
     }
 }
 
-private struct MainSettingsCloudBackupLifecycleContent: View {
+private struct MainSettingsCloudBackupBodyContent: View {
     private let content: AnyView
 
     init(
-        lifecycle: CloudBackupLifecycle,
+        body: CloudBackupScreenBody,
         status: CloudBackupSettingsRowStatus,
         onEnable: @escaping () -> Void,
         onOpenDetail: @escaping () -> Void
     ) {
-        content = switch lifecycle {
+        content = switch body {
         case .disabled:
             AnyView(SettingsRow(
                 title: "Enable Cloud Backup",
@@ -43,15 +43,27 @@ private struct MainSettingsCloudBackupLifecycleContent: View {
             AnyView(MainSettingsCloudBackupRestoringRow())
         case .pendingEnableRecovery:
             AnyView(MainSettingsCloudBackupRecoveryContent(onReview: onEnable))
-        case let .failed(failure):
+        case .loadFailed:
             AnyView(MainSettingsCloudBackupErrorContent(
-                message: failure.message,
+                message: "Cove couldn't load Cloud Backup on this device",
                 onReview: onOpenDetail
             ))
-        case .configured:
+        case .corrupted:
+            AnyView(MainSettingsCloudBackupErrorContent(
+                message: "Cove can't read the Cloud Backup settings on this device",
+                onReview: onOpenDetail
+            ))
+        case .configured, .finishingDisable, .driveAccountSwitch:
             AnyView(MainSettingsCloudBackupEnabledRow(
                 status: status,
                 onOpenDetail: onOpenDetail
+            ))
+        // a paused Enable goes on from the Enable sheet, which finishes it; other paused work
+        // belongs to the configured backup, whose detail screen draws the confirmation
+        case let .savedPasskeyConfirmation(paused):
+            AnyView(MainSettingsCloudBackupEnabledRow(
+                status: status,
+                onOpenDetail: paused.lifecycle == .enable ? onEnable : onOpenDetail
             ))
         }
     }
@@ -129,6 +141,8 @@ struct MainSettingsCloudBackupEnabledRow: View {
         .buttonStyle(.plain)
         .frame(minHeight: 44)
         .accessibilityHint("Opens Cloud Backup details")
+        // the title follows Rust's status, so a test that can't know it opens the row by this
+        .accessibilityIdentifier("settings.cloudBackup")
     }
 
     private var settingsChevron: some View {
@@ -152,10 +166,12 @@ struct MainSettingsCloudBackupEnabledStatus: View {
 
         VStack(alignment: .leading, spacing: 2) {
             Text(presentation.title)
+                .uiTestTruncationProbe()
 
             if let message = presentation.message {
                 Text(message)
                     .font(.caption2)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(presentation.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -176,6 +192,9 @@ private struct MainSettingsCloudBackupStatusPresentation {
         self.color = color
     }
 
+    // one exhaustive arm per status, so a status Rust adds fails to compile here; splitting it to
+    // lower the count would need a default arm, which would hide that
+    // swiftlint:disable:next cyclomatic_complexity
     init(status: CloudBackupSettingsRowStatus) {
         self = switch status {
         case .disabled, .disabling, .settingUp, .restoring:
@@ -202,6 +221,10 @@ private struct MainSettingsCloudBackupStatusPresentation {
             .driveUnavailable
         case .recoveryRequired:
             .recoveryRequired
+        case .turnOffIncomplete:
+            .turnOffIncomplete
+        case .turnedOnAgain:
+            .turnedOnAgain
         case let .authorizationRequired(message):
             .init(
                 symbol: "exclamationmark.icloud",
@@ -290,6 +313,18 @@ private struct MainSettingsCloudBackupStatusPresentation {
         title: "Cloud Backup Needs Recovery",
         message: "Open to review interrupted setup",
         color: Color.statusWarning
+    )
+    private static let turnOffIncomplete = Self(
+        symbol: "exclamationmark.icloud",
+        title: "Cloud Backup Is Being Turned Off",
+        message: "Open to finish turning off Cloud Backup",
+        color: Color.statusWarning
+    )
+    private static let turnedOnAgain = Self(
+        symbol: "checkmark.icloud",
+        title: "Cloud Backup Turned On Again",
+        message: "Cove is backing up your wallets again",
+        color: Color.statusInfo
     )
 }
 

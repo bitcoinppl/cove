@@ -1,9 +1,16 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupActionAvailability
+import org.bitcoinppl.cove_core.CloudBackupActionEntry
+import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,15 +51,24 @@ class OnboardingBackupViewsTest {
                 cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
             )
 
+        val cleanup = CloudBackupActionAvailability.Available
+
         assertEquals(
-            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(recovery),
+            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(recovery, cleanup),
             onboardingCloudBackupStepPresentation(
-                CloudBackupLifecycle.PendingEnableRecovery(recovery),
+                screen(
+                    CloudBackupScreenBody.PendingEnableRecovery(recovery),
+                    CloudBackupActionEntry(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP, cleanup),
+                ),
             ),
         )
         assertEquals(
+            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(recovery, cleanup = null),
+            onboardingCloudBackupStepPresentation(screen(CloudBackupScreenBody.PendingEnableRecovery(recovery))),
+        )
+        assertEquals(
             OnboardingCloudBackupStepPresentation.Enable,
-            onboardingCloudBackupStepPresentation(CloudBackupLifecycle.Disabled),
+            onboardingCloudBackupStepPresentation(screen(CloudBackupScreenBody.Disabled)),
         )
     }
 
@@ -80,4 +96,16 @@ class OnboardingBackupViewsTest {
         assertNull(dispatched)
         assertTrue(didSkip)
     }
+
+    private fun screen(
+        body: CloudBackupScreenBody,
+        vararg actions: CloudBackupActionEntry,
+    ) = CloudBackupScreen(
+        body = body,
+        settingsRow = CloudBackupSettingsRowStatus.Disabled,
+        healNotice = null,
+        lastOutcome = null,
+        rootPrompt = CloudBackupRootPrompt.None,
+        actions = CloudBackupActions(actions.toList()),
+    )
 }

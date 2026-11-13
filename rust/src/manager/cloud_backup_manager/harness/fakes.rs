@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use cove_device::cloud_storage::{
@@ -82,24 +82,45 @@ impl Default for Hold {
 
 /// One fake call waiting for the test to release it
 ///
-/// Until this drops the call counts among the held calls, and when the fake waits on a
+/// Until this drops the call is listed in [`HELD_CALLS`], and when the fake waits on a
 /// blocking-pool thread, that thread counts as waiting for the test
 #[derive(Debug)]
 struct HeldCall {
+    /// The hold the listing names, weak so a hold never keeps its own listing alive
+    hold: Weak<HoldInner>,
     _thread: WaitingThread,
 }
 
 impl HeldCall {
-    /// Counts the call that starts waiting on this thread
-    fn enter() -> Self {
-        HELD_CALLS.send_modify(|held| *held += 1);
-        Self { _thread: WaitingThread::enter() }
+    /// Lists the call that starts waiting on this thread
+    fn enter(hold: &Hold) -> Self {
+        HELD_CALLS.send_modify(|held| held.push(hold.clone()));
+        Self { hold: Arc::downgrade(&hold.0), _thread: WaitingThread::enter() }
     }
 }
 
 impl Drop for HeldCall {
     fn drop(&mut self) {
-        HELD_CALLS.send_modify(|held| *held -= 1);
+        HELD_CALLS.send_modify(|held| {
+            let position = held
+                .iter()
+                .position(|other| std::ptr::eq(Arc::as_ptr(&other.0), self.hold.as_ptr()));
+            if let Some(position) = position {
+                held.remove(position);
+            }
+        });
+    }
+}
+
+/// Ends a held call's listing once its caller stops waiting, released or not
+///
+/// A caller can abandon a held call, as an evidence stage does past its deadline, and a call
+/// left listed would make every later settle return early
+struct StopsWaiting<'a>(&'a Hold);
+
+impl Drop for StopsWaiting<'_> {
+    fn drop(&mut self) {
+        self.0.0.held.lock().take();
     }
 }
 
@@ -124,9 +145,13 @@ impl Hold {
         self.wait_for(HoldStage::Finished, "to return after release").await;
     }
 
-    /// Name the held call in deadline failures
+    /// Name the held call in deadline failures and pending boundaries
     fn label(&self, call: String) {
         *self.0.call.lock() = call;
+    }
+
+    fn name(&self) -> String {
+        self.0.call.lock().clone()
     }
 
     async fn wait_for(&self, stage: HoldStage, step: &str) {
@@ -143,7 +168,7 @@ impl Hold {
         self.0.stage.send_if_modified(|stage| {
             let armed = *stage == HoldStage::Armed;
             if armed {
-                *self.0.held.lock() = Some(HeldCall::enter());
+                *self.0.held.lock() = Some(HeldCall::enter(self));
                 *stage = HoldStage::Entered;
             }
             armed
@@ -152,6 +177,7 @@ impl Hold {
 
     async fn enter_and_wait(&self) {
         self.enter();
+        let _stops_waiting = StopsWaiting(self);
         self.wait_for(HoldStage::Released, "to be released by the test").await;
     }
 
@@ -172,18 +198,35 @@ impl Hold {
     }
 }
 
-/// Fake calls of any kind waiting on a [`Hold`]
-static HELD_CALLS: LazyLock<watch::Sender<usize>> = LazyLock::new(|| watch::Sender::new(0));
+/// Fake calls of any kind waiting on a [`Hold`], oldest first
+static HELD_CALLS: LazyLock<watch::Sender<Vec<Hold>>> =
+    LazyLock::new(|| watch::Sender::new(Vec::new()));
 
-/// How many fake calls are waiting for the test to release them
-pub(crate) fn held_calls() -> usize {
-    *HELD_CALLS.borrow()
+/// The fake calls waiting for the test to release them, by name, oldest first
+pub(crate) fn held_calls() -> Vec<String> {
+    HELD_CALLS.borrow().iter().map(Hold::name).collect()
+}
+
+/// Releases every fake call waiting on a hold now, the way quiescence delivers what is held
+pub(crate) fn release_held_calls() {
+    // a released call removes itself from the list, so the list is copied before releasing
+    let held = HELD_CALLS.borrow().clone();
+    for hold in held {
+        hold.release();
+    }
 }
 
 /// Resolves once some fake call is waiting for the test to release it
 pub(crate) async fn until_a_call_is_held() {
     let mut held = HELD_CALLS.subscribe();
-    let _ = held.wait_for(|held| *held > 0).await;
+    let _ = held.wait_for(|held| !held.is_empty()).await;
+}
+
+/// Resolves once no fake call waits on a hold, as when its caller released or abandoned it
+pub(crate) async fn until_no_call_is_held() {
+    let _deadline = Deadline::arm("every held call to be released or abandoned");
+    let mut held = HELD_CALLS.subscribe();
+    let _ = held.wait_for(Vec::is_empty).await;
 }
 
 fn write_json(path: &PathBuf, value: &impl serde::Serialize) {
@@ -240,8 +283,21 @@ pub(crate) enum CloudFault {
 struct CloudCalls {
     counts: HashMap<CloudCall, usize>,
     log: Vec<(CallId<CloudCall>, Option<String>)>,
+    policies: HashMap<CallId<CloudCall>, CloudAccessPolicy>,
     scripts: HashMap<CallId<CloudCall>, CloudFault>,
     in_flight: usize,
+    authorization: ProviderAuthorization,
+    consent_sheets: usize,
+}
+
+/// Whether the provider lets Cove in without asking, as Google Drive's app authorization does
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum ProviderAuthorization {
+    #[default]
+    Granted,
+    /// The user removed Cove's access: a silent call fails with `AuthorizationRequired`, and a
+    /// call that may ask for consent shows the provider's sheet, which the user accepts
+    Revoked,
 }
 
 fn label_hold(id: CallId<CloudCall>, fault: &CloudFault) {
@@ -286,6 +342,11 @@ impl HarnessCloud {
         id
     }
 
+    /// Drops every script no call reached yet, so the provider cooperates from here on
+    pub(crate) fn clear_scripts(&self) {
+        self.calls.lock().scripts.clear();
+    }
+
     /// Every call so far with the namespace it targeted
     pub(crate) fn calls(&self) -> Vec<(CallId<CloudCall>, Option<String>)> {
         self.calls.lock().log.clone()
@@ -300,10 +361,26 @@ impl HarnessCloud {
         self.calls.lock().in_flight
     }
 
+    /// The access policy the call with this identity asked for
+    pub(crate) fn policy_of(&self, id: CallId<CloudCall>) -> Option<CloudAccessPolicy> {
+        self.calls.lock().policies.get(&id).copied()
+    }
+
+    /// The user removes Cove's provider access, until a call that may ask for consent gets it
+    pub(crate) fn revoke_authorization(&self) {
+        self.calls.lock().authorization = ProviderAuthorization::Revoked;
+    }
+
+    /// How many times the provider asked the user for consent
+    pub(crate) fn consent_sheets(&self) -> usize {
+        self.calls.lock().consent_sheets
+    }
+
     async fn begin(
         &self,
         kind: CloudCall,
         namespace: Option<&str>,
+        policy: CloudAccessPolicy,
     ) -> Result<Option<CloudFault>, CloudStorageError> {
         let fault = {
             let mut calls = self.calls.lock();
@@ -311,6 +388,22 @@ impl HarnessCloud {
             *nth += 1;
             let id = CallId::new(kind, *nth);
             calls.log.push((id, namespace.map(str::to_string)));
+            calls.policies.insert(id, policy);
+
+            if calls.authorization == ProviderAuthorization::Revoked {
+                match policy {
+                    CloudAccessPolicy::Silent => {
+                        return Err(CloudStorageError::AuthorizationRequired(
+                            "the provider needs the user's consent".into(),
+                        ));
+                    }
+                    CloudAccessPolicy::ConsentAllowed => {
+                        calls.consent_sheets += 1;
+                        calls.authorization = ProviderAuthorization::Granted;
+                    }
+                }
+            }
+
             calls.scripts.remove(&id)
         };
 
@@ -396,7 +489,7 @@ impl CloudStorageAccess for HarnessCloud {
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::UploadMasterKey, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::UploadMasterKey, Some(&namespace), policy).await?;
         let result = self.inner.upload_master_key_backup(namespace, location, data, policy).await;
         self.finish(fault, result)
     }
@@ -409,7 +502,7 @@ impl CloudStorageAccess for HarnessCloud {
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::UploadWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::UploadWallet, Some(&namespace), policy).await?;
         let result =
             self.inner.upload_wallet_backup(namespace, record_id, location, data, policy).await;
         self.finish(fault, result)
@@ -421,7 +514,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let fault = self.begin(CloudCall::DownloadMasterKey, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DownloadMasterKey, Some(&namespace), policy).await?;
         let result = self.inner.download_master_key_backup(namespace, locations, policy).await;
         self.answer(fault, result)
     }
@@ -433,7 +526,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let fault = self.begin(CloudCall::DownloadWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DownloadWallet, Some(&namespace), policy).await?;
         let result =
             self.inner.download_wallet_backup(namespace, record_id, locations, policy).await;
         self.answer(fault, result)
@@ -446,7 +539,7 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::DeleteWallet, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DeleteWallet, Some(&namespace), policy).await?;
         let result = self.inner.delete_wallet_backup(namespace, record_id, locations, policy).await;
         self.finish(fault, result)
     }
@@ -456,7 +549,7 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let fault = self.begin(CloudCall::DeleteNamespace, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::DeleteNamespace, Some(&namespace), policy).await?;
         if let Some(CloudFault::PartialDeleteThenFail { removed, error }) = &fault {
             self.remove_records(&namespace, removed);
             return self.finish(None, Err(error.clone()));
@@ -470,7 +563,7 @@ impl CloudStorageAccess for HarnessCloud {
         &self,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListNamespaces, None).await?;
+        let fault = self.begin(CloudCall::ListNamespaces, None, policy).await?;
         let result = self.inner.list_namespaces(policy).await;
         self.answer(fault, result)
     }
@@ -480,7 +573,7 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListWalletFiles, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::ListWalletFiles, Some(&namespace), policy).await?;
         let result = match Self::listing_override(&fault) {
             Some(names) => Ok(names),
             None => self.inner.list_wallet_files(namespace, policy).await,
@@ -494,7 +587,8 @@ impl CloudStorageAccess for HarnessCloud {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<CloudStorageInventorySnapshot, CloudStorageError> {
-        let fault = self.begin(CloudCall::ListWalletFilesSnapshot, Some(&namespace)).await?;
+        let fault =
+            self.begin(CloudCall::ListWalletFilesSnapshot, Some(&namespace), policy).await?;
         let result = match Self::listing_override(&fault) {
             Some(names) => Ok(CloudStorageInventorySnapshot { names, is_complete: true }),
             None => self.inner.list_wallet_files_snapshot(namespace, policy).await,
@@ -510,16 +604,20 @@ impl CloudStorageAccess for HarnessCloud {
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
-        let fault = self.begin(CloudCall::IsBackupUploaded, Some(&namespace)).await?;
+        let fault = self.begin(CloudCall::IsBackupUploaded, Some(&namespace), policy).await?;
         let result = self.inner.is_backup_uploaded(namespace, record_id, locations, policy).await;
         self.answer(fault, result)
     }
 
     async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth {
-        match self.begin(CloudCall::SyncHealth, None).await {
+        match self.begin(CloudCall::SyncHealth, None, policy).await {
             Ok(fault) => {
                 let health = self.inner.overall_sync_health(policy).await;
                 self.answer(fault, Ok(health)).expect("sync health has no error path")
+            }
+
+            Err(CloudStorageError::AuthorizationRequired(message)) => {
+                CloudSyncHealth::AuthorizationRequired(message)
             }
 
             // a scripted failure has no error channel here, so report the provider unavailable
@@ -541,7 +639,7 @@ pub(crate) enum PasskeyMode {
     /// Answer with the scripted mock results
     #[default]
     Succeeds,
-    /// The user dismissed the sheet; today's error is `UserCancelled`
+    /// The user dismissed the sheet; its error is `NotCompleted`
     NotCompleted,
     /// The provider failed after presenting
     ProviderFailure,
@@ -625,7 +723,7 @@ impl HarnessPasskey {
 
         match mode {
             PasskeyMode::Succeeds => answer(),
-            PasskeyMode::NotCompleted => Err(PasskeyError::UserCancelled),
+            PasskeyMode::NotCompleted => Err(PasskeyError::NotCompleted),
             PasskeyMode::ProviderFailure => Err(PasskeyError::RequestFailed {
                 operation,
                 reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
@@ -640,7 +738,7 @@ impl HarnessPasskey {
             PasskeyMode::NeverCompletes => unreachable!("never-answered requests park above"),
             PasskeyMode::FailOnAnyInteractiveCall => {
                 self.calls.lock().forbidden.push(id);
-                Err(PasskeyError::UserCancelled)
+                Err(PasskeyError::NotCompleted)
             }
         }
     }
@@ -694,6 +792,9 @@ impl PasskeyProvider for HarnessPasskey {
     }
 }
 
+/// A hold on the next keychain read of a key the predicate names
+type ReadHold = (fn(&str) -> bool, Hold);
+
 /// File-backed keychain that survives process death
 #[derive(Debug, Clone)]
 pub(crate) struct HarnessKeychain {
@@ -703,6 +804,12 @@ pub(crate) struct HarnessKeychain {
     slow_deletes: Arc<Mutex<Option<Duration>>>,
     /// Holds the next delete of the namespace item until the test releases it
     namespace_delete_hold: Arc<Mutex<Option<Hold>>>,
+    /// Holds the next read of a key the predicate names until the test releases it
+    read_hold: Arc<Mutex<Option<ReadHold>>>,
+    /// Fails the next delete of this key, as a platform keychain that refuses it once
+    failing_delete: Arc<Mutex<Option<&'static str>>>,
+    /// Fails every save of this key until cleared, as a platform keychain that keeps refusing it
+    failing_save: Arc<Mutex<Option<&'static str>>>,
 }
 
 impl HarnessKeychain {
@@ -713,6 +820,9 @@ impl HarnessKeychain {
             file: Arc::new(file),
             slow_deletes: Arc::default(),
             namespace_delete_hold: Arc::default(),
+            read_hold: Arc::default(),
+            failing_delete: Arc::default(),
+            failing_save: Arc::default(),
         };
         let flushed = keychain.clone();
         on_checkpoint(move || flushed.persist());
@@ -734,22 +844,58 @@ impl HarnessKeychain {
         hold.label("held keychain namespace delete".into());
         *self.namespace_delete_hold.lock() = Some(hold);
     }
+
+    /// Holds the next read of a key `matches` names, on the thread that reads it
+    pub(crate) fn hold_next_read_where(&self, matches: fn(&str) -> bool, hold: Hold) {
+        hold.label("held keychain read".into());
+        *self.read_hold.lock() = Some((matches, hold));
+    }
+
+    /// Fails the next delete of `key`, leaving the item in place; later deletes work again
+    pub(crate) fn fail_next_delete_of(&self, key: &'static str) {
+        *self.failing_delete.lock() = Some(key);
+    }
+
+    /// Fails every save of `key`, leaving the stored value as it was, until
+    /// [`Self::clear_save_failures`]
+    pub(crate) fn fail_saves_of(&self, key: &'static str) {
+        *self.failing_save.lock() = Some(key);
+    }
+
+    pub(crate) fn clear_save_failures(&self) {
+        *self.failing_save.lock() = None;
+    }
 }
 
 impl KeychainAccess for HarnessKeychain {
     fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+        if *self.failing_save.lock() == Some(key.as_str()) {
+            return Err(KeychainError::Save);
+        }
+
         let result = self.inner.save(key, value);
         self.persist();
         result
     }
 
     fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
-        self.inner.get(key)
+        let hold =
+            self.read_hold.lock().take_if(|(matches, _)| matches(&key)).map(|(_, hold)| hold);
+        let Some(hold) = hold else { return self.inner.get(key) };
+
+        hold.block_until_released();
+        let value = self.inner.get(key);
+        hold.finish();
+        value
     }
 
     fn delete(&self, key: String) -> bool {
         if let Some(duration) = *self.slow_deletes.lock() {
             std::thread::sleep(duration);
+        }
+
+        if self.failing_delete.lock().take_if(|failing| *failing == key).is_some() {
+            return false;
         }
 
         let hold = (key == CSPP_NAMESPACE_ID_KEY)

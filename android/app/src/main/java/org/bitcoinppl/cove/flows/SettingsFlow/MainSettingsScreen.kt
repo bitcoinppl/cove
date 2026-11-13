@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -60,16 +59,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
 import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.performWalletReorderHaptic
-import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.movedWithinPrefix
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -93,9 +92,12 @@ private const val WALLET_SETTINGS_VISIBLE_LIMIT = 5
 
 @Composable
 private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
-    when (val status = manager.settingsRowStatus) {
+    when (val status = manager.screen.settingsRow) {
         is CloudBackupSettingsRowStatus.Disabled -> stringResource(R.string.cloud_backup_status_off)
-        is CloudBackupSettingsRowStatus.Disabling -> stringResource(R.string.cloud_backup_status_disabling)
+        is CloudBackupSettingsRowStatus.Disabling -> stringResource(R.string.cloud_backup_status_turning_off)
+        is CloudBackupSettingsRowStatus.TurnOffIncomplete ->
+            stringResource(R.string.cloud_backup_status_turn_off_incomplete)
+        is CloudBackupSettingsRowStatus.TurnedOnAgain -> stringResource(R.string.cloud_backup_status_turned_on_again)
         is CloudBackupSettingsRowStatus.SettingUp -> stringResource(R.string.cloud_backup_status_setting_up)
         is CloudBackupSettingsRowStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
         is CloudBackupSettingsRowStatus.Active -> stringResource(R.string.cloud_backup_status_active)
@@ -262,7 +264,7 @@ fun MainSettingsScreen(
 
                 if (showCloudBackupSettings) {
                     val cloudBackupSeverity =
-                        cloudBackupSettingsSeverity(cloudBackupManager.settingsRowStatus)
+                        cloudBackupSettingsSeverity(cloudBackupManager.screen.settingsRow)
                     SectionHeader(stringResource(R.string.title_cloud_backup))
                     MaterialSection {
                         Column {

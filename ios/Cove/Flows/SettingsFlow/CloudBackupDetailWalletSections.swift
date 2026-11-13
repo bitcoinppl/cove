@@ -1,18 +1,23 @@
 import SwiftUI
 
-struct WalletSections: View {
-    let wallets: [CloudBackupWalletItem]
+/// What a row says when this device no longer holds the wallet's secret, which may be recovery
+/// words, an extended private key or a TapSigner backup
+let cloudBackupSecretMissingLocallyMessage =
+    "This device no longer has what it needs to restore this wallet. Cloud Backup still has a copy."
 
-    private var groupedWallets: [GroupedWalletSections.Section] {
-        GroupedWalletSections(wallets: wallets).sections
+struct WalletSections: View {
+    let rows: [CloudBackupOwnRow]
+
+    private var groupedRows: [GroupedWalletSections.Section] {
+        GroupedWalletSections(rows: rows).sections
     }
 
     var body: some View {
-        ForEach(groupedWallets) { group in
+        ForEach(groupedRows) { group in
             Section(header: WalletSectionHeader(key: group.key)) {
-                ForEach(group.items, id: \.recordId) { item in
-                    WalletItemRow(item: item)
-                        .uiTestTruncationReport("cloudBackup.wallet.\(item.recordId).truncation")
+                ForEach(group.rows, id: \.wallet.recordId) { row in
+                    WalletItemRow(item: row.wallet, record: row.record)
+                        .uiTestTruncationReport("cloudBackup.wallet.\(row.wallet.recordId).truncation")
                 }
             }
         }
@@ -32,10 +37,17 @@ struct WalletItemRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let item: CloudBackupWalletItem
+    /// This device's record of the wallet, absent for a backup of a wallet not on this device
+    var record: CloudBackupOwnRecord?
     var accessibilityAction: String?
 
-    init(item: CloudBackupWalletItem, accessibilityAction: String? = nil) {
+    init(
+        item: CloudBackupWalletItem,
+        record: CloudBackupOwnRecord? = nil,
+        accessibilityAction: String? = nil
+    ) {
         self.item = item
+        self.record = record
         self.accessibilityAction = accessibilityAction
     }
 
@@ -62,14 +74,22 @@ struct WalletItemRow: View {
                     .foregroundStyle(Color.statusError)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if record == .secretMissingLocally {
+                ProbedLabel(cloudBackupSecretMissingLocallyMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Color.statusWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(cloudBackupWalletAccessibilityLabel(
             item: item,
+            record: record,
             action: accessibilityAction
         ))
-        .accessibilityIdentifier("cloudBackup.wallet.\(item.recordId)")
+        .accessibilityIdentifier(CloudBackupUiElement.walletRow(recordId: item.recordId).identifier)
     }
 
     private var name: some View {
@@ -142,6 +162,7 @@ private struct WalletBackupMetadata: View {
 
 func cloudBackupWalletAccessibilityLabel(
     item: CloudBackupWalletItem,
+    record: CloudBackupOwnRecord? = nil,
     action: String? = nil
 ) -> String {
     var components = [item.name]
@@ -156,6 +177,10 @@ func cloudBackupWalletAccessibilityLabel(
         components.append("Restore failed: \(failure.message)")
     }
 
+    if record == .secretMissingLocally {
+        components.append(cloudBackupSecretMissingLocallyMessage)
+    }
+
     if let action {
         components.append(action)
     }
@@ -166,7 +191,7 @@ func cloudBackupWalletAccessibilityLabel(
 private struct GroupedWalletSections {
     struct Section: Identifiable {
         let key: GroupKey
-        let items: [CloudBackupWalletItem]
+        let rows: [CloudBackupOwnRow]
 
         var id: GroupKey {
             key
@@ -175,12 +200,12 @@ private struct GroupedWalletSections {
 
     let sections: [Section]
 
-    init(wallets: [CloudBackupWalletItem]) {
-        sections = Dictionary(grouping: wallets) {
-            GroupKey(network: $0.network, walletMode: $0.walletMode)
+    init(rows: [CloudBackupOwnRow]) {
+        sections = Dictionary(grouping: rows) {
+            GroupKey(network: $0.wallet.network, walletMode: $0.wallet.walletMode)
         }
-        .map { key, items in
-            Section(key: key, items: items)
+        .map { key, rows in
+            Section(key: key, rows: rows)
         }
         .sorted { $0.key < $1.key }
     }

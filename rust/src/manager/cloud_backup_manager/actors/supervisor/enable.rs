@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::PromotionStartError;
 
 mod continuation;
 mod discard;
@@ -8,7 +9,7 @@ mod restart;
 mod start;
 mod upload_finalization;
 
-pub(crate) use continuation::EnableContinuation;
+pub(crate) use continuation::{DiscardTarget, EnableContinuation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
@@ -28,8 +29,6 @@ impl SavedPasskeyConfirmationRetry {
 pub(crate) struct EnableRecoveryFinalization {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
-    pub(crate) credential_id: Vec<u8>,
-    pub(crate) prf_salt: [u8; 32],
     pub(crate) active_critical_key: zeroize::Zeroizing<[u8; 32]>,
     pub(crate) pending_completion: PendingVerificationCompletion,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
@@ -40,8 +39,6 @@ impl std::fmt::Debug for EnableRecoveryFinalization {
         f.debug_struct("EnableRecoveryFinalization")
             .field("context", &self.context)
             .field("namespace_id", &"<redacted>")
-            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
-            .field("prf_salt", &"<redacted>")
             .field("active_critical_key", &"<redacted>")
             .field("pending_uploads_count", &self.pending_completion.uploads().len())
             .field("cleanup_sources_count", &self.cleanup_sources.len())
@@ -50,10 +47,7 @@ impl std::fmt::Debug for EnableRecoveryFinalization {
 }
 
 pub(crate) struct EnableUploadFinalization {
-    pub(crate) master_key: zeroize::Zeroizing<cove_cspp::master_key::MasterKey>,
-    pub(crate) passkey: zeroize::Zeroizing<UnpersistedPrfKey>,
     pub(crate) context: CloudBackupEnableContext,
-    pub(crate) namespace_id: String,
     pub(crate) pending_completion: PendingVerificationCompletion,
 }
 
@@ -88,6 +82,7 @@ impl CloudBackupSupervisor {
         }
 
         warn!("Enable failed: {error}");
+        self.screen_outcome.operation_failed(claim, &error);
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         manager.apply_enable_state(CloudBackupEnableState::Idle);
@@ -104,6 +99,7 @@ impl CloudBackupSupervisor {
         error: CloudBackupError,
     ) {
         warn!("Reinitialize backup enable failed: {error}");
+        self.screen_outcome.operation_failed(claim, &error);
         match error {
             CloudBackupError::UnsupportedPasskeyProvider => {
                 manager.apply_recovery_state(RecoveryState::Idle);
@@ -123,7 +119,52 @@ impl CloudBackupSupervisor {
             }
         }
 
-        match self.drive_account_switch_reinitialization_finished(manager, claim, false) {
+        match self.drive_account_switch_reinitialization_finished(
+            manager,
+            claim,
+            DriveAccountSwitchReinitializationEnd::Failed,
+        ) {
+            DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+            DriveAccountSwitchReinitializationCompletion::Stale
+            | DriveAccountSwitchReinitializationCompletion::Handled => return,
+        }
+
+        self.runtime.finish(claim);
+        manager.project_exclusive_operation_finished(claim);
+    }
+
+    /// Ends a run whose journal the journal recovery now owns: a started promotion it neither
+    /// finished nor rolled back, or a recovered backup's rollback that stopped partway. The
+    /// recovery finishes the promotion by the durable completion the run saved, or else rolls a
+    /// fresh backup back to its saved passkey's pause and a recovered one all the way back
+    ///
+    /// The reinitialize hasn't failed, so it isn't offered again, and a switch stays
+    /// Reinitializing for the recovery to hand back. The coordinator's view of the journal stays
+    /// unavailable meanwhile, so the screen offers Try Again, which runs that recovery, as a
+    /// relaunch does
+    fn stop_enable_for_promotion_recovery(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        error: CloudBackupError,
+    ) {
+        // a fresh Enable's failure offers nothing that would run it again, so it ends as one
+        if claim.operation() != CloudBackupExclusiveOperation::ReinitializeBackup {
+            self.fail_enable_operation(manager, claim, error);
+            return;
+        }
+
+        warn!("Reinitialize backup stopped before its local promotion finished: {error}");
+        self.screen_outcome.operation_failed(claim, &error);
+        manager.apply_recovery_state(RecoveryState::Idle);
+        manager.reconcile_runtime_status(self.runtime.status());
+
+        // a switch ends its claim itself, and a stale one has no claim of this run left to end
+        match self.drive_account_switch_reinitialization_finished(
+            manager,
+            claim,
+            DriveAccountSwitchReinitializationEnd::AwaitingPromotionRecovery,
+        ) {
             DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
             DriveAccountSwitchReinitializationCompletion::Stale
             | DriveAccountSwitchReinitializationCompletion::Handled => return,
@@ -139,7 +180,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
-            match self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+            match self.drive_account_switch_reinitialization_finished(
+                &manager,
+                claim,
+                DriveAccountSwitchReinitializationEnd::Succeeded,
+            ) {
                 DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
                 DriveAccountSwitchReinitializationCompletion::Stale
                 | DriveAccountSwitchReinitializationCompletion::Handled => return,

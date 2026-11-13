@@ -94,7 +94,7 @@ class CloudBackupDurableCompletionFullLaunchTest {
         }
         waitUntil("Settings should show the backup as confirming while its writes stay hidden") {
             manager.hasPendingUploadVerification &&
-                manager.settingsRowStatus is CloudBackupSettingsRowStatus.Confirming
+                manager.screen.settingsRow is CloudBackupSettingsRowStatus.Confirming
         }
         assertEquals("verification read the master key while it was hidden", 0, ScriptedCloudStorageAccess.masterDownloadCount())
         assertEquals("verification read a wallet while it was hidden", 0, ScriptedCloudStorageAccess.walletDownloadCount())
@@ -106,7 +106,7 @@ class CloudBackupDurableCompletionFullLaunchTest {
         waitUntil("the verifier should verify the backup on its own once it is visible", timeoutMs = 60_000) {
             !manager.hasPendingUploadVerification &&
                 manager.verificationState is CloudBackupVerificationState.Verified &&
-                manager.settingsRowStatus is CloudBackupSettingsRowStatus.Active
+                manager.screen.settingsRow is CloudBackupSettingsRowStatus.Active
         }
         assertTrue("verification never read the visible backup", ScriptedCloudStorageAccess.masterDownloadCount() > 0)
         assertOnlyTheEnablesPasskeyCalls("background confirmation asked for the passkey")

@@ -43,9 +43,9 @@ class CloudBackupRetryInterruptedSetupFullLaunchTest {
     }
 
     /**
-     * The provider rejects the setup's wallet upload after accepting its master key, and the
-     * production Enable action retries with the passkey, master key and namespace the failed
-     * attempt staged, leaving one backup in the cloud
+     * The provider rejects the setup's wallet upload after accepting its master key, which leaves
+     * the saved passkey's pause, and Confirm Passkey retries with the passkey, master key and
+     * namespace the failed attempt staged, leaving one backup in the cloud
      */
     @Test
     fun failedSetupUploadRetriesWithoutNewPasskey() {
@@ -81,10 +81,14 @@ class CloudBackupRetryInterruptedSetupFullLaunchTest {
             failedAttempt.filter { it.kind == UploadKind.MASTER }.map { it.namespace },
         )
 
+        // the failed upload leaves the passkey's pause, whose Confirm is the retry
+        onboarding.assertPendingEnableRecovery()
+        val failedAssertions = passkeyAssertionCount()
+
         // the enable is still running while this upload is held, so no background work made it
         ScriptedCloudStorageAccess.blockNextWalletUpload()
         try {
-            onboarding.retryCloudBackupEnable()
+            onboarding.confirmSavedPasskeyAfterFailure()
             assertTrue(
                 "expected the retry to upload the wallet",
                 ScriptedCloudStorageAccess.awaitBlockedWalletUpload(),
@@ -106,6 +110,7 @@ class CloudBackupRetryInterruptedSetupFullLaunchTest {
             1,
             ScriptedPasskeyProvider.callCount(Invocation.CREATE),
         )
+        assertTrue("the retry did not ask for the saved passkey", passkeyAssertionCount() > failedAssertions)
         assertEquals(
             "an upload went to another namespace",
             setOf(namespace),
@@ -117,4 +122,8 @@ class CloudBackupRetryInterruptedSetupFullLaunchTest {
             ScriptedCloudStorageAccess.freshEnableWalletRecordIds(namespace),
         )
     }
+
+    private fun passkeyAssertionCount(): Int =
+        ScriptedPasskeyProvider.callCount(Invocation.AUTHENTICATE) +
+            ScriptedPasskeyProvider.callCount(Invocation.DISCOVER)
 }

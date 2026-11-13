@@ -1,144 +1,183 @@
 @_exported import CoveCore
 import SwiftUI
 
-private extension CloudBackupVerificationState? {
-    var isVerifying: Bool {
-        if case .running = self { return true }
-        return false
-    }
-
-    var hasResult: Bool {
-        switch self {
-        case .verified, .needsAttention, .awaitingUploadConfirmation, .cancelled, .failed: true
-        default: false
-        }
-    }
-}
-
-private extension CloudBackupPasskeyRepairState? {
-    var isRecovering: Bool {
-        if case .running = self { return true }
-        return false
-    }
-}
-
+/// The verification Rust reports, with the controls its section names
+///
+/// Each state draws its own content, and draws its controls from `section.controls` where that
+/// state puts them; it never decides from the content which controls exist
 struct VerificationSection: View {
+    let section: CloudBackupVerificationSection
+    let actions: CloudBackupActions
+    let wallets: CloudBackupWalletsSection?
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-    let recreateConfirmationIsPresented: Binding<Bool>
-    let reinitializeConfirmationIsPresented: Binding<Bool>
+
+    private var view: CloudBackupVerificationView {
+        section.view
+    }
 
     private var undecryptableWalletCount: UInt32 {
-        guard case let .needsAttention(report: report, checkedAt: _) = manager.verificationState else {
-            return 0
-        }
-
+        guard case let .needsAttention(report: report, checkedAt: _) = view.state else { return 0 }
         return report.walletIssues.decryptionFailed
     }
 
-    private var isBusy: Bool {
-        manager.verificationState.isVerifying ||
-            manager.passkeyRepairState.isRecovering ||
-            manager.isPerformingDestructiveAction
-    }
-
     var body: some View {
-        content
-    }
+        switch view.state {
+        case .notVerified, .required:
+            CloudBackupVerificationStartSection(controls: controls(verify: verifyNow))
 
-    @ViewBuilder
-    private var content: some View {
-        switch manager.verificationState {
-        case nil, .notVerified, .required:
-            CloudBackupVerificationStartSection(
-                isBusy: isBusy,
-                onVerify: startVerification
-            )
+        // the progress section draws a running verification
         case .running:
             EmptyView()
+
         case let .verified(report: report, lastVerifiedAt: _):
             if let report {
-                CloudBackupVerifiedSection(
-                    report: report,
-                    isBusy: isBusy,
-                    needsSync: manager.detail?.needsSync.isEmpty == false,
-                    syncState: manager.syncState,
-                    onSync: syncUnsynced,
-                    onVerify: startVerification
-                )
+                CloudBackupVerifiedSection(report: report, controls: controls(verify: verifyAgain))
             } else {
-                CloudBackupPasskeyConfirmedSection(
-                    isBusy: isBusy,
-                    onVerify: startVerification
-                )
+                CloudBackupPasskeyConfirmedSection(controls: controls(verify: runFullVerification))
             }
+
         case let .needsAttention(report: report, checkedAt: _):
-            CloudBackupNeedsAttentionSection(
-                report: report,
-                isBusy: isBusy,
-                needsSync: manager.detail?.needsSync.isEmpty == false,
-                syncState: manager.syncState,
-                onSync: syncUnsynced,
-                onVerify: startVerification,
-                deletionState: manager.undecryptableWalletDeletionState,
-                onDeleteUndecryptable: requestUndecryptableWalletDeletion
-            )
+            CloudBackupNeedsAttentionSection(report: report, controls: controls(verify: verifyAgain))
+
         case .awaitingUploadConfirmation:
-            CloudBackupUploadConfirmationPendingSection()
-        case .cancelled:
-            CloudBackupVerificationCancelledSection(
-                isBusy: isBusy,
-                isRecoveringPasskey: manager.passkeyRepairState.isRecovering,
-                onVerify: startVerification,
-                onRepairPasskey: repairPasskey
+            CloudBackupPendingUploadConfirmationSection(
+                syncState: wallets?.sync,
+                controls: controls(verify: verifyNow)
             )
+            CloudBackupUploadConfirmationPendingSection()
+
+        case .notCompleted:
+            CloudBackupVerificationNotCompletedSection(controls: controls(verify: verifyNow))
+
         case let .failed(failure):
             CloudBackupVerificationFailureSection(
                 failure: failure,
-                passkeyRepairState: manager.passkeyRepairState,
-                isBusy: isBusy,
-                isDetailInventoryComplete: manager.isDetailInventoryComplete,
-                destructiveOperationState: manager.destructiveOperationState,
-                onRetry: retry,
-                onRepairPasskey: repairPasskey,
-                recreateConfirmationIsPresented: recreateConfirmationIsPresented,
-                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
+                controls: controls(verify: retry(failure))
             )
         }
     }
 
-    private func startVerification() {
-        manager.startVerification()
+    private var verifyNow: CloudBackupVerifyButton {
+        .init(title: "Verify Now", systemImage: "checkmark.shield", perform: startVerification)
     }
 
-    private func retry(_ retryAction: CloudBackupRetryAction?) {
-        if retryAction == .verifyDiscoverable {
-            manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
-        } else {
-            manager.startVerification(source: .cloudBackupDetail)
+    private var verifyAgain: CloudBackupVerifyButton {
+        .init(title: "Verify Again", systemImage: "checkmark.shield", perform: startVerification)
+    }
+
+    private var runFullVerification: CloudBackupVerifyButton {
+        .init(title: "Run Full Verification", systemImage: "checkmark.shield", perform: startVerification)
+    }
+
+    /// A failure's Verify is a Try Again, through the discoverable passkey when the failure asks
+    private func retry(_ failure: DeepVerificationFailure) -> CloudBackupVerifyButton {
+        var retryAction: CloudBackupRetryAction?
+        if case let .retry(_, _, action) = failure { retryAction = action }
+
+        return .init(title: "Try Again", systemImage: "arrow.clockwise") {
+            if retryAction == .verifyDiscoverable {
+                manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
+            } else {
+                startVerification()
+            }
         }
     }
 
-    private func repairPasskey() {
-        manager.dispatch(action: .repairPasskeyNoDiscovery)
+    private func controls(verify: CloudBackupVerifyButton) -> CloudBackupVerificationControls {
+        CloudBackupVerificationControls(
+            controls: section.controls,
+            actions: actions,
+            verify: verify,
+            recovery: view.recovery,
+            undecryptableCount: undecryptableWalletCount,
+            onConfirmRecovery: confirmDestructive,
+            onDeleteUndecryptable: requestUndecryptableWalletDeletion,
+            onRetryUpload: { manager.dispatch(action: .syncUnsynced) }
+        )
     }
 
-    private func syncUnsynced() {
-        manager.dispatch(action: .syncUnsynced)
+    private func startVerification() {
+        manager.dispatch(action: .startVerification(.cloudBackupDetail))
     }
 
-    private func requestUndecryptableWalletDeletion() {
-        guard undecryptableWalletCount > 0 else { return }
+    private func confirmDestructive(_ confirmation: CloudBackupDestructiveConfirmation) {
+        presentationCoordinator.present(.dialog(.destructive(confirmation)))
+    }
 
+    private func requestUndecryptableWalletDeletion(_ consent: CloudBackupBatchDeleteConsent) {
         presentationCoordinator.present(
-            .alert(.undecryptableWalletDeletion(undecryptableWalletCount))
+            .alert(.undecryptableWalletDeletion(undecryptableWalletCount, consent))
         )
     }
 }
 
+/// How the current state titles its Verify control, and what it runs
+struct CloudBackupVerifyButton {
+    let title: String
+    let systemImage: String
+    let perform: () -> Void
+}
+
+/// The verification section's controls, in the order Rust names them
+struct CloudBackupVerificationControls: View {
+    let controls: [CloudBackupVerificationControl]
+    let actions: CloudBackupActions
+    let verify: CloudBackupVerifyButton
+    let recovery: CloudBackupRecoveryOperation
+    let undecryptableCount: UInt32
+    let onConfirmRecovery: (CloudBackupDestructiveConfirmation) -> Void
+    let onDeleteUndecryptable: (CloudBackupBatchDeleteConsent) -> Void
+    let onRetryUpload: () -> Void
+
+    var body: some View {
+        ForEach(controls, id: \.self) { control in
+            switch control {
+            case .verify:
+                CloudBackupActionControl(action: .verify, actions: actions, perform: verify.perform) {
+                    ProbedLabel(verify.title, systemImage: verify.systemImage)
+                }
+
+            case let .recover(kind):
+                CloudBackupRecoverControl(
+                    confirmation: kind.confirmation,
+                    recovery: recovery,
+                    actions: actions,
+                    onConfirm: onConfirmRecovery
+                )
+
+            case let .deleteUnreadableBackups(consent):
+                CloudBackupUndecryptableWalletIssue(
+                    count: undecryptableCount,
+                    actions: actions,
+                    onDelete: { onDeleteUndecryptable(consent) }
+                )
+
+            case .retryUpload:
+                CloudBackupActionControl(action: .syncUnsynced, actions: actions, perform: onRetryUpload) {
+                    Label("Try Again", systemImage: "arrow.clockwise")
+                }
+
+            // only Google Drive asks to be authorized again; iCloud never does
+            case .reconnectDrive:
+                EmptyView()
+            }
+        }
+    }
+}
+
+extension CloudBackupRecoveryKind {
+    /// The confirmation this rebuild asks for before it runs
+    var confirmation: CloudBackupDestructiveConfirmation {
+        switch self {
+        case .recreateManifest: .recreate
+        case .reinitializeBackup: .reinitialize
+        }
+    }
+}
+
 private struct CloudBackupVerificationStartSection: View {
-    let isBusy: Bool
-    let onVerify: () -> Void
+    let controls: CloudBackupVerificationControls
 
     var body: some View {
         Section {
@@ -147,19 +186,15 @@ private struct CloudBackupVerificationStartSection: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
-            Button(action: onVerify) {
-                ProbedLabel("Verify Now", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
+            controls
         }
     }
 }
 
-private struct CloudBackupVerificationCancelledSection: View {
-    let isBusy: Bool
-    let isRecoveringPasskey: Bool
-    let onVerify: () -> Void
-    let onRepairPasskey: () -> Void
+/// A verification the passkey prompt didn't finish, such as a cancel; it never offers a passkey
+/// repair, since nothing showed the passkey is gone, so Verify is the way forward
+private struct CloudBackupVerificationNotCompletedSection: View {
+    let controls: CloudBackupVerificationControls
 
     var body: some View {
         Section {
@@ -169,34 +204,19 @@ private struct CloudBackupVerificationCancelledSection: View {
             )
             .foregroundStyle(Color.statusWarning)
 
-            Text(
-                "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey."
-            )
-            .font(.caption)
-            .uiTestTruncationProbe()
-            .foregroundStyle(.secondary)
+            Text("Verification didn't finish. Verify again to confirm your cloud backup can be restored.")
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.secondary)
 
-            Button(action: onVerify) {
-                ProbedLabel("Verify Now", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
-
-            CloudBackupRepairPasskeyButton(
-                isBusy: isBusy,
-                isRecovering: isRecoveringPasskey,
-                onRepair: onRepairPasskey
-            )
+            controls
         }
     }
 }
 
 private struct CloudBackupVerifiedSection: View {
     let report: DeepVerificationReport
-    let isBusy: Bool
-    let needsSync: Bool
-    let syncState: CloudBackupSyncState?
-    let onSync: () -> Void
-    let onVerify: () -> Void
+    let controls: CloudBackupVerificationControls
 
     private var summary: String? {
         var parts: [String] = []
@@ -234,25 +254,17 @@ private struct CloudBackupVerifiedSection: View {
             }
         }
 
-        CloudBackupVerificationActionButtons(
-            isBusy: isBusy,
-            needsSync: needsSync,
-            syncState: syncState,
-            onSync: onSync,
-            onVerify: onVerify
-        )
+        Section {
+            controls
+        }
     }
 }
 
+/// A report with wallet issues; the undecryptable backups' delete, when Rust names it, is drawn
+/// with Verify Again under the issues
 private struct CloudBackupNeedsAttentionSection: View {
     let report: DeepVerificationReport
-    let isBusy: Bool
-    let needsSync: Bool
-    let syncState: CloudBackupSyncState?
-    let onSync: () -> Void
-    let onVerify: () -> Void
-    let deletionState: CloudBackupUndecryptableWalletDeletionState
-    let onDeleteUndecryptable: () -> Void
+    let controls: CloudBackupVerificationControls
 
     var body: some View {
         Section {
@@ -265,27 +277,18 @@ private struct CloudBackupNeedsAttentionSection: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
-            CloudBackupWalletIssueRows(
-                issues: report.walletIssues,
-                deletionState: deletionState,
-                onDeleteUndecryptable: onDeleteUndecryptable
-            )
+            CloudBackupWalletIssueRows(issues: report.walletIssues)
         }
 
-        CloudBackupVerificationActionButtons(
-            isBusy: isBusy,
-            needsSync: needsSync,
-            syncState: syncState,
-            onSync: onSync,
-            onVerify: onVerify
-        )
+        Section {
+            controls
+        }
     }
 }
 
+/// The report's wallet issues; undecryptable backups are listed by their delete control
 private struct CloudBackupWalletIssueRows: View {
     let issues: CloudBackupWalletVerificationIssues
-    let deletionState: CloudBackupUndecryptableWalletDeletionState
-    let onDeleteUndecryptable: () -> Void
 
     var body: some View {
         CloudBackupWalletIssueLabel(
@@ -300,11 +303,6 @@ private struct CloudBackupWalletIssueRows: View {
             count: issues.invalid,
             message: "wallet backup file(s) contain invalid data"
         )
-        CloudBackupUndecryptableWalletIssue(
-            count: issues.decryptionFailed,
-            deletionState: deletionState,
-            onDelete: onDeleteUndecryptable
-        )
         CloudBackupWalletIssueLabel(
             count: issues.unsupported,
             message: "wallet backup(s) use a newer backup format"
@@ -313,12 +311,6 @@ private struct CloudBackupWalletIssueRows: View {
             count: issues.unreadable,
             message: "wallet backup(s) could not be read"
         )
-
-        if case let .failed(error) = deletionState {
-            ProbedLabel(error, systemImage: "xmark.circle.fill")
-                .foregroundStyle(Color.statusError)
-                .font(.caption)
-        }
     }
 }
 
@@ -337,173 +329,115 @@ private struct CloudBackupWalletIssueLabel: View {
 
 private struct CloudBackupUndecryptableWalletIssue: View {
     let count: UInt32
-    let deletionState: CloudBackupUndecryptableWalletDeletionState
+    let actions: CloudBackupActions
     let onDelete: () -> Void
 
     var body: some View {
-        if count > 0 {
-            Button(role: .destructive, action: onDelete) {
-                HStack {
-                    if case .deleting = deletionState {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
+        CloudBackupActionControl(
+            action: .deleteUnreadableBackups,
+            actions: actions,
+            role: .destructive,
+            perform: onDelete
+        ) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
 
-                    Text("\(count) wallet backup(s) could not be decrypted with this backup key")
-                        .uiTestTruncationProbe()
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                }
+                Text("\(count) wallet backup(s) could not be decrypted with this backup key")
+                    .uiTestTruncationProbe()
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
             }
-            .font(.caption)
-            .disabled(deletionState == .deleting)
-            .accessibilityHint("Opens a confirmation to delete these inaccessible backups")
         }
+        .font(.caption)
+        .accessibilityHint("Opens a confirmation to delete these inaccessible backups")
     }
 }
 
+/// A failed verification: its message, and the one recovery Rust names for it, if any
 private struct CloudBackupVerificationFailureSection: View {
     let failure: DeepVerificationFailure
-    let passkeyRepairState: CloudBackupPasskeyRepairState?
-    let isBusy: Bool
-    let isDetailInventoryComplete: Bool
-    let destructiveOperationState: CloudBackupDestructiveOperationState
-    let onRetry: (CloudBackupRetryAction?) -> Void
-    let onRepairPasskey: () -> Void
-    let recreateConfirmationIsPresented: Binding<Bool>
-    let reinitializeConfirmationIsPresented: Binding<Bool>
-
-    private var passkeyRepairError: String? {
-        guard case let .failed(error) = passkeyRepairState else { return nil }
-
-        return error
-    }
+    let controls: CloudBackupVerificationControls
 
     var body: some View {
         Section {
             switch failure {
-            case let .retry(message, _, retryAction):
-                CloudBackupRetryFailureContent(
-                    message: message,
-                    retryAction: retryAction,
-                    isBusy: isBusy,
-                    isRecoveringPasskey: passkeyRepairState.isRecovering,
-                    onRetry: onRetry,
-                    onRepairPasskey: onRepairPasskey
-                )
-            case let .recreateManifest(message, warning, _):
-                CloudBackupRecreateManifestFailureContent(
-                    message: message,
-                    warning: warning,
-                    isBusy: isBusy,
-                    isDetailInventoryComplete: isDetailInventoryComplete,
-                    destructiveOperationState: destructiveOperationState,
-                    confirmationIsPresented: recreateConfirmationIsPresented
-                )
-            case let .reinitializeBackup(message, warning, _):
-                CloudBackupReinitializeFailureContent(
-                    message: message,
-                    warning: warning,
-                    isBusy: isBusy,
-                    isDetailInventoryComplete: isDetailInventoryComplete,
-                    destructiveOperationState: destructiveOperationState,
-                    confirmationIsPresented: reinitializeConfirmationIsPresented
-                )
+            case let .retry(message, _, _):
+                ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.statusWarning)
+
+            case let .recreateManifest(message, warning, _),
+                 let .reinitializeBackup(message, warning, _):
+                ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.statusError)
+
+                Text(warning)
+                    .font(.caption)
+                    .uiTestTruncationProbe()
+                    .foregroundStyle(.secondary)
+
             case let .unsupportedVersion(message, _):
                 CloudBackupUnsupportedVersionFailureContent(message: message)
             }
+
+            controls
         }
-
-        CloudBackupPasskeyRepairErrorSection(error: passkeyRepairError)
     }
 }
 
-private struct CloudBackupRetryFailureContent: View {
-    let message: String
-    let retryAction: CloudBackupRetryAction?
-    let isBusy: Bool
-    let isRecoveringPasskey: Bool
-    let onRetry: (CloudBackupRetryAction?) -> Void
-    let onRepairPasskey: () -> Void
+/// A recreate or a reinitialize, which asks to confirm before it runs
+private struct CloudBackupRecoverControl: View {
+    let confirmation: CloudBackupDestructiveConfirmation
+    let recovery: CloudBackupRecoveryOperation
+    let actions: CloudBackupActions
+    let onConfirm: (CloudBackupDestructiveConfirmation) -> Void
 
-    var body: some View {
-        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(Color.statusWarning)
-
-        Button {
-            onRetry(retryAction)
-        } label: {
-            ProbedLabel("Try Again", systemImage: "arrow.clockwise")
+    private var isRunning: Bool {
+        switch confirmation {
+        case .recreate: recovery == .recreatingManifest
+        case .reinitialize: recovery == .reinitializingBackup
         }
-        .disabled(isBusy)
-
-        CloudBackupRepairPasskeyButton(
-            isBusy: isBusy,
-            isRecovering: isRecoveringPasskey,
-            onRepair: onRepairPasskey
-        )
     }
-}
 
-private struct CloudBackupRecreateManifestFailureContent: View {
-    let message: String
-    let warning: String
-    let isBusy: Bool
-    let isDetailInventoryComplete: Bool
-    let destructiveOperationState: CloudBackupDestructiveOperationState
-    let confirmationIsPresented: Binding<Bool>
+    private var title: String {
+        switch confirmation {
+        case .recreate: "Recreate Backup Index"
+        case .reinitialize: "Reinitialize Cloud Backup"
+        }
+    }
+
+    private var progressTitle: String {
+        switch confirmation {
+        case .recreate: "Recreating..."
+        case .reinitialize: "Reinitializing..."
+        }
+    }
+
+    private var systemImage: String {
+        switch confirmation {
+        case .recreate: "arrow.clockwise"
+        case .reinitialize: "arrow.counterclockwise"
+        }
+    }
 
     var body: some View {
-        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(Color.statusError)
-
-        Text(warning)
-            .font(.caption)
-            .uiTestTruncationProbe()
-            .foregroundStyle(.secondary)
-
-        CloudBackupDestructiveActionButton(
-            title: "Recreate Backup Index",
-            progressTitle: "Recreating...",
-            systemImage: "arrow.clockwise",
-            operation: .recreatingManifest,
-            currentOperation: destructiveOperationState,
-            isBusy: isBusy,
-            isDetailInventoryComplete: isDetailInventoryComplete,
-            action: { confirmationIsPresented.wrappedValue = true }
-        )
-    }
-}
-
-private struct CloudBackupReinitializeFailureContent: View {
-    let message: String
-    let warning: String
-    let isBusy: Bool
-    let isDetailInventoryComplete: Bool
-    let destructiveOperationState: CloudBackupDestructiveOperationState
-    let confirmationIsPresented: Binding<Bool>
-
-    var body: some View {
-        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(Color.statusError)
-
-        Text(warning)
-            .font(.caption)
-            .uiTestTruncationProbe()
-            .foregroundStyle(.secondary)
-
-        CloudBackupDestructiveActionButton(
-            title: "Reinitialize Cloud Backup",
-            progressTitle: "Reinitializing...",
-            systemImage: "arrow.counterclockwise",
-            operation: .reinitializingBackup,
-            currentOperation: destructiveOperationState,
-            isBusy: isBusy,
-            isDetailInventoryComplete: isDetailInventoryComplete,
-            action: { confirmationIsPresented.wrappedValue = true }
-        )
+        CloudBackupActionControl(
+            action: confirmation.action,
+            actions: actions,
+            role: .destructive,
+            perform: { onConfirm(confirmation) }
+        ) {
+            if isRunning {
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 4)
+                    Text(progressTitle)
+                        .uiTestTruncationProbe()
+                }
+            } else {
+                ProbedLabel(title, systemImage: systemImage)
+            }
+        }
     }
 }
 
@@ -518,51 +452,6 @@ private struct CloudBackupUnsupportedVersionFailureContent: View {
             .font(.caption)
             .uiTestTruncationProbe()
             .foregroundStyle(.secondary)
-    }
-}
-
-private struct CloudBackupDestructiveActionButton: View {
-    let title: String
-    let progressTitle: String
-    let systemImage: String
-    let operation: CloudBackupDestructiveOperationState
-    let currentOperation: CloudBackupDestructiveOperationState
-    let isBusy: Bool
-    let isDetailInventoryComplete: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(role: .destructive) {
-            guard isDetailInventoryComplete else { return }
-
-            action()
-        } label: {
-            if currentOperation == operation {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 4)
-                    Text(progressTitle)
-                        .uiTestTruncationProbe()
-                }
-            } else {
-                ProbedLabel(title, systemImage: systemImage)
-            }
-        }
-        .disabled(isBusy || !isDetailInventoryComplete)
-    }
-}
-
-private struct CloudBackupPasskeyRepairErrorSection: View {
-    let error: String?
-
-    var body: some View {
-        if let error {
-            Section {
-                ProbedLabel(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(Color.statusError)
-                    .font(.caption)
-            }
-        }
     }
 }
 
@@ -581,8 +470,7 @@ private struct CloudBackupUploadConfirmationPendingSection: View {
 }
 
 private struct CloudBackupPasskeyConfirmedSection: View {
-    let isBusy: Bool
-    let onVerify: () -> Void
+    let controls: CloudBackupVerificationControls
 
     var body: some View {
         Section {
@@ -594,44 +482,19 @@ private struct CloudBackupPasskeyConfirmedSection: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
-            Button(action: onVerify) {
-                ProbedLabel("Run Full Verification", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
+            controls
         }
     }
 }
 
-private struct CloudBackupVerificationActionButtons: View {
-    let isBusy: Bool
-    let needsSync: Bool
+/// Sync Now for the wallets waiting to upload, with the sync's progress or failure
+struct CloudBackupSyncNowControl: View {
     let syncState: CloudBackupSyncState?
-    let onSync: () -> Void
-    let onVerify: () -> Void
-
-    var body: some View {
-        Section {
-            if needsSync {
-                CloudBackupVerificationSyncButton(
-                    syncState: syncState,
-                    onSync: onSync
-                )
-            }
-
-            Button(action: onVerify) {
-                ProbedLabel("Verify Again", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
-        }
-    }
-}
-
-private struct CloudBackupVerificationSyncButton: View {
-    let syncState: CloudBackupSyncState?
+    let actions: CloudBackupActions
     let onSync: () -> Void
 
     var body: some View {
-        Button(action: onSync) {
+        CloudBackupActionControl(action: .syncUnsynced, actions: actions, perform: onSync) {
             HStack {
                 if case .syncing = syncState {
                     ProgressView()
@@ -645,7 +508,6 @@ private struct CloudBackupVerificationSyncButton: View {
                 }
             }
         }
-        .disabled(syncState == .syncing)
 
         if case let .failed(error) = syncState {
             Text(error)
@@ -653,27 +515,5 @@ private struct CloudBackupVerificationSyncButton: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
         }
-    }
-}
-
-private struct CloudBackupRepairPasskeyButton: View {
-    let isBusy: Bool
-    let isRecovering: Bool
-    let onRepair: () -> Void
-
-    var body: some View {
-        Button(action: onRepair) {
-            if isRecovering {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 4)
-                    Text("Creating Passkey...")
-                        .uiTestTruncationProbe()
-                }
-            } else {
-                ProbedLabel("Add New Passkey", systemImage: "person.badge.key")
-            }
-        }
-        .disabled(isBusy)
     }
 }

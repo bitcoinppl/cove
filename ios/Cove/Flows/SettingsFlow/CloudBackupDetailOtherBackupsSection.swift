@@ -1,34 +1,170 @@
 import SwiftUI
 
+/// Backups made with another passkey, and whether Cove could check for them, with the controls
+/// Rust names for the section
 struct OtherBackupsSection: View {
-    let summary: CloudBackupOtherBackupsSummary
+    let section: CloudBackupOtherBackupsSection
+    let actions: CloudBackupActions
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
-    private var isRecovering: Bool {
-        if case .recovering = manager.otherBackupsOperation { return true }
-        return false
+    var body: some View {
+        switch section.state {
+        case .notChecked:
+            EmptyView()
+
+        case .checking:
+            OtherBackupsCheckingSection()
+
+        case let .loaded(summary):
+            // a check that found none has nothing to list
+            if summary.namespaceCount > 0 {
+                OtherBackupsSectionContent(summary: summary, operation: section.operation) {
+                    controls
+                }
+            }
+
+        case let .loadFailed(reason):
+            OtherBackupsLoadFailedSection(reason: reason) {
+                controls
+            }
+        }
     }
 
-    private var isDeleting: Bool {
-        if case .deleting = manager.otherBackupsOperation { return true }
-        return false
+    private var controls: some View {
+        OtherBackupsControls(
+            section: section,
+            actions: actions,
+            manager: manager,
+            presentationCoordinator: presentationCoordinator
+        )
+    }
+}
+
+/// The controls Rust names for the section, in its order
+private struct OtherBackupsControls: View {
+    let section: CloudBackupOtherBackupsSection
+    let actions: CloudBackupActions
+    let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    var body: some View {
+        ForEach(section.controls, id: \.self) { control in
+            OtherBackupsControlButton(
+                control: control,
+                operation: section.operation,
+                actions: actions,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
+        }
+    }
+}
+
+/// One control of the section, drawn from its action's availability
+private struct OtherBackupsControlButton: View {
+    let control: CloudBackupOtherBackupsControl
+    let operation: OtherBackupsOperation
+    let actions: CloudBackupActions
+    let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    var body: some View {
+        switch control {
+        case .recover:
+            CloudBackupActionControl(
+                action: .recoverOtherBackups,
+                actions: actions,
+                perform: requestRecovery
+            ) {
+                OtherBackupsOperationLabel(
+                    title: operation == .recovering ? "Trying Passkey..." : "Try Another Passkey",
+                    systemImage: "person.badge.key",
+                    isLoading: operation == .recovering
+                )
+            }
+
+        case .delete:
+            CloudBackupActionControl(
+                action: .deleteOtherBackups,
+                actions: actions,
+                role: .destructive,
+                perform: requestDeletion
+            ) {
+                OtherBackupsOperationLabel(
+                    title: operation == .deleting ? "Deleting..." : "Delete These Backups",
+                    systemImage: "trash",
+                    isLoading: operation == .deleting
+                )
+            }
+
+        case .checkAgain:
+            CloudBackupActionControl(
+                action: .refreshDetail,
+                actions: actions,
+                perform: checkAgain
+            ) {
+                Text("Check Again")
+            }
+        }
     }
 
-    private var isOperating: Bool {
-        isRecovering || isDeleting
+    private func requestRecovery() {
+        presentationCoordinator.present(.dialog(.recoverOtherBackups))
     }
+
+    private func requestDeletion() {
+        presentationCoordinator.present(.alert(.otherBackupsDeleteConfirmation))
+    }
+
+    private func checkAgain() {
+        manager.dispatch(action: .refreshDetail)
+    }
+}
+
+private struct OtherBackupsCheckingSection: View {
+    var body: some View {
+        Section(header: Text("Backups with Another Key")) {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+                Text("Checking for backups with another key...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct OtherBackupsLoadFailedSection<Controls: View>: View {
+    let reason: CloudBackupInventoryIncompleteReason
+    @ViewBuilder let controls: Controls
+
+    var body: some View {
+        Section(header: Text("Backups with Another Key")) {
+            Text(reason.otherBackupsMessage)
+                .font(.caption)
+                .foregroundStyle(Color.statusError)
+
+            controls
+        }
+    }
+}
+
+private struct OtherBackupsSectionContent<Controls: View>: View {
+    let summary: CloudBackupOtherBackupsSummary
+    let operation: OtherBackupsOperation
+    @ViewBuilder let controls: Controls
 
     private var failure: String? {
-        if case let .failed(error) = manager.otherBackupsOperation { return error }
+        if case let .failed(error) = operation { return error }
         return nil
     }
 
     private var summaryText: String {
         let namespaceLabel = pluralize(Int(summary.namespaceCount), singular: "backup set", plural: "backup sets")
         let walletLabel = pluralize(Int(summary.walletCount), singular: "wallet", plural: "wallets")
-        let passkeyLabel = otherPasskeyLabel
-        return "\(namespaceLabel) protected by \(passkeyLabel), containing \(walletLabel)"
+        return "\(namespaceLabel) protected by \(otherPasskeyLabel), containing \(walletLabel)"
     }
 
     private var otherPasskeyLabel: String {
@@ -46,64 +182,12 @@ struct OtherBackupsSection: View {
     }
 
     var body: some View {
-        OtherBackupsSectionContent(
-            summaryText: summaryText,
-            isRecovering: isRecovering,
-            isDeleting: isDeleting,
-            isOperating: isOperating,
-            isInventoryComplete: manager.isOtherBackupsInventoryReady,
-            failure: failure,
-            onRequestRecovery: requestRecovery,
-            onRequestDeletion: requestDeletion
-        )
-    }
-
-    private func requestRecovery() {
-        guard manager.isOtherBackupsInventoryReady else { return }
-
-        presentationCoordinator.present(.dialog(.recoverOtherBackups))
-    }
-
-    private func requestDeletion() {
-        guard manager.isOtherBackupsInventoryReady else { return }
-
-        presentationCoordinator.present(.alert(.otherBackupsDeleteConfirmation))
-    }
-}
-
-private struct OtherBackupsSectionContent: View {
-    let summaryText: String
-    let isRecovering: Bool
-    let isDeleting: Bool
-    let isOperating: Bool
-    let isInventoryComplete: Bool
-    let failure: String?
-    let onRequestRecovery: () -> Void
-    let onRequestDeletion: () -> Void
-
-    var body: some View {
         Section(header: Text("Backups with Another Key")) {
             Text(summaryText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Button(action: onRequestRecovery) {
-                OtherBackupsOperationLabel(
-                    title: isRecovering ? "Trying Passkey..." : "Try Another Passkey",
-                    systemImage: "person.badge.key",
-                    isLoading: isRecovering
-                )
-            }
-            .disabled(isOperating || !isInventoryComplete)
-
-            Button(role: .destructive, action: onRequestDeletion) {
-                OtherBackupsOperationLabel(
-                    title: isDeleting ? "Deleting..." : "Delete These Backups",
-                    systemImage: "trash",
-                    isLoading: isDeleting
-                )
-            }
-            .disabled(isOperating || !isInventoryComplete)
+            controls
 
             if let failure {
                 Text(failure)

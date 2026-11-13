@@ -13,11 +13,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import org.bitcoinppl.cove.ui.theme.CoveTheme
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
-import org.bitcoinppl.cove_core.CloudBackupState
-import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.junit.Rule
 import org.junit.Test
 
@@ -30,13 +28,7 @@ class CloudBackupEnableOnboardingScreenTest {
         compose.setContent {
             CoveTheme(darkTheme = true) {
                 CloudBackupScreenFrame(
-                    manager =
-                        CloudBackupManager(
-                            CloudBackupState(
-                                CloudBackupLifecycle.Disabled,
-                                CloudBackupSettingsRowStatus.Disabled,
-                            ),
-                        ),
+                    manager = CloudBackupManager(cloudBackupFixture("disabled")),
                     actions =
                         CloudBackupScreenActions(
                             onBack = {},
@@ -50,13 +42,13 @@ class CloudBackupEnableOnboardingScreenTest {
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.onNodeWithText("How It Works").assertIsDisplayed()
         compose.onNodeWithTag("onboarding.cloudBackup.cancel").assertIsDisplayed()
-        compose.onNodeWithTag("onboarding.cloudBackup.enable").assertIsNotEnabled()
+        compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.ENABLE)).assertIsNotEnabled()
 
         compose.checkRow("passkey is required").performClick()
         compose.checkRow("need access to my Google account").performClick()
         compose.checkRow("manually back up my 12 or 24 words").performClick()
 
-        compose.onNodeWithTag("onboarding.cloudBackup.enable").assertIsEnabled()
+        compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.ENABLE)).assertIsEnabled()
     }
 
     @Test
@@ -64,18 +56,7 @@ class CloudBackupEnableOnboardingScreenTest {
         compose.setContent {
             CoveTheme(darkTheme = true) {
                 CloudBackupScreenFrame(
-                    manager =
-                        CloudBackupManager(
-                            CloudBackupState(
-                                CloudBackupLifecycle.PendingEnableRecovery(
-                                    CloudBackupPendingEnableRecovery(
-                                        supportCode = "CB-PE-001",
-                                        cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
-                                    ),
-                                ),
-                                CloudBackupSettingsRowStatus.RecoveryRequired,
-                            ),
-                        ),
+                    manager = CloudBackupManager(cloudBackupFixture("pending-enable-recovery")),
                     actions =
                         CloudBackupScreenActions(
                             onBack = {},
@@ -87,8 +68,8 @@ class CloudBackupEnableOnboardingScreenTest {
         }
 
         compose.onNodeWithText("Cloud Backup Needs Recovery").assertIsDisplayed()
-        compose.onNodeWithText("CB-PE-001").assertIsDisplayed()
-        compose.onNodeWithTag("cloudBackup.recovery.removeIncompleteSetup").assertIsDisplayed()
+        compose.onNodeWithText("CB-0000").assertIsDisplayed()
+        compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)).assertIsDisplayed()
     }
 
     @Test
@@ -101,6 +82,7 @@ class CloudBackupEnableOnboardingScreenTest {
                             supportCode = "CB-PE-004",
                             cleanup = CloudBackupPendingEnableCleanupState.SUPPORT_ONLY,
                         ),
+                    cleanup = null,
                     onConfirmCleanup = {},
                     onCancel = {},
                 )
@@ -109,7 +91,7 @@ class CloudBackupEnableOnboardingScreenTest {
 
         compose.onNodeWithText("CB-PE-004").assertIsDisplayed()
         compose.onNodeWithText("Contact Support").assertIsDisplayed()
-        compose.onAllNodesWithTag("cloudBackup.recovery.removeIncompleteSetup").assertCountEquals(0)
+        compose.onAllNodesWithTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)).assertCountEquals(0)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.checkRow(text: String) =

@@ -2,15 +2,15 @@ package org.bitcoinppl.cove.cloudbackup
 
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CloudBackupRestoreAllHelpersTest {
     @Test
-    fun startAvailabilityProjectsOnlyTheRustOwnedCountAndEnabledState() {
+    fun startStatesDrawRestoreAllWhoseAvailabilityComesFromActions() {
         val available =
             requireNotNull(
                 cloudBackupRestoreAllAction(
@@ -24,15 +24,10 @@ class CloudBackupRestoreAllHelpersTest {
                 ),
             )
 
-        assertEquals(CloudBackupRestoreAllActionKind.START, available.kind)
+        assertEquals(CloudBackupScreenAction.START_RESTORE_ALL, available.action)
         assertEquals("Restore All (3)", available.title)
-        assertTrue(available.enabled)
-        assertEquals(available.title, disabled.title)
-        assertFalse(disabled.enabled)
-        assertEquals(
-            CloudBackupManagerAction.StartRestoreAll,
-            cloudBackupRestoreAllManagerAction(available.kind),
-        )
+        assertEquals(available, disabled)
+        assertEquals(CloudBackupManagerAction.StartRestoreAll, available.managerAction)
     }
 
     @Test
@@ -50,15 +45,10 @@ class CloudBackupRestoreAllHelpersTest {
                 ),
             )
 
-        assertEquals(CloudBackupRestoreAllActionKind.RETRY, available.kind)
+        assertEquals(CloudBackupScreenAction.RETRY_RESTORE_ALL_REMAINING, available.action)
         assertEquals("Retry Remaining (1)", available.title)
-        assertTrue(available.enabled)
-        assertEquals(available.title, disabled.title)
-        assertFalse(disabled.enabled)
-        assertEquals(
-            CloudBackupManagerAction.RetryRestoreAllRemaining,
-            cloudBackupRestoreAllManagerAction(available.kind),
-        )
+        assertEquals(available, disabled)
+        assertEquals(CloudBackupManagerAction.RetryRestoreAllRemaining, available.managerAction)
     }
 
     @Test

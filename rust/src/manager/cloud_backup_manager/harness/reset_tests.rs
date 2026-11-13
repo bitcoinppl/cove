@@ -12,7 +12,7 @@ use cove_device::keychain::Keychain;
 
 use super::{
     CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd,
-    TestApp, change_a_wallet, keychain_namespace, load_detail, persisted, run_case,
+    TestApp, change_a_wallet, finish_wipe, keychain_namespace, load_detail, persisted, run_case,
     seed_verifiable_master_key,
 };
 use crate::database::Database;
@@ -31,11 +31,13 @@ use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     current_background_writes, wallet_entry_with_labels,
 };
+use crate::manager::cloud_backup_manager::screen::CloudBackupScreenBody;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupKeychain,
-    CloudBackupManagerAction, CloudBackupStore, CloudBackupVerificationSource,
-    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError,
+    CloudBackupExclusiveOperation as Op, CloudBackupKeychain, CloudBackupManagerAction,
+    CloudBackupResetPermit, CloudBackupStore, CloudBackupVerificationSource,
+    DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState,
+    RequestedDriveAccountSwitchStep, take_settled_off_count,
 };
 
 fn local_master_key_present() -> bool {
@@ -57,21 +59,6 @@ fn credential_id() -> Option<Vec<u8>> {
     CloudBackupKeychain::global().load_credential_id().expect("read credential")
 }
 
-/// Runs the Cloud Backup part of a full wipe: the owner clears local state, the database reset
-/// commits, and the reset finishes
-fn finish_wipe(
-    app: &TestApp,
-    permit: crate::manager::cloud_backup_manager::CloudBackupResetPermit,
-) {
-    app.block_on("the owner to clear local state", permit.clear_local_state())
-        .expect("clear local state");
-    // the wipe's commit point: `wipe_all_data_with_tier` resets the whole database, so every
-    // Cloud Backup table, the blob sync rows included, is gone before the reset finishes
-    Database::global().dangerous_reset_all_data().expect("reset the database");
-    app.block_on("the reset to finish", permit.complete_after_database_reset())
-        .expect("finish the reset");
-}
-
 /// Turn Off's cleanup runs on a blocking thread, which the runtime park can't see; settle waits
 /// for the runtime's blocking pool to go quiet and for the supervisor's stage checkpoint to show
 /// the effect reported, so the next step sees it done
@@ -84,9 +71,8 @@ fn settle_waits_for_an_effect_running_off_the_runtime() {
         load_detail(&mut app);
         app.keychain.slow_deletes(Duration::from_millis(100));
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         assert_eq!(keychain_namespace(), None);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
     });
@@ -106,8 +92,8 @@ fn reset_waits_for_an_effect_in_flight_then_frees_its_operation() {
         let hold = Hold::default();
         app.keychain.hold_namespace_delete(hold.clone());
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_cannot(&[N::Enable, N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_cannot(&[N::Enable, N::TurnOff]);
         app.block_on("the held cleanup to start", hold.entered());
         assert_eq!(
             app.admission(N::Enable),
@@ -397,9 +383,8 @@ fn a_turned_off_configurations_late_keychain_save_is_refused() {
         let first_writes = app.block_on("A's writes", current_background_writes(&manager));
         load_detail(&mut app);
 
-        app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
-            .then_can(&[N::Enable])
-            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
         let second = FakeAccount::new(1, 0).seed(&app);
         let second_key = master_key_bytes().expect("B's master key");
         let second_credential = credential_id();
@@ -505,8 +490,8 @@ fn wipe_during_verification_leaves_no_stale_key() {
     });
 }
 
-/// The platform calls that start or recover a Google Drive account switch, and a full wipe, are
-/// admitted like dispatched intents, and a rejection reaches the caller as a typed error
+/// A Google Drive account switch's Switch, Try Again and Cancel, and a full wipe, are admitted
+/// like any dispatched intent, and a rejected Switch records nothing for the platform to act on
 #[test]
 fn routed_entry_points_are_admitted_or_rejected_with_a_reason() {
     let test =
@@ -528,19 +513,28 @@ fn routed_entry_points_are_admitted_or_rejected_with_a_reason() {
         );
         assert_eq!(
             app.admission_of(UserIntent::RetryDriveAccountSwitchRecovery),
-            Admission::Accepted
+            Admission::Rejected(Rejection::NothingToContinue)
         );
         assert_eq!(app.admission_of(UserIntent::LocalReset), Admission::Accepted);
 
-        let manager = app.manager().clone();
-        let switch =
-            app.block_on("the switch call to answer", manager.begin_drive_account_switch());
-        assert_eq!(switch, Err(CloudBackupDriveAccountSwitchError::NotConfigured));
-        let recovery = app.block_on(
-            "the recovery call to answer",
-            manager.reconcile_drive_account_switch(DriveAccountSwitchPlatformState::NoTransition),
-        );
-        assert_eq!(recovery, Ok(DriveAccountSwitchReconcileAction::None));
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_can(&[N::Enable]);
+        assert_eq!(persisted_switch_phase(), None);
+        assert_eq!(app.manager().drained_drive_account_switch_steps(), vec![]);
+
+        // the platform found no switch at launch, so nothing is asked of it
+        app.event("the platform reports no switch", |app| {
+            let manager = app.manager().clone();
+            app.block_on(
+                "the switch's owner to handle the state",
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::State(
+                        DriveAccountSwitchPlatformState::NoTransition,
+                    ),
+                ),
+            );
+        })
+        .then_can(&[N::Enable]);
+        assert_eq!(app.manager().drained_drive_account_switch_steps(), vec![]);
 
         FakeAccount::new(1, 0).seed(&app);
         app.current().then_can(&[N::TurnOff]);
@@ -652,10 +646,13 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
         // provider read that a reset cancels by revoking the run's claim
         CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
 
-        let manager = app.manager().clone();
-        let transition_id = app
-            .block_on("the switch to drain the lane", manager.begin_drive_account_switch())
-            .expect("the switch starts");
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+        let transition_id =
+            persisted().drive_account_switch().expect("the switch starts").transition_id.value();
+        assert_eq!(
+            app.manager().drained_drive_account_switch_steps(),
+            vec![RequestedDriveAccountSwitchStep::SelectAccount(transition_id)]
+        );
         let revoked_listing = Hold::default();
         app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(revoked_listing.clone()));
 
@@ -663,9 +660,10 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
             let manager = app.manager().clone();
             app.block_on(
                 "the switch to continue",
-                manager.continue_drive_account_switch(transition_id),
-            )
-            .expect("continue the switch");
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::AccountSelected(transition_id),
+                ),
+            );
         })
         .then_cannot(&[N::Enable]);
         app.block_on("the first run's listing to start", revoked_listing.entered());
@@ -689,13 +687,14 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
         app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(resumed_listing.clone()));
         app.event("the app reconciles the switch the platform still stages", |app| {
             let manager = app.manager().clone();
-            let action = app.block_on(
+            app.block_on(
                 "the reconcile to answer",
-                manager.reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(
-                    transition_id,
-                )),
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::State(
+                        DriveAccountSwitchPlatformState::Staged(transition_id),
+                    ),
+                ),
             );
-            assert_eq!(action, Ok(DriveAccountSwitchReconcileAction::None));
         })
         .then_cannot(&[N::Enable]);
         app.block_on("the resumed run's listing to start", resumed_listing.entered());
@@ -741,9 +740,10 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         // staged material without its journal is evidence restart can only hand to recovery
         cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate())
             .expect("stage a master key");
-        app.relaunch().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        // recovery draws only its cleanup, so Enable is admitted but has no control here
+        app.relaunch().then_cannot(&[N::TurnOff]);
 
-        let recovery = match app.manager().state().lifecycle {
+        let recovery = match app.manager().model_state().lifecycle {
             CloudBackupLifecycle::PendingEnableRecovery(recovery) => recovery,
             lifecycle => panic!("not in recovery after restart: {lifecycle:?}"),
         };
@@ -757,7 +757,7 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         // the reset owns the runtime, and the recovery still shows
         app.current().then_cannot(&[N::Enable, N::TurnOff]);
         assert_eq!(
-            app.manager().state().lifecycle,
+            app.manager().model_state().lifecycle,
             CloudBackupLifecycle::PendingEnableRecovery(recovery.clone())
         );
 
@@ -765,11 +765,10 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
             app.block_on("the reset to end", permit.resume_after_failed_reset())
                 .expect("abandon the reset");
         })
-        .then_can(&[N::Enable])
         .then_cannot(&[N::TurnOff]);
 
         assert_eq!(
-            app.manager().state().lifecycle,
+            app.manager().model_state().lifecycle,
             CloudBackupLifecycle::PendingEnableRecovery(recovery.clone()),
             "{}",
             app.describe()
@@ -787,6 +786,170 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
             cspp.master_key_promotion_status().expect("read"),
             MasterKeyPromotionStatus::None
         );
-        assert_eq!(app.manager().state().lifecycle, CloudBackupLifecycle::Disabled);
+        assert_eq!(app.manager().model_state().lifecycle, CloudBackupLifecycle::Disabled);
+    });
+}
+
+/// A Google Drive account switch starts a new configuration, so a detail refresh that read the
+/// old account's inventory can't land in the new one: the held result, released after the switch,
+/// is dropped, and only a load the new configuration starts fills its inventory
+#[test]
+fn a_detail_refresh_from_before_an_account_switch_is_dropped() {
+    let test =
+        concat!(module_path!(), "::a_detail_refresh_from_before_an_account_switch_is_dropped");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 1).seed_records(&app);
+        let old_scope = app.manager().inventory_scope();
+
+        // the detail refresh lists the old account, then reads its records, where it is held
+        let held_read = Hold::default();
+        app.cloud.script_next(CloudCall::DownloadWallet, CloudFault::Hold(held_read.clone()));
+        app.dispatch(CloudBackupManagerAction::RefreshDetail).then_cannot(&[N::Enable]);
+        app.block_on("the old account's detail read to start", held_read.entered());
+
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+        let transition_id = persisted()
+            .drive_account_switch()
+            .expect("the switch is recorded")
+            .transition_id
+            .value();
+        assert_eq!(
+            app.manager().drained_drive_account_switch_steps(),
+            vec![RequestedDriveAccountSwitchStep::SelectAccount(transition_id)],
+            "{}",
+            app.describe()
+        );
+
+        app.event("the platform staged the selected account", |app| {
+            let manager = app.manager().clone();
+            app.block_on(
+                "the switch's owner to take the selected account",
+                manager.drive_account_switch_platform_result_handled(
+                    DriveAccountSwitchPlatformResult::AccountSelected(transition_id),
+                ),
+            );
+        })
+        .then_cannot(&[N::Enable]);
+        assert_ne!(
+            app.manager().inventory_scope(),
+            old_scope,
+            "the switch's reinitialize ended without starting a new configuration\n{}",
+            app.describe()
+        );
+        assert!(app.manager().inventory.read().loaded_detail().is_none());
+
+        app.event("release the old account's detail read", |_| held_read.release())
+            .then_cannot(&[N::Enable]);
+        app.block_on("the old account's detail read to return", held_read.finished());
+        app.settle();
+        assert!(
+            app.manager().inventory.read().loaded_detail().is_none(),
+            "the old account's detail landed in the new configuration\n{}",
+            app.describe()
+        );
+    });
+}
+
+/// Starts a full wipe while a confirmed Turn Off drains an upload in flight
+///
+/// The reset cancels the Turn Off before it commits, and the screen shows Disabled while the
+/// reset runs. Returns once the reset is ready, with the times Cloud Backup settled off before
+/// it taken
+fn reset_during_a_draining_turn_off(app: &mut TestApp) -> CloudBackupResetPermit {
+    FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+
+    let hold = Hold::default();
+    app.cloud.script_next(CloudCall::UploadWallet, CloudFault::Hold(hold.clone()));
+    app.event("a local wallet changes", |app| {
+        change_a_wallet(app).expect("the seeded wallet");
+    })
+    .then_can(&[N::TurnOff]);
+    app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+    app.block_on("the upload to be held", hold.entered());
+
+    app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+    app.confirm_turn_off().then_can(&[N::CancelDisable]);
+    assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled, "Turn Off committed");
+    take_settled_off_count();
+
+    let manager = app.manager().clone();
+    let reset = cove_tokio::task::spawn(async move { manager.prepare_local_reset().await });
+    app.event("a full wipe begins", |_| {}).then_cannot(&[N::Enable, N::TurnOff]);
+    assert!(
+        matches!(app.manager().published_screen().body, CloudBackupScreenBody::Disabled),
+        "the running reset doesn't show Disabled\n{}",
+        app.describe()
+    );
+
+    app.event("release the held upload", |_| hold.release()).then_cannot(&[N::Enable]);
+    let permit =
+        app.block_on("the reset to be ready", reset).expect("reset task").expect("reset permit");
+
+    assert_eq!(take_settled_off_count(), 0, "a running reset settled Cloud Backup off");
+    permit
+}
+
+/// A wipe that starts while Turn Off drains and fails before its key clear resumes the backup,
+/// so Cloud Backup never settles off and the platform keeps what belongs to the backup, such as
+/// Android's Google Drive account binding, though the reset showed Disabled
+#[test]
+fn a_reset_during_a_draining_turn_off_abandoned_before_its_key_clear_never_settles_off() {
+    let test = concat!(
+        module_path!(),
+        "::a_reset_during_a_draining_turn_off_abandoned_before_its_key_clear_never_settles_off"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let permit = reset_during_a_draining_turn_off(&mut app);
+
+        app.event("the wipe fails before its key clear", |app| {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        })
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::Enable]);
+
+        assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
+        assert_eq!(take_settled_off_count(), 0, "the abandoned reset settled Cloud Backup off");
+    });
+}
+
+/// The same reset settles Cloud Backup off once when its wipe commits
+#[test]
+fn a_reset_during_a_draining_turn_off_that_wipes_settles_off_once() {
+    let test =
+        concat!(module_path!(), "::a_reset_during_a_draining_turn_off_that_wipes_settles_off_once");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let permit = reset_during_a_draining_turn_off(&mut app);
+
+        app.event("the wipe commits", |app| finish_wipe(app, permit)).then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 1, "the wipe didn't settle Cloud Backup off once");
+
+        app.advance_clock(Duration::from_secs(600)).then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 0, "settling off was sent again");
+    });
+}
+
+/// A committed Turn Off that finishes settles Cloud Backup off once, and a launch that finds it
+/// off reports that too, so a process killed between the two still releases what it held
+#[test]
+fn a_finished_turn_off_settles_off_once() {
+    let test = concat!(module_path!(), "::a_finished_turn_off_settles_off_once");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.current().then_can(&[N::Enable]);
+        assert_eq!(take_settled_off_count(), 1, "the launch with Cloud Backup off wasn't sent");
+
+        FakeAccount::new(1, 0).seed(&app);
+        load_detail(&mut app);
+        app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
+        assert_eq!(take_settled_off_count(), 0, "the Turn Off review settled Cloud Backup off");
+
+        app.confirm_turn_off().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
+        assert_eq!(take_settled_off_count(), 1, "the Turn Off didn't settle Cloud Backup off once");
     });
 }

@@ -26,10 +26,10 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
@@ -324,8 +324,8 @@ class CloudBackupRestoreAllFullLaunchTest {
             val restoreAll = manager.restoreAllState
 
             ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeEntry &&
-                manager.isDetailInventoryComplete &&
-                !manager.isDetailInventoryChecking &&
+                manager.isInventoryComplete &&
+                !manager.isInventoryChecking &&
                 !manager.hasPendingUploadVerification &&
                 restoreAll is CloudBackupRestoreAllState.StartAvailable &&
                 restoreAll.walletCount == 3u &&
@@ -433,10 +433,21 @@ class CloudBackupRestoreAllFullLaunchTest {
         assertTrue("$message; rows=$rows, progress=${progressCardTexts()}, texts=${detailTexts()}", condition())
     }
 
-    private fun isCloudOnlyLoaded(): Boolean = CloudBackupManager.getInstance().cloudOnly is CloudOnlyState.Loaded
+    private fun isCloudOnlyLoaded(): Boolean = CloudBackupManager.getInstance().isInventoryComplete
 
-    private fun cloudOnlyWallets(): List<CloudBackupWalletItem> =
-        (CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets.orEmpty()
+    // the wallets Cloud Backup lists beside the phone's own: not on the device, and extra copies of
+    // wallets it holds
+    private fun cloudOnlyWallets(): List<CloudBackupWalletItem> {
+        val manager = CloudBackupManager.getInstance()
+
+        return (manager.notOnDeviceRows + manager.extraCopyRows).mapNotNull { row ->
+            when (val record = row.record) {
+                is CloudBackupListedRecord.NotOnDevice -> record.wallet
+                is CloudBackupListedRecord.ExtraCopy -> record.wallet
+                else -> null
+            }
+        }
+    }
 
     private fun cloudOnlyWallet(recordId: String): CloudBackupWalletItem? =
         cloudOnlyWallets().singleOrNull { wallet -> wallet.recordId == recordId }
@@ -547,7 +558,7 @@ class CloudBackupRestoreAllFullLaunchTest {
 
         val manager = CloudBackupManager.getInstance()
         val diagnostics =
-            "restoreAll=${manager.restoreAllState}, cloudOnly=${cloudOnlyWallets().map { it.recordId to it.syncStatus }}, " +
+            "screen=${manager.describeScreen()}, restoreAll=${manager.restoreAllState}, cloudOnly=${cloudOnlyWallets().map { it.recordId to it.syncStatus }}, " +
                 "route=${AppManager.getInstance().currentRoute}, localWallets=${localWalletNames()}, " +
                 "held=${ScriptedCloudStorageAccess.heldWalletDownloadRecordIds()}, " +
                 "walletDownloads=${ScriptedCloudStorageAccess.walletDownloadRecordIds()}"

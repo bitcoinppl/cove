@@ -67,6 +67,8 @@
 		C0D000052F20000000000001 /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */; };
 		C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
 		C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */; };
+		D1A100022F90000000000001 /* CloudBackupUIIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100012F90000000000001 /* CloudBackupUIIdentifiers.swift */; };
+		D1A100032F90000000000001 /* CloudBackupUIIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100012F90000000000001 /* CloudBackupUIIdentifiers.swift */; };
 		C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */; };
 		C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */; };
 		C0F5D0012F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */; };
@@ -81,6 +83,7 @@
 		C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */; };
 		C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */; };
 		C0F3000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */; };
+		C0F3000B2F80000000000001 /* CloudBackupTurnOffFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F2000B2F80000000000001 /* CloudBackupTurnOffFullAppUITests.swift */; };
 		C0F300092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */; };
 		C0F300082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */; };
 		C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */; };
@@ -173,6 +176,7 @@
 		C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoveCloudBackupUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveCloudBackupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupHostUITestSupport.swift; sourceTree = "<group>"; };
+		D1A100012F90000000000001 /* CloudBackupUIIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupUIIdentifiers.swift; sourceTree = "<group>"; };
 		C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateKeyExportFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupLargeTextFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupDeleteFromCloudFullAppUITests.swift; sourceTree = "<group>"; };
@@ -184,6 +188,7 @@
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0F200012F80000000000001 /* CloudBackupUITestControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../CoveCloudBackupUITestHost/CloudBackupUITestControl.swift; sourceTree = "<group>"; };
 		C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupDisableFullAppUITests.swift; sourceTree = "<group>"; };
+		C0F2000B2F80000000000001 /* CloudBackupTurnOffFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupTurnOffFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupSyncNowFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupLocalDeleteFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupNetworkFullAppUITests.swift; sourceTree = "<group>"; };
@@ -272,10 +277,12 @@
 				C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */,
 				C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */,
 				C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */,
+				D1A100012F90000000000001 /* CloudBackupUIIdentifiers.swift */,
 				C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */,
 				C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */,
 				C0F200032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift */,
 				C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */,
+				C0F2000B2F80000000000001 /* CloudBackupTurnOffFullAppUITests.swift */,
 				C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */,
 				C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */,
 				C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */,
@@ -633,6 +640,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */,
+				D1A100032F90000000000001 /* CloudBackupUIIdentifiers.swift in Sources */,
 				C0B000222F60000000000001 /* CoinControlManagerTests.swift in Sources */,
 				C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */,
 				C0F600032F90000000000001 /* KeyTeleportFileOpenTests.swift in Sources */,
@@ -683,10 +691,12 @@
 				C0F5D0012F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift in Sources */,
 				C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */,
 				C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */,
+				D1A100022F90000000000001 /* CloudBackupUIIdentifiers.swift in Sources */,
 				C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */,
 				C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */,
 				C0F300032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift in Sources */,
 				C0F3000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift in Sources */,
+				C0F3000B2F80000000000001 /* CloudBackupTurnOffFullAppUITests.swift in Sources */,
 				C0F300092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift in Sources */,
 				C0F300082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift in Sources */,
 				C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */,

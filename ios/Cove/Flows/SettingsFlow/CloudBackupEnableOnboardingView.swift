@@ -9,7 +9,10 @@ struct CloudBackupEnableOnboardingView: View {
     let onEnable: () -> Void
     let onCancel: () -> Void
     let message: String?
+    /// The Enable flow is running, so the screen waits under its progress overlay
     let isBusy: Bool
+    /// Whether Rust admits the intent the primary button sends; nil draws it disabled
+    let primaryAvailability: CloudBackupActionAvailability?
     let context: CloudBackupEnableOnboardingContext
     let primaryButtonTitle: String
 
@@ -24,6 +27,7 @@ struct CloudBackupEnableOnboardingView: View {
         onCancel: @escaping () -> Void,
         message: String?,
         isBusy: Bool,
+        primaryAvailability: CloudBackupActionAvailability?,
         context: CloudBackupEnableOnboardingContext = .standard,
         primaryButtonTitle: String = "Enable Cloud Backup"
     ) {
@@ -31,6 +35,7 @@ struct CloudBackupEnableOnboardingView: View {
         self.onCancel = onCancel
         self.message = message
         self.isBusy = isBusy
+        self.primaryAvailability = primaryAvailability
         self.context = context
         self.primaryButtonTitle = primaryButtonTitle
     }
@@ -59,7 +64,7 @@ struct CloudBackupEnableOnboardingView: View {
                     CloudBackupEnableButton(
                         title: primaryButtonTitle,
                         allChecked: allChecked,
-                        isBusy: isBusy,
+                        availability: primaryAvailability,
                         onEnable: onEnable
                     )
 
@@ -107,6 +112,7 @@ struct CloudBackupEnableOnboardingView: View {
         onEnable: {},
         onCancel: {},
         message: nil,
-        isBusy: false
+        isBusy: false,
+        primaryAvailability: .available
     )
 }

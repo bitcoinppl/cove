@@ -22,11 +22,11 @@ pub use state::{
     DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
-    PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedHealNotice,
-    PersistedPasskeyState, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
-    PersistedVerificationRequirement, PersistedWalletVerificationIssues,
+    PersistedDeepVerificationReport, PersistedDisableDisposition, PersistedDisablingCloudBackup,
+    PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
+    PersistedDriveAccountSwitchState, PersistedHealNotice, PersistedPasskeyState,
+    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
+    PersistedRestoreAllMarker, PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -248,6 +248,48 @@ mod tests {
         })
     }
 
+    /// The finishing facts are optional fields, so a record that never had them writes the
+    /// same JSON an older build reads, and an older build's record loads as a remote delete
+    /// nobody retried by hand
+    #[test]
+    fn disabling_record_finishing_facts_keep_the_stored_json_compatible() {
+        let previous_configured = match configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            None,
+            Some(1),
+        ) {
+            PersistedCloudBackupState::Configured(configured) => configured,
+            _ => unreachable!("configured_state builds a configured record"),
+        };
+        let mut disabling = PersistedDisablingCloudBackup {
+            previous_configured,
+            namespace_id: "namespace-1".into(),
+            disable_generation: 3,
+            started_at: 10,
+            delete_started_at: Some(11),
+            last_error: None,
+            retry_after: None,
+            disposition: PersistedDisableDisposition::DeleteRemote,
+            try_again_failed: false,
+        };
+
+        let json = serde_json::to_value(&disabling).unwrap();
+        assert!(json.get("disposition").is_none(), "{json}");
+        assert!(json.get("try_again_failed").is_none(), "{json}");
+        let older: PersistedDisablingCloudBackup = serde_json::from_value(json).unwrap();
+        assert_eq!(older, disabling);
+
+        disabling.disposition = PersistedDisableDisposition::LocalOnly;
+        disabling.try_again_failed = true;
+        let json = serde_json::to_string(&disabling).unwrap();
+        let read: PersistedDisablingCloudBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(read, disabling);
+    }
+
     #[test]
     fn pending_restore_all_marker_requires_configured_state() {
         let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
@@ -321,6 +363,8 @@ mod tests {
             delete_started_at: Some(20),
             last_error: None,
             retry_after: None,
+            disposition: PersistedDisableDisposition::DeleteRemote,
+            try_again_failed: false,
         });
 
         assert!(state.record_successful_sync(30, 3));

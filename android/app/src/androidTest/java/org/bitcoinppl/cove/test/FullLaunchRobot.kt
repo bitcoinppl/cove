@@ -390,7 +390,8 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    private fun acceptCloudBackupAcknowledgements() {
+    /** Checks the three Cloud Backup setup acknowledgements, which Enable waits on */
+    fun acceptCloudBackupAcknowledgements() {
         listOf(
             "my passkey is required",
             "access to my Google account",
@@ -415,8 +416,11 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    /** Taps Enable Cloud Backup again after a failure, leaving the acknowledgements as they are */
-    fun retryCloudBackupEnable(): FullLaunchOnboardingRobot {
+    /**
+     * Taps the details' primary button after a failed upload, which reads Confirm Passkey once the
+     * failure goes back to the saved passkey's pause, leaving the acknowledgements as they are
+     */
+    fun confirmSavedPasskeyAfterFailure(): FullLaunchOnboardingRobot {
         device.clickSafely(tag("onboarding.cloudBackup.enable"))
 
         return this

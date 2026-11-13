@@ -33,7 +33,7 @@ pub(crate) enum WalletIdentityKey {
 }
 
 /// What a backup can recover a wallet from
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum BackupRecoveryMaterial {
     /// A seed or extended private key that can sign
     Secret,
@@ -183,6 +183,119 @@ impl ExistingWalletIdentitySet {
     }
 }
 
+/// A local wallet that holds everything a backup can recover
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CoveringWallet {
+    pub(crate) id: WalletId,
+    /// The wallet's name when coverage was read, for display only; never used to match
+    pub(crate) name: String,
+}
+
+/// The local wallets that each cover a backup; never empty, since one identity can be held by
+/// several local wallets
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CoveringWallets {
+    first: CoveringWallet,
+    rest: Vec<CoveringWallet>,
+    /// What the backup can recover, which each covering wallet held when coverage was read, so a
+    /// later check can tell whether they still hold it
+    material: BackupRecoveryMaterial,
+}
+
+impl CoveringWallets {
+    pub(crate) fn one(wallet: CoveringWallet, material: BackupRecoveryMaterial) -> Self {
+        Self { first: wallet, rest: Vec::new(), material }
+    }
+
+    /// `None` when no wallet covers the backup
+    pub(crate) fn from_wallets(
+        wallets: impl IntoIterator<Item = CoveringWallet>,
+        material: BackupRecoveryMaterial,
+    ) -> Option<Self> {
+        let mut wallets = wallets.into_iter();
+        let first = wallets.next()?;
+
+        Some(Self { first, rest: wallets.collect(), material })
+    }
+
+    /// What the backup can recover
+    pub(crate) fn material(&self) -> BackupRecoveryMaterial {
+        self.material
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &CoveringWallet> {
+        std::iter::once(&self.first).chain(&self.rest)
+    }
+
+    /// The name shown for the covering wallet: the first one coverage found
+    pub(crate) fn display_name(&self) -> &str {
+        &self.first.name
+    }
+}
+
+/// The local wallets' identities, each also kept per wallet, so a covered backup can say which
+/// local wallets cover it
+#[derive(Debug, Clone, Default)]
+pub(crate) struct LocalWalletIdentities {
+    all: ExistingWalletIdentitySet,
+    wallets: Vec<(CoveringWallet, ExistingWalletIdentitySet)>,
+}
+
+/// How much of a backup the local wallets hold, naming the wallets that hold all of it
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum NamedWalletCoverage {
+    Covered(CoveringWallets),
+    SecretMissing,
+    Absent,
+}
+
+impl LocalWalletIdentities {
+    pub(crate) fn insert(&mut self, wallet: CoveringWallet, key: WalletIdentityKey) {
+        let mut identity = ExistingWalletIdentitySet::default();
+        identity.insert(key.clone());
+
+        self.all.insert(key);
+        self.wallets.push((wallet, identity));
+    }
+
+    /// Every local wallet's identity in one set
+    pub(crate) fn into_all(self) -> ExistingWalletIdentitySet {
+        self.all
+    }
+
+    /// How much of a backup with this key the local wallets hold
+    ///
+    /// Each coverage check is a membership test against the key one wallet inserted, so the
+    /// local wallets together cover a backup exactly when a single one of them does
+    pub(crate) fn coverage(
+        &self,
+        key: &WalletIdentityKey,
+        material: BackupRecoveryMaterial,
+    ) -> NamedWalletCoverage {
+        let covering = self
+            .wallets
+            .iter()
+            .filter(|(_, identity)| {
+                identity.coverage(key, material) == LocalWalletCoverage::Covered
+            })
+            .map(|(wallet, _)| wallet.clone());
+
+        if let Some(covering) = CoveringWallets::from_wallets(covering, material) {
+            return NamedWalletCoverage::Covered(covering);
+        }
+
+        match self.all.coverage(key, material) {
+            LocalWalletCoverage::SecretMissing => NamedWalletCoverage::SecretMissing,
+
+            // no single wallet covers the backup, so it is not an extra copy; treating it as
+            // absent keeps it restorable, which is the safe side
+            LocalWalletCoverage::Covered | LocalWalletCoverage::Absent => {
+                NamedWalletCoverage::Absent
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::ExistingWalletIdentitySet;
@@ -198,5 +311,62 @@ pub(crate) mod test_support {
                 + self.hot_fingerprints.len()
                 + self.wallet_ids.len()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BackupRecoveryMaterial, CoveringWallet, LocalWalletIdentities, NamedWalletCoverage,
+        WalletIdentityKey,
+    };
+    use crate::network::Network;
+    use crate::wallet::metadata::{WalletId, WalletMode};
+
+    fn wallet(id: &str, name: &str) -> CoveringWallet {
+        CoveringWallet { id: WalletId::from(id.to_string()), name: name.into() }
+    }
+
+    fn key(id: &str) -> WalletIdentityKey {
+        WalletIdentityKey::WalletId {
+            id: WalletId::from(id.to_string()),
+            network: Network::Bitcoin,
+            mode: WalletMode::Main,
+        }
+    }
+
+    fn covering_ids(coverage: NamedWalletCoverage) -> Vec<WalletId> {
+        let NamedWalletCoverage::Covered(covering) = coverage else {
+            panic!("expected the backup to be covered, got {coverage:?}");
+        };
+
+        covering.iter().map(|wallet| wallet.id.clone()).collect()
+    }
+
+    #[test]
+    fn coverage_names_the_wallet_holding_the_identity_not_a_same_name_wallet() {
+        let mut local = LocalWalletIdentities::default();
+        local.insert(wallet("wallet-a", "Test Wallet"), key("identity-a"));
+        local.insert(wallet("wallet-b", "Test Wallet"), key("identity-b"));
+
+        let covering = local.coverage(&key("identity-b"), BackupRecoveryMaterial::PublicOnly);
+        assert_eq!(covering_ids(covering), vec![WalletId::from("wallet-b".to_string())]);
+
+        let absent = local.coverage(&key("identity-c"), BackupRecoveryMaterial::PublicOnly);
+        assert_eq!(absent, NamedWalletCoverage::Absent);
+    }
+
+    #[test]
+    fn coverage_names_every_wallet_holding_one_identity() {
+        let mut local = LocalWalletIdentities::default();
+        local.insert(wallet("wallet-a", "Spending"), key("shared"));
+        local.insert(wallet("wallet-b", "Savings"), key("shared"));
+        local.insert(wallet("wallet-c", "Other"), key("other"));
+
+        let covering = local.coverage(&key("shared"), BackupRecoveryMaterial::PublicOnly);
+        assert_eq!(
+            covering_ids(covering),
+            vec![WalletId::from("wallet-a".to_string()), WalletId::from("wallet-b".to_string())]
+        );
     }
 }

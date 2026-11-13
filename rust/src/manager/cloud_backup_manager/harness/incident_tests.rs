@@ -12,6 +12,9 @@ use super::{
 };
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::CloudBackupManagerAction;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableConfirmation, CloudBackupScreenBody, CloudBackupSection,
+};
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
 /// What the platform sends when the app comes back to the foreground with a connection
@@ -22,11 +25,24 @@ fn foreground(app: &TestApp) {
     manager.resume_pending_cloud_upload_verification();
 }
 
+/// How many rows the published detail lists as own backups, not on this device, and extra copies
+fn listed_counts(app: &TestApp) -> (usize, usize, usize) {
+    let CloudBackupScreenBody::Configured(configured) = app.manager().published_screen().body
+    else {
+        panic!("the detail is not configured:\n{}", app.describe());
+    };
+
+    configured.sections.iter().fold((0, 0, 0), |(own, elsewhere, extra), section| match section {
+        CloudBackupSection::Wallets(wallets) => {
+            (own + wallets.up_to_date.len() + wallets.needs_sync.len(), elsewhere, extra)
+        }
+        CloudBackupSection::NotOnDevice(section) => (own, elsewhere + section.rows.len(), extra),
+        CloudBackupSection::ExtraCopies(section) => (own, elsewhere, extra + section.rows.len()),
+        _ => (own, elsewhere, extra),
+    })
+}
+
 #[test]
-#[ignore = "the first detail refresh opens every local wallet's label database synchronously on \
-            the runtime, about 5s for this account in a debug build, which trips the 10s wait \
-            limit on a loaded machine; remove this ignore once detail refresh does its wallet I/O \
-            off the runtime"]
 fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
     let test =
         concat!(module_path!(), "::incident_replay_on_the_lived_in_account_always_has_a_way_out");
@@ -41,25 +57,23 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         // the reporter opens the app after the stuck Turn Off: the record heals at load, and
         // nothing reaches the passkey provider on any step that follows without a tap
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current().then_can(&[N::Verify, N::SyncUnsynced]).then_cannot(&[
-            N::Enable,
-            N::KeepEnabled,
-            N::RestoreFromCloudBackup,
-        ]);
+        app.current().then_can(&[N::Verify]).then_cannot(&[N::Enable, N::RestoreFromCloudBackup]);
         let namespace = keychain_namespace().expect("the heal keeps the namespace");
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
 
         // the device came back online and iCloud changed, again and again
         for _ in 0..3 {
             app.event("foreground with a connection", foreground)
-                .then_can(&[N::Verify, N::SyncUnsynced])
-                .then_cannot(&[N::Enable, N::KeepEnabled]);
+                .then_can(&[N::Verify])
+                .then_cannot(&[N::Enable]);
         }
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "a resume deleted the backup");
 
-        // the detail screen loads its inventory silently and offers Turn Off
+        // the detail screen loads its inventory silently and offers Turn Off, listing each local
+        // wallet's own backup and each backup of a wallet not on this device
         load_detail(&mut app);
         app.current().then_can(&[N::TurnOff, N::Verify]).then_cannot(&[N::Enable]);
+        assert_eq!(listed_counts(&app), (31, 4, 0), "own, not on this device, extra copies");
 
         // a wallet edited meanwhile uploads again, since nothing holds writes any more
         let uploads = app.cloud.count(CloudCall::UploadWallet);
@@ -67,32 +81,42 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
             change_a_wallet(app).expect("a lived-in wallet");
         })
         .then_can(&[N::TurnOff])
-        .then_cannot(&[N::Enable, N::KeepEnabled]);
+        .then_cannot(&[N::Enable]);
         app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
         assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads + 1);
 
         // the app is closed and opened again: still configured, with the notice still there
-        app.relaunch().then_can(&[N::Verify]).then_cannot(&[N::Enable, N::KeepEnabled]);
+        app.relaunch().then_can(&[N::Verify]).then_cannot(&[N::Enable]);
         let PersistedCloudBackupState::Configured(configured) = persisted() else {
             panic!("the relaunch lost the healed configuration:\n{}", app.describe());
         };
         assert!(configured.heal_notice.is_some(), "the heal notice is persisted");
 
-        // Turn Off now runs instead of hanging: it refuses with a reason while records that are
-        // not on this device remain, deletes nothing, and stays available to try again. The
-        // refusal holds no other work
+        // Turn Off now runs instead of hanging: it shows what would be lost while records that are
+        // not on this device remain, asks twice, and deletes nothing without consent. The review
+        // is presentation, so it holds nothing else, and Cancel leaves every way out
         load_detail(&mut app);
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup)
+            .then_can(&[N::ConfirmDisable, N::CancelDisable, N::Verify])
+            .then_cannot(&[N::Enable]);
+        let review = app.turn_off_review().expect("the Turn Off review");
+        assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::Two);
+        assert!(
+            review.impact.not_on_device.names.len() + review.impact.unchecked as usize > 0,
+            "the review hides the records not on this device: {review:?}"
+        );
+
+        app.dispatch(CloudBackupManagerAction::CancelDisable)
             .then_can(&[N::TurnOff, N::Verify])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::ConfirmDisable, N::Enable]);
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
-        assert!(app.cloud.inner.has_namespace(&namespace), "a refused Turn Off deleted the backup");
+        assert!(app.cloud.inner.has_namespace(&namespace), "a review deleted the backup");
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
         // and coming back to the app keeps every way out, still without a passkey prompt
         app.event("foreground with a connection", foreground)
             .then_can(&[N::TurnOff])
-            .then_cannot(&[N::Enable, N::KeepEnabled]);
+            .then_cannot(&[N::Enable]);
         assert!(app.passkey.interactive_calls().is_empty());
     });
 }

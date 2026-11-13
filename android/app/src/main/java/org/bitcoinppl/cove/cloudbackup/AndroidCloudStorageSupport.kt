@@ -342,9 +342,6 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
         else -> CloudStorageException.NotAvailable(error.message ?: "drive listing failed")
     }
 
-internal fun driveAccountSelectionErrorMessage(error: Throwable): String =
-    mapDriveListError(error).message ?: "google drive account selection failed"
-
 internal class DriveHttpException(
     val statusCode: Int,
     val body: String,

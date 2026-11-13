@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -28,26 +29,111 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsControl
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSection
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
+import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 
+// the subtitles under the controls while they can run; one that can't shows Rust's reason instead
+private const val RECOVER_SUBTITLE = "Decrypt these backups once without changing your current Cloud Backup passkey"
+private const val DELETE_SUBTITLE = "Permanently remove the backups protected by the other passkey"
+
+/**
+ * Backup sets made with another passkey, or why Cove couldn't check for them, with the controls
+ * Rust names for the section
+ */
 @Composable
 internal fun OtherBackupsSection(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    section: CloudBackupOtherBackupsSection,
+) {
+    when (val state = section.state) {
+        CloudBackupOtherBackupsState.NotChecked,
+        CloudBackupOtherBackupsState.Checking,
+        -> Unit
+        is CloudBackupOtherBackupsState.LoadFailed ->
+            OtherBackupsLoadFailedSection(manager, screen, state.reason, section.controls)
+        is CloudBackupOtherBackupsState.Loaded ->
+            if (state.summary.namespaceCount > 0u) {
+                OtherBackupsLoadedSection(
+                    namespaceCount = state.summary.namespaceCount.toInt(),
+                    walletCount = state.summary.walletCount.toInt(),
+                    passkeySuffixes = state.summary.passkeyHints.map { it.nameSuffix },
+                    operation = section.operation,
+                    controls = section.controls,
+                    manager = manager,
+                    screen = screen,
+                )
+            }
+    }
+}
+
+@Composable
+private fun OtherBackupsLoadFailedSection(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    reason: CloudBackupInventoryIncompleteReason,
+    controls: List<CloudBackupOtherBackupsControl>,
+) {
+    CloudBackupTitledContentSection(title = "Backups with Another Key") {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ErrorInlineMessage(cloudBackupOtherBackupsFailureMessage(reason))
+            controls.forEach { control ->
+                when (control) {
+                    CloudBackupOtherBackupsControl.CHECK_AGAIN -> OtherBackupsCheckAgain(manager, screen)
+                    // Rust names these only for a loaded list, whose section holds their dialogs
+                    CloudBackupOtherBackupsControl.RECOVER,
+                    CloudBackupOtherBackupsControl.DELETE,
+                    -> Unit
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OtherBackupsCheckAgain(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+) {
+    CloudBackupActionButton(
+        screen = screen,
+        action = CloudBackupScreenAction.REFRESH_DETAIL,
+        title = "Check Again",
+        onDispatch = manager::dispatch,
+        onClick = { manager.dispatch(CloudBackupManagerAction.RefreshDetail) },
+    )
+}
+
+@Composable
+private fun OtherBackupsLoadedSection(
     namespaceCount: Int,
     walletCount: Int,
     passkeySuffixes: List<String>,
+    operation: OtherBackupsOperation,
+    controls: List<CloudBackupOtherBackupsControl>,
     manager: CloudBackupManager,
+    screen: CloudBackupScreen,
 ) {
     var showRecoverConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
     var recoveryResult by remember { mutableStateOf<OtherBackupsRecoveryResult?>(null) }
-    val operation = manager.otherBackupsOperation
     val isRecovering = operation is OtherBackupsOperation.Recovering
     val isDeleting = operation is OtherBackupsOperation.Deleting
     val isOperating = isRecovering || isDeleting
-    val actionsEnabled = !isOperating && manager.isOtherBackupsInventoryReady
+    val recover = screen.actions.lookup(CloudBackupScreenAction.RECOVER_OTHER_BACKUPS)
+    val delete = screen.actions.lookup(CloudBackupScreenAction.DELETE_OTHER_BACKUPS)
     val blocker = LocalCloudBackupPresentationCoordinator.current
 
     LaunchedEffect(operation) {
@@ -91,45 +177,74 @@ internal fun OtherBackupsSection(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
 
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = if (isRecovering) "Trying Passkey..." else "Try Another Passkey",
-                subtitle = "Decrypt these backups once without changing your current Cloud Backup passkey",
-                onClick = if (!actionsEnabled) null else {
-                    { showRecoverConfirmation = true }
-                },
-                modifier = Modifier.cloudBackupActionEnabled(actionsEnabled),
-                leadingContent = {
-                    if (isRecovering) {
-                        CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
-                    } else {
-                        Icon(Icons.Default.Key, contentDescription = null)
-                    }
-                },
-            )
+            controls.forEach { control ->
+                when (control) {
+                    CloudBackupOtherBackupsControl.RECOVER ->
+                        recover?.let { availability ->
+                            MaterialDivider()
+                            MaterialSettingsItem(
+                                title = if (isRecovering) "Trying Passkey..." else "Try Another Passkey",
+                                subtitle = availability.subtitle(RECOVER_SUBTITLE),
+                                onClick = if (!availability.isAvailable) null else {
+                                    { showRecoverConfirmation = true }
+                                },
+                                modifier =
+                                    Modifier
+                                        .cloudBackupActionEnabled(availability.isAvailable)
+                                        .testTag(CloudBackupTags.action(CloudBackupScreenAction.RECOVER_OTHER_BACKUPS)),
+                                leadingContent = {
+                                    if (isRecovering) {
+                                        CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
+                                    } else {
+                                        Icon(Icons.Default.Key, contentDescription = null)
+                                    }
+                                },
+                            )
+                        }
 
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = if (isDeleting) "Deleting..." else "Delete These Backups",
-                subtitle = "Permanently remove the backups protected by the other passkey",
-                onClick = if (!actionsEnabled) null else {
-                    { showDeleteConfirmation = true }
-                },
-                titleColor = MaterialTheme.colorScheme.error,
-                modifier = Modifier.cloudBackupActionEnabled(actionsEnabled),
-                leadingContent = {
-                    if (isDeleting) {
-                        CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
-                    } else {
-                        Icon(Icons.Default.Delete, contentDescription = null)
-                    }
-                },
-            )
+                    CloudBackupOtherBackupsControl.DELETE ->
+                        delete?.let { availability ->
+                            MaterialDivider()
+                            MaterialSettingsItem(
+                                title = if (isDeleting) "Deleting..." else "Delete These Backups",
+                                subtitle = availability.subtitle(DELETE_SUBTITLE),
+                                onClick = if (!availability.isAvailable) null else {
+                                    { showDeleteConfirmation = true }
+                                },
+                                titleColor = MaterialTheme.colorScheme.error,
+                                modifier =
+                                    Modifier
+                                        .cloudBackupActionEnabled(availability.isAvailable)
+                                        .testTag(CloudBackupTags.action(CloudBackupScreenAction.DELETE_OTHER_BACKUPS)),
+                                leadingContent = {
+                                    if (isDeleting) {
+                                        CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
+                                    } else {
+                                        Icon(Icons.Default.Delete, contentDescription = null)
+                                    }
+                                },
+                            )
+                        }
+
+                    CloudBackupOtherBackupsControl.CHECK_AGAIN -> OtherBackupsCheckAgain(manager, screen)
+                }
+            }
 
             if (operation is OtherBackupsOperation.Failed) {
                 MaterialDivider()
                 ErrorInlineMessage(operation.error, modifier = Modifier.padding(16.dp))
             }
+
+            CloudBackupLastOutcomeNote(
+                outcome = screen.lastOutcome,
+                target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.RECOVER_OTHER_BACKUPS),
+                onDispatch = manager::dispatch,
+            )
+            CloudBackupLastOutcomeNote(
+                outcome = screen.lastOutcome,
+                target = CloudBackupOutcomeTarget.Action(CloudBackupScreenAction.DELETE_OTHER_BACKUPS),
+                onDispatch = manager::dispatch,
+            )
         }
     }
 
@@ -142,7 +257,8 @@ internal fun OtherBackupsSection(
             },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isOtherBackupsInventoryReady,
+                    enabled = recover?.isAvailable == true,
+                    modifier = Modifier.testTag(CloudBackupTags.confirm(CloudBackupScreenAction.RECOVER_OTHER_BACKUPS)),
                     onClick = {
                         showRecoverConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.RecoverOtherBackups)
@@ -185,7 +301,7 @@ internal fun OtherBackupsSection(
             text = { Text("This will permanently remove these other backups from Google Drive.") },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isOtherBackupsInventoryReady,
+                    enabled = delete?.isAvailable == true,
                     onClick = {
                         showDeleteConfirmation = false
                         showFinalDeleteConfirmation = true
@@ -205,7 +321,8 @@ internal fun OtherBackupsSection(
             text = { Text("These backups cannot be recovered later, even if you find the passkey that currently protects them.") },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isOtherBackupsInventoryReady,
+                    enabled = delete?.isAvailable == true,
+                    modifier = Modifier.testTag(CloudBackupTags.confirm(CloudBackupScreenAction.DELETE_OTHER_BACKUPS)),
                     onClick = {
                         showFinalDeleteConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.DeleteOtherBackups)

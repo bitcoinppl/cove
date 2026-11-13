@@ -7,7 +7,9 @@
     <string name="title_settings_block_explorer">Block Explorer</string>
     <string name="title_cloud_backup">Cloud Backup</string>
     <string name="cloud_backup_status_off">Off</string>
-    <string name="cloud_backup_status_disabling">Disabling</string>
+    <string name="cloud_backup_status_turning_off">Turning off</string>
+    <string name="cloud_backup_status_turn_off_incomplete">Turn off didn\'t finish — open to finish</string>
+    <string name="cloud_backup_status_turned_on_again">Turned on again — open to review</string>
     <string name="cloud_backup_status_setting_up">Setting up</string>
     <string name="cloud_backup_status_restoring">Restoring</string>
     <string name="cloud_backup_status_active">Active</string>

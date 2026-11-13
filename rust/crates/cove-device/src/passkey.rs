@@ -16,8 +16,14 @@ pub enum PasskeyError {
     #[error("passkey provider does not support PRF")]
     PrfUnsupportedProvider,
 
-    #[error("user cancelled")]
-    UserCancelled,
+    /// The user-started request did not complete, such as a dismissed sheet; never a missing
+    /// credential
+    #[error("passkey request not completed")]
+    NotCompleted,
+
+    /// No foreground window or activity can present the request yet
+    #[error("{operation} not ready to present")]
+    NotReady { operation: PasskeyOperation },
 
     #[error("{operation} failed: {reason}")]
     RequestFailed { operation: PasskeyOperation, reason: PasskeyFailureReason },

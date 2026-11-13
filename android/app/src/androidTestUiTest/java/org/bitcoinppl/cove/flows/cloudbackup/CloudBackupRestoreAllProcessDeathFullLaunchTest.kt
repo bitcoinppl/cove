@@ -125,7 +125,7 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
         )
         openCloudBackup()
         waitUntil("expected authoritative Retry Remaining after process death") {
-            CloudBackupManager.getInstance().isDetailInventoryComplete &&
+            CloudBackupManager.getInstance().isInventoryComplete &&
                 CloudBackupManager.getInstance().restoreAllState ==
                 CloudBackupRestoreAllState.RetryAvailable(EXPECTED_REMAINING_WALLETS)
         }

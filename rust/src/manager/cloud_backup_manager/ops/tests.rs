@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::Duration;
 
 use act_zero::call;
@@ -22,18 +22,25 @@ use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitchPhase,
+    PersistedCloudBlobSyncState, PersistedDisableDisposition, PersistedDisablingCloudBackup,
+    PersistedDriveAccountSwitchPhase,
 };
 use crate::label_manager::LabelManager;
+use crate::manager::cloud_backup_manager::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
-    write::ConfigGeneration,
 };
-use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
+};
+use crate::manager::cloud_backup_manager::reconcile::{
+    CloudBackupManagerReconciler, CloudBackupReconcileMessage,
+};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
+    CloudBackupScreenBody, CloudBackupTurnOffFailure,
 };
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -47,17 +54,17 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome,
     CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
-    CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupInventoryAuthority,
-    CloudBackupInventoryIncompleteReason, CloudBackupKeychain, CloudBackupLifecycle,
-    CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRestoreAllState, CloudBackupRestoreEvent, CloudBackupRootPrompt,
-    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
-    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
+    CloudBackupDetailSnapshotCompletion, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
+    CloudBackupEnableState, CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
+    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreAllState,
+    CloudBackupRestoreEvent, CloudBackupRootPrompt, CloudBackupVerificationPresentation,
+    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingEnableNamespaceOwnership,
+    PendingEnablePasskeyMetadata, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction,
+    SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
@@ -141,7 +148,7 @@ async fn deep_verify_for_test(
         }
         VerificationState::Failed(failure) => DeepVerificationResult::Failed(failure),
         VerificationState::Cancelled => {
-            DeepVerificationResult::UserCancelled(manager.model_snapshot().detail)
+            DeepVerificationResult::NotCompleted(manager.model_snapshot().detail)
         }
         VerificationState::Idle | VerificationState::Verifying => {
             panic!("expected supervisor-owned deep verification result")
@@ -287,9 +294,49 @@ async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
     .await;
 }
 
-async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.start_disable_operation()).await.expect("start disable operation");
-    wait_for_test_condition(Duration::from_secs(2), "disable operation finishes", || {
+/// The Turn Off flow as the published screen shows it
+fn turn_off_screen(manager: &RustCloudBackupManager) -> CloudBackupDisableScreen {
+    match manager.published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.disable,
+        _ => CloudBackupDisableScreen::Idle,
+    }
+}
+
+/// Dispatches like the platform and waits until the screen it publishes is out
+///
+/// The handler's publish request queues behind the first checkpoint, so a second one waits it out
+async fn dispatch_and_publish(manager: &RustCloudBackupManager, action: CloudBackupManagerAction) {
+    dispatch_and_wait(manager, action).await;
+    supervisor_checkpoint(manager).await;
+}
+
+/// Taps Turn Off and returns the review the dialogs show
+async fn review_turn_off(manager: &RustCloudBackupManager) -> CloudBackupDisableReview {
+    dispatch_and_publish(manager, CloudBackupManagerAction::DisableCloudBackup).await;
+    wait_for_test_condition(Duration::from_secs(2), "the Turn Off review is ready", || {
+        !matches!(turn_off_screen(manager), CloudBackupDisableScreen::Preparing)
+    })
+    .await;
+
+    match turn_off_screen(manager) {
+        CloudBackupDisableScreen::Reviewing(review) => review,
+        screen => panic!("expected a Turn Off review, got {screen:?}"),
+    }
+}
+
+/// Confirms the review on screen and returns once the confirmed Turn Off has started
+async fn confirm_turn_off(manager: &RustCloudBackupManager) {
+    let CloudBackupDisableScreen::Reviewing(review) = turn_off_screen(manager) else {
+        panic!("expected a Turn Off review to confirm");
+    };
+
+    let review_id = review.review_id;
+    dispatch_and_publish(manager, CloudBackupManagerAction::ConfirmDisable { review_id }).await;
+}
+
+/// Waits for the running Turn Off, before or after its commit, to end and publish
+async fn wait_for_turn_off_run(manager: &RustCloudBackupManager) {
+    wait_for_test_condition(Duration::from_secs(5), "the Turn Off run ends", || {
         !matches!(
             manager
                 .projected_exclusive_operation()
@@ -298,14 +345,32 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
         )
     })
     .await;
+    supervisor_checkpoint(manager).await;
 }
 
-async fn run_keep_cloud_backup_enabled(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.keep_cloud_backup_enabled()).await.expect("keep cloud backup enabled");
-    wait_for_test_condition(Duration::from_secs(2), "keep-enabled recovery finishes", || {
-        current_disable_generation().is_none()
-    })
-    .await;
+/// Turns off with consent to whatever the review shows, and waits for the run to end
+async fn run_turn_off(manager: &RustCloudBackupManager) {
+    review_turn_off(manager).await;
+    confirm_turn_off(manager).await;
+    wait_for_turn_off_run(manager).await;
+}
+
+/// Taps Try Again on a committed Turn Off and waits for the run to end
+async fn try_again_turn_off(manager: &RustCloudBackupManager) {
+    dispatch_and_publish(manager, CloudBackupManagerAction::ResumeDisable).await;
+    wait_for_turn_off_run(manager).await;
+}
+
+/// Why the committed Turn Off on screen failed
+fn turn_off_failure(manager: &RustCloudBackupManager) -> CloudBackupTurnOffFailure {
+    let body = manager.published_screen().body;
+    if let CloudBackupScreenBody::FinishingDisable(finishing) = &body
+        && let CloudBackupFinishingDisableStage::Failed { reason } = finishing.stage
+    {
+        return reason;
+    }
+
+    panic!("expected a failed committed Turn Off, got {body:?}")
 }
 
 async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
@@ -358,19 +423,6 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
     panic!("saved passkey confirmation finishes");
 }
 
-fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
-    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
-        panic!("expected configured cloud backup lifecycle");
-    };
-    let CloudBackupDestructiveOperationState::DisableFailed { message, .. } =
-        configured.destructive_operation
-    else {
-        panic!("expected disable failure");
-    };
-
-    message
-}
-
 fn init_manager() -> Arc<RustCloudBackupManager> {
     ensure_cloud_backup_test_tokio_runtime();
     crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
@@ -396,9 +448,26 @@ async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBa
     supervisor_checkpoint(manager).await;
 }
 
+/// The app-wide manager, listened to as the app's platform listens to it
+///
+/// It outlives every test, and once a test resets it every later test's seeded record rebases it,
+/// so it sends far more than a manager one test builds. No test reads its messages, but its queue
+/// is bounded and its supervisor blocks on a full one, so they are consumed as a platform would
 fn global_manager() -> Arc<RustCloudBackupManager> {
+    static LISTENING: Once = Once::new();
+
     ensure_cloud_backup_test_tokio_runtime();
-    CLOUD_BACKUP_MANAGER.clone()
+    let manager = CLOUD_BACKUP_MANAGER.clone();
+    LISTENING.call_once(|| manager.listen_for_updates(Box::new(AbsentPlatform)));
+    manager
+}
+
+/// The platform side of the app-wide manager in tests, which has no screen to apply messages to
+#[derive(Debug)]
+struct AbsentPlatform;
+
+impl CloudBackupManagerReconciler for AbsentPlatform {
+    fn reconcile(&self, _message: CloudBackupReconcileMessage) {}
 }
 
 fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: impl Into<String>) {

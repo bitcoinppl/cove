@@ -21,9 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,8 @@ internal data class DialogChoice(
     val supportingText: String? = null,
     val icon: ImageVector? = null,
     val emphasized: Boolean = false,
+    val enabled: Boolean = true,
+    val testTag: String? = null,
     val onClick: () -> Unit,
 )
 
@@ -47,8 +51,11 @@ internal fun ChoiceAlertDialog(
     onCancel: () -> Unit = onDismiss,
     cancelText: String = "Cancel",
     showCancelButton: Boolean = true,
+    modifier: Modifier = Modifier,
+    footer: (@Composable () -> Unit)? = null,
 ) {
     AlertDialog(
+        modifier = modifier,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -65,6 +72,8 @@ internal fun ChoiceAlertDialog(
                 choices.forEach { choice ->
                     DialogChoiceRow(choice)
                 }
+
+                footer?.invoke()
             }
         },
         confirmButton = {
@@ -123,15 +132,19 @@ private fun DialogChoiceRow(choice: DialogChoice) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(
+                    enabled = choice.enabled,
                     role = Role.Button,
                     onClick = choice.onClick,
-                ),
+                ).then(choice.testTag?.let { Modifier.testTag(it) } ?: Modifier)
+                .alpha(if (choice.enabled) 1f else DISABLED_CHOICE_ALPHA),
         colors =
             ListItemDefaults.colors(
                 containerColor = containerColor,
             ),
     )
 }
+
+private const val DISABLED_CHOICE_ALPHA = 0.38f
 
 @Preview(showSystemUi = true, widthDp = 393, heightDp = 852)
 @Composable

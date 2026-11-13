@@ -452,9 +452,9 @@ impl RustCloudBackupManager {
             authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
         let authenticated = match auth_outcome {
             PasskeyAuthOutcome::Authenticated(result) => result,
-            // a typed cancel keeps the cancel reader copy and logs at info instead of warn
+            // a typed incomplete request keeps its reader copy and logs at info instead of warn
             PasskeyAuthOutcome::UserCancelled => {
-                return Err(CloudBackupError::passkey(PasskeyError::UserCancelled));
+                return Err(CloudBackupError::passkey(PasskeyError::NotCompleted));
             }
             PasskeyAuthOutcome::NoCredentialFound => {
                 warn!("Master key recovery needs a new backup: no passkey found ({auth_policy:?})");
@@ -526,7 +526,7 @@ pub(crate) fn apply_persisted_verification_result(
         DeepVerificationResult::PasskeyMissing(_) => state.mark_passkey_missing(),
 
         // cancellation does not provide new evidence about backup integrity
-        DeepVerificationResult::UserCancelled(_) => return false,
+        DeepVerificationResult::NotCompleted(_) => return false,
 
         DeepVerificationResult::Failed(_) => {
             state.mark_verification_required(state.last_verification_requested_at());

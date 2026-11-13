@@ -4,14 +4,14 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
+use super::owner::inventory::{InventoryEffects, InventoryInput};
 use super::verify::coordinator::{
-    CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
+    CloudBackupVerificationCoordinator, CloudBackupVerificationEffect, VerificationDetail,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
-    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
-    CloudBackupVerificationPresentation, CloudBackupVerificationSource,
-    PendingUploadVerificationState, RustCloudBackupManager,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupScreenDelta, CloudBackupStatus,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    CloudBackupVerificationSource, PendingUploadVerificationState, RustCloudBackupManager,
 };
 
 /// Durable Google Drive account-switch state owned by the platform
@@ -25,35 +25,61 @@ pub enum DriveAccountSwitchPlatformState {
     Committed(u64),
 }
 
-/// Platform action required to reconcile a persisted Google Drive account switch
+/// What Android's half of a Google Drive account switch did, reported to Rust's switch owner
+///
+/// Rust asks for each step with a `DriveAccountSwitch*Required` message, and Android answers each
+/// with one of these. They are service results, never user intents: the user's Switch, Retry and
+/// Cancel go through dispatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum DriveAccountSwitchReconcileAction {
-    /// Rust and platform state require no immediate platform mutation
-    None,
-    /// Atomically commit the staged Google Drive identity
-    Commit(u64),
-    /// Atomically discard the staged Google Drive identity
-    Rollback(u64),
-    /// Remove the completed transition marker without changing identity
-    Finalize(u64),
+pub enum DriveAccountSwitchPlatformResult {
+    /// The platform's durable switch state, reported at launch and when Rust asks for it
+    State(DriveAccountSwitchPlatformState),
+    /// The user picked another account and Android staged it durably
+    AccountSelected(u64),
+    /// The user picked the account already in use, or left the picker
+    AccountUnchanged(u64),
+    /// Android couldn't show the picker or stage the account the user picked
+    AccountSelectionFailed(u64),
+    /// Android committed its staged account
+    Committed(u64),
+    /// Android couldn't commit its staged account, which stays staged
+    CommitFailed(u64),
+    /// Android removed its committed transition marker
+    Finalized(u64),
+    /// Android couldn't remove its committed transition marker
+    FinalizeFailed(u64),
+    /// Android discarded its staged account and is back on the previous one
+    RolledBack(u64),
+    /// Android couldn't discard its staged account
+    RollbackFailed(u64),
 }
 
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
+    /// What changed on the screen; the platform applies it with
+    /// `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
+    Screen(Box<CloudBackupScreenDelta>),
     EnableCompleted(CloudBackupEnableContext),
+    /// Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
+    /// and no local reset runs
+    ///
+    /// Sent once each time the owner settles there, such as when a committed Turn Off finishes,
+    /// a local reset ends with Cloud Backup off, or the app launches with it off. A running reset
+    /// shows the Disabled screen without this, since an abandoned reset may resume the backup it
+    /// found. Platform state that belongs to a backup, such as Android's Google Drive account
+    /// binding, is released on this and never on the screen alone
+    SettledOff,
+    /// Android must show the account picker and stage the account the user picks
+    DriveAccountSwitchSelectionRequired(u64),
+    /// Android must report its durable switch state
+    DriveAccountSwitchStateRequired,
     /// Android must atomically commit its staged Google Drive identity
     DriveAccountSwitchCommitRequired(u64),
     /// Android must atomically discard its staged Google Drive identity
     DriveAccountSwitchRollbackRequired(u64),
     /// Android must remove the completed transition marker without changing identity
     DriveAccountSwitchFinalizeRequired(u64),
-    /// The persisted Rust and Android transition states require user-visible recovery
-    DriveAccountSwitchRecoveryRequired {
-        transition_id: u64,
-        message: String,
-    },
 }
 
 #[uniffi::export(callback_interface)]
@@ -86,28 +112,39 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
-        if let Some(lifecycle) = effects.lifecycle {
-            self.send(Message::Lifecycle(
-                Box::new(lifecycle.lifecycle),
-                lifecycle.settings_row_status,
-            ));
-        }
+        // the projection reads more than the lifecycle, so every change is diffed against the
+        // published screen, and only a real difference is sent
+        self.request_screen_publish();
 
         if let Some(context) = effects.enable_completed {
             self.send(Message::EnableCompleted(context));
         }
+    }
 
-        // the supervisor owns fetches, so it decides from fresh state whether one can start
-        if effects.cloud_only_refetch_needed {
+    /// Applies one input to the inventory owner, then publishes the screen and asks for a
+    /// cloud-only fetch when the input invalidated the rows
+    pub(crate) fn apply_inventory(&self, input: InventoryInput) -> InventoryEffects {
+        let effects = self.inventory.write().apply(input);
+
+        if effects.changed {
+            self.request_screen_publish();
+        }
+
+        // the supervisor owns fetches, so it decides from fresh state whether one can start; a
+        // fetch dropped as belonging to an earlier configuration is replaced the same way
+        if effects.refetch_needed || effects.dropped {
             send!(self.supervisor.ensure_cloud_only_fetch());
         }
+
+        // the supervisor holds whatever waits on the classification, such as a Turn Off review
+        if let Some(request) = effects.classification_settled {
+            send!(self.supervisor.inventory_classification_settled(request));
+        }
+
+        effects
     }
 
     pub(crate) fn reconcile_runtime_status(&self, status: CloudBackupStatus) {
-        if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::Enabling) {
-            self.clear_runtime_passkey_authorization();
-        }
-
         let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
         let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;
@@ -140,8 +177,11 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
-        if let Some(detail) = effect.detail {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(detail));
+        if let Some(VerificationDetail { detail, read_at }) = effect.detail {
+            self.apply_detail_outcome(
+                read_at.scope(),
+                CloudBackupDetailOutcome::VerifiedWithoutListing { detail, read_at },
+            );
         }
 
         if let Some(pending_upload_verification) = effect.pending_upload_verification {
@@ -246,6 +286,11 @@ impl RustCloudBackupManager {
 
 #[uniffi::export]
 impl RustCloudBackupManager {
+    /// Delivers every message, in the order it was sent, starting with those queued before this
+    /// call
+    ///
+    /// Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+    /// those by revision. The other messages are events with no revision, delivered in order
     pub fn listen_for_updates(&self, reconciler: Box<dyn CloudBackupManagerReconciler>) {
         self.reconciler.listen_sink(reconciler);
     }

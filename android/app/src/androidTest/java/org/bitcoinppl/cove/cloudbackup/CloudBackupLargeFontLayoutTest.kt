@@ -7,7 +7,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,35 +20,11 @@ import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
 import org.bitcoinppl.cove.test.WithFontScale
 import org.bitcoinppl.cove.ui.theme.CoveTheme
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
-import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
-import org.bitcoinppl.cove_core.CloudBackupDetail
-import org.bitcoinppl.cove_core.CloudBackupDetailState
-import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
-import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupState
-import org.bitcoinppl.cove_core.CloudBackupSyncState
-import org.bitcoinppl.cove_core.CloudBackupUndecryptableWalletDeletionState
-import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudBackupWalletItem
-import org.bitcoinppl.cove_core.CloudBackupWalletStatus
-import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
-import org.bitcoinppl.cove_core.OtherBackupsOperation
-import org.bitcoinppl.cove_core.WalletMode
-import org.bitcoinppl.cove_core.WalletType
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
-import org.bitcoinppl.cove_core.types.Network
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -66,7 +42,7 @@ class CloudBackupLargeFontLayoutTest {
 
     @Test
     fun setupDescriptionAcknowledgementsAndEnableAreReachable() {
-        showScreen(CloudBackupState(CloudBackupLifecycle.Disabled, CloudBackupSettingsRowStatus.Disabled))
+        showScreen(cloudBackupFixture("disabled"))
 
         assertTextReachable("Cloud Backup is end-to-end encrypted before it leaves your device")
         assertTextReachable("How It Works")
@@ -77,75 +53,69 @@ class CloudBackupLargeFontLayoutTest {
             row.performClick()
         }
 
-        assertActionReachable("Enable Cloud Backup", compose.onNodeWithTag("onboarding.cloudBackup.enable"))
+        assertActionReachable("Enable Cloud Backup", compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.ENABLE)))
         assertActionReachable("Cancel", compose.onNodeWithTag("onboarding.cloudBackup.cancel"))
     }
 
     @Test
     fun inventoryWithCloudOnlyRowsKeepsRestoreAllAndRowsReachable() {
         showScreen(
-            configuredState(
-                restoreAll = CloudBackupRestoreAllState.StartAvailable(walletCount = 2u),
-                verification = CloudBackupVerificationState.NotVerified,
-            ),
+            cloudBackupFixture("configured")
+                .withRestoreAll(CloudBackupRestoreAllState.StartAvailable(walletCount = 1u))
+                .withVerification(CloudBackupVerificationState.NotVerified),
         )
 
-        assertActionReachable("Restore All (2)", compose.onNodeWithText("Restore All (2)"))
-        CLOUD_ONLY_WALLETS.forEach { name -> assertActionReachable(name, walletRow(name)) }
+        assertActionReachable("Restore All (1)", compose.onNodeWithText("Restore All (1)"))
+        assertActionReachable(CLOUD_ONLY_WALLET, walletRow(CLOUD_ONLY_WALLET))
         assertActionReachable("Verify Now", compose.onNodeWithText("Verify Now"))
-        assertActionReachable("Disable Cloud Backup", compose.onNodeWithText("Disable Cloud Backup"))
+        assertActionReachable(
+            "Turn Off Cloud Backup",
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.TURN_OFF)),
+        )
     }
 
     @Test
     fun restoreAllProgressKeepsCancelReachable() {
         showScreen(
-            configuredState(
-                restoreAll =
+            cloudBackupFixture("configured")
+                .withAvailable(CloudBackupScreenAction.CANCEL_RESTORE_ALL)
+                .withRestoreAll(
                     CloudBackupRestoreAllState.Running(
-                        completed = 1u,
-                        total = 2u,
-                        currentWalletName = CLOUD_ONLY_WALLETS.last(),
+                        completed = 0u,
+                        total = 1u,
+                        currentWalletName = CLOUD_ONLY_WALLET,
                         cancellationRequested = false,
                     ),
-                verification = CloudBackupVerificationState.NotVerified,
-            ),
+                ),
         )
 
-        assertTextReachable("Restoring ${CLOUD_ONLY_WALLETS.last()}")
+        assertTextReachable("Restoring $CLOUD_ONLY_WALLET")
         assertActionReachable("Cancel", compose.onNodeWithText("Cancel"))
     }
 
     @Test
     fun failedVerificationKeepsRecoveryActionsReachable() {
         showScreen(
-            configuredState(
-                restoreAll = CloudBackupRestoreAllState.NotShown,
-                verification =
-                    CloudBackupVerificationState.Failed(
-                        DeepVerificationFailure.Retry(
-                            message = "cloud storage error: failed to download master key backup",
-                            detail = null,
-                            retryAction = null,
-                        ),
+            cloudBackupFixture("configured-passkey-missing").withVerification(
+                CloudBackupVerificationState.Failed(
+                    DeepVerificationFailure.Retry(
+                        message = "cloud storage error: failed to download master key backup",
+                        detail = null,
+                        retryAction = null,
                     ),
+                ),
             ),
         )
 
         assertTextReachable("failed to download master key backup")
-        listOf("Try Again", "Create New Passkey").forEach { action ->
+        listOf("Try Again", "Add Passkey").forEach { action ->
             assertActionReachable(action, compose.onNodeWithText(action))
         }
     }
 
     @Test
     fun missingPasskeyRecoveryKeepsAddPasskeyReachable() {
-        showScreen(
-            configuredState(
-                restoreAll = CloudBackupRestoreAllState.NotShown,
-                verification = CloudBackupVerificationState.NotVerified,
-                passkey = CloudBackupPasskeyState.Missing,
-            ),
-        )
+        showScreen(cloudBackupFixture("configured-passkey-missing"))
 
         assertTextReachable("Cloud Backup passkey missing")
         assertActionReachable("Add Passkey", compose.onNodeWithText("Add Passkey"))
@@ -153,31 +123,54 @@ class CloudBackupLargeFontLayoutTest {
 
     @Test
     fun pendingEnableRecoveryKeepsSupportCodeAndCleanupReachable() {
-        showScreen(
-            CloudBackupState(
-                CloudBackupLifecycle.PendingEnableRecovery(
-                    CloudBackupPendingEnableRecovery(
-                        supportCode = "CB-PE-001",
-                        cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
-                    ),
-                ),
-                CloudBackupSettingsRowStatus.RecoveryRequired,
-            ),
-        )
+        showScreen(cloudBackupFixture("pending-enable-recovery"))
 
-        assertTextReachable("CB-PE-001")
+        assertTextReachable("CB-0000")
         assertActionReachable(
             "Remove Incomplete Setup",
-            compose.onNodeWithTag("cloudBackup.recovery.removeIncompleteSetup"),
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CONFIRM_PENDING_ENABLE_CLEANUP)),
         )
     }
 
-    private fun showScreen(state: CloudBackupState) {
+    // the Turn Off review's first dialog, the longest one, with every way forward and out
+    @Test
+    fun turnOffReviewKeepsContinueAndCancelReachable() {
+        showScreen(cloudBackupFixture("turn-off-review"))
+
+        assertDialogActionReachable("Continue", compose.onNodeWithTag(CloudBackupTags.TURN_OFF_REVIEW_CONTINUE))
+        assertDialogActionReachable(
+            "Cancel",
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.CANCEL_DISABLE)),
+        )
+    }
+
+    @Test
+    fun finishingDisableKeepsTryAgainAndStopUsingReachable() {
+        showScreen(cloudBackupFixture("finishing-disable"))
+
+        assertTextReachable("Cloud Backup Is Being Turned Off")
+        listOf(CloudBackupScreenAction.RESUME_DISABLE, CloudBackupScreenAction.STOP_USING_ON_THIS_DEVICE).forEach { action ->
+            assertActionReachable(action.name, compose.onNodeWithTag(CloudBackupTags.action(action)))
+        }
+    }
+
+    @Test
+    fun healNoticeKeepsDismissAndTurnOffReachable() {
+        showScreen(cloudBackupFixture("configured-heal-notice"))
+
+        assertActionReachable(
+            "Dismiss",
+            compose.onNodeWithTag(CloudBackupTags.action(CloudBackupScreenAction.DISMISS_HEAL_NOTICE)),
+        )
+        assertActionReachable("Turn Off Cloud Backup", compose.onNodeWithTag(CloudBackupTags.HEAL_NOTICE_TURN_OFF))
+    }
+
+    private fun showScreen(screen: CloudBackupScreen) {
         compose.setContent {
             CoveTheme(darkTheme = true, dynamicColor = false) {
                 WithFontScale(LARGEST_SYSTEM_FONT_SCALE) {
                     CloudBackupScreenFrame(
-                        manager = CloudBackupManager(state),
+                        manager = CloudBackupManager(screen),
                         actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
                     )
                 }
@@ -219,6 +212,22 @@ class CloudBackupLargeFontLayoutTest {
         node.assertIsEnabled()
     }
 
+    // a dialog is its own root, so its actions must fit inside the dialog's window rather than the screen
+    private fun assertDialogActionReachable(
+        label: String,
+        node: SemanticsNodeInteraction,
+    ) {
+        val dialog = compose.onNode(isDialog()).getUnclippedBoundsInRoot()
+        val bounds = node.getUnclippedBoundsInRoot()
+
+        assertTrue(
+            "\"$label\" is $bounds, outside or squeezed in a dialog of $dialog",
+            bounds.top >= dialog.top && bounds.bottom <= dialog.bottom && bounds.height >= MIN_ACTION_HEIGHT,
+        )
+        node.assertHasClickAction()
+        node.assertIsEnabled()
+    }
+
     private fun checkRow(text: String): SemanticsNodeInteraction =
         compose.onNode(
             hasClickAction() and hasAnyDescendant(hasText(text, substring = true)),
@@ -228,72 +237,10 @@ class CloudBackupLargeFontLayoutTest {
     private fun walletRow(name: String): SemanticsNodeInteraction =
         compose.onNode(hasClickAction() and hasAnyDescendant(hasText(name)), useUnmergedTree = true)
 
-    private fun configuredState(
-        restoreAll: CloudBackupRestoreAllState,
-        verification: CloudBackupVerificationState,
-        passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
-    ): CloudBackupState {
-        val detail =
-            CloudBackupDetail(
-                lastSync = 1_779_915_780UL,
-                upToDate = listOf(wallet("Everyday Spending", CloudBackupWalletStatus.CONFIRMED)),
-                needsSync = emptyList(),
-                cloudOnlyCount = CLOUD_ONLY_WALLETS.size.toUInt(),
-            )
-        val loaded =
-            LoadedCloudBackupDetail(
-                detail = detail,
-                cloudOnly =
-                    CloudOnlyState.Loaded(
-                        CLOUD_ONLY_WALLETS.map { wallet(it, CloudBackupWalletStatus.DELETED_FROM_DEVICE) },
-                        incomplete = false,
-                    ),
-                cloudOnlyOperation = CloudOnlyOperation.Idle,
-                otherBackupsOperation = OtherBackupsOperation.Idle,
-                inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
-            )
-
-        return CloudBackupState(
-            lifecycle =
-                CloudBackupLifecycle.Configured(
-                    CloudBackupConfiguredState(
-                        passkey = passkey,
-                        verification = verification,
-                        sync = CloudBackupSyncState.Idle,
-                        destructiveOperation = CloudBackupDestructiveOperationState.Idle,
-                        undecryptableWalletDeletion = CloudBackupUndecryptableWalletDeletionState.Idle,
-                        detail = CloudBackupDetailState.Complete(loaded),
-                        otherBackups = CloudBackupOtherBackupsState.NotChecked,
-                        restoreAll = restoreAll,
-                        rootPrompt = CloudBackupRootPrompt.None,
-                        syncHealth = CloudSyncHealth.AllUploaded,
-                        verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
-                    ),
-                ),
-            settingsRowStatus = CloudBackupSettingsRowStatus.Active,
-        )
-    }
-
-    private fun wallet(
-        name: String,
-        status: CloudBackupWalletStatus,
-    ): CloudBackupWalletItem =
-        CloudBackupWalletItem(
-            name = name,
-            network = Network.BITCOIN,
-            walletMode = WalletMode.MAIN,
-            walletType = WalletType.HOT,
-            fingerprint = "73C5DA0A",
-            labelCount = 0u,
-            backupUpdatedAt = 1_779_931_020UL,
-            syncStatus = status,
-            restoreFailure = null,
-            recordId = name,
-        )
-
     private companion object {
         val MIN_ACTION_HEIGHT = 24.dp
-        val CLOUD_ONLY_WALLETS = listOf("Savings Wallet", "Travel Wallet")
+        // the configured fixture's only wallet that is not on this device
+        const val CLOUD_ONLY_WALLET = "Cold Storage"
         val ACKNOWLEDGEMENTS =
             listOf(
                 "my passkey is required",

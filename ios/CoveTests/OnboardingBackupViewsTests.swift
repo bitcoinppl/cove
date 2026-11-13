@@ -3,42 +3,6 @@ import CoveCore
 import XCTest
 
 final class OnboardingBackupViewsTests: XCTestCase {
-    func testScP04EveryInventoryStateProjectsRequiredActionAvailability() {
-        let loaded = loadedCloudBackupDetail()
-        let failure = "inventory unavailable"
-
-        let notLoaded = CloudBackupDetailState.notLoaded
-        XCTAssertNil(notLoaded.retainedDetailState)
-        XCTAssertFalse(notLoaded.isChecking)
-        XCTAssertFalse(notLoaded.isComplete)
-        XCTAssertNil(notLoaded.inventoryError)
-
-        let checking = CloudBackupDetailState.checking(retained: loaded)
-        XCTAssertEqual(checking.retainedDetailState?.detail, loaded.detail)
-        XCTAssertTrue(checking.isChecking)
-        XCTAssertFalse(checking.isComplete)
-        XCTAssertNil(checking.inventoryError)
-
-        let failed = CloudBackupDetailState.failed(
-            reason: .offline,
-            error: failure,
-            retained: loaded
-        )
-        XCTAssertEqual(failed.retainedDetailState?.detail, loaded.detail)
-        XCTAssertFalse(failed.isChecking)
-        XCTAssertFalse(failed.isComplete)
-        XCTAssertEqual(
-            failed.inventoryError,
-            "This device is offline. Connect to the internet, then check iCloud Drive again."
-        )
-
-        let complete = CloudBackupDetailState.complete(state: loaded)
-        XCTAssertEqual(complete.retainedDetailState?.detail, loaded.detail)
-        XCTAssertFalse(complete.isChecking)
-        XCTAssertTrue(complete.isComplete)
-        XCTAssertNil(complete.inventoryError)
-    }
-
     func testScP04EveryEnableStateProjectsItsExpectedBusyCategory() {
         let context = CloudBackupEnableContext(
             savedPasskeyConfirmation: .manual,
@@ -103,32 +67,27 @@ final class OnboardingBackupViewsTests: XCTestCase {
         XCTAssertNil(confirmingCopy.progress)
     }
 
-    func testScP04EveryBatchStateProjectsRequiredActionAvailability() {
+    func testScP04EveryBatchStateProjectsItsControl() {
         XCTAssertEqual(cloudBackupRestoreAllPresentation(state: .notShown), .hidden)
 
-        guard case .disabled = cloudBackupRestoreAllPresentation(
-            state: .startDisabled(walletCount: 2)
-        ) else {
-            return XCTFail("expected unavailable start action")
-        }
-        guard case let .action(start) = cloudBackupRestoreAllPresentation(
-            state: .startAvailable(walletCount: 2)
-        ) else {
-            return XCTFail("expected available start action")
-        }
-        XCTAssertEqual(start.intent, .start)
-
-        guard case .disabled = cloudBackupRestoreAllPresentation(
-            state: .retryDisabled(walletCount: 1)
-        ) else {
-            return XCTFail("expected unavailable retry action")
-        }
-        guard case let .action(retry) = cloudBackupRestoreAllPresentation(
-            state: .retryAvailable(walletCount: 1)
-        ) else {
-            return XCTFail("expected available retry action")
-        }
-        XCTAssertEqual(retry.intent, .retry)
+        // whether the control can be tapped is the screen's actions, so a disabled and an
+        // available state draw the same control
+        XCTAssertEqual(
+            cloudBackupRestoreAllPresentation(state: .startDisabled(walletCount: 2)),
+            .start(title: "Restore All (2)")
+        )
+        XCTAssertEqual(
+            cloudBackupRestoreAllPresentation(state: .startAvailable(walletCount: 2)),
+            .start(title: "Restore All (2)")
+        )
+        XCTAssertEqual(
+            cloudBackupRestoreAllPresentation(state: .retryDisabled(walletCount: 1)),
+            .retry(title: "Retry Remaining (1)")
+        )
+        XCTAssertEqual(
+            cloudBackupRestoreAllPresentation(state: .retryAvailable(walletCount: 1)),
+            .retry(title: "Retry Remaining (1)")
+        )
 
         guard case let .running(running) = cloudBackupRestoreAllPresentation(
             state: .running(
@@ -140,19 +99,24 @@ final class OnboardingBackupViewsTests: XCTestCase {
         ) else {
             return XCTFail("expected running presentation")
         }
-        XCTAssertTrue(running.canCancel)
+        XCTAssertFalse(running.cancellationRequested)
+        XCTAssertEqual(running.accessibilityValue, "Preparing wallet restores, Completed 0 of 2")
 
         guard case let .running(cancelling) = cloudBackupRestoreAllPresentation(
             state: .running(
-                completed: 0,
+                completed: 1,
                 total: 2,
-                currentWalletName: nil,
+                currentWalletName: "Savings",
                 cancellationRequested: true
             )
         ) else {
             return XCTFail("expected cancelling presentation")
         }
-        XCTAssertFalse(cancelling.canCancel)
+        XCTAssertTrue(cancelling.cancellationRequested)
+        XCTAssertEqual(
+            cancelling.accessibilityValue,
+            "Restoring Savings, Completed 1 of 2, Cancel requested. The current wallet will finish first."
+        )
     }
 
     func testRecoveryWordsUseFirstHalfInLeftColumn() {
@@ -210,14 +174,33 @@ final class OnboardingBackupViewsTests: XCTestCase {
 
         XCTAssertEqual(
             onboardingCloudBackupStepPresentation(
-                lifecycle: .pendingEnableRecovery(recovery)
+                body: .pendingEnableRecovery(recovery)
             ),
             .pendingEnableRecovery(recovery)
         )
         XCTAssertEqual(
-            onboardingCloudBackupStepPresentation(lifecycle: .disabled),
+            onboardingCloudBackupStepPresentation(body: .disabled),
             .enable
         )
+    }
+
+    /// An Enable paused on its saved passkey keeps onboarding on Confirm Passkey, and only an
+    /// Enable's pause does: other paused work isn't onboarding's to continue
+    func testPausedEnableMakesTheOnboardingPrimaryButtonConfirmThePasskey() throws {
+        let fixtures = cloudBackupScreenFixtures()
+        let screen = { (name: String) in
+            try XCTUnwrap(fixtures.first { $0.name.hasSuffix(":\(name)") }?.screen)
+        }
+
+        let pausedEnable = try screen("saved-passkey-confirmation-enable")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: pausedEnable), .confirmSavedPasskey)
+        XCTAssertTrue(pausedEnable.actions.isAvailable(action: .confirmSavedPasskey))
+
+        let pausedReinitialize = try screen("saved-passkey-confirmation-reinitialize")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: pausedReinitialize), .enable)
+
+        let disabled = try screen("disabled")
+        XCTAssertEqual(onboardingCloudBackupPrimaryAction(screen: disabled), .enable)
     }
 
     func testPendingEnableRecoveryRoutesCleanupToManagerAndCancelToSkip() {
@@ -253,21 +236,6 @@ final class OnboardingBackupViewsTests: XCTestCase {
         cloudBackupEnableBusyCopy(
             enableFlow: flow,
             verificationPresentation: verificationPresentation
-        )
-    }
-
-    private func loadedCloudBackupDetail() -> LoadedCloudBackupDetail {
-        LoadedCloudBackupDetail(
-            detail: CloudBackupDetail(
-                lastSync: nil,
-                upToDate: [],
-                needsSync: [],
-                cloudOnlyCount: 1
-            ),
-            inventoryAuthority: .providerConfirmed,
-            cloudOnly: .notFetched,
-            cloudOnlyOperation: .idle,
-            otherBackupsOperation: .idle
         )
     }
 }

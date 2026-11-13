@@ -96,14 +96,17 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
+    /// Marks the upload to `namespace_id` pending confirmation, only while the row is still
+    /// `current_state`; the row then names `namespace_id`, where the confirmation reads it
     pub(crate) fn mark_blob_uploaded_pending_confirmation_if_current(
         &self,
         current_state: &PersistedCloudBlobSyncState,
+        namespace_id: &str,
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<bool, CloudBackupError> {
-        let updated = self.replace_blob_state_if_current(
-            current_state,
+        let next_state = current_state.uploaded_to(
+            namespace_id,
             PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
                     revision_hash,
@@ -112,17 +115,22 @@ impl RustCloudBackupManager {
                     last_checked_at: None,
                 },
             ),
-            "persist uploaded cloud blob state",
-        )?;
+        );
+        let updated = Database::global()
+            .cloud_blob_sync_states
+            .set_if_current(current_state, &next_state)
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist uploaded cloud blob state", source)
+            })?;
 
         if !updated {
             return Ok(false);
         }
 
-        if current_state.is_master_key_wrapper() {
+        if next_state.is_master_key_wrapper() {
             send!(
                 self.supervisor
-                    .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())
+                    .start_master_key_upload_confirmation_grace(namespace_id.to_string())
             );
         }
 

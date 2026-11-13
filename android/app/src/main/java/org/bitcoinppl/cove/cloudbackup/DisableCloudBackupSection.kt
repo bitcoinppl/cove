@@ -1,17 +1,18 @@
 package org.bitcoinppl.cove.cloudbackup
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,190 +23,262 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove_core.CloudBackupDetail
+import org.bitcoinppl.cove_core.CloudBackupDisableScreen
+import org.bitcoinppl.cove_core.CloudBackupFinishingDisableScreen
+import org.bitcoinppl.cove_core.CloudBackupFinishingDisableStage
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.OtherBackupsOperation
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupTurnOffFailure
 
+/** The Turn Off button; Rust puts this section last and decides whether Turn Off can run */
 @Composable
-internal fun DisableCloudBackupSection(
+internal fun TurnOffCloudBackupSection(
     manager: CloudBackupManager,
-    detail: CloudBackupDetail?,
-    allowDisable: Boolean,
+    screen: CloudBackupScreen,
 ) {
-    var showUnavailable by remember { mutableStateOf(false) }
-    var showFirstConfirmation by remember { mutableStateOf(false) }
-    var showFinalConfirmation by remember { mutableStateOf(false) }
-    val unavailableMessage = disableUnavailableMessage(manager, detail)
-    val colors = cloudBackupVisualColors()
-    val coordinator = LocalCloudBackupPresentationCoordinator.current
+    Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        CloudBackupActionButton(
+            screen = screen,
+            action = CloudBackupScreenAction.TURN_OFF,
+            title = "Turn Off Cloud Backup",
+            style = CloudBackupActionStyle.DESTRUCTIVE_TEXT,
+            onDispatch = manager::dispatch,
+            onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
 
-    DisposableEffect(coordinator, showUnavailable, showFirstConfirmation, showFinalConfirmation) {
-        val isBlocked = showUnavailable || showFirstConfirmation || showFinalConfirmation
-        coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isBlocked)
+/**
+ * The Turn Off dialogs, a pure function of Rust's disable screen
+ *
+ * They come back after the app lock when Rust is still reviewing, and every way out of them
+ * dispatches CancelDisable so Rust never keeps a review the user left
+ */
+@Composable
+internal fun CloudBackupTurnOffDialogs(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    disable: CloudBackupDisableScreen,
+) {
+    val coordinator = LocalCloudBackupPresentationCoordinator.current
+    val isShowing = disable !is CloudBackupDisableScreen.Idle
+
+    DisposableEffect(coordinator, isShowing) {
+        coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isShowing)
         onDispose {
             coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
         }
     }
 
-    manager.disableFailure?.let { failure ->
-        ErrorInlineMessage(failure.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-        if (allowDisable) {
-            CloudBackupSimpleActionCard(
-                title = "Try Again",
-                icon = Icons.Default.Refresh,
-                tint = colors.danger,
-                onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+    val cancel = { manager.dispatch(CloudBackupManagerAction.CancelDisable) }
+
+    when (disable) {
+        CloudBackupDisableScreen.Idle -> Unit
+        CloudBackupDisableScreen.Preparing ->
+            TurnOffProgressDialog(
+                screen = screen,
+                tag = CloudBackupTags.TURN_OFF_PREPARING,
+                title = "Checking Cloud Backup",
+                message = "Cove is checking what's in Cloud Backup before turning it off.",
+                onCancel = cancel,
             )
-        }
-
-        if (failure.canKeepEnabled) {
-            CloudBackupSimpleActionCard(
-                title = "Keep Cloud Backup Enabled",
-                icon = Icons.Default.CloudDone,
-                tint = colors.success,
-                onClick = { manager.dispatch(CloudBackupManagerAction.KeepCloudBackupEnabled) },
+        CloudBackupDisableScreen.Offline -> TurnOffOfflineDialog(manager, screen, onCancel = cancel)
+        is CloudBackupDisableScreen.Reviewing -> TurnOffReviewDialogs(manager, screen, disable.v1, onCancel = cancel)
+        CloudBackupDisableScreen.Draining ->
+            TurnOffProgressDialog(
+                screen = screen,
+                tag = CloudBackupTags.TURN_OFF_DRAINING,
+                title = "Turning Off Cloud Backup",
+                message = "Cove is finishing the backups in progress before it deletes them.",
+                onCancel = cancel,
             )
-        }
-    }
-
-    if (manager.isDisablingCloudBackup) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.danger, strokeWidth = 2.dp)
-            Text(
-                "Deleting cloud backups",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.danger,
-            )
-        }
-    }
-
-    if (allowDisable) {
-        TextButton(
-            onClick = {
-                if (unavailableMessage != null) {
-                    showUnavailable = true
-                } else {
-                    showFirstConfirmation = true
-                }
-            },
-            enabled = !manager.isDisablingCloudBackup,
-            modifier =
-                Modifier
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = colors.danger),
-        ) {
-            Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-    }
-
-    if (showUnavailable) {
-        AlertDialog(
-            onDismissRequest = { showUnavailable = false },
-            title = { Text("Cloud Backup Can't Be Disabled Yet") },
-            text = {
-                Text(unavailableMessage ?: "Cove is waiting for Cloud Backup to finish another operation.")
-            },
-            confirmButton = {
-                TextButton(onClick = { showUnavailable = false }) { Text("OK") }
-            },
-        )
-    }
-
-    if (showFirstConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showFirstConfirmation = false },
-            title = { Text("Disable Cloud Backup?") },
-            text = { Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.") },
-            confirmButton = {
-                TextButton(
-                    enabled = allowDisable,
-                    onClick = {
-                        showFirstConfirmation = false
-                        showFinalConfirmation = true
-                    },
-                ) { Text("Continue") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFirstConfirmation = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showFinalConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showFinalConfirmation = false },
-            title = { Text("Delete Cloud Backups?") },
-            text = {
-                Text(
-                    "Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = allowDisable,
-                    onClick = {
-                        showFinalConfirmation = false
-                        manager.dispatch(CloudBackupManagerAction.DisableCloudBackup)
-                    },
-                ) { Text("Delete Cloud Backups and Disable") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFinalConfirmation = false }) { Text("Cancel") }
-            },
-        )
     }
 }
 
-private fun disableUnavailableMessage(
+@Composable
+private fun TurnOffProgressDialog(
+    screen: CloudBackupScreen,
+    tag: String,
+    title: String,
+    message: String,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        modifier = Modifier.testTag(tag),
+        title = { Text(title) },
+        text = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(message)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TurnOffCancelButton(screen, onCancel) },
+    )
+}
+
+@Composable
+private fun TurnOffOfflineDialog(
     manager: CloudBackupManager,
-    detail: CloudBackupDetail?,
-): String? {
-    if (!manager.isDetailInventoryComplete) {
-        return "Cove is still checking Cloud Backup."
-    }
+    screen: CloudBackupScreen,
+    onCancel: () -> Unit,
+) {
+    val retry = screen.actions.lookup(CloudBackupScreenAction.TURN_OFF)
 
-    if (manager.isDisablingCloudBackup) {
-        return "Cove is already disabling Cloud Backup."
-    }
-
-    if (manager.isPerformingDestructiveAction && manager.disableFailure == null) {
-        return "Cove is waiting for the current Cloud Backup operation to finish."
-    }
-
-    if (manager.cloudOnlyOperation is CloudOnlyOperation.Operating) {
-        return "Cove is waiting for the current cloud-only wallet operation to finish."
-    }
-
-    when (manager.otherBackupsOperation) {
-        is OtherBackupsOperation.Recovering,
-        is OtherBackupsOperation.Deleting,
-        -> return "Cove is waiting for the current other-backup operation to finish."
-        else -> Unit
-    }
-
-    if (detail != null) {
-        if (detail.cloudOnlyCount.toInt() > 0) {
-            return "Restore or delete wallets that are only in Cloud Backup before disabling."
-        }
-
-        val otherBackups = manager.otherBackupsState
-        if (
-            otherBackups is CloudBackupOtherBackupsState.Loaded &&
-                otherBackups.summary.namespaceCount.toInt() > 0
-        ) {
-            return "Recover or delete other Cloud Backups before disabling."
-        }
-    }
-
-    return null
+    AlertDialog(
+        onDismissRequest = onCancel,
+        modifier = Modifier.testTag(CloudBackupTags.TURN_OFF_OFFLINE),
+        title = { Text("No Connection") },
+        text = {
+            Text("Cove can't reach $PROVIDER right now. Turning off Cloud Backup needs a connection.")
+        },
+        confirmButton = {
+            TextButton(
+                enabled = retry?.isAvailable == true,
+                onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+                modifier = Modifier.testTag(CloudBackupTags.TURN_OFF_OFFLINE_RETRY),
+            ) { Text("Try Again") }
+        },
+        dismissButton = { TurnOffCancelButton(screen, onCancel) },
+    )
 }
+
+@Composable
+internal fun TurnOffCancelButton(
+    screen: CloudBackupScreen,
+    onCancel: () -> Unit,
+) {
+    // a dialog the user can't leave is worse than a cancel Rust rejects, which comes back as the
+    // last outcome, so Cancel stays drawn even when Rust sent no entry for it
+    val availability = screen.actions.lookup(CloudBackupScreenAction.CANCEL_DISABLE)
+
+    TextButton(
+        enabled = availability?.isAvailable != false,
+        onClick = onCancel,
+        modifier = Modifier.testTag(CloudBackupTags.action(CloudBackupScreenAction.CANCEL_DISABLE)),
+    ) { Text("Cancel") }
+}
+
+/**
+ * The panel after Turn Off was confirmed but couldn't finish deleting; it only goes forward
+ *
+ * Try Again resumes the delete, Reconnect shows when Drive access was lost, and Stop Using leaves
+ * the remote backups and finishes on this device
+ */
+@Composable
+internal fun CloudBackupFinishingDisableContent(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    finishing: CloudBackupFinishingDisableScreen,
+) {
+    var showStopUsingConfirmation by remember { mutableStateOf(false) }
+    val stage = finishing.stage
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .testTag(CloudBackupTags.FINISHING_DISABLE),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ErrorStateCard(
+            icon = Icons.Default.WarningAmber,
+            title = "Cloud Backup Is Being Turned Off",
+            body =
+                "Cove couldn't finish deleting your backups from $PROVIDER. Your wallets on this " +
+                    "device aren't affected. Some backups may already be deleted, and new changes " +
+                    "aren't being backed up.",
+        )
+
+        when (stage) {
+            CloudBackupFinishingDisableStage.Resuming ->
+                CloudBackupProgressContent(
+                    title = "Deleting backups",
+                    message = "Cove is trying again to delete your backups from $PROVIDER",
+                )
+            is CloudBackupFinishingDisableStage.Failed ->
+                ErrorInlineMessage(stage.reason.message())
+        }
+
+        FinishingDisableActions(manager, screen, onStopUsing = { showStopUsingConfirmation = true })
+    }
+
+    if (showStopUsingConfirmation) {
+        StopUsingConfirmationDialog(manager, screen, onDismiss = { showStopUsingConfirmation = false })
+    }
+}
+
+@Composable
+private fun FinishingDisableActions(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    onStopUsing: () -> Unit,
+) {
+    CloudBackupActionButton(
+        screen = screen,
+        action = CloudBackupScreenAction.RESUME_DISABLE,
+        title = "Try Again",
+        onDispatch = manager::dispatch,
+        onClick = { manager.dispatch(CloudBackupManagerAction.ResumeDisable) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    CloudBackupActionButton(
+        screen = screen,
+        action = CloudBackupScreenAction.RECONNECT_DRIVE,
+        title = "Reconnect $PROVIDER",
+        style = CloudBackupActionStyle.OUTLINED,
+        onDispatch = manager::dispatch,
+        onClick = { manager.dispatch(CloudBackupManagerAction.ReconnectDrive) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    CloudBackupActionButton(
+        screen = screen,
+        action = CloudBackupScreenAction.STOP_USING_ON_THIS_DEVICE,
+        title = "Stop Using Cloud Backup on This Device",
+        style = CloudBackupActionStyle.DESTRUCTIVE_TEXT,
+        onDispatch = manager::dispatch,
+        onClick = onStopUsing,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun StopUsingConfirmationDialog(
+    manager: CloudBackupManager,
+    screen: CloudBackupScreen,
+    onDismiss: () -> Unit,
+) {
+    CloudBackupConfirmationDialog(
+        title = "Stop Using Cloud Backup on This Device?",
+        message = "Your backups may still be in $PROVIDER. You can delete them from $PROVIDER settings.",
+        confirmTitle = "Stop Using",
+        availability = screen.actions.lookup(CloudBackupScreenAction.STOP_USING_ON_THIS_DEVICE),
+        confirmTag = CloudBackupTags.confirm(CloudBackupScreenAction.STOP_USING_ON_THIS_DEVICE),
+        onConfirm = {
+            onDismiss()
+            manager.dispatch(CloudBackupManagerAction.StopUsingOnThisDevice)
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+private fun CloudBackupTurnOffFailure.message(): String =
+    when (this) {
+        CloudBackupTurnOffFailure.OFFLINE -> "Cove can't reach $PROVIDER right now."
+        CloudBackupTurnOffFailure.AUTHORIZATION_REQUIRED -> "Cove needs access to $PROVIDER to finish."
+        CloudBackupTurnOffFailure.PROVIDER_UNAVAILABLE -> "$PROVIDER isn't available right now."
+        CloudBackupTurnOffFailure.OTHER -> "Something went wrong while deleting your backups."
+    }

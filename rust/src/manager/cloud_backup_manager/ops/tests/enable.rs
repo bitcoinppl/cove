@@ -5,9 +5,10 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
 
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot,
+    PendingEnableLocalMetadataSnapshot, PendingWork, PromotionStartError,
 };
 
 fn seed_retained_active_master() -> ([u8; 32], PendingEnableLocalMetadataSnapshot) {
@@ -141,7 +142,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             provider_hint: None,
         })
     );
-    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.abort_recovered_existing_enable().unwrap();
 
     assert!(matches!(error, CloudBackupError::CloudStorage(_)));
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
@@ -192,10 +193,8 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
+    // the configured backup's local key is gone, which is what recovers an existing backup
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    let prior_master_key = cove_cspp::master_key::MasterKey::generate();
-    let prior_master_key_bytes = *prior_master_key.as_bytes();
-    cspp.save_master_key(&prior_master_key).unwrap();
     let cloud_keychain = CloudBackupKeychain::global();
     cloud_keychain.save_passkey_and_namespace(&[7, 8, 9], [8; 32], "prior-namespace").unwrap();
     let prior_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
@@ -221,10 +220,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
             preparation.recovered_passkey_metadata(),
         )
         .unwrap();
-    assert_eq!(
-        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
-        &prior_master_key_bytes
-    );
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     let staged_journal = cloud_keychain.load_pending_enable_journal().unwrap().unwrap();
@@ -247,11 +243,8 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         )
         .unwrap_err();
 
-    assert!(matches!(error, CloudBackupError::Internal(_)));
-    assert_eq!(
-        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
-        &prior_master_key_bytes
-    );
+    assert!(matches!(error, PromotionStartError::Failed(CloudBackupError::Internal(_))));
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     assert_eq!(
         cspp.master_key_promotion_status().unwrap(),
@@ -262,8 +255,11 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 
-    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.abort_recovered_existing_enable().unwrap();
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
+    assert_eq!(cloud_keychain.load_pending_enable_journal().unwrap(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -367,63 +363,58 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_create_new_recovers_from_corrupted_persisted_state() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    manager
-        .persist_cloud_backup_state(
-            &PersistedCloudBackupState::corrupted("decode failed"),
-            "persist corrupt state for test",
-        )
-        .unwrap();
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-
-    enable_cloud_backup_create_new(&manager).await.unwrap();
-
-    // the pending upload worker settles Enable's upload confirmation, and so verifies the new
-    // record, as soon as the cloud reports the master key uploaded; holding it as syncing keeps
-    // the record unverified while the test reads it
-    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
-    confirm_saved_passkey_session(&manager).await;
-
-    // a pass of the worker while the upload is still syncing leaves the record needing
-    // verification, whenever the background loop also runs
-    assert!(verify_pending_uploads_once_for_test_async(&manager).await);
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    let recovered = Database::global().cloud_backup_state.get().unwrap();
-    assert_eq!(recovered.status(), PersistedCloudBackupStatus::Unverified);
-    assert!(recovered.pending_verification_completion().is_some());
-
-    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
-    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
-
-    let verified = Database::global().cloud_backup_state.get().unwrap();
-    assert_eq!(verified.status(), PersistedCloudBackupStatus::Enabled);
-    assert!(verified.last_verified_at().is_some());
-    assert!(verified.pending_verification_completion().is_none());
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn detail_entry_starts_discoverable_verification_without_runtime_authorization() {
+async fn detail_entry_loads_the_inventory_without_asking_for_the_passkey() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
 
     configure_enabled_cloud_backup(&manager, globals, 0);
     seed_verifiable_cloud_master_key(globals);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let discover_count = globals.passkey.discover_count();
+    let authenticate_count = globals.passkey.authenticate_count();
 
     call!(manager.supervisor.start_enter_detail()).await.unwrap();
-    wait_for_discover_count(globals, discover_count + 1).await;
+    wait_for_detail_load_to_settle(&manager).await;
 
-    assert_eq!(globals.passkey.discover_count(), discover_count + 1);
+    assert_eq!(globals.passkey.discover_count(), discover_count);
+    assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn check_again_joins_a_detail_load_the_inventory_already_shows() {
+    use crate::manager::cloud_backup_manager::admission::{Admission, CoalescibleIntent};
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
+
+    dispatch_and_wait(&manager, CloudBackupManagerAction::RefreshDetail).await;
+
+    let outcome = call!(manager.supervisor.harness_last_outcome())
+        .await
+        .unwrap()
+        .expect("Check Again should have been dispatched");
+    assert_eq!(outcome.admission, Admission::Coalesced(CoalescibleIntent::RefreshDetail));
+    assert!(matches!(
+        manager.inventory.read().detail_state(),
+        CloudBackupDetailState::Checking { .. }
+    ));
+}
+
+/// Waits until a detail load has finished, whether it completed or failed
+async fn wait_for_detail_load_to_settle(manager: &RustCloudBackupManager) {
+    wait_for_test_condition(Duration::from_secs(5), "detail load to settle", || {
+        matches!(
+            manager.inventory.read().detail_state(),
+            CloudBackupDetailState::Complete { .. } | CloudBackupDetailState::Failed { .. }
+        )
+    })
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -447,11 +438,10 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
 
     for verification in states {
         configure_enabled_cloud_backup(&manager, globals, 0);
-        manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.apply_verification_state(verification);
-        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+        globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
         let discover_count = globals.passkey.discover_count();
         let authenticate_count = globals.passkey.authenticate_count();
@@ -906,7 +896,7 @@ async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorizati
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
 
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
     let create_count = globals.passkey.create_count();
     let authenticate_count = globals.passkey.authenticate_count();
     let discover_count = globals.passkey.discover_count();
@@ -1003,7 +993,7 @@ async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recove
     );
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
-    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+    assert!(matches!(manager.model_state().lifecycle, CloudBackupLifecycle::Configured(_)));
     assert_eq!(
         manager.onboarding_enable_completion_readiness(),
         CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery
@@ -1031,7 +1021,7 @@ async fn fresh_start_new_passkey_cancellation_preserves_prior_active_exactly() {
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     let (prior_master_key, prior_metadata) = seed_retained_active_master();
-    globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_create_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_force_new(&manager).await.unwrap();
 
@@ -1075,7 +1065,12 @@ async fn fresh_start_new_upload_failure_preserves_prior_active_exactly() {
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::FreshOwned);
     assert!(matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_)));
-    assert!(take_pending_enable_session_for_test(&manager).await.is_some());
+    // the failed upload goes back to the journal's pause, which keeps no material in memory
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert_eq!(
+        manager.pending_enable.pending_work(),
+        PendingWork::Paused(ContinuationOwner::Enable)
+    );
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 }
 
@@ -1091,7 +1086,7 @@ async fn fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exact
     let prior_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(prior_namespace.clone(), vec![1, 2, 3]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_force_new(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
@@ -1157,7 +1152,7 @@ async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
         serde_json::to_vec(&encrypted_existing_master).unwrap(),
     );
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
@@ -1295,7 +1290,7 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn detail_entry_after_restart_without_active_authorization_prompts_normally() {
+async fn detail_entry_after_restart_never_asks_for_the_passkey() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -1316,14 +1311,16 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
     restarted_manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
     restarted_manager.apply_verification_state(VerificationState::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let discover_count = globals.passkey.discover_count();
+    let authenticate_count = globals.passkey.authenticate_count();
 
     call!(restarted_manager.supervisor.start_enter_detail()).await.unwrap();
-    wait_for_discover_count(globals, discover_count + 1).await;
+    wait_for_detail_load_to_settle(&restarted_manager).await;
 
-    assert_eq!(globals.passkey.discover_count(), discover_count + 1);
+    assert_eq!(globals.passkey.discover_count(), discover_count);
+    assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1340,7 +1337,6 @@ async fn detail_entry_refreshes_progressive_inventory_after_passkey_verification
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
 
-    manager.clear_runtime_passkey_authorization();
     manager.clear_pending_verification_completion();
     manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
     manager.apply_verification_state(VerificationState::Idle);
@@ -1368,7 +1364,7 @@ async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_create_new(&manager).await.unwrap();
 
@@ -1388,7 +1384,7 @@ async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_create_result(Err(PasskeyError::NotCompleted));
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
@@ -1431,7 +1427,7 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
         serde_json::to_vec(&encrypted_master).unwrap(),
     );
     globals.cloud.set_wallet_files(remote_namespace_id, vec!["wallet-remote.json".into()]);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
 
     let operation = new_restore_operation_for_test(&manager).await;
     let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();

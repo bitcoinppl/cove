@@ -196,6 +196,7 @@ impl CloudBackupKeychain {
         let encoded = serde_json::to_string(journal)
             .map_err(CloudBackupKeychainError::EncodePendingEnable)?;
         self.0.save(CSPP_PENDING_ENABLE_JOURNAL_KEY.into(), encoded)?;
+        super::pending_enable::evidence::journal_written(journal);
         Ok(())
     }
 
@@ -203,6 +204,7 @@ impl CloudBackupKeychain {
         &self,
     ) -> Result<Option<PendingEnableJournal>, CloudBackupKeychainError> {
         let Some(encoded) = self.0.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into())? else {
+            super::pending_enable::evidence::journal_read(None);
             return Ok(None);
         };
 
@@ -215,11 +217,13 @@ impl CloudBackupKeychain {
             ));
         }
 
+        super::pending_enable::evidence::journal_read(Some(&journal));
         Ok(Some(journal))
     }
 
     pub(crate) fn delete_pending_enable_journal(&self) -> Result<(), CloudBackupKeychainError> {
         self.delete_keychain_item_if_present(CSPP_PENDING_ENABLE_JOURNAL_KEY)?;
+        super::pending_enable::evidence::journal_deleted();
         Ok(())
     }
 

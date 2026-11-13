@@ -48,6 +48,9 @@ pub(crate) struct VerificationRun {
     pub(crate) continuation: DeepVerificationContinuation,
     /// The configuration and local wallet set when this run started reading the wallets
     pub(crate) basis: EvidenceBasis,
+    /// The inventory owner's local-wallet epoch before the run read the wallets, so the detail
+    /// it builds is dropped after any local wallet change, a restore's included
+    pub(crate) read_at: InventoryReadAt,
 }
 
 impl CloudBackupSupervisor {
@@ -202,7 +205,6 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        self.detail_workflow.clear_pending_completion();
         if matches!(
             manager.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
@@ -226,7 +228,12 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        let run = VerificationRun { claim, continuation, basis: self.evidence_basis() };
+        let run = VerificationRun {
+            claim,
+            continuation,
+            basis: self.evidence_basis(),
+            read_at: manager.inventory_read_at(),
+        };
         let force_discoverable = continuation.force_discoverable();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
@@ -308,7 +315,6 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.detail_workflow.set_authorization(authorization);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
@@ -509,10 +515,11 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.settle_verification_evidence(&manager, run.basis, result);
+        self.settle_verification_evidence(&manager, run.basis, run.read_at, result);
 
+        // a verification that needed consent already has it, so the refresh after it is silent
         if should_refresh_open_detail {
-            let plan = self.detail_workflow.request_refresh();
+            let plan = self.detail_workflow.request_refresh(DetailRefreshOrigin::Automatic);
             self.handle_detail_refresh_plan(manager.clone(), plan);
         }
 
@@ -686,7 +693,6 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.detail_workflow.set_authorization(authorization);
                 if let Err(error) = self
                     .runtime
                     .commit(|lifecycle| manager.finish_passkey_wrapper_repair(lifecycle, uploaded))
@@ -732,7 +738,8 @@ impl CloudBackupSupervisor {
             })
         }) {
             Ok(()) => {
-                let detail_claim = self.detail_workflow.start_operation_result();
+                let detail_claim =
+                    self.detail_workflow.start_operation_result(manager.inventory_scope());
                 let config = self.runtime.generation();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail(config).await;
@@ -765,7 +772,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, detail_claim.scope(), &result);
         }
 
         manager.refresh_sync_health();

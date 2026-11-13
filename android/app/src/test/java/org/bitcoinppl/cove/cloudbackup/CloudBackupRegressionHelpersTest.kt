@@ -3,39 +3,22 @@ package org.bitcoinppl.cove.cloudbackup
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
-import org.bitcoinppl.cove_core.CloudBackupDetail
-import org.bitcoinppl.cove_core.CloudBackupDetailState
-import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
+import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
-import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
-import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
-import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupScreen
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
-import org.bitcoinppl.cove_core.CloudBackupSyncState
-import org.bitcoinppl.cove_core.CloudBackupUndecryptableWalletDeletionState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
-import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudBackupWalletItem
-import org.bitcoinppl.cove_core.CloudBackupWalletStatus
-import org.bitcoinppl.cove_core.CloudOnlyState
-import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
-import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -146,292 +129,6 @@ class CloudBackupRegressionHelpersTest {
         }
 
     @Test
-    fun notVerifiedStateKeepsDetailReachable() {
-        assertEquals(
-            CloudBackupDetailBodyState.DETAIL,
-            cloudBackupDetailBodyState(
-                manager = cloudBackupManager(verification = CloudBackupVerificationState.NotVerified),
-                hasDetail = true,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-        assertEquals(
-            CloudBackupDetailBodyState.LOADING,
-            cloudBackupDetailBodyState(
-                manager = cloudBackupManager(verification = CloudBackupVerificationState.NotVerified),
-                hasDetail = false,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-    }
-
-    @Test
-    fun verificationProgressHasOnePresentationOwner() {
-        assertEquals(
-            CloudBackupDetailProgressPresentation.VERIFICATION_CARD,
-            cloudBackupDetailProgressPresentation(
-                isVerificationRunning = true,
-                isInventoryChecking = true,
-                hasRetainedDetail = true,
-                hasVisibleWalletRows = false,
-            ),
-        )
-        assertEquals(
-            CloudBackupDetailProgressPresentation.VERIFICATION_INLINE,
-            cloudBackupDetailProgressPresentation(
-                isVerificationRunning = true,
-                isInventoryChecking = true,
-                hasRetainedDetail = true,
-                hasVisibleWalletRows = true,
-            ),
-        )
-        assertEquals(
-            CloudBackupDetailProgressPresentation.INVENTORY_INLINE,
-            cloudBackupDetailProgressPresentation(
-                isVerificationRunning = false,
-                isInventoryChecking = true,
-                hasRetainedDetail = true,
-                hasVisibleWalletRows = true,
-            ),
-        )
-    }
-
-    @Test
-    fun inlineVerificationKeepsWalletDetailVisible() {
-        assertEquals(
-            CloudBackupDetailBodyState.DETAIL,
-            cloudBackupDetailBodyState(
-                manager = cloudBackupManager(verification = CloudBackupVerificationState.Running),
-                hasDetail = true,
-                progressPresentation =
-                    CloudBackupDetailProgressPresentation.VERIFICATION_INLINE,
-            ),
-        )
-    }
-
-    @Test
-    fun visibleWalletRowsRequireDetailAndIgnoreCountOnlyState() {
-        val detail =
-            CloudBackupDetail(
-                lastSync = null,
-                upToDate = emptyList(),
-                needsSync = emptyList(),
-                cloudOnlyCount = 1u,
-            )
-        val wallet =
-            CloudBackupWalletItem(
-                name = "Savings",
-                network = null,
-                walletMode = null,
-                walletType = null,
-                fingerprint = null,
-                labelCount = null,
-                backupUpdatedAt = null,
-                syncStatus = CloudBackupWalletStatus.CONFIRMED,
-                restoreFailure = null,
-                recordId = "wallet-record",
-            )
-
-        assertFalse(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.NotFetched))
-        assertFalse(cloudBackupHasVisibleWalletRows(null, CloudOnlyState.Loaded(listOf(wallet), incomplete = false)))
-        assertTrue(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(listOf(wallet), incomplete = false)))
-        assertTrue(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(emptyList(), incomplete = true)))
-        assertFalse(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(emptyList(), incomplete = false)))
-    }
-
-    @Test
-    fun cancelledVerificationShowsRecoveryInsteadOfLoadedDetail() {
-        assertEquals(
-            CloudBackupDetailBodyState.CANCELLED,
-            cloudBackupDetailBodyState(
-                manager = cloudBackupManager(verification = CloudBackupVerificationState.Cancelled),
-                hasDetail = true,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-    }
-
-    @Test
-    fun failedVerificationWithoutDetailShowsFallbackVerificationSection() {
-        val bodyState =
-            cloudBackupDetailBodyState(
-                manager =
-                    cloudBackupManager(
-                        verification =
-                            CloudBackupVerificationState.Failed(
-                                DeepVerificationFailure.Retry(
-                                    message = "Drive unavailable",
-                                    detail = null,
-                                    retryAction = null,
-                                ),
-                            ),
-                    ),
-                hasDetail = false,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            )
-
-        assertNull(bodyState)
-        assertTrue(shouldShowFallbackVerificationSection(bodyState))
-        assertFalse(shouldShowFallbackVerificationSection(CloudBackupDetailBodyState.DETAIL))
-    }
-
-    @Test
-    fun failedInventoryShowsRetryStateInsteadOfLoadingOrZero() {
-        val manager =
-            cloudBackupManager(
-                detail =
-                    CloudBackupDetailState.Failed(
-                        reason = CloudBackupInventoryIncompleteReason.OFFLINE,
-                        error = "Drive inventory is unavailable",
-                        retained = null,
-                    ),
-            )
-
-        assertEquals(
-            CloudBackupDetailBodyState.INVENTORY_FAILED,
-            cloudBackupDetailBodyState(
-                manager = manager,
-                hasDetail = false,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-        assertEquals(
-            "This device is offline. Connect to the internet, then check Google Drive again.",
-            manager.detailError,
-        )
-        assertFalse(manager.isDetailInventoryComplete)
-    }
-
-    @Test
-    fun trustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
-        val loaded = providerConfirmedDetail()
-        val detail = loaded.detail
-
-        val notLoaded = cloudBackupManager()
-        assertNull(notLoaded.detail)
-        assertFalse(notLoaded.isDetailInventoryChecking)
-        assertFalse(notLoaded.isDetailInventoryComplete)
-        assertFalse(notLoaded.isDetailInventoryReady)
-
-        val checking = cloudBackupManager(detail = CloudBackupDetailState.Checking(retained = loaded))
-        assertEquals(detail, checking.detail)
-        assertTrue(checking.isDetailInventoryChecking)
-        assertFalse(checking.isDetailInventoryComplete)
-        assertFalse(checking.isDetailInventoryReady)
-
-        val unavailable =
-            cloudBackupManager(
-                detail =
-                    CloudBackupDetailState.Failed(
-                        reason = CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE,
-                        error = "Drive inventory is unavailable",
-                        retained = loaded,
-                    ),
-            )
-        assertEquals(detail, unavailable.detail)
-        assertFalse(unavailable.isDetailInventoryChecking)
-        assertFalse(unavailable.isDetailInventoryComplete)
-        assertTrue(unavailable.isDetailInventoryReady)
-
-        val complete = cloudBackupManager(detail = CloudBackupDetailState.Complete(state = loaded))
-        assertEquals(detail, complete.detail)
-        assertFalse(complete.isDetailInventoryChecking)
-        assertTrue(complete.isDetailInventoryComplete)
-        assertTrue(complete.isDetailInventoryReady)
-    }
-
-    @Test
-    fun offlineFailureKeepsTrustedRowsButDisablesTheirActions() {
-        val loaded = providerConfirmedDetail()
-        val failed =
-            cloudBackupManager(
-                detail =
-                    CloudBackupDetailState.Failed(
-                        reason = CloudBackupInventoryIncompleteReason.OFFLINE,
-                        error = "Drive inventory is unavailable",
-                        retained = loaded,
-                    ),
-            )
-
-        assertEquals(loaded.detail, failed.detail)
-        assertEquals(
-            "This device is offline. Connect to the internet, then check Google Drive again.",
-            failed.detailError,
-        )
-        assertFalse(failed.isDetailInventoryChecking)
-        assertFalse(failed.isDetailInventoryComplete)
-        assertFalse(
-            "an offline device keeps the known rows but can't restore or delete them",
-            failed.isDetailInventoryReady,
-        )
-    }
-
-    @Test
-    fun pendingUploadConfirmationDoesNotReplaceDetailContent() {
-        assertEquals(
-            CloudBackupDetailBodyState.DETAIL,
-            cloudBackupDetailBodyState(
-                manager =
-                    cloudBackupManager(
-                        verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
-                    ),
-                hasDetail = true,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-        assertTrue(
-            shouldShowPendingUploadConfirmationStatus(
-                cloudBackupManager(
-                    verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
-                ),
-            ),
-        )
-    }
-
-    @Test
-    fun interactiveVerificationKeepsVerifyingBody() {
-        assertEquals(
-            CloudBackupDetailBodyState.VERIFYING,
-            cloudBackupDetailBodyState(
-                manager = cloudBackupManager(verification = CloudBackupVerificationState.Running),
-                hasDetail = true,
-                progressPresentation = CloudBackupDetailProgressPresentation.VERIFICATION_CARD,
-            ),
-        )
-    }
-
-    @Test
-    fun pendingUploadConfirmationWithoutDetailKeepsBackgroundLoadingBody() {
-        assertEquals(
-            CloudBackupDetailBodyState.LOADING,
-            cloudBackupDetailBodyState(
-                manager =
-                    cloudBackupManager(
-                        verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
-                    ),
-                hasDetail = false,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-    }
-
-    @Test
-    fun blockedPendingUploadAuthorizationWithoutDetailShowsAuthorizationBody() {
-        assertEquals(
-            CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED,
-            cloudBackupDetailBodyState(
-                manager =
-                    cloudBackupManager(
-                        verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
-                        sync = CloudBackupSyncState.Blocked("authorization required"),
-                    ),
-                hasDetail = false,
-                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
-            ),
-        )
-    }
-
-    @Test
     fun onboardingPolicySuppressesGenericCloudBackupRootPrompts() {
         val context =
             presentableContext(
@@ -482,31 +179,41 @@ class CloudBackupRegressionHelpersTest {
 
     @Test
     fun existingOnlyPasskeyChoiceDoesNotOfferNewBackup() {
-        val presentation =
-            cloudBackupPasskeyChoicePresentation(
-                CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly(manualEnableContext(), null),
-            )
+        val intent = CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly(manualEnableContext(), null)
+        val choices = passkeyChoicePromptChoices(intent)
 
-        assertNull(presentation.secondaryActionTitle)
-        assertTrue(presentation.message.contains("existing passkey"))
+        assertEquals(
+            listOf(CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING),
+            choices.map { it.action },
+        )
+        assertTrue(cloudBackupPasskeyChoicePresentation(intent).message.contains("existing passkey"))
     }
 
     @Test
     fun normalEnableOffersStartNewBackup() {
-        val presentation =
-            cloudBackupPasskeyChoicePresentation(
-                CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null),
-            )
+        val choices =
+            passkeyChoicePromptChoices(CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null))
 
-        assertEquals("Start a New Backup", presentation.secondaryActionTitle)
+        assertEquals(
+            listOf("Use Existing Passkey", "Start a New Backup"),
+            choices.map { it.title },
+        )
+        assertEquals(
+            CloudBackupManagerAction.AcceptEnablePrompt(CloudBackupEnablePromptChoice.CREATE_NEW),
+            choices.last().intent,
+        )
     }
 
     @Test
     fun repairPasskeyChoiceKeepsCreateNewPasskeyAction() {
-        val presentation =
-            cloudBackupPasskeyChoicePresentation(CloudBackupPasskeyChoiceIntent.RepairPasskey)
+        val choices = passkeyChoicePromptChoices(CloudBackupPasskeyChoiceIntent.RepairPasskey)
 
-        assertEquals("Create New Passkey", presentation.secondaryActionTitle)
+        assertEquals("Create New Passkey", choices.last().title)
+        assertEquals(CloudBackupManagerAction.RepairPasskeyNoDiscovery, choices.last().intent)
+        assertEquals(
+            listOf(CloudBackupScreenAction.REPAIR_PASSKEY, CloudBackupScreenAction.REPAIR_PASSKEY),
+            choices.map { it.action },
+        )
     }
 
     @Test
@@ -631,49 +338,15 @@ class CloudBackupRegressionHelpersTest {
             verificationSource = CloudBackupVerificationSource.SETTINGS,
         )
 
-    private fun providerConfirmedDetail() =
-        LoadedCloudBackupDetail(
-            detail =
-                CloudBackupDetail(
-                    lastSync = null,
-                    upToDate = emptyList(),
-                    needsSync = emptyList(),
-                    cloudOnlyCount = 1u,
-                ),
-            inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
-            cloudOnly = CloudOnlyState.NotFetched,
-            cloudOnlyOperation = CloudOnlyOperation.Idle,
-            otherBackupsOperation = OtherBackupsOperation.Idle,
+    private fun cloudBackupManager(): CloudBackupManager =
+        CloudBackupManager(
+            CloudBackupScreen(
+                body = CloudBackupScreenBody.Disabled,
+                settingsRow = CloudBackupSettingsRowStatus.Disabled,
+                healNotice = null,
+                lastOutcome = null,
+                rootPrompt = CloudBackupRootPrompt.None,
+                actions = CloudBackupActions(emptyList()),
+            ),
         )
-
-    private fun cloudBackupManager(
-        passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
-        verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
-        sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
-        detail: CloudBackupDetailState = CloudBackupDetailState.NotLoaded,
-    ): CloudBackupManager {
-        val state =
-            CloudBackupState(
-                lifecycle =
-                    CloudBackupLifecycle.Configured(
-                        CloudBackupConfiguredState(
-                            passkey = passkey,
-                            verification = verification,
-                            sync = sync,
-                            destructiveOperation = CloudBackupDestructiveOperationState.Idle,
-                            undecryptableWalletDeletion =
-                                CloudBackupUndecryptableWalletDeletionState.Idle,
-                            detail = detail,
-                            otherBackups = CloudBackupOtherBackupsState.NotChecked,
-                            restoreAll = CloudBackupRestoreAllState.NotShown,
-                            rootPrompt = CloudBackupRootPrompt.None,
-                            syncHealth = CloudSyncHealth.Unknown,
-                            verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
-                        ),
-                    ),
-                settingsRowStatus = CloudBackupSettingsRowStatus.CheckingSync,
-            )
-
-        return CloudBackupManager(state)
-    }
 }

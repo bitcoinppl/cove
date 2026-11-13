@@ -25,8 +25,11 @@ struct DetailRead {
 }
 
 impl RustCloudBackupManager {
+    /// Lists the backups without waiting for the provider, through `cloud`, whose policy the
+    /// refresh's origin chose
     pub(crate) async fn load_cloud_backup_detail_inventory_snapshot(
         &self,
+        cloud: CloudStorageClient,
     ) -> Option<CloudBackupDetailInventorySnapshotResult> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -40,7 +43,6 @@ impl RustCloudBackupManager {
                 return Some(CloudBackupDetailInventorySnapshotResult::AccessError(error));
             }
         };
-        let cloud = CloudStorage::global_explicit_client();
         let snapshot = match cloud.list_wallet_backups_snapshot(namespace.clone()).await {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -78,11 +80,13 @@ impl RustCloudBackupManager {
         ))
     }
 
-    /// Finishes a detail refresh from `snapshot` for a producer started under `config`
+    /// Finishes a detail refresh from `snapshot` for a producer started under `config`, reading
+    /// through the refresh's `cloud`
     pub(crate) async fn complete_cloud_backup_detail_inventory_snapshot(
         &self,
         snapshot: CloudBackupDetailInventorySnapshot,
         config: ConfigGeneration,
+        cloud: CloudStorageClient,
     ) -> Option<CloudBackupDetailSnapshotCompletion> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -114,7 +118,6 @@ impl RustCloudBackupManager {
             ));
         }
 
-        let cloud = CloudStorage::global_explicit_client();
         match snapshot.authority {
             Some(CloudBackupInventoryAuthority::ProviderConfirmed) => {
                 Some(CloudBackupDetailSnapshotCompletion::Final(
@@ -182,6 +185,7 @@ impl RustCloudBackupManager {
         &self,
         confirmation: CloudBackupDetailProviderConfirmation,
         config: ConfigGeneration,
+        cloud: CloudStorageClient,
     ) -> Option<CloudBackupDetailResult> {
         let current_namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
@@ -193,7 +197,7 @@ impl RustCloudBackupManager {
             )));
         }
 
-        self.refresh_cloud_backup_detail(config).await
+        self.list_cloud_backup_detail(config, cloud).await
     }
 
     /// List wallet backups in the current namespace and build detail
@@ -202,9 +206,21 @@ impl RustCloudBackupManager {
     /// surface an explicit recovery action instead of mutating backup state during refresh.
     /// `config` is the configuration generation the caller read before starting the refresh, so
     /// the uploads the read confirms are confirmed only while that configuration is current
+    ///
+    /// For an exclusive operation's follow-up: every exclusive operation starts from a dispatched
+    /// tap, so the provider may ask for consent. The detail refresh cycle lists through the client
+    /// its origin chose, and the pending upload verifier, which nobody taps, lists silently
     pub(crate) async fn refresh_cloud_backup_detail(
         &self,
         config: ConfigGeneration,
+    ) -> Option<CloudBackupDetailResult> {
+        self.list_cloud_backup_detail(config, CloudStorage::global_explicit_client()).await
+    }
+
+    pub(crate) async fn list_cloud_backup_detail(
+        &self,
+        config: ConfigGeneration,
+        cloud: CloudStorageClient,
     ) -> Option<CloudBackupDetailResult> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -224,7 +240,6 @@ impl RustCloudBackupManager {
         }
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
-        let cloud = CloudStorage::global_explicit_client();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(error) => {

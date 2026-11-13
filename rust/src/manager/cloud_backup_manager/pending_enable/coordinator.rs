@@ -2,6 +2,9 @@ use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus, master_
 use cove_device::keychain::Keychain;
 use tracing::warn;
 
+use super::evidence::{self, PendingWork};
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
+
 use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupError, CloudBackupKeychain, PendingEnableJournal,
@@ -10,6 +13,22 @@ use crate::manager::cloud_backup_manager::{
 
 #[derive(Clone, Debug)]
 pub(crate) struct PendingEnableCoordinator(Keychain);
+
+/// Why a local promotion did not start, which decides who goes on from its journal
+#[derive(Debug)]
+pub(crate) enum PromotionStartError {
+    /// Nothing was promoted, or the promotion was rolled back and the journal is where it was
+    Failed(CloudBackupError),
+    /// The promotion started and its rollback failed: the journal records a started promotion
+    /// that only the journal recovery can roll back
+    NeedsRecovery(CloudBackupError),
+}
+
+impl From<CloudBackupError> for PromotionStartError {
+    fn from(error: CloudBackupError) -> Self {
+        Self::Failed(error)
+    }
+}
 
 impl PendingEnableCoordinator {
     pub(crate) fn new(keychain: Keychain) -> Self {
@@ -59,6 +78,13 @@ impl PendingEnableCoordinator {
             return cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
                 CloudBackupError::internal_context("save recovered pending enable passkey", source)
             });
+        }
+
+        // a full rollback restores no key, which only holds if none was active when it began
+        if self.active_namespace()?.is_some() {
+            return Err(CloudBackupError::Internal(
+                "an existing backup is only recovered without a local master key".into(),
+            ));
         }
 
         match cspp.master_key_promotion_status().map_err(|source| {
@@ -114,8 +140,15 @@ impl PendingEnableCoordinator {
         Ok(())
     }
 
-    pub(crate) fn rollback_enable_recovery_master_key(&self) -> Result<(), CloudBackupError> {
-        warn!("Enable: rolling back recovered local master key after recovery failure");
+    /// Rolls a recovered-existing Enable back to before it began: the prior active key and
+    /// passkey metadata come back, and the journal goes
+    ///
+    /// The one way out of a recovered backup that didn't finish, for its own failed run and the
+    /// restart's recovery alike. Recovered work has no pause to go back to, so this either
+    /// finishes or leaves the journal, which keeps the work the recovery's until a run finishes
+    /// it, from wherever an earlier run stopped
+    pub(crate) fn abort_recovered_existing_enable(&self) -> Result<(), CloudBackupError> {
+        warn!("Enable: rolling back recovered local master key");
         let cloud_keychain = self.cloud_keychain();
         let journal = cloud_keychain
             .load_pending_enable_journal()
@@ -123,30 +156,42 @@ impl PendingEnableCoordinator {
             .ok_or_else(|| {
                 CloudBackupError::Internal("pending recovered Cloud Backup state is missing".into())
             })?;
-        if journal.namespace_ownership() != PendingEnableNamespaceOwnership::RecoveredExisting {
-            return Err(CloudBackupError::Internal(
-                "refusing to roll back a non-recovery pending enable as recovered state".into(),
-            ));
-        }
-        if !matches!(
-            journal.phase(),
-            PendingEnableJournalPhase::PasskeyRegistered(_)
-                | PendingEnableJournalPhase::RemoteWritesStarted(_)
-        ) || !self.has_staged_namespace(journal.namespace_id())?
-            || !matches!(
-                self.promotion_status()?,
+        let status = self.promotion_status()?;
+        let rollback_compatible = match journal.phase() {
+            PendingEnableJournalPhase::PasskeyRegistered(_) => {
+                matches!(status, MasterKeyPromotionStatus::Staged | MasterKeyPromotionStatus::None)
+            }
+            PendingEnableJournalPhase::RemoteWritesStarted(_) => matches!(
+                status,
                 MasterKeyPromotionStatus::Staged
                     | MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
-            )
+                    | MasterKeyPromotionStatus::None
+            ),
+            PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
+            PendingEnableJournalPhase::Staging | PendingEnableJournalPhase::Staged => false,
+        };
+        // with no promotion left, an earlier rollback restored the prior key state, which for a
+        // recovered backup is no key: one is only recovered without it. A key active now is
+        // another's, which this abort must not take for its own
+        let material_matches = match status {
+            MasterKeyPromotionStatus::None => self.active_namespace()?.is_none(),
+            _ => self.has_staged_namespace(journal.namespace_id())?,
+        };
+        if journal.namespace_ownership() != PendingEnableNamespaceOwnership::RecoveredExisting
+            || !rollback_compatible
+            || !material_matches
         {
             return Err(CloudBackupError::Internal(
                 "refusing to roll back mismatched recovered Cloud Backup evidence".into(),
             ));
         }
 
-        self.cspp().rollback_master_key_promotion().map_err(|source| {
-            CloudBackupError::internal_context("roll back recovered master key", source)
-        })?;
+        if status != MasterKeyPromotionStatus::None {
+            self.cspp().rollback_master_key_promotion().map_err(|source| {
+                CloudBackupError::internal_context("roll back recovered master key", source)
+            })?;
+        }
+
         cloud_keychain.restore_passkey_metadata(journal.previous_metadata()).map_err(|source| {
             CloudBackupError::internal_context(
                 "restore prior Cloud Backup passkey metadata",
@@ -188,6 +233,26 @@ impl PendingEnableCoordinator {
                 source,
             )
         })
+    }
+
+    /// The pending Enable-flow work the journal records, from memory
+    ///
+    /// Admission and the screen read this on every dispatch and publish, so it never reads the
+    /// keychain; the journal's accessors keep it current
+    pub(crate) fn pending_work(&self) -> PendingWork {
+        evidence::pending_work()
+    }
+
+    /// Names `owner` as the work the journal written next belongs to, for that work's pause;
+    /// paused work keeps its owner until its journal is gone
+    pub(crate) fn adopt(&self, owner: ContinuationOwner) {
+        evidence::adopt(owner);
+    }
+
+    /// Records that the recovery could not read the journal, so whether work is paused is
+    /// unknown until it reads it again
+    pub(crate) fn mark_unavailable(&self) {
+        evidence::mark_unreadable();
     }
 
     pub(crate) fn stage_fresh_enable_master(
@@ -322,7 +387,7 @@ impl PendingEnableCoordinator {
             ));
         }
         if !self.has_staged_namespace(journal.namespace_id())?
-            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])?
+            || !self.has_retryable_stage(&journal)?
         {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable passkey has mismatched staged material".into(),
@@ -369,7 +434,7 @@ impl PendingEnableCoordinator {
         &self,
         master_key: &MasterKey,
         passkey: &UnpersistedPrfKey,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<(), PromotionStartError> {
         self.begin_pending_enable_local_promotion_with_metadata(
             &master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
@@ -382,7 +447,7 @@ impl PendingEnableCoordinator {
         namespace_id: &str,
         credential_id: &[u8],
         prf_salt: [u8; 32],
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<(), PromotionStartError> {
         self.begin_pending_enable_local_promotion_with_metadata(
             namespace_id,
             PendingEnableNamespaceOwnership::RecoveredExisting,
@@ -399,7 +464,7 @@ impl PendingEnableCoordinator {
         namespace_id: &str,
         namespace_ownership: PendingEnableNamespaceOwnership,
         expected_passkey: PendingEnablePasskeyMetadata,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<(), PromotionStartError> {
         let cspp = self.cspp();
         let staged = cspp.load_staged_master_key().map_err(|source| {
             CloudBackupError::internal_context("load staged master key for promotion", source)
@@ -407,7 +472,8 @@ impl PendingEnableCoordinator {
         if staged.as_ref().is_none_or(|master_key| master_key.namespace_id() != namespace_id) {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable has mismatched staged master key ownership".into(),
-            ));
+            )
+            .into());
         }
         if !self.has_promotion_status(&[
             MasterKeyPromotionStatus::Staged,
@@ -415,7 +481,8 @@ impl PendingEnableCoordinator {
         ])? {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable has mismatched promotion state".into(),
-            ));
+            )
+            .into());
         }
 
         let cloud_keychain = self.cloud_keychain();
@@ -432,7 +499,8 @@ impl PendingEnableCoordinator {
         {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable cannot promote unowned staged material".into(),
-            ));
+            )
+            .into());
         }
         cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
             CloudBackupError::internal_context("mark pending enable promotion", source)
@@ -461,15 +529,17 @@ impl PendingEnableCoordinator {
         Ok(())
     }
 
+    // the journal already records the started promotion, so a rollback that fails leaves it
+    // for the journal recovery
     fn retain_promotion_error(
         original: CloudBackupError,
         rollback: Result<(), CloudBackupError>,
-    ) -> CloudBackupError {
+    ) -> PromotionStartError {
         match rollback {
-            Ok(()) => original,
-            Err(rollback) => CloudBackupError::Internal(
+            Ok(()) => PromotionStartError::Failed(original),
+            Err(rollback) => PromotionStartError::NeedsRecovery(CloudBackupError::Internal(
                 format!("{original}; pending enable rollback also failed: {rollback}").into(),
-            ),
+            )),
         }
     }
 
@@ -609,6 +679,18 @@ impl PendingEnableCoordinator {
                     )
                 })?;
             }
+            // a stage a rolled-back promotion kept goes with that promotion's record
+            PendingEnableJournalPhase::RemoteWritesStarted(_)
+                if self.promotion_status()?
+                    == MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior) =>
+            {
+                cspp.rollback_master_key_promotion().map_err(|error| {
+                    CloudBackupError::internal_context(
+                        "discard pending Cloud Backup stage kept for retry",
+                        error,
+                    )
+                })?;
+            }
             PendingEnableJournalPhase::Staged
             | PendingEnableJournalPhase::PasskeyRegistered(_)
             | PendingEnableJournalPhase::RemoteWritesStarted(_) => {
@@ -665,6 +747,20 @@ impl PendingEnableCoordinator {
         })
     }
 
+    /// Whether `journal`'s stage can still be uploaded: isolated, or, once remote writes started,
+    /// kept by a local promotion that rolled back for retry with the prior key active again
+    fn has_retryable_stage(
+        &self,
+        journal: &PendingEnableJournal,
+    ) -> Result<bool, CloudBackupError> {
+        let status = self.promotion_status()?;
+        let rolled_back_for_retry = status
+            == MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
+            && matches!(journal.phase(), PendingEnableJournalPhase::RemoteWritesStarted(_));
+
+        Ok(status == MasterKeyPromotionStatus::Staged || rolled_back_for_retry)
+    }
+
     fn has_staged_namespace(&self, namespace_id: &str) -> Result<bool, CloudBackupError> {
         self.cspp()
             .load_staged_master_key()
@@ -683,13 +779,7 @@ impl PendingEnableCoordinator {
         let Some(passkey) = journal.passkey() else {
             return Ok(false);
         };
-        let active_namespace = self
-            .cspp()
-            .load_master_key_from_store()
-            .map_err(|source| {
-                CloudBackupError::internal_context("inspect committed master key", source)
-            })?
-            .map(|master_key| master_key.namespace_id());
+        let active_namespace = self.active_namespace()?;
         let cloud_keychain = self.cloud_keychain();
         let read_error =
             |source| CloudBackupError::internal_context("inspect committed passkey", source);
@@ -702,6 +792,15 @@ impl PendingEnableCoordinator {
             && namespace_id.as_deref() == Some(journal.namespace_id())
             && credential_id.as_deref() == Some(passkey.credential_id.as_slice())
             && prf_salt == Some(passkey.prf_salt))
+    }
+
+    fn active_namespace(&self) -> Result<Option<String>, CloudBackupError> {
+        self.cspp()
+            .load_master_key_from_store()
+            .map(|master_key| master_key.map(|master_key| master_key.namespace_id()))
+            .map_err(|source| {
+                CloudBackupError::internal_context("inspect active master key", source)
+            })
     }
 
     fn promotion_status(&self) -> Result<MasterKeyPromotionStatus, CloudBackupError> {
@@ -729,6 +828,7 @@ mod tests {
             Ok(()),
         );
 
+        let PromotionStartError::Failed(error) = error else { panic!("{error:?}") };
         assert_eq!(error.to_string(), "internal error: original promotion failure");
     }
 
@@ -738,6 +838,7 @@ mod tests {
             CloudBackupError::Internal("original promotion failure".into()),
             Err(CloudBackupError::Internal("rollback failure".into())),
         );
+        let PromotionStartError::NeedsRecovery(error) = error else { panic!("{error:?}") };
         let message = error.to_string();
 
         assert!(message.contains("original promotion failure"));

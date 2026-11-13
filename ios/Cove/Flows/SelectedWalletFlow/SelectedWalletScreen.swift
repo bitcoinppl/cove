@@ -301,7 +301,7 @@ struct SelectedWalletScreen: View {
             content: SelectedWalletPresentedContent(
                 manager: manager,
                 screenHeight: screenHeight,
-                cloudBackupIsConfigured: cloudBackupManager.isConfigured,
+                cloudBackupIsConfigured: cloudBackupManager.screen.configured != nil,
                 shouldShowNavBar: shouldShowNavBar,
                 reduceTransparency: reduceTransparency,
                 toolbarTextColor: toolbarTextColor,

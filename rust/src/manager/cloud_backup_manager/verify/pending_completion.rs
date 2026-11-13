@@ -17,7 +17,7 @@ use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::actors::supervisor::EvidenceBasis;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingEnableJournalPhase, PendingVerificationUpload,
+    CloudBackupDetail, InventoryReadAt, PendingEnableJournalPhase, PendingVerificationUpload,
     master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
@@ -50,6 +50,9 @@ const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
 #[derive(Debug)]
 pub(crate) struct PendingVerificationSettlement {
     pub(crate) basis: EvidenceBasis,
+    /// The inventory owner's local-wallet epoch from before this evidence was read, so a detail
+    /// it carries is dropped after a wallet change the wallet set hasn't seen yet
+    pub(crate) read_at: InventoryReadAt,
     pub(crate) completion: PendingVerificationCompletion,
     pub(crate) result: DeepVerificationResult,
 }
@@ -66,13 +69,14 @@ impl RustCloudBackupManager {
             return None;
         }
 
+        let read_at = self.inventory_read_at();
         let completion = self.pending_verification_completion()?;
 
         if completion.is_expired(
             cove_util::time::unix_timestamp_secs_or_zero(),
             PENDING_VERIFICATION_COMPLETION_TTL_SECONDS,
         ) {
-            return Some(Self::expired_pending_verification_settlement(basis, completion));
+            return Some(Self::expired_pending_verification_settlement(basis, read_at, completion));
         }
 
         match self.pending_verification_uploads_readiness(&completion) {
@@ -82,7 +86,7 @@ impl RustCloudBackupManager {
                 let failure =
                     DeepVerificationFailure::retry(error, completion.report().detail, None);
                 let result = DeepVerificationResult::Failed(failure);
-                return Some(PendingVerificationSettlement { basis, completion, result });
+                return Some(PendingVerificationSettlement { basis, read_at, completion, result });
             }
         }
 
@@ -99,7 +103,7 @@ impl RustCloudBackupManager {
                 Err(failure) => DeepVerificationResult::Failed(*failure),
             };
 
-        Some(PendingVerificationSettlement { basis, completion, result })
+        Some(PendingVerificationSettlement { basis, read_at, completion, result })
     }
 
     fn pending_enable_finalization_owns_completion() -> bool {
@@ -119,6 +123,7 @@ impl RustCloudBackupManager {
 
     fn expired_pending_verification_settlement(
         basis: EvidenceBasis,
+        read_at: InventoryReadAt,
         completion: PendingVerificationCompletion,
     ) -> PendingVerificationSettlement {
         warn!(
@@ -131,7 +136,7 @@ impl RustCloudBackupManager {
         );
         let result = DeepVerificationResult::Failed(failure);
 
-        PendingVerificationSettlement { basis, completion, result }
+        PendingVerificationSettlement { basis, read_at, completion, result }
     }
 
     fn pending_verification_uploads_readiness(
@@ -396,7 +401,10 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         config: ConfigGeneration,
     ) -> Option<CloudBackupDetail> {
-        match self.refresh_cloud_backup_detail(config).await {
+        // the verifier resumes at launch and on foreground with nobody tapping, so a listing that
+        // needs Drive consent fails instead of asking, like its reads above
+        let cloud = CloudStorage::global_silent_client();
+        match self.list_cloud_backup_detail(config, cloud).await {
             Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) => {
                 Some(listed.detail)
             }
@@ -416,37 +424,53 @@ impl RustCloudBackupManager {
         DeepVerificationFailure::retry(message, completion.report().detail, None)
     }
 
-    pub(crate) fn apply_verified_report(&self, report: DeepVerificationReport) {
+    pub(crate) fn apply_verified_report(
+        &self,
+        report: DeepVerificationReport,
+        read_at: InventoryReadAt,
+    ) {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::complete(
-            source, report,
+            source, report, read_at,
         ));
     }
 
-    pub(crate) fn apply_needs_attention_report(&self, report: DeepVerificationReport) {
+    pub(crate) fn apply_needs_attention_report(
+        &self,
+        report: DeepVerificationReport,
+        read_at: InventoryReadAt,
+    ) {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::needs_attention(
-            source, report,
+            source, report, read_at,
         ));
     }
 
     /// Applies the in-memory effect of an upload confirmation the owner already settled
-    pub(crate) fn apply_settled_verification_result(&self, result: DeepVerificationResult) {
-        self.apply_verification_result_effect(result);
+    pub(crate) fn apply_settled_verification_result(
+        &self,
+        result: DeepVerificationResult,
+        read_at: InventoryReadAt,
+    ) {
+        self.apply_verification_result_effect(result, read_at);
         self.refresh_pending_upload_verification_state();
     }
 
-    fn apply_verification_result_effect(&self, result: DeepVerificationResult) {
+    fn apply_verification_result_effect(
+        &self,
+        result: DeepVerificationResult,
+        read_at: InventoryReadAt,
+    ) {
         let source = self.current_verification_source();
         let effect = match result {
             DeepVerificationResult::Verified(report) => {
-                CloudBackupVerificationCoordinator::complete(source, report)
+                CloudBackupVerificationCoordinator::complete(source, report, read_at)
             }
             DeepVerificationResult::NeedsAttention(report) => {
-                CloudBackupVerificationCoordinator::needs_attention(source, report)
+                CloudBackupVerificationCoordinator::needs_attention(source, report, read_at)
             }
             DeepVerificationResult::Failed(failure) => {
-                CloudBackupVerificationCoordinator::fail(source, failure)
+                CloudBackupVerificationCoordinator::fail(source, failure, read_at)
             }
             other => {
                 debug!("Pending upload confirmation settled with {other:?}");
@@ -457,9 +481,15 @@ impl RustCloudBackupManager {
         self.apply_verification_effect(effect);
     }
 
-    pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {
+    pub(crate) fn apply_failed_verification(
+        &self,
+        failure: DeepVerificationFailure,
+        read_at: InventoryReadAt,
+    ) {
         let source = self.current_verification_source();
-        self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(source, failure));
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(
+            source, failure, read_at,
+        ));
     }
 }
 

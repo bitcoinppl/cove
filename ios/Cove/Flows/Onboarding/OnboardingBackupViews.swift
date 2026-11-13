@@ -219,9 +219,9 @@ enum OnboardingCloudBackupRecoveryIntent {
 }
 
 func onboardingCloudBackupStepPresentation(
-    lifecycle: CloudBackupLifecycle
+    body: CloudBackupScreenBody
 ) -> OnboardingCloudBackupStepPresentation {
-    guard case let .pendingEnableRecovery(recovery) = lifecycle else { return .enable }
+    guard case let .pendingEnableRecovery(recovery) = body else { return .enable }
 
     return .pendingEnableRecovery(recovery)
 }
@@ -250,10 +250,11 @@ struct OnboardingCloudBackupStepView: View {
 
     var body: some View {
         Group {
-            switch onboardingCloudBackupStepPresentation(lifecycle: backupManager.lifecycle) {
+            switch onboardingCloudBackupStepPresentation(body: backupManager.screen.body) {
             case let .pendingEnableRecovery(recovery):
                 CloudBackupPendingEnableRecoveryView(
                     recovery: recovery,
+                    actions: backupManager.screen.actions,
                     onRemoveIncompleteSetup: {
                         routeRecoveryIntent(.removeIncompleteSetup)
                     },
@@ -273,7 +274,7 @@ struct OnboardingCloudBackupStepView: View {
         .task(id: backupManager.enableCompletion?.id) {
             await completeIfReady()
         }
-        .task(id: backupManager.lifecycle) {
+        .task(id: backupManager.screen.body) {
             await completeIfReady()
         }
     }
@@ -390,78 +391,68 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     let onSkip: () -> Void
     let context: CloudBackupEnableOnboardingContext
 
+    private var screen: CloudBackupScreen {
+        backupManager.screen
+    }
+
+    private var verificationState: CloudBackupVerificationState? {
+        screen.verification?.state
+    }
+
     private var onboardingMessage: String? {
-        if backupManager.isUnsupportedPasskeyProvider {
+        if case .unsupportedProvider = screen.configured?.passkeyCard {
             return "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
         }
 
-        if let message = backupManager.lifecycleFailureMessage {
-            return message
+        if let outcome = screen.enableSheetOutcome {
+            return outcome.message
         }
 
-        switch backupManager.verificationState {
-        case let .failed(failure):
-            return failure.message()
+        guard case let .failed(failure) = verificationState else { return nil }
+        return failure.message()
+    }
+
+    /// the overlay shows while Cove works on Enable or on the verification that finishes it
+    private var isWorking: Bool {
+        switch verificationState {
+        case .running, .awaitingUploadConfirmation:
+            true
         default:
-            return nil
+            screen.enableFlow?.isWorking ?? false
         }
-    }
-
-    private var isBusy: Bool {
-        if case .running = backupManager.verificationState { return true }
-        if backupManager.hasPendingUploadVerification { return true }
-        if case .confirmingSavedPasskey = backupManager.enableFlow { return true }
-
-        return isEnablingCloudBackup && !needsManualPasskeyConfirmation
-    }
-
-    private var isEnablingCloudBackup: Bool {
-        backupManager.isLifecycleEnabling
-    }
-
-    private var isPromptingForEnableChoice: Bool {
-        if case .passkeyChoice(.enable) = backupManager.rootPrompt {
-            return true
-        }
-        if case .passkeyChoice(.enableExistingPasskeyOnly) = backupManager.rootPrompt {
-            return true
-        }
-
-        return false
-    }
-
-    private var savedPasskeyConfirmationMode: SavedPasskeyConfirmationMode? {
-        guard case let .awaitingSavedPasskeyConfirmation(mode) = backupManager.enableFlow else {
-            return nil
-        }
-
-        return mode
     }
 
     private var needsManualPasskeyConfirmation: Bool {
-        savedPasskeyConfirmationMode == .manual
+        screen.pausedEnable != nil
+    }
+
+    private var primaryAction: CloudBackupScreenAction {
+        onboardingCloudBackupPrimaryAction(screen: screen)
     }
 
     private var primaryButtonTitle: String {
-        if case .failed = backupManager.verificationState { return "Try Again" }
-        return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+        switch primaryAction {
+        case .verify: "Try Again"
+        case .confirmSavedPasskey: "Confirm Passkey"
+        default: "Enable Cloud Backup"
+        }
     }
 
     private func handleEnableTap() {
-        guard !isBusy, !isPromptingForEnableChoice else { return }
-
-        if needsManualPasskeyConfirmation {
-            return backupManager.dispatch(action: .confirmSavedPasskey)
+        switch primaryAction {
+        case .verify:
+            backupManager.dispatch(action: .startVerification(.onboarding))
+        case .confirmSavedPasskey:
+            backupManager.dispatch(action: .confirmSavedPasskey)
+        default:
+            onEnable()
         }
-        if case .failed = backupManager.verificationState {
-            return backupManager.dispatch(action: .startVerification(.onboarding))
-        }
-
-        onEnable()
     }
 
     private func handleSkipTap() {
-        if needsManualPasskeyConfirmation {
+        // Cancel here skips Cloud Backup, so it ends a paused Enable when Rust offers its Discard;
+        // otherwise it only leaves
+        if needsManualPasskeyConfirmation, screen.actions.isAvailable(action: .discardPendingEnable) {
             backupManager.dispatch(action: .discardPendingEnableCloudBackup)
         }
 
@@ -474,19 +465,30 @@ private struct OnboardingCloudBackupDetailsStepView: View {
                 onEnable: handleEnableTap,
                 onCancel: handleSkipTap,
                 message: onboardingMessage,
-                isBusy: isBusy || isPromptingForEnableChoice,
+                isBusy: isWorking,
+                primaryAvailability: screen.actions.availability(action: primaryAction),
                 context: context,
                 primaryButtonTitle: primaryButtonTitle
             )
 
-            if isBusy {
+            if isWorking {
                 CloudBackupEnableBusyOverlay(
-                    enableFlow: backupManager.enableFlow,
-                    verificationPresentation: backupManager.verificationPresentation
+                    enableFlow: screen.enableFlow,
+                    verificationPresentation: screen.verification?.presentation ?? .hidden(source: nil)
                 )
             }
         }
     }
+}
+
+/// The intent the Cloud Backup step's primary button sends for `screen`
+///
+/// An Enable paused on its saved passkey goes on only once the user confirms that passkey, so the
+/// button confirms it instead of starting another Enable
+func onboardingCloudBackupPrimaryAction(screen: CloudBackupScreen) -> CloudBackupScreenAction {
+    if case .failed = screen.verification?.state { return .verify }
+    if screen.pausedEnable != nil { return .confirmSavedPasskey }
+    return .enable
 }
 
 func isOnboardingCloudBackupEnableCompletion(_ context: CloudBackupEnableContext) -> Bool {

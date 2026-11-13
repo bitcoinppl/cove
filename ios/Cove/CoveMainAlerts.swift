@@ -145,7 +145,7 @@ private struct HotWalletKeyMissingActions: View {
     let app: AppManager
 
     var body: some View {
-        if CloudBackupManager.shared.isCloudBackupEnabled {
+        if CloudBackupManager.shared.screen.configured != nil {
             Button("Open Cloud Backup") {
                 app.alertState = .none
                 app.loadAndReset(to: .settings(.cloudBackup))

@@ -5,6 +5,7 @@ use crate::manager::cloud_backup_manager::{
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
 use crate::test_support::{LoadedHostDeadline, loaded_host_wait, raw_wallet_keychain_entries};
+use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
@@ -518,7 +519,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_native_cancellation_after_match_restores_retained_matches_without_refresh() {
-    assert_terminal_native_stop_restores_retained_matches(PasskeyError::UserCancelled).await;
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::NotCompleted).await;
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -836,7 +837,7 @@ async fn onboarding_restore_is_rejected_while_backup_is_configured() {
 
     assert!(matches!(event, CloudBackupRestoreEvent::Failed(_)), "{event:?}");
     let outcome = call!(manager.supervisor.harness_last_outcome()).await.unwrap().unwrap();
-    assert_eq!(outcome.admission, Admission::Rejected(Rejection::NotConfigured));
+    assert_eq!(outcome.admission, Admission::Rejected(Rejection::AlreadyOn));
     assert_eq!(manager.projected_exclusive_operation(), None);
     assert_eq!(globals.passkey.discover_count(), 0);
     assert_eq!(
@@ -1685,7 +1686,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn restore_all_preparation_reuses_one_session_and_authentication_for_ordered_records() {
+async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -1705,6 +1706,9 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
     CloudBackupKeychain::global().save_namespace_id(&namespace).unwrap();
     CloudBackupKeychain::global().save_passkey(&credential_id, prf_salt).unwrap();
+
+    // Restore All is offered only on a listing Cove read in full, which needs the local key
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
     manager
         .persist_cloud_backup_state(
             &persisted_enabled_cloud_backup_state(None),
@@ -1763,7 +1767,7 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
         .await
         .unwrap();
 
-    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
     assert_eq!(globals.passkey.discover_count(), 0);
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
@@ -1779,8 +1783,16 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     assert_eq!(warning.wallet_name, second_wallet.name);
 
     let duplicate_outcome = prepared.restore_record(&second_record_id).await.unwrap();
-    assert_eq!(duplicate_outcome, CloudOnlyRestoreOutcome::AlreadyOnDevice);
-    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(
+        duplicate_outcome,
+        CloudOnlyRestoreOutcome::AlreadyOnDevice {
+            covered_by: CoveringWallets::one(
+                CoveringWallet { id: second_wallet.id.clone(), name: second_wallet.name.clone() },
+                BackupRecoveryMaterial::PublicOnly,
+            ),
+        }
+    );
+    assert_eq!(globals.passkey.authenticate_count(), 0);
     assert_eq!(globals.passkey.discover_count(), 0);
     assert!(
         Database::global()
@@ -1893,9 +1905,9 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
 
     let authoritative_record_ids = prepared
         .authoritative_fetch()
-        .wallets
+        .rows
         .iter()
-        .map(|wallet| wallet.record_id.as_str())
+        .map(|row| row.record_id.as_str())
         .collect::<Vec<_>>();
     assert_eq!(authoritative_record_ids.len(), 4);
     assert!(authoritative_record_ids.contains(
@@ -1979,7 +1991,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
         .await
         .unwrap();
 
-    assert!(prepared.authoritative_fetch().wallets.is_empty());
+    assert!(prepared.authoritative_fetch().rows.is_empty());
     assert!(prepared.ordered_queue().is_empty());
     assert_eq!(globals.passkey.authenticate_count(), 0);
     assert_eq!(globals.passkey.discover_count(), 0);

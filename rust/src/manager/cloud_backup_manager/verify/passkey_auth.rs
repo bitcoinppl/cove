@@ -168,7 +168,7 @@ impl VerificationSession {
 
 fn map_authentication_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudBackupError> {
     match error {
-        PasskeyError::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
+        PasskeyError::NotCompleted => Ok(PasskeyAuthOutcome::UserCancelled),
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
         PasskeyError::PrfUnsupportedProvider => Err(CloudBackupError::UnsupportedPasskeyProvider),
         other => Err(CloudBackupError::passkey(other)),
@@ -290,7 +290,7 @@ mod tests {
 
             let prf_salt = [7; 32];
             CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
-            globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+            globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
             globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
                 credential_id: vec![4, 5, 6],
                 prf_output: vec![8; 32],

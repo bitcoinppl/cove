@@ -32,6 +32,12 @@ impl ConfigGeneration {
     }
 }
 
+impl From<ConfigGeneration> for u64 {
+    fn from(generation: ConfigGeneration) -> Self {
+        generation.0
+    }
+}
+
 /// What a write command is, which decides when the policy lets it run
 ///
 /// Operation-owned classes carry the claim of the operation that sent them: an operation holds

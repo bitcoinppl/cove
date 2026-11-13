@@ -11,17 +11,13 @@ impl CloudBackupSupervisor {
         };
         manager.project_enable_context_started(context);
 
-        match self.start_ready_enable_upload_if_present(manager.clone(), claim) {
+        match self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => {
                 self.fail_enable_operation(&manager, claim, error);
                 return;
             }
-        }
-
-        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
-            return;
         }
 
         addr.send_fut_with(move |addr| async move {
@@ -39,17 +35,13 @@ impl CloudBackupSupervisor {
         };
         manager.project_enable_context_started(context);
 
-        match self.start_ready_enable_upload_if_present(manager.clone(), claim) {
+        match self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => {
                 self.fail_enable_operation(&manager, claim, error);
                 return;
             }
-        }
-
-        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
-            return;
         }
 
         manager.apply_enable_state(CloudBackupEnableState::CreatingPasskey);
@@ -74,17 +66,13 @@ impl CloudBackupSupervisor {
         };
         manager.project_enable_context_started(context);
 
-        match self.start_ready_enable_upload_if_present(manager.clone(), claim) {
+        match self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => {
                 self.fail_enable_operation(&manager, claim, error);
                 return;
             }
-        }
-
-        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
-            return;
         }
 
         addr.send_fut_with(move |addr| async move {
@@ -138,17 +126,13 @@ impl CloudBackupSupervisor {
 
         manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::ReinitializeBackup));
 
-        match self.start_ready_enable_upload_if_present(manager.clone(), claim) {
+        match self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => {
                 self.fail_enable_operation(&manager, claim, error);
                 return;
             }
-        }
-
-        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
-            return;
         }
 
         addr.send_fut_with(move |addr| async move {

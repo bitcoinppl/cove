@@ -21,7 +21,6 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.junit.Assert.assertEquals
@@ -95,7 +94,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         waitUntil("the refreshed inventory after the delete should be applied") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
+            manager.isInventoryComplete &&
                 manager.cloudOnlyOperation !is CloudOnlyOperation.Operating &&
                 REFRESH_MARKER_RECORD_ID in cloudOnlyRecordIds()
         }
@@ -134,7 +133,13 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         device.clickClickableAncestor(deleteAction)
 
         device.waitForText("Delete $walletName?")
-        device.waitForText("This wallet backup will be permanently removed from Cloud Backup")
+
+        // a wallet that isn't on this device may hold the only copy, which Rust confirms with the
+        // stronger message
+        device.waitForText(
+            "This may be the only copy of this wallet. Without its recovery words, it can't be " +
+                "recovered after you delete it. This can't be undone.",
+        )
         device.waitForText("Delete Forever")
     }
 
@@ -193,8 +198,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         waitUntil("expected the two other fixture wallets as cloud-only rows once the inventory completes") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.isDetailInventoryComplete &&
-                manager.isDetailInventoryReady &&
+            manager.isInventoryComplete &&
                 cloudOnlyRecordIds() == listOf(KEPT_RECORD_ID, SELECTED_RECORD_ID)
         }
         device.scrollUntilText(SELECTED_WALLET_NAME)
@@ -216,9 +220,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
 
     // reads manager state, so call it on the main thread
     private fun cloudOnlyRecordIds(): List<String> =
-        ((CloudBackupManager.getInstance().cloudOnly as? CloudOnlyState.Loaded)?.wallets)
-            .orEmpty()
-            .map { wallet -> wallet.recordId }
+        CloudBackupManager.getInstance().notOnDeviceRows.map { row -> row.recordId }
 
     // reads manager state, so call it on the main thread
     private fun localWalletIds(): Set<String> =
@@ -252,7 +254,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
             onMainValue {
                 val manager = CloudBackupManager.getInstance()
 
-                "state=${manager.state}, cloudOnly=${cloudOnlyRecordIds()}, " +
+                "screen=${manager.describeScreen()}, cloudOnly=${cloudOnlyRecordIds()}, " +
                     "operation=${manager.cloudOnlyOperation}, " +
                     "localWallets=${AppManager.getInstance().wallets.map { it.name }}, " +
                     "walletLists=${ScriptedCloudStorageAccess.walletListCount()}, " +

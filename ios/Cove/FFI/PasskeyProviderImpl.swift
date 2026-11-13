@@ -226,10 +226,12 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         // eats the request timeout
         PresenterIdle.waitBlocking()
 
-        let delegate = PasskeyDelegate(context: .registration)
-        let controller: ASAuthorizationController
+        // the anchor is resolved once, before the request starts; with no window the request
+        // would anchor to nothing and the system sheet would never show
+        let started: (ASAuthorizationController, PasskeyDelegate)? = DispatchQueue.main.sync {
+            guard let anchor = PresenterIdle.presentationWindow() else { return nil }
 
-        controller = DispatchQueue.main.sync {
+            let delegate = PasskeyDelegate(context: .registration, anchor: anchor)
             Log.info("[PASSKEY] registration request start rpId=\(rpId)")
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
@@ -250,7 +252,12 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
             ctrl.performRequests()
-            return ctrl
+            return (ctrl, delegate)
+        }
+
+        guard case let (controller, delegate)? = started else {
+            Log.warn("[PASSKEY] registration request not started, no presentation window")
+            throw PasskeyError.NotReady(operation: .registration)
         }
         defer { releasePasskeyRequestOnMain(controller, delegate) }
 
@@ -326,10 +333,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         // eats the request timeout
         PresenterIdle.waitBlocking()
 
-        let delegate = PasskeyDelegate(context: context)
-        let controller: ASAuthorizationController
+        let started: (ASAuthorizationController, PasskeyDelegate)? = DispatchQueue.main.sync {
+            guard let anchor = PresenterIdle.presentationWindow() else { return nil }
 
-        controller = DispatchQueue.main.sync {
+            let delegate = PasskeyDelegate(context: context, anchor: anchor)
             Log.info(
                 "[PASSKEY] \(context.logDescription) request start rpId=\(rpId) targeted=\(credentialId != nil)"
             )
@@ -359,7 +366,12 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
             ctrl.performRequests()
-            return ctrl
+            return (ctrl, delegate)
+        }
+
+        guard case let (controller, delegate)? = started else {
+            Log.warn("[PASSKEY] \(context.logDescription) request not started, no presentation window")
+            throw PasskeyError.NotReady(operation: context.operation)
         }
         defer { releasePasskeyRequestOnMain(controller, delegate) }
 
@@ -421,13 +433,16 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     private let timeout: TimeInterval
     private var result: Result<ASAuthorizationCredential, Error>?
     private let context: PasskeyOperationContext
+    private let anchor: ASPresentationAnchor
     private var didRequestPresentationAnchor = false
 
     init(
         context: PasskeyOperationContext,
+        anchor: ASPresentationAnchor,
         timeout: TimeInterval = PasskeyDelegate.interactiveRequestTimeout
     ) {
         self.context = context
+        self.anchor = anchor
         self.timeout = timeout
     }
 
@@ -464,7 +479,7 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             didRequestPresentationAnchor = true
         }
 
-        return passkeyPresentationAnchor()
+        return anchor
     }
 
     func authorizationController(
@@ -495,8 +510,8 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
                 didRequestPresentationAnchor: didRequestPresentationAnchor,
                 diagnosticMessage: errorMetadata
             ) {
-            case .userCancelled:
-                result = .failure(PasskeyError.UserCancelled)
+            case .notCompleted:
+                result = .failure(PasskeyError.NotCompleted)
                 logMessage = "[PASSKEY] \(context.logDescription) cancelled \(errorMetadata)"
                 shouldWarn = false
             case let .requestFailed(reason):
@@ -549,7 +564,7 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
 }
 
 enum PasskeyAuthorizationFailure {
-    case userCancelled
+    case notCompleted
     case requestFailed(PasskeyFailureReason)
 }
 
@@ -559,7 +574,7 @@ func passkeyAuthorizationFailure(
     diagnosticMessage: String
 ) -> PasskeyAuthorizationFailure {
     if code == .canceled {
-        return .userCancelled
+        return .notCompleted
     }
 
     return .requestFailed(

@@ -14,51 +14,110 @@ use tokio::runtime::Handle;
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
 use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
-use super::invariants::{Invariants, Violation};
+use super::invariants::{Boundary, Invariants, PendingWork, Violation};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteSupervisor;
 use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
-use crate::manager::cloud_backup_manager::admission::{Admission, EnableIntent, UserIntent};
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, EnableIntent, ReviewExit, UserIntent,
+};
 use crate::manager::cloud_backup_manager::ops::test_support::{
     TestGlobals, install_test_globals, register_test_supervisor,
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
+    CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyScreen,
+    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+};
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRuntimeOwnership,
-    CloudBackupVerificationSource, RustCloudBackupManager, initialize_cloud_backup_manager_with,
+    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRowDeleteConsent,
+    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
+    initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 /// A user-visible next action, written as a literal in tests
 ///
-/// The set grows as tests need it; [`NextAction::intent`] maps each one to its `UserIntent`
+/// The set grows as tests need it; [`NextAction::intent`] maps each one to its `UserIntent`, and
+/// [`NextAction::control`] to the screen control that sends it
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum NextAction {
     Enable,
     RestoreFromCloudBackup,
     TurnOff,
-    KeepEnabled,
+    /// Confirms the Turn Off review on screen
+    ConfirmDisable,
+    CancelDisable,
+    /// Restore Them First on the Turn Off review on screen
+    RestoreFirst,
+    /// Verify First on the Turn Off review on screen
+    VerifyFirst,
+    /// Try Again on a committed Turn Off
+    ResumeDisable,
+    StopUsingOnThisDevice,
+    /// Reconnect Google Drive, after the provider asked for the user's consent
+    ReconnectDrive,
     Verify,
     SyncUnsynced,
+    RetryLoad,
+    ResetOnThisDevice,
 }
 
 impl NextAction {
-    /// The intent a tap on this action dispatches
-    pub(crate) fn intent(self) -> UserIntent {
+    /// The intent a tap on this action dispatches, on a screen whose Turn Off review is `review_id`
+    pub(crate) fn intent(self, review_id: Option<u64>) -> UserIntent {
         let context = CloudBackupEnableContext::settings_manual();
         match self {
             Self::Enable => UserIntent::Enable(EnableIntent::Standard, context),
             Self::RestoreFromCloudBackup => UserIntent::RestoreFromCloudBackup,
             Self::TurnOff => UserIntent::TurnOff,
-            Self::KeepEnabled => UserIntent::KeepEnabled,
+            // with no review on screen there is no Confirm to tap, so any id is stale
+            Self::ConfirmDisable => {
+                UserIntent::ConfirmDisable { review_id: review_id.unwrap_or_default() }
+            }
+            Self::CancelDisable => UserIntent::CancelDisable,
+            Self::RestoreFirst => UserIntent::LeaveReview {
+                review_id: review_id.unwrap_or_default(),
+                to: ReviewExit::RestoreFirst,
+            },
+            Self::VerifyFirst => UserIntent::LeaveReview {
+                review_id: review_id.unwrap_or_default(),
+                to: ReviewExit::VerifyFirst,
+            },
+            Self::ResumeDisable => UserIntent::ResumeDisable,
+            Self::StopUsingOnThisDevice => UserIntent::StopUsingOnThisDevice,
+            Self::ReconnectDrive => UserIntent::ReconnectDrive,
             Self::Verify => UserIntent::StartVerification {
                 source: CloudBackupVerificationSource::CloudBackupDetail,
                 discoverable: false,
             },
             Self::SyncUnsynced => UserIntent::SyncUnsynced,
+            Self::RetryLoad => UserIntent::RetryLoad,
+            Self::ResetOnThisDevice => UserIntent::ResetOnThisDevice,
+        }
+    }
+
+    /// The screen control the user taps for this action
+    pub(crate) fn control(self) -> CloudBackupScreenAction {
+        match self {
+            Self::Enable => CloudBackupScreenAction::Enable,
+            Self::RestoreFromCloudBackup => CloudBackupScreenAction::RestoreFromCloudBackup,
+            Self::TurnOff => CloudBackupScreenAction::TurnOff,
+            Self::ConfirmDisable => CloudBackupScreenAction::ConfirmDisable,
+            Self::CancelDisable => CloudBackupScreenAction::CancelDisable,
+            Self::RestoreFirst => CloudBackupScreenAction::RestoreFirst,
+            Self::VerifyFirst => CloudBackupScreenAction::VerifyFirst,
+            Self::ResumeDisable => CloudBackupScreenAction::ResumeDisable,
+            Self::StopUsingOnThisDevice => CloudBackupScreenAction::StopUsingOnThisDevice,
+            Self::ReconnectDrive => CloudBackupScreenAction::ReconnectDrive,
+            Self::Verify => CloudBackupScreenAction::Verify,
+            Self::SyncUnsynced => CloudBackupScreenAction::SyncUnsynced,
+            Self::RetryLoad => CloudBackupScreenAction::RetryLoad,
+            Self::ResetOnThisDevice => CloudBackupScreenAction::ResetOnThisDevice,
         }
     }
 }
@@ -101,6 +160,11 @@ pub(crate) fn open_durable_state() {
     env();
 }
 
+/// This phase's keychain before the app launches, so a test can fault what the launch reads
+pub(crate) fn launch_keychain() -> HarnessKeychain {
+    env().keychain.clone()
+}
+
 fn bounded_block_on<T>(what: &str, future: impl Future<Output = T>) -> T {
     let _deadline = Deadline::arm(what);
     env().handle.block_on(future)
@@ -126,6 +190,20 @@ pub(crate) struct TestApp {
 }
 
 const SETTLE_ROUNDS: usize = 500;
+
+/// How far quiescence moves the clock at a time: past the longest single timer live work waits
+/// on, a passkey authorization retry's 15 s budget, a restore's last namespace refresh at 15 s or
+/// a Turn Off review's 20 s evidence deadline
+const QUIESCE_TICK: Duration = Duration::from_secs(61);
+
+/// The most clock advances quiescence makes for live work; an operation's timers run one after
+/// another, and none chains more than a few, so work still live after these has nothing left
+/// that would end it
+const QUIESCE_ADVANCES: usize = 10;
+
+/// The most pending boundaries quiescence settles at, each releasing what is held or advancing
+/// the clock once; a provider that holds every new call would otherwise never let it finish
+const QUIESCE_ROUNDS: usize = 50;
 
 impl TestApp {
     /// Launch the app on this phase's durable state
@@ -190,6 +268,16 @@ impl TestApp {
     pub(crate) fn current(&mut self) -> Step<'_> {
         self.begin_event("current state".into());
         Step(self)
+    }
+
+    /// Taps Confirm on the Turn Off review the screen shows
+    pub(crate) fn confirm_turn_off(&mut self) -> Step<'_> {
+        let review = self.turn_off_review();
+        let review_id = review.map(|review| review.review_id).unwrap_or_else(|| {
+            panic!("after {}: no Turn Off review to confirm\n{}", self.last_event, self.describe())
+        });
+
+        self.dispatch(CloudBackupManagerAction::ConfirmDisable { review_id })
     }
 
     /// A user tap or platform call
@@ -261,6 +349,16 @@ impl TestApp {
         .expect("the supervisor answers")
     }
 
+    /// Whether work that only held calls and timers end holds the runtime now: an operation, or
+    /// a Turn Off review preparing its evidence
+    pub(crate) fn holds_live_work(&self) -> bool {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("whether live work holds the runtime", async move {
+            call!(supervisor.harness_holds_live_work()).await
+        })
+        .expect("the supervisor answers")
+    }
+
     /// The interrupted-Enable recovery the runtime body holds now, apart from what is shown
     pub(crate) fn runtime_recovery(&self) -> Option<CloudBackupPendingEnableRecovery> {
         let supervisor = self.manager.supervisor.clone();
@@ -290,21 +388,62 @@ impl TestApp {
         Step(self)
     }
 
-    /// Settles, then checks the invariants at that boundary
-    fn settle_and_check(&mut self) {
-        self.settle();
-        self.check_invariants();
+    /// Drives the app to quiescence and checks the invariants there, 4a with no exemption
+    ///
+    /// Releases every held fake call and advances the clock while work is live, checking each
+    /// pending boundary on the way, until nothing is held and no work is live or the advances run
+    /// out. At that boundary no work may be live and the body must have a named exit;
+    /// work still live there has nothing left that would end it
+    ///
+    /// Live work is an operation or a Turn Off review preparing its evidence
+    /// ([`Self::holds_live_work`]): a review is not an operation, but a Check Again's review waits
+    /// on the classification it asked for or on its evidence deadline, both timers on the paused
+    /// clock
+    pub(crate) fn quiesce(&mut self) -> Step<'_> {
+        self.begin_event("quiesce".into());
+        let mut advances = 0;
+
+        for _ in 0..QUIESCE_ROUNDS {
+            let work = self.settle();
+            self.check_invariants(&Boundary::Pending(work.clone()));
+
+            match work {
+                PendingWork::HeldCalls(_) => fakes::release_held_calls(),
+                PendingWork::PausedClock
+                    if advances < QUIESCE_ADVANCES && self.holds_live_work() =>
+                {
+                    advances += 1;
+                    self.block_on("the paused clock to advance", self.clock.advance(QUIESCE_TICK));
+                }
+                PendingWork::PausedClock => {
+                    self.check_invariants(&Boundary::Quiescent);
+                    return Step(self);
+                }
+            }
+        }
+
+        panic!(
+            "quiescence still had held calls {:?} after {QUIESCE_ROUNDS} releases\n{}",
+            fakes::held_calls(),
+            self.describe()
+        );
     }
 
-    /// Checks the harness invariants now; every event does this after it settles
-    pub(crate) fn check_invariants(&mut self) {
+    /// Settles, then checks the invariants at the pending boundary it reached
+    fn settle_and_check(&mut self) {
+        let work = self.settle();
+        self.check_invariants(&Boundary::Pending(work));
+    }
+
+    /// Checks the harness invariants at `boundary`
+    fn check_invariants(&mut self, boundary: &Boundary) {
         let mut invariants = std::mem::take(&mut self.invariants);
-        let checked = invariants.check(self);
+        let checked = invariants.check(self, boundary);
         self.invariants = invariants;
 
         if let Err(violation) = checked {
             panic!(
-                "invariant {:?} ({}) broken after {}: {}\n{}",
+                "invariant {:?} ({}) broken at {boundary:?} after {}: {}\n{}",
                 violation.invariant,
                 violation.invariant as u8,
                 self.last_event,
@@ -319,9 +458,9 @@ impl TestApp {
     /// For tests that show an invariant catches a state the owner must refuse; the step that
     /// follows must not rely on the ledger the failed check left
     pub(crate) fn settled_violation(&mut self) -> Option<Violation> {
-        self.settle();
+        let work = self.settle();
         let mut invariants = std::mem::take(&mut self.invariants);
-        let checked = invariants.check(self);
+        let checked = invariants.check(self, &Boundary::Pending(work));
         self.invariants = invariants;
         checked.err()
     }
@@ -338,7 +477,8 @@ impl TestApp {
         }
     }
 
-    /// Wait until the actors have handled every message and no off-runtime work is in flight
+    /// Wait until the actors have handled every message and no off-runtime work is in flight,
+    /// and name the work left for the test to move
     ///
     /// A round waits for the runtime's blocking pool to go quiet, runs a mailbox barrier on both
     /// actors, and waits for the runtime thread to park. A current-thread runtime parks only
@@ -350,7 +490,7 @@ impl TestApp {
     /// checkpoint shows no operation in an `Effecting` stage. Calls waiting on a `Hold` and
     /// tasks waiting on the paused clock count as settled, so tests release holds and advance
     /// time as events
-    pub(crate) fn settle(&self) {
+    pub(crate) fn settle(&self) -> PendingWork {
         let supervisor = self.manager.supervisor.clone();
         let writes = self.manager.cloud_writes.clone();
 
@@ -376,8 +516,9 @@ impl TestApp {
             }
 
             // an effect waiting on a held call is settled; the test releases it as an event
-            if fakes::held_calls() != 0 {
-                return;
+            let held = fakes::held_calls();
+            if !held.is_empty() {
+                return PendingWork::HeldCalls(held);
             }
 
             let checkpoint = format!("the supervisor's stage checkpoint after {}", self.last_event);
@@ -385,7 +526,7 @@ impl TestApp {
                 .block_on(&checkpoint, call!(supervisor.harness_effects_settled()))
                 .expect("stage checkpoint");
             if effects_settled.try_recv().is_ok() {
-                return;
+                return PendingWork::PausedClock;
             }
 
             let effect = format!("the in-flight effect to report after {}", self.last_event);
@@ -403,9 +544,17 @@ impl TestApp {
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
     }
 
+    /// Asserts what dispatch would do with each action, and that the published screen agrees
+    ///
+    /// An admitted action has an available control. A rejected one has no control or an
+    /// unavailable one; a tap that coalesces into running work may still show enabled, since it
+    /// joins that work
     fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
+        let screen = self.manager.published_screen();
+
         for action in actions {
             let admission = self.admission(*action);
+            let control = screen.actions.availability(action.control());
             // a coalesced repeat starts nothing new, so it counts as not admitted
             let admitted = matches!(admission, Admission::Accepted);
             if admitted != expect_admitted {
@@ -416,23 +565,160 @@ impl TestApp {
                     self.describe()
                 );
             }
+
+            let shown = matches!(control, Some(CloudBackupActionAvailability::Available));
+            let agrees = match admission {
+                Admission::Accepted => shown,
+                Admission::Rejected(_) => !shown,
+                Admission::Coalesced(_) => true,
+            };
+            assert!(
+                agrees,
+                "after {}: {action:?} was {admission:?} but the screen shows {control:?}\n{}",
+                self.last_event,
+                self.describe()
+            );
         }
     }
 
     /// What dispatch would do with `action` now, from the same `evaluate_admission` it calls
     pub(crate) fn admission(&self, action: NextAction) -> Admission {
         let supervisor = self.manager.supervisor.clone();
+        let intent = action.intent(self.turn_off_review().map(|review| review.review_id));
         self.block_on("the supervisor's admission answer", async move {
-            call!(supervisor.harness_admission(action.intent())).await.expect("admission")
+            call!(supervisor.harness_admission(intent))
+                .await
+                .expect("admission")
+                .expect("the harness holds the manager")
         })
+    }
+
+    /// The Turn Off review the published screen shows
+    pub(crate) fn turn_off_review(&self) -> Option<CloudBackupDisableReview> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        match configured.disable {
+            CloudBackupDisableScreen::Reviewing(review) => Some(review),
+            CloudBackupDisableScreen::Idle
+            | CloudBackupDisableScreen::Preparing
+            | CloudBackupDisableScreen::Offline
+            | CloudBackupDisableScreen::Draining => None,
+        }
+    }
+
+    /// The consent the Delete on `record_id`'s row carries on the published screen
+    pub(crate) fn row_delete(&self, record_id: &str) -> Option<CloudBackupRowDeleteConsent> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        configured
+            .sections
+            .into_iter()
+            .flat_map(|section| match section {
+                CloudBackupSection::NotOnDevice(section) => section.rows,
+                CloudBackupSection::ExtraCopies(section) => section.rows,
+                _ => Vec::new(),
+            })
+            .filter(|row| row.record_id == RecordId::from(record_id.to_owned()))
+            .flat_map(|row| row.actions)
+            .find_map(|action| match action.action {
+                CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+                _ => None,
+            })
     }
 
     /// What admission says now for an intent no [`NextAction`] names, such as a platform call
     pub(crate) fn admission_of(&self, intent: UserIntent) -> Admission {
         let supervisor = self.manager.supervisor.clone();
         self.block_on("the supervisor's admission answer", async move {
-            call!(supervisor.harness_admission(intent)).await.expect("admission")
+            call!(supervisor.harness_admission(intent))
+                .await
+                .expect("admission")
+                .expect("the harness holds the manager")
         })
+    }
+
+    /// The confirmation of work paused on its saved passkey, when it owns the screen
+    ///
+    /// Its controls must be exactly the ones admission accepts now, each drawn available: the
+    /// screen carries no list of its own that could offer a dead control or hide the way on
+    pub(crate) fn saved_passkey_confirmation(&self) -> Option<CloudBackupSavedPasskeyScreen> {
+        let screen = self.manager.published_screen();
+        let CloudBackupScreenBody::SavedPasskeyConfirmation(paused) = screen.body else {
+            return None;
+        };
+
+        let accepted: Vec<_> =
+            [CloudBackupSavedPasskeyControl::Confirm, CloudBackupSavedPasskeyControl::Discard]
+                .into_iter()
+                .filter(|control| self.admission_of(control.intent()) == Admission::Accepted)
+                .collect();
+        assert_eq!(paused.controls, accepted, "{}", self.describe());
+
+        for control in &paused.controls {
+            assert_eq!(
+                screen.actions.availability(control.action()),
+                Some(CloudBackupActionAvailability::Available),
+                "{control:?}\n{}",
+                self.describe()
+            );
+        }
+
+        // the pause owns the backup until its Confirm or Discard, so admission refuses every
+        // other intent that starts work, as the screen draws none of them
+        let starts_work = [
+            NextAction::Enable,
+            NextAction::RestoreFromCloudBackup,
+            NextAction::TurnOff,
+            NextAction::ResumeDisable,
+            NextAction::ReconnectDrive,
+            NextAction::Verify,
+            NextAction::SyncUnsynced,
+        ]
+        .map(|action| action.intent(None))
+        .into_iter()
+        .chain([
+            UserIntent::ReinitializeBackup,
+            UserIntent::RecreateManifest,
+            UserIntent::RepairPasskey { no_discovery: false },
+            UserIntent::RefreshDetail,
+            UserIntent::StartRestoreAll,
+            UserIntent::RecoverOtherBackups,
+            UserIntent::DeleteOtherBackups,
+            UserIntent::SwitchDriveAccount,
+        ]);
+        for intent in starts_work {
+            let admission = self.admission_of(intent.clone());
+            assert!(
+                matches!(admission, Admission::Rejected(_)),
+                "{intent:?} was {admission:?} while paused\n{}",
+                self.describe()
+            );
+        }
+
+        Some(paused)
+    }
+
+    /// Taps a control of the saved-passkey confirmation, as a platform sends it
+    pub(crate) fn tap_saved_passkey(
+        &mut self,
+        control: CloudBackupSavedPasskeyControl,
+    ) -> Step<'_> {
+        let action = match control {
+            CloudBackupSavedPasskeyControl::Confirm => {
+                CloudBackupManagerAction::ConfirmSavedPasskey
+            }
+            CloudBackupSavedPasskeyControl::Discard => {
+                CloudBackupManagerAction::DiscardPendingEnableCloudBackup
+            }
+        };
+
+        self.dispatch(action)
     }
 
     /// The last dispatched intent and what admission said
@@ -451,10 +737,11 @@ impl TestApp {
         });
 
         format!(
-            "active operation: {active:?}\npersisted: {:?}\ncloud calls: {:?}\nlifecycle: {:#?}",
+            "active operation: {active:?}\npersisted: {:?}\ncloud calls: {:?}\nlifecycle: {:#?}\nscreen: {:#?}",
             Database::global().cloud_backup_state.get(),
             self.cloud.calls(),
-            self.manager.state().lifecycle,
+            self.manager.model_state().lifecycle,
+            self.manager.published_screen(),
         )
     }
 }

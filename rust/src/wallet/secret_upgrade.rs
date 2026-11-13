@@ -11,7 +11,7 @@ use crate::{
         fingerprint::Fingerprint,
         metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
     },
-    wallet_identity::{PublicWalletIdentity, PublicWalletIdentityError},
+    wallet_identity::{CoveringWallet, PublicWalletIdentity, PublicWalletIdentityError},
     wallet_secret::WalletSecretExt as _,
 };
 
@@ -92,6 +92,11 @@ impl ExistingWalletSecretUpgrade {
         let secret = secret.clone().into_network_kind(network.into());
 
         Ok(target.map(|target| Self { secret, network, fingerprint, target }))
+    }
+
+    /// The local wallet the secret would be added to
+    pub(crate) fn target(&self) -> CoveringWallet {
+        CoveringWallet { id: self.target.id.clone(), name: self.target.name.clone() }
     }
 
     /// Saves the secret for the matched wallet and marks it hot, rolling back on failure

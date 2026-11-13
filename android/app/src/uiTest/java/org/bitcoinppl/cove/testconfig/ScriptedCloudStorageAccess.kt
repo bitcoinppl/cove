@@ -102,7 +102,21 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private val uploads = CopyOnWriteArrayList<Upload>()
 
     @Volatile
-    private var walletUploadBlock: WalletUploadBlock? = null
+    private var walletUploadBlock: AttemptHold? = null
+
+    private val namespaceDeleteFailures = CopyOnWriteArrayList<NamespaceDeleteFailure>()
+
+    @Volatile
+    private var namespaceDeleteHold: AttemptHold? = null
+
+    private val walletDeletes = AtomicInteger(0)
+
+    @Volatile
+    private var walletDeleteHold: AttemptHold? = null
+
+    // the fixture's namespace is built in, so deleting it leaves this mark until a master key
+    // upload recreates it, as the iOS host's deleted-namespace marker does
+    private val fixtureNamespaceDeleted = AtomicBoolean(false)
 
     enum class NamespaceResult {
         EMPTY,
@@ -134,6 +148,26 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val error: UploadError,
     )
 
+    /** How a scripted namespace delete fails */
+    enum class NamespaceDeleteError {
+        OFFLINE,
+        NOT_AVAILABLE,
+        AUTHORIZATION_REQUIRED,
+        ;
+
+        fun exception(): CloudStorageException =
+            when (this) {
+                OFFLINE -> CloudStorageException.Offline("scripted provider is offline")
+                NOT_AVAILABLE -> CloudStorageException.NotAvailable("scripted namespace delete failure")
+                AUTHORIZATION_REQUIRED -> CloudStorageException.AuthorizationRequired("scripted authorization failure")
+            }
+    }
+
+    private data class NamespaceDeleteFailure(
+        val attempt: Int,
+        val error: NamespaceDeleteError,
+    )
+
     /** One upload the app asked the provider to store, with [recordId] null for the master key */
     data class Upload(
         val kind: UploadKind,
@@ -142,11 +176,19 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val accepted: Boolean,
     )
 
-    private class WalletUploadBlock(
+    /** Parks the call numbered [attempt] of one kind until the test releases it */
+    private class AttemptHold(
         val attempt: Int,
     ) {
         val entered = CountDownLatch(1)
         val release = CompletableDeferred<Unit>()
+
+        suspend fun enterIfClaimedBy(call: Int) {
+            if (call != attempt) return
+
+            entered.countDown()
+            release.await()
+        }
     }
 
     fun attach(context: Context): CloudStorageAccess {
@@ -201,6 +243,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         releaseAllWalletDownloadHolds()
         walletDownloadHolds.clear()
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
+        fixtureNamespaceDeleted.set(false)
         resetUploads()
     }
 
@@ -275,8 +318,65 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
      */
     fun mostUploadStatusChecksOfOneRecord(): Int = uploadStatusChecks.values.maxOfOrNull { it.get() } ?: 0
 
-    /** Namespaces the fresh-enable cloud was asked to delete */
+    /** Namespace deletes either cloud was asked to make, failed or held ones included */
     fun namespaceDeleteCount(): Int = namespaceDeletes.get()
+
+    /**
+     * Fails the namespace delete numbered [attempt], counted from one since the scenario was
+     * configured, after any hold on it is released; the cloud keeps the backup
+     */
+    fun failNamespaceDelete(
+        attempt: Int,
+        error: NamespaceDeleteError = NamespaceDeleteError.NOT_AVAILABLE,
+    ) {
+        require(attempt > 0) { "namespace delete attempts are one-based" }
+        namespaceDeleteFailures += NamespaceDeleteFailure(attempt, error)
+    }
+
+    /** Fails every namespace delete numbered in [attempts], as [failNamespaceDelete] does for one */
+    fun failNamespaceDeletes(
+        attempts: IntRange,
+        error: NamespaceDeleteError = NamespaceDeleteError.NOT_AVAILABLE,
+    ) {
+        attempts.forEach { failNamespaceDelete(it, error) }
+    }
+
+    /** Lets every later namespace delete through, such as the one a test's Try Again makes */
+    fun stopFailingNamespaceDeletes() {
+        namespaceDeleteFailures.clear()
+    }
+
+    /**
+     * Holds the next namespace delete before the cloud deletes anything, until
+     * [releaseHeldNamespaceDelete], so a test can check what the app allows while it is in flight
+     */
+    fun holdNextNamespaceDelete() {
+        namespaceDeleteHold?.release?.complete(Unit)
+        namespaceDeleteHold = AttemptHold(attempt = namespaceDeletes.get() + 1)
+    }
+
+    fun awaitHeldNamespaceDelete(timeoutMs: Long = 20_000): Boolean =
+        namespaceDeleteHold?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseHeldNamespaceDelete() {
+        namespaceDeleteHold?.release?.complete(Unit)
+    }
+
+    /**
+     * Holds the next wallet backup delete before the cloud deletes anything, until
+     * [releaseHeldWalletDelete], so a test can check what the app allows while a row delete runs
+     */
+    fun holdNextWalletDelete() {
+        walletDeleteHold?.release?.complete(Unit)
+        walletDeleteHold = AttemptHold(attempt = walletDeletes.get() + 1)
+    }
+
+    fun awaitHeldWalletDelete(timeoutMs: Long = 20_000): Boolean =
+        walletDeleteHold?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseHeldWalletDelete() {
+        walletDeleteHold?.release?.complete(Unit)
+    }
 
     fun walletListCount(): Int = walletLists.get()
 
@@ -472,7 +572,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
      * action made it
      */
     fun blockNextWalletUpload() {
-        walletUploadBlock = WalletUploadBlock(attempt = walletUploads.get() + 1)
+        walletUploadBlock = AttemptHold(attempt = walletUploads.get() + 1)
     }
 
     fun awaitBlockedWalletUpload(timeoutMs: Long = 20_000): Boolean =
@@ -569,7 +669,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val enableScenario = freshEnableScenario
 
         return if (enableScenario == null) {
-            namespaceScenario.next(policy)
+            namespaceScenario.next(policy).filterNot(::isDeletedFixtureNamespace)
         } else if (enableScenario.isVisibilityReleased()) {
             enableScenario.masterNamespaces()
         } else {
@@ -595,6 +695,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             scenario.visibleConfirmationRead.countDown()
 
             return backup.copyOf()
+        }
+
+        if (isDeletedFixtureNamespace(namespace)) {
+            throw CloudStorageException.NotFound("cloud backup was deleted")
         }
 
         return ScriptedCloudBackupFixture.masterWrapper.copyOf()
@@ -638,6 +742,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
             "unexpected fixture namespace $namespace"
         }
+        if (isDeletedFixtureNamespace(namespace)) {
+            throw CloudStorageException.NotFound("cloud backup is not available")
+        }
 
         return visibleFixtureWalletRecordIds().map(::walletFilename)
     }
@@ -670,6 +777,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         if (fixtureRestoreEnabled) {
             return if (
                 namespace == ScriptedCloudBackupFixture.NAMESPACE &&
+                    !isDeletedFixtureNamespace(namespace) &&
                     (recordId == MASTER_KEY_RECORD_ID || recordId in visibleFixtureWalletRecordIds())
             ) {
                 CloudBackupUploadStatus.UPLOADED
@@ -723,6 +831,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                 "unexpected fixture namespace $namespace"
             }
             ScriptedConnectivityAccess.throwIfOffline()
+            fixtureNamespaceDeleted.set(false)
 
             return
         }
@@ -747,10 +856,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ) {
         val attempt = walletUploads.incrementAndGet()
         recordUpload(UploadKind.WALLET, attempt, namespace, recordId)
-        walletUploadBlock?.takeIf { it.attempt == attempt }?.let { block ->
-            block.entered.countDown()
-            block.release.await()
-        }
+        walletUploadBlock?.enterIfClaimedBy(attempt)
 
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
@@ -785,6 +891,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         uploads.clear()
         walletUploadBlock?.release?.complete(Unit)
         walletUploadBlock = null
+        namespaceDeleteFailures.clear()
+        namespaceDeleteHold?.release?.complete(Unit)
+        namespaceDeleteHold = null
+        walletDeletes.set(0)
+        walletDeleteHold?.release?.complete(Unit)
+        walletDeleteHold = null
     }
 
     /** Records the upload, and throws the scripted failure when one fails this attempt */
@@ -820,6 +932,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val scenario = freshEnableScenario
         if (scenario == null) {
             if (fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+                if (isDeletedFixtureNamespace(namespace)) {
+                    throw CloudStorageException.NotFound("cloud backup was deleted")
+                }
+
                 // a deleted backup stays gone even if Cove uploaded it earlier in the test
                 if (recordId !in deletedFixtureWalletRecordIds) {
                     uploadedFixtureWalletBackups[recordId]?.let { backup -> return backup.copyOf() }
@@ -890,6 +1006,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy,
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
+        walletDeleteHold?.enterIfClaimedBy(walletDeletes.incrementAndGet())
+
         val scenario = freshEnableScenario
         if (scenario != null) {
             scenario.deleteWalletBackup(namespace, recordId)
@@ -923,10 +1041,30 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy,
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
-        val scenario = freshEnableScenario ?: unsupported()
-        namespaceDeletes.incrementAndGet()
-        scenario.deleteNamespace(namespace)
+        val attempt = namespaceDeletes.incrementAndGet()
+        namespaceDeleteHold?.enterIfClaimedBy(attempt)
+        namespaceDeleteFailures.firstOrNull { it.attempt == attempt }?.let { throw it.error.exception() }
+
+        val scenario = freshEnableScenario
+        if (scenario != null) {
+            scenario.deleteNamespace(namespace)
+            return
+        }
+
+        if (!fixtureRestoreEnabled) unsupported()
+
+        check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+            "unexpected fixture namespace $namespace"
+        }
+
+        // the delete takes the device's uploads with it; the built-in fixture records stay
+        // hidden behind the mark
+        fixtureNamespaceDeleted.set(true)
+        uploadedFixtureWalletBackups.clear()
     }
+
+    private fun isDeletedFixtureNamespace(namespace: String): Boolean =
+        fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE && fixtureNamespaceDeleted.get()
 
     private fun unsupported(): Nothing =
         throw CloudStorageException.NotAvailable("operation is not scripted for UI tests")

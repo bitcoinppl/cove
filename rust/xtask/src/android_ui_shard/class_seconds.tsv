@@ -7,6 +7,7 @@
 19	org.bitcoinppl.cove.cloudbackup.CloudBackupAccessibilityTest
 17	org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingScreenTest
 35	org.bitcoinppl.cove.cloudbackup.CloudBackupLargeFontLayoutTest
+30	org.bitcoinppl.cove.cloudbackup.CloudBackupScreenContractTest
 10	org.bitcoinppl.cove.cloudbackup.CloudBackupVerificationSectionTest
 75	org.bitcoinppl.cove.flows.AndroidCompactLayoutAuditTest
 111	org.bitcoinppl.cove.flows.CoinControlFlow.UtxoLockFullLaunchTest
@@ -38,6 +39,8 @@
 65	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRestoreAllFullLaunchTest
 22	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRetryInterruptedSetupFullLaunchTest
 107	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupSyncNowFullLaunchTest
+400	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffFullLaunchTest
+2	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupTurnOffRelaunchFullLaunchTest
 32	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportAppScannerFullLaunchTest
 48	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportBackgroundLockTest
 16	org.bitcoinppl.cove.flows.keyteleport.KeyTeleportMnemonicReviewTest

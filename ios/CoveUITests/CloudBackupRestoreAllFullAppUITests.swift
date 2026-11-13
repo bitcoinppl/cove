@@ -34,6 +34,11 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
 
         control.waitForHold("wallet-two")
         screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
+        control.assertNextActions(
+            "a running batch should offer Cancel instead of Restore All",
+            available: ["cancelRestoreAll"],
+            unavailable: ["startRestoreAll"]
+        )
         XCTAssertTrue(screen.isNotOnDevice(Self.walletTwoRecordId))
         XCTAssertTrue(screen.isNotOnDevice(Self.walletThreeRecordId))
 
@@ -48,6 +53,11 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         screen.waitUntilOnDevice(Self.walletThreeRecordId)
         XCTAssertFalse(robot.button(startingWith: "Restore All").exists)
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
+        control.assertNextActions(
+            "a finished batch should leave nothing to restore",
+            available: ["turnOff"],
+            unavailable: ["startRestoreAll", "retryRestoreAllRemaining", "cancelRestoreAll"]
+        )
     }
 
     /// Leaving the detail screen and the settings screen keeps the same batch running, and
@@ -71,6 +81,7 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
 
         screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
         XCTAssertEqual(control.state.enteredHolds, ["wallet-two"], "re-entering started another batch")
+        control.assertNextActions("re-entering should still offer Cancel", available: ["cancelRestoreAll"])
 
         let cancel = app.buttons["Cancel"]
         robot.scrollToHittable(cancel)
@@ -84,6 +95,11 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         screen.waitUntilOnDevice(Self.walletTwoRecordId)
         XCTAssertTrue(screen.isNotOnDevice(Self.walletThreeRecordId), "cancel did not skip the next wallet")
         XCTAssertFalse(robot.button(startingWith: "Restore All").exists)
+        control.assertNextActions(
+            "a cancelled batch should offer Retry Remaining",
+            available: ["retryRestoreAllRemaining"],
+            unavailable: ["startRestoreAll", "cancelRestoreAll"]
+        )
     }
 
     /// Killing the app partway through a batch, after one wallet finished, leaves Retry Remaining
@@ -122,6 +138,11 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         XCTAssertEqual(state.countInLatestLaunch(.passkeyCreate), 0, "relaunch created a passkey")
         XCTAssertEqual(state.countInLatestLaunch(restoreAttempt), 0, "relaunch tried to restore the remaining wallet")
         XCTAssertFalse(screen.progress.exists, "relaunch resumed the batch on its own")
+        control.assertNextActions(
+            "the relaunch should wait for Retry Remaining",
+            available: ["retryRestoreAllRemaining"],
+            unavailable: ["cancelRestoreAll"]
+        )
 
         let retry = robot.button(startingWith: "Retry Remaining (1)")
         robot.scrollToHittable(retry)
@@ -152,6 +173,7 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         robot.scrollToHittable(screen.row(duplicate), initialWait: 15)
         XCTAssertTrue(screen.row(duplicate).label.contains("Already on this device"))
         XCTAssertFalse(robot.button(startingWith: "Restore All (3)").exists)
+        control.assertNextActions("the copy shouldn't hold Restore All back", available: ["startRestoreAll"])
 
         try control.holdWalletDownload(id: "wallet-two", recordId: Self.walletTwoRecordId, skippingCalls: 1)
         screen.tapRestoreAll(count: 2)
@@ -246,7 +268,7 @@ struct RestoreAllScreen {
     }
 
     func row(_ recordId: String) -> XCUIElement {
-        app.descendants(matching: .any)["cloudBackup.wallet.\(recordId)"]
+        app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(recordId)]
     }
 
     /// Whether the wallet's row is in the cloud-only section, whose status reads Not on device
