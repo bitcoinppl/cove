@@ -41,7 +41,11 @@ impl CloudBackupSupervisor {
         }
     }
 
-    pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
+    pub(crate) fn begin_restore_all_operation(
+        &mut self,
+        retry: bool,
+        ticket: Option<PermitTicket>,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
 
@@ -67,6 +71,7 @@ impl CloudBackupSupervisor {
             return;
         };
 
+        let authority = self.runtime.grant(claim, ticket);
         let namespace_id = match manager.current_namespace_id() {
             Ok(namespace_id) => namespace_id,
             Err(error) => {
@@ -92,7 +97,12 @@ impl CloudBackupSupervisor {
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         addr.send_fut_with(move |addr| async move {
             let result = manager
-                .prepare_restore_all_cloud_wallets(&writes, frozen_wallets, listing_generation)
+                .prepare_restore_all_cloud_wallets(
+                    &writes,
+                    frozen_wallets,
+                    listing_generation,
+                    authority,
+                )
                 .await;
             send!(addr.complete_restore_all_preparation(claim, scope, result));
         });
@@ -100,9 +110,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn request_restore_all_cancellation(&mut self) {
         let Some(claim) = self.runtime.claim() else { return };
-        let Some(run) = self.runtime.restore_all(claim) else { return };
-        let cancellation = &run.cancellation;
-        if cancellation.swap(true, Ordering::AcqRel) {
+        if self.runtime.restore_all(claim).is_none() || !self.runtime.cancel_restore(claim) {
             return;
         }
 

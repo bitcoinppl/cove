@@ -78,7 +78,7 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     }
 
     func testCancelledVerificationRetriesWithTheSamePasskey() throws {
-        let control = try restoreFixtureAndOpenDetail()
+        let control = try restoreFixtureAndOpenDetail(verify: true)
         control.assertNextActions("a verified backup should offer Verify", available: ["verify", "turnOff"])
         let before = control.state
         try control.answerNextPasskeyAssertions([.userCancelled, .success])
@@ -120,8 +120,8 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     // MARK: - Setup
 
     /// Restores Fixture Wallet One and opens Cloud Backup detail once the entry refresh has listed
-    /// the cloud and the restore's verification has settled
-    private func restoreFixtureAndOpenDetail() throws -> CloudBackupHostControl {
+    /// the cloud, with the backup not verified, then, with `verify`, verifies it with Verify Now
+    private func restoreFixtureAndOpenDetail(verify: Bool) throws -> CloudBackupHostControl {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [Self.walletOneRecordId])
         )
@@ -130,9 +130,15 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
         robot.openSettings()
         robot.openCloudBackupDetail()
-        control.waitForAppState("the restored backup never settled as verified", timeout: 60) {
-            $0.inventoryLoaded && $0.verification == "verified"
-                && !$0.awaitingUploadConfirmation && $0.wallets.map(\.recordId) == [Self.walletOneRecordId]
+        control.waitForAppState("the restored backup never listed only wallet one", timeout: 60) {
+            $0.inventoryLoaded && !$0.awaitingUploadConfirmation
+                && $0.wallets.map(\.recordId) == [Self.walletOneRecordId]
+        }
+
+        if verify {
+            robot.verifyRestoredBackup(control)
+        } else {
+            robot.assertRestoredBackupNotVerified(control)
         }
 
         return control
@@ -141,7 +147,7 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     /// Adds the test mnemonic as a wallet whose automatic upload the cloud rejects, so the detail
     /// offers Sync Now for it, and returns its row
     private func restoreFixtureWithPendingWallet() throws -> (CloudBackupHostControl, CloudBackupUITestAppState.Wallet) {
-        let control = try restoreFixtureAndOpenDetail()
+        let control = try restoreFixtureAndOpenDetail(verify: false)
         try control.update { $0.newWalletUploadFailures = [.quotaExceeded] }
 
         robot.goBack()
@@ -153,6 +159,13 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
         control.waitUntil("the automatic upload of the new wallet should be rejected") {
             $0.uploads.filter { $0.isNewWallet && !$0.accepted }.count == 1
         }
+
+        // the new wallet changed the backup, so the root asks whether to verify it, over the
+        // sidebar Settings is opened from
+        let verifyPrompt = app.descendants(matching: .any)[CloudBackupUIIdentifier.promptVerification]
+        XCTAssertTrue(verifyPrompt.waitForExistence(timeout: 15), "a new wallet should ask to verify the backup")
+        verifyPrompt.buttons["Not Now"].tap()
+        XCTAssertTrue(verifyPrompt.waitForNonExistence(timeout: 10), "Not Now should close the verify prompt")
 
         // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
         // upload's saved failure; the failure itself requests no refresh, so a refresh that ran

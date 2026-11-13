@@ -2,8 +2,8 @@ use super::*;
 
 impl CloudBackupSupervisor {
     /// Continues the paused Enable or reinitialize admission accepted a confirmation for, as the
-    /// operation that paused it
-    pub async fn confirm_saved_passkey(&mut self) -> ActorResult<()> {
+    /// operation that paused it, under the confirmation tap's permit
+    pub async fn confirm_saved_passkey(&mut self, ticket: Option<PermitTicket>) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         if let Err(error) = self.take_up_paused_work(&manager) {
             self.answer_failed(&manager, CloudBackupScreenAction::ConfirmSavedPasskey, &error);
@@ -17,10 +17,10 @@ impl CloudBackupSupervisor {
         // a switch's reinitialize goes on as a new run of that switch, which holds its own claim
         let claim = match continuation.owner() {
             ContinuationOwner::DriveAccountSwitch(transition_id) => {
-                self.resume_drive_account_switch_reinitialization(&manager, transition_id)
+                self.resume_drive_account_switch_reinitialization(&manager, transition_id, ticket)
             }
             owner @ (ContinuationOwner::Enable | ContinuationOwner::Reinitialize) => {
-                self.begin_exclusive_operation(&manager, owner.operation())
+                self.begin_permitted_operation(&manager, owner.operation(), ticket)
             }
         };
         let Some(claim) = claim else {
@@ -188,10 +188,11 @@ impl CloudBackupSupervisor {
         pending: PendingEnableSession,
     ) -> bool {
         let addr = self.addr();
+        let authority = self.runtime.authority(claim);
 
         manager.apply_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.confirm_saved_passkey_from_session(pending).await;
+            let result = manager.confirm_saved_passkey_from_session(pending, authority).await;
             send!(addr.complete_saved_passkey_confirmation(claim, result));
         });
 

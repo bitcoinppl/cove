@@ -122,17 +122,6 @@ class DriveHttpClientTest {
     }
 
     @Test
-    fun foregroundAuthorizationTimeoutMapsToAuthorizationRequired() {
-        val error = mapDriveListError(ForegroundAuthorizationTimeoutException("google drive authorization timed out"))
-
-        assertTrue(error is CloudStorageException.AuthorizationRequired)
-        assertEquals(
-            "google drive authorization timed out",
-            (error as CloudStorageException.AuthorizationRequired).v1,
-        )
-    }
-
-    @Test
     fun googleApiErrorsAreMappedToUnavailableWithStatus() {
         val apiError = ApiException(Status(CommonStatusCodes.DEVELOPER_ERROR))
         val uploadError = mapDriveUploadError(apiError, "wallet-record")

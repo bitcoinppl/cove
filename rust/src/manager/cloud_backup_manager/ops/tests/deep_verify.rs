@@ -17,7 +17,9 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
     let discover_count = globals.passkey.discover_count();
     let list_count = globals.cloud.list_wallet_files_attempt_count();
 
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_discover_count(globals, discover_count + 1).await;
 
     assert_eq!(globals.passkey.discover_count(), discover_count + 1);
@@ -45,6 +47,7 @@ async fn deep_verify_corrupted_persisted_state_short_circuits() {
             unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
             current_config(&manager).await,
             true,
+            permit(PermitIntent::Verify),
         )
         .await;
 
@@ -160,7 +163,9 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     hold_wallet_upload_confirmation(globals, &metadata).await;
 
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(
         Duration::from_secs(2),
         "verification awaits upload confirmation",
@@ -196,7 +201,9 @@ async fn manual_verification_repairs_missing_master_key_wrapper_through_supervis
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
 
     wait_for_test_condition(Duration::from_secs(8), "verification wrapper repair finishes", || {
         manager.projected_exclusive_operation().is_none()
@@ -232,7 +239,9 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
     globals.cloud.fail_list_wallet_files("list failed");
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
 
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
 
     wait_for_test_condition(
         Duration::from_secs(8),
@@ -351,6 +360,7 @@ async fn deep_verify_reads_each_wallet_backup_once() {
             operation_writes(&manager, run.claim),
             run.basis.config(),
             true,
+            permit(PermitIntent::Verify),
         )
         .await;
 
@@ -541,7 +551,9 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
         DiscoveredPasskeyResult { prf_output: vec![7; 32], credential_id: vec![1, 2, 3] };
 
     globals.passkey.set_discover_result(Err(PasskeyError::NotCompleted));
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(Duration::from_secs(2), "expected cancelled verification", || {
         matches!(manager.model_snapshot().verification, VerificationState::Cancelled)
     })
@@ -556,7 +568,9 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     assert_eq!(globals.cloud.master_key_backup_bytes(&namespace), master_key_backup);
 
     globals.passkey.set_discover_result(Ok(discover_result));
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
     wait_for_test_condition(Duration::from_secs(2), "expected retry to verify backup", || {
         matches!(manager.model_snapshot().verification, VerificationState::Verified(_))
     })
@@ -589,6 +603,7 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
                 unowned_writes(&manager, CloudBackupExclusiveOperation::Verify),
                 current_config(&manager).await,
                 false,
+                permit(PermitIntent::Verify),
             )
             .await;
         globals.keychain.clear_read_failures();
@@ -599,9 +614,16 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
             panic!("unreadable {key} did not fail verification");
         };
 
-        assert_eq!(
-            failure.connectivity_retry_action(),
-            Some(crate::manager::cloud_backup_manager::CloudBackupRetryAction::Verify),
+        assert!(
+            matches!(
+                failure,
+                crate::manager::cloud_backup_manager::DeepVerificationFailure::Retry {
+                    retry_action: Some(
+                        crate::manager::cloud_backup_manager::CloudBackupRetryAction::Verify
+                    ),
+                    ..
+                }
+            ),
             "unreadable {key} left no retry"
         );
     }
@@ -705,4 +727,69 @@ async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
         progress_sections(&manager).as_slice(),
         [CloudBackupProgressSection::InventoryIncomplete { .. }]
     ));
+}
+
+/// A passkey failure is logged only in its redacted form, from the platform error a native
+/// provider hands Rust through every log the failed operation writes. An allowlisted domain
+/// keeps its code; any other domain, its code and free text never reach a log
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_passkey_request_logs_only_its_redacted_form() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    // the verification runs on the manager's runtime threads, so read the process-wide capture
+    // the app's subscriber writes to rather than a subscriber scoped to this thread
+    crate::logging::init();
+
+    // shaped like the iOS delegate's diagnostic, plus free text no platform may log
+    let cases = [
+        (
+            "error_domain=NSCocoaErrorDomain error_code=4097",
+            "outcome=unknown operation=DiscoverAssertion error_domain=NSCocoaErrorDomain error_code=4097",
+        ),
+        (
+            "error_domain=com.example.passkey error_code=40442 user=alice@example.com",
+            "outcome=unknown operation=DiscoverAssertion error_domain=unlisted",
+        ),
+    ];
+
+    for (diagnostic_message, redacted) in cases {
+        reset_cloud_backup_test_state(&manager, globals);
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        seed_verifiable_cloud_master_key(globals);
+        globals.passkey.set_discover_result(Err(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::DiscoverAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: diagnostic_message.into() },
+        }));
+
+        call!(
+            manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify)))
+        )
+        .await
+        .unwrap();
+
+        // the operation's own error log is the last line this failure writes
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let logged = loop {
+            let logs = cove_common::logging::capture::snapshot_text();
+            let operation_error = logs.lines().any(|line| {
+                line.contains("Deep verification unexpected error") && line.contains(redacted)
+            });
+            if operation_error {
+                break logs;
+            }
+
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no redacted operation error log:\n{logs}"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        };
+
+        for private in ["com.example.passkey", "error_code=40442", "alice@example.com"] {
+            assert!(!logged.contains(private), "{private} reached the log:\n{logged}");
+        }
+    }
 }

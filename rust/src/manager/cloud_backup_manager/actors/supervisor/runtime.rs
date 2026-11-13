@@ -50,6 +50,7 @@ use crate::manager::cloud_backup_manager::turn_off::{
     AdmittedFinish, ConfirmedTurnOff, DeleteAuthority, FinishFailure, FinishRun, FinishStart,
     RetryWake, ReviewId, TurnOffCommit, TurnOffReview,
 };
+use crate::manager::cloud_backup_manager::wallets::{PasskeyRequestAuthority, PermitGrant};
 
 /// The lifecycle body and the operation running in it
 #[derive(Debug)]
@@ -221,6 +222,8 @@ pub(crate) enum RecoveryOp {
 pub(crate) struct OpRun {
     claim: CloudBackupExclusiveOperationClaim,
     stage: Stage,
+    /// The permit of the tap that started it; dropping the run revokes it
+    permit: Option<PermitGrant>,
 }
 
 /// A restore or Restore All run, whose worker keeps draining until it observes cancellation
@@ -230,6 +233,8 @@ pub(crate) struct RestoreRun {
     pub(crate) cancellation: Arc<AtomicBool>,
     /// Set once the run commits a local wallet, so cloud-only rows are reclassified when it ends
     pub(crate) committed_local_wallet: bool,
+    /// The permit of the tap that started it; dropping the run revokes it
+    permit: Option<PermitGrant>,
 }
 
 impl RestoreRun {
@@ -237,13 +242,22 @@ impl RestoreRun {
         claim: CloudBackupExclusiveOperationClaim,
         cancellation: Arc<AtomicBool>,
     ) -> Self {
-        Self { claim, cancellation, committed_local_wallet: false }
+        Self { claim, cancellation, committed_local_wallet: false, permit: None }
+    }
+
+    /// Asks the worker to stop and revokes the tap's permit
+    ///
+    /// The run keeps its claim until the worker drains, but a passkey request the worker had not
+    /// started yet can no longer present. Returns false when the run was already cancelled
+    fn cancel(&mut self) -> bool {
+        self.permit = None;
+        !self.cancellation.swap(true, Ordering::AcqRel)
     }
 }
 
 impl OpRun {
     fn new(claim: CloudBackupExclusiveOperationClaim) -> Self {
-        Self { claim, stage: Stage::Running }
+        Self { claim, stage: Stage::Running, permit: None }
     }
 
     /// Ends an `Effecting` stage and tells everyone waiting on it
@@ -575,6 +589,120 @@ impl Runtime {
             )) => Some(run),
             Self::Resetting { held, .. } => held.as_mut(),
             _ => None,
+        }
+    }
+
+    /// The running standard operation; `op_run_mut` is the mutable twin, which also reaches the
+    /// effect a reset holds
+    fn op_run(&self) -> Option<&OpRun> {
+        match self {
+            Self::Disabled {
+                op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
+            }
+            | Self::FinishingDisable { op: Some(ResumeDisable(run)), .. }
+            | Self::DriveAccountSwitch { op: Some(SwitchOp(run)) }
+            | Self::PendingEnableRecovery {
+                op: Some(RecoveryOp::Continue(run) | RecoveryOp::Discard(run)),
+                ..
+            }
+            | Self::Configured(ConfiguredBody::Running(
+                ConfiguredOp::TurnOff(run)
+                | ConfiguredOp::Verify(run)
+                | ConfiguredOp::RepairPasskey(run)
+                | ConfiguredOp::RestoreCloudWallet(run)
+                | ConfiguredOp::DeleteRecords(run)
+                | ConfiguredOp::RecoverOtherBackups(run)
+                | ConfiguredOp::DeleteOtherBackups(run)
+                | ConfiguredOp::Reinitialize(run)
+                | ConfiguredOp::RecreateManifest(run)
+                | ConfiguredOp::DiscardReinitialize(run),
+            )) => Some(run),
+            _ => None,
+        }
+    }
+
+    /// The running restore or Restore All run
+    fn restore_run_mut(&mut self) -> Option<&mut RestoreRun> {
+        match self {
+            Self::Disabled { op: Some(DisabledOp::Restore(run)) }
+            | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)), .. }
+            | Self::Configured(ConfiguredBody::Running(ConfiguredOp::RestoreAll(run))) => Some(run),
+            _ => None,
+        }
+    }
+
+    /// The permit grant of the running operation with `claim`
+    fn grant(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&PermitGrant> {
+        if !self.is_current(claim) {
+            return None;
+        }
+
+        let restore = self.restore(claim).or_else(|| self.restore_all(claim));
+        let slot = match self.op_run() {
+            Some(run) => &run.permit,
+            None => &restore?.permit,
+        };
+
+        slot.as_ref()
+    }
+
+    /// Binds a tap's permit grant to the running operation with `claim`
+    ///
+    /// A claim that no longer runs drops the grant here, which revokes the permit before any work
+    /// can use it
+    pub(crate) fn bind_grant(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        grant: PermitGrant,
+    ) {
+        if !self.is_current(claim) {
+            return;
+        }
+
+        if let Some(run) = self.op_run_mut() {
+            run.permit = Some(grant);
+        } else if let Some(run) = self.restore_run_mut() {
+            run.permit = Some(grant);
+        }
+    }
+
+    /// Drops the permit grant of the running operation with `claim`, which revokes its permit
+    ///
+    /// The operation keeps its claim, but nothing it starts afterwards can present a request
+    pub(crate) fn revoke_grant(&mut self, claim: CloudBackupExclusiveOperationClaim) {
+        if !self.is_current(claim) {
+            return;
+        }
+
+        if let Some(run) = self.op_run_mut() {
+            run.permit = None;
+        } else if let Some(run) = self.restore_run_mut() {
+            run.permit = None;
+        }
+    }
+
+    /// Cancels the running restore or Restore All with `claim`, revoking its permit
+    ///
+    /// Returns false when `claim` runs no restore or its cancellation was already requested
+    pub(crate) fn cancel_restore(&mut self, claim: CloudBackupExclusiveOperationClaim) -> bool {
+        if !self.is_current(claim) {
+            return false;
+        }
+
+        self.restore_run_mut().filter(|run| run.claim == claim).is_some_and(RestoreRun::cancel)
+    }
+
+    /// The passkey authority of the work `claim` runs: its tap's permit, or `Silent`
+    ///
+    /// Later steps of an operation read it here rather than carrying it through each message,
+    /// so a step that outlives its operation finds `Silent`, and its permit revoked anyway
+    pub(crate) fn authority(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) -> PasskeyRequestAuthority {
+        match self.grant(claim) {
+            Some(grant) => PasskeyRequestAuthority::Interactive(grant.permit()),
+            None => PasskeyRequestAuthority::Silent,
         }
     }
 
@@ -963,11 +1091,22 @@ impl Runtime {
         facts: Result<IdleFacts<'_>, DatabaseError>,
     ) -> Result<(), Unstartable> {
         debug_assert!(self.is_current(from));
+
+        // the slot never frees in a hand-off, so the tap's permit moves on with it
+        let grant = self.op_run_mut().and_then(|run| run.permit.take());
         let held = std::mem::replace(self, Self::Disabled { op: None });
         *self = Self::idle(facts);
         if let Err(unstartable) = self.start_standard(to) {
             *self = held;
+            if let Some(run) = self.op_run_mut() {
+                run.permit = grant;
+            }
+
             return Err(unstartable);
+        }
+
+        if let Some(grant) = grant {
+            self.bind_grant(to, grant);
         }
 
         Ok(())
@@ -1024,12 +1163,14 @@ impl Runtime {
         let taken = self.take_op();
         let (held, start) = match taken {
             None => (None, ResetStart::Idle),
-            Some(TakenOp::Restore(run)) => {
-                run.cancellation.store(true, Ordering::Release);
+            Some(TakenOp::Restore(mut run)) => {
+                run.cancel();
                 (None, ResetStart::Cancelled(run.claim))
             }
-            Some(TakenOp::Standard(run)) => match run.stage {
+            Some(TakenOp::Standard(mut run)) => match run.stage {
                 Stage::Effecting { .. } => {
+                    // the effect finishes, but its permit starts no new request
+                    run.permit = None;
                     let claim = run.claim;
                     (Some(run), ResetStart::AwaitingEffect(claim))
                 }

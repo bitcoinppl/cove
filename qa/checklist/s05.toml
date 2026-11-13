@@ -90,7 +90,7 @@ paths = [
 coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testReconnectCompletesInventoryWithoutDuplicatesOrPasskey",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_refresh_completes_inventory_once_per_wallet_without_passkey",
-    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_leaves_offline_verification_failure_without_passkey",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupReconnectFullLaunchTest.kt::reconnectAloneCompletesInventoryWithoutPasskeyPrompt",
 ]
 # 1.4.0: ios HUMAN, android HUMAN

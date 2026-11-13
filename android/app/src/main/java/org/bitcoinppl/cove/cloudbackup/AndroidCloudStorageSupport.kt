@@ -168,9 +168,6 @@ private fun AuthorizationRequiredException.cloudStorageMessage(): String =
 private fun DriveAccountBindingException.cloudStorageMessage(): String =
     message?.takeIf(String::isNotBlank) ?: "google drive account is unavailable"
 
-private fun ForegroundAuthorizationTimeoutException.cloudStorageMessage(): String =
-    message?.takeIf(String::isNotBlank) ?: "google drive authorization timed out"
-
 private fun ApiException.cloudStorageMessage(prefix: String): String {
     val status = CommonStatusCodes.getStatusCodeString(statusCode)
     val details = message
@@ -268,8 +265,6 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is DriveAccountIdentityLookupException ->
             mapDriveIdentityLookupError(error)
-        is ForegroundAuthorizationTimeoutException ->
-            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
@@ -313,8 +308,6 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is DriveAccountIdentityLookupException ->
             mapDriveIdentityLookupError(error)
-        is ForegroundAuthorizationTimeoutException ->
-            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->

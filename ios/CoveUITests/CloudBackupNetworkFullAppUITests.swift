@@ -147,7 +147,7 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
     private var offlineBaseline: (walletDownloads: [Int], passkeyCalls: [Int]) = ([], [])
 
     /// Restores Fixture Wallet One, lists all three wallets, and opens Cloud Backup detail once the
-    /// entry refresh has listed the cloud and the restore's verification has settled
+    /// entry refresh has listed the cloud, with the restored backup not verified
     private func openSettledDetail() throws -> CloudBackupHostControl {
         let control = try CloudBackupHostControl(
             script: .init(cloud: .fixture, listedWalletRecordIds: [Self.walletOneRecordId])
@@ -161,13 +161,13 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
         robot.openCloudBackupDetail()
 
         // the detail held from the restore can already look complete, so wait for the entry's own
-        // listing and for verification to settle too: a verification result that lands after the
-        // network drops replaces the detail without a listing and clears the cloud-only rows
+        // listing; nothing verifies on its own, so the restored backup stays not verified
         control.waitForAppState("the provider never confirmed both cloud-only rows", timeout: 60) {
             $0.inventoryLoaded && $0.operation == "idle"
-                && $0.verification == "verified"
+                && $0.verification == "notVerified"
                 && $0.notOnDeviceRecordIds == Self.cloudOnlyRecordIds && $0.restoreAll == "startAvailable(2)"
         }
+        robot.assertRestoredBackupNotVerified(control)
         XCTAssertGreaterThan(walletListings(control.state), listingsBeforeEntry, "opening the detail listed nothing")
 
         return control

@@ -320,3 +320,28 @@ pub(crate) fn finish_wipe(app: &TestApp, permit: CloudBackupResetPermit) {
     app.block_on("the reset to finish", permit.complete_after_database_reset())
         .expect("finish the reset");
 }
+
+/// Seed a second namespace in the cloud, as an earlier Enable on another device would leave
+/// it, holding one wallet that is not on this device
+///
+/// Its master key is wrapped with the scripted passkey's PRF, so only a discovered passkey
+/// opens it. Returns the namespace and the wallet it holds
+pub(crate) fn seed_other_namespace(app: &TestApp) -> (String, WalletId) {
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+
+    let mut wallet = xpub_only_wallet_metadata();
+    wallet.network = Database::global().global_config.wallet_target().network;
+    let record_id = wallet_record_id(wallet.id.as_ref());
+    let entry = wallet_entry_with_labels(&wallet, None);
+    let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &master_key, 1);
+
+    app.cloud.inner.set_master_key_backup(namespace.clone(), verifiable_wrapper(&master_key));
+    app.cloud.inner.set_wallet_backup(namespace.clone(), record_id.clone(), backup);
+    app.cloud
+        .inner
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id(&record_id)]);
+    app.cloud.persist();
+
+    (namespace, wallet.id)
+}

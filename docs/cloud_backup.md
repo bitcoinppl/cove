@@ -692,7 +692,8 @@ providers, and invalid results are returned to the owning flow without
 automatic retry or registration fallback. Only a typed no-credential result
 may continue into the owning enable or repair flow's explicit registration
 step. Interactive passkey and Drive sheets are not wrapped in a global
-watchdog.
+watchdog. Every request, and every automatic retry, needs the live permit of
+the tap that started the operation; see `docs/passkeys.md`.
 
 ## Restore All
 
@@ -999,6 +1000,11 @@ the third. How that request ends decides what the screen offers next:
 `CloudBackupError::passkey_request_failure` sorts a passkey error into not
 completed or failed, and the verification's typed repair cause says whether
 the stored passkey was found, so the decision never rests on an error message.
+
+A deep verification runs once per tap. A connectivity failure leaves the
+verification failed with its retry action, and nothing verifies again by
+itself on reconnect, on foreground or on opening the detail screen, since
+verifying may need a passkey request that only the user's tap may start.
 
 ## Related Notes
 

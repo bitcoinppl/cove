@@ -329,7 +329,7 @@ paths = [
 ]
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::verification_retry_after_passkey_cancel_verifies_without_new_passkey",
-  "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_leaves_offline_verification_failure_without_passkey",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::sync_now_offline_uploads_nothing_then_uploads_after_reconnect",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::manual_verification_repairs_missing_master_key_wrapper_through_supervisor",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::reinitialize_backup_verification_reads_the_new_backup",

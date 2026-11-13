@@ -56,12 +56,18 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn begin_restore_cloud_wallet_operation(&mut self, record_id: String) {
+    pub(crate) fn begin_restore_cloud_wallet_operation(
+        &mut self,
+        record_id: String,
+        ticket: Option<PermitTicket>,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(claim) = self
-            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::RestoreCloudWallet,
+            ticket,
+        ) else {
             return;
         };
 
@@ -72,8 +78,9 @@ impl CloudBackupSupervisor {
         // read before the restore reads the local wallets, so a later change can discard its result
         let listing_generation = manager.inventory.read().cloud_only_listing_generation();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.do_restore_cloud_wallet(&writes, &record_id).await;
+            let result = manager.do_restore_cloud_wallet(&writes, &record_id, authority).await;
             send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));
         });
     }

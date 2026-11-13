@@ -1,9 +1,15 @@
+mod authority;
 mod authorization_retry;
 mod material;
 mod namespace_matcher;
 
 use crate::manager::cloud_backup_manager::CloudBackupError;
 
+#[cfg(test)]
+pub(crate) use authority::passkey_request_may_present;
+#[cfg(test)]
+pub(crate) use authority::test_support as authority_test_support;
+pub(crate) use authority::{PasskeyRequestAuthority, PermitGrant, PermitIntent};
 pub(crate) use authorization_retry::PlatformAuthorizationRetrier;
 pub(crate) use material::{
     PasskeyMaterialAcquirer, PasskeyMaterialOutcome, delay_before_new_passkey_auth,

@@ -13,7 +13,9 @@ pub(crate) mod write;
 
 pub(crate) use self::cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace};
 pub(crate) use self::restore::CloudBackupRestoreEvent;
-pub(crate) use self::supervisor::CloudBackupSupervisor;
+#[cfg(test)]
+pub(crate) use self::supervisor::dispatch_test_support;
+pub(crate) use self::supervisor::{CloudBackupSupervisor, PermitTicket};
 #[cfg(test)]
 pub(crate) use self::uploads::UploadFinish;
 pub(crate) use self::write::{

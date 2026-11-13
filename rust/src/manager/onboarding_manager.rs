@@ -617,7 +617,8 @@ impl RustOnboardingManager {
             }
             OnboardingCloudBackupEnableStart::CreateNewPasskey => {
                 info!("Onboarding: enabling cloud backup without passkey discovery");
-                // through dispatch, so admission decides it like a tap and a busy slot rejects it
+                // dispatched as the onboarding tap, so admission decides it like a tap and its
+                // passkey registration runs under the tap's permit
                 CLOUD_BACKUP_MANAGER
                     .dispatch(CloudBackupManagerAction::EnableCloudBackupNoDiscovery(context));
             }

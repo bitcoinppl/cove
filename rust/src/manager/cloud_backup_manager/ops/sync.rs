@@ -10,6 +10,7 @@ use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWriteClient,
 };
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
+use crate::manager::cloud_backup_manager::wallets::PasskeyRequestAuthority;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, RustCloudBackupManager,
 };
@@ -73,6 +74,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn prepare_reupload_all_wallets(
         &self,
         writes: CloudBackupWriteClient,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupReuploadedWallets, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RecreateManifest)?;
         info!("Re-uploading all wallets to cloud");
@@ -84,6 +86,7 @@ impl RustCloudBackupManager {
                 &writes,
                 &namespace,
                 RECREATE_MANIFEST_RECOVERY_MESSAGE,
+                authority,
             )
         })
         .await

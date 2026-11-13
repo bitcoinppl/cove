@@ -1407,11 +1407,17 @@ fn passkey_modes_answer_interactive_calls() {
 
         use super::{HarnessPasskey, PasskeyCall};
         use crate::manager::cloud_backup_manager::ops::test_support::MockPasskeyProviderImpl;
+        use crate::manager::cloud_backup_manager::wallets::{PermitIntent, authority_test_support};
 
         let passkey = HarnessPasskey::new(MockPasskeyProviderImpl::default());
         let authenticate = |passkey: &HarnessPasskey| {
             passkey.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3])
         };
+
+        // the fake presents only for the request holding the gate with a live permit, as Rust's
+        // retrier opens one before every call
+        let (grant, authority) = authority_test_support::revocable_permit(PermitIntent::Verify);
+        let request = authority.permit().expect("interactive").begin_request().expect("free gate");
 
         passkey.set_mode(PasskeyMode::NotCompleted);
         assert!(matches!(authenticate(&passkey), Err(PasskeyError::NotCompleted)));
@@ -1435,6 +1441,21 @@ fn passkey_modes_answer_interactive_calls() {
         assert!(authenticate(&passkey).is_err());
         assert_eq!(passkey.forbidden_calls(), vec![CallId::new(PasskeyCall::Authenticate, 4)]);
         assert_eq!(passkey.interactive_calls().len(), 4);
+
+        // the operation ends while the request waits for a presenter, so it presents nothing
+        let hold = Hold::default();
+        passkey.set_mode(PasskeyMode::AwaitingPresenter(hold.clone()));
+        let waiting = std::thread::spawn({
+            let passkey = passkey.clone();
+            move || authenticate(&passkey)
+        });
+        futures::executor::block_on(hold.entered());
+        drop(grant);
+        hold.release();
+        let answer = waiting.join().expect("waiting passkey thread");
+        assert!(matches!(answer, Err(PasskeyError::NotCompleted)), "{answer:?}");
+        assert_eq!(passkey.withdrawn_calls(), vec![CallId::new(PasskeyCall::Authenticate, 5)]);
+        drop(request);
     });
 }
 

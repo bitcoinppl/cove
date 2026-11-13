@@ -11,6 +11,7 @@ use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use futures::stream::{self, TryStreamExt as _};
 use tracing::{info, warn};
 
+use super::authority::PasskeyRequestAuthority;
 use super::authorization_retry::{
     PlatformAuthorizationRetrier, is_pre_presentation_platform_authorization_failure,
 };
@@ -77,6 +78,7 @@ impl NamespaceMatchSnapshotOutcome {
 pub(crate) struct NamespacePasskeyMatcher {
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
+    authority: PasskeyRequestAuthority,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -159,9 +161,13 @@ pub(crate) struct NamespacePasskeyMatchSession {
 }
 
 impl NamespacePasskeyMatcher {
-    /// Builds a matcher from cloud and passkey service handles
-    pub(crate) fn new(cloud: &CloudStorageClient, passkey: &PasskeyAccess) -> Self {
-        Self { cloud: cloud.clone(), passkey: passkey.clone() }
+    /// Builds a matcher that presents passkey requests under `authority`
+    pub(crate) fn new(
+        cloud: &CloudStorageClient,
+        passkey: &PasskeyAccess,
+        authority: &PasskeyRequestAuthority,
+    ) -> Self {
+        Self { cloud: cloud.clone(), passkey: passkey.clone(), authority: authority.clone() }
     }
 
     pub(crate) fn start_session(&self) -> NamespacePasskeyMatchSession {
@@ -175,9 +181,8 @@ impl NamespacePasskeyMatcher {
         NamespacePasskeyMatchSession {
             cloud: self.cloud.clone(),
             passkey: self.passkey.clone(),
-            authorization_retrier: PlatformAuthorizationRetrier::with_cancellation(
-                cancellation.clone(),
-            ),
+            authorization_retrier: PlatformAuthorizationRetrier::new(self.authority.clone())
+                .with_cancellation(cancellation.clone()),
             credential_selection: CredentialSelection::NotAttempted,
             attempted_candidates: HashSet::new(),
             saw_supported_candidate: false,
@@ -317,7 +322,7 @@ impl NamespacePasskeyMatchSession {
                             candidate.encrypted.prf_salt,
                         ),
                     )
-                    .await;
+                    .await?;
 
                     if cancellation_requested(&self.cancellation) {
                         return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
@@ -325,7 +330,8 @@ impl NamespacePasskeyMatchSession {
 
                     let prf_output = match auth {
                         Ok(prf_output) => prf_output,
-                        Err(PasskeyError::NotCompleted) => {
+                        // a sheet that never showed says nothing about this candidate
+                        Err(PasskeyError::NotCompleted | PasskeyError::NotReady { .. }) => {
                             return Ok(if matches.is_empty() {
                                 NamespaceMatchSnapshotOutcome::UserDeclined
                             } else {
@@ -360,7 +366,7 @@ impl NamespacePasskeyMatchSession {
                         self.authorization_retrier
                             .discover(&self.passkey, candidate.encrypted.prf_salt),
                     )
-                    .await;
+                    .await?;
 
                     if cancellation_requested(&self.cancellation) {
                         return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
@@ -368,7 +374,7 @@ impl NamespacePasskeyMatchSession {
 
                     let discovered = match discovery {
                         Ok(discovered) => discovered,
-                        Err(PasskeyError::NotCompleted) => {
+                        Err(PasskeyError::NotCompleted | PasskeyError::NotReady { .. }) => {
                             // the platform reports a cancellation and an authenticator failure
                             // the same way, so record what the attempt looked like
                             info!(

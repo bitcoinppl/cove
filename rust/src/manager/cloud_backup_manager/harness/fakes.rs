@@ -30,6 +30,9 @@ use crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     MockCloudDurableContents, MockCloudStorage, MockPasskeyProviderImpl,
 };
+use crate::manager::cloud_backup_manager::wallets::{
+    authority_test_support, passkey_request_may_present,
+};
 use crate::test_support::MockKeychain;
 
 /// A provider call's stable identity within one process
@@ -643,8 +646,12 @@ pub(crate) enum PasskeyMode {
     NotCompleted,
     /// The provider failed after presenting
     ProviderFailure,
-    /// Wait for the test to release the request, then answer with the mock results
+    /// The sheet is on screen until the test releases the request, which then answers with the
+    /// mock results
     Slow(Hold),
+    /// No presenter is ready until the test releases the request; the request then asks whether
+    /// it may still present, as the platforms do, and answers with the mock results if so
+    AwaitingPresenter(Hold),
     /// Never answer
     #[expect(dead_code, reason = "reserved for bounded passkey request tests")]
     NeverCompletes,
@@ -657,6 +664,8 @@ struct PasskeyCalls {
     counts: HashMap<PasskeyCall, usize>,
     log: Vec<CallId<PasskeyCall>>,
     forbidden: Vec<CallId<PasskeyCall>>,
+    /// Requests whose operation ended before the presenter was ready, so they showed nothing
+    withdrawn: Vec<CallId<PasskeyCall>>,
 }
 
 /// Passkey provider fake; the mock's results answer `Succeeds` and `Slow` requests
@@ -665,11 +674,28 @@ pub(crate) struct HarnessPasskey {
     pub(crate) inner: MockPasskeyProviderImpl,
     mode: Arc<Mutex<PasskeyMode>>,
     calls: Arc<Mutex<PasskeyCalls>>,
+    /// Requests that reached the platform with no live permit holding the gate
+    unpermitted: Arc<Mutex<Vec<String>>>,
 }
 
 impl HarnessPasskey {
     pub(crate) fn new(inner: MockPasskeyProviderImpl) -> Self {
-        Self { inner, mode: Arc::default(), calls: Arc::default() }
+        Self { inner, mode: Arc::default(), calls: Arc::default(), unpermitted: Arc::default() }
+    }
+
+    /// Requests that reached the platform without a live permit or outside the gate, since the
+    /// last call
+    pub(crate) fn take_unpermitted_calls(&self) -> Vec<String> {
+        std::mem::take(&mut *self.unpermitted.lock())
+    }
+
+    // sampled as the request reaches the platform, before any hold, so a request that passed
+    // its live check counts as permitted even if a reset revokes the permit while it is held
+    fn sample_permit(&self, id: CallId<PasskeyCall>) {
+        let holder_live = authority_test_support::passkey_gate_holder_live();
+        if holder_live != Some(true) {
+            self.unpermitted.lock().push(format!("{id:?} gate holder live: {holder_live:?}"));
+        }
     }
 
     pub(crate) fn set_mode(&self, mode: PasskeyMode) {
@@ -678,6 +704,12 @@ impl HarnessPasskey {
 
     pub(crate) fn interactive_calls(&self) -> Vec<CallId<PasskeyCall>> {
         self.calls.lock().log.clone()
+    }
+
+    /// Requests that showed nothing because their operation ended while they waited for a
+    /// presenter
+    pub(crate) fn withdrawn_calls(&self) -> Vec<CallId<PasskeyCall>> {
+        self.calls.lock().withdrawn.clone()
     }
 
     /// Interactive calls made while the mode was `FailOnAnyInteractiveCall`
@@ -700,11 +732,28 @@ impl HarnessPasskey {
             id
         };
 
+        self.sample_permit(id);
+
         let mode = self.mode.lock().clone();
 
         // passkey requests run on blocking-pool threads, so waiting here never stalls the
         // runtime; a held or never-answered request counts as settled, like a held cloud call.
         // Settling waits for every other moment of the request as a job in the runtime's pool
+        if let PasskeyMode::AwaitingPresenter(hold) = &mode {
+            hold.label(format!("passkey call {:?} #{} awaiting a presenter", id.kind, id.nth));
+            hold.block_until_released();
+        }
+
+        // the platforms ask once the presenter is ready, right before showing the sheet
+        if !passkey_request_may_present() {
+            self.calls.lock().withdrawn.push(id);
+            if let PasskeyMode::AwaitingPresenter(hold) = &mode {
+                hold.finish();
+            }
+
+            return Err(PasskeyError::NotCompleted);
+        }
+
         match &mode {
             PasskeyMode::Slow(hold) => {
                 hold.label(format!("held passkey call {:?} #{}", id.kind, id.nth));
@@ -729,7 +778,7 @@ impl HarnessPasskey {
                 reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
             }),
 
-            PasskeyMode::Slow(hold) => {
+            PasskeyMode::Slow(hold) | PasskeyMode::AwaitingPresenter(hold) => {
                 let result = answer();
                 hold.finish();
                 result

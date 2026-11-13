@@ -428,17 +428,6 @@ impl DeepVerificationFailure {
             | Self::UnsupportedVersion { detail, .. } => detail.as_ref(),
         }
     }
-
-    pub(crate) fn is_connectivity_retry(&self) -> bool {
-        matches!(self, Self::Retry { retry_action: Some(_), .. })
-    }
-
-    pub(crate) fn connectivity_retry_action(&self) -> Option<CloudBackupRetryAction> {
-        match self {
-            Self::Retry { retry_action: Some(action), .. } => Some(*action),
-            _ => None,
-        }
-    }
 }
 
 /// Retry action the UI should dispatch for a retryable verification failure

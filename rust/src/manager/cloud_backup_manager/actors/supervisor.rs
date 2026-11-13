@@ -29,7 +29,7 @@ use crate::database::cloud_backup::{
 };
 use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionBody, ContinuationOwner, PauseReason, Rejection, UserIntent,
+    Admission, AdmissionBody, ContinuationOwner, EnableIntent, PauseReason, Rejection, UserIntent,
 };
 use crate::manager::cloud_backup_manager::keychain::{
     CloudBackupKeychain, CloudBackupKeychainError, LocalStateOwner,
@@ -52,7 +52,7 @@ use crate::manager::cloud_backup_manager::verify::{
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, delay_before_new_passkey_auth,
+    CloudOnlyRestoreOutcome, PasskeyRequestAuthority, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,
@@ -113,9 +113,11 @@ use enable::{DiscardTarget, EnableContinuation};
 
 pub(crate) use account_switch::{
     AwaitedDriveAccountSwitchStep, DriveAccountSwitchReinitializationEnd,
-    UnsavedDriveAccountSwitchCompletion,
+    PendingDriveAccountSwitchRecovery, UnsavedDriveAccountSwitchCompletion,
 };
-pub(crate) use dispatch::DispatchOutcome;
+#[cfg(test)]
+pub(crate) use dispatch::test_support as dispatch_test_support;
+pub(crate) use dispatch::{DispatchOutcome, PermitTicket, TicketedAdmission};
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_workflow::{
@@ -177,13 +179,6 @@ pub(crate) enum DetailRefreshAttempt {
     AutomaticConnectivityRetry,
 }
 
-/// Verification attempt kind used to avoid retry loops on connectivity failures
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum VerificationAttempt {
-    Initial,
-    AutomaticConnectivityRetry,
-}
-
 fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
     matches!(status, ConnectivityStatus::Unknown | ConnectivityStatus::Connected)
 }
@@ -223,19 +218,6 @@ fn refresh_detail_needs_connectivity_retry(
 
     let Some(result) = result else { return false };
     result.is_connectivity_access_error()
-        && should_retry_connectivity_failure(manager.connection_status())
-}
-
-fn verification_needs_connectivity_retry(
-    manager: &RustCloudBackupManager,
-    attempt: VerificationAttempt,
-    result: &DeepVerificationResult,
-) -> bool {
-    if attempt != VerificationAttempt::Initial {
-        return false;
-    }
-
-    matches!(result, DeepVerificationResult::Failed(failure) if failure.is_connectivity_retry())
         && should_retry_connectivity_failure(manager.connection_status())
 }
 
@@ -326,6 +308,9 @@ pub(crate) struct CloudBackupSupervisor {
     /// The platform step the switch asked Android for and waits on; only its answer moves the
     /// switch
     drive_account_switch_awaited: AwaitedDriveAccountSwitchStep,
+    /// Try Again's permit for a stopped switch reinitialize, held for the platform's next state
+    /// report to restart the run under
+    drive_account_switch_recovery_permit: Option<PendingDriveAccountSwitchRecovery>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
@@ -412,6 +397,7 @@ impl CloudBackupSupervisor {
             enable_continuation: None,
             drive_account_switch_unsaved: None,
             drive_account_switch_awaited: AwaitedDriveAccountSwitchStep::default(),
+            drive_account_switch_recovery_permit: None,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
@@ -515,6 +501,21 @@ impl CloudBackupSupervisor {
         }
 
         manager.project_exclusive_operation_started(claim);
+        Some(claim)
+    }
+
+    /// Starts `operation` for an admitted tap and binds the tap's ticket to it
+    ///
+    /// The operation's steps read their passkey authority from the runtime by claim; work
+    /// started without a ticket reads `Silent`
+    fn begin_permitted_operation(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        operation: CloudBackupExclusiveOperation,
+        ticket: Option<PermitTicket>,
+    ) -> Option<CloudBackupExclusiveOperationClaim> {
+        let claim = self.begin_exclusive_operation(manager, operation)?;
+        self.runtime.grant(claim, ticket);
         Some(claim)
     }
 
@@ -751,37 +752,34 @@ impl CloudBackupSupervisor {
         )
     }
 
-    pub async fn start_enable_operation(
+    pub(crate) fn start_enable(
         &mut self,
+        kind: EnableIntent,
         context: CloudBackupEnableContext,
-    ) -> ActorResult<()> {
-        self.begin_enable_operation(context);
-        Produces::ok(())
+        ticket: Option<PermitTicket>,
+    ) {
+        match kind {
+            EnableIntent::Standard => self.begin_enable_operation(context, ticket),
+            EnableIntent::ForceNew => self.begin_enable_force_new_operation(context, ticket),
+            EnableIntent::NoDiscovery => self.begin_enable_no_discovery_operation(context, ticket),
+        }
     }
 
-    pub async fn start_enable_force_new_operation(
+    pub async fn start_recovery_operation(
         &mut self,
-        context: CloudBackupEnableContext,
+        action: RecoveryAction,
+        ticket: Option<PermitTicket>,
     ) -> ActorResult<()> {
-        self.begin_enable_force_new_operation(context);
+        self.begin_recovery_operation(action, ticket);
         Produces::ok(())
     }
 
-    pub async fn start_enable_no_discovery_operation(
+    pub async fn start_repair_passkey_operation(
         &mut self,
-        context: CloudBackupEnableContext,
+        no_discovery: bool,
+        ticket: Option<PermitTicket>,
     ) -> ActorResult<()> {
-        self.begin_enable_no_discovery_operation(context);
-        Produces::ok(())
-    }
-
-    pub async fn start_recovery_operation(&mut self, action: RecoveryAction) -> ActorResult<()> {
-        self.begin_recovery_operation(action);
-        Produces::ok(())
-    }
-
-    pub async fn start_repair_passkey_operation(&mut self, no_discovery: bool) -> ActorResult<()> {
-        self.begin_repair_passkey_operation(no_discovery);
+        self.begin_repair_passkey_operation(no_discovery, ticket);
         Produces::ok(())
     }
 
@@ -795,13 +793,18 @@ impl CloudBackupSupervisor {
     pub async fn start_restore_cloud_wallet_operation(
         &mut self,
         record_id: String,
+        ticket: Option<PermitTicket>,
     ) -> ActorResult<()> {
-        self.begin_restore_cloud_wallet_operation(record_id);
+        self.begin_restore_cloud_wallet_operation(record_id, ticket);
         Produces::ok(())
     }
 
-    pub async fn start_restore_all_operation(&mut self, retry: bool) -> ActorResult<()> {
-        self.begin_restore_all_operation(retry);
+    pub async fn start_restore_all_operation(
+        &mut self,
+        retry: bool,
+        ticket: Option<PermitTicket>,
+    ) -> ActorResult<()> {
+        self.begin_restore_all_operation(retry, ticket);
         Produces::ok(())
     }
 
@@ -815,15 +818,6 @@ impl CloudBackupSupervisor {
         record_id: String,
     ) -> ActorResult<()> {
         self.begin_delete_cloud_wallet_operation(record_id);
-        Produces::ok(())
-    }
-
-    /// Deletes those of `record_ids`, the batch the user confirmed, that still fail to decrypt
-    pub async fn start_delete_undecryptable_wallet_backups_operation(
-        &mut self,
-        record_ids: Vec<String>,
-    ) -> ActorResult<()> {
-        self.begin_delete_undecryptable_wallet_backups_operation(record_ids);
         Produces::ok(())
     }
 
@@ -1419,18 +1413,24 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
+    pub async fn start_restore_from_cloud_backup(
+        &mut self,
+        ticket: Option<PermitTicket>,
+    ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         let addr = self.addr();
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::Restore,
+            ticket,
+        ) else {
             warn!("restore_from_cloud_backup called while another operation is active, ignoring");
             return Produces::ok(());
         };
 
         let cancellation = self.restore_cancellation(claim);
-        let operation = RestoreOperation::new(claim, addr.clone(), cancellation);
+        let authority = self.runtime.authority(claim);
+        let operation = RestoreOperation::new(claim, addr.clone(), cancellation, authority);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -1475,10 +1475,12 @@ impl CloudBackupSupervisor {
         // onboarding starts this outside dispatch, so it is admitted the same way: a configured
         // backup or a running operation refuses it
         let claim = match self.admit(&manager, &UserIntent::RestoreFromCloudBackup) {
-            Admission::Accepted => {
-                self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
-            }
-            Admission::Coalesced(_) | Admission::Rejected(_) => None,
+            TicketedAdmission::Accepted(ticket) => self.begin_permitted_operation(
+                &manager,
+                CloudBackupExclusiveOperation::Restore,
+                ticket,
+            ),
+            TicketedAdmission::Refused(_) => None,
         };
         let Some(claim) = claim else {
             warn!("restore_from_cloud_backup was not admitted, ignoring");
@@ -1494,8 +1496,9 @@ impl CloudBackupSupervisor {
         };
 
         let cancellation = self.restore_cancellation(claim);
+        let authority = self.runtime.authority(claim);
         let operation =
-            RestoreOperation::new_with_events(claim, addr.clone(), sender, cancellation);
+            RestoreOperation::new_with_events(claim, addr.clone(), sender, cancellation, authority);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started for onboarding");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -1540,11 +1543,8 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
-        let Some(run) = self.runtime.claim().and_then(|claim| self.runtime.restore(claim)) else {
-            return Produces::ok(());
-        };
-
-        if run.cancellation.swap(true, Ordering::AcqRel) {
+        let Some(claim) = self.runtime.claim() else { return Produces::ok(()) };
+        if self.runtime.restore(claim).is_none() || !self.runtime.cancel_restore(claim) {
             return Produces::ok(());
         }
 
@@ -1581,7 +1581,8 @@ impl CloudBackupSupervisor {
         &mut self,
     ) -> ActorResult<Result<oneshot::Receiver<()>, Rejection>> {
         if let Some(manager) = self.manager()
-            && let Admission::Rejected(rejection) = self.admit(&manager, &UserIntent::LocalReset)
+            && let TicketedAdmission::Refused(Admission::Rejected(rejection)) =
+                self.admit(&manager, &UserIntent::LocalReset)
         {
             return Produces::ok(Err(rejection));
         }
@@ -1606,6 +1607,10 @@ impl CloudBackupSupervisor {
         // limit, or in flight, would list the cloud through a client that may ask the user for
         // consent, for a configuration the reset is clearing
         self.detail_workflow.suspend();
+
+        // a reset revokes every permit, so Try Again's ticket held for a switch's report can't
+        // outlive it, even when the reset fails and the switch is still recorded
+        self.drive_account_switch_recovery_permit = None;
         Produces::ok(Ok(receiver))
     }
 
@@ -1778,6 +1783,7 @@ pub(crate) mod test_support {
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
     use crate::manager::cloud_backup_manager::turn_off::TurnOffReview;
+    use crate::manager::cloud_backup_manager::wallets::PermitIntent;
     use crate::manager::{
         cloud_backup_manager::{
             CloudBackupPublishedScreen, CloudBackupReconcileMessage, CloudBackupScreenDelta,
@@ -1905,16 +1911,6 @@ pub(crate) mod test_support {
             self.invariant_log.dispatches.push(record);
         }
 
-        /// Starts a verification operation outside dispatch, as detail entry does
-        pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
-            if let Some(manager) = self.manager() {
-                let started = self.begin_manual_verification(manager, force_discoverable);
-                assert!(started, "a test started a verification while {:?} runs", *self.runtime);
-            }
-
-            Produces::ok(())
-        }
-
         /// Allocates a manual verification's operation and its run without running it, for tests
         /// that run the verification pass themselves
         pub async fn begin_verification_run_for_test(
@@ -1928,10 +1924,7 @@ pub(crate) mod test_support {
 
             Produces::ok(VerificationRun {
                 claim,
-                continuation: DeepVerificationContinuation::Manual {
-                    force_discoverable,
-                    attempt: VerificationAttempt::Initial,
-                },
+                continuation: DeepVerificationContinuation::Manual { force_discoverable },
                 basis: self.evidence_basis(),
                 read_at: manager.inventory_read_at(),
             })
@@ -2047,6 +2040,17 @@ pub(crate) mod test_support {
             Produces::ok(self.runtime.claim().is_some() || self.prepares_turn_off_review())
         }
 
+        /// Whether the running operation holds a tap's live permit, or `None` when nothing runs
+        pub(crate) async fn harness_running_operation_may_present(
+            &mut self,
+        ) -> ActorResult<Option<bool>> {
+            let may_present = self.runtime.claim().map(|claim| {
+                matches!(self.runtime.authority(claim), PasskeyRequestAuthority::Interactive(_))
+            });
+
+            Produces::ok(may_present)
+        }
+
         /// The interrupted-Enable recovery the runtime body holds now
         pub(crate) async fn harness_recovery(
             &mut self,
@@ -2067,6 +2071,41 @@ pub(crate) mod test_support {
             claim: CloudBackupExclusiveOperationClaim,
         ) -> ActorResult<Finish> {
             Produces::ok(self.runtime.finish(claim))
+        }
+
+        /// Starts an Enable as an admitted tap would, for tests that skip admission
+        pub async fn start_enable_for_test(
+            &mut self,
+            kind: EnableIntent,
+            context: CloudBackupEnableContext,
+            ticket: Option<PermitTicket>,
+        ) -> ActorResult<()> {
+            self.start_enable(kind, context, ticket);
+            Produces::ok(())
+        }
+
+        /// Starts a deep verification as a Verify operation, for tests that skip admission and
+        /// the pending upload confirmation check
+        pub async fn start_verification_for_test(
+            &mut self,
+            force_discoverable: bool,
+            ticket: Option<PermitTicket>,
+        ) -> ActorResult<()> {
+            let Some(manager) = self.manager() else { return Produces::ok(()) };
+            let Some(claim) = self.begin_permitted_operation(
+                &manager,
+                CloudBackupExclusiveOperation::Verify,
+                ticket,
+            ) else {
+                return Produces::ok(());
+            };
+
+            self.start_verification_with_context(
+                manager,
+                claim,
+                DeepVerificationContinuation::Manual { force_discoverable },
+            );
+            Produces::ok(())
         }
 
         pub async fn run_wallet_upload_inline_for_test(
@@ -2097,7 +2136,9 @@ pub(crate) mod test_support {
                 .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
                 .expect("begin restore operation");
             let cancellation = self.restore_cancellation(claim);
-            let operation = RestoreOperation::new(claim, addr, cancellation);
+            let ticket = dispatch_test_support::ticket(PermitIntent::RestoreFromCloudBackup);
+            let authority = self.runtime.grant(claim, Some(ticket));
+            let operation = RestoreOperation::new(claim, addr, cancellation, authority);
             Produces::ok(operation)
         }
 

@@ -14,6 +14,8 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
+
+use crate::manager::cloud_backup_manager::wallets::PasskeyRequestAuthority;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -135,6 +137,7 @@ impl RustCloudBackupManager {
         writes: CloudBackupWriteClient,
         config: ConfigGeneration,
         force_discoverable: bool,
+        authority: PasskeyRequestAuthority,
     ) -> CloudBackupDeepVerificationStep {
         let state = self.state.read().status().clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
@@ -142,7 +145,8 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
-        match self.do_deep_verify_cloud_backup(writes, config, force_discoverable).await {
+        match self.do_deep_verify_cloud_backup(writes, config, force_discoverable, authority).await
+        {
             Ok(result) => result,
             Err(error) => CloudBackupDeepVerificationStep::Complete(
                 Self::deep_verification_error_result(force_discoverable, error),
@@ -237,22 +241,32 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn prepare_passkey_wrapper_repair(
         &self,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.prepare_passkey_wrapper_repair_with_strategy(WrapperRepairStrategy::DiscoverOrCreate)
-            .await
+        self.prepare_passkey_wrapper_repair_with_strategy(
+            WrapperRepairStrategy::DiscoverOrCreate,
+            authority,
+        )
+        .await
     }
 
     pub(crate) async fn prepare_passkey_wrapper_repair_no_discovery(
         &self,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.prepare_passkey_wrapper_repair_with_strategy(WrapperRepairStrategy::CreateNew).await
+        self.prepare_passkey_wrapper_repair_with_strategy(
+            WrapperRepairStrategy::CreateNew,
+            authority,
+        )
+        .await
     }
 
     async fn prepare_passkey_wrapper_repair_with_strategy(
         &self,
         strategy: WrapperRepairStrategy,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
@@ -272,7 +286,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let repair = WrapperRepairOperation::new(&cloud, passkey, &namespace);
+        let repair = WrapperRepairOperation::new(&cloud, passkey, &authority, &namespace);
         repair.prepare(&local_master_key, &wallet_record_ids, strategy).await.map_err(Into::into)
     }
 
@@ -362,9 +376,10 @@ impl RustCloudBackupManager {
         writes: CloudBackupWriteClient,
         config: ConfigGeneration,
         force_discoverable: bool,
+        authority: PasskeyRequestAuthority,
     ) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
-        VerificationSession::new(self, writes, config, force_discoverable)?.run().await
+        VerificationSession::new(self, writes, config, force_discoverable, authority)?.run().await
     }
 
     /// Recovers the local master key from the cloud wrapper, for a producer writing through
@@ -377,6 +392,7 @@ impl RustCloudBackupManager {
         writes: &CloudBackupWriteClient,
         namespace: &str,
         recovery_message: &str,
+        authority: PasskeyRequestAuthority,
     ) -> Result<MasterKey, CloudBackupError> {
         self.recover_local_master_key_from_cloud_with_policy(
             writes,
@@ -384,16 +400,21 @@ impl RustCloudBackupManager {
             recovery_message,
             PasskeyAuthPolicy::StoredThenDiscover,
             CloudStorage::global_explicit_client(),
+            authority,
         )
         .await
     }
 
     /// [`Self::recover_local_master_key_from_cloud`] with the stored passkey only
+    ///
+    /// Background callers pass `Silent`, so with a stored credential they get `NeedsPasskey`
+    /// rather than a passkey sheet, and without one `RecoveryRequired` as before
     pub(crate) async fn recover_local_master_key_from_cloud_without_discovery(
         &self,
         writes: &CloudBackupWriteClient,
         namespace: &str,
         recovery_message: &str,
+        authority: PasskeyRequestAuthority,
     ) -> Result<MasterKey, CloudBackupError> {
         self.recover_local_master_key_from_cloud_with_policy(
             writes,
@@ -401,6 +422,7 @@ impl RustCloudBackupManager {
             recovery_message,
             PasskeyAuthPolicy::StoredOnly,
             CloudStorage::global_silent_client(),
+            authority,
         )
         .await
     }
@@ -412,6 +434,7 @@ impl RustCloudBackupManager {
         recovery_message: &str,
         auth_policy: PasskeyAuthPolicy,
         cloud: cove_device::cloud_storage::CloudStorageClient,
+        authority: PasskeyRequestAuthority,
     ) -> Result<MasterKey, CloudBackupError> {
         let keychain = Keychain::global();
         let passkey = PasskeyAccess::global();
@@ -447,7 +470,7 @@ impl RustCloudBackupManager {
         }
 
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let authenticator = PasskeyAuthenticator::new(&cloud_keychain, passkey);
+        let authenticator = PasskeyAuthenticator::new(&cloud_keychain, passkey, &authority);
         let auth_outcome =
             authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
         let authenticated = match auth_outcome {

@@ -14,7 +14,10 @@ use cove_device::keychain::Keychain;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
-use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
+use super::{
+    PasskeyRequestAuthority, PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE,
+    prepare_wallet_backup,
+};
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
     CloudBackupWriteCompletion, Decision,
@@ -132,6 +135,7 @@ impl RustCloudBackupManager {
                 writes,
                 &namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
+                PasskeyRequestAuthority::Silent,
             )
         })
         .await?;
@@ -601,6 +605,7 @@ impl RustCloudBackupManager {
                 writes,
                 namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
+                PasskeyRequestAuthority::Silent,
             )
         })
         .await
@@ -706,6 +711,8 @@ impl RustCloudBackupManager {
             | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::LocalWalletConflict(_)
+            | CloudBackupError::NeedsPasskey
+            | CloudBackupError::PasskeyBusy
             | CloudBackupError::Cancelled => false,
         }
     }

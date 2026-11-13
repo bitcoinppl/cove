@@ -96,10 +96,15 @@ pub(crate) struct PreparedWalletBackup {
     pub(crate) entry: WalletEntry,
 }
 
+#[cfg(test)]
+pub(crate) use passkey::authority_test_support;
+#[cfg(test)]
+pub(crate) use passkey::passkey_request_may_present;
 pub(crate) use passkey::{
     NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
-    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PlatformAuthorizationRetrier,
-    delay_before_new_passkey_auth, map_wrapper_repair_passkey_error,
+    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PasskeyRequestAuthority, PermitGrant,
+    PermitIntent, PlatformAuthorizationRetrier, delay_before_new_passkey_auth,
+    map_wrapper_repair_passkey_error,
 };
 #[cfg(test)]
 pub(crate) use payload::test_support as payload_test_support;

@@ -47,8 +47,8 @@ internal class CloudBackupTurnOffRobot(
     // setup
 
     /**
-     * Restores Fixture Wallet One in onboarding, then lists [listedAfterRestore] beside it and
-     * opens Cloud Backup once the inventory has listed them
+     * Restores Fixture Wallet One in onboarding, then lists [listedAfterRestore] beside it, opens
+     * Cloud Backup, verifies the backup with Verify Now and waits until the inventory has listed them
      */
     fun restoreWalletOneAndOpenDetail(
         listedAfterRestore: List<String> = NOT_ON_DEVICE_RECORD_IDS,
@@ -72,6 +72,7 @@ internal class CloudBackupTurnOffRobot(
 
         awaitOnboardingRoute()
         openCloudBackup()
+        verifyRestoredBackup()
         waitUntil("the inventory never listed the restored wallet's other records", timeoutMs = 60_000L) {
             manager.isInventoryComplete &&
                 !manager.isInventoryChecking &&
@@ -79,6 +80,25 @@ internal class CloudBackupTurnOffRobot(
                 listedRecordIds() == listedAfterRestore.toSet()
         }
         manager.assertNextActions("a settled backup should offer Turn Off", available = setOf(TURN_OFF))
+    }
+
+    /**
+     * Verifies a restored backup the way a user does, with Verify Now on its card, which the
+     * scripted provider answers with the passkey the restore found
+     *
+     * A restore doesn't count as verification, and the detail starts none on its own, so a
+     * restored backup stays not verified until the user taps Verify Now
+     */
+    fun verifyRestoredBackup() {
+        waitUntil("a restored backup should wait for Verify Now", timeoutMs = 60_000L) {
+            manager.isInventoryComplete &&
+                manager.verificationState == CloudBackupVerificationState.NotVerified
+        }
+        manager.assertNextActions(
+            "a restored backup should offer Verify",
+            available = setOf(CloudBackupScreenAction.VERIFY),
+        )
+        clickText("Verify Now", scroll = true)
     }
 
     /** Enables Cloud Backup from onboarding and opens it once the fresh backup is confirmed */

@@ -53230,6 +53230,21 @@ public func cloudBackupUiElements() -> [CloudBackupUiElement]  {
     )
 })
 }
+/**
+ * Whether the passkey request the platform is about to show may still show
+ *
+ * The platform asks after its presenter is ready and right before it starts the system sheet.
+ * The operation that started the request can end while the platform waits for a presenter; the
+ * request then answers false, and the platform reports it as not completed without showing
+ * anything. Only interactive requests hold the gate, so a presence check doesn't ask
+ */
+public func passkeyRequestMayPresent() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_passkey_request_may_present(uniffiCallStatus
+    )
+})
+}
 public func sendFlowAlertStateFromAddressError(error: AddressError, address: String) -> SendFlowAlertState  {
     return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
         uniffiCallStatus in
@@ -53708,6 +53723,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_cloud_backup_ui_elements() != 21236) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_passkey_request_may_present() != 31752) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267) {

@@ -10,11 +10,13 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.exceptions.CreateCredentialCancellationException
+import androidx.credentials.exceptions.CreateCredentialException
 import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import androidx.credentials.exceptions.CreateCredentialProviderConfigurationException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
@@ -40,14 +42,18 @@ import org.bitcoinppl.cove_core.device.PasskeyRegistrationPlatform
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationResult
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import org.bitcoinppl.cove_core.device.passkeyAaguidFromAttestationObject
+import org.bitcoinppl.cove_core.device.passkeyRequestLogLine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
 import java.util.Base64
 
-class AndroidPasskeyProvider(
+class AndroidPasskeyProvider internal constructor(
     context: Context,
+    private val presenter: PasskeyPresenter,
 ) : PasskeyProvider {
+    constructor(context: Context) : this(context, PasskeyPresenter())
+
     private val appContext = context.applicationContext
     private val credentialManager by lazy { CredentialManager.create(appContext) }
     private val secureRandom = SecureRandom()
@@ -58,16 +64,19 @@ class AndroidPasskeyProvider(
         user: PasskeyRegistrationUser,
     ): PasskeyRegistrationResult {
         enforceBackgroundThread("createPasskey")
-        return runBlocking {
+
+        // detekt cannot resolve the generated result type and would infer Nothing for the generic request
+        return runBlocking<PasskeyRegistrationResult> {
             try {
-                val activity = ForegroundUiBridge.requireActivity()
                 val response =
-                    credentialManager.createCredential(
-                        activity,
-                        CreatePublicKeyCredentialRequest(
-                            requestJson = buildCreateRequestJson(rpId, challenge, user),
-                        ),
-                    )
+                    presenter.interactive(PasskeyOperation.REGISTRATION) { activity ->
+                        credentialManager.createCredential(
+                            activity,
+                            CreatePublicKeyCredentialRequest(
+                                requestJson = buildCreateRequestJson(rpId, challenge, user),
+                            ),
+                        )
+                    }
 
                 val registration =
                     response as? CreatePublicKeyCredentialResponse
@@ -100,15 +109,16 @@ class AndroidPasskeyProvider(
         enforceBackgroundThread("authenticateWithPrf")
         return runBlocking {
             try {
-                val activity = ForegroundUiBridge.requireActivity()
                 val response =
-                    credentialManager.getCredential(
-                        activity,
-                        buildGetCredentialRequest(
-                            requestJson = buildPasskeyAssertionRequestJson(rpId, credentialId, prfSalt, challenge),
-                            preferImmediatelyAvailableCredentials = false,
-                        ),
-                    )
+                    presenter.interactive(PasskeyOperation.AUTHENTICATE_ASSERTION) { activity ->
+                        credentialManager.getCredential(
+                            activity,
+                            buildGetCredentialRequest(
+                                requestJson = buildPasskeyAssertionRequestJson(rpId, credentialId, prfSalt, challenge),
+                                preferImmediatelyAvailableCredentials = false,
+                            ),
+                        )
+                    }
 
                 val credential =
                     requirePublicKeyCredential(
@@ -135,15 +145,16 @@ class AndroidPasskeyProvider(
             enforceBackgroundThread("discoverAndAuthenticateWithPrf")
 
             try {
-                val activity = ForegroundUiBridge.requireActivity()
                 val response =
-                    credentialManager.getCredential(
-                        activity,
-                        buildGetCredentialRequest(
-                            requestJson = buildPasskeyAssertionRequestJson(rpId, null, prfSalt, challenge),
-                            preferImmediatelyAvailableCredentials = false,
-                        ),
-                    )
+                    presenter.interactive(PasskeyOperation.DISCOVER_ASSERTION) { activity ->
+                        credentialManager.getCredential(
+                            activity,
+                            buildGetCredentialRequest(
+                                requestJson = buildPasskeyAssertionRequestJson(rpId, null, prfSalt, challenge),
+                                preferImmediatelyAvailableCredentials = false,
+                            ),
+                        )
+                    }
 
                 val credential =
                     requirePublicKeyCredential(
@@ -174,21 +185,34 @@ class AndroidPasskeyProvider(
         // credentialManager.getCredential can present UI, so do not use this for background polling
         return runBlocking {
             try {
-                val activity = ForegroundUiBridge.requireActivity()
-                credentialManager.getCredential(
-                    activity,
-                    buildGetCredentialRequest(
-                        requestJson = buildPresenceCheckRequestJson(rpId, credentialId),
-                        preferImmediatelyAvailableCredentials = true,
-                    ),
-                )
-                PasskeyCredentialPresence.PRESENT
+                val presented =
+                    presenter.present(PASSKEY_PRESENCE_CHECK_TIMEOUT_MS) { activity ->
+                        credentialManager.getCredential(
+                            activity,
+                            buildGetCredentialRequest(
+                                requestJson = buildPresenceCheckRequestJson(rpId, credentialId),
+                                preferImmediatelyAvailableCredentials = true,
+                            ),
+                        )
+                    }
+
+                // like iOS, a presence check that could not start or finish in time proves nothing
+                when (presented) {
+                    is PresentedRequest.Completed -> PasskeyCredentialPresence.PRESENT
+                    PresentedRequest.NotReady, PresentedRequest.TimedOut -> {
+                        Log.w("AndroidPasskeyProvider", "presence check was indeterminate: $presented")
+                        PasskeyCredentialPresence.INDETERMINATE
+                    }
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 when (error) {
                     is NoCredentialException -> PasskeyCredentialPresence.MISSING
                     else -> {
-                        Log.w("AndroidPasskeyProvider", "presence check was indeterminate", error)
+                        Log.w(
+                            "AndroidPasskeyProvider",
+                            passkeyFailureLogMessage("presence check was indeterminate", error),
+                        )
                         PasskeyCredentialPresence.INDETERMINATE
                     }
                 }
@@ -271,7 +295,10 @@ class AndroidPasskeyProvider(
         return runCatching {
             passkeyAaguidFromAttestationObject(attestationObject.fromBase64Url())
         }.getOrElse { error ->
-            Log.w("AndroidPasskeyProvider", "failed to extract passkey provider AAGUID", error)
+            Log.w(
+                "AndroidPasskeyProvider",
+                passkeyFailureLogMessage("failed to extract passkey provider AAGUID", error),
+            )
             ""
         }
     }
@@ -310,9 +337,6 @@ class AndroidPasskeyProvider(
 internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
     when (error) {
         is PasskeyException -> error
-        // no resumed activity could present the request, which Rust treats as not ready rather
-        // than a failed request
-        is ForegroundAuthorizationTimeoutException -> PasskeyException.NotReady(PasskeyOperation.REGISTRATION)
         is CreateCredentialCancellationException -> PasskeyException.NotCompleted()
         is CreateCredentialInterruptedException ->
             passkeyRequestFailed(
@@ -348,13 +372,33 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
             )
     }
 
+/**
+ * The only form in which an Android log shows the platform error behind a passkey request
+ *
+ * A credential exception's type is its domain. Rust's one allowlist keeps a known type and hides
+ * any other, and the exception's message never reaches the log
+ */
+internal fun passkeyFailureLogMessage(
+    message: String,
+    error: Throwable,
+    logLine: (domain: String, code: Long?) -> String = ::passkeyRequestLogLine,
+): String {
+    val domain =
+        when (error) {
+            is GetCredentialException -> error.type
+            is CreateCredentialException -> error.type
+            else -> error.javaClass.name
+        }
+
+    return "$message ${logLine(domain, null)}"
+}
+
 internal fun mapPasskeyGetError(
     error: Exception,
     operation: PasskeyOperation = PasskeyOperation.AUTHENTICATE_ASSERTION,
 ): PasskeyException =
     when (error) {
         is PasskeyException -> error
-        is ForegroundAuthorizationTimeoutException -> PasskeyException.NotReady(operation)
         is NoCredentialException -> PasskeyException.NoCredentialFound()
         is GetCredentialCancellationException -> PasskeyException.NotCompleted()
         is GetCredentialInterruptedException ->

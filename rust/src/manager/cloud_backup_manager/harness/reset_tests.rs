@@ -330,28 +330,13 @@ fn a_held_read_of_an_ended_backup_confirms_nothing_in_the_next_one() {
     });
 }
 
-/// A key recovery that outlives its configuration can't write the next one's keys: a dirty
-/// upload starts proving backup A's master key, a reset ends A and backup B is enabled before the
-/// proof lands, and B's namespace, master key and passkey stay exactly as B's Enable left them
-#[test]
-fn background_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys() {
-    let test = concat!(
-        module_path!(),
-        "::background_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys"
-    );
-    run_case(test, &[PhaseEnd::Exit], |_| {
-        assert_held_recovery_leaves_the_next_backups_keys(|app| {
-            app.event("a wallet change needs an upload", |app| {
-                change_a_wallet(app).expect("a local wallet");
-            })
-            .then_can(&[N::TurnOff]);
-            app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
-        });
-    });
-}
-
-/// The same for a manual Verify: its claim ends with the reset, so the master key and passkey it
-/// proves for A after B's Enable are refused
+/// A key recovery that outlives its configuration can't write the next one's keys: a manual
+/// Verify starts proving backup A's master key, a reset ends A and its claim, and backup B is
+/// enabled before the proof lands, so B's namespace, master key and passkey stay exactly as B's
+/// Enable left them
+///
+/// Background work recovers no key without a tap, so only a tapped Verify can hold such a proof;
+/// `passkey_tests::silent_paths_never_present_a_passkey_request` covers the background upload
 #[test]
 fn verification_key_recovery_from_an_ended_backup_leaves_the_next_backups_keys() {
     let test = concat!(

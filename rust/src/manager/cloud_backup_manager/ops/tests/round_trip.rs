@@ -139,6 +139,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
         .do_restore_cloud_wallet(
             &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
             &record_id,
+            permit(PermitIntent::RestoreCloudWallet),
         )
         .await
         .unwrap();

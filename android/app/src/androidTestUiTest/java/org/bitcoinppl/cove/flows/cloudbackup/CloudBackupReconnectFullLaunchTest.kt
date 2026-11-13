@@ -20,6 +20,7 @@ import org.bitcoinppl.cove.testconfig.ScriptedConnectivityAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
+import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.Route
@@ -199,8 +200,8 @@ class CloudBackupReconnectFullLaunchTest {
         device.openCloudBackup()
 
         // the detail held from the restore can already look complete, so wait for the refresh the
-        // entry starts, the restore's upload confirmation and its verification, whose cloud-only
-        // reload would otherwise race the network drop
+        // entry starts and the restore's upload confirmation; a restore doesn't count as
+        // verification and nothing verifies on its own, so the backup stays not verified
         waitUntil(
             "expected the entry refresh to settle with two fixture wallets and Restore All",
             timeoutMs = 60_000L,
@@ -211,7 +212,7 @@ class CloudBackupReconnectFullLaunchTest {
                 manager.isInventoryComplete &&
                 !manager.isInventoryChecking &&
                 !manager.hasPendingUploadVerification &&
-                manager.verificationState is CloudBackupVerificationState.Verified &&
+                manager.verificationState == CloudBackupVerificationState.NotVerified &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u) &&
                 cloudOnlyRecordIds() ==
                 listOf(
@@ -219,6 +220,10 @@ class CloudBackupReconnectFullLaunchTest {
                     ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID,
                 )
         }
+        CloudBackupManager.getInstance().assertNextActions(
+            "a restored backup should offer Verify",
+            available = setOf(CloudBackupScreenAction.VERIFY),
+        )
     }
 
     private fun passkeyCallCounts(): Map<Invocation, Int> =

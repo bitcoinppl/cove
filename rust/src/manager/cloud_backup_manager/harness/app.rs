@@ -359,6 +359,16 @@ impl TestApp {
         .expect("the supervisor answers")
     }
 
+    /// Whether the operation holding the runtime has a tap's live permit, or `None` when none
+    /// runs
+    pub(crate) fn running_operation_may_present(&self) -> Option<bool> {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("the running operation's passkey authority", async move {
+            call!(supervisor.harness_running_operation_may_present()).await
+        })
+        .expect("the supervisor answers")
+    }
+
     /// The interrupted-Enable recovery the runtime body holds now, apart from what is shown
     pub(crate) fn runtime_recovery(&self) -> Option<CloudBackupPendingEnableRecovery> {
         let supervisor = self.manager.supervisor.clone();

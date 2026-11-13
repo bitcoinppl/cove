@@ -45,6 +45,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupResetPermit,
     DriveAccountSwitchPlatformResult as Platform, DriveAccountSwitchPlatformState,
     PendingEnableLocalMetadataSnapshot, RequestedDriveAccountSwitchStep as Step_,
+    VerificationState,
 };
 
 /// How long a newly registered passkey is given before Cove asks the user to confirm it
@@ -269,6 +270,136 @@ fn a_failed_finalize_recovers_through_try_again() {
             CloudBackupScreenBody::Configured(_)
         ));
         assert_eq!(requested_steps(&app), vec![]);
+    });
+}
+
+/// The user's Switch to an account whose commit fails on the platform, which leaves the switch's
+/// run holding the slot without the Switch tap's permit
+fn switch_whose_commit_fails(app: &mut TestApp) {
+    FakeAccount::new(1, 0).seed(app);
+    load_detail(app);
+    app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![7; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let transition_id = switch_to_a_new_account(app);
+    assert_eq!(requested_steps(app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+
+    // the run stops for recovery, and the Switch tap's permit stops with it
+    platform_reports(app, Platform::CommitFailed(transition_id)).then_cannot(&[N::Enable]);
+    assert!(
+        matches!(switch_stage(app), Some(CloudBackupDriveAccountSwitchStage::NeedsAttention(_))),
+        "{}",
+        app.describe()
+    );
+    assert_eq!(app.running_operation_may_present(), Some(false), "{}", app.describe());
+}
+
+/// After a restart, Android's launch report asks for the commit again
+fn launch_report_asks_for_the_commit(app: &mut TestApp) -> u64 {
+    let transition_id =
+        persisted().drive_account_switch().expect("the switch is recorded").transition_id.value();
+    platform_reports(app, Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)))
+        .then_cannot(&[N::Enable]);
+    assert_eq!(requested_steps(app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+
+    transition_id
+}
+
+/// Try Again on a switch whose commit failed, across a restart and a launch commit that failed
+/// again, holds its own tap's permit through the commit and the new backup's verification that
+/// follows it
+#[test]
+fn try_again_after_a_failed_commit_verifies_under_its_own_tap() {
+    let test =
+        concat!(module_path!(), "::try_again_after_a_failed_commit_verifies_under_its_own_tap");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            switch_whose_commit_fails(&mut app);
+            return;
+        }
+
+        let mut app = TestApp::launch();
+        app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: vec![7; 32],
+            credential_id: vec![1, 2, 3],
+        }));
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+
+        let transition_id = launch_report_asks_for_the_commit(&mut app);
+        platform_reports(&mut app, Platform::CommitFailed(transition_id)).then_cannot(&[N::Enable]);
+        assert_eq!(
+            availability(&app, A::RetryDriveAccountSwitchRecovery),
+            Some(CloudBackupActionAvailability::Available)
+        );
+        assert_ne!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+        let calls_before = app.passkey.interactive_calls().len();
+
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::ReportState]);
+        assert_eq!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+
+        platform_reports(
+            &mut app,
+            Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)),
+        )
+        .then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+
+        // the commit continues into the new backup's verification under the Try Again permit;
+        // invariant 6 checks each of its passkey requests against that live permit
+        platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::Finalize(transition_id)]);
+        assert!(
+            matches!(app.manager().model_snapshot().verification, VerificationState::Verified(_)),
+            "{}",
+            app.describe()
+        );
+        assert!(app.passkey.interactive_calls().len() > calls_before, "{}", app.describe());
+
+        platform_reports(&mut app, Platform::Finalized(transition_id))
+            .then_can(&[N::TurnOff])
+            .then_cannot(&[N::Enable]);
+        assert_eq!(switch_phase(), None);
+    });
+}
+
+/// A commit no tap stands behind, as the launch report's after a restart, ends the switch
+/// without verifying the new backup, which would need its passkey, and offers the user's Verify
+/// instead
+#[test]
+fn a_launch_commit_settles_without_verifying_and_offers_verify() {
+    let test =
+        concat!(module_path!(), "::a_launch_commit_settles_without_verifying_and_offers_verify");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let mut app = TestApp::launch();
+            switch_whose_commit_fails(&mut app);
+            return;
+        }
+
+        let mut app = TestApp::launch();
+        let transition_id = launch_report_asks_for_the_commit(&mut app);
+
+        platform_reports(&mut app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::Finalize(transition_id)]);
+        assert!(!app.runs_operation(), "{}", app.describe());
+        // no verification of the new backup ran: it would have asked for the passkey. The
+        // background upload confirmation may still settle on its own, since it presents nothing
+        assert!(app.passkey.interactive_calls().is_empty(), "{}", app.describe());
+        assert!(
+            !matches!(app.manager().model_snapshot().verification, VerificationState::Verified(_)),
+            "{}",
+            app.describe()
+        );
+
+        platform_reports(&mut app, Platform::Finalized(transition_id))
+            .then_can(&[N::TurnOff, N::Verify])
+            .then_cannot(&[N::Enable]);
+        assert_eq!(switch_phase(), None);
     });
 }
 
@@ -701,14 +832,176 @@ fn a_launch_report_goes_on_from_a_switch_completion_that_was_not_saved() {
     });
 }
 
-/// The same unsaved result is lost with the process, and the record still says Reinitializing:
-/// the relaunch shows Try Again, and the platform's launch report runs the reinitialize again
-/// in the new account and commits it
+/// A local reset that fails before its wipe, as the reset's owner abandons one
+fn abandon_a_local_reset(app: &mut TestApp) {
+    let manager = app.manager().clone();
+    let permit = app
+        .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+        .expect("reset permit");
+    app.event("the wipe fails before its commit", |app| {
+        app.block_on("the reset to end", permit.resume_after_failed_reset())
+            .expect("abandon the reset");
+    })
+    .then_cannot(&[N::Enable]);
+}
+
+/// A switch whose reinitialize a reset revoked before the reset failed before its wipe: the
+/// switch is still Reinitializing with no run, and offers Try Again. Returns the transition
+fn switch_a_failed_reset_stopped_in_its_reinitialize(app: &mut TestApp) -> u64 {
+    let namespace = FakeAccount::new(1, 0).seed(app);
+    // the cloud's master key opens under the passkey the fake provider answers with, so a run
+    // that holds a permit can recover the key it needs
+    seed_verifiable_master_key(app, &namespace);
+    load_detail(app);
+
+    // without a local master key the reinitialize first lists the cloud's namespaces, a provider
+    // read that holds the run in Reinitializing while the reset revokes it
+    CloudBackupKeychain::global().delete_master_key().expect("delete local master key");
+    let revoked_listing = Hold::default();
+    app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(revoked_listing.clone()));
+    let transition_id = switch_to_a_new_account(app);
+    app.block_on("the first run's listing to start", revoked_listing.entered());
+
+    abandon_a_local_reset(app);
+    app.event("release the revoked run's listing", |_| revoked_listing.release())
+        .then_cannot(&[N::Enable]);
+    app.block_on("the revoked run's listing to return", revoked_listing.finished());
+
+    assert_eq!(switch_phase(), Some(PersistedDriveAccountSwitchPhase::Reinitializing));
+    assert!(!app.runs_operation(), "{}", app.describe());
+    assert_eq!(
+        availability(app, A::RetryDriveAccountSwitchRecovery),
+        Some(CloudBackupActionAvailability::Available),
+        "{}",
+        app.describe()
+    );
+
+    transition_id
+}
+
+/// The switch's run, which holds a tap's permit, commits, verifies the new backup and finalizes
+///
+/// The namespace isn't checked: the fake shares namespaces across accounts, so
+/// platform_finishes_the_switch's namespace check can't apply to a run that recovered the
+/// cloud's master key
+fn platform_finishes_the_recovered_switch(app: &mut TestApp, transition_id: u64) {
+    assert_eq!(requested_steps(app), vec![Step_::Commit(transition_id)], "{}", app.describe());
+    platform_reports(app, Platform::Committed(transition_id)).then_cannot(&[N::Enable]);
+    assert_eq!(requested_steps(app), vec![Step_::Finalize(transition_id)]);
+    assert!(
+        matches!(app.manager().model_snapshot().verification, VerificationState::Verified(_)),
+        "{}",
+        app.describe()
+    );
+
+    platform_reports(app, Platform::Finalized(transition_id))
+        .then_can(&[N::TurnOff])
+        .then_cannot(&[N::Enable]);
+    assert_eq!(switch_phase(), None);
+    assert!(!app.runs_operation(), "{}", app.describe());
+}
+
+/// A reset that revokes a switch's reinitialize and then fails before its wipe leaves the switch
+/// in Reinitializing with no run. Try Again there asks the platform for its state first, and the
+/// staged account's report restarts the reinitialize under Try Again's permit, so the passkey
+/// it needs is asked for under that tap and the switch finishes
 #[test]
-fn a_switch_whose_finished_reinitialize_was_not_saved_finishes_after_a_relaunch() {
+fn try_again_restarts_a_reinitialize_a_failed_reset_stopped_under_its_tap() {
     let test = concat!(
         module_path!(),
-        "::a_switch_whose_finished_reinitialize_was_not_saved_finishes_after_a_relaunch"
+        "::try_again_restarts_a_reinitialize_a_failed_reset_stopped_under_its_tap"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_a_failed_reset_stopped_in_its_reinitialize(&mut app);
+        let calls_before = app.passkey.interactive_calls().len();
+
+        // Try Again asks the platform first: only its report can say the staged account is
+        // still there, so nothing runs yet
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::ReportState], "{}", app.describe());
+        assert!(!app.runs_operation(), "{}", app.describe());
+
+        // the staged account's report restarts the reinitialize under Try Again's permit;
+        // invariant 6 checks each of its passkey requests against that live permit
+        platform_reports(
+            &mut app,
+            Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)),
+        )
+        .then_cannot(&[N::Enable]);
+        assert_eq!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+        assert!(app.passkey.interactive_calls().len() > calls_before, "{}", app.describe());
+
+        platform_finishes_the_recovered_switch(&mut app, transition_id);
+    });
+}
+
+/// A reset revokes every permit, including Try Again's held for the platform's report: a report
+/// that arrives after a reset that failed before its wipe restarts the reinitialize with no
+/// permit, so it asks for no passkey. Only a new Try Again recovers the switch
+#[test]
+fn a_reset_cancels_try_again_s_permit_held_for_the_platform_s_report() {
+    let test = concat!(
+        module_path!(),
+        "::a_reset_cancels_try_again_s_permit_held_for_the_platform_s_report"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let transition_id = switch_a_failed_reset_stopped_in_its_reinitialize(&mut app);
+        let calls_before = app.passkey.interactive_calls().len();
+        let withdrawn_before = app.passkey.withdrawn_calls().len();
+
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(requested_steps(&app), vec![Step_::ReportState], "{}", app.describe());
+
+        // a reset begins before the report arrives and fails before its wipe
+        abandon_a_local_reset(&mut app);
+
+        // the delayed report restarts the reinitialize with no permit, so it fails before the
+        // passkey provider and the switch waits for a new Try Again
+        platform_reports(
+            &mut app,
+            Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)),
+        )
+        .then_cannot(&[N::Enable]);
+        assert_ne!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+        assert_eq!(app.passkey.interactive_calls().len(), calls_before, "{}", app.describe());
+        assert_eq!(app.passkey.withdrawn_calls().len(), withdrawn_before, "{}", app.describe());
+        assert_eq!(requested_steps(&app), vec![], "{}", app.describe());
+        assert_eq!(
+            switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            availability(&app, A::RetryDriveAccountSwitchRecovery),
+            Some(CloudBackupActionAvailability::Available),
+            "{}",
+            app.describe()
+        );
+
+        // a new Try Again reruns the reinitialize under its own permit
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+        assert!(app.passkey.interactive_calls().len() > calls_before, "{}", app.describe());
+
+        platform_finishes_the_recovered_switch(&mut app, transition_id);
+    });
+}
+
+/// The same unsaved result is lost with the process, and the record still says Reinitializing.
+/// The platform's launch report runs the reinitialize again, but no tap stands behind that run,
+/// so it stops before asking for the passkey and the switch waits for Try Again. Try Again
+/// reruns it under its own tap's permit and commits it
+#[test]
+fn try_again_reruns_an_unsaved_switch_reinitialize_after_a_relaunch() {
+    let test = concat!(
+        module_path!(),
+        "::try_again_reruns_an_unsaved_switch_reinitialize_after_a_relaunch"
     );
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
@@ -734,11 +1027,52 @@ fn a_switch_whose_finished_reinitialize_was_not_saved_finishes_after_a_relaunch(
             prf_output: vec![7; 32],
             credential_id: vec![1, 2, 3],
         }));
+        let calls_before = app.passkey.interactive_calls().len();
+        let withdrawn_before = app.passkey.withdrawn_calls().len();
+
+        // the launch report's rerun holds no permit, so it fails before the passkey provider,
+        // registration and discovery alike, and the switch keeps its record for Try Again
         platform_reports(
             &mut app,
             Platform::State(DriveAccountSwitchPlatformState::Staged(transition_id)),
         )
         .then_cannot(&[N::Enable]);
+        assert_eq!(app.passkey.interactive_calls().len(), calls_before, "{}", app.describe());
+        assert_eq!(app.passkey.withdrawn_calls().len(), withdrawn_before, "{}", app.describe());
+        assert_eq!(requested_steps(&app), vec![], "{}", app.describe());
+        assert_eq!(
+            switch_phase(),
+            Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            persisted().drive_account_switch().map(|switch| switch.transition_id.value()),
+            Some(transition_id)
+        );
+        assert!(!app.runs_operation(), "{}", app.describe());
+        assert!(
+            matches!(
+                switch_stage(&app),
+                Some(CloudBackupDriveAccountSwitchStage::NeedsAttention(_))
+            ),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            availability(&app, A::RetryDriveAccountSwitchRecovery),
+            Some(CloudBackupActionAvailability::Available),
+            "{}",
+            app.describe()
+        );
+
+        // Try Again binds its ticket to the rerun, so its passkey requests run under that grant;
+        // invariant 6 checks each one against the live permit
+        app.dispatch(CloudBackupManagerAction::RetryDriveAccountSwitchRecovery)
+            .then_cannot(&[N::Enable]);
+        assert_eq!(app.running_operation_may_present(), Some(true), "{}", app.describe());
+        assert!(app.passkey.interactive_calls().len() > calls_before, "{}", app.describe());
+
         platform_finishes_the_switch(&mut app, transition_id, &old_namespace);
     });
 }

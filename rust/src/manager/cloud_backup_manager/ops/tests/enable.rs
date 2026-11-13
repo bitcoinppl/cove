@@ -166,7 +166,10 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     }));
 
     let preparation = manager
-        .prepare_create_new_enable_passkey(CloudBackupEnableContext::settings_manual())
+        .prepare_create_new_enable_passkey(
+            CloudBackupEnableContext::settings_manual(),
+            permit(PermitIntent::Enable),
+        )
         .await
         .unwrap();
     let CloudBackupEnablePasskeyPreparation::Ready(ready) = preparation else {

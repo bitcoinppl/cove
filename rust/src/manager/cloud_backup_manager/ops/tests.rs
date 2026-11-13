@@ -31,6 +31,7 @@ use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
 };
+use crate::manager::cloud_backup_manager::admission::EnableIntent;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
@@ -43,6 +44,7 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupScreenBody, CloudBackupTurnOffFailure,
 };
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
+use crate::manager::cloud_backup_manager::wallets::PermitIntent;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
@@ -110,6 +112,7 @@ async fn deep_verify_for_test(
             operation_writes(manager, run.claim),
             run.basis.config(),
             force_discoverable,
+            permit(PermitIntent::Verify),
         )
         .await;
     call!(manager.supervisor.complete_verification(run, step)).await.unwrap();
@@ -230,17 +233,35 @@ async fn run_enable_operation(
 
     match operation {
         TestEnableOperation::Enable(context) => {
-            call!(manager.supervisor.start_enable_operation(context)).await
+            call!(manager.supervisor.start_enable_for_test(
+                EnableIntent::Standard,
+                context,
+                Some(tap(PermitIntent::Enable))
+            ))
+            .await
         }
         TestEnableOperation::ForceNew(context) => {
-            call!(manager.supervisor.start_enable_force_new_operation(context)).await
+            call!(manager.supervisor.start_enable_for_test(
+                EnableIntent::ForceNew,
+                context,
+                Some(tap(PermitIntent::Enable))
+            ))
+            .await
         }
         TestEnableOperation::NoDiscovery(context) => {
-            call!(manager.supervisor.start_enable_no_discovery_operation(context)).await
+            call!(manager.supervisor.start_enable_for_test(
+                EnableIntent::NoDiscovery,
+                context,
+                Some(tap(PermitIntent::Enable))
+            ))
+            .await
         }
         TestEnableOperation::ReinitializeBackup => {
-            call!(manager.supervisor.start_recovery_operation(RecoveryAction::ReinitializeBackup))
-                .await
+            call!(manager.supervisor.start_recovery_operation(
+                RecoveryAction::ReinitializeBackup,
+                Some(tap(PermitIntent::Reinitialize))
+            ))
+            .await
         }
     }
     .expect("start enable operation");
@@ -374,9 +395,12 @@ fn turn_off_failure(manager: &RustCloudBackupManager) -> CloudBackupTurnOffFailu
 }
 
 async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.start_recovery_operation(RecoveryAction::RecreateManifest))
-        .await
-        .expect("start recreate-manifest operation");
+    call!(manager.supervisor.start_recovery_operation(
+        RecoveryAction::RecreateManifest,
+        Some(tap(PermitIntent::RecreateManifest))
+    ))
+    .await
+    .expect("start recreate-manifest operation");
     wait_for_test_condition(Duration::from_secs(8), "recreate-manifest operation finishes", || {
         !matches!(
             manager
@@ -389,9 +413,13 @@ async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
 }
 
 async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_discovery: bool) {
-    call!(manager.supervisor.start_repair_passkey_operation(no_discovery))
-        .await
-        .expect("start repair-passkey operation");
+    call!(
+        manager
+            .supervisor
+            .start_repair_passkey_operation(no_discovery, Some(tap(PermitIntent::RepairPasskey)))
+    )
+    .await
+    .expect("start repair-passkey operation");
     wait_for_test_condition(Duration::from_secs(8), "repair-passkey operation finishes", || {
         !matches!(
             manager
@@ -404,7 +432,9 @@ async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_
 }
 
 async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.confirm_saved_passkey()).await.expect("confirm saved passkey");
+    call!(manager.supervisor.confirm_saved_passkey(Some(tap(PermitIntent::ConfirmSavedPasskey))))
+        .await
+        .expect("confirm saved passkey");
     let deadline = LoadedHostDeadline::after(Duration::from_secs(5));
     while !deadline.has_passed() {
         if !matches!(

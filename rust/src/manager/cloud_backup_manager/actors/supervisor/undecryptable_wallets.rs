@@ -5,20 +5,24 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_delete_undecryptable_wallet_backups_operation(
         &mut self,
         record_ids: Vec<String>,
+        ticket: Option<PermitTicket>,
     ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(claim) = self.begin_exclusive_operation(
+        let Some(claim) = self.begin_permitted_operation(
             &manager,
             CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+            ticket,
         ) else {
             return;
         };
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.prepare_delete_undecryptable_wallet_backups(&writes, record_ids).await;
+            let result = manager
+                .prepare_delete_undecryptable_wallet_backups(&writes, record_ids, authority)
+                .await;
             send!(addr.complete_delete_undecryptable_wallet_backups_preparation(claim, result));
         });
     }
@@ -69,7 +73,8 @@ impl CloudBackupSupervisor {
         );
 
         // the deletion hands its slot to the verification that checks what is left, so nothing
-        // starts in between
+        // starts in between, and that verification presents the passkey under the delete's
+        // permit, which the hand-off moves to it
         let Some(verification) = self.hand_off_exclusive_operation(
             &manager,
             claim,
@@ -88,10 +93,7 @@ impl CloudBackupSupervisor {
         self.start_verification_with_context(
             manager,
             verification,
-            DeepVerificationContinuation::Manual {
-                force_discoverable: false,
-                attempt: VerificationAttempt::Initial,
-            },
+            DeepVerificationContinuation::Manual { force_discoverable: false },
         );
         Produces::ok(())
     }

@@ -7,9 +7,8 @@
 //! and the clock advanced until nothing is left. Production code never calls it; the actors
 //! only keep test-only logs of what they decided, which each check takes.
 //!
-//! Turned on: 1, 2, 3, 4a, 5, 7 and 8; 4b runs at the end of each model case
-//! (`model_tests.rs`), since it drives the app out of the state it checks, and 6 needs the
-//! passkey permit.
+//! Turned on: 1, 2, 3, 4a, 5, 6, 7 and 8; 4b runs at the end of each model case
+//! (`model_tests.rs`), since it drives the app out of the state it checks.
 //! A state that is legitimately between two actors, such as a
 //! policy the owner pushed and the lane has not applied yet, is tracked as pending, never
 //! reported as a violation, and must be acknowledged by the next boundary
@@ -84,6 +83,8 @@ pub(crate) enum Invariant {
     /// Every control the screen offers is drawn, and at quiescence no operation is live and the
     /// body has an exit the user can take
     Exits = 4,
+    /// No interactive passkey request reaches the platform without a live user permit
+    PasskeyPermit = 6,
     /// A paused write leaves no Failed row and arms no retry
     PausedWrite = 7,
     /// An extra copy offers Delete only while the wallet it names has a current own row, and no
@@ -170,6 +171,7 @@ impl Invariants {
         self.check_write_policy(&view.owner, &lane.applied, &lane.decisions)?;
         self.check_operations(&view.owner.transitions, view.owner.claim, view.shown_operation)?;
         self.check_admissions(&view.dispatches)?;
+        Self::check_passkey_permits(app.passkey.take_unpermitted_calls())?;
         self.check_paused_writes(finishes)?;
         let live = LiveWork {
             operation: view.owner.claim,
@@ -243,6 +245,18 @@ impl Invariants {
         }
 
         Ok(())
+    }
+
+    /// 6: every interactive request the platform saw ran under a live permit, inside the gate
+    fn check_passkey_permits(unpermitted: Vec<String>) -> Result<(), Violation> {
+        if unpermitted.is_empty() {
+            return Ok(());
+        }
+
+        Err(Violation::new(
+            Invariant::PasskeyPermit,
+            format!("passkey requests without a live permit: {unpermitted:?}"),
+        ))
     }
 
     /// 1: the runtime holds a committed disable only with the commit the record holds, and a

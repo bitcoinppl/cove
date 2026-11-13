@@ -1,11 +1,15 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_enable_operation(&mut self, context: CloudBackupEnableContext) {
+    pub(crate) fn begin_enable_operation(
+        &mut self,
+        context: CloudBackupEnableContext,
+        ticket: Option<PermitTicket>,
+    ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
+            self.begin_permitted_operation(&manager, CloudBackupExclusiveOperation::Enable, ticket)
         else {
             return;
         };
@@ -20,17 +24,24 @@ impl CloudBackupSupervisor {
             }
         }
 
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_enable(context).await;
+            let result = manager.prepare_enable(context, authority).await;
             send!(addr.complete_enable_preparation(claim, result));
         });
     }
 
-    pub(crate) fn begin_enable_force_new_operation(&mut self, context: CloudBackupEnableContext) {
+    pub(crate) fn begin_enable_force_new_operation(
+        &mut self,
+        context: CloudBackupEnableContext,
+        ticket: Option<PermitTicket>,
+    ) {
         let Some(manager) = self.manager() else { return };
-        let Some(claim) =
-            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::EnableForceNew)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::EnableForceNew,
+            ticket,
+        ) else {
             return;
         };
         manager.project_enable_context_started(context);
@@ -56,12 +67,15 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_enable_no_discovery_operation(
         &mut self,
         context: CloudBackupEnableContext,
+        ticket: Option<PermitTicket>,
     ) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let Some(claim) = self
-            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::EnableNoDiscovery)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::EnableNoDiscovery,
+            ticket,
+        ) else {
             return;
         };
         manager.project_enable_context_started(context);
@@ -81,11 +95,13 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_reinitialize_backup_operation(&mut self) {
+    pub(crate) fn start_reinitialize_backup_operation(&mut self, ticket: Option<PermitTicket>) {
         let Some(manager) = self.manager() else { return };
-        let Some(claim) = self
-            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::ReinitializeBackup)
-        else {
+        let Some(claim) = self.begin_permitted_operation(
+            &manager,
+            CloudBackupExclusiveOperation::ReinitializeBackup,
+            ticket,
+        ) else {
             return;
         };
 
@@ -135,8 +151,11 @@ impl CloudBackupSupervisor {
             }
         }
 
+        let authority = self.runtime.authority(claim);
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_enable(CloudBackupEnableContext::settings_manual()).await;
+            let result = manager
+                .prepare_enable(CloudBackupEnableContext::settings_manual(), authority)
+                .await;
             send!(addr.complete_enable_preparation(claim, result));
         });
     }
