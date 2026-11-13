@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+};
 
 use bitcoin::{
     Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxMerkleNode, TxOut, Txid,
@@ -22,6 +26,18 @@ const BLOCK_INTERVAL_SECS: u32 = 600;
 const EASY_BITS: u32 = 0x207f_ffff;
 
 const FUNDING_FEE: Amount = Amount::from_sat(1_000);
+
+/// Bitcoin Core's `-incrementalrelayfee` default before 29.1, in sat/vB
+///
+/// Later releases lower it to 0.1 sat/vB, but many nodes still run the older
+/// default, so a wallet's replacement has to clear this one to relay everywhere
+const INCREMENTAL_RELAY_SAT_PER_VB: u64 = 1;
+
+/// Core's `MAX_REPLACEMENT_CANDIDATES`: a replacement may evict at most this many transactions
+const MAX_REPLACEMENT_CANDIDATES: usize = 100;
+
+/// Core's `-bytespersigop` default, the virtual bytes each signature operation counts as
+const BYTES_PER_SIGOP: u64 = 20;
 
 /// Where a transaction is in the fake chain
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -64,6 +80,12 @@ pub enum BroadcastError {
     AlreadyConfirmed,
     /// An input spends an output the chain has never seen
     MissingInput(OutPoint),
+    /// An input spends an output that a confirmed transaction already spent
+    SpentInput(OutPoint),
+    /// The outputs add up to more than the inputs, or to more than an amount can hold
+    OutputsExceedInputs,
+    /// The transaction double-spends pending ones without meeting the replacement rules
+    Replacement(ReplacementError),
     /// Input `index` does not satisfy the script of the output it spends, such as a
     /// missing or invalid signature
     InvalidScript { index: usize, error: bitcoinconsensus::Error },
@@ -75,9 +97,12 @@ impl fmt::Display for BroadcastError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AlreadyConfirmed => f.write_str("Transaction already in block chain"),
-            Self::MissingInput(outpoint) => {
+            Self::MissingInput(outpoint) | Self::SpentInput(outpoint) => {
                 write!(f, "bad-txns-inputs-missingorspent ({outpoint})")
             }
+
+            Self::OutputsExceedInputs => f.write_str("bad-txns-in-belowout"),
+            Self::Replacement(error) => error.fmt(f),
 
             // ERR_SCRIPT is libbitcoinconsensus's "no error" value, set when the script itself fails
             Self::InvalidScript { index, error: bitcoinconsensus::Error::ERR_SCRIPT } => {
@@ -92,6 +117,74 @@ impl fmt::Display for BroadcastError {
 }
 
 impl std::error::Error for BroadcastError {}
+
+/// Why a double spend of pending transactions was refused
+///
+/// The node replaces pending transactions the way Bitcoin Core 28 and later do
+/// by default, with full RBF: the replaced transactions need not signal BIP 125,
+/// but the replacement must pay for them under BIP 125's other rules
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ReplacementError {
+    /// An input spends an output of a transaction the replacement would evict
+    ///
+    /// Not a BIP 125 rule: Core refuses it before the replacement rules run
+    SpendsConflictingTx(Txid),
+    /// Rule 2: an input spends a pending output that no evicted transaction spent from
+    AddsUnconfirmedInput(OutPoint),
+    /// Rule 3: the replacement pays less than every transaction it evicts together
+    LessFeeThanReplaced { fee: Amount, replaced_fees: Amount },
+    /// Rule 4: the extra fee does not pay to relay the replacement at the incremental rate
+    NotEnoughToRelay { additional_fee: Amount, required: Amount },
+    /// Rule 6: the fee rate is not above that of a transaction it directly conflicts with
+    FeeRateNotHigher { conflict: Txid },
+    /// Rule 5: the direct conflicts and their descendants add up to more than 100
+    TooManyReplacements { count: usize },
+    /// A transaction it would evict was added with [`FakeChain::add_to_mempool`] without
+    /// known inputs, so the fees to beat are unknown
+    UnknownFee(Txid),
+}
+
+/// Messages start with Bitcoin Core's reject reason for each rule
+impl fmt::Display for ReplacementError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SpendsConflictingTx(txid) => {
+                write!(f, "bad-txns-spends-conflicting-tx ({txid})")
+            }
+
+            Self::AddsUnconfirmedInput(outpoint) => {
+                write!(f, "replacement-adds-unconfirmed ({outpoint})")
+            }
+
+            Self::LessFeeThanReplaced { fee, replaced_fees } => write!(
+                f,
+                "insufficient fee, less fees than conflicting txs; {} < {}",
+                fee.to_sat(),
+                replaced_fees.to_sat()
+            ),
+
+            Self::NotEnoughToRelay { additional_fee, required } => write!(
+                f,
+                "insufficient fee, not enough additional fees to relay; {} < {}",
+                additional_fee.to_sat(),
+                required.to_sat()
+            ),
+
+            Self::FeeRateNotHigher { conflict } => {
+                write!(f, "insufficient fee, new feerate is not above that of {conflict}")
+            }
+
+            Self::TooManyReplacements { count } => write!(
+                f,
+                "too many potential replacements ({count} > {MAX_REPLACEMENT_CANDIDATES})"
+            ),
+
+            Self::UnknownFee(txid) => {
+                write!(f, "fake node can't price {txid}, which was added to the mempool unchecked")
+            }
+        }
+    }
+}
 
 /// A merkle inclusion proof with sibling hashes in internal byte order
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -204,24 +297,31 @@ impl FakeChain {
     /// a retried broadcast succeeds, while a confirmed one is rejected. Only the
     /// first acceptance is added to the broadcast log
     ///
-    /// A new transaction must spend outputs the chain knows, and every input's
-    /// scripts and signatures must pass consensus checks. Fees, dust,
-    /// standardness and double spends are not checked
+    /// A new transaction must spend outputs the chain knows that no confirmed
+    /// transaction spent, and every input's scripts and signatures must pass
+    /// consensus checks. A double spend of pending transactions replaces them and
+    /// their pending descendants when it meets the rules in [`ReplacementError`].
+    /// Fees of other transactions, dust and standardness are not checked
     pub fn broadcast(&self, tx: Transaction) -> Result<Txid, BroadcastError> {
         let txid = tx.compute_txid();
         let mut state = self.state.lock();
 
         match state.txs.get(&txid).map(|entry| entry.location) {
-            Some(TxLocation::Mempool) => Ok(txid),
-            Some(TxLocation::Confirmed { .. }) => Err(BroadcastError::AlreadyConfirmed),
-            None => {
-                state.verify_scripts(&tx)?;
-                state.add_to_mempool(tx);
-                state.broadcasts.push(txid);
-
-                Ok(txid)
-            }
+            Some(TxLocation::Mempool) => return Ok(txid),
+            Some(TxLocation::Confirmed { .. }) => return Err(BroadcastError::AlreadyConfirmed),
+            None => {}
         }
+
+        state.check_inputs_unspent(&tx)?;
+        let fee = state.fee(&tx).ok_or(BroadcastError::OutputsExceedInputs)?;
+        let replaced = state.check_replacement(&tx, fee).map_err(BroadcastError::Replacement)?;
+        state.verify_scripts(&tx)?;
+
+        state.remove(&replaced);
+        state.add_to_mempool(tx);
+        state.broadcasts.push(txid);
+
+        Ok(txid)
     }
 
     /// Transactions accepted through a broadcast, oldest first
@@ -307,26 +407,8 @@ impl FakeChain {
             "{txid} is confirmed and cannot be evicted"
         );
 
-        let mut evicted = vec![txid];
-        let mut next = 0;
-        while let Some(&parent) = evicted.get(next) {
-            let children = state
-                .txs
-                .iter()
-                .filter(|(child, entry)| {
-                    entry.location == TxLocation::Mempool
-                        && !evicted.contains(child)
-                        && entry.tx.input.iter().any(|input| input.previous_output.txid == parent)
-                })
-                .map(|(child, _)| *child)
-                .collect::<Vec<_>>();
-
-            evicted.extend(children);
-            next += 1;
-        }
-
-        state.txs.retain(|txid, _| !evicted.contains(txid));
-        state.order.retain(|ordered| !evicted.contains(ordered));
+        let evicted = state.with_pending_descendants(vec![txid]);
+        state.remove(&evicted);
     }
 
     /// Where `txid` is, `None` when the chain has never seen it or evicted it
@@ -492,18 +574,10 @@ impl FakeChain {
         Some(MerkleProof { height, position, branch: merkle_branch(leaves.collect(), position) })
     }
 
-    /// The fee a transaction pays when every input's previous output is known
+    /// The fee a transaction pays, when every input's previous output is known and the
+    /// outputs add up to no more than the inputs
     pub fn fee(&self, tx: &Transaction) -> Option<Amount> {
-        let state = self.state.lock();
-        let inputs = tx
-            .input
-            .iter()
-            .map(|input| state.prevout(&input.previous_output).map(|output| output.value))
-            .collect::<Option<Vec<_>>>()?;
-        let total_in = inputs.into_iter().sum::<Amount>();
-        let total_out = tx.output.iter().map(|output| output.value).sum::<Amount>();
-
-        total_in.checked_sub(total_out)
+        self.state.lock().fee(tx)
     }
 }
 
@@ -541,6 +615,189 @@ impl ChainState {
 
             entry.tx.output.get(outpoint.vout as usize).cloned()
         })
+    }
+
+    fn fee(&self, tx: &Transaction) -> Option<Amount> {
+        // checked sums, since `Sum for Amount` panics on overflow and any test can build a
+        // transaction with absurd output values
+        let total_in = tx.input.iter().try_fold(Amount::ZERO, |total, input| {
+            total.checked_add(self.prevout(&input.previous_output)?.value)
+        })?;
+
+        let total_out = tx
+            .output
+            .iter()
+            .try_fold(Amount::ZERO, |total, output| total.checked_add(output.value))?;
+
+        total_in.checked_sub(total_out)
+    }
+
+    /// Core's policy size: the virtual size, raised for transactions heavy in signature
+    /// operations to [`BYTES_PER_SIGOP`] per operation (`GetVirtualTransactionSize`)
+    fn policy_vsize(&self, tx: &Transaction) -> u64 {
+        let sigop_cost = tx.total_sigop_cost(|outpoint| self.prevout(outpoint)) as u64;
+        let weight = tx.weight().to_wu().max(sigop_cost.saturating_mul(BYTES_PER_SIGOP));
+
+        weight.div_ceil(4)
+    }
+
+    /// The fee of a pending transaction the replacement would evict
+    fn evicted_fee(&self, txid: Txid) -> Result<Amount, ReplacementError> {
+        self.fee(&self.txs[&txid].tx).ok_or(ReplacementError::UnknownFee(txid))
+    }
+
+    /// Pending transactions that spend an output `tx` also spends
+    fn pending_conflicts(&self, tx: &Transaction) -> Vec<Txid> {
+        self.order
+            .iter()
+            .copied()
+            .filter(|txid| {
+                let entry = &self.txs[txid];
+
+                entry.location == TxLocation::Mempool
+                    && entry.tx.input.iter().any(|spent| {
+                        tx.input.iter().any(|input| input.previous_output == spent.previous_output)
+                    })
+            })
+            .collect()
+    }
+
+    /// `roots` followed by every pending transaction that descends from one of them
+    fn with_pending_descendants(&self, mut roots: Vec<Txid>) -> Vec<Txid> {
+        let mut next = 0;
+        while let Some(&parent) = roots.get(next) {
+            let children = self
+                .order
+                .iter()
+                .copied()
+                .filter(|child| {
+                    let entry = &self.txs[child];
+
+                    entry.location == TxLocation::Mempool
+                        && !roots.contains(child)
+                        && entry.tx.input.iter().any(|input| input.previous_output.txid == parent)
+                })
+                .collect::<Vec<_>>();
+
+            roots.extend(children);
+            next += 1;
+        }
+
+        roots
+    }
+
+    fn remove(&mut self, txids: &[Txid]) {
+        self.txs.retain(|txid, _| !txids.contains(txid));
+        self.order.retain(|ordered| !txids.contains(ordered));
+    }
+
+    /// Refuses inputs the chain has never seen or that a confirmed transaction spent
+    fn check_inputs_unspent(&self, tx: &Transaction) -> Result<(), BroadcastError> {
+        for input in &tx.input {
+            let outpoint = input.previous_output;
+            if self.prevout(&outpoint).is_none() {
+                return Err(BroadcastError::MissingInput(outpoint));
+            }
+
+            let spent_by_confirmed = self.txs.values().any(|entry| {
+                matches!(entry.location, TxLocation::Confirmed { .. })
+                    && entry.tx.input.iter().any(|spent| spent.previous_output == outpoint)
+            });
+
+            if spent_by_confirmed {
+                return Err(BroadcastError::SpentInput(outpoint));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The pending transactions `tx` would evict, after checking it pays to replace them
+    ///
+    /// Follows Bitcoin Core 28's full RBF policy and runs the checks in Core's order, see
+    /// [`ReplacementError`]. `fee` is what `tx` pays
+    fn check_replacement(
+        &self,
+        tx: &Transaction,
+        fee: Amount,
+    ) -> Result<Vec<Txid>, ReplacementError> {
+        let conflicts = self.pending_conflicts(tx);
+        if conflicts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let replaced = self.with_pending_descendants(conflicts.clone());
+
+        // spending from an evicted transaction would leave the replacement without its input
+        let spends_replaced =
+            tx.input.iter().find(|input| replaced.contains(&input.previous_output.txid));
+
+        if let Some(input) = spends_replaced {
+            return Err(ReplacementError::SpendsConflictingTx(input.previous_output.txid));
+        }
+
+        // rule 6: Core compares rates per virtual byte, truncated to whole sat/kvB
+        let vsize = self.policy_vsize(tx);
+        let fee_rate = sat_per_kvb(fee, vsize);
+        for conflict in &conflicts {
+            let conflict_fee = self.evicted_fee(*conflict)?;
+            let conflict_rate =
+                sat_per_kvb(conflict_fee, self.policy_vsize(&self.txs[conflict].tx));
+
+            if fee_rate <= conflict_rate {
+                return Err(ReplacementError::FeeRateNotHigher { conflict: *conflict });
+            }
+        }
+
+        // rule 5 counts each conflict with its descendants, the way Core's
+        // `GetEntriesForConflicts` does, so a shared descendant counts once per conflict
+        let count = conflicts
+            .iter()
+            .map(|conflict| self.with_pending_descendants(vec![*conflict]).len())
+            .sum::<usize>();
+
+        if count > MAX_REPLACEMENT_CANDIDATES {
+            return Err(ReplacementError::TooManyReplacements { count });
+        }
+
+        // rule 2: a pending parent must already be the parent of a transaction it evicts,
+        // descendants included
+        let parents_of_replaced = replaced
+            .iter()
+            .flat_map(|txid| self.txs[txid].tx.input.iter())
+            .map(|input| input.previous_output.txid)
+            .collect::<HashSet<_>>();
+
+        for input in &tx.input {
+            let parent = input.previous_output.txid;
+            let parent_is_pending =
+                self.txs.get(&parent).is_some_and(|entry| entry.location == TxLocation::Mempool);
+
+            if parent_is_pending && !parents_of_replaced.contains(&parent) {
+                return Err(ReplacementError::AddsUnconfirmedInput(input.previous_output));
+            }
+        }
+
+        // rule 3 counts the fees of descendants too, since they leave the mempool as well;
+        // a total past `Amount::MAX` is more than any replacement can pay
+        let mut replaced_fees = Amount::ZERO;
+        for txid in &replaced {
+            let evicted_fee = self.evicted_fee(*txid)?;
+            replaced_fees = replaced_fees.checked_add(evicted_fee).unwrap_or(Amount::MAX);
+        }
+
+        let Some(additional_fee) = fee.checked_sub(replaced_fees) else {
+            return Err(ReplacementError::LessFeeThanReplaced { fee, replaced_fees });
+        };
+
+        // rule 4
+        let required = Amount::from_sat(INCREMENTAL_RELAY_SAT_PER_VB.saturating_mul(vsize));
+
+        if additional_fee < required {
+            return Err(ReplacementError::NotEnoughToRelay { additional_fee, required });
+        }
+
+        Ok(replaced)
     }
 
     /// Runs every input of `tx` through libbitcoinconsensus against the output it spends
@@ -658,6 +915,13 @@ fn merkle_root(mut level: Vec<[u8; 32]>) -> [u8; 32] {
 
 fn next_level(level: &[[u8; 32]]) -> Vec<[u8; 32]> {
     level.chunks(2).map(|pair| hash_pair(&pair[0], pair.get(1).unwrap_or(&pair[0]))).collect()
+}
+
+/// A fee rate the way Core's `CFeeRate` stores it: whole sat/kvB, truncated
+///
+/// Computed in u128 so no fee and size can overflow
+fn sat_per_kvb(fee: Amount, vsize: u64) -> u128 {
+    u128::from(fee.to_sat()) * 1_000 / u128::from(vsize.max(1))
 }
 
 /// The sibling hashes needed to walk from the leaf at `index` up to the root
