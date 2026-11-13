@@ -1190,11 +1190,11 @@ impl RustWalletManager {
         self.scan_status.read().clone()
     }
 
-    fn current_metadata(&self) -> WalletMetadata {
+    pub(crate) fn current_metadata(&self) -> WalletMetadata {
         self.metadata.read().clone()
     }
 
-    fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
+    pub(crate) fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
         self.ensure_active()?;
         if self.current_metadata().internal.performed_full_scan_at.is_some() {
             return Ok(());

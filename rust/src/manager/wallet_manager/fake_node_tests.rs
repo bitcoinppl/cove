@@ -40,6 +40,8 @@ use crate::{
     },
 };
 
+mod fee_bump;
+
 /// A fake node selected for signet, which puts back the node, wallet lists, selections, network
 /// and wallet mode it changed when it drops, since later tests share these settings
 struct Fixture {

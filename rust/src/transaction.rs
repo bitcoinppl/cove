@@ -1,3 +1,4 @@
+pub mod fee_bump;
 pub mod ffi;
 mod local_time;
 pub mod transaction_details;

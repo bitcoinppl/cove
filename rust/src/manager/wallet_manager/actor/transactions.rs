@@ -30,7 +30,10 @@ use crate::{
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
-        actor::{SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid},
+        actor::{
+            SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid,
+            fee_bump::ReplacedTransaction,
+        },
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
     node::{Node, client::NodeClient},
@@ -812,8 +815,13 @@ impl WalletActor {
 
         let txid = transaction.compute_txid();
 
+        // a replacement must be seen after the transactions it replaces, since the wallet keeps
+        // whichever of two double spends it saw last
+        let replaced = self.transactions_replaced_by(&transaction);
+        let seen_at = ReplacedTransaction::seen_at(&replaced, now);
+
         // insert the unconfirmed transaction into the local wallet
-        self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
+        self.wallet.bdk.apply_unconfirmed_txs([(transaction.clone(), seen_at)]);
 
         // persist the wallet to save the new transaction
         let persisted = match self.wallet.persist() {
@@ -835,6 +843,10 @@ impl WalletActor {
         // keep the unsigned record until the wallet state is durable, the next scan prunes it
         if persisted {
             self.prune_settled_unsigned_transactions();
+        }
+
+        if !replaced.is_empty() {
+            self.hand_over_to_replacement(&replaced, &transaction).await;
         }
 
         send!(self.addr.start_transaction_watcher(txid));
