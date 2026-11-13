@@ -650,8 +650,7 @@ async fn backup_wallets_preserves_newer_dirty_state() {
 
 // the load-time origin repair changes a field of the backup revision, so a wallet whose backup is
 // already confirmed must be uploaded again with the repaired origin. A hot wallet whose key is
-// missing locally keeps its confirmed backup, since opening it downgrades it to watch-only and
-// that upload would drop the key from the cloud
+// missing locally is marked too: the write lane, not this mark, keeps its cloud key
 #[tokio::test(flavor = "current_thread")]
 async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
     let _guard = async_test_lock().lock().await;
@@ -671,25 +670,16 @@ async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
     let without_key = load_origin_less_wallet_with_confirmed_backup(false);
     CONNECTIVITY_MANAGER.set_connection_state(true);
 
-    let (loaded_origin, expected_origin, sync_state) = with_key;
-    assert_eq!(loaded_origin, expected_origin);
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
-        ),
-        "{sync_state:?}"
-    );
-
-    let (loaded_origin, expected_origin, sync_state) = without_key;
-    assert_eq!(loaded_origin, expected_origin);
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
-        ),
-        "{sync_state:?}"
-    );
+    for (loaded_origin, expected_origin, sync_state) in [with_key, without_key] {
+        assert_eq!(loaded_origin, expected_origin);
+        assert!(
+            matches!(
+                sync_state,
+                Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+            ),
+            "{sync_state:?}"
+        );
+    }
 }
 
 /// Loads a hot wallet whose stored row lacks an origin and whose backup is confirmed, returning
@@ -753,8 +743,8 @@ fn load_origin_less_wallet_with_confirmed_backup(
 
 // an address-type switch interrupted before its metadata commit is healed on the next load, and
 // the healed address type and origin must reach a backup that was already confirmed. A hot
-// wallet whose key is missing locally keeps its confirmed backup, since opening it downgrades it
-// to watch-only and that upload would drop the key from the cloud
+// wallet whose key is missing locally is marked too: the write lane, not this mark, keeps its
+// cloud key
 #[tokio::test(flavor = "current_thread")]
 async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup_dirty() {
     use crate::wallet::WalletAddressType;
@@ -776,28 +766,17 @@ async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup
     let without_key = heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(false);
     CONNECTIVITY_MANAGER.set_connection_state(true);
 
-    for (stored, _) in [&with_key, &without_key] {
+    for (stored, sync_state) in [with_key, without_key] {
         assert_eq!(stored.address_type, WalletAddressType::WrappedSegwit);
         assert_eq!(stored.origin.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
+        assert!(
+            matches!(
+                sync_state,
+                Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+            ),
+            "{sync_state:?}"
+        );
     }
-
-    let (_, sync_state) = with_key;
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
-        ),
-        "{sync_state:?}"
-    );
-
-    let (_, sync_state) = without_key;
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
-        ),
-        "{sync_state:?}"
-    );
 }
 
 /// Leaves a native segwit wallet with a confirmed backup mid-switch to wrapped segwit, then loads

@@ -42,10 +42,10 @@ use crate::manager::cloud_backup_manager::{
     CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupConfiguredState, CloudBackupEnableContext,
     CloudBackupEnableFlow, CloudBackupEnablePromptChoice, CloudBackupExclusiveOperation,
     CloudBackupInventoryIncompleteReason, CloudBackupNoticeKind, CloudBackupOtherBackupsState,
-    CloudBackupPasskeyState, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
-    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStateReducer,
-    CloudBackupSyncState, CloudBackupVerificationSource, CloudBackupVerificationState,
-    DeepVerificationFailure,
+    CloudBackupPasskeyHint, CloudBackupPasskeyState, CloudBackupRestoreAllState,
+    CloudBackupRestoreFlow, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupStateReducer, CloudBackupSyncState, CloudBackupVerificationSource,
+    CloudBackupVerificationState, DeepVerificationFailure,
 };
 
 /// The screen for the runtime, its admission snapshot, the presentation, the inventory and the
@@ -63,10 +63,11 @@ pub(crate) fn project(
     presentation: &CloudBackupStateReducer,
     inventory: &InventoryFacts,
     notices: &Notices,
+    passkey_hint: Option<&CloudBackupPasskeyHint>,
 ) -> CloudBackupScreen {
     let inventory = inventory.view();
     let consents = inventory.delete_consents(configuration);
-    let body = body(runtime, admission, presentation, &inventory, &consents);
+    let body = body(runtime, admission, presentation, &inventory, &consents, passkey_hint);
     let settings_row = settings_row(&body, notices, presentation);
     let root_prompt = match &body {
         CloudBackupScreenBody::Enabling(_) | CloudBackupScreenBody::Configured(_) => {
@@ -93,6 +94,7 @@ fn body(
     presentation: &CloudBackupStateReducer,
     inventory: &InventoryView,
     consents: &DeleteConsents<'_>,
+    passkey_hint: Option<&CloudBackupPasskeyHint>,
 ) -> CloudBackupScreenBody {
     use AdmissionBody as B;
 
@@ -143,6 +145,7 @@ fn body(
             presentation,
             inventory,
             consents,
+            passkey_hint,
         )),
         B::FinishingDisable => {
             CloudBackupScreenBody::FinishingDisable(CloudBackupFinishingDisableScreen {
@@ -271,6 +274,7 @@ fn configured_screen(
     presentation: &CloudBackupStateReducer,
     inventory: &InventoryView,
     consents: &DeleteConsents<'_>,
+    passkey_hint: Option<&CloudBackupPasskeyHint>,
 ) -> CloudBackupConfiguredScreen {
     let configured = presentation.configured_presentation();
     let view = CloudBackupVerificationView {
@@ -283,6 +287,8 @@ fn configured_screen(
     if configured.passkey != CloudBackupPasskeyState::Available {
         sections.push(CloudBackupSection::PasskeyCard(configured.passkey.clone()));
     }
+
+    let passkey_hint = passkey_hint.filter(|_| configured.passkey.shows_provider_hint()).cloned();
 
     // the screen has one progress section, and a running verification takes it over the
     // inventory's: inline above rows it will update, or a card in their place
@@ -327,6 +333,7 @@ fn configured_screen(
         last_sync,
         sync_health: configured.sync_health,
         disable: runtime.disable_screen(),
+        passkey_hint,
     }
 }
 

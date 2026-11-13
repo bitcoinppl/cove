@@ -1,0 +1,61 @@
+name: Model nightly
+
+# The Cloud Backup model test runs a few short cases in every test run; this runs many longer ones
+# each night from a new seed, so the sequences it explores keep changing. A failing case prints
+# the command that replays it, and a minimized failure becomes a named test
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "First case's seed; empty derives one from the run number"
+        required: false
+        default: ""
+  schedule:
+    # 09:00 UTC is 04:00 US Central during daylight time and 03:00 in winter
+    - cron: "0 9 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  model:
+    name: model sequences
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTFLAGS: -D warnings
+      COVE_MODEL_CASES: "400"
+      COVE_MODEL_STEPS: "120"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # the test jobs' cache, so the nightly run reuses their build
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+          shared-key: test
+          save-if: false
+
+      - name: Run the model test
+        env:
+          INPUT_SEED: ${{ inputs.seed }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          # each run starts its cases at a new seed, far from the CI default's
+          export COVE_MODEL_SEED="${INPUT_SEED:-$(( RUN_NUMBER * 1000003 ))}"
+          echo "COVE_MODEL_SEED=$COVE_MODEL_SEED COVE_MODEL_CASES=$COVE_MODEL_CASES COVE_MODEL_STEPS=$COVE_MODEL_STEPS"
+          cd rust && cargo test --locked -p cove --lib -- model_sequences --nocapture

@@ -26,6 +26,7 @@ pub(crate) struct InventoryFacts {
     classified: bool,
     read_at: InventoryReadAt,
     listing_generation: u64,
+    rows_current: bool,
     detail: CloudBackupDetailState,
     restore_all: CloudBackupRestoreAllState,
     other_backups: CloudBackupOtherBackupsState,
@@ -42,6 +43,8 @@ pub(crate) struct InventoryView {
     pub(crate) read_at: InventoryReadAt,
     /// The cloud-only listing the rows were classified under
     pub(crate) listing_generation: u64,
+    /// The loaded rows were read under the latest listing, so a delete can rest on them
+    pub(crate) rows_current: bool,
     /// Shown while the inventory loads or after a load failed
     pub(crate) progress: Option<InventoryProgress>,
     /// The rows of the last finished load, kept through a refresh or a failure
@@ -225,6 +228,7 @@ impl InventoryFacts {
             classified: owner.classified().is_some(),
             read_at: owner.read_at(),
             listing_generation: owner.cloud_only_listing_generation(),
+            rows_current: owner.loaded_rows_are_current(),
             detail: owner.detail_state().clone(),
             restore_all: owner
                 .restore_all(reducer.restore_all_runtime(), reducer.active_operation().is_some()),
@@ -265,6 +269,7 @@ impl InventoryFacts {
             classified: self.classified,
             read_at: self.read_at,
             listing_generation: self.listing_generation,
+            rows_current: self.rows_current,
             progress,
             rows: loaded_detail(&self.detail).map(inventory_rows),
             restore_all: self.restore_all.clone(),
@@ -327,7 +332,10 @@ fn own_row(wallet: &CloudBackupWalletItem, own_secrets: &OwnSecretFacts) -> Clou
         | CloudBackupWalletStatus::Uploading
         | CloudBackupWalletStatus::UploadedPendingConfirmation => CloudBackupOwnRecord::Pending,
         CloudBackupWalletStatus::Failed => CloudBackupOwnRecord::Stale,
-        CloudBackupWalletStatus::DeletedFromDevice => CloudBackupOwnRecord::SecretMissingLocally,
+        CloudBackupWalletStatus::DeletedFromDevice
+        | CloudBackupWalletStatus::SecretMissingLocally => {
+            CloudBackupOwnRecord::SecretMissingLocally
+        }
         CloudBackupWalletStatus::UnsupportedVersion
         | CloudBackupWalletStatus::RemoteStateUnknown => CloudBackupOwnRecord::Missing,
     };

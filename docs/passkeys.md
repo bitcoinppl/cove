@@ -7,12 +7,13 @@ Notes on passkey behavior that matters for Cloud Backup flows.
 A passkey request puts a system sheet on screen, so only a user's tap may start
 one, and only inside the operation that tap started.
 
-- Admission mints a permit ticket only for these taps: Enable, Confirm Saved
-  Passkey, Restore from Cloud Backup, Verify, Repair Passkey, Recover Other
-  Backups, Recreate Manifest, Restore Cloud Wallet, Restore All and its Retry
-  Remaining, Reinitialize, Delete Undecryptable Wallet Backups, and Switch Drive
-  Account and its Try Again. Restore Cloud Wallet and Restore All present a
-  request only when the local master key is missing.
+- Admission mints a permit ticket only for these taps: Enable (and an answer
+  to the Enable prompt), Confirm Saved Passkey, Restore from Cloud Backup,
+  Verify, Repair Passkey, Recover Other Backups, Recreate Manifest, Restore
+  Cloud Wallet, Restore All and its Retry Remaining, Reinitialize, Delete
+  Undecryptable Wallet Backups, and Switch Drive Account and its Try Again.
+  Restore Cloud Wallet and Restore All present a request only when the local
+  master key is missing.
 - Reconnect Google Drive gets no ticket. On a configured backup it is the
   tapped inventory refresh, whose listing may show Google's consent sheet, and
   on a committed Turn Off it resumes that Turn Off; neither asks for the
@@ -43,10 +44,13 @@ one, and only inside the operation that tap started.
 - Cancelling a restore or Restore All revokes its permit at once. The run keeps
   its claim until its worker drains, but nothing it starts after the cancel can
   present.
-- Background and follow-up work holds `Silent` authority: uploads, sync, the
-  background cloud fetch, detail entry and refresh, reconnects and relaunch
-  reconciliation. Any request it makes fails with `NeedsPasskey` before it
-  reaches the platform.
+- Work no tap started holds `Silent` authority: uploads, sync, the background
+  cloud fetch, detail entry and refresh, reconnects (which never verify) and
+  relaunch reconciliation. Any request it makes fails with `NeedsPasskey`
+  before it reaches the platform. Follow-up work inside a tap's operation, such
+  as a Verify's wrapper repair, keeps that tap's permit.
+- Rust's refusals (`NeedsPasskey`, `PasskeyBusy`, and `Cancelled` for a revoked
+  permit) are never retried.
 - One request is on screen at a time. A request that starts while another is
   still open fails with `PasskeyBusy` instead of queueing behind a sheet the
   user can't see, even when the open request belongs to an operation that has
@@ -74,15 +78,11 @@ one, and only inside the operation that tap started.
 A passkey request starts only when the app can show the system passkey sheet:
 
 - iOS: the app lock is down, and a visible key window of a foreground-active
-  scene has no alert, presentation, dismissal, or transition in its presented
-  chain on two checks in a row (`PresenterIdle`)
+  scene has no alert in its presented chain and no controller in it being
+  presented, dismissed, or in a transition, on two checks in a row
+  (`PresenterIdle`). An ordinary sheet that is already up counts as idle
 - Android: the app lock is down, and an activity is resumed
   (`ForegroundUiBridge.awaitPresenter`)
-
-The app lock draws over a window that stays active and idle on iOS, and over an
-activity that stays resumed on Android, so neither fact shows the lock. Both
-apps read the lock from `AuthManager`'s mirror of Rust's lock (`lockState` on
-iOS, `isLocked` on Android), the same state that draws it.
 
 Each platform waits up to 1.5 seconds for a ready presenter. When none appears,
 the request reports not ready and never starts: it is not sent over an inactive
@@ -112,6 +112,17 @@ for. Rust treats it like a request the user left without completing: it is not
 retried, it does not fall back to discovery or registration, and it does not
 mark the stored credential missing. A presence check that is not ready is
 indeterminate.
+
+A request that doesn't complete reaches Rust as `PasskeyError::NotCompleted`:
+iOS reports any `ASAuthorizationError.canceled` (1001) this way, and Android
+reports `CreateCredentialCancellationException` and
+`GetCredentialCancellationException`. A platform cancellation doesn't prove the
+user cancelled, so the copy never says they did, and neither result marks a
+passkey missing.
+
+Automatic retry of a pre-presentation platform authorization failure has a
+budget per platform: iOS retries any operation for up to 15 seconds, and
+Android retries only a discovery assertion for up to 2 seconds.
 
 The ready presenter carries the window (iOS) or activity (Android) the request
 anchors to, so a request cannot be built without one.

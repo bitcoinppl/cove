@@ -212,7 +212,7 @@ coverage = [
     "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testCancellationRemainsCancellation",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust covers cancel at enable, confirmation, verification and restore with a scripted provider; platform tests map each os cancel to UserCancelled
+# rust covers cancel at enable, confirmation, verification and restore with a scripted provider; platform tests map each os cancel or dismissal to NotCompleted, which shows the neutral not-verified copy and offers no passkey repair
 
 [[row]]
 id = "s05-disable-while-cloud-writes-pending"
@@ -238,7 +238,7 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::turn_off_mid_batch_pauses_the_rest_of_the_batch",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms hold a new wallet's upload in the scripted cloud, then disable through the detail's Disable action and both confirmations: the backup stays in the cloud and the app stays disabling while the write is held, and once it is released the disable deletes the whole backup once, leaving no master key or wallet record behind
+# ui tests on both platforms hold a new wallet's upload in the scripted cloud, then turn off through rust's review, which asks once for a backup that holds only this device's wallets: the backup stays in the cloud and the app stays disabling while the write is held, and once it is released the disable deletes the whole backup once, leaving no master key or wallet record behind
 
 [[row]]
 id = "s05-delete-from-cloud-confirmation-and-selected-backup"
@@ -257,8 +257,378 @@ paths = [
 ]
 coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_leaves_the_turn_off_impact",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_extra_copy_left_by_an_added_seed_waits_for_the_wallet_backup",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_queued_row_delete_whose_wallet_came_back_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_extra_copy_whose_wallet_backup_went_missing_stays",
     "ios-ui:ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift::testCancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDeleteFromCloudFullLaunchTest.kt::cancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust tests check that a row whose wallet is on this device waits until a read finds that wallet's own backup current in the cloud, even when its sync row once said confirmed, and that a delete queued behind a write deletes nothing once its wallet is back on the device
 # ui tests on both apps open the second of two cloud-only rows, check that the action sheet and Delete Forever confirmation name it, cancel without deleting, then delete it and check that scripted cloud storage deleted only its record at exactly its current and legacy locations, and that once the inventory refresh after the delete is applied the row is gone while the other cloud-only row and the local wallet stay; the real iCloud and Google Drive providers' delete calls are not exercised
+
+[[row]]
+id = "s05-cloud-row-delete-refused-when-the-backup-changed"
+section = "5"
+title = "Cloud row delete refused when the backup changed"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_seed_backup_only_a_watch_only_wallet_matches_may_be_the_only_copy",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_invalidation_has_the_owner_read_the_rows_again",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::row_delete_waits_for_the_write_in_flight",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_authorization_for_a_record_that_left_and_came_back_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_of_a_record_already_gone_completes",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_row_delete_whose_follow_up_listing_is_held_frees_the_lane_and_turn_off",
+    "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::a_row_delete_trusted_under_an_earlier_configuration_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_whose_inventory_changed_partway_keeps_the_rest",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_deletes_only_the_confirmed_records_still_undecryptable",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_a_later_read_finds_readable_is_not_authorized",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_batch_record_read_readable_loses_its_unreadable_delete",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_unreadable_delete_reads_the_record_when_the_lane_runs_it",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::an_unreadable_row_delete_reads_the_record_when_the_lane_runs_it",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests/row_delete.rs::a_stale_batch_has_the_rows_read_again",
+    "rust:rust/src/manager/cloud_backup_manager/harness/row_delete_tests.rs::a_stale_row_delete_says_so_while_its_rows_are_read_again",
+    "rust:rust/src/manager/cloud_backup_manager/harness/row_delete_tests.rs::a_failed_row_delete_says_why_while_its_rows_are_read_again",
+]
+# rust tests check that a seed backup a watch-only wallet matches still counts as possibly the only copy, that rows an invalidation left on screen offer no Delete and authorize nothing until the inventory owner's own fetch reads them again, that a delete queued behind a write, or one whose record left and came back, or one trusted under an earlier configuration deletes nothing, that a record already gone still completes the delete, that a delete ends at the provider's answer so a held follow-up listing holds neither the lane nor Turn Off, that an undecryptable batch stops at the first changed record and keeps the rest, that a batch deletes only the confirmed records still undecryptable when it runs, that a batch never deletes a record a later fetch reads, that a record read readable during a batch loses its unreadable Delete, that an unreadable record, a batch's or a single row's, is read again in the lane and kept when another device rewrote it while the delete waited, that a stale batch has the rows read again, and that a stale or failed row delete keeps saying why while the rows are read again
+
+[[row]]
+id = "s05-cloud-upload-keeps-a-key-this-device-lost"
+section = "5"
+title = "Cloud upload keeps a key this device lost"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/actors/write/**",
+    "rust/src/manager/cloud_backup_manager/wallets/upload.rs",
+    "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+    "rust/src/manager/cloud_backup_manager/verify/integrity.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/payload.rs",
+    "rust/src/manager/cloud_backup_manager/wallet_changes.rs",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailWalletSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupWalletRows.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::startup_auto_sync_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_rename_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_dirty_upload_keeps_a_cloud_key_this_device_lost",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/key_material.rs::a_watch_only_wallet_still_replaces_its_watch_only_copy",
+]
+# rust tests check that a hot wallet downgraded to watch-only and a TAPSIGNER wallet missing its backup leave their key-bearing cloud record unchanged through the startup auto-sync, a rename and the dirty-upload queue, show Key not on device instead of Confirmed, and that a watch-only wallet over a watch-only record still uploads and confirms. The badge text has no UI test on either platform
+
+[[row]]
+id = "s05-turn-off-review-asks-once-or-twice"
+section = "5"
+title = "Turn Off asks once or twice by what it would delete"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::only_own_backups_and_extra_copies_ask_once",
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::turn_off_asks_twice_until_the_inventory_is_complete",
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::a_failed_listing_with_no_rows_asks_twice",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_asks_twice_for_backups_it_could_not_check_and_deletes_only_after_consent",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_failed_listing_asks_twice_and_deletes_nothing_until_confirmed",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_review_never_asks_for_a_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_leaves_backups_made_with_another_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::turn_off_is_admitted_before_the_detail_inventory_loads",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testExtraCopiesOnlyAskOnceAndTurnOffCompletes",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testWalletsNotOnDeviceAskTwiceAndRestoreThemFirstRestoresThem",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::extraCopiesOnlyAskOnceAndTurnOffCompletes",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::walletsNotOnDeviceAskTwiceAndRestoreThemFirstRestoresThem",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::ownBackupsOnlyNeedOneConfirmationThatNamesTheCount",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::walletsOnlyInCloudBackupAreNamedWithTheRestCounted",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::incompleteInventoryWarnsBeforeAnyCountsAndNeverClaimsAll",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::extraCopiesAndOtherPasskeyBackupsAreExplainedInTheFinalStep",
+]
+# this device's own backups and extra copies ask once; wallets not on this device, unchecked or unreadable backups, an incomplete
+# inventory or a failed listing ask twice. turn off never waits for the inventory and never asks for a passkey, and backups
+# made with another passkey stay
+
+[[row]]
+id = "s05-turn-off-review-restore-or-verify-first"
+section = "5"
+title = "Restore Them First and Verify First leave the Turn Off review for that work"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::restore_first_restores_the_one_wallet_the_review_names",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::restore_first_restores_every_wallet_the_review_names_through_restore_all",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::verify_first_ends_the_review_and_runs_the_verification",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_risk",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::a_restore_first_the_inventory_cannot_start_leaves_the_review_open",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::an_operation_started_from_the_review_ends_it",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testWalletsNotOnDeviceAskTwiceAndRestoreThemFirstRestoresThem",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testUncheckedBackupsAskTwiceAndStillTurnOffAfterVerifyFirstIsNotCompleted",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::walletsNotOnDeviceAskTwiceAndRestoreThemFirstRestoresThem",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::uncheckedStage2VerifyFirstFailsNeutrallyAndTurnOffStillAsksTwice",
+]
+# one wallet not on this device restores alone and several run restore all; verify first runs the verification. nothing
+# continues into turn off afterwards, and a verify that isn't completed still lets turn off ask twice
+
+[[row]]
+id = "s05-turn-off-offline-asks-for-connection"
+section = "5"
+title = "Turn Off while offline asks for a connection"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testOfflineTurnOffAsksForAConnectionThenCompletesAfterReconnect",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::offlineTurnOffAsksForAConnectionThenCompletesAfterReconnect",
+]
+# the dialog offers try again and cancel, nothing is deleted while offline, and turn off completes after reconnect
+
+[[row]]
+id = "s05-turn-off-impact-change-brings-review-back"
+section = "5"
+title = "A backup change between review and confirm brings the review back"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_backup_listed_after_the_review_asks_again_and_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_wallet_deleted_between_review_and_confirm_asks_again_and_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_confirmation_of_an_earlier_review_is_rejected",
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::a_swapped_record_in_a_risk_category_counts_as_growth",
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::worse_evidence_counts_as_growth",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::a_configuration_change_makes_the_turn_off_review_stale",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::turn_off_recheck_after_the_record_moved_on_deletes_nothing",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testImpactThatGrowsBeforeTheDeleteBringsTheReviewBack",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::impactThatChangesBeforeConfirmBringsTheReviewBack",
+]
+# a confirm deletes only what the user reviewed; a new record in a risk category or worse evidence reopens the review
+
+[[row]]
+id = "s05-turn-off-every-way-out-keeps-turn-off"
+section = "5"
+title = "Leaving the Turn Off review keeps backup on"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::cancel_during_the_drain_keeps_backup_on",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::turn_off_drain_failure_before_commit_leaves_backup_configured",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testBackgroundingDuringTheReviewKeepsTheScreenCoherent",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::everyWayOutOfTheReviewLeavesTurnOffOffered",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::lockDuringTheReviewKeepsTheScreenCoherent",
+]
+# cancel, back, tapping outside, locking or backgrounding during the review persists nothing and leaves turn off available.
+# ios checks cancel and backgrounding only
+
+[[row]]
+id = "s05-turn-off-incomplete-try-again-and-relaunch"
+section = "5"
+title = "A failed backup delete leaves Turn Off Incomplete until Try Again finishes it"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::persisted_disabling_on_restart_resumes_to_disabled",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_whose_failure_cannot_be_saved_finishes_on_try_again",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_cleanup_finishes_from_every_partial_local_state",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::scripted_namespace_delete_failure_then_retry_disables",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::killed_after_namespace_delete_resumes_to_disabled_on_next_launch",
+    "rust:rust/src/manager/cloud_backup_manager/harness/crash_tests.rs::killed_after_commit_before_the_delete_resumes_to_disabled",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testFailedDeleteSurvivesRelaunchAndTryAgainFinishesTurnOff",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::failedDeleteThenTryAgainFinishesTurnOffInTheSameProcess",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::failedDeleteStage2RelaunchShowsTurnOffIncompleteAndTryAgainFinishes",
+]
+# after the commit the settings row shows turn off incomplete until a try again, a relaunch or a reconnect finishes it
+
+[[row]]
+id = "s05-stop-using-on-this-device-after-failed-try-again"
+section = "5"
+title = "Stop Using on This Device is enabled only after a failed Try Again"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::stop_using_on_this_device_is_offered_after_a_failed_try_again",
+    "rust:rust/src/manager/cloud_backup_manager/turn_off.rs::a_failed_try_again_stays_failed_after_try_again",
+    "human",
+]
+# it shows disabled with "try again first" until a try again fails, which a relaunch keeps, then turns cloud backup off on
+# this device alone and leaves the remote backup. no ui test taps it yet
+
+[[row]]
+id = "s05-heal-notice-for-legacy-stuck-record"
+section = "5"
+title = "A stuck Turn Off from an older build heals with a notice"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::legacy_stuck_disabling_record_heals_at_load",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::ui_test_seam_seeds_the_legacy_record_that_the_launch_heals",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::failed_heal_write_keeps_the_legacy_record_and_fails_the_load",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testHealedLegacyRecordShowsTheNoticeAndTurnsOffFromIt",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::healStage2NoticeShowsWithoutAPasskeyAndTurnsOffFromIt",
+]
+# the launch turns the backup back on with a notice that offers turn off and dismiss, without a passkey prompt, and the
+# settings row reads turned on again. no ui test taps dismiss
+
+[[row]]
+id = "s05-load-failed-retry-and-corrupted-reset"
+section = "5"
+title = "A failed load retries in place and a corrupted record resets on this device"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::retry_after_a_failed_load_heals_without_a_relaunch",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::corrupted_record_resets_on_this_device_before_enable",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::disable_corrupted_persisted_state_fails_closed",
+    "rust:rust/src/manager/cloud_backup_manager/screen/contract.rs::every_fixture_draws_each_control_it_offers_where_its_content_allows",
+    "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testEveryScreenFixtureDrawsItsAvailableActionsOnTheDetail",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreenContractTest.kt::fixturesCoverEveryScreenTheContractNames",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreenContractTest.kt::everyAvailableActionHasAnEnabledControlOnItsSurface",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreenContractTest.kt::everyUnavailableActionIsDisabledOrAbsent",
+]
+# try again on a failed load reads the record again without a relaunch; reset on this device clears a corrupted record so
+# enable works again. the platform contract tests draw both screens from their fixtures; no full-launch ui test reaches either
+
+[[row]]
+id = "s05-passkey-not-completed-keeps-wallets-and-turn-off"
+section = "5"
+title = "A passkey prompt left without completing keeps wallets and Turn Off"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+    "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+    "rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs",
+    "rust/src/manager/cloud_backup_manager/error.rs",
+    "ios/Cove/FFI/PasskeyProviderImpl.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::a_cancelled_verification_never_offers_a_passkey_repair",
+    "rust:rust/src/manager/cloud_backup_manager/screen/contract.rs::only_a_verification_that_failed_on_the_passkey_offers_a_repair",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::a_not_completed_verify_asks_once_and_does_not_prompt_after_relaunch",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testPasskeyNotCompletedKeepsWalletsAndTurnOffWithoutPromptingOnRelaunch",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::passkeyNotCompletedKeepsWalletsAndTurnOff",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::passkeyNotCompletedStage2RelaunchKeepsTurnOffWithoutPrompting",
+]
+# the verification ends not completed with neutral copy and no passkey repair, and the next launch shows no passkey prompt
+
+[[row]]
+id = "s05-running-row-operation-holds-turn-off"
+section = "5"
+title = "A running row restore or delete holds Turn Off with a caption"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::an_operation_started_from_the_review_ends_it",
+    "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testRunningRowRestoreHoldsTurnOffUntilItFinishes",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::heldRowDeleteHoldsTurnOffUntilItFinishes",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreenCopyTest.kt::everyOperationKindIsNamedInItsWaitingCaption",
+]
+# turn off shows unavailable with a caption naming the running operation and comes back when it ends; ios holds a restore,
+# android a delete

@@ -505,6 +505,14 @@ private fun StatusBadge(
                 )
             CloudBackupWalletStatus.UNSUPPORTED_VERSION -> StatusBadgeStyle("Unsupported", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> StatusBadgeStyle("Unknown", colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.SECRET_MISSING_LOCALLY ->
+                StatusBadgeStyle(
+                    "Key not on device",
+                    colors.warning,
+                    colors.warningFill,
+                    colors.warningBorder,
+                    Icons.Default.WarningAmber,
+                )
         }
 
     Surface(

@@ -109,6 +109,7 @@ class CloudBackupUnplacedOutcomeTest {
                             lastSync = null,
                             syncHealth = CloudSyncHealth.AllUploaded,
                             disable = CloudBackupDisableScreen.Idle,
+                            passkeyHint = null,
                         ),
                     ),
                 settingsRow = CloudBackupSettingsRowStatus.Syncing,

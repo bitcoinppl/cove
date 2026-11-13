@@ -3,6 +3,8 @@ import SwiftUI
 /// The passkey card above the list, for a passkey Cloud Backup can't use
 struct CloudBackupPasskeyCard: View {
     let state: CloudBackupPasskeyState
+    /// Where the missing passkey was created, when Rust knows
+    let hint: CloudBackupPasskeyHint?
     let actions: CloudBackupActions
     let manager: CloudBackupManager
 
@@ -11,9 +13,9 @@ struct CloudBackupPasskeyCard: View {
         case .available:
             EmptyView()
         case .missing:
-            MissingPasskeyContent(repairState: nil, actions: actions, manager: manager)
+            MissingPasskeyContent(repairState: nil, hint: hint, actions: actions, manager: manager)
         case let .needsRepair(repairState):
-            MissingPasskeyContent(repairState: repairState, actions: actions, manager: manager)
+            MissingPasskeyContent(repairState: repairState, hint: hint, actions: actions, manager: manager)
         case .unsupportedProvider:
             UnsupportedPasskeyProviderContent(actions: actions, manager: manager)
         }
@@ -22,6 +24,7 @@ struct CloudBackupPasskeyCard: View {
 
 private struct MissingPasskeyContent: View {
     let repairState: CloudBackupPasskeyRepairState?
+    let hint: CloudBackupPasskeyHint?
     let actions: CloudBackupActions
     let manager: CloudBackupManager
 
@@ -54,6 +57,14 @@ private struct MissingPasskeyContent: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError.opacity(0.85))
                 .multilineTextAlignment(.center)
+
+                if let hint {
+                    Text(hint.originLine)
+                        .font(.footnote)
+                        .uiTestTruncationProbe()
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -196,5 +207,15 @@ struct CloudBackupTurnOffSection: View {
             }
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         }
+    }
+}
+
+extension CloudBackupPasskeyHint {
+    /// Where the passkey was created, by the name the user finds it under in their password manager
+    var originLine: String {
+        let name = "Cove Cloud Backup (\(nameSuffix))"
+        guard let providerName else { return "Created as \(name)" }
+
+        return "Created in \(providerName) as \(name)"
     }
 }

@@ -154,7 +154,8 @@ pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
         record_id: String,
         error: String,
     },
-    Failed(String),
+    /// The operation ended without changing its row; the control that started it shows why
+    Stopped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -537,8 +538,8 @@ impl RustCloudBackupManager {
                 self.apply_cloud_only_restore_failure(record_id, error.clone());
                 self.apply_cloud_only_operation(CloudOnlyOperation::Failed { error });
             }
-            CloudBackupCloudOnlyWalletOutcome::Failed(error) => {
-                self.apply_cloud_only_operation(CloudOnlyOperation::Failed { error });
+            CloudBackupCloudOnlyWalletOutcome::Stopped => {
+                self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
             }
         }
     }

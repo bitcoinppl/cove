@@ -60,6 +60,9 @@ pub(crate) struct PendingEnableLocalMetadataSnapshot {
     pub(crate) credential_id: Option<String>,
     pub(crate) prf_salt: Option<String>,
     pub(crate) namespace_id: Option<String>,
+    /// The stored provider hint, as stored; journals written before hints were stored have none
+    #[serde(default)]
+    pub(crate) provider_hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

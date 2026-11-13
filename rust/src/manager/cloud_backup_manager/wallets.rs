@@ -77,6 +77,21 @@ pub(crate) enum BackupSecret {
     WatchOnly,
 }
 
+impl BackupSecret {
+    /// Whether a record carrying `self` may replace a cloud record carrying `replaced`
+    ///
+    /// The cloud record may be the last copy of a key or TAPSIGNER backup, for example after
+    /// a hot wallet lost its key here and opened as watch-only, so a record without key
+    /// material never replaces one with it. The write lane enforces this before every wallet
+    /// upload, and the inventory reports a wallet in that state the same way
+    pub(crate) fn may_replace(self, replaced: Self) -> bool {
+        match (self, replaced) {
+            (Self::WatchOnly, Self::Held) => false,
+            (Self::Held, _) | (Self::WatchOnly, Self::WatchOnly) => true,
+        }
+    }
+}
+
 impl From<&WalletSecret> for BackupSecret {
     fn from(secret: &WalletSecret) -> Self {
         match secret {
@@ -110,9 +125,10 @@ pub(crate) use passkey::{
 pub(crate) use payload::test_support as payload_test_support;
 pub(crate) use payload::{
     LocalSecret, decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
-    upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload,
+    wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReadError, WalletBackupReader,
     WalletRestoreOutcome, WalletRestoreSession,
 };
+pub(crate) use upload::WalletUpload;

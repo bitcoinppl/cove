@@ -20,6 +20,7 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupStore,
+    CloudBackupWalletVerificationIssues, DeepVerificationReport, VerificationState,
 };
 use crate::mnemonic::{MnemonicExt as _, NumberOfBip39Words};
 use crate::network::Network;
@@ -120,6 +121,62 @@ impl FakeAccount {
     }
 }
 
+/// Writes `count` backups of wallets this device doesn't have under a key it doesn't hold, lists
+/// them beside `account`'s records, and reports them the way a verification that couldn't
+/// decrypt them does
+///
+/// Returns their record ids in record order, the order a batch delete takes them in
+pub(crate) fn seed_undecryptable_records(
+    app: &TestApp,
+    account: &SeededAccount,
+    count: usize,
+) -> Vec<String> {
+    let other_key = cove_cspp::master_key::MasterKey::generate();
+    let target = Database::global().global_config.wallet_target();
+    let mut record_ids = Vec::with_capacity(count);
+    for _ in 0..count {
+        let wallet = DistinctWallet::new(target.network);
+        let record_id = wallet_record_id(wallet.metadata.id.as_ref());
+        let mut entry = wallet_entry_with_labels(&wallet.metadata, None);
+        entry.xpub = Some(wallet.xpub.to_string());
+
+        let backup = encrypted_wallet_backup_bytes_for_entry(&entry, &other_key, 1);
+        app.cloud.inner.set_wallet_backup(account.namespace.clone(), record_id.clone(), backup);
+        record_ids.push(record_id);
+    }
+
+    record_ids.sort();
+    let files = account
+        .local
+        .iter()
+        .map(|record| record.record_id.as_str())
+        .chain(account.not_on_device.iter().map(String::as_str))
+        .chain(record_ids.iter().map(String::as_str))
+        .map(wallet_filename_from_record_id)
+        .collect();
+
+    app.cloud.inner.set_wallet_files(account.namespace.clone(), files);
+    app.cloud.persist();
+
+    let decryption_failed = u32::try_from(count).expect("record count fits u32");
+    app.manager().apply_verification_state(VerificationState::NeedsAttention(
+        DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 0,
+            wallet_issues: CloudBackupWalletVerificationIssues {
+                decryption_failed,
+                ..CloudBackupWalletVerificationIssues::default()
+            },
+            detail: None,
+        },
+    ));
+    app.settle();
+
+    record_ids
+}
+
 /// What [`FakeAccount::seed_records`] put in the cloud
 #[derive(Debug, Clone)]
 pub(crate) struct SeededAccount {
@@ -184,13 +241,24 @@ pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
     app.cloud.inner.set_master_key_backup(namespace.to_string(), verifiable_wrapper(&master_key));
     app.cloud.persist();
     CloudBackupKeychain::global()
-        .save_passkey(&[1, 2, 3], VERIFIABLE_PRF_SALT)
+        .save_passkey_and_hint(&[1, 2, 3], VERIFIABLE_PRF_SALT, None)
         .expect("save passkey");
     app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: VERIFIABLE_PRF_KEY.to_vec(),
         credential_id: vec![1, 2, 3],
     }));
     app.passkey.inner.set_authenticate_result(Ok(VERIFIABLE_PRF_KEY.to_vec()));
+}
+
+/// Saves `credential_id` as this device's passkey with the salt the verifiable wrapper uses, and
+/// where it was created when `hint` is given
+pub(crate) fn save_device_passkey(
+    credential_id: &[u8],
+    hint: Option<&cove_cspp::backup_data::PasskeyProviderHint>,
+) {
+    CloudBackupKeychain::global()
+        .save_passkey_and_hint(credential_id, VERIFIABLE_PRF_SALT, hint)
+        .expect("save passkey");
 }
 
 /// A watch-only wallet with its own key, so no two seeded wallets share an identity
@@ -319,6 +387,56 @@ pub(crate) fn finish_wipe(app: &TestApp, permit: CloudBackupResetPermit) {
     Database::global().dangerous_reset_all_data().expect("reset the database");
     app.block_on("the reset to finish", permit.complete_after_database_reset())
         .expect("finish the reset");
+}
+
+/// How a record [`seed_unreadable_records`] lists fails to read with this device's key
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnreadableSeed {
+    /// A real wallet backup encrypted under another master key: a decrypt failure
+    OtherKey,
+    /// Bytes that are not a wallet backup at all, so reading fails before any key is used
+    Garbage,
+    /// Listed by the provider with nothing behind it to download
+    Missing,
+}
+
+/// Lists one record of each [`UnreadableSeed`] in `namespace`, beside what it already lists, and
+/// returns their record ids with how each fails
+pub(crate) fn seed_unreadable_records(
+    app: &TestApp,
+    namespace: &str,
+) -> Vec<(String, UnreadableSeed)> {
+    let other_key = cove_cspp::master_key::MasterKey::generate();
+    let network = Database::global().global_config.wallet_target().network;
+    let mut files =
+        app.cloud.inner.durable_contents().wallet_files.remove(namespace).unwrap_or_default();
+
+    let mut seeded = Vec::new();
+    for seed in [UnreadableSeed::OtherKey, UnreadableSeed::Garbage, UnreadableSeed::Missing] {
+        let mut wallet = xpub_only_wallet_metadata();
+        wallet.network = network;
+        let record_id = wallet_record_id(wallet.id.as_ref());
+
+        let bytes = match seed {
+            UnreadableSeed::OtherKey => {
+                let entry = wallet_entry_with_labels(&wallet, None);
+                Some(encrypted_wallet_backup_bytes_for_entry(&entry, &other_key, 1))
+            }
+            UnreadableSeed::Garbage => Some(b"not a wallet backup".to_vec()),
+            UnreadableSeed::Missing => None,
+        };
+
+        if let Some(bytes) = bytes {
+            app.cloud.inner.set_wallet_backup(namespace.to_owned(), record_id.clone(), bytes);
+        }
+
+        files.push(wallet_filename_from_record_id(&record_id));
+        seeded.push((record_id, seed));
+    }
+
+    app.cloud.inner.set_wallet_files(namespace.to_owned(), files);
+    app.cloud.persist();
+    seeded
 }
 
 /// Seed a second namespace in the cloud, as an earlier Enable on another device would leave

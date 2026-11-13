@@ -1,5 +1,0 @@
-Releases are on hold while the Cloud Backup ownership rework lands across its four stacked PRs.
-
-While this file exists, `xtask bump-version` and the TestFlight release flow refuse to consume a
-version or build number, so no user-distributed build ships a partial rework. CI still builds
-everything. The last PR of the stack removes this file.

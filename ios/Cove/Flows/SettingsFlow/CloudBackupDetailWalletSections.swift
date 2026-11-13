@@ -220,7 +220,7 @@ private struct StatusBadge: View {
         case .uploading, .uploadedPendingConfirmation: .statusInfo
         case .confirmed: .statusSuccess
         case .failed: .statusError
-        case .deletedFromDevice, .unsupportedVersion: .statusWarning
+        case .deletedFromDevice, .unsupportedVersion, .secretMissingLocally: .statusWarning
         case .alreadyOnDevice: .statusInfo
         case .remoteStateUnknown: .secondary
         }
@@ -250,6 +250,7 @@ private extension CloudBackupWalletStatus {
         case .alreadyOnDevice: "Already on this device"
         case .unsupportedVersion: "Unsupported, requires a newer version of Cove"
         case .remoteStateUnknown: "Unknown"
+        case .secretMissingLocally: "Key not on device"
         }
     }
 }

@@ -1067,7 +1067,8 @@ fn save_passkey_rolls_back_on_second_save_failure() {
     ]);
     globals.keychain.fail_save_at(2);
 
-    let error = CloudBackupKeychain::global().save_passkey(&[1, 2, 3], [7; 32]).unwrap_err();
+    let error =
+        CloudBackupKeychain::global().save_passkey_and_hint(&[1, 2, 3], [7; 32], None).unwrap_err();
 
     assert!(matches!(
         error,
@@ -1489,4 +1490,31 @@ async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fa
     assert!(globals.cloud.has_master_key_backup(&namespace));
     assert_eq!(CloudBackupKeychain::global().load_credential_id().unwrap(), None);
     assert_eq!(CloudBackupKeychain::global().load_prf_salt().unwrap(), None);
+}
+
+/// A passkey a repair creates keeps the hint of where it was created, both on this device and
+/// in the wrapper the repair uploaded, so reusing it later names the same provider
+#[tokio::test(flavor = "current_thread")]
+async fn a_repaired_passkeys_provider_hint_is_saved_with_it() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    let namespace = manager.current_namespace_id().unwrap();
+
+    persist_xpub_wallets(vec![xpub_only_wallet_metadata()]);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+    run_repair_passkey_operation(&manager, true).await;
+
+    let saved = CloudBackupKeychain::global()
+        .known_provider_hint(&[1, 2, 3])
+        .expect("the repair saves the new passkey's hint with it");
+    let wrapper: cove_cspp::backup_data::EncryptedMasterKeyBackup =
+        serde_json::from_slice(&globals.cloud.master_key_backup_bytes(&namespace).unwrap())
+            .unwrap();
+    assert_eq!(wrapper.passkey_provider_hint, Some(saved));
+
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

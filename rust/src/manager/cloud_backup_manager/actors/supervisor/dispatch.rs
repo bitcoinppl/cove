@@ -268,9 +268,7 @@ impl CloudBackupSupervisor {
 
         match intent {
             // a delete runs only on the evidence its confirmation showed
-            I::DeleteCloudWallet(consent) => {
-                self.consented_delete(manager, intent, |offered| offered.admits_row(consent))
-            }
+            I::DeleteCloudWallet(consent) => self.consented_row_delete(manager, intent, consent),
             I::DeleteUndecryptableWalletBackups(consent) => {
                 self.consented_delete(manager, intent, |offered| {
                     offered.admits_undecryptable_batch(consent)
@@ -303,6 +301,26 @@ impl CloudBackupSupervisor {
             }
             intent => Ok(Admitted::Work(intent.clone(), PermitTicket::for_admitted(intent))),
         }
+    }
+
+    /// Starts a row delete whose consent still holds against the inventory now
+    ///
+    /// The authorization is built from the consent the user confirmed and checked against the
+    /// rows as they are now, the check the write lane makes again just before the remote call,
+    /// so a confirmation drawn from evidence that has since moved is stale; the screen published
+    /// with the rejection carries the current consent
+    fn consented_row_delete(
+        &self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+        consent: &CloudBackupRowDeleteConsent,
+    ) -> Result<Admitted, Refused> {
+        if let Err(stale) = self.row_delete_holds(manager, consent) {
+            info!("Cloud Backup refused a stale row delete: {stale:?}");
+            return Err(Refused::Rejected(Rejection::ReviewStale));
+        }
+
+        Ok(Admitted::Work(intent.clone(), PermitTicket::for_admitted(intent)))
     }
 
     /// Starts a delete whose consent is the one the inventory offers now
@@ -569,12 +587,10 @@ impl CloudBackupSupervisor {
                 self.cancel_restore_all_operation().await?;
             }
             I::DeleteCloudWallet(consent) => {
-                self.start_delete_cloud_wallet_operation(consent.record_id().clone().into())
-                    .await?;
+                self.start_delete_cloud_wallet_operation(consent).await?;
             }
             I::DeleteUndecryptableWalletBackups(consent) => {
-                let record_ids = consent.record_ids().cloned().map(String::from).collect();
-                self.begin_delete_undecryptable_wallet_backups_operation(record_ids, ticket);
+                self.begin_delete_undecryptable_wallet_backups_operation(consent, ticket);
             }
             // started in this turn, so the operation is allocated with its admission
             I::RecoverOtherBackups => self.begin_recover_other_backups_operation(ticket),

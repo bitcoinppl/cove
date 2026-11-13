@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
+
+use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 
 use crate::manager::cloud_backup_manager::inventory::{CopyCover, InventoryListedClass};
 use crate::manager::cloud_backup_manager::screen::{
@@ -172,6 +174,55 @@ pub(crate) struct CloudOnlyInventory {
     listed_record_ids: Option<HashSet<String>>,
     /// Listing generation the loaded rows completely read, unset when nothing complete is loaded
     complete_fetch_generation: Option<u64>,
+    /// Listing generation the loaded rows were read or kept under, complete or not, unset when
+    /// no rows are loaded
+    rows_generation: Option<u64>,
+}
+
+/// What reading one listed record with the key this configuration verified found
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RecordRead {
+    /// It decrypted and parsed, so it is the row the fetch's classifier made of it
+    Readable(Box<CloudOnlyRow>),
+    /// The provider no longer has it
+    Absent,
+    /// A newer Cove wrote it
+    Unsupported,
+    /// The verified key failed to decrypt it
+    Undecryptable,
+    /// It failed at a stage that says nothing about the key
+    Unreadable(CloudBackupUnreadableKind),
+}
+
+impl RecordRead {
+    /// The record a row shows for this read, or `None` when the provider no longer lists it
+    pub(crate) fn record(self) -> Option<CloudOnlyRecord> {
+        match self {
+            Self::Readable(row) => Some(row.record),
+            Self::Absent => None,
+            Self::Unsupported => Some(CloudOnlyRecord::Unsupported),
+            Self::Undecryptable => Some(CloudOnlyRecord::Unreadable {
+                kind: CloudBackupUnreadableKind::Decrypt,
+                trust: CloudBackupKeyTrust::VerifiedCurrentKey,
+            }),
+            Self::Unreadable(kind) => {
+                Some(CloudOnlyRecord::Unreadable { kind, trust: CloudBackupKeyTrust::Unverified })
+            }
+        }
+    }
+}
+
+/// Listed records read with the key a configuration verified, under one listing
+///
+/// The reader takes the listing generation before it reads the local wallets, so a wallet
+/// change during the read moves the generation and the reads are dropped instead of describing
+/// a record that became a local wallet's own
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecordReads {
+    pub(crate) listing_generation: u64,
+    /// The configuration whose verified key read the records
+    pub(crate) configuration: ConfigGeneration,
+    pub(crate) reads: BTreeMap<String, RecordRead>,
 }
 
 impl CloudOnlyInventory {
@@ -210,6 +261,7 @@ impl CloudOnlyInventory {
         let complete =
             fetch.read_every_record() && self.listed_record_ids.as_ref() == Some(&fetch_listing);
         self.complete_fetch_generation = complete.then_some(fetch.listing_generation);
+        self.rows_generation = Some(fetch.listing_generation);
     }
 
     /// Drops a record that stopped being cloud-only, because it was restored or deleted, so the
@@ -222,6 +274,7 @@ impl CloudOnlyInventory {
 
     pub(crate) fn clear_loaded(&mut self) {
         self.complete_fetch_generation = None;
+        self.rows_generation = None;
     }
 
     fn covers_listing(&self, loaded_ids: &HashSet<String>) -> bool {
@@ -236,7 +289,16 @@ impl CloudOnlyInventory {
 
         // the rows match the latest listing, so they are current for it
         self.complete_fetch_generation = Some(self.generation);
+        self.rows_generation = Some(self.generation);
         true
+    }
+
+    /// Whether the loaded rows were read under the latest listing, so a delete can rest on them
+    ///
+    /// Unlike completeness, a partial read counts: each row it holds still says what its record
+    /// is, but rows read under a listing since replaced or forgotten say nothing
+    pub(crate) fn loaded_rows_are_current(&self) -> bool {
+        self.rows_generation == Some(self.generation)
     }
 
     /// Whether loaded rows are a complete read of exactly the latest listing

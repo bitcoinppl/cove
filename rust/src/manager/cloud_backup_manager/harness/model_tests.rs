@@ -1,14 +1,16 @@
 //! The model-based sequence tests
 //!
-//! Each case starts from a generated world, applies a generated sequence of taps, dismissals,
-//! provider completions and failures, held calls released later as stale results, timer
-//! advances, Background and Foreground, wallet changes, Google Drive account switch steps, local
-//! resets and relaunches, and after every event checks the harness invariants and the next
-//! actions the reference model derives from the durable record. While a Turn Off is on screen,
-//! most draws move it forward (consent, Cancel, a failed delete, Try Again, Stop Using on This
-//! Device), so cases reach the commit and the escape path. One case in [`KILL_ONE_IN`] kills its
-//! process once, mid-operation when a relaunch is drawn while one runs, and goes on in a new
-//! process on the durable state the kill left.
+//! Each case starts from a generated world, applies a generated sequence of taps, row actions,
+//! dismissals of the dialog and the notice on screen, provider completions and failures, held
+//! calls released later as stale results, timer advances, opening the detail screen, Background
+//! and Foreground, wallet changes, Google Drive account switch steps, local resets and
+//! relaunches, and after every event checks the harness invariants, the next actions the durable
+//! record forbids, the [`reference`] model's expected screen, and that the own backups of wallets
+//! on this device stay while backup stays on. While a Turn Off is
+//! on screen, most draws move it forward (consent, Cancel, a failed delete, Try Again, Stop Using
+//! on This Device), so cases reach the commit and the escape path. One case in [`KILL_ONE_IN`]
+//! kills its process once, mid-operation when a relaunch is drawn while one runs, and goes on in
+//! a new process on the durable state the kill left.
 //!
 //! [`model_sequences_keep_the_invariants`] checks 4a at quiescence and the escape 4b once, at the
 //! end of each case. [`model_escapes_from_every_reached_state`] checks both from every state a
@@ -28,39 +30,50 @@
 //! command. A minimized failure becomes a named test, and a seed that found a production bug is
 //! parked in [`PARKED_SEEDS`] until the bug is fixed.
 //!
-//! The reference model is a semantic subset: what the record forbids. Positive availability and
-//! the screen's sections join it once Rust projects the screen
+//! The reference model is a semantic subset of the screen: the body, the sections present, which
+//! next actions are and aren't available, the Turn Off review, the listed rows and their actions,
+//! and which own backups stay. [`ProtectedRecords`] starts from the world's own backups before the
+//! first event, keeps its expectations across a process kill, and is checked once more after the
+//! escape's cooperative completion, before Turn Off is authorized to remove the namespace
 #![cfg(test)]
 
+mod reference;
+
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use cove_device::cloud_storage::CloudStorageError;
 
+use self::reference::{Applied, ListedKind, Phase, Reference, WorldRecords};
 use super::fakes;
 use super::process::{checkpoint, child_root};
 use super::{
-    CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyMode, PhaseEnd, TestApp,
-    change_a_wallet, finish_wipe, persisted, run_case, seed_legacy_stuck_disabling,
+    CloudCall, CloudFault, FakeAccount, Hold, NextAction as N, PasskeyMode, PhaseEnd, ScreenFault,
+    SectionKind, TestApp, UnreadableSeed, change_a_wallet, finish_wipe, load_detail, persisted,
+    run_case, seed_legacy_stuck_disabling, seed_unreadable_records, seed_verifiable_master_key,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::admission::Admission;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupSavedPasskeyLifecycle, CloudBackupSavedPasskeyScreen, CloudBackupScreenAction,
-    CloudBackupScreenBody,
+    CloudBackupDisableScreen, CloudBackupSavedPasskeyLifecycle, CloudBackupSavedPasskeyScreen,
+    CloudBackupScreenAction, CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupVerificationSource,
+    CloudBackupBatchDeleteConsent, CloudBackupEnableContext, CloudBackupKeychain,
+    CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupRootPrompt,
+    CloudBackupRowDeleteConsent, CloudBackupStore, CloudBackupVerificationSource, CloudOnlyState,
     DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState,
     RequestedDriveAccountSwitchStep, RustCloudBackupManager,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
-/// CI defaults, set from the measured harness cost (about 6ms an event, under 1s a case at 80
-/// events), so a CI run takes about 10s; see `docs/testing.md` for deeper runs
-const DEFAULT_CASES: usize = 24;
+/// CI defaults, set from the measured harness cost (0.5 to 2.5s a case of 60 events alone, up to
+/// 18s beside the rest of the suite on a loaded machine), so a CI run stays near 20s; the nightly
+/// workflow and `docs/testing.md` cover deeper runs
+const DEFAULT_CASES: usize = 16;
 const DEFAULT_STEPS: usize = 60;
 const DEFAULT_SEED: u64 = 0x00C0_7EBA_C0FF_EE00;
 
@@ -85,6 +98,10 @@ const MODEL_KILL: &str = "model process death";
 
 /// The platform's durable Drive switch state, which outlives a killed process
 const PLATFORM_FILE: &str = "model-drive-platform.txt";
+
+/// What the reference model expects of the durable state a killed process leaves: the world's
+/// records, the own backups it protects and the heal notice the record carries
+const EXPECTATIONS_FILE: &str = "model-expectations.json";
 
 /// Each step's state as the recording run of a probe case reached it
 const STATES_FILE: &str = "model-probe-states.txt";
@@ -163,8 +180,14 @@ fn kills(seed: u64) -> bool {
 enum World {
     Off,
     Configured,
-    /// Configured, with one backup for a wallet that isn't on this device
-    WithCloudOnlyRecord,
+    /// Configured, with backups of two wallets that aren't on this device, listed on the open
+    /// detail screen so the first row actions name real rows
+    WithCloudOnlyRecords,
+    /// Configured with a verifiable master key, beside a backup of a wallet that isn't on this
+    /// device and three records this device's key can't read: one under another key, one that
+    /// isn't a backup, and one the provider lists with nothing behind it; listed on the open
+    /// detail screen
+    WithUnreadableRecords,
     /// The reporter's stuck record, healed by the launch
     LegacyStuckDisabling,
 }
@@ -199,10 +222,18 @@ enum Tap {
     RetryDriveAccountSwitch,
     /// Cancel on a Drive switch that needs attention
     CancelDriveAccountSwitch,
+    /// Row actions name the first loaded cloud-only row, or a record no listing has; a delete
+    /// carries the consent the screen offers, or the last one it offered
+    RestoreCloudWallet,
+    DeleteCloudWallet,
+    StartRestoreAll,
+    RetryRestoreAllRemaining,
+    CancelRestoreAll,
+    DeleteUndecryptable,
 }
 
 impl Tap {
-    const ALL: [Self; 19] = [
+    const ALL: [Self; 25] = [
         Self::Enable,
         Self::TurnOff,
         Self::ConfirmDisable,
@@ -222,13 +253,25 @@ impl Tap {
         Self::DismissVerificationPrompt,
         Self::DismissPasskeyChoicePrompt,
         Self::DismissMissingPasskeyReminder,
+        Self::RestoreCloudWallet,
+        Self::DeleteCloudWallet,
+        Self::StartRestoreAll,
+        Self::RetryRestoreAllRemaining,
+        Self::CancelRestoreAll,
+        Self::DeleteUndecryptable,
     ];
 
-    /// The action this tap dispatches, given the Turn Off review on screen
-    fn action(self, review_id: Option<u64>) -> CloudBackupManagerAction {
+    /// The action this tap dispatches, given the Turn Off review on screen, the row a row action
+    /// names and the consents a delete carries, or `None` for a delete no screen has offered yet
+    fn action(
+        self,
+        review_id: Option<u64>,
+        row: &str,
+        consents: &TapConsents,
+    ) -> Option<CloudBackupManagerAction> {
         use CloudBackupManagerAction as A;
 
-        match self {
+        let action = match self {
             Self::Enable => A::EnableCloudBackup(CloudBackupEnableContext::settings_manual()),
             Self::TurnOff => A::DisableCloudBackup,
             // with no review on screen this answers none, which admission rejects as stale
@@ -251,12 +294,80 @@ impl Tap {
             Self::DismissMissingPasskeyReminder => A::DismissMissingPasskeyReminder,
             Self::RetryDriveAccountSwitch => A::RetryDriveAccountSwitchRecovery,
             Self::CancelDriveAccountSwitch => A::CancelDriveAccountSwitch,
-        }
+            Self::RestoreCloudWallet => A::RestoreCloudWallet(row.to_owned().into()),
+            Self::DeleteCloudWallet => A::DeleteCloudWallet(consents.row.clone()?),
+            Self::StartRestoreAll => A::StartRestoreAll,
+            Self::RetryRestoreAllRemaining => A::RetryRestoreAllRemaining,
+            Self::CancelRestoreAll => A::CancelRestoreAll,
+            Self::DeleteUndecryptable => {
+                A::DeleteUndecryptableWalletBackups(consents.batch.clone()?)
+            }
+        };
+
+        Some(action)
     }
 
     /// Whether this tap may register a new passkey, which the provider's next create answers
     fn registers_a_passkey(self) -> bool {
         matches!(self, Self::Enable | Self::Reinitialize | Self::RetryDriveAccountSwitch)
+    }
+}
+
+/// The consents a delete tap carries: the one the screen offers now, or else the last one it
+/// offered, which has gone stale and dispatch must refuse
+#[derive(Debug, Default)]
+struct TapConsents {
+    row: Option<CloudBackupRowDeleteConsent>,
+    batch: Option<CloudBackupBatchDeleteConsent>,
+}
+
+impl TapConsents {
+    /// Takes what the published screen offers now, on `row` and in the verification section,
+    /// over what it offered before
+    fn refresh(&mut self, app: &TestApp, row: &str) {
+        if let Some(consent) = app.row_delete(row) {
+            self.row = Some(consent);
+        }
+
+        if let Some(consent) = app.undecryptable_delete() {
+            self.batch = Some(consent);
+        }
+    }
+}
+
+/// The tap the platform sends when the user dismisses the dialog on screen by its Cancel,
+/// backdrop or back gesture, or `None` when no dialog is open
+///
+/// Every Turn Off dialog's dismissal cancels the Turn Off, and each root prompt sends
+/// the dismiss intent its platform binding sends
+fn dialog_dismissal(app: &TestApp) -> Option<Tap> {
+    let screen = app.screen();
+    if let CloudBackupScreenBody::Configured(configured) = &screen.body
+        && configured.disable != CloudBackupDisableScreen::Idle
+    {
+        return Some(Tap::CancelDisable);
+    }
+
+    match screen.root_prompt {
+        CloudBackupRootPrompt::None => None,
+        CloudBackupRootPrompt::ExistingBackupFound(..) => Some(Tap::DiscardPendingEnable),
+        CloudBackupRootPrompt::PasskeyChoice(_) => Some(Tap::DismissPasskeyChoicePrompt),
+        CloudBackupRootPrompt::MissingPasskeyReminder => Some(Tap::DismissMissingPasskeyReminder),
+        CloudBackupRootPrompt::Verification => Some(Tap::DismissVerificationPrompt),
+    }
+}
+
+fn listed_rows(app: &TestApp) -> usize {
+    app.manager().inventory.read().cloud_only().loaded_rows().map_or(0, <[_]>::len)
+}
+
+/// The record a row action names: the first loaded cloud-only row, as a tap on the screen would
+///
+/// With no row loaded, it names a record no listing has, which a row action must refuse
+fn row_record(app: &TestApp) -> String {
+    match app.manager().inventory.read().cloud_only() {
+        CloudOnlyState::Loaded { rows, .. } if !rows.is_empty() => rows[0].record_id.clone(),
+        _ => "unlisted-record".into(),
     }
 }
 
@@ -281,6 +392,8 @@ enum Event {
     Tap(Tap),
     /// A local wallet's backed-up metadata changed
     WalletChanged,
+    /// The user opens the detail screen and waits for its inventory, which lists the rows
+    OpenDetail,
     /// The app went to the background: connectivity is lost, and nothing is delivered
     Background,
     /// The app came back: connectivity returns, and the platform reports a cloud change and
@@ -289,6 +402,8 @@ enum Event {
     AdvanceClock(u64),
     /// The next call of this kind fails
     FailNext(CloudCall),
+    /// The next wallet record delete finds the record already gone
+    DeleteFindsNothing,
     /// The next call of this kind waits for a later release, so its result may arrive stale
     HoldNext(CloudCall),
     /// The oldest held call completes
@@ -304,11 +419,19 @@ enum Event {
     Reset(Wipe),
     /// Quit and launch again; in a case that kills, with an operation running, the process dies
     Relaunch,
+    /// The user dismisses the dialog on screen by its Cancel, backdrop or back gesture: a Turn
+    /// Off dialog cancels the Turn Off, a prompt sends its dismiss intent, and with no dialog
+    /// nothing happens
+    DismissDialog,
+    /// The user dismisses the notice on screen: the heal notice, or else the last outcome
+    DismissNotice,
 }
 
-const SCRIPTED_CALLS: [CloudCall; 5] = [
+const SCRIPTED_CALLS: [CloudCall; 7] = [
     CloudCall::UploadWallet,
     CloudCall::UploadMasterKey,
+    CloudCall::DeleteWallet,
+    CloudCall::DownloadWallet,
     CloudCall::DeleteNamespace,
     CloudCall::ListWalletFiles,
     CloudCall::ListNamespaces,
@@ -319,12 +442,13 @@ const SCRIPTED_CALLS: [CloudCall; 5] = [
 ///
 /// A confirmed Turn Off settles within its dispatch, so it stops in `FinishingDisable` only when
 /// its delete fails, which has to be scripted before the confirmation
-const REVIEW_EVENTS: [Event; 5] = [
+const REVIEW_EVENTS: [Event; 6] = [
     Event::Tap(Tap::ConfirmDisable),
     Event::FailNext(CloudCall::DeleteNamespace),
     Event::Tap(Tap::ConfirmDisable),
     Event::FailNext(CloudCall::DeleteNamespace),
     Event::Tap(Tap::CancelDisable),
+    Event::DismissDialog,
 ];
 /// A stopped Turn Off: Try Again, which offers Stop Using only once it fails too
 const FINISHING_EVENTS: [Event; 2] =
@@ -351,12 +475,13 @@ fn generate(rng: &mut Rng, held: usize, focus: &[Event]) -> Event {
     }
 
     // taps weigh the most, so most cases reach operations; the rest is the platform and providers
-    match rng.below(24) {
+    match rng.below(27) {
         0..=9 => Event::Tap(rng.pick(&Tap::ALL)),
         10 => Event::WalletChanged,
         11 => Event::Background,
         12 => Event::Foreground,
         13 | 14 => Event::AdvanceClock(rng.pick(&[1, 5, 30, 61, 300])),
+        15 if rng.below(4) == 0 => Event::DeleteFindsNothing,
         15 => Event::FailNext(rng.pick(&SCRIPTED_CALLS)),
         16 => Event::HoldNext(rng.pick(&SCRIPTED_CALLS)),
         17 if held > 0 => Event::ReleaseHeld,
@@ -367,6 +492,9 @@ fn generate(rng: &mut Rng, held: usize, focus: &[Event]) -> Event {
         ])),
         19 | 20 => Event::DriveSwitch { proceed: rng.below(4) != 0 },
         21 => Event::Reset(rng.pick(&[Wipe::Completes, Wipe::FailsBeforeCommit])),
+        22 => Event::OpenDetail,
+        23 => Event::DismissDialog,
+        24 => Event::DismissNotice,
         _ => Event::Relaunch,
     }
 }
@@ -581,36 +709,179 @@ fn local_reset(app: &TestApp, wipe: Wipe) {
     }
 }
 
-/// One generated case: its app, the calls it holds, the platform's Drive switch, and its trace
+/// The own backups the reference model expects the cloud to keep, kept apart from the sync
+/// table, which a faulty delete's completion would also clear
+///
+/// While backup stays on in one namespace, only a row delete removes single wallet records, and
+/// no row may name the own record of a wallet on this device. So once the cloud holds a local
+/// wallet's own backup, it keeps it until that wallet leaves this device or the namespace ends
+///
+/// It starts from the own backups the world seeded, before the first event, so a loss on that
+/// event is caught, and a process a kill started keeps the expectations the killed one had
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct ProtectedRecords {
+    namespace: Option<String>,
+    record_ids: BTreeSet<String>,
+}
+
+impl ProtectedRecords {
+    /// Protects the own backups the world seeded in `namespace`
+    fn seeded(namespace: Option<String>, record_ids: impl IntoIterator<Item = String>) -> Self {
+        let record_ids = match namespace {
+            Some(_) => record_ids.into_iter().collect(),
+            None => BTreeSet::new(),
+        };
+
+        Self { namespace, record_ids }
+    }
+
+    /// Reports an own backup the model protects that the cloud no longer holds, then protects the
+    /// own backups the cloud holds now
+    fn check(&mut self, app: &TestApp, record: &PersistedCloudBackupState) -> Option<String> {
+        let namespace = match record {
+            PersistedCloudBackupState::Configured(_) => {
+                CloudBackupKeychain::global().namespace_id().expect("read the namespace")
+            }
+            _ => None,
+        };
+
+        // Turn Off and a new namespace may remove every record, so the model starts over
+        if namespace != self.namespace {
+            self.namespace = namespace;
+            self.record_ids.clear();
+        }
+
+        let namespace = self.namespace.as_deref()?;
+        let local = CloudBackupStore::global().local_wallet_record_ids().expect("read the wallets");
+
+        // a wallet that left this device leaves its backup cloud-only, which a row may delete
+        self.record_ids.retain(|record_id| local.contains(record_id));
+
+        let held = |record_id: &String| app.cloud.inner.has_wallet_backup(namespace, record_id);
+        if let Some(lost) = self.record_ids.iter().find(|record_id| !held(record_id)) {
+            return Some(format!("the own backup {lost} of a wallet on this device is gone"));
+        }
+
+        self.record_ids.extend(local.into_iter().filter(held));
+        None
+    }
+}
+
+/// One generated case: its app, the calls it holds, the platform's Drive switch, the own backups
+/// it protects, and its trace
 struct Case {
     app: TestApp,
     held: Vec<(Hold, usize)>,
     platform: DrivePlatform,
     /// A relaunch while an operation runs kills the process instead of waiting for rest
     kills: bool,
+    protected: ProtectedRecords,
+    reference: Reference,
+    consents: TapConsents,
     trace: Vec<String>,
 }
 
+/// What the reference model expects of the durable state, saved for the process a kill starts
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct Expectations {
+    world: WorldRecords,
+    protected: ProtectedRecords,
+    heal: Option<bool>,
+}
+
 impl Case {
+    /// Seeds `world`, and checks the reference model and the own backups before the first event
     fn start(world: World, kills: bool) -> Self {
+        let mut case = Self::seed(world, kills);
+        case.check_start();
+        case
+    }
+
+    /// Seeds `world` and the reference model's expectations of it, checking nothing yet
+    fn seed(world: World, kills: bool) -> Self {
         let mut app = launch();
-        match world {
-            World::Off => {}
-            World::Configured => {
-                FakeAccount::new(2, 0).seed(&app);
+        let seeded = |app: &TestApp, account: FakeAccount| {
+            let seeded = account.seed_records(app);
+            let listed = seeded
+                .not_on_device
+                .iter()
+                .map(|record_id| (record_id.clone(), ListedKind::NotOnDevice))
+                .collect();
+            let own = seeded.local.into_iter().map(|record| record.record_id);
+            let world = WorldRecords { namespace: Some(seeded.namespace), listed };
+            let protected = ProtectedRecords::seeded(world.namespace.clone(), own);
+
+            (world, protected)
+        };
+
+        let (records, protected, phase, heal, fresh) = match world {
+            World::Off => {
+                (WorldRecords::default(), ProtectedRecords::default(), Phase::Off, false, false)
             }
-            World::WithCloudOnlyRecord => {
-                FakeAccount::new(1, 1).seed(&app);
+            World::Configured => {
+                let (records, protected) = seeded(&app, FakeAccount::new(2, 0));
+                (records, protected, Phase::Configured, false, false)
+            }
+            World::WithCloudOnlyRecords => {
+                let (records, protected) = seeded(&app, FakeAccount::new(1, 2));
+                load_detail(&mut app);
+                assert_eq!(listed_rows(&app), 2, "the detail screen lists both cloud-only rows");
+                (records, protected, Phase::Configured, false, true)
+            }
+            World::WithUnreadableRecords => {
+                let (mut records, protected) = seeded(&app, FakeAccount::new(1, 1));
+                let namespace = records.namespace.clone().expect("a seeded namespace");
+                seed_verifiable_master_key(&app, &namespace);
+                for (record_id, seed) in seed_unreadable_records(&app, &namespace) {
+                    let kind = match seed {
+                        UnreadableSeed::OtherKey => ListedKind::Decrypt,
+                        UnreadableSeed::Garbage => ListedKind::Parse,
+                        UnreadableSeed::Missing => ListedKind::NotDownloadable,
+                    };
+                    records.listed.insert(record_id, kind);
+                }
+
+                load_detail(&mut app);
+                assert_eq!(listed_rows(&app), 4, "the detail screen lists every cloud-only row");
+                (records, protected, Phase::Configured, false, true)
             }
             World::LegacyStuckDisabling => {
-                let namespace = FakeAccount::new(1, 0).seed(&app);
+                let (records, protected) = seeded(&app, FakeAccount::new(1, 0));
+                let namespace = records.namespace.clone().expect("a seeded namespace");
                 seed_legacy_stuck_disabling(&namespace, 1);
                 app.relaunch().then_cannot(&[N::Enable]);
+                (records, protected, Phase::Configured, true, false)
             }
+        };
+
+        let reference = Reference::new(records, phase, heal, fresh);
+        Self {
+            app,
+            held: Vec::new(),
+            platform: DrivePlatform::Idle,
+            kills,
+            protected,
+            reference,
+            consents: TapConsents::default(),
+            trace: vec![format!("world {world:?}")],
+        }
+    }
+
+    /// The reference model and the own backups hold before any event
+    fn check_start(&mut self) {
+        if let Err(error) = self.reference.check(&self.app) {
+            self.fail(&format!("the reference model at the start: {error}"));
         }
 
-        let trace = vec![format!("world {world:?}")];
-        Self { app, held: Vec::new(), platform: DrivePlatform::Idle, kills, trace }
+        let record = persisted();
+        if let Some(lost) = self.protected.check(&self.app, &record) {
+            self.fail(&lost);
+        }
+    }
+
+    /// Fails the case with what went wrong, its trace and the app's state
+    fn fail(&self, what: &str) -> ! {
+        panic!("{what}\ntrace:\n{}\n{}", self.trace.join("\n"), self.app.describe());
     }
 
     /// The app launched again on the durable state a killed process left, and the platform's
@@ -619,15 +890,27 @@ impl Case {
         let root = child_root().expect("a harness child");
         let saved = std::fs::read_to_string(root.join(PLATFORM_FILE)).unwrap_or_default();
         let platform = DrivePlatform::decode(&saved);
+        let expectations: Expectations = serde_json::from_slice(
+            &std::fs::read(root.join(EXPECTATIONS_FILE)).expect("the killed process's model"),
+        )
+        .expect("decode the killed process's model");
 
+        let app = launch();
+        let reference = Reference::after_kill(expectations.world, expectations.heal, &app);
         let mut case = Self {
-            app: launch(),
+            app,
             held: Vec::new(),
             platform,
             kills: false,
+            // the own backups the killed process protected stay protected in this one
+            protected: expectations.protected,
+            reference,
+            // a consent from before the kill is stale, but the new screen offers fresh ones
+            consents: TapConsents::default(),
             trace: vec![format!("launch after the kill, platform {platform:?}")],
         };
         case.reconcile_at_launch(step);
+        case.check_start();
         case
     }
 
@@ -653,6 +936,7 @@ impl Case {
         }
 
         let relaunches = matches!(event, Event::Relaunch) && !app.runs_operation();
+        let mut applied = Applied::Event(event);
         let step_result = match event {
             Event::Tap(tap) => {
                 let review_id = app.turn_off_review().map(|review| review.review_id);
@@ -665,11 +949,56 @@ impl Case {
                     app.passkey.inner.set_create_result(Ok(NEW_CREDENTIAL.to_vec()));
                 }
 
-                app.dispatch(tap.action(review_id))
+                // the output names a row action's record, so a run shows whether rows were listed
+                let row = row_record(app);
+                if matches!(tap, Tap::RestoreCloudWallet | Tap::DeleteCloudWallet) {
+                    println!("model step {step}: the row names {row}");
+                }
+
+                self.consents.refresh(app, &row);
+                applied = Applied::Tap(tap);
+                match tap.action(review_id, &row, &self.consents) {
+                    Some(action) => app.dispatch(action),
+                    None => {
+                        applied = Applied::Nothing;
+                        app.event("a delete tap before any Delete was offered", |_| {})
+                    }
+                }
+            }
+            Event::DismissDialog => match dialog_dismissal(app) {
+                Some(tap) => {
+                    applied = Applied::Tap(tap);
+                    let review_id = app.turn_off_review().map(|review| review.review_id);
+                    let action = tap.action(review_id, "", &self.consents).expect("a dismissal");
+                    app.dispatch(action)
+                }
+                None => {
+                    applied = Applied::Nothing;
+                    app.event("no dialog to dismiss", |_| {})
+                }
+            },
+            Event::DismissNotice => {
+                let kind = match app.screen().heal_notice {
+                    Some(_) => CloudBackupNoticeKind::Heal,
+                    None => CloudBackupNoticeKind::LastOutcome,
+                };
+
+                applied = match kind {
+                    CloudBackupNoticeKind::Heal => Applied::DismissHealNotice,
+                    CloudBackupNoticeKind::LastOutcome => Applied::DismissLastOutcome,
+                };
+                app.dispatch(CloudBackupManagerAction::DismissNotice(kind))
             }
             Event::WalletChanged => app.event("a local wallet changed", |app| {
                 change_a_wallet(app);
             }),
+            Event::OpenDetail => {
+                let record = Database::global().cloud_backup_state.get().expect("read the record");
+                app.dispatch(CloudBackupManagerAction::RefreshDetail)
+                    .then_cannot(forbidden_by_record(&record));
+
+                app.advance_clock(Duration::from_secs(60))
+            }
             Event::Background => app.event("background", |_| {
                 CONNECTIVITY_MANAGER.set_status_without_broadcast(ConnectivityStatus::Disconnected);
             }),
@@ -684,6 +1013,10 @@ impl Case {
             Event::FailNext(kind) => app.event("script a failure", |app| {
                 let error = CloudStorageError::NotAvailable("model failure".into());
                 app.cloud.script_next(kind, CloudFault::Fail(error));
+            }),
+            Event::DeleteFindsNothing => app.event("script an already-gone delete", |app| {
+                let error = CloudStorageError::NotFound("model record".into());
+                app.cloud.script_next(CloudCall::DeleteWallet, CloudFault::Fail(error));
             }),
             Event::HoldNext(kind) => {
                 let hold = Hold::default();
@@ -708,6 +1041,7 @@ impl Case {
                 if self.platform == DrivePlatform::Idle
                     && persisted().drive_account_switch().is_none() =>
             {
+                applied = Applied::SwitchDriveAccount;
                 app.dispatch(CloudBackupManagerAction::SwitchDriveAccount)
             }
             Event::DriveSwitch { proceed } => {
@@ -724,6 +1058,7 @@ impl Case {
             Event::Relaunch if !relaunches => {
                 // a relaunch mid-operation is a process kill, which killing cases cover
                 println!("model step {step}: an operation runs, so the app does not relaunch");
+                applied = Applied::Nothing;
                 app.current()
             }
             Event::Relaunch => app.relaunch(),
@@ -731,6 +1066,14 @@ impl Case {
 
         let record = Database::global().cloud_backup_state.get().expect("read the record");
         step_result.then_cannot(forbidden_by_record(&record));
+        let held = !fakes::held_calls().is_empty();
+        if let Err(error) = self.reference.after(applied, &self.app, held) {
+            self.fail(&format!("the reference model: {error}"));
+        }
+
+        if let Some(lost) = self.protected.check(&self.app, &record) {
+            self.fail(&lost);
+        }
 
         // the escape path touches no provider, so only a write held in flight can delay it
         if stops_using && self.held.is_empty() {
@@ -767,6 +1110,11 @@ impl Case {
 
         let record = Database::global().cloud_backup_state.get().expect("read the record");
         reconciled.then_cannot(forbidden_by_record(&record));
+
+        let held = !fakes::held_calls().is_empty();
+        if let Err(error) = self.reference.after(Applied::PlatformReport, &self.app, held) {
+            self.fail(&format!("the reference model: {error}"));
+        }
     }
 
     /// The process dies here: the parent kills it at the checkpoint, and the case goes on in a
@@ -778,6 +1126,14 @@ impl Case {
         let root = child_root().expect("a harness child");
         std::fs::write(root.join(PLATFORM_FILE), self.platform.encode())
             .expect("save the platform's switch state");
+
+        let expectations = Expectations {
+            world: self.reference.world().clone(),
+            protected: std::mem::take(&mut self.protected),
+            heal: self.reference.heal(),
+        };
+        let encoded = serde_json::to_vec(&expectations).expect("encode the model");
+        std::fs::write(root.join(EXPECTATIONS_FILE), encoded).expect("save the model");
         checkpoint(MODEL_KILL);
         panic!("a killing case passed {MODEL_KILL:?} without being killed");
     }
@@ -843,9 +1199,18 @@ impl Case {
                 break;
             }
 
+            // a local reset wipes Rust's switch but not the platform's staged account, and Rust
+            // asks for nothing until the next launch, where the platform reports its state and
+            // Rust rolls the orphan back, so the cooperative platform reports it as at launch
+            let orphaned = persisted().drive_account_switch().is_none()
+                && !shows_switch(&self.app.manager().published_screen().body);
             let platform = &mut self.platform;
             self.app
                 .event("the cooperative platform's next Drive switch step", move |app| {
+                    if orphaned {
+                        *platform = platform.report_state(app);
+                    }
+
                     *platform = platform.step(app, true);
                 })
                 .then_cannot(&[]);
@@ -899,6 +1264,12 @@ impl Case {
         let quiesced = self.app.quiesce();
         let record = Database::global().cloud_backup_state.get().expect("read the record");
         quiesced.then_cannot(forbidden_by_record(&record));
+
+        // what the cooperative completion did to the own backups is checked before Turn Off is
+        // authorized to remove the namespace they are in
+        if let Some(lost) = self.protected.check(&self.app, &record) {
+            self.fail(&format!("after the cooperative completion: {lost}"));
+        }
 
         let quiesced = self.app.manager().published_screen().body;
         self.trace.push(format!("{steps}: quiescent in {}", body_name(&quiesced)));
@@ -996,7 +1367,8 @@ fn run_events(seed: u64, steps: usize, kills: bool, mut reached: impl FnMut(&Cas
     let world = rng.pick(&[
         World::Off,
         World::Configured,
-        World::WithCloudOnlyRecord,
+        World::WithCloudOnlyRecords,
+        World::WithUnreadableRecords,
         World::LegacyStuckDisabling,
     ]);
 
@@ -1062,8 +1434,10 @@ fn run_sequence_phase(case: usize, seed: u64, max_steps: usize, phase: SequenceP
     let events = model.trace.len();
     model.escape(events);
     println!(
-        "MODEL_TIMING case={case} seed={seed} phase={phase:?} events={} elapsed_ms={}",
+        "MODEL_TIMING case={case} seed={seed} phase={phase:?} events={} reference_checks={} \
+         elapsed_ms={}",
         model.trace.len() - 1,
+        model.reference.checked,
         started.elapsed().as_millis()
     );
 }
@@ -1204,4 +1578,162 @@ fn clear_root(root: &Path, keep: &[&str]) {
             std::fs::remove_file(&path).expect("clear the case root");
         }
     }
+}
+
+/// Removes the own backup of one wallet on this device from the cloud, and its sync row with it,
+/// as a faulty delete that also cleared the table would
+fn lose_an_own_backup(app: &TestApp) -> String {
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let local = CloudBackupStore::global().local_wallet_record_ids().unwrap();
+    let record_id = local.into_iter().next().expect("the world has local wallets");
+    app.cloud.inner.remove_wallet_backup(&namespace, &record_id);
+    app.cloud.persist();
+    Database::global().cloud_blob_sync_states.delete(&record_id).unwrap();
+
+    record_id
+}
+
+/// The own-backup check catches a loss on the first event, before it has looked at the cloud
+/// or the sync table, since it starts from the own backups the world seeded
+#[test]
+fn the_model_catches_an_own_backup_lost_on_the_first_event() {
+    let test = concat!(module_path!(), "::the_model_catches_an_own_backup_lost_on_the_first_event");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        clear_root(&child_root().expect("a harness child"), &[]);
+        let mut case = Case::seed(World::Configured, false);
+
+        let mut lost = None;
+        case.app
+            .event("a faulty first event deletes an own backup", |app| {
+                lost = Some(lose_an_own_backup(app));
+            })
+            .then_cannot(&[]);
+
+        let lost = lost.expect("the event ran");
+        let found = case.protected.check(&case.app, &persisted());
+        assert!(
+            found.as_deref().is_some_and(|found| found.contains(&lost)),
+            "the model missed the own backup {lost} lost on the first event: {found:?}"
+        );
+    });
+}
+
+/// The own-backup check catches a loss across a process kill, with no sync row left to relearn
+/// it from, since the new process keeps the expectations the killed one saved
+#[test]
+fn the_model_catches_an_own_backup_lost_across_a_kill() {
+    let test = concat!(module_path!(), "::the_model_catches_an_own_backup_lost_across_a_kill");
+    run_case(test, &[PhaseEnd::KillAt(MODEL_KILL), PhaseEnd::Exit], |phase| {
+        let root = child_root().expect("a harness child");
+        if phase == 0 {
+            clear_root(&root, &[]);
+            let mut case = Case::start(World::Configured, true);
+            let lost = lose_an_own_backup(&case.app);
+            std::fs::write(root.join("lost-record"), &lost).expect("save the lost record");
+            case.kill(0, "after the own backup is lost");
+        }
+
+        let lost = std::fs::read_to_string(root.join("lost-record")).expect("the lost record");
+        let launched = std::panic::catch_unwind(|| Case::after_kill(0));
+        let Err(panic) = launched else {
+            panic!("the new process missed the own backup {lost} lost across the kill");
+        };
+
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        assert!(
+            message.contains(&format!("the own backup {lost} of a wallet on this device is gone")),
+            "the new process failed for another reason: {message}"
+        );
+    });
+}
+
+/// The reference model fails a screen that drops the Not on This Device section the world's
+/// cloud-only records need, or the Turn Off action a configured backup offers
+///
+/// The faults come in through a harness seam on the published screen, so production stays as it
+/// is and the model has to notice on its own
+#[test]
+fn the_reference_model_catches_a_dropped_section_or_action() {
+    let test = concat!(module_path!(), "::the_reference_model_catches_a_dropped_section_or_action");
+    let faults = [
+        (World::WithCloudOnlyRecords, ScreenFault::DropSection(SectionKind::NotOnDevice)),
+        (World::WithUnreadableRecords, ScreenFault::DropSection(SectionKind::Wallets)),
+        (World::Configured, ScreenFault::DropAction(CloudBackupScreenAction::TurnOff)),
+        (World::WithUnreadableRecords, ScreenFault::OfferUnreadableDelete { verified: false }),
+        (World::WithUnreadableRecords, ScreenFault::OfferUnreadableDelete { verified: true }),
+    ];
+    let phases = faults.map(|_| PhaseEnd::Exit);
+    run_case(test, &phases, |phase| {
+        clear_root(&child_root().expect("a harness child"), &[]);
+        let (world, fault) = faults[phase];
+        let mut case = Case::start(world, false);
+
+        case.app.inject_screen_fault(fault);
+        let error = case.reference.check(&case.app).expect_err("the model missed the fault");
+        let named = match fault {
+            ScreenFault::DropSection(section) => format!("{section:?}"),
+            ScreenFault::DropAction(action) => format!("{action:?}"),
+            ScreenFault::OfferUnreadableDelete { .. } => "seeded as Decrypt".into(),
+        };
+        assert!(error.contains(&named), "the model failed without naming {named}: {error}");
+    });
+}
+
+/// A Turn Off confirmed, or a Try Again tapped, while the provider holds the namespace delete
+/// keeps the resume running on the finishing body with nothing to tap, and turns off once the
+/// provider answers
+///
+/// The reference holds the screen to that state rather than taking a held delete for a failed one
+#[test]
+fn the_reference_model_follows_a_held_namespace_delete() {
+    use CloudCall::DeleteNamespace;
+    use Event::{FailNext, HoldNext, OpenDetail, ReleaseHeld, Tap as T};
+
+    let test = concat!(module_path!(), "::the_reference_model_follows_a_held_namespace_delete");
+    let scenarios: [&[Event]; 3] = [
+        // seeds 20261400 and 20261667: a review on a listing the reference doesn't know
+        &[HoldNext(DeleteNamespace), T(Tap::TurnOff), T(Tap::ConfirmDisable), ReleaseHeld],
+        // a review on a fresh listing, whose confirmation commits for certain
+        &[
+            OpenDetail,
+            HoldNext(DeleteNamespace),
+            T(Tap::TurnOff),
+            T(Tap::ConfirmDisable),
+            ReleaseHeld,
+        ],
+        // a Try Again after the committed delete failed
+        &[
+            FailNext(DeleteNamespace),
+            OpenDetail,
+            T(Tap::TurnOff),
+            T(Tap::ConfirmDisable),
+            HoldNext(DeleteNamespace),
+            T(Tap::ResumeDisable),
+            ReleaseHeld,
+        ],
+    ];
+    let phases = scenarios.map(|_| PhaseEnd::Exit);
+    run_case(test, &phases, |phase| {
+        clear_root(&child_root().expect("a harness child"), &[]);
+        let events = scenarios[phase];
+        let mut case = Case::start(World::Configured, false);
+
+        // the reference held the screen to the running resume after the confirmation or Try Again
+        let mut resumed = 0;
+        for (step, event) in events.iter().enumerate() {
+            let checked = case.reference.checked;
+            case.apply(step, *event);
+            if case.reference.phase() == Phase::Resuming && case.reference.checked > checked {
+                resumed += 1;
+            }
+        }
+
+        assert_eq!(resumed, 1, "the resume was checked once\n{}", case.trace.join("\n"));
+        case.finish(events.len());
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", case.trace.join("\n"));
+    });
 }

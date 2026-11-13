@@ -371,6 +371,7 @@ mod debug {
             last_sync: Some(VERIFIED_AT),
             sync_health: CloudSyncHealth::AllUploaded,
             disable: CloudBackupDisableScreen::Idle,
+            passkey_hint: None,
         })
     }
 
@@ -384,6 +385,7 @@ mod debug {
             last_sync: Some(VERIFIED_AT),
             sync_health: CloudSyncHealth::AllUploaded,
             disable,
+            passkey_hint: None,
         })
     }
 

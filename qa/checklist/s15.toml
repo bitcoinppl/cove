@@ -158,8 +158,8 @@ coverage = [
 # biometric cancel is the ios test here and android's stays with s15-biometric-authentication-and-prompt-cancel.
 # android stays human only to cancel the real credential manager passkey sheet: camera deny and the
 # nfc sheet are the android tests here, and s05-passkey-cancel-leaves-active-state-intact and
-# s12-passkey-and-provider-failure-retry-policy inject the cancellation or call the error mapping
-# directly, so nothing tests the real sheet's cancel reaching AndroidPasskeyProvider
+# s12-passkey-and-provider-failure-retry-policy inject a NotCompleted result or call the error
+# mapping directly, so nothing tests the real sheet's cancel reaching AndroidPasskeyProvider
 
 [[row]]
 id = "s15-network-dialog-cancel-outside-and-back"

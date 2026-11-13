@@ -1,6 +1,7 @@
 //! `TestApp`: one real manager on the harness runtime, driven by events whose next actions the
 //! test must assert
 
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -28,14 +29,17 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
+    CloudBackupActionAvailability, CloudBackupDeleteConfirmation, CloudBackupDisableReview,
+    CloudBackupDisableScreen, CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupListedRow,
     CloudBackupRowActionKind, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyScreen,
-    CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupScreen, CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection,
+    CloudBackupUnreadableKind, CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRowDeleteConsent,
-    CloudBackupRuntimeOwnership, CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
+    CLOUD_BACKUP_MANAGER, CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory,
+    CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupPendingEnableRecovery,
+    CloudBackupResetPermit, CloudBackupRowDeleteConsent, CloudBackupRuntimeOwnership,
+    CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
     initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
@@ -122,6 +126,107 @@ impl NextAction {
     }
 }
 
+/// One kind of section on the configured screen, declared in the order the screen draws them
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum SectionKind {
+    PasskeyCard,
+    Progress,
+    Verification,
+    Wallets,
+    NotOnDevice,
+    ExtraCopies,
+    OtherBackups,
+    TurnOff,
+}
+
+impl SectionKind {
+    pub(crate) fn of(section: &CloudBackupSection) -> Self {
+        match section {
+            CloudBackupSection::PasskeyCard(_) => Self::PasskeyCard,
+            CloudBackupSection::Progress(_) => Self::Progress,
+            CloudBackupSection::Verification(_) => Self::Verification,
+            CloudBackupSection::Wallets(_) => Self::Wallets,
+            CloudBackupSection::NotOnDevice(_) => Self::NotOnDevice,
+            CloudBackupSection::ExtraCopies(_) => Self::ExtraCopies,
+            CloudBackupSection::OtherBackups(_) => Self::OtherBackups,
+            CloudBackupSection::TurnOff => Self::TurnOff,
+        }
+    }
+}
+
+/// A projection fault a negative control puts into the harness's view of the published screen
+///
+/// Only [`TestApp::screen`] applies it, so a test can show that a check fails on a screen that
+/// left something out; the manager, its deltas and the platforms never see it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScreenFault {
+    /// The configured screen loses every section of this kind, and the actions only it drew
+    DropSection(SectionKind),
+    /// The action table loses this action, as if no surface drew it
+    DropAction(CloudBackupScreenAction),
+    /// Every decrypt failure's row offers Delete in place of Verify, and with `verified` also
+    /// reads as the verified key's failure, as if a listing or a passed Verify proved the key
+    OfferUnreadableDelete { verified: bool },
+}
+
+impl ScreenFault {
+    fn apply(self, screen: &mut CloudBackupScreen) {
+        match self {
+            Self::DropSection(kind) => {
+                if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
+                    configured.sections.retain(|section| SectionKind::of(section) != kind);
+                }
+
+                let drawn: HashSet<_> =
+                    screen.drawn_controls().into_iter().map(|drawn| drawn.action).collect();
+                screen.actions.entries.retain(|entry| drawn.contains(&entry.action));
+            }
+            Self::DropAction(action) => {
+                screen.actions.entries.retain(|entry| entry.action != action);
+            }
+            Self::OfferUnreadableDelete { verified } => {
+                let CloudBackupScreenBody::Configured(configured) = &mut screen.body else {
+                    return;
+                };
+
+                let rows = configured.sections.iter_mut().flat_map(|section| match section {
+                    CloudBackupSection::NotOnDevice(section) => section.rows.iter_mut().collect(),
+                    _ => Vec::new(),
+                });
+                for row in rows {
+                    offer_unreadable_delete(row, verified);
+                }
+            }
+        }
+    }
+}
+
+/// Gives a decrypt failure's row a Delete in place of its Verify, and with `verified` the trust
+/// that would allow it
+fn offer_unreadable_delete(row: &mut CloudBackupListedRow, verified: bool) {
+    let CloudBackupListedRecord::Unreadable { kind: CloudBackupUnreadableKind::Decrypt, trust } =
+        &mut row.record
+    else {
+        return;
+    };
+
+    if verified {
+        *trust = CloudBackupKeyTrust::VerifiedCurrentKey;
+    }
+
+    let category =
+        CloudBackupDeleteCategory::Unreadable { kind: CloudBackupUnreadableKind::Decrypt };
+    let consent = CloudBackupRowDeleteConsent::fixture(row.record_id.as_str(), category);
+    for action in &mut row.actions {
+        if action.action == CloudBackupRowActionKind::Verify {
+            action.action = CloudBackupRowActionKind::Delete {
+                confirmation: CloudBackupDeleteConfirmation::MayBeOnlyCopy,
+                consent: consent.clone(),
+            };
+        }
+    }
+}
+
 /// Process-wide providers and runtime for one harness child
 #[derive(Debug)]
 struct HarnessEnv {
@@ -187,6 +292,8 @@ pub(crate) struct TestApp {
     /// The managers soft relaunches replaced, fenced like a local reset fences them for as long
     /// as the app runs, so like the process a relaunch ends they can do nothing more
     retired: Vec<CloudBackupResetPermit>,
+    /// A negative control's fault in the harness's view of the screen
+    screen_fault: Option<ScreenFault>,
 }
 
 const SETTLE_ROUNDS: usize = 500;
@@ -248,6 +355,7 @@ impl TestApp {
             unasserted: None,
             invariants: Invariants::default(),
             retired: Vec::new(),
+            screen_fault: None,
         };
 
         app.settle_and_check();
@@ -256,6 +364,22 @@ impl TestApp {
 
     pub(crate) fn manager(&self) -> &Arc<RustCloudBackupManager> {
         &self.manager
+    }
+
+    /// The published screen as the harness's checks see it: with the negative control's fault,
+    /// if one was injected
+    pub(crate) fn screen(&self) -> CloudBackupScreen {
+        let mut screen = self.manager.published_screen();
+        if let Some(fault) = self.screen_fault {
+            fault.apply(&mut screen);
+        }
+
+        screen
+    }
+
+    /// From here on, the harness's view of the screen has `fault`; for negative controls only
+    pub(crate) fn inject_screen_fault(&mut self, fault: ScreenFault) {
+        self.screen_fault = Some(fault);
     }
 
     /// Run a future on the harness runtime's context from the test thread, bounded by the
@@ -554,26 +678,34 @@ impl TestApp {
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
     }
 
-    /// Asserts what dispatch would do with each action, and that the published screen agrees
+    /// Asserts what dispatch would do with each action, and that the screen agrees
+    fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
+        if let Some(mismatch) = self.admission_mismatch(actions, expect_admitted) {
+            panic!("after {}: {mismatch}\n{}", self.last_event, self.describe());
+        }
+    }
+
+    /// What disagrees with expecting each of `actions` admitted, or not, on the screen as the
+    /// harness sees it, or `None` when nothing does
     ///
     /// An admitted action has an available control. A rejected one has no control or an
     /// unavailable one; a tap that coalesces into running work may still show enabled, since it
     /// joins that work
-    fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
-        let screen = self.manager.published_screen();
+    pub(crate) fn admission_mismatch(
+        &self,
+        actions: &[NextAction],
+        expect_admitted: bool,
+    ) -> Option<String> {
+        let screen = self.screen();
 
-        for action in actions {
+        actions.iter().find_map(|action| {
             let admission = self.admission(*action);
             let control = screen.actions.availability(action.control());
             // a coalesced repeat starts nothing new, so it counts as not admitted
             let admitted = matches!(admission, Admission::Accepted);
             if admitted != expect_admitted {
                 let expected = if expect_admitted { "admitted" } else { "not admitted" };
-                panic!(
-                    "after {}: expected {action:?} to be {expected}, it was {admission:?}\n{}",
-                    self.last_event,
-                    self.describe()
-                );
+                return Some(format!("expected {action:?} to be {expected}, it was {admission:?}"));
             }
 
             let shown = matches!(control, Some(CloudBackupActionAvailability::Available));
@@ -582,13 +714,10 @@ impl TestApp {
                 Admission::Rejected(_) => !shown,
                 Admission::Coalesced(_) => true,
             };
-            assert!(
-                agrees,
-                "after {}: {action:?} was {admission:?} but the screen shows {control:?}\n{}",
-                self.last_event,
-                self.describe()
-            );
-        }
+
+            (!agrees)
+                .then(|| format!("{action:?} was {admission:?} but the screen shows {control:?}"))
+        })
     }
 
     /// What dispatch would do with `action` now, from the same `evaluate_admission` it calls
@@ -638,6 +767,28 @@ impl TestApp {
             .flat_map(|row| row.actions)
             .find_map(|action| match action.action {
                 CloudBackupRowActionKind::Delete { consent, .. } => Some(consent),
+                _ => None,
+            })
+    }
+
+    /// The consent the Delete Unreadable Backups control carries on the published screen
+    pub(crate) fn undecryptable_delete(&self) -> Option<CloudBackupBatchDeleteConsent> {
+        let CloudBackupScreenBody::Configured(configured) = self.manager.published_screen().body
+        else {
+            return None;
+        };
+
+        configured
+            .sections
+            .into_iter()
+            .flat_map(|section| match section {
+                CloudBackupSection::Verification(section) => section.controls,
+                _ => Vec::new(),
+            })
+            .find_map(|control| match control {
+                CloudBackupVerificationControl::DeleteUnreadableBackups { consent } => {
+                    Some(consent)
+                }
                 _ => None,
             })
     }

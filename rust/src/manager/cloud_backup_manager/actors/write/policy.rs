@@ -9,10 +9,14 @@
 //! pause, and a command from an older configuration can't recreate remote data a newer one
 //! deleted
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::manager::cloud_backup_manager::admission::PauseReason;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+    DeleteAuthorization, StaleTarget,
+};
 
 /// Identifies one configuration of the backup within this process
 ///
@@ -29,6 +33,13 @@ static NEXT_CONFIG_GENERATION: AtomicU64 = AtomicU64::new(1);
 impl ConfigGeneration {
     pub(crate) fn next() -> Self {
         Self(NEXT_CONFIG_GENERATION.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+/// A generation this process minted, read back from the number a consent carried
+impl From<u64> for ConfigGeneration {
+    fn from(generation: u64) -> Self {
+        Self(generation)
     }
 }
 
@@ -52,8 +63,13 @@ pub(crate) enum CommandClass {
     Operation(CloudBackupExclusiveOperationClaim),
     /// Turn Off's delete of the namespace it committed to delete
     TurnOffDelete { claim: CloudBackupExclusiveOperationClaim, namespace_id: String },
-    /// A row or batch delete of wallet records in the active namespace
-    RowDelete(CloudBackupExclusiveOperationClaim),
+    /// A row or batch delete of one wallet record, which the policy runs only under its own
+    /// operation and the lane runs only while the authorization still holds
+    RowDelete {
+        claim: CloudBackupExclusiveOperationClaim,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+    },
     /// Recover Other Backups or Delete Other Backups deleting another namespace
     OtherBackupDelete(CloudBackupExclusiveOperationClaim),
     /// Discarding the namespace an interrupted Enable wrote
@@ -68,7 +84,7 @@ impl CommandClass {
         match self {
             Self::Operation(claim)
             | Self::TurnOffDelete { claim, .. }
-            | Self::RowDelete(claim)
+            | Self::RowDelete { claim, .. }
             | Self::OtherBackupDelete(claim)
             | Self::EnableDiscard(claim) => Some(*claim),
             Self::Ordinary { .. } | Self::SourceCleanup { .. } => None,
@@ -85,6 +101,9 @@ pub(crate) enum Decision {
     Paused(PauseReason),
     /// The command's operation ended or its configuration was replaced; it is dropped
     Stale,
+    /// The policy runs it, but the row delete's authorization no longer matches the inventory, so
+    /// nothing is deleted and the caller refreshes
+    StaleTarget(StaleTarget),
 }
 
 /// The lifecycle body as the write lane needs it
@@ -212,7 +231,7 @@ impl WritePolicy {
                 _ => Decision::Stale,
             },
 
-            C::RowDelete(claim) => match &self.body {
+            C::RowDelete { claim, .. } => match &self.body {
                 B::Configured {
                     op: Some(ConfiguredWrites { claim: running, kind: ConfiguredWriter::RowDelete }),
                 } if running == claim => Decision::Run,

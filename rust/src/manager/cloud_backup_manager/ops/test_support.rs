@@ -236,6 +236,7 @@ struct MockCloudState {
     upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
     delete_namespace_error: Option<CloudStorageError>,
+    wallet_backup_delete_errors: HashMap<(String, String), CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     list_namespaces_attempts: usize,
     next_list_namespaces_gate: Option<Arc<MockCloudDownloadGate>>,
@@ -249,6 +250,7 @@ struct MockCloudState {
     delete_namespace_attempts: usize,
     next_delete_namespace_gate: Option<Arc<MockCloudDownloadGate>>,
     next_wallet_upload_gate: Option<Arc<MockCloudDownloadGate>>,
+    next_list_wallet_files_gate: Option<Arc<MockCloudDownloadGate>>,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     list_wallet_files_snapshot_attempts: usize,
@@ -260,6 +262,29 @@ struct MockCloudState {
     dirty_wallet_on_next_backup_check: Option<WalletId>,
     download_requests: Vec<MockCloudDownloadRequest>,
     uploads: Vec<MockCloudUpload>,
+    explicit_missing_record_lookup: MockMissingRecordLookup,
+}
+
+/// How a consent-allowed download answers for a record the provider doesn't hold
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum MockMissingRecordLookup {
+    /// `NotFound` at once, as Google Drive and the silent iOS client answer
+    #[default]
+    NotFound,
+    /// `SyncPending`, as iOS's consent-allowed lookup ends once it stops waiting for the record
+    /// to sync; the fake answers at once instead of after the wait
+    SyncPending,
+}
+
+impl MockMissingRecordLookup {
+    fn missing(self, policy: CloudAccessPolicy, path: String) -> CloudStorageError {
+        match (self, policy) {
+            (Self::SyncPending, CloudAccessPolicy::ConsentAllowed) => {
+                CloudStorageError::SyncPending(path)
+            }
+            _ => CloudStorageError::NotFound(path),
+        }
+    }
 }
 
 /// A file the provider accepted, at the path it was asked to write
@@ -391,6 +416,11 @@ impl MockCloudStorage {
 
     pub(crate) fn set_wallet_backup(&self, namespace: String, record_id: String, backup: Vec<u8>) {
         self.state.lock().wallet_backups.insert((namespace, record_id), backup);
+    }
+
+    /// Removes a backup as another device deleting it would
+    pub(crate) fn remove_wallet_backup(&self, namespace: &str, record_id: &str) {
+        self.state.lock().wallet_backups.remove(&(namespace.to_owned(), record_id.to_owned()));
     }
 
     pub(crate) fn set_wallet_backup_download_override(
@@ -535,6 +565,13 @@ impl MockCloudStorage {
         gate
     }
 
+    /// Holds the next wallet listing, silent or not, until the test releases it
+    pub(crate) fn gate_next_list_wallet_files(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().next_list_wallet_files_gate = Some(gate.clone());
+        gate
+    }
+
     pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
         self.state.lock().list_wallet_files_non_interactive_error = None;
     }
@@ -600,6 +637,16 @@ impl MockCloudStorage {
         state.upload_wallet_backup_error = None;
     }
 
+    /// Fails every delete of one wallet record with `error`, leaving the record as it is
+    pub(crate) fn fail_wallet_backup_delete(
+        &self,
+        namespace: String,
+        record_id: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().wallet_backup_delete_errors.insert((namespace, record_id), error);
+    }
+
     pub(crate) fn fail_delete_namespace(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
@@ -612,6 +659,12 @@ impl MockCloudStorage {
     pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::NotFound(message.into()));
+    }
+
+    /// Answers consent-allowed downloads of missing records the way iOS does, until the next
+    /// reset
+    pub(crate) fn set_explicit_missing_record_lookup(&self, lookup: MockMissingRecordLookup) {
+        self.state.lock().explicit_missing_record_lookup = lookup;
     }
 
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
@@ -825,7 +878,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
-        _policy: CloudAccessPolicy,
+        policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let gate = {
             let mut state = self.state.lock();
@@ -853,11 +906,12 @@ impl CloudStorageAccess for MockCloudStorage {
             if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
                 Err(error)
             } else {
+                let lookup = state.explicit_missing_record_lookup;
                 state
                     .master_key_backups
                     .get(&namespace)
                     .cloned()
-                    .ok_or(CloudStorageError::NotFound(namespace))
+                    .ok_or_else(|| lookup.missing(policy, namespace))
             }
         };
 
@@ -939,12 +993,14 @@ impl CloudStorageAccess for MockCloudStorage {
             return Ok(backup);
         }
 
-        self.state
-            .lock()
-            .wallet_backups
-            .get(&(namespace.clone(), record_id.clone()))
-            .cloned()
-            .ok_or(CloudStorageError::NotFound(format!("{namespace}/{record_id}")))
+        let state = self.state.lock();
+        state.wallet_backups.get(&(namespace.clone(), record_id.clone())).cloned().ok_or_else(
+            || {
+                state
+                    .explicit_missing_record_lookup
+                    .missing(policy, format!("{namespace}/{record_id}"))
+            },
+        )
     }
 
     async fn delete_wallet_backup(
@@ -955,6 +1011,12 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
+        if let Some(error) =
+            state.wallet_backup_delete_errors.get(&(namespace.clone(), record_id.clone()))
+        {
+            return Err(error.clone());
+        }
+
         if record_id == MASTER_KEY_RECORD_ID {
             state.master_key_backups.remove(&namespace);
             return Ok(());
@@ -1037,6 +1099,11 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
+        let gate = self.state.lock().next_list_wallet_files_gate.take();
+        if let Some(gate) = gate {
+            gate.block().await;
+        }
+
         let mut state = self.state.lock();
         state.list_wallet_files_attempts += 1;
         *state.list_wallet_files_attempts_by_namespace.entry(namespace.clone()).or_default() += 1;
@@ -2278,7 +2345,7 @@ pub(crate) fn seed_verifiable_cloud_master_key(globals: &TestGlobals) -> String 
     let master_json = serde_json::to_vec(&encrypted).unwrap();
     let revision_hash = master_key_wrapper_revision_hash(&master_json);
     globals.cloud.set_master_key_backup(namespace, master_json);
-    CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+    CloudBackupKeychain::global().save_passkey_and_hint(&[1, 2, 3], prf_salt, None).unwrap();
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],

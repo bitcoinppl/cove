@@ -205,7 +205,7 @@ coverage = [
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRetryInterruptedSetupFullLaunchTest.kt::failedSetupUploadRetriesWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms fail a setup upload at the provider, which goes back to the saved passkey's pause, and retry it through Confirm Passkey with the same passkey, leaving one namespace and one copy of each wallet. ci runs the ios retry test by name, since the same class's background verification test fails on master
+# ui tests on both platforms fail a setup upload at the provider, which goes back to the saved passkey's pause, and retry it through Confirm Passkey with the same passkey, leaving one namespace and one copy of each wallet
 
 [[row]]
 id = "s12-cancel-incomplete-setup-preserves-active-data"
@@ -527,3 +527,76 @@ coverage = [
 # the provider is still syncing with the keep-cove-open message instead of calling it missing or
 # corrupt. a person still evicts and downloads backups on a real icloud account; the download poll
 # loop calls FileManager directly, with no test seam
+
+[[row]]
+id = "s12-no-passkey-prompt-without-a-tap"
+section = "12"
+title = "Only a user's tap shows a passkey sheet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+    "rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs",
+    "rust/src/manager/cloud_backup_manager/error.rs",
+    "ios/Cove/FFI/PasskeyProviderImpl.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupScreenContent.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::silent_inventory_paths_never_prompt",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::detail_entry_after_restart_never_asks_for_the_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::silent_paths_never_present_a_passkey_request",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::manual_saved_passkey_confirmation_presents_under_its_own_tap",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::recovering_another_namespace_presents_only_under_its_tap",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::a_tap_while_an_ended_operations_request_is_open_is_refused_as_busy",
+    "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::silent_authority_presents_no_request",
+    "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::a_permit_revoked_during_backoff_presents_no_further_request",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_leaves_offline_verification_failure_without_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::connected_connectivity_failure_settles_verification_without_retry",
+    "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testReconnectCompletesInventoryWithoutDuplicatesOrPasskey",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupReconnectFullLaunchTest.kt::reconnectAloneCompletesInventoryWithoutPasskeyPrompt",
+]
+# detail entry, refresh, background work, reconnect and relaunch never present a passkey request; a second request while
+# one is open is refused as busy
+
+[[row]]
+id = "s12-passkey-sheet-only-when-presenter-ready"
+section = "12"
+title = "A passkey request waits for a ready presenter"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+    "rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs",
+    "rust/src/manager/cloud_backup_manager/error.rs",
+    "ios/Cove/FFI/PasskeyProviderImpl.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+    "ios/Cove/PresenterIdle.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/PasskeyPresenter.kt",
+]
+coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::a_passkey_request_that_cannot_present_yet_changes_nothing",
+    "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testRequestsDoNotStartWhenPresenterIsNotReady",
+    "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testInteractiveRequestTimeoutCancelsOnMainQueueAndReturnsPresentedFailure",
+    "ios-unit:ios/CoveTests/PresenterIdleTests.swift::testSettleNeedsConsecutiveReadyChecks",
+    "ios-unit:ios/CoveTests/PresenterIdleTests.swift::testOnlyAVisibleKeyWindowOfAForegroundActiveSceneIsReady",
+    "ios-unit:ios/CoveTests/PresenterIdleTests.swift::testWaitIsNotReadyAfterTheTimeoutWhenThePresenterStaysBusy",
+    "ios-unit:ios/CoveTests/PresenterIdleTests.swift::testAlertAnywhereInChainIsBusy",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/PasskeyPresenterTest.kt::readyPresenterRunsTheRequestOnItsActivity",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/PasskeyPresenterTest.kt::noResumedActivityReportsNotReadyWithoutStartingTheRequest",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/PasskeyPresenterTest.kt::requestBoundCancelsTheRequestAndFailsAfterPresentation",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/ForegroundUiBridgeTest.kt::presenterIsReadyOnlyWhileAnActivityIsResumed",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/ForegroundUiBridgeTest.kt::presenterBecomesReadyWhenAnActivityResumesDuringTheWait",
+    "human",
+]
+# with no ready window or activity within 1.5 seconds the request reports not ready and never starts; an interactive request
+# is bounded at five minutes. a real system sheet over an alert can only be checked on a device

@@ -184,6 +184,7 @@ internal fun ErrorStateCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     body: String,
+    detail: String? = null,
 ) {
     Card(
         modifier =
@@ -202,6 +203,9 @@ internal fun ErrorStateCard(
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.error)
             Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
             Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            detail?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
         }
     }
 }

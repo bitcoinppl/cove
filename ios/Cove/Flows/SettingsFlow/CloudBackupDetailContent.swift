@@ -98,7 +98,12 @@ private struct CloudBackupSectionContent: View {
     var body: some View {
         switch section {
         case let .passkeyCard(state):
-            CloudBackupPasskeyCard(state: state, actions: screen.actions, manager: manager)
+            CloudBackupPasskeyCard(
+                state: state,
+                hint: configured.passkeyHint,
+                actions: screen.actions,
+                manager: manager
+            )
 
         case let .progress(progress):
             CloudBackupProgressContent(progress: progress, actions: screen.actions, manager: manager)

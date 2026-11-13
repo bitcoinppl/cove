@@ -504,6 +504,7 @@ impl RustCloudBackupManager {
             OwnedKeychainWrite::Passkey {
                 credential_id: authenticated.credential_id.clone(),
                 prf_salt: encrypted.prf_salt,
+                provider_hint: encrypted.passkey_provider_hint.clone(),
             },
             OwnedKeychainWrite::MasterKey(MasterKey::from_bytes(*master_key.as_bytes())),
         ];

@@ -202,6 +202,7 @@ private fun cloudBackupPreviewScreen(): CloudBackupScreen {
                     lastSync = 1_779_915_780UL,
                     syncHealth = CloudSyncHealth.Uploading,
                     disable = CloudBackupDisableScreen.Idle,
+                    passkeyHint = null,
                 ),
             ),
         settingsRow = CloudBackupSettingsRowStatus.Syncing,

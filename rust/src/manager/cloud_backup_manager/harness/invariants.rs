@@ -34,6 +34,7 @@ use crate::manager::cloud_backup_manager::inventory::InventoryRows;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::owner::delete_authorization::StaleTarget;
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupListedRecord, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
     CloudBackupScreenBody, CloudBackupSection, mismatched_delete_consents, undrawn_actions,
@@ -90,6 +91,8 @@ pub(crate) enum Invariant {
     /// An extra copy offers Delete only while the wallet it names has a current own row, and no
     /// record is both a local wallet's own and listed beside them
     InventoryRows = 8,
+    /// Every row that offers Delete is one the delete authority would authorize now
+    OfferedDeletes = 9,
 }
 
 /// Tracked state across boundaries for one running app
@@ -143,19 +146,22 @@ impl Invariants {
 
     /// Checks every invariant turned on against the app settled at `boundary`
     pub(crate) fn check(&mut self, app: &TestApp, boundary: &Boundary) -> Result<(), Violation> {
-        let supervisor = app.manager().supervisor.clone();
-        let view = app
-            .block_on("the supervisor's invariant view", async move {
-                call!(supervisor.harness_invariant_view()).await
-            })
-            .expect("supervisor invariant view");
-
+        // the lane is read first: while a call is held, settling returns with other work still
+        // running, and the owner publishes a policy before the lane applies it, so a lane read
+        // before the owner never sees a policy the owner's view doesn't have yet
         let writes = app.writes();
         let lane = app
             .block_on("the write lane's invariant view", async move {
                 call!(writes.harness_lane_view()).await
             })
             .expect("write lane invariant view");
+
+        let supervisor = app.manager().supervisor.clone();
+        let view = app
+            .block_on("the supervisor's invariant view", async move {
+                call!(supervisor.harness_invariant_view()).await
+            })
+            .expect("supervisor invariant view");
 
         let uploads = view.uploads.clone();
         let finishes = app
@@ -186,7 +192,8 @@ impl Invariants {
 
         self.check_screen_deltas(&screen)?;
         check_exits(&screen.published, boundary, live)?;
-        check_inventory_rows(&screen.published, screen.inventory.as_ref())
+        check_inventory_rows(&screen.published, screen.inventory.as_ref())?;
+        check_offered_deletes(&screen.offered_deletes)
     }
 
     /// 3: a platform that starts from a `state()` snapshot and applies every delta sent so far
@@ -676,6 +683,24 @@ fn check_exits(
     ))
 }
 
+/// 9: the screen and the delete check read one rule, so the consent every Delete a row offers
+/// carries holds against the inventory; a tap on it never ends in a refusal the screen could have
+/// shown
+///
+/// Read off the fresh projection, in the supervisor turn that checked its consents, so a change
+/// between the two can't stand in for a disagreement
+fn check_offered_deletes(offered: &[(RecordId, Result<(), StaleTarget>)]) -> Result<(), Violation> {
+    let Some((record_id, Err(stale))) = offered.iter().find(|(_, authorized)| authorized.is_err())
+    else {
+        return Ok(());
+    };
+
+    Err(Violation::new(
+        Invariant::OfferedDeletes,
+        format!("{record_id:?} offers Delete, but its consent no longer holds: {stale:?}"),
+    ))
+}
+
 /// 8: an extra copy names a wallet that covers it and offers Delete only while a covering wallet
 /// has a current own row (otherwise it says Back up first), and no record id is both
 /// a local wallet's own and a listed row, and every delete consents to the rows it is drawn with
@@ -772,7 +797,7 @@ fn owns(policy: &WritePolicy, class: &CommandClass) -> bool {
         }
         C::Operation(claim)
         | C::TurnOffDelete { claim, .. }
-        | C::RowDelete(claim)
+        | C::RowDelete { claim, .. }
         | C::OtherBackupDelete(claim)
         | C::EnableDiscard(claim) => running_claim(&policy.body) == Some(*claim),
     }

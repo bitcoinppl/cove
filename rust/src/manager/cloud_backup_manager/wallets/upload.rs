@@ -15,12 +15,12 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::{
-    PasskeyRequestAuthority, PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE,
-    prepare_wallet_backup,
+    BackupSecret, PasskeyRequestAuthority, PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE,
+    WalletBackupLookup, WalletBackupReader, prepare_wallet_backup,
 };
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, Decision,
+    CloudBackupWriteCompletion, Decision, WalletUploadOutcome,
 };
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
@@ -30,14 +30,123 @@ use crate::manager::cloud_backup_manager::{
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 
+/// One encrypted wallet record for the write lane, and the kind of secret it carries
+///
+/// It is built only by encrypting a prepared entry, so what it says it carries can't disagree
+/// with what it uploads
+pub(crate) struct WalletUpload {
+    record_id: String,
+    data: Vec<u8>,
+    secret: UploadSecret,
+}
+
+/// What an upload carries; one without key material keeps the key that reads the record it
+/// would replace
+enum UploadSecret {
+    Held,
+    WatchOnly { critical_key: Zeroizing<[u8; 32]> },
+}
+
+impl std::fmt::Debug for WalletUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let secret = match self.secret {
+            UploadSecret::Held => BackupSecret::Held,
+            UploadSecret::WatchOnly { .. } => BackupSecret::WatchOnly,
+        };
+
+        f.debug_struct("WalletUpload")
+            .field("record_id", &self.record_id)
+            .field("bytes", &self.data.len())
+            .field("secret", &secret)
+            .finish()
+    }
+}
+
+impl WalletUpload {
+    pub(crate) fn encrypt(
+        prepared: &PreparedWalletBackup,
+        namespace: &str,
+        critical_key: &[u8; 32],
+    ) -> Result<Self, CloudBackupError> {
+        let remote_metadata = RemotePayloadMetadata::wallet(
+            namespace,
+            &prepared.record_id,
+            prepared.entry.wallet_id.as_str(),
+            prepared.entry.updated_at,
+        );
+        let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+            &prepared.entry,
+            critical_key,
+            remote_metadata,
+        )
+        .map_err(CloudBackupError::crypto)?;
+
+        let data = serde_json::to_vec(&encrypted).map_err(CloudBackupError::internal)?;
+        let secret = match BackupSecret::from(&prepared.entry.secret) {
+            BackupSecret::Held => UploadSecret::Held,
+            BackupSecret::WatchOnly => {
+                UploadSecret::WatchOnly { critical_key: Zeroizing::new(*critical_key) }
+            }
+        };
+
+        Ok(Self { record_id: prepared.record_id.clone(), data, secret })
+    }
+
+    /// Whether writing this record would replace key material the cloud record holds
+    ///
+    /// Only an upload without key material reads the record. One whose version this build can't
+    /// read counts as holding key material, and one that doesn't decrypt or parse fails the
+    /// upload, since replacing it unchecked could drop the last copy of a key
+    pub(crate) async fn drops_key_material(
+        &self,
+        cloud: &CloudStorageClient,
+        namespace: &str,
+    ) -> Result<bool, CloudBackupError> {
+        let UploadSecret::WatchOnly { critical_key } = &self.secret else {
+            return Ok(false);
+        };
+
+        let reader =
+            WalletBackupReader::new(cloud.clone(), namespace.to_owned(), critical_key.clone());
+
+        let replaced = match reader.summary_if_present(&self.record_id).await? {
+            WalletBackupLookup::NotFound => return Ok(false),
+            WalletBackupLookup::Found(summary) => summary.secret,
+            WalletBackupLookup::UnsupportedVersion(version) => {
+                warn!("Cloud backup upload found wallet backup version {version} in its place");
+                BackupSecret::Held
+            }
+        };
+
+        Ok(!BackupSecret::WatchOnly.may_replace(replaced))
+    }
+
+    pub(crate) fn into_parts(self) -> (String, Vec<u8>) {
+        (self.record_id, self.data)
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use super::{UploadSecret, WalletUpload};
+
+    impl WalletUpload {
+        /// Raw bytes for lane tests that check ordering, not what the record holds; it claims
+        /// key material, so the lane never reads the record it replaces
+        pub(crate) fn opaque_for_test(record_id: impl Into<String>, data: Vec<u8>) -> Self {
+            Self { record_id: record_id.into(), data, secret: UploadSecret::Held }
+        }
+    }
+}
+
 struct PreparedDirtyWalletUpload {
     prepared: PreparedWalletBackup,
-    wallet_json: Vec<u8>,
+    upload: WalletUpload,
 }
 
 struct PreparedCloudWalletUpload {
     prepared: PreparedWalletBackup,
-    wallet_json: Vec<u8>,
+    upload: WalletUpload,
 }
 
 struct CloudWalletUploadBatch {
@@ -208,25 +317,31 @@ impl RustCloudBackupManager {
                 }
             };
 
-            let PreparedCloudWalletUpload { prepared, wallet_json } = prepared_upload;
-            if let Err(error) = writes
-                .upload_wallet_backup(
-                    batch.cloud.clone(),
-                    batch.namespace.clone(),
-                    prepared.record_id.clone(),
-                    wallet_json,
-                )
-                .await
-            {
-                return self
-                    .finish_partial_cloud_wallet_upload_batch(
-                        writes,
-                        batch,
-                        uploaded_wallets,
-                        uploaded_record_ids,
-                        error,
-                    )
-                    .await;
+            let PreparedCloudWalletUpload { prepared, upload } = prepared_upload;
+            let outcome = writes
+                .upload_wallet_backup(batch.cloud.clone(), batch.namespace.clone(), upload)
+                .await;
+
+            match outcome {
+                Ok(WalletUploadOutcome::Uploaded) => {}
+
+                // the cloud copy stays as it is and the rest of the batch still uploads
+                Ok(WalletUploadOutcome::KeptKeyMaterial) => {
+                    info!("Backup: wallet {}/{} kept its cloud copy", index + 1, wallets.len());
+                    continue;
+                }
+
+                Err(error) => {
+                    return self
+                        .finish_partial_cloud_wallet_upload_batch(
+                            writes,
+                            batch,
+                            uploaded_wallets,
+                            uploaded_record_ids,
+                            error,
+                        )
+                        .await;
+                }
             }
 
             uploaded_record_ids.push(prepared.record_id.clone());
@@ -273,17 +388,19 @@ impl RustCloudBackupManager {
                     }
                 };
 
-            let PreparedCloudWalletUpload { prepared, wallet_json } = prepared_upload;
-            if let Err(error) = writes
-                .upload_wallet_backup(
-                    cloud.clone(),
-                    namespace.to_string(),
-                    prepared.record_id.clone(),
-                    wallet_json,
-                )
-                .await
-            {
-                return Err(CloudBackupWalletBatchUploadError::new(uploaded_wallets, error));
+            let PreparedCloudWalletUpload { prepared, upload } = prepared_upload;
+            match writes.upload_wallet_backup(cloud.clone(), namespace.to_string(), upload).await {
+                Ok(WalletUploadOutcome::Uploaded) => {}
+
+                // the cloud copy stays as it is and the rest of the batch still uploads
+                Ok(WalletUploadOutcome::KeptKeyMaterial) => {
+                    info!("Backup: wallet {}/{} kept its cloud copy", index + 1, wallets.len());
+                    continue;
+                }
+
+                Err(error) => {
+                    return Err(CloudBackupWalletBatchUploadError::new(uploaded_wallets, error));
+                }
             }
 
             uploaded_wallets.push(CloudBackupUploadedWallet::new(
@@ -440,7 +557,7 @@ impl RustCloudBackupManager {
                 }
             };
 
-        let PreparedDirtyWalletUpload { prepared, wallet_json } = prepared_upload;
+        let PreparedDirtyWalletUpload { prepared, upload } = prepared_upload;
         let cloud = CloudStorage::global_silent_client();
 
         // the row names the namespace this upload writes to, so its confirmation, and a failure
@@ -474,14 +591,28 @@ impl RustCloudBackupManager {
             .upload_wallet_backup_with_completion(
                 cloud.clone(),
                 namespace.clone(),
-                record_id.clone(),
-                wallet_json,
+                upload,
                 completion,
             )
             .await;
 
         match upload_result {
-            Ok(()) => Ok(()),
+            Ok(WalletUploadOutcome::Uploaded) => Ok(()),
+
+            // the lane kept the cloud copy, which holds key material this device lacks; the row
+            // fails without a retry, since uploading again changes nothing until the device has
+            // the key back, and restoring it marks the wallet dirty again
+            Ok(WalletUploadOutcome::KeptKeyMaterial) => {
+                self.mark_blob_failed_if_current(
+                    &uploading_state,
+                    Some(prepared.revision_hash),
+                    false,
+                    None,
+                    "kept the cloud backup, which holds key material this device lacks".into(),
+                )?;
+
+                Ok(())
+            }
 
             // pausing is not failing: the upload's own row goes back to Dirty with no retry timer,
             // and the write lane wakes the scheduler when ordinary writes run again
@@ -612,25 +743,10 @@ impl RustCloudBackupManager {
         .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let remote_metadata = RemotePayloadMetadata::wallet(
-            namespace,
-            &prepared.record_id,
-            prepared.entry.wallet_id.as_str(),
-            prepared.entry.updated_at,
-        );
-        let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
-            &prepared.entry,
-            &critical_key,
-            remote_metadata,
-        )
-        .map_err(CloudBackupError::crypto)
-        .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
-
-        let wallet_json = serde_json::to_vec(&encrypted)
-            .map_err(CloudBackupError::internal)
+        let upload = WalletUpload::encrypt(&prepared, namespace, &critical_key)
             .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash))?;
 
-        Ok(PreparedDirtyWalletUpload { prepared, wallet_json })
+        Ok(PreparedDirtyWalletUpload { prepared, upload })
     }
 
     pub(crate) async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -735,20 +851,7 @@ async fn prepare_cloud_wallet_upload(
     critical_key: &[u8; 32],
 ) -> Result<PreparedCloudWalletUpload, CloudBackupError> {
     let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
-    let remote_metadata = RemotePayloadMetadata::wallet(
-        namespace,
-        &prepared.record_id,
-        prepared.entry.wallet_id.as_str(),
-        prepared.entry.updated_at,
-    );
-    let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
-        &prepared.entry,
-        critical_key,
-        remote_metadata,
-    )
-    .map_err(CloudBackupError::crypto)?;
+    let upload = WalletUpload::encrypt(&prepared, namespace, critical_key)?;
 
-    let wallet_json = serde_json::to_vec(&encrypted).map_err(CloudBackupError::internal)?;
-
-    Ok(PreparedCloudWalletUpload { prepared, wallet_json })
+    Ok(PreparedCloudWalletUpload { prepared, upload })
 }

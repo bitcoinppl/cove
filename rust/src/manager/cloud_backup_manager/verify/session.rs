@@ -166,16 +166,9 @@ pub(crate) struct CloudBackupDeepVerificationAutoSyncCompletion {
 }
 
 impl CloudBackupPreparedDeepVerificationWrapperRepair {
-    pub(crate) fn namespace_id(&self) -> &str {
-        &self.preparation.namespace_id
-    }
-
-    pub(crate) fn credential_id(&self) -> &[u8] {
-        &self.preparation.credential_id
-    }
-
-    pub(crate) fn prf_salt(&self) -> [u8; 32] {
-        self.preparation.prf_salt
+    /// The repaired passkey the wrapper names
+    pub(crate) fn preparation(&self) -> &CloudBackupPreparedPasskeyWrapperRepair {
+        &self.preparation
     }
 
     pub(crate) fn into_parts(
@@ -636,6 +629,7 @@ impl VerificationSession {
                 let write = OwnedKeychainWrite::Passkey {
                     credential_id: authenticated.credential_id.clone(),
                     prf_salt,
+                    provider_hint: encrypted_master.passkey_provider_hint.clone(),
                 };
                 if let Err(error) = self.save_owned(write).await {
                     return Ok(MasterKeyResolution::Finished(

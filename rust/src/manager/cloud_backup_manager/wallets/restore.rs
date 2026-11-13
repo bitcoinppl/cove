@@ -2,7 +2,7 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletBackupVersion, WalletEntry};
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_util::ResultExt as _;
 use cove_util::json::JsonDecodeError;
@@ -76,6 +76,13 @@ pub(crate) struct WalletBackupReader {
     critical_key: Zeroizing<[u8; 32]>,
 }
 
+// the key never reaches a log
+impl std::fmt::Debug for WalletBackupReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WalletBackupReader").field("namespace", &self.namespace).finish()
+    }
+}
+
 impl WalletBackupReader {
     pub(crate) fn new(
         cloud: CloudStorageClient,
@@ -114,6 +121,32 @@ impl WalletBackupReader {
             WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
             WalletBackupLookup::UnsupportedVersion(version) => {
                 Ok(WalletBackupLookup::UnsupportedVersion(version))
+            }
+        }
+    }
+
+    /// [`Self::summary`] for a record that may never have existed, such as the one a first
+    /// upload would replace
+    ///
+    /// The provider's settled presence answers first, so a missing record reads as `NotFound`
+    /// on every platform: a consent-allowed download of a record iCloud doesn't hold waits for it
+    /// to sync and ends in `SyncPending`, never `NotFound`
+    pub(crate) async fn summary_if_present(
+        &self,
+        record_id: &str,
+    ) -> Result<WalletBackupLookup<RemoteWalletBackupSummary>, CloudBackupError> {
+        let presence = self
+            .cloud()?
+            .is_backup_uploaded(self.namespace.clone(), record_id.to_owned())
+            .await
+            .map_err(|source| {
+                CloudBackupError::cloud_storage_context("check wallet backup", source)
+            })?;
+
+        match presence {
+            CloudBackupUploadStatus::NotFound => Ok(WalletBackupLookup::NotFound),
+            CloudBackupUploadStatus::Uploaded | CloudBackupUploadStatus::Pending => {
+                self.summary(record_id).await
             }
         }
     }
@@ -230,13 +263,13 @@ impl WalletBackupReader {
     }
 
     async fn download_wallet_json(&self, record_id: &str) -> Result<Vec<u8>, CloudStorageError> {
-        let Some(cloud) = &self.cloud else {
-            return Err(CloudStorageError::NotAvailable(
-                "test cloud storage cannot download wallet backups".into(),
-            ));
-        };
+        self.cloud()?.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
+    }
 
-        cloud.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
+    fn cloud(&self) -> Result<&CloudStorageClient, CloudStorageError> {
+        self.cloud.as_ref().ok_or_else(|| {
+            CloudStorageError::NotAvailable("test cloud storage cannot read wallet backups".into())
+        })
     }
 
     pub(crate) fn decrypt_entry(

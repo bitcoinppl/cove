@@ -4,7 +4,7 @@ use act_zero::send;
 use tracing::{error, warn};
 
 use super::RustCloudBackupManager;
-use super::wallets::{upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload};
+use super::wallets::wallet_metadata_change_requires_upload;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -83,25 +83,6 @@ impl RustCloudBackupManager {
         if wallet_metadata_change_requires_upload(before, after) {
             self.mark_wallet_blob_dirty(after.id.clone());
         }
-    }
-
-    /// Reports a metadata change that loading a wallet made on its own
-    ///
-    /// When the upload could replace a key or TAPSIGNER backup the cloud copy still holds with a
-    /// watch-only record, the backup is left as is, since it may be the only copy left. That
-    /// includes watch-only wallets, which may be hot wallets downgraded after a lost key, and hot
-    /// wallets missing their key, which are downgraded to watch-only once they open
-    pub(crate) fn handle_wallet_metadata_repair(
-        &self,
-        before: &WalletMetadata,
-        after: &WalletMetadata,
-    ) {
-        if upload_may_drop_cloud_secret(cove_device::keychain::Keychain::global(), after) {
-            warn!(id = %after.id, "an upload could drop key material from the cloud; leaving the backup as is");
-            return;
-        }
-
-        self.handle_wallet_metadata_update(before, after);
     }
 
     pub(crate) fn handle_wallet_backup_change(&self, wallet_id: WalletId) {

@@ -375,15 +375,6 @@ impl LocalSecret {
     }
 }
 
-/// Whether uploading this wallet could replace key material its cloud copy still holds
-///
-/// An upload carries a watch-only record when the wallet's key or TAPSIGNER backup is missing
-/// from the local keychain, and always for a watch-only wallet, which may be a hot wallet
-/// downgraded after its key was lost locally. A keychain read error counts as missing
-pub(crate) fn upload_may_drop_cloud_secret(keychain: &Keychain, metadata: &WalletMetadata) -> bool {
-    matches!(LocalSecret::read(keychain, metadata), LocalSecret::Missing | LocalSecret::Unreadable)
-}
-
 pub(crate) fn wallet_metadata_change_requires_upload(
     before: &WalletMetadata,
     after: &WalletMetadata,
@@ -510,72 +501,6 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // an upload without the local key material would replace the cloud copy with a watch-only one
-    #[test]
-    fn upload_may_drop_cloud_secret_only_without_local_key_material() {
-        use std::sync::Arc;
-
-        use bitcoin::secp256k1::PublicKey;
-        use cove_tap_card::{TapSigner, TapSignerState};
-
-        use crate::wallet::metadata::HardwareWalletMetadata;
-
-        // other tests reset the shared keychain
-        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        crate::test_support::init_test_keychain();
-        let keychain = Keychain::global();
-
-        let mut hot = WalletMetadata::preview_new();
-        hot.wallet_type = WalletType::Hot;
-        keychain.delete_wallet_secret(&hot.id);
-        let hot_missing_before = upload_may_drop_cloud_secret(keychain, &hot);
-
-        let mnemonic = bip39::Mnemonic::parse_normalized(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        )
-        .unwrap();
-        keychain.save_wallet_secret(&hot.id, KeychainWalletSecret::Mnemonic(mnemonic)).unwrap();
-        let hot_missing_after = upload_may_drop_cloud_secret(keychain, &hot);
-        keychain.delete_wallet_secret(&hot.id);
-
-        // secp256k1 generator point G, a valid compressed public key
-        let pubkey = PublicKey::from_slice(&[
-            0x02, 0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE,
-            0x87, 0x0B, 0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81,
-            0x5B, 0x16, 0xF8, 0x17, 0x98,
-        ])
-        .unwrap();
-        let tap_signer = Arc::new(TapSigner {
-            state: TapSignerState::Sealed,
-            card_ident: "TEST-IDENT".to_string(),
-            nonce: "deadbeef".to_string(),
-            signature: "cafebabe".to_string(),
-            pubkey: Arc::new(pubkey),
-        });
-
-        let mut tap_signer_wallet = WalletMetadata::preview_new();
-        tap_signer_wallet.wallet_type = WalletType::Cold;
-        tap_signer_wallet.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
-        keychain.delete_tap_signer_backup(&tap_signer_wallet.id);
-        let tap_signer_missing_before = upload_may_drop_cloud_secret(keychain, &tap_signer_wallet);
-
-        keychain.save_tap_signer_backup(&tap_signer_wallet.id, &[7; 32]).unwrap();
-        let tap_signer_missing_after = upload_may_drop_cloud_secret(keychain, &tap_signer_wallet);
-        keychain.delete_tap_signer_backup(&tap_signer_wallet.id);
-
-        let mut other_cold = WalletMetadata::preview_new();
-        other_cold.wallet_type = WalletType::Cold;
-        let mut watch_only = WalletMetadata::preview_new();
-        watch_only.wallet_type = WalletType::WatchOnly;
-
-        assert!(hot_missing_before, "a hot wallet without its key");
-        assert!(!hot_missing_after, "a hot wallet with its key");
-        assert!(tap_signer_missing_before, "a TAPSIGNER wallet without its backup");
-        assert!(!tap_signer_missing_after, "a TAPSIGNER wallet with its backup");
-        assert!(!upload_may_drop_cloud_secret(keychain, &other_cold), "other cold wallets");
-        assert!(upload_may_drop_cloud_secret(keychain, &watch_only), "watch-only wallets");
-    }
 
     #[test]
     fn hot_cloud_backup_derives_descriptors_when_both_mirrors_are_missing() {

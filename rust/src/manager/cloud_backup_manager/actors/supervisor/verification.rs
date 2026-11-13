@@ -230,11 +230,7 @@ impl CloudBackupSupervisor {
         run: VerificationRun,
         prepared: CloudBackupPreparedDeepVerificationWrapperRepair,
     ) {
-        let authorization = RuntimePasskeyAuthorization {
-            namespace_id: prepared.namespace_id().to_owned(),
-            credential_id: prepared.credential_id().to_vec(),
-            prf_salt: prepared.prf_salt(),
-        };
+        let authorization = RuntimePasskeyAuthorization::from(prepared.preparation());
 
         let (resume, upload) = prepared.into_parts();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), run.claim);
@@ -261,12 +257,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok((resume, authorization)) => {
-                if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
-                    .save_passkey(&authorization.credential_id, authorization.prf_salt)
-                    .map_err(|source| {
-                        CloudBackupError::internal_context("save cspp credentials", source)
-                    })
-                {
+                if let Err(error) = authorization.save() {
                     self.finish_deep_verification_continuation_with_error(manager, run, error);
                     return Produces::ok(());
                 }
@@ -564,11 +555,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(preparation) => {
-                let authorization = RuntimePasskeyAuthorization {
-                    namespace_id: preparation.namespace_id.clone(),
-                    credential_id: preparation.credential_id.clone(),
-                    prf_salt: preparation.prf_salt,
-                };
+                let authorization = RuntimePasskeyAuthorization::from(&preparation);
 
                 let upload = preparation.into_upload();
                 let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
@@ -624,12 +611,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok((uploaded, authorization)) => {
-                if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
-                    .save_passkey(&authorization.credential_id, authorization.prf_salt)
-                    .map_err(|source| {
-                        CloudBackupError::internal_context("save cspp credentials", source)
-                    })
-                {
+                if let Err(error) = authorization.save() {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
                         error: error.logged_reader_message("Repair passkey failed"),

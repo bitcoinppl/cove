@@ -185,6 +185,12 @@ pub struct RecordId(String);
 
 uniffi::custom_newtype!(RecordId, String);
 
+impl RecordId {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Per-wallet cloud backup sync state shown in backup detail
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupWalletStatus {
@@ -199,6 +205,9 @@ pub enum CloudBackupWalletStatus {
     AlreadyOnDevice,
     UnsupportedVersion,
     RemoteStateUnknown,
+    /// The cloud copy holds this wallet's key or TAPSIGNER backup and this device doesn't, so the
+    /// copy is kept as it is and uploads from this device leave it unchanged
+    SecretMissingLocally,
 }
 
 /// Privacy-safe restore failure associated with a cloud-only wallet row
@@ -273,9 +282,7 @@ impl CloudBackupPasskeyHint {
         encrypted: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
         namespace_id: &str,
     ) -> Result<Option<Self>, cove_cspp::backup_data::remote_payload::RemotePayloadError> {
-        encrypted.remote_metadata.normalized_master_key(namespace_id)?;
-
-        Ok(encrypted.passkey_provider_hint.as_ref().map(Self::from_provider_hint))
+        Ok(encrypted.passkey_provider_hint_for(namespace_id)?.map(Self::from_provider_hint))
     }
 
     /// Whether this hint was registered after `other`, so it describes the newer passkey

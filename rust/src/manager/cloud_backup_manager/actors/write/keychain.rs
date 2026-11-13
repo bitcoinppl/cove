@@ -14,8 +14,13 @@ use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 
 /// A keychain write a producer prepared for the lane to save
 pub(crate) enum OwnedKeychainWrite {
-    /// The passkey that just decrypted the cloud master key
-    Passkey { credential_id: Vec<u8>, prf_salt: [u8; 32] },
+    /// The passkey that just decrypted the cloud master key, with the hint of where it was
+    /// created that the wrapper it decrypted carries
+    Passkey {
+        credential_id: Vec<u8>,
+        prf_salt: [u8; 32],
+        provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+    },
     /// The cloud master key that passkey proved, replacing a missing or stale local key
     MasterKey(cove_cspp::master_key::MasterKey),
 }
@@ -58,10 +63,12 @@ pub(crate) fn save_owned_keychain_writes(
 
     for write in writes {
         match write {
-            OwnedKeychainWrite::Passkey { credential_id, prf_salt } => {
-                cloud_keychain.save_passkey(&credential_id, prf_salt).map_err(|source| {
-                    CloudBackupError::internal_context("save cloud backup passkey", source)
-                })?;
+            OwnedKeychainWrite::Passkey { credential_id, prf_salt, provider_hint } => {
+                cloud_keychain
+                    .save_passkey_and_hint(&credential_id, prf_salt, provider_hint.as_ref())
+                    .map_err(|source| {
+                        CloudBackupError::internal_context("save cloud backup passkey", source)
+                    })?;
             }
 
             OwnedKeychainWrite::MasterKey(master_key) => {

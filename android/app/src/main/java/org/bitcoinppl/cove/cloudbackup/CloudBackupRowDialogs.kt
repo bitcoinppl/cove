@@ -101,7 +101,7 @@ internal fun CloudBackupRowDialogHost(
         }
     }
 
-    if (!isCurrent || row == null) return
+    if (dialog == null || !isCurrent || row == null) return
 
     when (dialog) {
         is CloudBackupRowDialog.Sheet ->

@@ -7,13 +7,13 @@
 //! that someone has to lift
 
 use std::collections::VecDeque;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, call, send};
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_tokio::task::spawn_actor;
 use tokio::sync::oneshot;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
@@ -28,10 +28,28 @@ use super::types::{
 };
 use super::worker::{
     CloudBackupRemoteWriteCommand, CloudBackupRemoteWriteResult, CloudBackupWriteWorker,
+    RowDeleteReport,
 };
+use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+    DeleteAuthorization, StaleTarget,
+};
+use crate::manager::cloud_backup_manager::owner::inventory::InventoryInput;
+use crate::manager::cloud_backup_manager::wallets::{WalletBackupReader, WalletUpload};
 
 pub(crate) type CloudBackupWriteResultReceiver<T> =
     oneshot::Receiver<CloudBackupWriteCommandResult<T>>;
+
+/// What a command that finished hands back to its submitter
+#[derive(Debug)]
+pub(crate) enum LaneOutput {
+    Done,
+    RowDelete(RowDeleteReport),
+    /// A wallet upload wrote nothing, so its local completion was not applied
+    KeptKeyMaterial,
+    /// An unreadable delete read the record as something else and kept it; the inventory owner
+    /// has the read
+    RecordKept,
+}
 
 /// Monotonic identifier for commands accepted by the write supervisor
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,8 +113,11 @@ pub(crate) struct WriteTicket {
 enum CloudBackupWriteLocalCompletion {
     None,
     Apply(CloudBackupWriteCompletion),
-    DeleteActiveWallet {
+    /// Forgets a deleted record's local sync state, or hands the owner what an unreadable
+    /// delete read instead, stamped by the authorization it ran under
+    DeleteWalletRecord {
         record_id: String,
+        authorization: Arc<DeleteAuthorization>,
     },
     FinalizeUploadedWallets {
         namespace_id: String,
@@ -118,7 +139,7 @@ struct CloudBackupPendingWrite {
     class: CommandClass,
     remote: CloudBackupRemoteWriteCommand,
     completion: CloudBackupWriteLocalCompletion,
-    sender: oneshot::Sender<CloudBackupWriteCommandResult<()>>,
+    sender: oneshot::Sender<CloudBackupWriteCommandResult<LaneOutput>>,
 }
 
 impl CloudBackupPendingWrite {
@@ -134,7 +155,7 @@ impl CloudBackupPendingWrite {
         )
     }
 
-    fn complete(self, result: Result<(), CloudBackupError>) {
+    fn complete(self, result: Result<LaneOutput, CloudBackupError>) {
         let _ = self.sender.send(CloudBackupWriteCommandResult::new(self.context, result));
     }
 }
@@ -144,11 +165,11 @@ struct CloudBackupInFlightWrite {
     context: CloudBackupWriteCommandContext,
     class: CommandClass,
     completion: CloudBackupWriteLocalCompletion,
-    sender: oneshot::Sender<CloudBackupWriteCommandResult<()>>,
+    sender: oneshot::Sender<CloudBackupWriteCommandResult<LaneOutput>>,
 }
 
 impl CloudBackupInFlightWrite {
-    fn complete(self, result: Result<(), CloudBackupError>) {
+    fn complete(self, result: Result<LaneOutput, CloudBackupError>) {
         let _ = self.sender.send(CloudBackupWriteCommandResult::new(self.context, result));
     }
 }
@@ -314,7 +335,7 @@ impl CloudBackupWriteSupervisor {
         class: CommandClass,
         remote: CloudBackupRemoteWriteCommand,
         completion: CloudBackupWriteLocalCompletion,
-    ) -> CloudBackupWriteResultReceiver<()> {
+    ) -> CloudBackupWriteResultReceiver<LaneOutput> {
         let (sender, receiver) = oneshot::channel();
         let context = CloudBackupWriteCommandContext::new(self.next_command_id, class.claim());
         self.next_command_id += 1;
@@ -338,7 +359,10 @@ impl CloudBackupWriteSupervisor {
         }
 
         while let Some(write) = self.pending_writes.pop_front() {
-            let decision = self.policy.policy.decide(&write.class);
+            let decision = match self.policy.policy.decide(&write.class) {
+                Decision::Run => self.check_target(&write.class),
+                decision => decision,
+            };
 
             #[cfg(test)]
             self.decisions.push(LaneDecision {
@@ -364,10 +388,38 @@ impl CloudBackupWriteSupervisor {
                     let error = stale_error(&write.class);
                     write.complete(Err(error));
                 }
+                Decision::StaleTarget(stale) => {
+                    info!("Cloud Backup row delete no longer authorized: {stale:?}");
+                    write.complete(Ok(LaneOutput::RowDelete(RowDeleteReport::StaleTarget(stale))));
+                }
             }
         }
 
         self.answer_idle_waiters();
+    }
+
+    /// Checks a row delete's authorization against the inventory as it is now, just before the
+    /// remote call
+    ///
+    /// The view is read here, at the queue head, so a change that landed while the delete waited
+    /// behind other writes is seen
+    fn check_target(&self, class: &CommandClass) -> Decision {
+        let CommandClass::RowDelete { authorization, record_id, .. } = class else {
+            return Decision::Run;
+        };
+
+        let view =
+            self.manager.upgrade().ok_or(StaleTarget::InventoryUnavailable).and_then(|manager| {
+                manager.delete_view(self.policy.policy.generation).map_err(|error| {
+                    warn!("Cloud Backup row delete could not read the inventory: {error}");
+                    StaleTarget::InventoryUnavailable
+                })
+            });
+
+        match view.and_then(|view| authorization.check(record_id, &view)) {
+            Ok(()) => Decision::Run,
+            Err(stale) => Decision::StaleTarget(stale),
+        }
     }
 
     fn start_pending_write(&mut self, write: CloudBackupPendingWrite) {
@@ -415,6 +467,12 @@ impl CloudBackupWriteSupervisor {
         } else {
             match (self.ensure_current(&active.class), result) {
                 (Err(error), _) => Err(error),
+
+                // nothing was written, so there is no local state to record
+                (Ok(()), Ok(CloudBackupRemoteWriteResult::KeptKeyMaterial)) => {
+                    Ok(LaneOutput::KeptKeyMaterial)
+                }
+
                 (Ok(()), Ok(output)) => self.apply_local_completion(&active, output).await,
                 (Ok(()), Err(error)) => Err(error),
             }
@@ -430,13 +488,13 @@ impl CloudBackupWriteSupervisor {
         &self,
         active: &CloudBackupInFlightWrite,
         output: CloudBackupRemoteWriteResult,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<LaneOutput, CloudBackupError> {
         let manager = match (&active.completion, &output) {
-            (CloudBackupWriteLocalCompletion::None, _) => return Ok(()),
+            (CloudBackupWriteLocalCompletion::None, _) => return Ok(LaneOutput::Done),
             (
                 CloudBackupWriteLocalCompletion::KeychainSave,
                 CloudBackupRemoteWriteResult::Keychain(KeychainSave::Saved),
-            ) => return Ok(()),
+            ) => return Ok(LaneOutput::Done),
             (
                 CloudBackupWriteLocalCompletion::KeychainSave,
                 CloudBackupRemoteWriteResult::Keychain(KeychainSave::NamespaceChanged),
@@ -458,19 +516,25 @@ impl CloudBackupWriteSupervisor {
             (
                 CloudBackupWriteLocalCompletion::Apply(completion),
                 CloudBackupRemoteWriteResult::None,
-            ) => completion.clone().apply(&manager).await,
+            ) => completion.clone().apply(&manager).await.map(|()| LaneOutput::Done),
 
-            // remove the local active-wallet sync state and refresh the count from cloud
             (
-                CloudBackupWriteLocalCompletion::DeleteActiveWallet { record_id },
-                CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids),
+                CloudBackupWriteLocalCompletion::DeleteWalletRecord { record_id, .. },
+                CloudBackupRemoteWriteResult::WalletRecordRemoved { already_absent },
             ) => {
                 manager.remove_blob_sync_states(std::iter::once(record_id.clone()))?;
+                Ok(LaneOutput::RowDelete(RowDeleteReport::Removed { already_absent }))
+            }
 
-                let wallet_count = wallet_record_ids.len() as u32;
-                send!(manager.supervisor.record_cloud_wallet_count(wallet_count));
-
-                Ok(())
+            // the read replaces the row's classification and trust, which revokes the Delete
+            // offered on the old one
+            (
+                CloudBackupWriteLocalCompletion::DeleteWalletRecord { record_id, authorization },
+                CloudBackupRemoteWriteResult::RecordKept(read),
+            ) => {
+                let reads = authorization.read_of(record_id.clone(), read);
+                manager.apply_inventory(InventoryInput::RecordsRead(reads));
+                Ok(LaneOutput::RecordKept)
             }
 
             // persist the enabled state before marking the uploaded wallets pending confirmation
@@ -491,7 +555,8 @@ impl CloudBackupWriteSupervisor {
                 .await
                 .map_err(CloudBackupError::internal)??;
 
-                self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
+                self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await?;
+                Ok(LaneOutput::Done)
             }
 
             // complete a background upload batch using the best wallet count available
@@ -511,7 +576,8 @@ impl CloudBackupWriteSupervisor {
                 ))
                 .await
                 .map_err(CloudBackupError::internal)??;
-                self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
+                self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await?;
+                Ok(LaneOutput::Done)
             }
 
             _ => Err(CloudBackupError::Internal(
@@ -542,20 +608,20 @@ impl CloudBackupWriteSupervisor {
         Ok(())
     }
 
+    /// Uploads one wallet record, unless at execution it would replace key material
     pub(crate) async fn upload_wallet_backup(
         &mut self,
         class: CommandClass,
         cloud: CloudStorageClient,
         namespace: String,
-        record_id: String,
-        data: Vec<u8>,
+        upload: WalletUpload,
         completion: Option<CloudBackupWriteCompletion>,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let completion = completion
             .map_or(CloudBackupWriteLocalCompletion::None, CloudBackupWriteLocalCompletion::Apply);
         let receiver = self.submit(
             class,
-            CloudBackupRemoteWriteCommand::UploadWallet { cloud, namespace, record_id, data },
+            CloudBackupRemoteWriteCommand::UploadWallet { cloud, namespace, upload },
             completion,
         );
         Produces::ok(receiver)
@@ -568,7 +634,7 @@ impl CloudBackupWriteSupervisor {
         namespace: String,
         data: Vec<u8>,
         completion: Option<CloudBackupWriteCompletion>,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let completion = completion
             .map_or(CloudBackupWriteLocalCompletion::None, CloudBackupWriteLocalCompletion::Apply);
         let receiver = self.submit(
@@ -579,23 +645,62 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(receiver)
     }
 
-    pub(crate) async fn delete_active_wallet_backup(
+    /// Deletes one wallet record under a row delete's authorization
+    ///
+    /// The class and the remote call are built from the same authorization and record, so the
+    /// remote call deletes exactly what the lane checked
+    pub(crate) async fn delete_wallet_record(
         &mut self,
-        class: CommandClass,
-        cloud: CloudStorageClient,
-        namespace: String,
+        claim: CloudBackupExclusiveOperationClaim,
+        authorization: Arc<DeleteAuthorization>,
         record_id: String,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
-        let receiver = self.submit(
-            class,
-            CloudBackupRemoteWriteCommand::DeleteActiveWallet {
-                cloud,
-                namespace,
-                record_id: record_id.clone(),
-            },
-            CloudBackupWriteLocalCompletion::DeleteActiveWallet { record_id },
-        );
-        Produces::ok(receiver)
+        cloud: CloudStorageClient,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
+        let remote = CloudBackupRemoteWriteCommand::DeleteWalletRecord {
+            cloud,
+            namespace: authorization.namespace().to_owned(),
+            record_id: record_id.clone(),
+        };
+
+        Produces::ok(self.submit_record_delete(claim, authorization, record_id, remote))
+    }
+
+    /// Deletes one unreadable record, a row's or a batch's, which the lane reads with `reader`, the
+    /// configuration's verified key, just before deleting it
+    pub(crate) async fn delete_unreadable_record(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+        cloud: CloudStorageClient,
+        reader: WalletBackupReader,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
+        let remote = CloudBackupRemoteWriteCommand::DeleteUnreadableRecord {
+            cloud,
+            reader,
+            namespace: authorization.namespace().to_owned(),
+            record_id: record_id.clone(),
+        };
+
+        Produces::ok(self.submit_record_delete(claim, authorization, record_id, remote))
+    }
+
+    /// Queues `remote`, built from the same authorization and record as its class, so the remote
+    /// call deletes exactly what the lane checked
+    fn submit_record_delete(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+        remote: CloudBackupRemoteWriteCommand,
+    ) -> CloudBackupWriteResultReceiver<LaneOutput> {
+        let completion = CloudBackupWriteLocalCompletion::DeleteWalletRecord {
+            record_id: record_id.clone(),
+            authorization: authorization.clone(),
+        };
+        let class = CommandClass::RowDelete { claim, authorization, record_id };
+
+        self.submit(class, remote, completion)
     }
 
     pub(crate) async fn finalize_uploaded_wallets(
@@ -605,7 +710,7 @@ impl CloudBackupWriteSupervisor {
         namespace_id: String,
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         state_mode: CloudBackupUploadedWalletsStateMode,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let fallback_count = uploaded_wallets.len() as u32;
         let receiver = self.submit(
             class,
@@ -630,7 +735,7 @@ impl CloudBackupWriteSupervisor {
         namespace_id: String,
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         count_refresh: CloudBackupWalletCountRefresh,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let receiver = self.submit(
             class,
             CloudBackupRemoteWriteCommand::ListWalletCountOptional {
@@ -650,7 +755,7 @@ impl CloudBackupWriteSupervisor {
         &mut self,
         class: CommandClass,
         completion: CloudBackupWriteCompletion,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let receiver = self.submit(
             class,
             CloudBackupRemoteWriteCommand::None,
@@ -665,7 +770,7 @@ impl CloudBackupWriteSupervisor {
         class: CommandClass,
         namespace_id: String,
         writes: Vec<OwnedKeychainWrite>,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let receiver = self.submit(
             class,
             CloudBackupRemoteWriteCommand::SaveKeychain { namespace_id, writes },
@@ -680,7 +785,7 @@ impl CloudBackupWriteSupervisor {
         class: CommandClass,
         cloud: CloudStorageClient,
         namespace: String,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let receiver = self.submit(
             class,
             CloudBackupRemoteWriteCommand::DeleteNamespace { cloud, namespace },
@@ -696,7 +801,7 @@ impl CloudBackupWriteSupervisor {
     pub(crate) async fn barrier(
         &mut self,
         class: CommandClass,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+    ) -> ActorResult<CloudBackupWriteResultReceiver<LaneOutput>> {
         let receiver = self.submit(
             class,
             CloudBackupRemoteWriteCommand::None,
@@ -710,17 +815,27 @@ impl CloudBackupWriteSupervisor {
 mod tests {
     use std::sync::Arc;
 
+    use cove_device::cloud_storage::CloudStorage;
+
     use super::*;
     use crate::database::Database;
     use crate::database::cloud_backup::PersistedCloudBackupStatus;
     use crate::manager::cloud_backup_manager::actors::write::{
         ConfiguredWriter, ConfiguredWrites, OffWrites, PolicyBody,
     };
+    use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
-        async_test_lock, reset_cloud_backup_test_state, test_globals,
+        async_test_lock, configure_enabled_cloud_backup, reset_cloud_backup_test_state,
+        test_globals,
     };
+    use crate::manager::cloud_backup_manager::owner::delete_authorization::test_support::authorization_on;
+    use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+        DeleteView, ListingGeneration, StaleTarget,
+    };
+    use crate::manager::cloud_backup_manager::owner::inventory::InventoryReadAt;
     use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
+    use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
     use crate::manager::cloud_backup_manager::{
         DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
     };
@@ -736,6 +851,19 @@ mod tests {
         PolicyBody::Configured { op }
     }
 
+    /// An authorization for one not-on-device record, minted under `configuration`
+    fn test_authorization(configuration: ConfigGeneration) -> DeleteAuthorization {
+        let view = DeleteView {
+            namespace: "ns".into(),
+            listing: ListingGeneration(1),
+            read_at: InventoryReadAt::default(),
+            configuration,
+            rows: [("record".to_owned(), CloudBackupDeleteCategory::NotOnDevice)].into(),
+        };
+
+        authorization_on(&view, "record", CloudBackupDeleteCategory::NotOnDevice)
+    }
+
     /// Puts `body` in force under `generation`, as the lifecycle supervisor would publish it
     fn set_policy(
         supervisor: &mut CloudBackupWriteSupervisor,
@@ -749,7 +877,7 @@ mod tests {
     fn submit_none(
         supervisor: &mut CloudBackupWriteSupervisor,
         class: CommandClass,
-    ) -> CloudBackupWriteResultReceiver<()> {
+    ) -> CloudBackupWriteResultReceiver<LaneOutput> {
         supervisor.submit(
             class,
             CloudBackupRemoteWriteCommand::None,
@@ -784,6 +912,11 @@ mod tests {
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
         let policy = |body| WritePolicy { generation, body };
+        let row_delete = |claim| CommandClass::RowDelete {
+            claim,
+            authorization: Arc::new(test_authorization(generation)),
+            record_id: "record".into(),
+        };
         let writes = |claim, kind| Some(ConfiguredWrites { claim, kind });
 
         let cases = [
@@ -814,7 +947,7 @@ mod tests {
             ),
             (
                 policy(configured(writes(verify, ConfiguredWriter::Other))),
-                CommandClass::RowDelete(verify),
+                row_delete(verify),
                 Decision::Stale,
             ),
             // a reinitialize replacing the configuration pauses background work and source
@@ -875,7 +1008,7 @@ mod tests {
             // row deletes and other-backup deletes run only under their own operation
             (
                 policy(configured(writes(delete_row, ConfiguredWriter::RowDelete))),
-                CommandClass::RowDelete(delete_row),
+                row_delete(delete_row),
                 Decision::Run,
             ),
             (
@@ -1120,6 +1253,59 @@ mod tests {
             Err(CloudBackupError::WritesPaused(PauseReason::ConfigurationChanged))
         ));
         assert_eq!(Database::global().cloud_backup_state.get().unwrap(), before);
+    }
+
+    /// Only the key the configuration in force verified proves a record is bad, so a delete
+    /// trusted under an earlier configuration goes stale at the queue head
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_row_delete_trusted_under_an_earlier_configuration_deletes_nothing() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = crate::manager::cloud_backup_manager::initialize_cloud_backup_manager();
+        reset_cloud_backup_test_state(&manager, globals);
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        let namespace = manager.current_namespace_id().unwrap();
+        let record_id = "unreadable".to_owned();
+        globals.cloud.set_wallet_backup(namespace.clone(), record_id.clone(), vec![1, 2, 3]);
+
+        let trusted = ConfigGeneration::next();
+
+        // the consent was given while the configuration that verified the key was in force
+        let authorization = authorization_on(
+            &manager.delete_view(trusted).unwrap(),
+            &record_id,
+            CloudBackupDeleteCategory::Unreadable { kind: CloudBackupUnreadableKind::Decrypt },
+        );
+
+        let delete_row = claim(CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups, 1);
+        let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
+        set_policy(
+            &mut supervisor,
+            ConfigGeneration::next(),
+            configured(Some(ConfiguredWrites {
+                claim: delete_row,
+                kind: ConfiguredWriter::RowDelete,
+            })),
+        );
+        let receiver = supervisor
+            .delete_wallet_record(
+                delete_row,
+                Arc::new(authorization),
+                record_id.clone(),
+                CloudStorage::global_explicit_client(),
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            receiver.await.unwrap().into_result(),
+            Ok(LaneOutput::RowDelete(RowDeleteReport::StaleTarget(
+                StaleTarget::ConfigurationChanged
+            )))
+        ));
+        assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use super::*;
 use crate::manager::cloud_backup_manager::CloudBackupWalletVerificationIssues;
+use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 
 fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decryption_failed: u32) {
     manager.apply_verification_state(VerificationState::NeedsAttention(DeepVerificationReport {
@@ -17,8 +18,10 @@ fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decrypt
     }));
 }
 
+/// The preparation reads only the records the user confirmed and not this device's own, and
+/// reads as undecryptable only those the configured key fails to decrypt
 #[tokio::test(flavor = "current_thread")]
-async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_crypto_failures() {
+async fn undecryptable_preparation_reads_only_confirmed_cloud_only_crypto_failures() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -33,8 +36,8 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
     let good_wallet = xpub_only_wallet_metadata();
     let mut bad_wallet = xpub_only_wallet_metadata();
     bad_wallet.network = crate::network::Network::Testnet;
-    let mut recovered_before_delete = xpub_only_wallet_metadata();
-    recovered_before_delete.network = crate::network::Network::Signet;
+    let mut second_bad_wallet = xpub_only_wallet_metadata();
+    second_bad_wallet.network = crate::network::Network::Signet;
     let mut local_bad_wallet = xpub_only_wallet_metadata();
     local_bad_wallet.network = crate::network::Network::Testnet4;
     let listed_after_confirmation = xpub_only_wallet_metadata();
@@ -42,7 +45,7 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
 
     let good_record_id = wallet_record_id(good_wallet.id.as_ref());
     let bad_record_id = wallet_record_id(bad_wallet.id.as_ref());
-    let recovered_record_id = wallet_record_id(recovered_before_delete.id.as_ref());
+    let second_bad_record_id = wallet_record_id(second_bad_wallet.id.as_ref());
     let local_bad_record_id = wallet_record_id(local_bad_wallet.id.as_ref());
     let listed_after_record_id = wallet_record_id(listed_after_confirmation.id.as_ref());
     globals.cloud.set_wallet_backup(
@@ -57,14 +60,8 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
     );
     globals.cloud.set_wallet_backup(
         namespace.clone(),
-        recovered_record_id.clone(),
-        encrypted_wallet_backup_bytes(
-            &recovered_before_delete,
-            &other_master_key,
-            "recovered-later",
-            1,
-        )
-        .await,
+        second_bad_record_id.clone(),
+        encrypted_wallet_backup_bytes(&second_bad_wallet, &other_master_key, "second-bad", 1).await,
     );
     globals.cloud.set_wallet_backup(
         namespace.clone(),
@@ -82,7 +79,7 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
         vec![
             wallet_filename_from_record_id(&good_record_id),
             wallet_filename_from_record_id(&bad_record_id),
-            wallet_filename_from_record_id(&recovered_record_id),
+            wallet_filename_from_record_id(&second_bad_record_id),
             wallet_filename_from_record_id(&local_bad_record_id),
             wallet_filename_from_record_id(&listed_after_record_id),
         ],
@@ -93,9 +90,10 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
     let confirmed = vec![
         good_record_id.clone(),
         bad_record_id.clone(),
-        recovered_record_id.clone(),
+        second_bad_record_id.clone(),
         local_bad_record_id.clone(),
     ];
+    let read = call!(manager.supervisor.start_unreadable_read_for_test()).await.unwrap();
     let prepared = manager
         .prepare_delete_undecryptable_wallet_backups(
             &unowned_writes(
@@ -104,37 +102,19 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_confirmed_cloud_only_c
             ),
             confirmed,
             permit(PermitIntent::DeleteUndecryptableWalletBackups),
+            read,
         )
         .await
         .unwrap();
-    let candidates: HashSet<_> = prepared.record_ids().iter().cloned().collect();
-    assert_eq!(candidates, HashSet::from([bad_record_id.clone(), recovered_record_id.clone()]));
 
-    globals.cloud.set_wallet_backup(
-        namespace.clone(),
-        recovered_record_id.clone(),
-        encrypted_wallet_backup_bytes(
-            &recovered_before_delete,
-            &current_master_key,
-            "recovered",
-            1,
-        )
-        .await,
+    // every confirmed record not on this device is read, and only the crypto failures read as
+    // undecryptable; the rest are evidence the owner applies to its rows
+    let reads = &prepared.reads().reads;
+    assert_eq!(
+        reads.keys().collect::<BTreeSet<_>>(),
+        BTreeSet::from([&good_record_id, &bad_record_id, &second_bad_record_id])
     );
-    let (claim, writes) = begin_operation_writes_for_test(
-        &manager,
-        CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
-    )
-    .await;
-
-    let deleted =
-        manager.delete_prepared_undecryptable_wallet_backups(prepared, writes).await.unwrap();
-    finish_operation_for_test(&manager, claim).await;
-
-    assert_eq!(deleted, 1);
-    assert!(!globals.cloud.has_wallet_backup(&namespace, &bad_record_id));
-    assert!(globals.cloud.has_wallet_backup(&namespace, &recovered_record_id));
-    assert!(globals.cloud.has_wallet_backup(&namespace, &good_record_id));
-    assert!(globals.cloud.has_wallet_backup(&namespace, &local_bad_record_id));
-    assert!(globals.cloud.has_wallet_backup(&namespace, &listed_after_record_id));
+    assert!(matches!(reads[&good_record_id], RecordRead::Readable(_)));
+    assert_eq!(reads[&bad_record_id], RecordRead::Undecryptable);
+    assert_eq!(reads[&second_bad_record_id], RecordRead::Undecryptable);
 }

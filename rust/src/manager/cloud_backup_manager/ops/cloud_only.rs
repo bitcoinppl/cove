@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -11,7 +12,12 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
+use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
+use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
+use crate::manager::cloud_backup_manager::owner::delete_authorization::{
+    DeleteAuthorization, StaleTarget,
+};
+use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
@@ -23,12 +29,6 @@ use crate::manager::cloud_backup_manager::{
     is_provider_wide_interruption,
 };
 use crate::wallet_identity::{LocalWalletIdentities, NamedWalletCoverage};
-
-pub(crate) struct CloudBackupPreparedCloudWalletDelete {
-    pub(crate) cloud: CloudStorageClient,
-    pub(crate) namespace: String,
-    pub(crate) record_id: String,
-}
 
 pub(crate) struct CloudBackupPreparedWalletRestore {
     reader: WalletBackupReader,
@@ -321,19 +321,114 @@ impl RustCloudBackupManager {
         Ok(CloudBackupPreparedWalletRestore { reader })
     }
 
-    pub(crate) async fn prepare_delete_cloud_wallet(
+    /// Deletes one listed record the user confirmed, through the write lane
+    ///
+    /// The lane checks the authorization again just before the remote call, so a row that
+    /// changed while this waited reports a stale target instead of deleting. The lane reads an
+    /// unreadable row's record again with the verified key first, and keeps one that no longer
+    /// fails to decrypt
+    pub(crate) async fn delete_authorized_cloud_wallet(
         &self,
-        record_id: &str,
-    ) -> Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError> {
+        writes: CloudBackupWriteClient,
+        authorization: Arc<DeleteAuthorization>,
+        record_id: String,
+    ) -> Result<RowDeleteReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteCloudWallet)?;
-        let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global_explicit_client();
 
-        Ok(CloudBackupPreparedCloudWalletDelete {
-            cloud,
-            namespace,
-            record_id: record_id.to_string(),
-        })
+        let cloud = CloudStorage::global_explicit_client();
+        let report = match authorization.category() {
+            CloudBackupDeleteCategory::Unreadable { .. } => {
+                delete_unreadable_row(&writes, cloud, authorization, record_id).await
+            }
+            _ => writes.delete_authorized_record(cloud, authorization, record_id).await,
+        };
+
+        let report = report.map_err(|error| {
+            let error = match error {
+                CloudBackupError::CloudStorage(source) => {
+                    CloudBackupError::cloud_storage_context("delete wallet backup", source)
+                }
+                error => error,
+            };
+
+            blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
+        })?;
+
+        if let RowDeleteReport::Removed { .. } = report {
+            info!("Deleted cloud wallet");
+        }
+
+        Ok(report)
+    }
+}
+
+/// Deletes an unreadable row the way the unreadable batch deletes its records
+async fn delete_unreadable_row(
+    writes: &CloudBackupWriteClient,
+    cloud: CloudStorageClient,
+    authorization: Arc<DeleteAuthorization>,
+    record_id: String,
+) -> Result<RowDeleteReport, CloudBackupError> {
+    let reader = verified_reader(cloud.clone(), authorization.namespace())?;
+    let deleted = writes.delete_unreadable_record(cloud, reader, authorization, record_id).await?;
+
+    // the lane's read kept the record, so the category the user agreed to no longer holds; the
+    // inventory owner already has the read
+    Ok(deleted.unwrap_or(RowDeleteReport::StaleTarget(StaleTarget::CategoryChanged)))
+}
+
+/// A reader of `namespace` with this device's key, the key an unreadable row's Delete trusts
+///
+/// A row delete holds no passkey permit, so it never recovers a missing key; without the key
+/// nothing is read and nothing is deleted
+fn verified_reader(
+    cloud: CloudStorageClient,
+    namespace: &str,
+) -> Result<WalletBackupReader, CloudBackupError> {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
+        .filter(|master_key| master_key.namespace_id() == namespace)
+        .ok_or_else(|| CloudBackupError::RecoveryRequired(UNREADABLE_ROW_KEY_MESSAGE.into()))?;
+
+    Ok(WalletBackupReader::new(
+        cloud,
+        namespace.to_owned(),
+        Zeroizing::new(master_key.critical_data_key()),
+    ))
+}
+
+const UNREADABLE_ROW_KEY_MESSAGE: &str =
+    "Cloud backup needs verification before this wallet backup can be deleted";
+
+/// What `record_id` reads as with `reader`, which holds the key the configuration verified, for
+/// the inventory owner; a readable record is classified the way a fetch classifies it
+///
+/// A provider-wide interruption says nothing about the record, so it is the error that stops the
+/// caller instead of a read
+pub(crate) async fn read_record(
+    reader: &WalletBackupReader,
+    record_id: &str,
+    local_wallets: &LocalWalletIdentities,
+) -> Result<RecordRead, CloudStorageError> {
+    match reader.read(record_id).await {
+        Ok(WalletBackupLookup::Found(wallet)) => {
+            let row = listed_wallet_row(wallet, record_id.to_owned(), local_wallets);
+            Ok(RecordRead::Readable(Box::new(row)))
+        }
+        Ok(WalletBackupLookup::NotFound) => Ok(RecordRead::Absent),
+        Ok(WalletBackupLookup::UnsupportedVersion(_)) => Ok(RecordRead::Unsupported),
+        Err(WalletBackupReadError::Decrypt(_)) => Ok(RecordRead::Undecryptable),
+        Err(WalletBackupReadError::Download(source)) if is_provider_wide_interruption(&source) => {
+            Err(source)
+        }
+
+        // a parse failure may come before decryption, so it says nothing about the key
+        Err(error) => {
+            let kind = CloudBackupUnreadableKind::from(&error);
+            warn!("Read an unreadable wallet backup: {}", CloudBackupError::from(error));
+            Ok(RecordRead::Unreadable(kind))
+        }
     }
 }
 

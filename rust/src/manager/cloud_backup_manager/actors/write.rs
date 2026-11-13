@@ -27,5 +27,6 @@ pub(crate) use self::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,
 };
+pub(crate) use self::worker::{RowDeleteReport, WalletUploadOutcome};
 
 pub(crate) type CloudBackupWriteError = crate::manager::cloud_backup_manager::CloudBackupError;
