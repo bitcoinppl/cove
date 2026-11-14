@@ -1,6 +1,9 @@
 package org.bitcoinppl.cove.flows.cloudbackup
 
 import android.graphics.Rect
+import android.os.Build
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.Configurator
 import androidx.test.uiautomator.UiDevice
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
@@ -12,7 +15,9 @@ import javax.xml.parsers.DocumentBuilderFactory
 // StaleObjectException once a recomposition has replaced the node it found, which the detail does
 // to its rows and Restore All whenever a progress section appears or goes. A snapshot is a copy of
 // every window taken once the app is idle, so each read looks its target up again and sees the
-// replacement, and a snapshot never goes stale
+// replacement, and a snapshot never goes stale. The dump would otherwise walk UiAutomation's node
+// cache, which Compose invalidates only once its batched accessibility events arrive, so each
+// snapshot clears that cache first and fetches every node live, as a UiObject2 read does
 
 /** What a test reads or taps: a node's test tag, or the exact text it shows */
 internal sealed interface UiTarget {
@@ -139,6 +144,9 @@ internal class UiSnapshot private constructor(
 
 /** A copy of every window's visible nodes, taken once the app is idle */
 internal fun UiDevice.snapshot(): UiSnapshot {
+    // a cached dump taken straight after a state change can still show the screen from before it
+    clearNodeCache()
+
     val xml =
         ByteArrayOutputStream().use { output ->
             dumpWindowHierarchy(output)
@@ -146,6 +154,17 @@ internal fun UiDevice.snapshot(): UiSnapshot {
         }
 
     return UiSnapshot.parse(xml)
+}
+
+// the same connected UiAutomation UiDevice uses, since asking with other flags would reconnect it;
+// API 33, the lowest this app supports, has no way to clear the cache, so its dumps can lag
+private fun clearNodeCache() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+
+    InstrumentationRegistry
+        .getInstrumentation()
+        .getUiAutomation(Configurator.getInstance().uiAutomationFlags)
+        .clearCache()
 }
 
 /** Whether the control holding [target] is enabled right now, or null when none is on screen */
