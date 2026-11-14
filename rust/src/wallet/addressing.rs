@@ -112,21 +112,66 @@ pub(crate) fn authoritative_public_descriptor_mirror(
 
             Ok(Some(public_descriptors(&wallet)))
         }
-        Err(load_error) => {
-            let keychain_pair = Keychain::global().get_public_descriptor(&metadata.id)?;
-            let Some((external, internal)) = keychain_pair else {
-                return Ok(None);
-            };
-
-            if descriptor_pair_matches_address_type(&external, &internal, metadata.address_type) {
-                return Ok(Some((external, internal)));
-            }
-
-            Err(WalletError::LoadError(format!(
-                "{load_error}; keychain descriptors do not match published wallet metadata"
-            )))
-        }
+        Err(load_error) => matching_keychain_descriptors(metadata, &load_error),
     }
+}
+
+/// A wallet's two address chains and how far the wallet has revealed each one
+pub(crate) struct PublishedAddressChains {
+    pub external: ExtendedDescriptor,
+    pub internal: ExtendedDescriptor,
+
+    /// `None` when the chain was never revealed, or when only the keychain mirror was read
+    pub last_revealed_external: Option<u32>,
+    pub last_revealed_internal: Option<u32>,
+}
+
+/// Read a wallet's address chains without changing its storage or the keychain
+///
+/// Unlike [`authoritative_public_descriptor_mirror`], this never creates, migrates, or heals
+/// anything, so lookups that only read can run at any time. A wallet with no store falls back to
+/// the keychain mirror, which records no revealed indexes. A store that exists but cannot be read
+/// is an error rather than a fallback, because the mirror cannot say how far the wallet revealed
+pub(crate) fn read_published_address_chains(
+    metadata: &WalletMetadata,
+) -> Result<Option<PublishedAddressChains>, WalletError> {
+    let operation = WalletLifecycleCoordinator::global()
+        .begin_persistence_operation(metadata.id.clone())
+        .map_err_str(WalletError::LoadError)?;
+
+    let stored = BdkStore::read_address_chains(&metadata.id, &operation)
+        .map_err_str(WalletError::LoadError)?;
+
+    if let Some(stored) = stored {
+        return Ok(Some(stored));
+    }
+
+    let mirror = matching_keychain_descriptors(metadata, &WalletError::WalletNotFound)?;
+    Ok(mirror.map(|(external, internal)| PublishedAddressChains {
+        external,
+        internal,
+        last_revealed_external: None,
+        last_revealed_internal: None,
+    }))
+}
+
+/// The keychain descriptor pair, when it matches the address type the metadata publishes
+fn matching_keychain_descriptors(
+    metadata: &WalletMetadata,
+    load_error: &WalletError,
+) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, WalletError> {
+    let keychain_pair = Keychain::global().get_public_descriptor(&metadata.id)?;
+    let Some((external, internal)) = keychain_pair else {
+        return Ok(None);
+    };
+
+    if descriptor_pair_matches_address_type(&external, &internal, metadata.address_type) {
+        return Ok(Some((external, internal)));
+    }
+
+    Err(WalletError::LoadError(format!(
+        "{load_error}; keychain descriptors do not match published wallet metadata"
+    )))
 }
 
 /// Retry the keychain mirror from the descriptor pair published in the store

@@ -34,6 +34,7 @@ mod test_support;
 #[cfg(test)]
 mod hardware_signing_tests;
 
+mod address_ownership;
 mod app;
 mod bootstrap;
 mod router;
