@@ -230,6 +230,11 @@ impl TryFrom<String> for Reason {
             color_eyre::eyre::bail!("reason is empty");
         }
 
+        // the reason ends up in one-line log messages and run annotations
+        if value.contains(['\n', '\r']) {
+            color_eyre::eyre::bail!("reason {value:?} spans more than one line");
+        }
+
         Ok(Self(value))
     }
 }
@@ -344,7 +349,7 @@ impl IosTestQuarantine {
 
             if in_actions {
                 let level = if test.is_expired(today) { "error" } else { "notice" };
-                println!("::{level} title=Quarantined iOS test::{summary}");
+                println!("::{level} title=Quarantined iOS test::{}", annotation_message(&summary));
             }
         }
 
@@ -362,9 +367,15 @@ impl IosTestQuarantine {
     }
 }
 
+/// Escapes a GitHub Actions workflow command's message, which decodes `%25`, `%0D` and `%0A` and
+/// ends at a line break, so a `%` in a reason or issue link shows as written
+fn annotation_message(text: &str) -> String {
+    text.replace('%', "%25").replace('\r', "%0D").replace('\n', "%0A")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{IosTestId, IosTestQuarantine};
+    use super::{annotation_message, IosTestId, IosTestQuarantine};
     use jiff::civil::date;
 
     const ENTRY: &str = r#"
@@ -392,6 +403,10 @@ reason = "times out under load"
             ENTRY.replace("expires = 2026-12-09\n", ""),
             ENTRY.replace("issue = \"https://github.com/bitcoinppl/cove/issues/1\"\n", ""),
             ENTRY.replace("reason = \"times out under load\"", "reason = \" \""),
+            ENTRY.replace(
+                "reason = \"times out under load\"",
+                "reason = \"times out\\nunder load\"",
+            ),
             ENTRY.replace("2026-12-09", "\"2026-12-09\""),
             ENTRY.replace("2026-12-09", "2026-12-09T00:00:00Z"),
             ENTRY.replace("2026-12-09", "2026-02-30"),
@@ -406,6 +421,12 @@ reason = "times out under load"
         for contents in rejected {
             assert!(IosTestQuarantine::parse(&contents).is_err(), "accepted:\n{contents}");
         }
+    }
+
+    #[test]
+    fn annotations_show_a_percent_sign_as_written() {
+        assert_eq!(annotation_message("100% flaky, %0A"), "100%25 flaky, %250A");
+        assert_eq!(annotation_message("a\r\nb"), "a%0D%0Ab");
     }
 
     #[test]
