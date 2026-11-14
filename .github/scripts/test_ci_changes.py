@@ -21,7 +21,15 @@ ANDROID: frozenset[Job] = frozenset(
     {Job.ANDROID_INSTRUMENTED, Job.COMPILE_ANDROID, Job.KTLINT, Job.QA_MANIFEST}
 )
 IOS: frozenset[Job] = frozenset(
-    {Job.COMPILE_IOS, Job.IOS_UI, Job.QA_MANIFEST, Job.SWIFT_LINT, Job.TEST}
+    {
+        Job.COMPILE_IOS,
+        Job.IOS_UI,
+        Job.IOS_UNIT_TESTS,
+        Job.QA_MANIFEST,
+        Job.SWIFT_LINT,
+        Job.TEST,
+        Job.TEST_MACOS,
+    }
 )
 
 # the developer's own git config, such as commit signing, stays out of the throwaway repositories
@@ -68,6 +76,7 @@ class RuleTests(unittest.TestCase):
                 Job.COMPILE_ANDROID,
                 Job.COMPILE_IOS,
                 Job.IOS_UI,
+                Job.IOS_UNIT_TESTS,
                 Job.KTLINT,
                 Job.SWIFT_LINT,
                 Job.TAPSIGNER_EMULATOR,
@@ -190,7 +199,13 @@ class PlanTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as out_dir:
             output = Path(out_dir) / "output"
-            env = {k: v for k, v in GIT_ENV.items() if k != "BASE_REF"}
+            # the CI runner's own event and token stay out, or the script would place the
+            # pull request this test runs in
+            env = {
+                k: v
+                for k, v in GIT_ENV.items()
+                if k != "BASE_REF" and not k.startswith(("GITHUB_", "GH_"))
+            }
             subprocess.run(
                 [sys.executable, "-I", str(SCRIPT)],
                 cwd=self.repo.path,
@@ -204,16 +219,19 @@ class PlanTests(unittest.TestCase):
         return {job: value for job, _, value in (line.partition("=") for line in lines)}
 
     def test_the_script_writes_every_job_to_the_actions_output(self) -> None:
+        # without an event payload the pull request's base is unknown, so its run can't vouch
+        # for the merge tier, though it still runs those jobs
         cases = {
-            "a filtered pull_request": ("pr-merge", "pull_request", ANDROID | IOS),
-            "a push": ("pr-merge", "push", ALL_JOBS),
+            "a filtered pull_request": ("pr-merge", "pull_request", ANDROID | IOS, "false"),
+            "a push": ("pr-merge", "push", ALL_JOBS, "true"),
         }
 
-        for name, (branch, event, selected) in cases.items():
+        for name, (branch, event, selected, merge_tiers) in cases.items():
             with self.subTest(name):
                 self.assertEqual(
                     self.run_script(branch, event),
-                    {job.value: "true" if job in selected else "false" for job in Job},
+                    {job.value: "true" if job in selected else "false" for job in Job}
+                    | {"merge_tiers": merge_tiers},
                 )
 
 

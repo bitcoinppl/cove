@@ -1,0 +1,52 @@
+name: Stack gate
+
+# posts the stack-top commit status, see .github/scripts/ci_stack_gate.py. A slice of a GitHub stack
+# runs only tiers 0 and 1, so its status passes once the stack's top is green on the merge tier;
+# every other pull request's passes once its own head is. Since the whole stack merges at once, the
+# merge tier then runs once per stack rather than on every slice and every rebase of it.
+# workflow_run runs this from master with a token that can post statuses, for forks' pull requests
+# too, and re-evaluates a stack when a CI or UI tests run on any of its heads starts or ends, so a
+# status follows its stack's top without a job waiting or polling
+on:
+  workflow_run:
+    workflows: [CI, UI tests]
+    types: [requested, completed]
+  # retargeting a base and closing a stack's top change which head tests a slice without starting
+  # CI. This never checks out or runs the pull request's code
+  pull_request_target:
+    types: [edited, closed]
+
+permissions: {}
+
+jobs:
+  stack-top:
+    # an edit matters only when it moves the base
+    if: >-
+      (github.event_name == 'workflow_run'
+        && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'workflow_dispatch'))
+      || (github.event_name == 'pull_request_target'
+        && (github.event.action == 'closed' || github.event.changes.base))
+    # the newest evaluation of a head reads the newest runs, so it replaces an older one still
+    # going; on the job rather than the workflow, so an event the if above drops can't cancel one
+    concurrency:
+      group: stack-gate-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      # master's scripts, never a pull request's
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Post the stack-top status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/ci_stack_gate.py
