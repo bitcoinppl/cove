@@ -699,8 +699,8 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         );
 
         // the shard planner weighs runs by these, passing or not, see ios_ui_shard.rs
-        if let Some(dir) = &results_dir {
-            record_run_seconds(dir, run.name(), started.elapsed());
+        if let (Some(dir), Some(name)) = (&results_dir, run.timing_name()) {
+            record_run_seconds(dir, name, started.elapsed());
         }
 
         if let Err(error) = result {
@@ -2002,6 +2002,10 @@ struct IosUiRun {
     suite: IosUiSuite,
     /// `<Target>/<Class>/<method>` identifiers, in the order listed
     tests: Vec<String>,
+    /// Whether the run's seconds stand for what its name does in the run timings: always for a
+    /// single CoveUITests test, and for a class run only when the class was listed whole, since a
+    /// class run of some of its methods shares the class's name but not its cost
+    complete: bool,
 }
 
 impl IosUiRun {
@@ -2015,6 +2019,21 @@ impl IosUiRun {
         match self.tests.as_slice() {
             [test] => test,
             _ => self.class(),
+        }
+    }
+
+    /// The name the run's seconds are kept under in the run timings, or none for a class run of
+    /// only some of its methods, whose seconds would understate the whole class's
+    fn timing_name(&self) -> Option<&str> {
+        self.complete.then(|| self.name())
+    }
+
+    /// The seconds the run is expected to take: its time in CI, or an estimate from its test count
+    /// when it has none
+    fn cost(&self, seconds: &IosUiRunSeconds) -> u64 {
+        match self.timing_name() {
+            Some(name) => seconds.of(name, self.tests.len()),
+            None => IosUiRunSeconds::estimate(self.tests.len()),
         }
     }
 
@@ -2042,8 +2061,14 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
         .wrap_err_with(|| format!("Failed to read {IOS_PROJECT_FILE}"))?;
 
     let mut expanded = Vec::new();
+    let mut whole_classes = HashSet::new();
     for test in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
         expanded.extend(ios_ui_tests_to_run(sh, &project, test)?);
+
+        // a `<Target>/<Class>` expands to every method of the class
+        if test.split('/').count() == 2 {
+            whole_classes.insert(test);
+        }
     }
 
     if expanded.is_empty() {
@@ -2064,14 +2089,17 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
             })
             .flatten();
 
+        let complete =
+            !suite.runs_each_class_together() || whole_classes.contains(test_class(&test));
+
         match class_run {
             Some(run) => run.tests.push(test),
-            None => runs.push(IosUiRun { suite, tests: vec![test] }),
+            None => runs.push(IosUiRun { suite, tests: vec![test], complete }),
         }
     }
 
     Ok(shard.take(runs.into_iter().map(|run| {
-        let cost = seconds.of(run.name(), run.tests.len());
+        let cost = run.cost(&seconds);
         (run, cost)
     })))
 }
@@ -2790,9 +2818,7 @@ mod tests {
 
             let loads = slices
                 .iter()
-                .map(|runs| {
-                    runs.iter().map(|run| seconds.of(run.name(), run.tests.len())).sum::<u64>()
-                })
+                .map(|runs| runs.iter().map(|run| run.cost(&seconds)).sum::<u64>())
                 .collect::<Vec<_>>();
             let (lightest, heaviest) = (loads.iter().min().unwrap(), loads.iter().max().unwrap());
             assert!(heaviest - lightest <= 600, "shards are unbalanced: {loads:?}");
@@ -2845,6 +2871,28 @@ mod tests {
             assert_eq!(runs.len(), 2);
             let cloud = runs.iter().find(|run| run.suite == IosUiSuite::CloudBackup).unwrap();
             assert_eq!(cloud.tests, [methods[1].clone(), methods[0].clone()]);
+        }
+
+        // a run of some of a cloud class's methods shares the class's name, so it gets the
+        // estimate and leaves no timing that `ios-ui-timings` would average into the class's
+        #[test]
+        fn a_partial_cloud_backup_class_run_keeps_out_of_the_class_timing() {
+            let sh = ios_shell();
+            let seconds = IosUiRunSeconds::checked_in().unwrap();
+            let class = "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests";
+            let methods = ios_ui_shard_tests(&sh, class, shard("1/1")).unwrap();
+            assert!(methods.len() >= 3);
+
+            let whole = ios_ui_shard_runs(&sh, class, shard("1/1")).unwrap();
+            assert_eq!(whole[0].timing_name(), Some(class));
+            assert_eq!(whole[0].cost(&seconds), seconds.of(class, whole[0].tests.len()));
+
+            let listed = format!("{},{}", methods[0], methods[1]);
+            let partial = ios_ui_shard_runs(&sh, &listed, shard("1/1")).unwrap();
+            assert_eq!(partial[0].name(), class);
+            assert_eq!(partial[0].timing_name(), None);
+            assert_eq!(partial[0].cost(&seconds), IosUiRunSeconds::estimate(2));
+            assert_ne!(partial[0].cost(&seconds), whole[0].cost(&seconds));
         }
     }
 
@@ -2943,6 +2991,7 @@ mod tests {
             let run = IosUiRun {
                 suite: IosUiSuite::CloudBackup,
                 tests: ["testA", "testB", "testC"].map(|method| format!("{class}/{method}")).into(),
+                complete: true,
             };
 
             // testA passed, testB lost its app, and testC never started

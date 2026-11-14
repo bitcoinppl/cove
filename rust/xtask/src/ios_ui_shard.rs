@@ -57,10 +57,14 @@ impl IosUiRunSeconds {
 
     /// The seconds the run named `name`, running `test_count` tests, is expected to take
     ///
-    /// A run missing from the table, a new test or a cloud backup class run with only some of its
-    /// methods listed, gets an estimate from its test count
+    /// A run missing from the table, such as a new test, gets the estimate from its test count
     pub fn of(&self, name: &str, test_count: usize) -> u64 {
-        self.0.get(name).unwrap_or(RUN_OVERHEAD_SECS + TEST_BODY_SECS * test_count as u64)
+        self.0.get(name).unwrap_or_else(|| Self::estimate(test_count))
+    }
+
+    /// The seconds a run of `test_count` tests with no time in CI is expected to take
+    pub fn estimate(test_count: usize) -> u64 {
+        RUN_OVERHEAD_SECS + TEST_BODY_SECS * test_count as u64
     }
 
     /// Reads the run records under `inputs`, each a `run-seconds.tsv` record, a table in the same
