@@ -25,6 +25,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# caches save only from runs on master, as each rust-cache step's save-if says: a pull request or
+# branch run can read master's caches but no other branch's, and the repository's caches share
+# 10 GB, so entries saved for one branch pushed out the master entries every run starts from
 env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
@@ -123,6 +126,7 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust-xtask
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Install pinned Swift lint tools
         run: |
           cd rust
@@ -181,6 +185,7 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Set up just
         uses: taiki-e/install-action@v2
@@ -237,12 +242,17 @@ jobs:
     runs-on: macos-26
     env:
       RUSTFLAGS: -D warnings
+    outputs:
+      ios_ffi_key: ${{ steps.ios_ffi.outputs.key }}
+      ios_ffi_saved: ${{ steps.ios_ffi.outputs.saved }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # dependencies only: the iOS target directory alone would fill the repository's 10 GB, so
+      # the ios-ffi step below caches the library it builds instead
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
@@ -250,14 +260,20 @@ jobs:
           cache-bin: false
           cache-targets: false
           prefix-key: v2-rust-ios
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Set up just
         uses: taiki-e/install-action@v2
         with:
           tool: just
 
-      - name: Build Rust FFI bindings
-        run: just build-ios
+      # restores the library and bindings master last built from the same Rust, toolchain, Xcode
+      # and flags, or runs `just build-ios`; the check below compares the bindings either way
+      - name: Build or restore Rust FFI bindings
+        id: ios_ffi
+        uses: ./.github/actions/ios-ffi
+        with:
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
 
       - name: Verify iOS bindings are up to date
         shell: bash
@@ -280,6 +296,28 @@ jobs:
       - name: Run iOS unit tests
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests -parallel-testing-enabled NO test
 
+  # each Rust change on master saves a new iOS library entry that no later run reads, and the
+  # repository's caches share 10 GB, so once compile-ios saves one the older master entries go;
+  # a job of its own so the code compile-ios builds never holds a token that can delete caches
+  prune-ios-ffi-cache:
+    needs: compile-ios
+    if: ${{ needs.compile-ios.outputs.ios_ffi_saved == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Delete older iOS Rust library entries on master
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ needs.compile-ios.outputs.ios_ffi_key }}
+        run: |
+          gh cache list --repo "$REPO" --ref refs/heads/master --key ios-ffi- --limit 100 \
+            --json id,key --jq ".[] | select(.key != env.KEEP) | .id" |
+            while read -r id; do
+              gh cache delete "$id" --repo "$REPO"
+            done
+
   qa-manifest:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.qa_manifest != 'false') }}
@@ -296,6 +334,7 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # fails when a checklist row names a test or path that no longer exists
       - name: Check QA checklist manifest
@@ -352,6 +391,7 @@ jobs:
           cache-bin: false
           prefix-key: v1-rust
           shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # xtask's pre-push test runs `just pre-push`
       - name: Set up just
@@ -391,6 +431,7 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Set up just and cargo-nextest
         uses: taiki-e/install-action@v2
@@ -421,5 +462,6 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cd rust && cargo clippy --locked --all-targets --all-features -- -D warnings

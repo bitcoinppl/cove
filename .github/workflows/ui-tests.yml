@@ -43,6 +43,9 @@ concurrency:
   group: ui-tests-${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && format('manual-{0}', github.ref) || github.ref }}
   cancel-in-progress: true
 
+# caches save only from runs on master, as each rust-cache step's save-if says: a pull request or
+# branch run can read master's caches but no other branch's, and the repository's caches share
+# 10 GB, so entries saved for one branch pushed out the master entries every run starts from
 env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
@@ -168,6 +171,7 @@ jobs:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust-android-x86_64
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # xtask deals the flavour's classes, or the ones a manual run names, out to the shards longest
       # first by the times in rust/xtask/src/android_ui_shard/class_seconds.tsv, keeping each class
@@ -297,10 +301,11 @@ jobs:
     # never on a pull request or a push, see the top of this file
     if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
     runs-on: macos-26
-    # each shard runs about 22 tests, after 10 to 18 minutes building the Rust library, the fake
-    # node and the test bundles; a CoveUITests test paid about 3 minutes of simulator, runner and
-    # coverage overhead on top of its body before coverage was turned off and cloud backup classes
-    # shared a simulator, and the slowest hosted runners need headroom beyond the estimate
+    # each shard runs about 22 tests, after 10 to 18 minutes building the Rust library, unless
+    # compile-ios cached it, the fake node and the test bundles; a CoveUITests test paid about 3
+    # minutes of simulator, runner and coverage overhead on top of its body before coverage was
+    # turned off and cloud backup classes shared a simulator, and the slowest hosted runners need
+    # headroom beyond the estimate
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -331,6 +336,7 @@ jobs:
           cache-bin: false
           cache-targets: false
           prefix-key: v2-rust-ios
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Set up just
         if: steps.plan.outputs.run == 'true'
@@ -351,9 +357,13 @@ jobs:
           printf '%s\n' "$tests"
           echo "count=$(printf '%s' "$tests" | grep -c . || true)" >>"$GITHUB_OUTPUT"
 
-      - name: Build Rust FFI bindings
+      # restores the library compile-ios saved on master for the same Rust, toolchain, Xcode and
+      # flags, or builds it; RUSTFLAGS matches compile-ios's, which the key includes
+      - name: Build or restore Rust FFI bindings
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
-        run: just build-ios
+        uses: ./.github/actions/ios-ffi
+        env:
+          RUSTFLAGS: -D warnings
 
       # the TAPSIGNER emulator runs in a Python environment uv builds
       - name: Set up uv

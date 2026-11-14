@@ -82,9 +82,13 @@ jobs:
         with:
           tool: just
 
-      # before init, so CodeQL traces only the Swift build and not the Rust one
-      - name: Build Rust FFI bindings
-        run: just build-ios
+      # before init, so CodeQL traces only the Swift build and not the Rust one; restores the
+      # library compile-ios saved on master when one matches, and RUSTFLAGS matches compile-ios's,
+      # which the key includes
+      - name: Build or restore Rust FFI bindings
+        uses: ./.github/actions/ios-ffi
+        env:
+          RUSTFLAGS: -D warnings
 
       - uses: github/codeql-action/init@v4
         with:

@@ -1,0 +1,135 @@
+name: iOS Rust library
+description: >-
+  Restores the iOS Rust library and Swift bindings `just build-ios` builds from a cache keyed on
+  everything the build reads, see .github/scripts/ios_ffi_cache.py, or builds them on a miss, and
+  reports hit or miss with its timings in the job summary and a notice. Set up the Rust toolchain,
+  its cargo cache and just first. The key includes the build's environment, so a caller that
+  wants compile-ios's entries sets RUSTFLAGS to -D warnings as compile-ios does
+
+inputs:
+  save:
+    description: >-
+      'true' to save a miss's build; only pushes to master save, so an entry every pull request
+      reads only ever holds a build of master
+    required: false
+    default: "false"
+
+outputs:
+  key:
+    description: The cache key, empty when an input couldn't be read and the cache was off
+    value: ${{ steps.key.outputs.key }}
+  saved:
+    description: "'true' when this run saved a new entry under the key"
+    value: ${{ steps.save.outcome == 'success' }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute the iOS Rust library cache key
+      id: key
+      shell: bash
+      run: python3 -I .github/scripts/ios_ffi_cache.py
+
+    # a build deletes and rewrites both, so a hit must too: a committed binding the cached build
+    # doesn't write then shows as deleted in the up-to-date check, as it would after a build
+    - name: Clear the iOS Rust library outputs
+      id: clear
+      if: steps.key.outputs.key != ''
+      shell: bash
+      env:
+        CACHED_PATHS: ${{ steps.key.outputs.paths }}
+      run: |
+        while IFS= read -r path; do
+          rm -rf -- "$path"
+        done <<<"$CACHED_PATHS"
+
+        echo "started=$(date +%s)" >>"$GITHUB_OUTPUT"
+
+    # an exact key with no restore-keys, since a near match would be a library of other Rust
+    - name: Restore the iOS Rust library
+      id: restore
+      if: steps.key.outputs.key != ''
+      uses: actions/cache/restore@v6
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ steps.key.outputs.paths }}
+
+    - name: Time the restore
+      id: restored
+      if: steps.key.outputs.key != ''
+      shell: bash
+      env:
+        STARTED: ${{ steps.clear.outputs.started }}
+      run: echo "seconds=$(($(date +%s) - STARTED))" >>"$GITHUB_OUTPUT"
+
+    - name: Build Rust FFI bindings
+      id: build
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        started=$(date +%s)
+        just build-ios
+        echo "seconds=$(($(date +%s) - started))" >>"$GITHUB_OUTPUT"
+
+    - name: Save the iOS Rust library
+      id: save
+      if: inputs.save == 'true' && steps.key.outputs.key != '' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ steps.key.outputs.paths }}
+
+    # the notice is what `gh api` can count across runs, see docs/testing.md; a failed build still
+    # reports its miss
+    - name: Report the iOS Rust library cache
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        KEY: ${{ steps.key.outputs.key }}
+        HIT: ${{ steps.restore.outputs.cache-hit }}
+        RESTORE_SECONDS: ${{ steps.restored.outputs.seconds }}
+        BUILD_OUTCOME: ${{ steps.build.outcome }}
+        BUILD_SECONDS: ${{ steps.build.outputs.seconds }}
+        SAVE_INPUT: ${{ inputs.save }}
+        SAVE_OUTCOME: ${{ steps.save.outcome }}
+      run: |
+        if [[ -z $KEY ]]; then
+          result=off
+          restore="cache off, the key step says why"
+        elif [[ $HIT == true ]]; then
+          result=hit
+          restore="hit in ${RESTORE_SECONDS} s"
+        else
+          result=miss
+          restore="miss after ${RESTORE_SECONDS} s"
+        fi
+
+        case $BUILD_OUTCOME in
+          skipped) build="skipped" ;;
+          success) build="built in ${BUILD_SECONDS} s" ;;
+          *) build="$BUILD_OUTCOME" ;;
+        esac
+
+        if [[ $SAVE_OUTCOME == success ]]; then
+          save="saved"
+        elif [[ $result == miss && $SAVE_INPUT != true ]]; then
+          save="not saved, only pushes to master save"
+        elif [[ $result == miss ]]; then
+          save="not saved ($SAVE_OUTCOME)"
+        else
+          save="nothing to save"
+        fi
+
+        echo "::notice title=iOS Rust library cache::$result: restore $restore, Rust build $build, $save"
+
+        {
+          echo "### iOS Rust library cache: $result"
+          echo
+          echo "| Step | Result |"
+          echo "| --- | --- |"
+          echo "| Restore | $restore |"
+          echo "| Rust build (\`just build-ios\`) | $build |"
+          echo "| Save | $save |"
+          echo
+          echo "Key: \`${KEY:-none}\`"
+        } >>"$GITHUB_STEP_SUMMARY"
