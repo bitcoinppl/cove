@@ -99,7 +99,7 @@ The rules:
 2. Open one issue per quarantined test, labeled `ui-tests` for Android and `rust` for Rust, with the failure message and the runs it failed and passed in
 3. Set the expiry at most 60 days ahead. The entry holds through that day in UTC and fails the job the day after
 4. By the expiry, fix the test, remove the entry and close the issue. If the fix is still under way, a pull request may move the date, saying why in the issue, and a test that no longer earns its place can be deleted with its issue closed
-5. Remove an entry once its fix lands and the test passes repeatedly in CI, such as in a few manual `UI tests` runs that name it
+5. Remove the entry on the fix's branch, then check the fix with a few manual `UI tests` runs that name the test; those runs skip a test that is still annotated, even when they name it. Close the issue once the fix lands
 
 [`.github/scripts/ci_quarantine.py`](../.github/scripts/ci_quarantine.py) reads the entries from the source and fails on an expired or malformed entry, or one more than 60 days ahead. Run `python3 -I .github/scripts/ci_quarantine.py` from the repository root to list the quarantined tests and see what the job would report.
 
