@@ -45,7 +45,9 @@ class Tier(IntEnum):
     docs/testing.md lists the jobs in each
     """
 
-    # formatters, linters and the QA manifest, which fail locally in under a minute
+    # formatters, linters and the QA manifest, which fail locally in under a minute. CI's
+    # quarantine expiry checks run here too, though no Job names them: they fail on a date
+    # rather than on a change, so they run on every push at every stack position
     PRE_PUSH = 0
     # builds and the Linux tests, which every slice of a stack still passes so bisect works
     EVERY_PUSH = 1

@@ -75,10 +75,12 @@ CI's jobs fall into tiers, by how often their signal is worth the runner time:
 
 | Tier | Jobs | When they run |
 | --- | --- | --- |
-| 0 | `rustfmt`, `swift-lint`, `ktlint`, `qa-manifest` | Every push |
-| 1 | `clippy`, `test (ubuntu-24.04)`, `tapsigner-emulator`, `compile-android`, and `compile-ios` up to its build | Every push |
+| 0 | `rustfmt`, `swift-lint`, `ktlint`, `qa-manifest`, and the quarantine expiry checks `quarantine` and `ios-quarantine` | Every push; the quarantine checks run whatever changed, since an entry expires on a date |
+| 1 | `clippy`, `test (ubuntu-24.04)`, `tapsigner-emulator`, `compile-android` with its instrumented test compile, and `compile-ios` up to its build | Every push |
 | 2, the merge tier | `test (macos-latest)`, `compile-ios`'s iOS unit tests step, and the Android instrumented tests | Pull requests to master, the top of a stack, pushes to master and nightly; on a pull request the Android tests run only with the `ui-tests` label, which works on a slice too |
 | 3 | The iOS UI tests and CodeQL's Swift analysis | Nightly and in manual runs |
+
+`prune-ios-ffi-cache` tests nothing and has no tier: it runs only after `compile-ios` saves an iOS Rust library entry on a push to master. [`test_ci_stack.py`](../.github/scripts/test_ci_stack.py) fails when a CI job neither reads a `changes` output nor is listed there with its tier, so a new job runs at a tier someone chose.
 
 A stack merges all at once, so master ends up equal to its top. So a slice of a stack runs tiers 0 and 1, which keep every slice building and passing the Linux tests, so bisect still works, and the stack's top runs the merge tier once for the whole stack. That stops each slice, and each rebase of it, from running the merge tier again. A stacked pull request's merge commit has the slices below it merged in, so the top's run diffs against the stack's base rather than its own, and its jobs cover every slice's changes. CI's `changes` job reads the pull request's stack from GitHub and places it in one of these positions:
 

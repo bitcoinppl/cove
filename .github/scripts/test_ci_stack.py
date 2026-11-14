@@ -5,6 +5,8 @@ master and a fork's, as the GitHub API reports them
     python3 -I -m unittest discover -s .github/scripts -p "test_*.py"
 """
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -14,6 +16,7 @@ import unittest
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Final
 
 from ci_changes import (
     ALL_JOBS,
@@ -34,6 +37,7 @@ from ci_changes import (
     Unstacked,
     changed_paths,
     locate,
+    main,
     output_lines,
     parse_stack,
     spans_trunk,
@@ -294,39 +298,68 @@ GIT_ENV: Mapping[str, str] = {
 
 
 class TopDiffTests(unittest.TestCase):
+    """The top of a stack over a slice that changes Rust, where the top changes only docs; the
+    top's merge commit has the slice merged into its first parent, as GitHub builds a stacked pull
+    request's"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name)
+
+        self.git("init", "-q", "-b", "master")
+        self.commit("README.md", "base")
+        self.git("checkout", "-q", "-b", "slice")
+        self.commit("rust/src/lib.rs", "slice")
+        self.git("checkout", "-q", "-b", "top")
+        self.commit("docs/top.md", "top")
+        self.git("checkout", "-q", "-b", "merge", "slice")
+        self.git("merge", "-q", "--no-ff", "-m", "merge", "top")
+        self.git("remote", "add", "origin", str(self.repo))
+
+    def git(self, *args: str) -> None:
+        subprocess.run(["git", *args], cwd=self.repo, env=GIT_ENV, check=True, capture_output=True)
+
+    def commit(self, path: str, message: str) -> None:
+        (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / path).write_text(message, encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
     def test_the_top_diffs_against_the_stack_base_to_see_every_slice(self) -> None:
-        # the lower slice changes Rust and the top only docs, and the top's merge commit has the
-        # lower slice merged into its first parent, as GitHub builds a stacked pull request's
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp)
+        self.assertEqual(changed_paths(Git(self.repo), "pull_request", ""), ("docs/top.md",))
+        self.assertEqual(
+            changed_paths(Git(self.repo), "pull_request", "", stack_base="master"),
+            ("docs/top.md", "rust/src/lib.rs"),
+        )
 
-            def git(*args: str) -> None:
-                subprocess.run(
-                    ["git", *args], cwd=repo, env=GIT_ENV, check=True, capture_output=True
-                )
+    def test_the_tops_run_tests_the_merge_tier_for_a_lower_slices_change(self) -> None:
+        # the slice below leaves the macOS tests and iOS unit tests to the top, so the top's run has
+        # to pick them for the slice's Rust change though its own change is docs only
+        output = self.repo / "github-output"
+        event = self.repo / "event.json"
+        event.write_text(
+            json.dumps({"pull_request": {"number": TOP.number, "base": {"ref": TOP.base_ref}}}),
+            encoding="utf-8",
+        )
+        env = {
+            "GITHUB_EVENT_NAME": "pull_request",
+            "GITHUB_EVENT_PATH": str(event),
+            "GITHUB_REPOSITORY": "bitcoinppl/cove",
+            "GH_TOKEN": "token",
+            "GITHUB_OUTPUT": str(output),
+        }
 
-            def commit(path: str, message: str) -> None:
-                (repo / path).parent.mkdir(parents=True, exist_ok=True)
-                (repo / path).write_text(message, encoding="utf-8")
-                git("add", "-A")
-                git("commit", "-q", "-m", message)
+        with contextlib.chdir(self.repo), contextlib.redirect_stdout(io.StringIO()):
+            main(env, lambda repo, number: response(TOP, STACK))
 
-            git("init", "-q", "-b", "master")
-            commit("README.md", "base")
-            git("checkout", "-q", "-b", "slice")
-            commit("rust/src/lib.rs", "slice")
-            git("checkout", "-q", "-b", "top")
-            commit("docs/top.md", "top")
-            git("checkout", "-q", "-b", "merge", "slice")
-            git("merge", "-q", "--no-ff", "-m", "merge", "top")
-            git("remote", "add", "origin", str(repo))
+        lines = output.read_text(encoding="utf-8").splitlines()
+        outputs = {name: value for name, _, value in (line.partition("=") for line in lines)}
 
-            self.assertEqual(changed_paths(Git(repo), "pull_request", ""), ("docs/top.md",))
-            self.assertEqual(
-                changed_paths(Git(repo), "pull_request", "", stack_base="master"),
-                ("docs/top.md", "rust/src/lib.rs"),
-            )
-
+        self.assertEqual(
+            {name: outputs[name] for name in (Job.TEST_MACOS, Job.IOS_UNIT_TESTS, "merge_tiers")},
+            dict.fromkeys((Job.TEST_MACOS, Job.IOS_UNIT_TESTS, "merge_tiers"), "true"),
+        )
 
 def ci_run(
     url: str,
@@ -594,6 +627,53 @@ class WorkflowNameTests(unittest.TestCase):
                 assert name is not None
                 self.assertIn(name[1], gate.split("workflows:")[1].splitlines()[0])
 
+
+# ci.yml's jobs that no changes output skips. The quarantine checks fail on a date rather than on a
+# change, so like tier 0 they run on every push, at every stack position
+EVERY_PUSH_CI_JOBS: Final = frozenset({"quarantine", "ios-quarantine"})
+# the planner, and the cache upkeep that runs only after compile-ios saves an entry on master
+UNTIERED_CI_JOBS: Final = frozenset({"changes", "prune-ios-ffi-cache"})
+
+
+def job_blocks(workflow: str) -> dict[str, str]:
+    """Each job's id and its lines, from a workflow's top-level jobs map"""
+    jobs = workflow.split("\njobs:\n", 1)[1]
+    parts = re.split(r"(?m)^  ([a-z0-9_-]+):\n", jobs)
+    return dict(zip(parts[1::2], parts[2::2], strict=True))
+
+
+class WorkflowTierTests(unittest.TestCase):
+    """Each job a workflow adds runs at a tier someone chose, rather than one a stack position
+    happens to give it"""
+
+    def read(self, name: str) -> str:
+        path = WORKFLOWS / name
+        if not path.exists():
+            self.skipTest(f"{path} isn't checked out")
+
+        return path.read_text(encoding="utf-8")
+
+    def test_every_ci_job_is_path_filtered_or_chosen_to_run_on_every_push(self) -> None:
+        outputs = {job.value for job in Job}
+
+        for name, block in job_blocks(self.read(CI_WORKFLOW)).items():
+            with self.subTest(job=name):
+                read = set(re.findall(r"needs\.changes\.outputs\.(\w+)", block)) & outputs
+                if read:
+                    continue
+
+                self.assertIn(name, EVERY_PUSH_CI_JOBS | UNTIERED_CI_JOBS)
+                if name in EVERY_PUSH_CI_JOBS:
+                    self.assertNotRegex(block, r"(?m)^    (if|needs):")
+
+    def test_ui_tests_places_no_pull_request_so_a_labeled_slice_runs_android(self) -> None:
+        # without a token its plan can't read the stack, so a slice's ui-tests label still runs the
+        # Android tests there, rather than leaving them to an unlabeled top that skips them
+        changes = job_blocks(self.read(UI_TESTS_WORKFLOW))["changes"]
+
+        self.assertIn("python3 -I .github/scripts/ci_changes.py", changes)
+        self.assertNotIn("GH_TOKEN", changes)
+        self.assertNotIn("github.token", changes)
 
 if __name__ == "__main__":
     unittest.main()
