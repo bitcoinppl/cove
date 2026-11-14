@@ -222,6 +222,11 @@ jobs:
       - name: Run Android unit tests
         run: cd android && ./gradlew testDevDebugUnitTest
 
+      # the instrumented sources otherwise only compile in the UI tests workflow's emulator jobs,
+      # which pull requests run only when labeled; its own step so the run shows what it costs
+      - name: Compile Android instrumented tests
+        run: cd android && ./gradlew compileDevDebugAndroidTestKotlin compileUiTestDebugAndroidTestKotlin
+
   compile-ios:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_ios != 'false') && needs.changes.outputs.compile_ios_local != 'true' }}
