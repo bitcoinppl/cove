@@ -4,9 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -57,7 +55,7 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
         )
 
         try {
-            device.clickClickableAncestor(device.scrollUntilText("Restore All (2)"))
+            device.scrollAndTap(UiTarget.Text("Restore All (2)"))
             assertTrue(
                 "expected a provider read after authoritative batch preparation",
                 ScriptedCloudStorageAccess.awaitBlockedWalletDownload(),
@@ -91,17 +89,16 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
             listOf(ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID),
             cloudOnlyRecordIds(),
         )
-        assertEquals(
-            "wallet-local failure should expose the authoritative remaining batch",
-            "Retry Remaining (1)",
-            device.scrollUntilText("Retry Remaining (1)").text,
+        device.scrollUntilShown(
+            UiTarget.Text("Retry Remaining (1)"),
+            message = "wallet-local failure should expose the authoritative remaining batch",
         )
         ScriptedCloudStorageAccess.configureFixtureWalletDownloadDefault(
             ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID,
             FixtureWalletDownloadResult.VALID,
         )
-        device.clickClickableAncestorForText("Fixture Wallet Three", searchAbove = true)
-        device.clickClickableAncestorForText("Retry restore")
+        device.scrollAndTap(UiTarget.Text("Fixture Wallet Three"), upwardFirst = true)
+        device.scrollAndTap(UiTarget.Text("Retry restore"))
 
         waitUntil("row-local retry should restore the remaining wallet") {
             cloudOnlyRecordIds().isEmpty() &&
@@ -125,13 +122,13 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
         )
 
         try {
-            device.clickClickableAncestor(device.scrollUntilText("Restore All (2)"))
+            device.scrollAndTap(UiTarget.Text("Restore All (2)"))
             assertTrue(
                 "expected Restore All to block while restoring the first wallet",
                 ScriptedCloudStorageAccess.awaitBlockedWalletDownload(),
             )
 
-            device.clickClickableAncestor(device.scrollUntilText("Cancel"))
+            device.scrollAndTap(UiTarget.Text("Cancel"))
             waitUntil("cancellation should be requested without interrupting the active wallet") {
                 val state = CloudBackupManager.getInstance().restoreAllState
                 state is CloudBackupRestoreAllState.Running && state.cancellationRequested
@@ -150,10 +147,9 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
             "one remaining wallet should not expose Restore All after clean cancellation",
             device.findObject(By.text("Restore All (1)")) == null,
         )
-        assertEquals(
-            "cancellation should expose the authoritative remaining batch",
-            "Retry Remaining (1)",
-            device.scrollUntilText("Retry Remaining (1)").text,
+        device.scrollUntilShown(
+            UiTarget.Text("Retry Remaining (1)"),
+            message = "cancellation should expose the authoritative remaining batch",
         )
     }
 
@@ -162,11 +158,11 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
         launchFullApp()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
         device.waitForText("Your wallets have been restored.")
         ScriptedCloudStorageAccess.exposeAllProductionFixtureWallets()
-        device.clickClickableAncestor(device.waitForText("Done"))
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -211,61 +207,8 @@ class CloudBackupRestoreAllScenarioFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to text \"$value\"")
-    }
-
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }.click()
-    }
-
-    private fun UiDevice.clickClickableAncestorForText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-        searchAbove: Boolean = false,
     ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            val node = findObject(By.text(value))
-            if (node == null) {
-                val startY = if (searchAbove) displayHeight / 4 else displayHeight * 3 / 4
-                val endY = if (searchAbove) displayHeight * 3 / 4 else displayHeight / 4
-                swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-                Thread.sleep(250)
-                continue
-            }
-
-            try {
-                clickClickableAncestor(node)
-                return
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
-        }
-
-        error("Timed out clicking text \"$value\"")
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun waitUntil(

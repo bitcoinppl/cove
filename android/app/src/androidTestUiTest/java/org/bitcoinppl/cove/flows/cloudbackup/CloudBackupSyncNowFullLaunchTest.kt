@@ -11,11 +11,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Direction
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -242,7 +239,7 @@ class CloudBackupSyncNowFullLaunchTest {
     // merges its texts into one node, so only that node's own texts are read and another wallet's
     // badge can't count. uiautomator's view of a merged row doesn't list the badge text
     private fun UiDevice.walletRowBadges(walletName: String): Set<String> {
-        scrollUntil(By.textContains(walletName))
+        scrollUntilShown(UiTarget.TextContaining(walletName))
 
         val rows = mutableListOf<List<String>>()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
@@ -339,16 +336,18 @@ class CloudBackupSyncNowFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
+    }
 
     private fun UiDevice.waitForTextContaining(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.textContains(value)), timeoutMs)
-            ?: error("Timed out waiting for text containing \"$value\"")
+    ) {
+        if (!wait(Until.hasObject(By.textContains(value)), timeoutMs)) {
+            error("Timed out waiting for text containing \"$value\"")
+        }
+    }
 
     // collects every text the detail shows, scrolling its container until the container reports no
     // more scroll at its end and again at its top, and fails rather than return a partial scan
@@ -375,82 +374,33 @@ class CloudBackupSyncNowFullLaunchTest {
         return texts
     }
 
-    // scrolls the detail's container, finding it again when a recomposition replaces it; returns
-    // false once the container cannot scroll further that way
+    // swipes the detail's container once, returning false when nothing on screen moved, which
+    // means the container was already at that end
     private fun UiDevice.scrollDetail(direction: Direction): Boolean {
-        repeat(5) {
-            try {
-                // compose marks a list scrollable only while it can scroll, so a detail that fits on
-                // screen has no scrollable node and the visible texts are all of it
-                val container = findObject(By.scrollable(true)) ?: return false
+        val before = snapshot()
 
-                return container.scroll(direction, 0.8f)
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
+        // compose marks a list scrollable only while it can scroll, so a detail that fits on
+        // screen has no scrollable node and the visible texts are all of it
+        val container = before.scrollableBounds() ?: return false
+        val (startY, endY) =
+            when (direction) {
+                Direction.DOWN -> container.bottom - container.height() / 10 to container.top + container.height() / 10
+                Direction.UP -> container.top + container.height() / 10 to container.bottom - container.height() / 10
+                else -> error("the detail scrolls only up and down")
             }
-        }
+        swipe(container.centerX(), startY, container.centerX(), endY, 20)
 
-        error("the detail's container kept changing while it was scrolled")
+        // a fling keeps moving the texts after the swipe, so the comparison waits for it to stop
+        waitForIdle()
+
+        return snapshot().placedTexts() != before.placedTexts()
     }
 
-    // reads the same viewport again when the tree moves under the read
-    private fun UiDevice.visibleTexts(): List<String> {
-        repeat(5) {
-            try {
-                return findObjects(By.textStartsWith("")).mapNotNull { node -> node.text }
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
-        }
+    private fun UiDevice.visibleTexts(): List<String> = snapshot().texts()
 
-        error("the detail kept changing while its texts were read")
-    }
+    private fun UiDevice.scrollUntilText(value: String) = scrollUntilShown(UiTarget.Text(value))
 
-    // scrolls down, then back up, since the detail may already be scrolled past the text
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 = scrollUntil(By.text(value), timeoutMs)
-
-    private fun UiDevice.scrollUntil(
-        selector: BySelector,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var swipes = 0
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(selector)?.let { return it }
-            val upward = (swipes / 4) % 2 == 1
-            val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
-            val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
-            swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-            swipes += 1
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to $selector")
-    }
-
-    private fun UiDevice.clickText(value: String) {
-        val deadline = System.currentTimeMillis() + 20_000L
-
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                var clickable: UiObject2? = scrollUntilText(value)
-                while (clickable != null && !clickable.isClickable) {
-                    clickable = clickable.parent
-                }
-
-                requireNotNull(clickable) { "expected a clickable ancestor for $value" }.click()
-                return
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
-        }
-
-        error("Timed out clicking text \"$value\"")
-    }
+    private fun UiDevice.clickText(value: String) = scrollAndTap(UiTarget.Text(value))
 
     private fun pollUntil(
         timeoutMs: Long,

@@ -5,7 +5,6 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -83,7 +82,7 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             recordId = ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID,
             matchingRequestsToSkip = 1,
         )
-        device.findTextByScrolling("Restore All (2)").clickClickableAncestor()
+        device.scrollAndTap(UiTarget.Text("Restore All (2)"))
 
         assertTrue(
             "expected SC-U09 Restore All to remain inside its first atomic wallet",
@@ -92,13 +91,13 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
         val runningBeforeNavigation = requireRunningRestoreAll()
         assertEquals(0u, runningBeforeNavigation.completed)
         assertEquals(EXPECTED_REMAINING_WALLETS, runningBeforeNavigation.total)
-        device.findTextByScrolling("0 of 2 complete")
+        device.scrollUntilShown(UiTarget.Text("0 of 2 complete"))
 
         openSettings()
         assertSameInFlightBatch(runningBeforeNavigation, requireRunningRestoreAll())
 
         openCloudBackup()
-        device.findTextByScrolling("0 of 2 complete")
+        device.scrollUntilShown(UiTarget.Text("0 of 2 complete"))
         assertSameInFlightBatch(runningBeforeNavigation, requireRunningRestoreAll())
     }
 
@@ -133,7 +132,7 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             "Retry Remaining must follow an authoritative provider inventory",
             ScriptedCloudStorageAccess.walletListCount() > 0,
         )
-        device.findTextByScrolling("Retry Remaining (2)")
+        device.scrollUntilShown(UiTarget.Text("Retry Remaining (2)"))
         val remainingWalletDownloadsAfterReconciliation = remainingWalletDownloadRecordIds()
 
         Thread.sleep(AUTOMATIC_RESTORE_SETTLE_MS)
@@ -174,7 +173,7 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             )
         }
 
-        device.findTextByScrolling("Retry Remaining (2)").clickClickableAncestor()
+        device.scrollAndTap(UiTarget.Text("Retry Remaining (2)"))
         waitUntil("Retry Remaining should restore both remaining wallets", timeoutMs = 60_000L) {
             AppManager.getInstance().wallets.size == 3 &&
                 CloudBackupManager.getInstance().restoreAllState == CloudBackupRestoreAllState.NotShown
@@ -189,9 +188,9 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
     }
 
     private fun restoreInitialFixtureAndFinishOnboarding() {
-        device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
-        device.clickClickableAncestor(device.waitForText("Done"))
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -252,23 +251,8 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    private fun UiDevice.findTextByScrolling(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to text \"$value\"\n${windowHierarchy()}")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun UiDevice.windowHierarchy(): String =
@@ -276,20 +260,6 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             dumpWindowHierarchy(output)
             output.toString()
         }
-
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        node.clickClickableAncestor()
-    }
-
-    private fun UiObject2.clickClickableAncestor() {
-        var clickable: UiObject2? = this
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for $text" }.click()
-    }
 
     private fun waitUntil(
         message: String,

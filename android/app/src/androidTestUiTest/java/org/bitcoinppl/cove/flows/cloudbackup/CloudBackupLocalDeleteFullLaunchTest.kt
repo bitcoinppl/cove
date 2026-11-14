@@ -4,9 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
@@ -152,7 +150,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
 
         device.scrollUntilText(NOT_ON_THIS_DEVICE)
         tapUntilShown(wallet.name, RESTORE_ACTION)
-        device.clickClickableAncestorForText(RESTORE_ACTION)
+        device.clickTextInClickable(RESTORE_ACTION)
 
         waitUntil("restoring the cloud-only row should bring the wallet back") {
             cloudOnlyWallets().isEmpty() &&
@@ -272,7 +270,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
     ) {
         repeat(TAP_ATTEMPTS) {
             device.waitForIdle()
-            device.clickClickableAncestorForText(target)
+            device.clickTextInClickable(target)
             if (device.wait(Until.hasObject(By.text(expected)), 5_000L)) return
         }
 
@@ -312,87 +310,24 @@ class CloudBackupLocalDeleteFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
+    }
 
     private fun UiDevice.clickText(value: String) {
-        clickClickableAncestorForText(value, scrollWhenMissing = false)
+        clickTextInClickable(value, scrollWhenMissing = false)
     }
 
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
+    private fun UiDevice.scrollUntilText(value: String) = scrollUntilShown(UiTarget.Text(value))
 
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-            // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-            waitForIdle()
-        }
-
-        error("Timed out scrolling to text \"$value\"")
-    }
-
-    // a node found while a screen settles can belong to a copy with no tap target, such as the retained
-    // detail still listing a just-deleted wallet above its Not on This Device row until the refresh
-    // replaces it, so each attempt finds the text again instead of trusting the first node
-    private fun UiDevice.clickClickableAncestorForText(
+    // a text found while a screen settles can belong to a copy with no tap target, such as the
+    // retained detail still listing a just-deleted wallet above its Not on This Device row until the
+    // refresh replaces it, so the tap goes to the first copy inside something clickable
+    private fun UiDevice.clickTextInClickable(
         value: String,
         timeoutMs: Long = 20_000L,
         scrollWhenMissing: Boolean = true,
-    ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var missing = 0
-        var withoutClickableAncestor = 0
-        var stale = 0
-
-        while (System.currentTimeMillis() < deadline) {
-            val node = findObject(By.text(value))
-            if (node == null) {
-                missing++
-                if (scrollWhenMissing) {
-                    swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-                }
-            } else {
-                try {
-                    val clickable = node.clickableAncestor()
-                    if (clickable != null) {
-                        clickable.click()
-                        return
-                    }
-
-                    withoutClickableAncestor++
-                } catch (_: StaleObjectException) {
-                    stale++
-                }
-            }
-
-            // a tap while the list still flings only stops it, so the next lookup waits for it to settle
-            waitForIdle()
-            Thread.sleep(100)
-        }
-
-        val attempts =
-            "$withoutClickableAncestor lookups found no clickable ancestor, $stale went stale and " +
-                "$missing found no text within the ${timeoutMs}ms budget"
-
-        require(withoutClickableAncestor == 0) { "expected a clickable ancestor for $value; $attempts" }
-        error("Timed out clicking text \"$value\"; $attempts")
-    }
-
-    private fun UiObject2.clickableAncestor(): UiObject2? {
-        var candidate: UiObject2? = this
-
-        while (candidate != null && !candidate.isClickable) {
-            candidate = candidate.parent
-        }
-
-        return candidate
-    }
+    ) = if (scrollWhenMissing) scrollAndTap(UiTarget.Text(value), timeoutMs) else tap(UiTarget.Text(value), timeoutMs)
 
     private fun waitUntil(
         message: String,

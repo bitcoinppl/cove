@@ -4,9 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -91,22 +89,22 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             waitUntil("$action should be enabled again once the inventory is complete") {
-                device.findObject(By.text(action))?.let { device.clickableAncestor(it).isEnabled } == true
+                device.controlEnabled(UiTarget.Text(action)) == true
             }
         }
 
         // tapping Delete swaps the sheet for its own confirmation, which keeps a separate readiness gate
-        device.clickableAncestor(device.waitForText(DELETE_ACTION)).click()
+        device.tap(UiTarget.Text(DELETE_ACTION))
         device.waitForText(DELETE_FOREVER)
         whileKnownInventoryIsChecked(trigger = { dispatchOnMain(CloudBackupManagerAction.RefreshDetail) }) {
             assertDeleteForeverDisabledAndInert()
         }
 
         waitUntil("Delete Forever should be enabled again once the inventory is complete") {
-            device.findObject(By.text(DELETE_FOREVER))?.let { device.clickableAncestor(it).isEnabled } == true
+            device.controlEnabled(UiTarget.Text(DELETE_FOREVER)) == true
         }
 
-        device.clickableAncestor(device.waitForText(CANCEL)).click()
+        device.tap(UiTarget.Text(CANCEL))
         assertTrue(
             "Cancel should close the delete confirmation",
             device.wait(Until.gone(By.text(DELETE_FOREVER)), 10_000L),
@@ -125,7 +123,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
     private fun tapCheckAgainUntilTheCheckStarts() {
         repeat(CHECK_AGAIN_ATTEMPTS) {
             device.waitForIdle()
-            device.clickTextScrollingUp(CHECK_AGAIN)
+            device.scrollAndTap(UiTarget.Text(CHECK_AGAIN), upwardFirst = true)
 
             // longer than the minimum interval between refreshes, which can defer the check
             if (ScriptedCloudStorageAccess.awaitBlockedWalletListSnapshot(timeoutMs = 8_000L)) return
@@ -204,12 +202,12 @@ class CloudBackupInventoryActionsFullLaunchTest {
         )
 
         for (name in listOf(WALLET_TWO, WALLET_THREE)) {
-            device.scrollUntilText(name)
+            device.scrollUntilShown(UiTarget.Text(name))
             waitUntil("$name should be disabled until the inventory is complete") {
-                device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == false
+                device.controlEnabled(UiTarget.Text(name)) == false
             }
 
-            device.clickableAncestor(device.waitForText(name)).click()
+            device.tap(UiTarget.Text(name))
             assertFalse(
                 "$name must not open Restore or Delete until the inventory is complete",
                 device.wait(Until.hasObject(By.text(RESTORE_ACTION)), 2_000L) ||
@@ -221,15 +219,15 @@ class CloudBackupInventoryActionsFullLaunchTest {
     private fun assertOpenSheetActionsDisabledAndInert() {
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             waitUntil("$action in the open sheet should be disabled while checking") {
-                device.findObject(By.text(action))?.let { device.clickableAncestor(it).isEnabled } == false
+                device.controlEnabled(UiTarget.Text(action)) == false
             }
         }
 
         // background verification reads backups while the check is held, so a restore is judged by
         // its outcome, a new local wallet, rather than by provider downloads
         val localWalletsBefore = AppManager.getInstance().wallets.map { it.id }
-        device.clickableAncestor(device.waitForText(RESTORE_ACTION)).click()
-        device.clickableAncestor(device.waitForText(DELETE_ACTION)).click()
+        device.tap(UiTarget.Text(RESTORE_ACTION))
+        device.tap(UiTarget.Text(DELETE_ACTION))
 
         assertFalse(
             "a disabled Delete must not ask to delete the backup",
@@ -257,10 +255,10 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
     private fun assertDeleteForeverDisabledAndInert() {
         waitUntil("Delete Forever should be disabled while checking") {
-            device.findObject(By.text(DELETE_FOREVER))?.let { device.clickableAncestor(it).isEnabled } == false
+            device.controlEnabled(UiTarget.Text(DELETE_FOREVER)) == false
         }
 
-        device.clickableAncestor(device.waitForText(DELETE_FOREVER)).click()
+        device.tap(UiTarget.Text(DELETE_FOREVER))
         assertFalse(
             "a disabled Delete Forever must leave its confirmation open",
             device.wait(Until.gone(By.text("Delete $WALLET_TWO?")), 2_000L),
@@ -280,16 +278,16 @@ class CloudBackupInventoryActionsFullLaunchTest {
     }
 
     private fun assertRowOpensEnabledActions(name: String) {
-        device.scrollUntilText(name)
+        device.scrollUntilShown(UiTarget.Text(name))
         waitUntil("$name should be enabled once the inventory is complete") {
-            device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == true
+            device.controlEnabled(UiTarget.Text(name)) == true
         }
 
-        device.clickableAncestor(device.waitForText(name)).click()
+        device.tap(UiTarget.Text(name))
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             assertTrue(
                 "$action should be enabled once the inventory is complete",
-                device.clickableAncestor(device.waitForText(action)).isEnabled,
+                device.waitForControl(UiTarget.Text(action)).enabled,
             )
         }
     }
@@ -303,10 +301,10 @@ class CloudBackupInventoryActionsFullLaunchTest {
         walletIdsAtLaunch = AppManager.getInstance().wallets.map { it.id }.toSet()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickableAncestor(device.waitForText("Restore with Passkey")).click()
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
         ScriptedCloudStorageAccess.exposeAllProductionFixtureWallets()
-        device.clickableAncestor(device.waitForText("Done")).click()
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -351,63 +349,8 @@ class CloudBackupInventoryActionsFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-            // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-            waitForIdle()
-        }
-
-        error("Timed out scrolling to text \"$value\"")
-    }
-
-    // a disabled Compose clickable stays clickable in the accessibility tree and reports isEnabled false
-    private fun UiDevice.clickableAncestor(node: UiObject2): UiObject2 {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        return requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }
-    }
-
-    private fun UiDevice.clickTextScrollingUp(
-        value: String,
-        timeoutMs: Long = 20_000L,
     ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            val node = findObject(By.text(value))
-            if (node == null) {
-                swipe(displayWidth / 2, displayHeight / 4, displayWidth / 2, displayHeight * 3 / 4, 20)
-
-                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-                waitForIdle()
-                continue
-            }
-
-            try {
-                clickableAncestor(node).click()
-                return
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
-        }
-
-        error("Timed out clicking text \"$value\"")
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun waitUntil(
