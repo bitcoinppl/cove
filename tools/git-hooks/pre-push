@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Runs `just pre-push` on the commits a push adds, so the quick CI checks run before every push from
+# a worktree where `just install-hooks` enabled this; docs/testing.md#pre-push-checks describes it.
+# Skip it for one push with `git push --no-verify`
+#
+# git passes the remote's name and URL as arguments and one line per pushed ref on stdin:
+#   <local ref> <local oid> <remote ref> <remote oid>
+# with an all-zero local oid for a delete and an all-zero remote oid for a new remote ref
+
+is_zero() {
+    case $1 in
+        *[!0]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# commits a remote already has were checked when they were pushed, which also covers a new branch
+# and the commits a force push rewrites; a remote oid this clone has never fetched can't be
+# excluded, and the remotes' refs usually exclude the same commits anyway
+revisions=""
+while read -r _local_ref local_oid _remote_ref remote_oid; do
+    is_zero "$local_oid" && continue
+    revisions="$revisions $local_oid"
+
+    if ! is_zero "$remote_oid" && git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
+        revisions="$revisions ^$remote_oid"
+    fi
+done
+
+# a push of only deletes adds no commits
+if [ -z "$revisions" ]; then
+    exit 0
+fi
+
+if ! command -v just >/dev/null 2>&1; then
+    printf "pre-push: skipping the pre-push checks: just isn't installed\n" >&2
+    exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# the oids and options never contain spaces, so splitting the list on them is safe
+# shellcheck disable=SC2086
+exec just pre-push $revisions --not --remotes </dev/null

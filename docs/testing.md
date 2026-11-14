@@ -17,6 +17,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 - [Recording results](#recording-results)
 - [Rows that need a person](#rows-that-need-a-person)
 - [After a pass](#after-a-pass)
+- [Pre-push checks](#pre-push-checks)
 
 ---
 
@@ -333,3 +334,52 @@ Some neighboring checks don't need a person. KeyTeleport transfers between two C
 - Give every FAIL a regression test at the cheapest layer that can catch it. Record it in the manifest under `pending` with its pull request, then under `coverage` once it merges
 - Turn any agent steps that only navigate and observe into a device script in `qa/device`, so the next release runs them with a command
 - Update fixtures and this document with anything the run had to work around
+
+## Pre-push checks
+
+`just pre-push` runs the CI checks that fail locally in seconds, for the files a range of commits changes, so a formatting, lint, manifest or bindings mistake fails on your machine instead of costing a CI run. It is the one entry point for these checks: run it before every push, and the git hook below runs it too. [`tools/pre-push.sh`](../tools/pre-push.sh) implements it.
+
+```sh
+just pre-push                             # the commits on HEAD that origin/master doesn't have
+just pre-push origin/my-branch..HEAD      # any revisions, as `git log` takes them
+```
+
+It exits with one of these codes, which the hook and other callers rely on, so they don't change:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Every check that ran passed, or the commits need none. A check skipped for a missing tool doesn't fail it |
+| `1` | A check failed |
+| `2` | The revisions or the repository couldn't be read, such as an unknown revision or no `origin/master` to compare with |
+
+[`tools/git-hooks/pre-push`](../tools/git-hooks/pre-push) runs `just pre-push` on the commits of each `git push`. It is off until you enable it:
+
+```sh
+just install-hooks       # this worktree only
+just install-hooks all   # every worktree of this clone, including ones created later
+just uninstall-hooks     # or `just uninstall-hooks all`
+```
+
+Both set `core.hooksPath` to `tools/git-hooks`, for one worktree through `git config --worktree` or for the whole clone, and refuse to replace a `core.hooksPath` that is already set to something else. In a bare clone with worktrees, use `just install-hooks all`, since per-worktree settings would make git apply the shared `core.bare` to every worktree. Each worktree runs the hook from its own checkout.
+
+`just pre-push` runs only the checks that the commits' files need, with the commands and configs of the CI jobs they stand in for:
+
+| Check | Runs when the commits change | Command | CI job |
+| --- | --- | --- | --- |
+| `rustfmt` | `rust/` | `cargo fmt --all -- --check` in `rust/` | `rustfmt` |
+| `qa` | `rust/`, `ios/`, `android/` or `qa/` | `just qa-check` | `qa-manifest` |
+| `swiftformat` | `*.swift`, `.swiftformat` or `tools/swift-tools.json` | `just lint-swift-format` | `swift-lint`, its SwiftFormat step |
+| `ktlint` | `*.kt`, `*.kts` or `android/.editorconfig` | `just ktlint --offline` | `ktlint`, its ktlint step |
+| `bindings` | `rust/`, once the checkout has a host build of the Rust library | `just bindings-check` | the bindings checks in `compile-android` and `compile-ios` |
+
+The hook checks the pushed commits that no remote has yet, so a new branch is checked from where it left a remote branch, a force push checks only the rewritten commits, and a delete runs nothing. Without `just`, it skips the checks with a warning. A merge counts only the files where it differs from every parent. The checks read the working tree, and `just pre-push` warns when the working tree differs from the checked commits under `rust/`, `ios/`, `android/` or `qa/`.
+
+A check whose tool is missing is skipped with a one-line warning rather than failing: no `cargo`, `rustfmt` or `just`, Java missing, a `JAVA_HOME` without `bin/java` or the pinned Gradle not downloaded yet, or a pinned swiftformat that isn't downloaded yet or can't run because the machine isn't a Mac. The checks never use the network: Cargo runs offline, Gradle runs with `--offline`, so a crate or Gradle dependency that was never downloaded fails the check, and swiftformat runs only when `cargo xtask swift-tools path swiftformat` finds it already downloaded, which `just swift-tool swiftformat --version` does once.
+
+`just bindings-check` builds the Rust library for the host, generates the Kotlin and Swift bindings from it, and compares them with the committed ones. CI's compile jobs generate them from the device builds instead, so they still have the final say if an export ever differs between the host and a device target. The first host build in a checkout took over 3 minutes on a 24-core Linux machine, so `just pre-push` skips the check, with a warning, until `just bindings-check` has run once in that checkout. After that, rebuilding for a push's changes took 10 to 20 seconds.
+
+`just pre-push` should finish in under a minute. With warm caches, a Rust push took about 12 seconds and a Kotlin push about 2. The first run in a fresh checkout also builds xtask for the manifest check, which took up to a minute. These stay in CI because they can't finish in a minute: detekt, which compiles the app before it lints it, swiftlint and the Cove Swift lint rules, clippy, and the tests.
+
+To push without the hook's checks once, use `git push --no-verify`. To skip some of them, list them in `COVE_PRE_PUSH_SKIP`, as in `COVE_PRE_PUSH_SKIP=bindings git push` or `COVE_PRE_PUSH_SKIP=bindings just pre-push`, or use `COVE_PRE_PUSH_SKIP=all`.
+
+[`rust/xtask/tests/pre_push_hook.rs`](../rust/xtask/tests/pre_push_hook.rs) enables the hook with `just install-hooks` in a throwaway clone. It checks that `just pre-push` exits 1 for an unformatted Rust commit, 0 once a later commit formats it and 2 for an unknown revision. It also checks that the hook stops an unformatted commit on a new branch and in a force push, and lets a formatted one, a push without Rust changes and a delete through.

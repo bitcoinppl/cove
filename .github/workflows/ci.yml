@@ -329,6 +329,12 @@ jobs:
           prefix-key: v1-rust
           shared-key: test
 
+      # xtask's pre-push test runs `just pre-push`
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
       - name: Run tests
         run: cd rust && cargo test --locked --workspace
 
