@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.Icon
@@ -51,6 +52,7 @@ fun EnterAddressView(
     focusRequester: FocusRequester,
     onFocusChanged: (Boolean) -> Unit = {},
     onDone: () -> Unit = {},
+    onPickWallet: (() -> Unit)? = null,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -100,6 +102,9 @@ fun EnterAddressView(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+            onPickWallet?.let { pickWallet ->
+                SendToMyWalletButton(onClick = pickWallet)
             }
             IconButton(
                 onClick = onScanQr,
@@ -163,5 +168,22 @@ fun EnterAddressView(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * opens the picker for sending to another of the user's wallets
+ */
+@Composable
+internal fun SendToMyWalletButton(onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.offset(x = 8.dp).testTag("sendFlow.sendToMyWallet"),
+    ) {
+        Icon(
+            Icons.Filled.AccountBalanceWallet,
+            contentDescription = stringResource(R.string.cd_send_to_my_wallet),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

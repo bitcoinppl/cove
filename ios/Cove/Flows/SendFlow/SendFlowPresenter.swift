@@ -62,6 +62,7 @@ extension AppManager: SendFlowRouting {}
     enum SheetState: Equatable {
         case qr
         case fee
+        case transferDestination
     }
 
     var alertStateBinding: Binding<TaggedItem<SendFlowAlertState>?> {

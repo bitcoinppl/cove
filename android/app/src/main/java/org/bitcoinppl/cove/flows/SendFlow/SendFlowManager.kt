@@ -140,11 +140,14 @@ class SendFlowManager internal constructor(
 
     /**
      * get/set entering address with dispatch
+     * only dispatches if value actually changed (matches iOS pattern), since Rust treats every
+     * edit as a newer address that drops a wallet pick still on its way
      */
     var enteringAddress: String
         get() = _enteringAddress
         set(value) {
             if (isClosed.get()) return
+            if (_enteringAddress == value) return
             _enteringAddress = value
             dispatch(SendFlowManagerAction.NotifyEnteringAddressChanged(value))
         }
@@ -237,6 +240,21 @@ class SendFlowManager internal constructor(
         _enteringAddress = address.unformatted()
         this.address = address
         dispatch(SendFlowManagerAction.NotifyAddressChanged(address))
+    }
+
+    /**
+     * the user's other wallets this send can pay directly, for the wallet picker
+     */
+    fun transferDestinations(): List<TransferDestination> =
+        withRustOr(emptyList()) {
+            transferDestinations()
+        }
+
+    /**
+     * fill the address with another wallet's next receive address
+     */
+    fun selectTransferDestination(walletId: WalletId) {
+        dispatch(SendFlowManagerAction.SelectTransferDestination(walletId))
     }
 
     fun updateAmount(amount: Amount) {

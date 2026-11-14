@@ -156,6 +156,13 @@
     <string name="label_how_much_to_send">How much would you like to send?</string>
     <string name="label_enter_address">Enter address</string>
     <string name="label_where_send_to">Where do you want to send to?</string>
+    <string name="cd_send_to_my_wallet">Send to one of my wallets</string>
+    <string name="title_send_to_my_wallet">Send to My Wallet</string>
+    <string name="label_send_to_my_wallet_hint">Cove fills in that wallet\'s next receive address.</string>
+    <string name="label_send_to_hardware_wallet_note">Cove derives a hardware wallet\'s address from its public key. Check the address on the device before sending a large amount.</string>
+    <string name="label_transfer_destination_not_scanned">Open this wallet once so Cove can scan it</string>
+    <string name="label_hardware_wallet">Hardware wallet</string>
+    <string name="label_watch_only">Watch-only</string>
     <string name="label_account">Account</string>
     <string name="btn_change_speed">Change speed</string>
     <string name="label_total_spending">Total Spending</string>

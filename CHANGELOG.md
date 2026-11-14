@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added sending directly to another of your wallets, using that wallet's next receive address
 - Improved app lock handling so finishing or leaving a send never clears a lock that needs authentication
 
 ## [1.3.0] - 2026-07-16
