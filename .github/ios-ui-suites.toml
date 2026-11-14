@@ -1,0 +1,284 @@
+# Maps changed paths to the iOS UI suites that can catch a break in them, so
+# `cove-local-ci <worktree> <sha>:ios-ui --ios-ui-suites affected` runs those suites instead of
+# every suite in `IOS_UI_SUITES` in .github/workflows/ui-tests.yml
+#
+# The first rule with a glob that matches a path decides it. `*` also matches `/`, and a glob may
+# not contain `[` or `]`. A path no rule matches, or a rule set to "all", runs every suite, so a
+# path goes here only with the suites that drive it; when in doubt, leave it out. Keeping it
+# current is described in docs/testing.md, and .github/scripts/test_ios_ui_suites.py checks it
+#
+# `xtask ios-ui` builds only the schemes of the suites it runs, so a file compiled into both UI
+# test targets names at least one suite from each, or a break in the other target goes unseen
+
+# shared by every suite: the Rust library and its bindings, the build, the project, the suite
+# list, and the support code every test launches through
+[[rule]]
+paths = [
+    "rust/*",
+    "justfile",
+    ".github/workflows/ui-tests.yml",
+    "ios/Cove.xcodeproj/*",
+    "ios/CoveCore/*",
+    "ios/CoveUITests/FullLaunchSupport.swift",
+    "ios/CoveUITests/FakeNodeControl.swift",
+    "ios/CoveUITests/ScreenReachability.swift",
+]
+suites = "all"
+
+# each suite's own file, with any other suite that calls into it
+[[rule]]
+paths = ["ios/CoveUITests/BiometricLockFullLaunchUITests.swift"]
+suites = ["CoveUITests/BiometricLockFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/HardwareSigningFullLaunchUITests.swift"]
+suites = ["CoveUITests/HardwareSigningFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/KeyTeleportAppScannerFullLaunchUITests.swift"]
+suites = ["CoveUITests/KeyTeleportAppScannerFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift"]
+suites = ["CoveUITests/KeyTeleportReceiveFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift"]
+suites = ["CoveUITests/KeyTeleportSendFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/LargeTextWordBreakFullLaunchUITests.swift"]
+suites = ["CoveUITests/LargeTextWordBreakFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/NfcScanPrivacyCoverFullLaunchUITests.swift"]
+suites = ["CoveUITests/NfcScanPrivacyCoverFullLaunchUITests"]
+
+# also compiled into CoveCloudBackupUITests, which runs none of its tests, so its shortest suite
+# checks that target still builds
+[[rule]]
+paths = ["ios/CoveUITests/OnboardingFullLaunchUITests.swift"]
+suites = [
+    "CoveUITests/OnboardingFullLaunchUITests",
+    "CoveCloudBackupUITests/CloudBackupDisableFullAppUITests",
+]
+
+[[rule]]
+paths = ["ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift"]
+suites = ["CoveUITests/PublicKeyImportFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/ReceiveTextSizeFullLaunchUITests.swift"]
+suites = ["CoveUITests/ReceiveTextSizeFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift"]
+suites = ["CoveUITests/TapSignerLayoutFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/UtxoLockFullLaunchUITests.swift"]
+suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
+suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupDeleteFromCloudFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupDisableFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupDisableFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupLocalDeleteFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupOnboardingLateOfferFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests"]
+
+# its record ids, openDetailWithTwoCloudOnlyWallets and RestoreAllScreen are shared with the Large
+# Text and Network suites
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift"]
+suites = [
+    "CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests",
+]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/PrivateKeyExportFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/PrivateKeyExportFullAppUITests"]
+
+# compiled into CoveCloudBackupUITests but left out of IOS_UI_SUITES, so a full run only builds
+# it; the shortest suite in that target does the same
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupInventoryFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupDisableFullAppUITests"]
+
+# helpers, each mapped to the suites that call into it
+
+[[rule]]
+paths = ["ios/CoveUITests/SimulatorBiometrics.swift"]
+suites = ["CoveUITests/BiometricLockFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/HardwareWalletScreens.swift"]
+suites = [
+    "CoveUITests/ReceiveTextSizeFullLaunchUITests",
+    "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
+    "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
+    "CoveUITests/HardwareSigningFullLaunchUITests",
+    "CoveUITests/PublicKeyImportFullLaunchUITests",
+    "CoveUITests/TapSignerLayoutFullLaunchUITests",
+]
+
+# compiled into both targets
+[[rule]]
+paths = ["ios/CoveUITests/KeyTeleportPeer.swift"]
+suites = [
+    "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
+    "CoveUITests/HardwareSigningFullLaunchUITests",
+    "CoveUITests/KeyTeleportReceiveFullLaunchUITests",
+    "CoveUITests/KeyTeleportSendFullLaunchUITests",
+    "CoveUITests/KeyTeleportAppScannerFullLaunchUITests",
+    "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
+]
+
+# compiled into both targets; KeyTeleportPeer.swift and HardwareWalletScreens.swift build on it,
+# so their suites are here too
+[[rule]]
+paths = ["ios/CoveUITests/HardwareSignerControl.swift"]
+suites = [
+    "CoveUITests/ReceiveTextSizeFullLaunchUITests",
+    "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
+    "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
+    "CoveUITests/BiometricLockFullLaunchUITests",
+    "CoveUITests/HardwareSigningFullLaunchUITests",
+    "CoveUITests/PublicKeyImportFullLaunchUITests",
+    "CoveUITests/TapSignerLayoutFullLaunchUITests",
+    "CoveUITests/KeyTeleportReceiveFullLaunchUITests",
+    "CoveUITests/KeyTeleportSendFullLaunchUITests",
+    "CoveUITests/KeyTeleportAppScannerFullLaunchUITests",
+    "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
+]
+
+# the Cloud Backup host app and its controls run only under CoveCloudBackupUITests
+[[rule]]
+paths = [
+    "ios/CoveUITests/CloudBackupHostControl.swift",
+    "ios/CoveUITests/CloudBackupHostUITestSupport.swift",
+    "ios/CoveCloudBackupUITestHost/*",
+]
+suites = [
+    "CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests",
+    "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupDeleteFromCloudFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupDisableFullAppUITests",
+]
+
+# app flows behind one entry point that only these suites open. The Cloud Backup host app also
+# compiles them, but a break there would need a reference to CoveProductionApp.swift, the one app
+# file the host leaves out, or a clash with a host-only name, so no host suite runs for them
+
+# coin control opens only from the wallet's more-info menu (MoreInfoPopover), and its set-amount
+# screen and custom-amount sheet only from coin control
+[[rule]]
+paths = [
+    "ios/Cove/Flows/CoinControlFlow/*",
+    "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/Common/SendFlowUtxoCustomAmountSheetView.swift",
+]
+suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
+
+# the keyTeleport route, which RouteView shows with KeyTeleportContainer
+[[rule]]
+paths = ["ios/Cove/Flows/KeyTeleportFlow/*"]
+suites = [
+    "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
+    "CoveUITests/KeyTeleportReceiveFullLaunchUITests",
+    "CoveUITests/KeyTeleportSendFullLaunchUITests",
+    "CoveUITests/KeyTeleportAppScannerFullLaunchUITests",
+    "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
+]
+
+# the tapSigner sheet, which opens only for a scanned TAPSIGNER or a TAPSIGNER wallet
+[[rule]]
+paths = ["ios/Cove/Flows/TapSignerFlow/*"]
+suites = [
+    "CoveUITests/HardwareSigningFullLaunchUITests",
+    "CoveUITests/TapSignerLayoutFullLaunchUITests",
+]
+
+# the rest of the app: its entry, routing, shared components and the screens most suites pass
+# through
+[[rule]]
+paths = ["ios/Cove/*", "ios/CodeScanner/*", "ios/Logger.swift"]
+suites = "all"
+
+# never built or read by `just build-ios` or `xtask ios-ui`: Android, the unit tests (their scheme
+# isn't a UI test scheme), App Store text, the Swift lint tools, the device QA tools and checklist,
+# the other workflows and CI scripts, and files read only by people and review bots
+[[rule]]
+paths = [
+    "android/*",
+    "ios/CoveTests/*",
+    "ios/metadata/*",
+    ".swiftlint.yml",
+    ".swiftformat",
+    ".swift-ast-lint.yml",
+    "tools/cove-swift-lint/*",
+    "tools/swift-tools.json",
+    "tools/wda/*",
+    "tools/uia2/*",
+    "qa/*",
+    ".github/ios-ui-suites.toml",
+    ".github/scripts/*",
+    ".github/workflows/ci.yml",
+    ".github/workflows/codeql.yml",
+    ".github/workflows/mobile-artifacts.yml",
+    ".github/workflows/regenerate-bindings.yml",
+    ".github/pull_request_template.md",
+    "docs/*",
+    "images/*",
+    "designs/*",
+    "pubkeys/*",
+    ".codex/*",
+    ".greptile/*",
+    ".coderabbit.yaml",
+    ".envrc.example",
+    "rust-analyzer.json",
+    "LICENSE",
+    "AGENTS.md",
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "SECURITY.md",
+]
+suites = []

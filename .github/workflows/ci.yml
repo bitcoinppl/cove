@@ -58,12 +58,16 @@ jobs:
       test_macos_local: ${{ steps.local.outputs.test_macos_local }}
     steps:
       # the merge commit and both its parents, or with a base input the whole history, so the
-      # script finds where the branch left it; diffing names reads trees, never blobs
+      # script finds where the branch left it; diffing names reads trees, never blobs. The test of
+      # .github/ios-ui-suites.toml reads it, which the cone takes with .github/scripts, and
+      # ui-tests.yml's suite list
       - uses: actions/checkout@v6
         with:
           fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.base != '' && '0' || '2' }}
           filter: blob:none
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows
 
       # a failure here fails the job before it writes outputs, so every job runs
       - name: Test the job filter
