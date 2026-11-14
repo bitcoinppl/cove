@@ -1,0 +1,25 @@
+# Flaky iOS tests that CI leaves out until they're fixed; see "Quarantined tests" in
+# docs/testing.md
+#
+# Each entry names one test method as <Target>/<Class>/<method>, with <Target> CoveTests,
+# CoveUITests or CoveCloudBackupUITests, an issue for its fix, the last day it may stay quarantined
+# and why. `cargo xtask ios-quarantine check` fails once that day has passed: fix the test and
+# remove its entry, or extend `expires` with a note on the issue saying why
+
+[[test]]
+id = "CoveTests/SendFlowBackNavigationTests/testBackFromSendAtLargestAccessibilitySizeFinishes"
+issue = "https://github.com/bitcoinppl/cove/issues/1108"
+expires = 2026-12-09
+reason = "The back transition misses its 10-second wait on slow simulators"
+
+[[test]]
+id = "CoveUITests/HardwareSigningFullLaunchUITests/testTapSignerImportRetriesAfterWrongPinAndDroppedSession"
+issue = "https://github.com/bitcoinppl/cove/issues/1109"
+expires = 2026-12-09
+reason = "A fake node control request times out"
+
+[[test]]
+id = "CoveUITests/OnboardingFullLaunchUITests/testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard"
+issue = "https://github.com/bitcoinppl/cove/issues/1110"
+expires = 2026-12-09
+reason = "No import suggestion appears on the iPhone 17 iOS 27 simulator"

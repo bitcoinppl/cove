@@ -6526,6 +6526,7 @@ dependencies = [
  "glob",
  "hex",
  "image",
+ "jiff",
  "jsonwebtoken",
  "keyteleport",
  "memchr",

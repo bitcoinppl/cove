@@ -131,13 +131,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(button(startingWith: "Scan QR code").exists)
     }
 
-    func testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard() throws {
-        // quarantined in CI: on the iPhone 17 iOS 27 simulator no suggestion appears after typing "a"
-        try XCTSkipIf(
-            ProcessInfo.processInfo.environment["COVE_SKIP_QUARANTINED"] == "1",
-            "Quarantined in CI until the missing import suggestion is diagnosed"
-        )
-
+    func testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard() {
         launchApp()
 
         reachStorageChoices()

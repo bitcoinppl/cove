@@ -313,6 +313,10 @@ enum Commands {
         records: Vec<std::path::PathBuf>,
     },
 
+    /// Quarantined iOS tests: print their `-skip-testing:` arguments, or check none has expired
+    #[command(name = "ios-quarantine", subcommand)]
+    IosQuarantine(ios::QuarantineCommand),
+
     /// Bump and upload to TestFlight, copy previous test notes, and add to me-only
     #[command(name = "testflight")]
     Testflight {
@@ -553,6 +557,8 @@ fn run(cli: Cli) -> Result<()> {
                 ios::IosUiOptions::new(device, test, shard, foreground, results_dir, list);
             ios::run_ios_ui_tests(options, cli.verbose)
         }
+
+        Commands::IosQuarantine(command) => ios::run_quarantine(command),
 
         Commands::Testflight { api_key_path, api_key_id, api_issuer_id } => {
             let options =
