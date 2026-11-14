@@ -5,7 +5,6 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -81,20 +80,22 @@ class CloudBackupReconnectFullLaunchTest {
                 manager.restoreAllState == CloudBackupRestoreAllState.StartDisabled(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
         }
-        device.scrollUntilText(OFFLINE_DETAIL_MESSAGE)
+        device.scrollUntilShown(UiTarget.Text(OFFLINE_DETAIL_MESSAGE))
+        device.scrollUntilShown(UiTarget.Text(RESTORE_ALL_TITLE))
         assertFalse(
             "Restore All must stay disabled offline",
-            device.scrollUntilText(RESTORE_ALL_TITLE).clickableAncestor().isEnabled,
+            device.waitForControl(UiTarget.Text(RESTORE_ALL_TITLE)).enabled,
         )
 
         // a disabled Compose row stays in the tree and reports isEnabled false, and a tap on it
         // must open neither action
         val walletDownloadsOffline = ScriptedCloudStorageAccess.walletDownloadCount()
         for (name in CLOUD_ONLY_WALLET_NAMES) {
-            val row = device.scrollUntilText(name).clickableAncestor()
-            assertFalse("$name must be disabled offline", row.isEnabled)
+            val row = UiTarget.Text(name)
+            device.scrollUntilShown(row)
+            assertFalse("$name must be disabled offline", device.waitForControl(row).enabled)
 
-            row.click()
+            device.tap(row)
             assertFalse(
                 "$name must not open Restore or Delete offline",
                 device.wait(Until.hasObject(By.text(RESTORE_ACTION)), 2_000L) ||
@@ -128,12 +129,13 @@ class CloudBackupReconnectFullLaunchTest {
                 manager.restoreAllState == CloudBackupRestoreAllState.StartDisabled(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
         }
-        device.scrollUntilText(OFFLINE_DETAIL_MESSAGE)
-        device.scrollUntilText("Fixture Wallet Two")
-        device.scrollUntilText("Fixture Wallet Three")
+        device.scrollUntilShown(UiTarget.Text(OFFLINE_DETAIL_MESSAGE))
+        device.scrollUntilShown(UiTarget.Text("Fixture Wallet Two"))
+        device.scrollUntilShown(UiTarget.Text("Fixture Wallet Three"))
+        device.scrollUntilShown(UiTarget.Text(RESTORE_ALL_TITLE))
         assertFalse(
             "Restore All must stay disabled while the inventory is incomplete",
-            device.scrollUntilText(RESTORE_ALL_TITLE).clickableAncestor().isEnabled,
+            device.waitForControl(UiTarget.Text(RESTORE_ALL_TITLE)).enabled,
         )
 
         // the reconnect itself must refresh the open detail, so the test starts no refresh; the
@@ -154,11 +156,12 @@ class CloudBackupReconnectFullLaunchTest {
             "the offline message should clear once the inventory completes",
             device.wait(Until.gone(By.text(OFFLINE_DETAIL_MESSAGE)), 10_000L),
         )
-        device.scrollUntilText("Fixture Wallet Two")
-        device.scrollUntilText("Fixture Wallet Three")
+        device.scrollUntilShown(UiTarget.Text("Fixture Wallet Two"))
+        device.scrollUntilShown(UiTarget.Text("Fixture Wallet Three"))
+        device.scrollUntilShown(UiTarget.Text(RESTORE_ALL_TITLE))
         assertTrue(
             "Restore All should be available again after reconnecting",
-            device.scrollUntilText(RESTORE_ALL_TITLE).clickableAncestor().isEnabled,
+            device.waitForControl(UiTarget.Text(RESTORE_ALL_TITLE)).enabled,
         )
         assertEquals(
             "refreshing the inventory must neither create nor ask for a passkey",
@@ -173,11 +176,11 @@ class CloudBackupReconnectFullLaunchTest {
         launchFullApp()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
         device.waitForText("Your wallets have been restored.")
         ScriptedCloudStorageAccess.exposeAllProductionFixtureWallets()
-        device.clickClickableAncestor(device.waitForText("Done"))
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -251,43 +254,8 @@ class CloudBackupReconnectFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    // scrolls down, then back up, since the detail may already be scrolled past the text
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var swipes = 0
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            val upward = (swipes / 4) % 2 == 1
-            val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
-            val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
-            swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-            swipes += 1
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to text \"$value\"")
-    }
-
-    private fun UiObject2.clickableAncestor(): UiObject2 {
-        var clickable: UiObject2? = this
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        return requireNotNull(clickable) { "expected a clickable ancestor for $text" }
-    }
-
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        node.clickableAncestor().click()
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun waitUntil(

@@ -5,7 +5,6 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -130,7 +129,7 @@ class CloudBackupDisableFullLaunchTest {
         val deadline = System.currentTimeMillis() + 20_000L
 
         while (System.currentTimeMillis() < deadline) {
-            device.findObject(By.text(TURN_OFF_CONFIRM))?.let { return clickClickableAncestor(it) }
+            if (device.snapshot().control(UiTarget.Text(TURN_OFF_CONFIRM)) != null) return device.tap(UiTarget.Text(TURN_OFF_CONFIRM))
             if (device.hasObject(By.text(TURN_OFF_FIRST_TITLE))) device.clickText("Continue")
 
             Thread.sleep(200)
@@ -221,69 +220,27 @@ class CloudBackupDisableFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
+    }
 
     private fun UiDevice.clickText(
         value: String,
         scroll: Boolean = false,
         timeoutMs: Long = 20_000L,
-    ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            val node = wait(Until.findObject(By.text(value)), if (scroll) 1_000L else timeoutMs)
-            if (node != null) {
-                clickClickableAncestor(node)
-                return
-            }
-
-            if (scroll) {
-                swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-                waitForIdle()
-            }
-        }
-
-        error("Timed out clicking text \"$value\"")
-    }
+    ) = clickTarget(UiTarget.Text(value), scroll, timeoutMs)
 
     private fun UiDevice.clickTagged(
         tag: String,
         scroll: Boolean = false,
         timeoutMs: Long = 20_000L,
-    ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
+    ) = clickTarget(UiTarget.Tag(tag), scroll, timeoutMs)
 
-        while (System.currentTimeMillis() < deadline) {
-            val node = wait(Until.findObject(By.res(tag)), if (scroll) 1_000L else timeoutMs)
-            if (node != null) {
-                clickClickableAncestor(node)
-                return
-            }
-
-            if (scroll) {
-                swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-                waitForIdle()
-            }
-        }
-
-        error("Timed out clicking tag \"$tag\"")
-    }
-
-    private fun clickClickableAncestor(node: UiObject2) {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }.click()
-    }
+    private fun UiDevice.clickTarget(
+        target: UiTarget,
+        scroll: Boolean,
+        timeoutMs: Long,
+    ) = if (scroll) scrollAndTap(target, timeoutMs) else tap(target, timeoutMs)
 
     private fun waitUntil(
         message: String,

@@ -12,9 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -482,57 +480,15 @@ class CloudBackupRestoreAllFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    // scrolls down, then back up, since the detail may already be scrolled past the text
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var swipes = 0
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            val upward = (swipes / 4) % 2 == 1
-            val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
-            val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
-            swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-            swipes += 1
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to text \"$value\"")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
-    // clicks the first node showing [value] that sits in something clickable, since a text can also
-    // appear as a plain label, such as the Cloud Backup section header above its Settings row
-    private fun UiDevice.clickText(value: String) {
-        val deadline = System.currentTimeMillis() + 20_000L
+    private fun UiDevice.scrollUntilText(value: String) = scrollUntilShown(UiTarget.Text(value))
 
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                scrollUntilText(value)
-                val clickable =
-                    findObjects(By.text(value)).firstNotNullOfOrNull { node ->
-                        generateSequence(node) { it.parent }.firstOrNull { it.isClickable }
-                    }
-
-                if (clickable != null) {
-                    clickable.click()
-                    return
-                }
-            } catch (_: StaleObjectException) {
-                // the tree moved under the read, so find the text again
-            }
-
-            Thread.sleep(100)
-        }
-
-        error("Timed out clicking text \"$value\"")
-    }
+    // taps the first copy of [value] inside something clickable, since a text can also appear as
+    // a plain label, such as the Cloud Backup section header above its Settings row
+    private fun UiDevice.clickText(value: String) = scrollAndTap(UiTarget.Text(value))
 
     private fun pollUntil(
         timeoutMs: Long,

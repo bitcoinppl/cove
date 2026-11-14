@@ -2,9 +2,7 @@ package org.bitcoinppl.cove.flows.cloudbackup
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -204,12 +202,10 @@ internal class CloudBackupTurnOffRobot(
     }
 
     /** Waits for the first of two dialogs, which Rust opens when Turn Off deletes something unrecoverable */
-    fun waitForFirstDialog(): UiObject2 {
+    fun waitForFirstDialog() {
         waitUntil("the Turn Off review never showed its first dialog", timeoutMs = 20_000L) {
             device.hasObject(By.text(FIRST_DIALOG_TITLE))
         }
-
-        return device.findObject(By.text(FIRST_DIALOG_TITLE))
     }
 
     /** Waits for the dialog that confirms the delete, the only one when Turn Off asks once */
@@ -265,11 +261,7 @@ internal class CloudBackupTurnOffRobot(
 
         FullLaunchOnboardingRobot(device).acceptCloudBackupAcknowledgements()
         waitUntil("Enable should be enabled once the acknowledgements are checked") {
-            try {
-                device.findObject(enable)?.isEnabled == true
-            } catch (_: StaleObjectException) {
-                false
-            }
+            device.controlEnabled(UiTarget.Tag(CloudBackupTags.action(CloudBackupScreenAction.ENABLE))) == true
         }
     }
 
@@ -300,7 +292,7 @@ internal class CloudBackupTurnOffRobot(
 
     // device steps
 
-    fun waitForText(value: String): UiObject2 = device.waitForText(value)
+    fun waitForText(value: String) = device.waitForText(value)
 
     /**
      * Waits for [value] on a scrolling screen, swiping toward the top and then back down while it
@@ -310,27 +302,13 @@ internal class CloudBackupTurnOffRobot(
     fun scrollToText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var towardTop = true
-        var swipes = 0
-
-        while (System.currentTimeMillis() < deadline) {
-            device.findObject(By.text(value))?.let { return it }
-
-            // a finger moving down shows what is above
-            val (fromY, toY) =
-                if (towardTop) device.displayHeight / 4 to device.displayHeight * 3 / 4
-                else device.displayHeight * 3 / 4 to device.displayHeight / 4
-            device.swipe(device.displayWidth / 2, fromY, device.displayWidth / 2, toY, 20)
-            device.waitForIdle()
-
-            swipes += 1
-            if (swipes % SWIPES_PER_PASS == 0) towardTop = !towardTop
-        }
-
-        error("Timed out scrolling to text \"$value\"; ${manager.describeScreen()}")
-    }
+    ) = device.scrollUntilShown(
+        UiTarget.Text(value),
+        timeoutMs,
+        upwardFirst = true,
+        message = "Timed out scrolling to text \"$value\"; ${manager.describeScreen()}",
+        swipesPerDirection = SWIPES_PER_PASS,
+    )
 
     fun clickText(
         value: String,
@@ -367,61 +345,46 @@ internal class CloudBackupTurnOffRobot(
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"; ${manager.describeScreen()}")
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) {
+            error("Timed out waiting for text \"$value\"; ${manager.describeScreen()}")
+        }
+    }
 
     private fun UiDevice.clickText(
         value: String,
         scroll: Boolean = false,
         timeoutMs: Long = 20_000L,
-    ) = clickFirst("text \"$value\"", scroll, timeoutMs) { findObjects(By.text(value)) }
+    ) = clickFirst(UiTarget.Text(value), scroll, timeoutMs)
 
     private fun UiDevice.clickTagged(
         tag: String,
         scroll: Boolean = false,
         timeoutMs: Long = 20_000L,
-    ) = clickFirst("tag \"$tag\"", scroll, timeoutMs) { findObjects(By.res(tag)) }
+    ) = clickFirst(UiTarget.Tag(tag), scroll, timeoutMs)
 
-    // clicks the first match that sits in something clickable, since a text can also appear as a
-    // plain label, scrolling between looks when [scroll] is set
+    // taps the first match that sits in something clickable, since a text can also appear as a
+    // plain label, scrolling until it shows when [scroll] is set
     private fun UiDevice.clickFirst(
-        description: String,
+        target: UiTarget,
         scroll: Boolean,
         timeoutMs: Long,
-        find: () -> List<UiObject2>,
     ) {
+        if (scroll) scrollUntilShown(target, timeoutMs, message = timedOutClicking(target))
+
         val deadline = System.currentTimeMillis() + timeoutMs
-
         while (System.currentTimeMillis() < deadline) {
-            val clickable =
-                try {
-                    find().firstNotNullOfOrNull { node -> generateSequence(node) { it.parent }.firstOrNull { it.isClickable } }
-                } catch (_: StaleObjectException) {
-                    // the tree moved under the read, so look again
-                    null
-                }
-
-            if (clickable != null) {
-                clickable.click()
-                return
-            }
-
-            if (scroll) {
-                swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-                waitForIdle()
-            }
+            if (snapshot().control(target) != null) return tap(target, timeoutMs)
 
             Thread.sleep(100)
         }
 
-        error(
-            "Timed out clicking $description; route=${AppManager.getInstance().currentRoute}, " +
-                "actions=${manager.describeActions()}, ${manager.describeScreen()}",
-        )
+        error(timedOutClicking(target))
     }
+
+    private fun timedOutClicking(target: UiTarget): String =
+        "Timed out clicking ${target.description}; route=${AppManager.getInstance().currentRoute}, " +
+            "actions=${manager.describeActions()}, ${manager.describeScreen()}"
 
     companion object {
         val TURN_OFF = CloudBackupScreenAction.TURN_OFF

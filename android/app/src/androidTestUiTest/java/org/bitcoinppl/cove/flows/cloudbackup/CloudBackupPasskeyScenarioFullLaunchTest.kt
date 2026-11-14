@@ -5,7 +5,6 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -100,7 +99,7 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
         launchFullApp()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
+        device.tap(UiTarget.Text("Restore with Passkey"))
 
         assertTrue(
             "expected one bounded discovery retry to reach the scripted success; " +
@@ -197,7 +196,7 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
             !CloudBackupManager.getInstance().hasPendingUploadVerification
         }
 
-        device.clickClickableAncestor(device.waitForText("Continue"))
+        device.tap(UiTarget.Text("Continue"))
         onboarding.continueFromBackupWallet().acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -224,17 +223,8 @@ class CloudBackupPasskeyScenarioFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000,
-    ) = wait(Until.findObject(By.text(value)), timeoutMs)
-        ?: error("Timed out waiting for text \"$value\"")
-
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }.click()
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun rustConnectivityStatus() =

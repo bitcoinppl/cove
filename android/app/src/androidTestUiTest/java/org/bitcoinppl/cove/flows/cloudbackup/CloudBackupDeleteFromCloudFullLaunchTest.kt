@@ -1,14 +1,10 @@
 package org.bitcoinppl.cove.flows.cloudbackup
 
-import android.graphics.Rect
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.BySelector
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -57,7 +53,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
 
         // the second row, so a delete that took the first row's id would remove the wrong one
         openDeleteConfirmation(SELECTED_WALLET_NAME)
-        device.clickText("Cancel")
+        device.tap(UiTarget.Text("Cancel"))
         assertTrue(
             "Cancel should close the confirmation",
             device.wait(Until.gone(By.text("Delete $SELECTED_WALLET_NAME?")), 10_000L),
@@ -72,7 +68,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         device.waitForText(KEPT_WALLET_NAME)
 
         openDeleteConfirmation(SELECTED_WALLET_NAME)
-        device.clickText("Delete Forever")
+        device.tap(UiTarget.Text("Delete Forever"))
 
         waitUntil("Delete Forever should reach the cloud provider") {
             ScriptedCloudStorageAccess.deletedWalletRecordIds().isNotEmpty() ||
@@ -103,8 +99,8 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
             setOf(KEPT_RECORD_ID, REFRESH_MARKER_RECORD_ID),
             onMainValue(::cloudOnlyRecordIds).toSet(),
         )
-        device.scrollUntilText(REFRESH_MARKER_WALLET_NAME)
-        device.scrollUntilText(KEPT_WALLET_NAME)
+        device.scrollUntilShownText(REFRESH_MARKER_WALLET_NAME)
+        device.scrollUntilShownText(KEPT_WALLET_NAME)
 
         // the manager state check above is the proof; this on-screen check is supplementary
         assertTrue(
@@ -120,17 +116,21 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
     }
 
     private fun openDeleteConfirmation(walletName: String) {
-        device.clickText(walletName)
+        device.tap(UiTarget.Text(walletName))
 
         // the sheet slides up, so its action is tapped only once it holds still
-        val description = "Restore this wallet to the device or delete it from Cloud Backup."
-        device.waitForText(description)
-        val deleteAction = device.waitForSettled(By.text("Delete from Cloud Backup"), "Delete from Cloud Backup")
+        val description = UiTarget.Text("Restore this wallet to the device or delete it from Cloud Backup.")
+        device.waitForText(description.text)
+        val deleteAction = UiTarget.Text("Delete from Cloud Backup")
+        device.waitForSettledControl(deleteAction)
+
+        // the innermost container of the sheet's delete action that also holds its description is
+        // the sheet itself, so a search inside it can't match the wallet row underneath
         assertTrue(
             "the action sheet should be titled with the selected wallet",
-            sheetContaining(deleteAction, description).hasObject(By.text(walletName)),
+            device.snapshot().containerOf(deleteAction, holding = description)?.shows(UiTarget.Text(walletName)) == true,
         )
-        device.clickClickableAncestor(deleteAction)
+        device.tap(deleteAction)
 
         device.waitForText("Delete $walletName?")
 
@@ -141,21 +141,6 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
                 "recovered after you delete it. This can't be undone.",
         )
         device.waitForText("Delete Forever")
-    }
-
-    // the innermost ancestor of the sheet's delete action that also holds its description is the
-    // sheet itself, so a search inside it can't match the wallet row underneath
-    private fun sheetContaining(
-        action: UiObject2,
-        description: String,
-    ): UiObject2 {
-        var node: UiObject2? = action
-
-        while (node != null && !node.hasObject(By.text(description))) {
-            node = node.parent
-        }
-
-        return requireNotNull(node) { "the delete action is not inside the action sheet" }
     }
 
     // gives a delete that Cancel would have dispatched time to reach the provider before asserting none did
@@ -182,11 +167,11 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         launchFullApp()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickText("Restore with Passkey")
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
         device.waitForText("Your wallets have been restored.")
         ScriptedCloudStorageAccess.exposeAllProductionFixtureWallets()
-        device.clickText("Done")
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         waitForAppOnRestoredWallet()
 
@@ -201,7 +186,7 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
             manager.isInventoryComplete &&
                 cloudOnlyRecordIds() == listOf(KEPT_RECORD_ID, SELECTED_RECORD_ID)
         }
-        device.scrollUntilText(SELECTED_WALLET_NAME)
+        device.scrollUntilShownText(SELECTED_WALLET_NAME)
         device.waitForText(KEPT_WALLET_NAME)
     }
 
@@ -266,72 +251,13 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\", on screen: ${visibleTexts()}")
-
-    private fun UiDevice.visibleTexts(): List<String> = findObjects(By.textStartsWith("")).mapNotNull { it.text }
-
-    private fun UiDevice.clickText(value: String) {
-        waitForText(value)
-        clickClickableAncestor(waitForSettled(By.text(value), "text \"$value\""))
-    }
-
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            if (hasObject(By.text(value))) return waitForSettled(By.text(value), "text \"$value\"")
-
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-            Thread.sleep(250)
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) {
+            error("Timed out waiting for text \"$value\", on screen: ${snapshot().texts()}")
         }
-
-        error("Timed out scrolling to text \"$value\", on screen: ${visibleTexts()}")
     }
 
-    /**
-     * Waits until [selector] matches a node whose bounds held still between two looks, so a tap on
-     * it lands where it was found rather than where a sliding sheet or dialog has moved it
-     */
-    private fun UiDevice.waitForSettled(
-        selector: BySelector,
-        description: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var previous: Rect? = null
-
-        while (System.currentTimeMillis() < deadline) {
-            val node = findObject(selector)
-            val bounds =
-                try {
-                    node?.visibleBounds
-                } catch (_: StaleObjectException) {
-                    null
-                }
-
-            if (node != null && bounds != null && bounds == previous) return node
-
-            previous = bounds
-            Thread.sleep(SETTLE_POLL_MS)
-        }
-
-        error("$description never held still, last bounds $previous\n${visibleTexts()}")
-    }
-
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }.click()
-    }
+    private fun UiDevice.scrollUntilShownText(value: String) = scrollUntilShown(UiTarget.Text(value))
 
     private companion object {
         const val SELECTED_RECORD_ID = ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID
@@ -344,6 +270,5 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         const val REFRESH_MARKER_RECORD_ID = ScriptedCloudBackupFixture.XPRV_WALLET_RECORD_ID
         const val REFRESH_MARKER_WALLET_NAME = ScriptedCloudBackupFixture.XPRV_WALLET_NAME
         const val CANCEL_SETTLE_MS = 3_000L
-        const val SETTLE_POLL_MS = 200L
     }
 }

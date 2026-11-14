@@ -5,7 +5,6 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -88,10 +87,10 @@ class CloudBackupFirstInventoryFullLaunchTest {
         awaitBootstrap()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickableAncestor(device.waitForText("Restore with Passkey")).click()
+        device.tap(UiTarget.Text("Restore with Passkey"))
         device.waitForText("You're all set")
         ScriptedCloudStorageAccess.exposeAllProductionFixtureWallets()
-        device.clickableAncestor(device.waitForText("Done")).click()
+        device.tap(UiTarget.Text("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Cloud Backup settings",
@@ -235,16 +234,16 @@ class CloudBackupFirstInventoryFullLaunchTest {
     }
 
     private fun assertRowOpensEnabledActions(name: String) {
-        device.scrollUntilText(name)
+        device.scrollUntilShown(UiTarget.Text(name))
         waitUntil("$name should be enabled once the inventory is complete") {
-            device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == true
+            device.controlEnabled(UiTarget.Text(name)) == true
         }
 
-        device.clickableAncestor(device.waitForText(name)).click()
+        device.tap(UiTarget.Text(name))
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             assertTrue(
                 "$action should be enabled once the inventory is complete",
-                device.clickableAncestor(device.waitForText(action)).isEnabled,
+                device.waitForControl(UiTarget.Text(action)).enabled,
             )
         }
     }
@@ -280,36 +279,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
     private fun UiDevice.waitForText(
         value: String,
         timeoutMs: Long = 20_000L,
-    ): UiObject2 =
-        wait(Until.findObject(By.text(value)), timeoutMs)
-            ?: error("Timed out waiting for text \"$value\"")
-
-    private fun UiDevice.scrollUntilText(
-        value: String,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
-            swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-
-            // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-            waitForIdle()
-        }
-
-        error("Timed out scrolling to text \"$value\"")
-    }
-
-    // a disabled Compose clickable stays clickable in the accessibility tree and reports isEnabled false
-    private fun UiDevice.clickableAncestor(node: UiObject2): UiObject2 {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        return requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }
+    ) {
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
     }
 
     private fun waitUntil(
