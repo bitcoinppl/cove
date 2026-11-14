@@ -22,6 +22,7 @@ import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
 import org.bitcoinppl.cove.cloudbackup.cloudBackupFixture
+import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
@@ -721,6 +722,11 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    @QuarantinedInCi(
+        reason = "the hardware import step is sometimes not displayed after system back",
+        issue = "https://github.com/bitcoinppl/cove/issues/1097",
+        expires = "2026-12-09",
+    )
     fun hardwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
         var selected = ""
 

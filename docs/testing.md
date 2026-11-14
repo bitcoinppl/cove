@@ -5,6 +5,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 ## Table of Contents
 
 - [Layers](#layers)
+- [Quarantined tests](#quarantined-tests)
 - [Hardware signer tests](#hardware-signer-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Features left out of release passes](#features-left-out-of-release-passes)
@@ -83,6 +84,24 @@ Both inputs take comma-separated lists, and a class runs all its tests. A run th
 A manual run shows under Actions but not in a pull request's checks, so it confirms a fix without clearing a failed check. To clear one, use GitHub's "Re-run failed jobs" on the pull request's run, which reruns only the failed shard or flavour, or push the fix.
 
 CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch, or start CI on the branch as shown above.
+
+## Quarantined tests
+
+A test that flakes in CI can be quarantined: CI stops running it while an issue tracks the fix. A quarantine is temporary, so every entry names its issue and an expiry date, and CI's `quarantine` job fails on every pull request and push to master once any entry is past its date, whatever the change touches.
+
+- **Android**: annotate the test method or class with `@QuarantinedInCi(reason = "...", issue = "https://github.com/bitcoinppl/cove/issues/<n>", expires = "YYYY-MM-DD")`, all three by name as string literals. `just android-instrumented-ci` and the `UI tests` workflow skip it, while plain `connected*AndroidTest` runs and `just android-ui-manual` still run it
+- **Rust**: mark the test `#[ignore = "quarantined until YYYY-MM-DD: https://github.com/bitcoinppl/cove/issues/<n>"]`, with the reason in a comment above it. `cargo test` and `cargo nextest` skip it; run it with `cargo test -- --ignored <name>` or `cargo nextest run --run-ignored only <name>`. An `#[ignore]` whose reason doesn't start with `quarantin`, such as the TAPSIGNER emulator tests', isn't a quarantine
+- **iOS**: a failing UI test comes out of `IOS_UI_SUITES` with an issue to bring it back, as described under [Layers](#layers); the expiry check doesn't cover it
+
+The rules:
+
+1. Quarantine only a test the GitHub Actions logs show flaking: it failed, then passed on a rerun of the same commit, and the failure is the test's own rather than the emulator's or the runner's. When the cause is cheap to fix, such as a Rust test that shares process-global state with another one, fix it instead
+2. Open one issue per quarantined test, labeled `ui-tests` for Android and `rust` for Rust, with the failure message and the runs it failed and passed in
+3. Set the expiry at most 60 days ahead. The entry holds through that day in UTC and fails the job the day after
+4. By the expiry, fix the test, remove the entry and close the issue. If the fix is still under way, a pull request may move the date, saying why in the issue, and a test that no longer earns its place can be deleted with its issue closed
+5. Remove the entry on the fix's branch, then check the fix with a few manual `UI tests` runs that name the test; those runs skip a test that is still annotated, even when they name it. Close the issue once the fix lands
+
+[`.github/scripts/ci_quarantine.py`](../.github/scripts/ci_quarantine.py) reads the entries from the source and fails on an expired or malformed entry, or one more than 60 days ahead. Run `python3 -I .github/scripts/ci_quarantine.py` from the repository root to list the quarantined tests and see what the job would report.
 
 ## Hardware signer tests
 

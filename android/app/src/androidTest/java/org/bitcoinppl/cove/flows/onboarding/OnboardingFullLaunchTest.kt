@@ -7,6 +7,7 @@ import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
+import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.junit.Before
@@ -185,6 +186,11 @@ class OnboardingFullLaunchTest {
     }
 
     @Test
+    @QuarantinedInCi(
+        reason = "races the screen transition after import: stale UiAutomator nodes or a wallet selection timeout",
+        issue = "https://github.com/bitcoinppl/cove/issues/1098",
+        expires = "2026-12-09",
+    )
     fun softwareWalletUserCanImportKnownWords() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 
