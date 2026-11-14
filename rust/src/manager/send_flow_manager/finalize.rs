@@ -343,6 +343,7 @@ mod tests {
             state: state.into_inner(),
             reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+            address_entry: Arc::default(),
         })
     }
 

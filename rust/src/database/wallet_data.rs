@@ -331,6 +331,19 @@ impl WalletDataDb {
         self.delete(WalletDataKey::ReceiveAddressCache)
     }
 
+    /// Stop the Receive screen from showing the address at `derivation_index` again
+    ///
+    /// Receive's rotation can hand out the address its screen still has cached, such as when
+    /// another wallet takes it for a send, so the cache is dropped when it holds that address
+    pub fn forget_cached_receive_address(&self, derivation_index: u32) -> Result<()> {
+        let cached = self.get_receive_address_cache()?;
+        if cached.is_some_and(|cache| cache.derivation_index == derivation_index) {
+            self.delete_receive_address_cache()?;
+        }
+
+        Ok(())
+    }
+
     pub fn get_payjoin_sender_session(&self) -> Result<Option<PayjoinSenderSession>> {
         let value = self.get(WalletDataKey::PayjoinSenderSession)?;
 

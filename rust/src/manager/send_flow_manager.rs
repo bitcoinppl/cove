@@ -28,7 +28,7 @@ use crate::{
     wallet::{
         Address,
         balance::Balance,
-        metadata::{FiatOrBtc, WalletMetadata},
+        metadata::{FiatOrBtc, WalletId, WalletMetadata},
     },
 };
 use act_zero::WeakAddr;
@@ -106,6 +106,10 @@ pub struct RustSendFlowManager {
     reconciler: ReconcileChannel<Message>,
 
     fee_check_task: DebouncedTask<()>,
+
+    /// Taken by each action that puts an address in the send and by a picked wallet's address
+    /// when it lands from its task, so they apply one at a time and the latest one wins
+    address_entry: Arc<Mutex<()>>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -137,6 +141,9 @@ pub enum SendFlowManagerReconcileMessage {
 pub enum SendFlowManagerAction {
     ChangeEnteringAddress(String),
 
+    /// Pay another of the user's wallets, filling in its next receive address
+    SelectTransferDestination(WalletId),
+
     ChangeSetAmountFocusField(Option<SetAmountFocusField>),
 
     SelectMaxSend,
@@ -155,11 +162,23 @@ pub enum SendFlowManagerAction {
     NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
-    NotifySelectedUnitedChanged { old: BitcoinUnit, new: BitcoinUnit },
-    NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
-    NotifyScanCodeChanged { old: String, new: String },
+    NotifySelectedUnitedChanged {
+        old: BitcoinUnit,
+        new: BitcoinUnit,
+    },
+    NotifyBtcOrFiatChanged {
+        old: FiatOrBtc,
+        new: FiatOrBtc,
+    },
+    NotifyScanCodeChanged {
+        old: String,
+        new: String,
+    },
     NotifyPricesChanged(Arc<PriceResponse>),
-    NotifyFocusFieldChanged { old: Option<SetAmountFocusField>, new: Option<SetAmountFocusField> },
+    NotifyFocusFieldChanged {
+        old: Option<SetAmountFocusField>,
+        new: Option<SetAmountFocusField>,
+    },
 
     // starting with an amount and address from scan
     NotifyAddressChanged(Arc<Address>),
@@ -174,6 +193,21 @@ pub enum SendFlowManagerAction {
 
     FinalizeAndGoToNextScreen,
     AcknowledgeWarningAndFinalize(SendFlowWarningKind),
+}
+
+impl SendFlowManagerAction {
+    /// Whether the action puts a new address in the send, or clears it
+    const fn enters_address(&self) -> bool {
+        matches!(
+            self,
+            Self::ChangeEnteringAddress(_)
+                | Self::SelectTransferDestination(_)
+                | Self::NotifyEnteringAddressChanged(_)
+                | Self::NotifyAddressChanged(_)
+                | Self::NotifyScanCodeChanged { .. }
+                | Self::ClearAddress
+        )
+    }
 }
 
 impl RustSendFlowManager {
@@ -212,6 +246,7 @@ impl RustSendFlowManager {
             wallet_manager,
             reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+            address_entry: Arc::default(),
         }
         .into();
 
@@ -501,6 +536,15 @@ impl RustSendFlowManager {
         // only the variant name: actions carry typed or scanned text, which can be a pasted seed
         trace!("dispatch: {}", <&'static str>::from(&action));
 
+        // each new address starts a generation, which drops any picked wallet's address that
+        // is still on its way
+        let address_entry = self.address_entry.clone();
+        let _address_turn = action.enters_address().then(|| {
+            let turn = address_entry.lock();
+            self.state.lock().address_generation += 1;
+            turn
+        });
+
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {
                 let old_value = self.state.lock().entering_btc_amount.clone();
@@ -583,6 +627,10 @@ impl RustSendFlowManager {
             Action::ChangeEnteringAddress(string) => {
                 self.reconciler.send(Message::UpdateEnteringAddress(string.clone()));
                 self.handle_entering_address_changed(string);
+            }
+
+            Action::SelectTransferDestination(wallet_id) => {
+                self.select_transfer_destination(wallet_id);
             }
 
             Action::DisableCoinControlMode => self.disable_coin_control_mode(),
@@ -792,6 +840,7 @@ mod tests {
                 "fee_check",
                 super::Duration::from_millis(200),
             ),
+            address_entry: Arc::default(),
         })
     }
 
