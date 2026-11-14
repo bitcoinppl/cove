@@ -3,10 +3,10 @@ name: UI tests
 # emulator and simulator suites take far longer than the rest of CI, so they
 # run nightly, on PRs that opt in with the `ui-tests` label, and, for Android
 # only, after merge.
-# iOS runs only nightly and in manual runs: its shards hold three of GitHub's
-# few macOS runners for well over an hour each, so iOS UI runs for a PR happen
-# locally with cove-local-ci or through a manual run, and a push to master
-# leaves them to the next nightly.
+# iOS runs only nightly and in manual runs: its shards hold all five of the
+# organization's macOS runners for close to two hours, so iOS UI runs for a PR
+# happen locally with cove-local-ci or through a manual run, and a push to
+# master leaves them to the next nightly.
 # A labeled PR runs only the Android suites, and only when its changes reach
 # Android.
 # A manual run can name tests to run instead of the full suites, to check a fix
@@ -24,8 +24,12 @@ on:
         required: false
         default: ""
   schedule:
-    # 08:00 UTC is 03:00 US Central during daylight time and 02:00 in winter
-    - cron: "0 8 * * *"
+    # GitHub has started this workflow's scheduled runs 6 to 10 hours late every day since October
+    # 2026, as it has CodeQL's, so the nightly is set for the evening: on time it starts at 19:17
+    # US Central in winter and 20:17 in summer, and that late it still lands between about 01:00
+    # and 06:00 Central, out of US working hours either way, when the iOS shards would take every macOS
+    # runner from pull requests; a minute past the hour also misses the hour's peak load
+    - cron: "17 1 * * *"
   push:
     branches:
       - master
@@ -212,7 +216,7 @@ jobs:
 
       # restores the Gradle User Home that CI's compile-android job writes on master, so the job
       # rarely downloads the Kotlin compiler from its GitHub release redirect, which can 504;
-      # read-only so the scheduled master run doesn't save a different set under the shared key
+      # read-only so the nightly master run doesn't save a different set under the shared key
       - name: Setup Gradle
         if: steps.shard.outputs.run == 'true'
         uses: gradle/actions/setup-gradle@v6
@@ -301,18 +305,20 @@ jobs:
     # never on a pull request or a push, see the top of this file
     if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
     runs-on: macos-26
-    # each shard runs about 22 tests, after 10 to 18 minutes building the Rust library, unless
-    # compile-ios cached it, the fake node and the test bundles; a CoveUITests test paid about 3
-    # minutes of simulator, runner and coverage overhead on top of its body before coverage was
-    # turned off and cloud backup classes shared a simulator, and the slowest hosted runners need
-    # headroom beyond the estimate
-    timeout-minutes: 120
+    # each shard spends 10 to 24 minutes building the Rust library, unless compile-ios cached it,
+    # the fake node and the test bundles, then about 100 minutes on its tests by the checked-in
+    # timings, a CoveUITests test taking about 5 minutes on its own simulator and each simulator
+    # retry as long again; shards took 93 to 148 minutes in three full runs, the longest with a
+    # test stopped at its 25-minute allowance, and one runner ran its tests 1.34 times slower than
+    # the timings and needed about 155, so the headroom covers that on the heaviest shard plus a
+    # test stopped at its allowance
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        # a full run splits across this many macOS runners; fixed for the same reason as the
-        # Android flavours
-        shard: ["1/3", "2/3", "3/3"]
+        # a full run splits across all five of the organization's macOS runners, which the
+        # nightly has to itself; fixed for the same reason as the Android flavours
+        shard: ["1/5", "2/5", "3/5", "4/5", "5/5"]
     steps:
       - uses: actions/checkout@v6
 
@@ -370,8 +376,8 @@ jobs:
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: astral-sh/setup-uv@v10.3.3
 
-      # xtask expands each class into its test methods and keeps this shard's share, builds each
-      # scheme once, and runs each CoveUITests test on a fresh clone of a once-booted simulator so
+      # xtask expands each class into its test methods and keeps this shard's share, dealt out
+      # longest first by rust/xtask/src/ios_ui_shard/run_seconds.tsv, builds each scheme once, and runs each CoveUITests test on a fresh clone of a once-booted simulator so
       # it starts at first launch; each CoveCloudBackupUITests class shares one clone and one
       # xcodebuild call, since its host app wipes its data at every launch. It keeps
       # cove-fake-node up on the first port block, 39100-39102, for the tests that fund a wallet
@@ -385,11 +391,26 @@ jobs:
           SHARD: ${{ steps.plan.outputs.shard }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test "$TESTS" --shard "$SHARD" --results-dir "$RUNNER_TEMP/ios-ui-results"
 
+      # each run's seconds, which `cargo xtask ios-ui-timings` refreshes the shard timings from;
+      # uploaded whatever the outcome, a shard that hit its timeout included, so the runs it
+      # finished still count
+      - name: Upload iOS run timings
+        if: always() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-timings-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/ios-ui-results/run-seconds.tsv
+          if-no-files-found: ignore
+          retention-days: 30
+          # a re-run job uploads under the same name
+          overwrite: true
+
       # each attempt's bundle and logs are named for its test, or its class when the class run
-      # holds several;
-      # DerivedData keeps only the newest bundles
+      # holds several; a passing attempt's bundle is deleted, so this holds only failures, and it
+      # uploads from a shard cancelled at its timeout too, whose last run's bundle shows where it
+      # stalled; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
-        if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
+        if: always() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: actions/upload-artifact@v7
         with:
           name: ios-ui-results-${{ strategy.job-index }}

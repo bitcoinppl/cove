@@ -6,6 +6,7 @@ use crate::common::{
 use crate::version::BuildNumberFile;
 use crate::{
     fake_node::AndroidPorts,
+    ios_ui_shard::{record_run_seconds, IosUiRunSeconds},
     shutdown::{self, Registration, Stop},
     ui_test_host::UiTestHost,
     ui_test_ports::{RunLock, UiTestPorts, PORT_BASE_ENV},
@@ -83,6 +84,11 @@ const IOS_PROJECT_FILE: &str = "Cove.xcodeproj/project.pbxproj";
 // first app launch and Xcode finding the simulator all fail now and then, so retry those
 // environment failures on another fresh simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
+// a test running longer than this fails and the class's next test starts in a new runner, so a
+// hung test costs its run this long instead of the shard's whole timeout, as a 6-test cloud
+// backup class once did with no output for 50 minutes; the slowest passing test took about 20
+// minutes, simulator start included
+const IOS_UI_TEST_TIME_ALLOWANCE_SECS: u64 = 25 * 60;
 const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS: u64 = 5;
@@ -681,7 +687,8 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
     for run in runs {
-        if let Err(error) = run_ios_ui_run(
+        let started = Instant::now();
+        let result = run_ios_ui_run(
             &sh,
             &build,
             &mut simulators,
@@ -689,7 +696,14 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
             &run,
             results_dir.as_deref(),
             verbose,
-        ) {
+        );
+
+        // the shard planner weighs runs by these, passing or not, see ios_ui_shard.rs
+        if let (Some(dir), Some(name)) = (&results_dir, run.timing_name()) {
+            record_run_seconds(dir, name, started.elapsed());
+        }
+
+        if let Err(error) = result {
             print_error(&format!("{error:?}"));
             failures.push(run.name().to_string());
         }
@@ -1454,6 +1468,7 @@ fn run_ios_ui_run(
 
     let only_testing = &run.only_testing_args();
     let xctestrun = build.xctestrun(run.suite)?;
+    let time_limit = &ios_ui_test_time_limit_args();
 
     // xcodebuild hands TEST_RUNNER_ variables to the test runner without the prefix
     let port_base_env = format!("TEST_RUNNER_{PORT_BASE_ENV}");
@@ -1468,7 +1483,7 @@ fn run_ios_ui_run(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, run.name(), 0));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {only_testing...}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
         )
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
@@ -1506,7 +1521,7 @@ fn run_ios_ui_run(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, name, attempt));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {only_testing...}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
         )
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
@@ -1546,6 +1561,21 @@ fn run_ios_ui_run(
     }
 
     unreachable!("iOS UI test retry loop should return from every branch")
+}
+
+/// The `xcodebuild` arguments that fail a test running past [`IOS_UI_TEST_TIME_ALLOWANCE_SECS`],
+/// which a test can't raise for itself
+fn ios_ui_test_time_limit_args() -> [String; 6] {
+    let allowance = IOS_UI_TEST_TIME_ALLOWANCE_SECS.to_string();
+
+    [
+        "-test-timeouts-enabled".to_string(),
+        "YES".to_string(),
+        "-default-test-execution-time-allowance".to_string(),
+        allowance.clone(),
+        "-maximum-test-execution-time-allowance".to_string(),
+        allowance,
+    ]
 }
 
 /// The UI test bundles of each scheme a run needs, built once with `build-for-testing`
@@ -1965,14 +1995,6 @@ impl IosUiSuite {
     }
 }
 
-/// Estimated seconds one `xcodebuild test-without-building` call spends outside test bodies on a
-/// hosted runner: cloning and booting the simulator, then installing and launching the runner,
-/// measured at about 3 minutes a call while coverage was still collected
-const IOS_UI_RUN_OVERHEAD_SECS: u64 = 180;
-
-/// Estimated seconds of one test body: the median test's 5.5 minutes less the overhead
-const IOS_UI_TEST_BODY_SECS: u64 = 150;
-
 /// The tests one `xcodebuild test-without-building` call runs on one fresh simulator: a single
 /// test, or for a suite that runs each class together, every listed test of one class
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1980,6 +2002,10 @@ struct IosUiRun {
     suite: IosUiSuite,
     /// `<Target>/<Class>/<method>` identifiers, in the order listed
     tests: Vec<String>,
+    /// Whether the run's seconds stand for what its name does in the run timings: always for a
+    /// single CoveUITests test, and for a class run only when the class was listed whole, since a
+    /// class run of some of its methods shares the class's name but not its cost
+    complete: bool,
 }
 
 impl IosUiRun {
@@ -1996,6 +2022,21 @@ impl IosUiRun {
         }
     }
 
+    /// The name the run's seconds are kept under in the run timings, or none for a class run of
+    /// only some of its methods, whose seconds would understate the whole class's
+    fn timing_name(&self) -> Option<&str> {
+        self.complete.then(|| self.name())
+    }
+
+    /// The seconds the run is expected to take: its time in CI, or an estimate from its test count
+    /// when it has none
+    fn cost(&self, seconds: &IosUiRunSeconds) -> u64 {
+        match self.timing_name() {
+            Some(name) => seconds.of(name, self.tests.len()),
+            None => IosUiRunSeconds::estimate(self.tests.len()),
+        }
+    }
+
     /// The run as log and error messages describe it
     fn label(&self) -> String {
         match self.tests.len() {
@@ -2007,24 +2048,27 @@ impl IosUiRun {
     fn only_testing_args(&self) -> Vec<String> {
         self.tests.iter().map(|test| format!("-only-testing:{test}")).collect()
     }
-
-    fn estimated_secs(&self) -> u64 {
-        IOS_UI_RUN_OVERHEAD_SECS + IOS_UI_TEST_BODY_SECS * self.tests.len() as u64
-    }
 }
 
 /// Expands a comma-separated list of tests into the runs that cover them, then keeps the shard's
-/// share of the runs
+/// share of the runs, dealt out longest first by the seconds each took in CI
 ///
 /// A run's tests stay together on one shard, since they share one simulator
 fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<IosUiRun>> {
+    let seconds = IosUiRunSeconds::checked_in()?;
     let project = sh
         .read_file(IOS_PROJECT_FILE)
         .wrap_err_with(|| format!("Failed to read {IOS_PROJECT_FILE}"))?;
 
     let mut expanded = Vec::new();
+    let mut whole_classes = HashSet::new();
     for test in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
         expanded.extend(ios_ui_tests_to_run(sh, &project, test)?);
+
+        // a `<Target>/<Class>` expands to every method of the class
+        if test.split('/').count() == 2 {
+            whole_classes.insert(test);
+        }
     }
 
     if expanded.is_empty() {
@@ -2045,14 +2089,17 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
             })
             .flatten();
 
+        let complete =
+            !suite.runs_each_class_together() || whole_classes.contains(test_class(&test));
+
         match class_run {
             Some(run) => run.tests.push(test),
-            None => runs.push(IosUiRun { suite, tests: vec![test] }),
+            None => runs.push(IosUiRun { suite, tests: vec![test], complete }),
         }
     }
 
     Ok(shard.take(runs.into_iter().map(|run| {
-        let cost = run.estimated_secs();
+        let cost = run.cost(&seconds);
         (run, cost)
     })))
 }
@@ -2613,6 +2660,7 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 mod tests {
     mod ui_test_plan {
         use crate::ios::{ios_ui_shard_runs, IosUiSuite};
+        use crate::ios_ui_shard::IosUiRunSeconds;
         use crate::ui_test_shard::UiTestShard;
         use color_eyre::Result;
         use std::collections::HashSet;
@@ -2717,6 +2765,65 @@ mod tests {
             assert!(tests.iter().all(|test| IosUiSuite::for_test(test) == IosUiSuite::CloudBackup));
         }
 
+        /// The workflow's `IOS_UI_SUITES`, the tests a full nightly run covers
+        fn nightly_suites() -> String {
+            let workflow = include_str!("../../../.github/workflows/ui-tests.yml");
+            let (_, after) = workflow.split_once("IOS_UI_SUITES: >-\n").unwrap();
+
+            after.lines().map(str::trim).take_while(|line| line.starts_with("Cove")).collect()
+        }
+
+        /// The workflow's iOS shards, as its matrix lists them
+        fn nightly_shards() -> Vec<UiTestShard> {
+            let workflow = include_str!("../../../.github/workflows/ui-tests.yml");
+            let (_, ios) = workflow.split_once("\n  ios-ui:\n").unwrap();
+            let (_, matrix) = ios.split_once("shard: [").unwrap();
+            let (list, _) = matrix.split_once(']').unwrap();
+
+            list.split(',').map(|value| shard(value.trim().trim_matches('"'))).collect()
+        }
+
+        // the real suites, matrix and checked-in timings: the workflow's shards run every test
+        // once, keep each cloud backup class on one, and get close to the same estimated time,
+        // which its timeout is sized from
+        #[test]
+        fn the_nightly_shards_cover_every_test_once_and_stay_balanced() {
+            let sh = ios_shell();
+            let suites = nightly_suites();
+            let seconds = IosUiRunSeconds::checked_in().unwrap();
+            assert!(suites.split(',').count() > 20, "read the suites: {suites}");
+
+            let all = ios_ui_shard_runs(&sh, &suites, shard("1/1")).unwrap();
+            let shards = nightly_shards();
+            assert_eq!(shards.len(), 5);
+
+            let slices = shards
+                .iter()
+                .map(|&value| ios_ui_shard_runs(&sh, &suites, value).unwrap())
+                .collect::<Vec<_>>();
+
+            let mut covered = HashSet::new();
+            for run in slices.iter().flatten() {
+                for test in &run.tests {
+                    assert!(covered.insert(test.clone()), "{test} is on two shards");
+                }
+            }
+            let every_test = all.iter().flat_map(|run| run.tests.iter().cloned());
+            assert_eq!(covered, every_test.collect::<HashSet<_>>());
+
+            for cloud in all.iter().filter(|run| run.suite == IosUiSuite::CloudBackup) {
+                let holding = slices.iter().filter(|runs| runs.contains(cloud)).count();
+                assert_eq!(holding, 1, "{} is not whole on one shard", cloud.name());
+            }
+
+            let loads = slices
+                .iter()
+                .map(|runs| runs.iter().map(|run| run.cost(&seconds)).sum::<u64>())
+                .collect::<Vec<_>>();
+            let (lightest, heaviest) = (loads.iter().min().unwrap(), loads.iter().max().unwrap());
+            assert!(heaviest - lightest <= 600, "shards are unbalanced: {loads:?}");
+        }
+
         // a cloud backup class shares one simulator, so it can't be split, while each main test
         // is a run of its own
         #[test]
@@ -2764,6 +2871,28 @@ mod tests {
             assert_eq!(runs.len(), 2);
             let cloud = runs.iter().find(|run| run.suite == IosUiSuite::CloudBackup).unwrap();
             assert_eq!(cloud.tests, [methods[1].clone(), methods[0].clone()]);
+        }
+
+        // a run of some of a cloud class's methods shares the class's name, so it gets the
+        // estimate and leaves no timing that `ios-ui-timings` would average into the class's
+        #[test]
+        fn a_partial_cloud_backup_class_run_keeps_out_of_the_class_timing() {
+            let sh = ios_shell();
+            let seconds = IosUiRunSeconds::checked_in().unwrap();
+            let class = "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests";
+            let methods = ios_ui_shard_tests(&sh, class, shard("1/1")).unwrap();
+            assert!(methods.len() >= 3);
+
+            let whole = ios_ui_shard_runs(&sh, class, shard("1/1")).unwrap();
+            assert_eq!(whole[0].timing_name(), Some(class));
+            assert_eq!(whole[0].cost(&seconds), seconds.of(class, whole[0].tests.len()));
+
+            let listed = format!("{},{}", methods[0], methods[1]);
+            let partial = ios_ui_shard_runs(&sh, &listed, shard("1/1")).unwrap();
+            assert_eq!(partial[0].name(), class);
+            assert_eq!(partial[0].timing_name(), None);
+            assert_eq!(partial[0].cost(&seconds), IosUiRunSeconds::estimate(2));
+            assert_ne!(partial[0].cost(&seconds), whole[0].cost(&seconds));
         }
     }
 
@@ -2862,6 +2991,7 @@ mod tests {
             let run = IosUiRun {
                 suite: IosUiSuite::CloudBackup,
                 tests: ["testA", "testB", "testC"].map(|method| format!("{class}/{method}")).into(),
+                complete: true,
             };
 
             // testA passed, testB lost its app, and testC never started
