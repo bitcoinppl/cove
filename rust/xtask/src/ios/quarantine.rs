@@ -16,7 +16,7 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
-use jiff::{civil::Date, tz::TimeZone, Timestamp};
+use jiff::{civil::Date, tz::TimeZone, Timestamp, ToSpan};
 use serde::Deserialize;
 use std::{collections::HashSet, fmt, str::FromStr};
 use xshell::Shell;
@@ -26,6 +26,10 @@ const QUARANTINE_FILE: &str = "test-quarantine.toml";
 
 /// Every entry's issue is in this repository
 const ISSUE_URL_PREFIX: &str = "https://github.com/bitcoinppl/cove/issues/";
+
+/// How far ahead an entry may expire, as for the Android and Rust quarantines, so extending a
+/// quarantine means looking at it again rather than picking a far-off date
+const MAX_DAYS_AHEAD: i64 = 60;
 
 #[derive(Subcommand)]
 pub enum QuarantineCommand {
@@ -38,7 +42,7 @@ pub enum QuarantineCommand {
         target: IosTestTarget,
     },
 
-    /// Check every entry and fail if any is past its expiry date
+    /// Check every entry and fail if any is past its expiry date or expires more than 60 days ahead
     Check,
 }
 
@@ -262,6 +266,32 @@ impl QuarantinedTest {
     fn is_expired(&self, today: Date) -> bool {
         today > self.expires.0
     }
+
+    /// Whether the entry holds on `today`, has expired, or expires further ahead than allowed
+    fn standing(&self, today: Date) -> Standing {
+        if self.is_expired(today) {
+            return Standing::Expired;
+        }
+
+        if self.expires.0 > latest_expiry(today) {
+            return Standing::TooFarAhead;
+        }
+
+        Standing::Holds
+    }
+}
+
+/// Where an entry stands on a given day
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Standing {
+    Holds,
+    Expired,
+    TooFarAhead,
+}
+
+/// The furthest expiry an entry may have on `today`
+fn latest_expiry(today: Date) -> Date {
+    today.saturating_add(MAX_DAYS_AHEAD.days())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -330,35 +360,60 @@ impl IosTestQuarantine {
         }
     }
 
-    /// Lists every entry and fails if any is past its expiry date
+    /// Lists every entry and fails if any is past its expiry date or expires more than
+    /// `MAX_DAYS_AHEAD` days ahead
     ///
     /// In GitHub Actions each entry is also an annotation on the run, so the quarantined tests
     /// show on a pull request's checks
     fn check(&self, today: Date) -> Result<()> {
         let in_actions = std::env::var("GITHUB_ACTIONS").is_ok_and(|value| value == "true");
         let mut expired = Vec::new();
+        let mut too_far_ahead = Vec::new();
 
         for test in &self.0 {
             let summary = test.summary();
-            if test.is_expired(today) {
-                eprintln!("{} Expired quarantine: {summary}", "✗".red());
-                expired.push(test.id.to_string());
-            } else {
-                println!("{} Quarantined: {summary}", "!".yellow());
+            let standing = test.standing(today);
+            match standing {
+                Standing::Holds => println!("{} Quarantined: {summary}", "!".yellow()),
+                Standing::Expired => {
+                    eprintln!("{} Expired quarantine: {summary}", "✗".red());
+                    expired.push(test.id.to_string());
+                }
+                Standing::TooFarAhead => {
+                    eprintln!("{} Quarantine expires too far ahead: {summary}", "✗".red());
+                    too_far_ahead.push(test.id.to_string());
+                }
             }
 
             if in_actions {
-                let level = if test.is_expired(today) { "error" } else { "notice" };
+                let level = if standing == Standing::Holds { "notice" } else { "error" };
                 println!("::{level} title=Quarantined iOS test::{}", annotation_message(&summary));
             }
         }
 
+        let mut problems = Vec::new();
         if !expired.is_empty() {
-            color_eyre::eyre::bail!(
-                "{} quarantined iOS test(s) past their expiry in ios/{QUARANTINE_FILE}: {}. Fix \
-                 and remove each entry, or extend its expiry with a note on its issue",
+            problems.push(format!(
+                "{} past their expiry: {}. Fix and remove each entry, or extend its expiry with a \
+                 note on its issue",
                 expired.len(),
                 expired.join(", ")
+            ));
+        }
+
+        if !too_far_ahead.is_empty() {
+            problems.push(format!(
+                "{} expiring more than {MAX_DAYS_AHEAD} days ahead: {}. Pick a date on or before {}",
+                too_far_ahead.len(),
+                too_far_ahead.join(", "),
+                latest_expiry(today)
+            ));
+        }
+
+        if !problems.is_empty() {
+            color_eyre::eyre::bail!(
+                "Quarantined iOS tests in ios/{QUARANTINE_FILE}: {}",
+                problems.join("; ")
             );
         }
 
@@ -375,7 +430,7 @@ fn annotation_message(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{annotation_message, IosTestId, IosTestQuarantine};
+    use super::{annotation_message, IosTestId, IosTestQuarantine, Standing};
     use jiff::civil::date;
 
     const ENTRY: &str = r#"
@@ -395,6 +450,17 @@ reason = "times out under load"
         assert!(test.is_expired(date(2026, 12, 10)));
         assert!(quarantine.check(date(2026, 12, 9)).is_ok());
         assert!(quarantine.check(date(2026, 12, 10)).is_err());
+    }
+
+    // 2026-10-10 is 60 days before the entry's 2026-12-09
+    #[test]
+    fn an_entry_may_expire_at_most_60_days_ahead() {
+        let quarantine = IosTestQuarantine::parse(ENTRY).unwrap();
+
+        assert_eq!(quarantine.0[0].standing(date(2026, 10, 10)), Standing::Holds);
+        assert!(quarantine.check(date(2026, 10, 10)).is_ok());
+        assert_eq!(quarantine.0[0].standing(date(2026, 10, 9)), Standing::TooFarAhead);
+        assert!(quarantine.check(date(2026, 10, 9)).is_err());
     }
 
     #[test]
