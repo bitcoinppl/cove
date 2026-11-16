@@ -56,11 +56,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// texts are checked in the space above the number pad
     private var numberPad: NumberPadWatch?
 
-    /// While set, the identifier of a button on the toolbar the screen puts on the keyboard, so the
-    /// toolbar covers the content as the keyboard does
-    private var keyboardToolbarButton: String?
-
-    /// The Max button on the toolbar the send screen puts on the amount's number pad
+    /// The Max button on the toolbar the send screen puts on the amount's number pad, which covers
+    /// the content as the keyboard does whenever it shows
     private static let amountToolbarButton = "sendFlow.max"
 
     private struct NumberPadWatch {
@@ -153,7 +150,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         // at this size the send screen opens with the address focused just under the keyboard,
         // where only a drag brings it into reach
         reachAndTap(app.buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")), "wallet: Send")
-        reachAndTap(app.textViews.matching(identifier: "sendFlow.address"), "send: address").typeText(XCUIApplication.externalAddress)
+        reachAndTap(app.textViews.matching(identifier: "sendFlow.address"), "send: address").typeTextOnceFocused(XCUIApplication.externalAddress)
         reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount")
         app.tapMax()
 
@@ -173,7 +170,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         // a CVC screen may hold Continue back until it has a whole CVC, so Continue is checked
         // once one is in; it is never submitted
-        reachAndTap(app.secureTextFields.matching(identifier: "Enter CVC"), "signing CVC: CVC field").typeText(HardwareSignerControl.tapSignerCvc)
+        reachAndTap(app.secureTextFields.matching(identifier: "Enter CVC"), "signing CVC: CVC field").typeTextOnceFocused(HardwareSignerControl.tapSignerCvc)
         let submit = assertReachable(button("Continue"), "signing CVC: Continue", needsHit: true)
         XCTAssertTrue(submit.isEnabled, "signing CVC: Continue is disabled with a whole CVC entered")
 
@@ -211,7 +208,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             awaitingInput: [advancedContinue]
         )
 
-        reachAndTap(chainCodeField, "advanced setup: chain code field").typeText(Self.randomChainCode())
+        reachAndTap(chainCodeField, "advanced setup: chain code field").typeTextOnceFocused(Self.randomChainCode())
         reachAndTap(button("Continue"), "advanced setup: Continue")
 
         try enterCvc(
@@ -303,11 +300,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount after Max")
         numberPad = NumberPadWatch(screen: "send", frame: settledNumberPad(on: "send"))
         XCTAssertTrue(app.buttons[Self.amountToolbarButton].waitForExistence(timeout: 15), "the send screen's number pad opened without its toolbar")
-        keyboardToolbarButton = Self.amountToolbarButton
-        defer {
-            numberPad = nil
-            keyboardToolbarButton = nil
-        }
+        defer { numberPad = nil }
 
         let element = assertReachable(next, "send: Next", needsHit: true)
         XCTAssertTrue(element.isEnabled, "send: Next is disabled")
@@ -322,7 +315,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         assertCvcScreenFits(on: screen, title: title, description: description, cancel: cancel)
 
         let field = app.secureTextFields.matching(identifier: "Enter CVC")
-        reachAndTap(field, "\(screen): CVC field").typeText(cvc)
+        reachAndTap(field, "\(screen): CVC field").typeTextOnceFocused(cvc)
         reachAndTap(button("Continue"), "\(screen): Continue")
         XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
     }
@@ -554,7 +547,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let matches = query.allElementsBoundByIndex.map { "\($0.frame) hittable \($0.isHittable)" }
         let cover = keyboardCover().map { "\($0)" } ?? "none"
         XCTFail(
-            "\(name) never fit on screen, \(limit): matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboardToolbarButton == nil ? "" : "and its toolbar ")\(cover)"
+            "\(name) never fit on screen, \(limit): matches \(matches) in window \(app.windows.firstMatch.frame), keyboard and any toolbar on it \(cover)"
         )
 
         return query.firstMatch
@@ -638,17 +631,18 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         return area
     }
 
-    /// The part of the window the keyboard covers, joined by the toolbar on it while
-    /// `keyboardToolbarButton` names one, or nil while no keyboard is up
+    /// The part of the window the keyboard covers, joined by the send screen's amount toolbar while
+    /// it shows, or nil while no keyboard is up
     ///
     /// Whether XCUITest counts a toolbar SwiftUI puts on the keyboard in the keyboard's frame isn't
-    /// documented, so the toolbar holding the button, or failing that the button itself, joins it
+    /// documented, so the toolbar holding Max, or failing that Max itself, joins it. The toolbar
+    /// covers the address editor whenever the amount's number pad is up, not only while Next is
+    /// checked, and a tap there lands on the toolbar and leaves the amount focused
     private func keyboardCover() -> CGRect? {
         let keyboard = app.keyboards.firstMatch
         guard keyboard.exists else { return nil }
 
-        guard let identifier = keyboardToolbarButton else { return keyboard.frame }
-
+        let identifier = Self.amountToolbarButton
         let button = app.buttons[identifier]
         let toolbar = app.toolbars.containing(.button, identifier: identifier).firstMatch
         if toolbar.exists { return keyboard.frame.union(toolbar.frame) }
