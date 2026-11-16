@@ -634,7 +634,8 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
 #[tokio::test(flavor = "current_thread")]
 async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
     use crate::manager::cloud_backup_manager::screen::{
-        CloudBackupProgressSection, CloudBackupSection, repeated_section_kinds, section_kind,
+        CloudBackupProgressSection, CloudBackupSection, misordered_section_kinds,
+        repeated_section_kinds, section_kind,
     };
     use crate::manager::cloud_backup_manager::{
         CloudBackupInventoryIncompleteReason, CloudBackupWalletItem, CloudBackupWalletStatus,
@@ -647,6 +648,7 @@ async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
     let progress_sections = |manager: &RustCloudBackupManager| {
         let screen = manager.published_screen();
         assert_eq!(repeated_section_kinds(&screen), Vec::<&str>::new());
+        assert_eq!(misordered_section_kinds(&screen), Vec::<&str>::new());
 
         let CloudBackupScreenBody::Configured(configured) = screen.body else {
             panic!("a configured screen");

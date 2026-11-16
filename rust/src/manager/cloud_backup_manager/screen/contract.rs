@@ -130,6 +130,36 @@ pub(crate) fn repeated_section_kinds(screen: &CloudBackupScreen) -> Vec<&'static
     configured.sections.iter().map(section_kind).filter(|kind| !seen.insert(*kind)).collect()
 }
 
+/// The section kinds a configured `screen` lists above a kind the projection puts before them
+///
+/// The fixtures are built by hand, so this keeps them in the order users see; the projected
+/// screen is checked against the same order
+pub(crate) fn misordered_section_kinds(screen: &CloudBackupScreen) -> Vec<&'static str> {
+    let CloudBackupScreenBody::Configured(configured) = &screen.body else { return Vec::new() };
+
+    configured
+        .sections
+        .windows(2)
+        .filter(|pair| section_rank(&pair[0]) > section_rank(&pair[1]))
+        .map(|pair| section_kind(&pair[1]))
+        .collect()
+}
+
+/// A section's place in the configured screen's order, top to bottom, as the projection
+/// builds it
+fn section_rank(section: &CloudBackupSection) -> u8 {
+    match section {
+        CloudBackupSection::PasskeyCard(_) => 0,
+        CloudBackupSection::Progress(_) => 1,
+        CloudBackupSection::Wallets(_) => 2,
+        CloudBackupSection::NotOnDevice(_) => 3,
+        CloudBackupSection::ExtraCopies(_) => 4,
+        CloudBackupSection::OtherBackups(_) => 5,
+        CloudBackupSection::Verification(_) => 6,
+        CloudBackupSection::TurnOff => 7,
+    }
+}
+
 /// A section's identity as the platforms key it, matching iOS's `CloudBackupSection.kind`
 pub(crate) fn section_kind(section: &CloudBackupSection) -> &'static str {
     match section {
@@ -405,6 +435,9 @@ mod tests {
             let repeated = repeated_section_kinds(screen);
             assert!(repeated.is_empty(), "{} lists {repeated:?} more than once", fixture.name);
 
+            let misordered = misordered_section_kinds(screen);
+            assert!(misordered.is_empty(), "{} lists {misordered:?} out of order", fixture.name);
+
             let mismatched = mismatched_delete_consents(screen);
             assert!(mismatched.is_empty(), "{} mismatches {mismatched:?}", fixture.name);
         }
@@ -612,6 +645,25 @@ mod tests {
             .sections
             .insert(1, CloudBackupSection::Progress(CloudBackupProgressSection::InventoryChecking));
         assert_eq!(repeated_section_kinds(&screen), ["progress"]);
+    }
+
+    /// Verification listed above the wallets, where the screen drew it before it moved down to
+    /// Turn Off, is caught
+    #[test]
+    fn verification_above_the_inventory_is_caught() {
+        let mut screen = named("configured-clean");
+        assert_eq!(misordered_section_kinds(&screen), Vec::<&str>::new());
+
+        let Body::Configured(configured) = &mut screen.body else { panic!("a configured screen") };
+        let verification = configured
+            .sections
+            .iter()
+            .position(|section| matches!(section, CloudBackupSection::Verification(_)))
+            .expect("a verification section");
+
+        let section = configured.sections.remove(verification);
+        configured.sections.insert(0, section);
+        assert_eq!(misordered_section_kinds(&screen), ["wallets"]);
     }
 
     fn named(name: &str) -> CloudBackupScreen {

@@ -24,7 +24,8 @@ use tracing::error;
 
 #[cfg(test)]
 pub(crate) use self::contract::{
-    mismatched_delete_consents, repeated_section_kinds, section_kind, undrawn_actions,
+    mismatched_delete_consents, misordered_section_kinds, repeated_section_kinds, section_kind,
+    undrawn_actions,
 };
 #[cfg(test)]
 pub(crate) use self::fixtures::cloud_backup_screen_fixtures;
