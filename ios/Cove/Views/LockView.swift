@@ -262,9 +262,13 @@ private struct LockContentLayer<Content: View>: View {
     var body: some View {
         GeometryReader { geometry in
             // the overlay only covers the content visually, so hide it from VoiceOver while
-            // locked; otherwise VoiceOver can still read the screen under it and activate controls
+            // locked; otherwise VoiceOver can still read the screen under it and activate controls.
+            // On iOS 26 accessibilityHidden doesn't reach the UIKit views a NavigationStack hosts,
+            // which VoiceOver and XCUITest still found under the lock, so the content is also
+            // drawn transparent, which UIKit accessibility skips; the opaque overlay covers it anyway
             content
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                .opacity(lockState == .locked ? 0 : 1)
                 .accessibilityHidden(lockState == .locked)
 
             if lockState == .locked {

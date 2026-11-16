@@ -189,7 +189,7 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
 
         let field = app.secureTextFields.matching(identifier: "Teleport Password")
         XCTAssertTrue(field.firstMatch.waitForExistence(timeout: 20), "the scanned response never asked for the password")
-        layout.reachAndTap(field, "password: field").typeText(response.password)
+        layout.reachAndTap(field, "password: field").typeTextOnceFocused(response.password)
         layout.reachAndTap(button("Unlock"), "password: Unlock")
     }
 

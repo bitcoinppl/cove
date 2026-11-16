@@ -312,6 +312,9 @@ private struct TermsCheckboxCard<Content: View>: View {
                     .foregroundStyle(isOn ? Color.btnGradientLight : Color.btnGradientLight.opacity(0.92))
             }
             .buttonStyle(.plain)
+            // the check mark is the only sign of the box's state, so VoiceOver reads it as
+            // selected, as Android's checkbox role does
+            .accessibilityAddTraits(isOn ? .isSelected : [])
 
             content()
                 .font(OnboardingRecoveryTypography.footnote)

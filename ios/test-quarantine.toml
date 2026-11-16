@@ -23,3 +23,9 @@ id = "CoveUITests/OnboardingFullLaunchUITests/testSoftwareWalletImportSuggestion
 issue = "https://github.com/bitcoinppl/cove/issues/1110"
 expires = 2026-12-09
 reason = "No import suggestion appears on the iPhone 17 iOS 27 simulator"
+
+[[test]]
+id = "CoveUITests/TapSignerLayoutFullLaunchUITests/testTapSignerSetupScreensFitAtLargestTextSize"
+issue = "https://github.com/bitcoinppl/cove/issues/1169"
+expires = 2027-01-14
+reason = "The hardware signer host's TAPSIGNER start request times out"

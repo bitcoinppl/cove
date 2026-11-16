@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -103,9 +104,12 @@ class KeyTeleportPasteRejectionTest {
     private fun assertRejectionAsksForTheReceiverRequest() {
         // the screen header already says "request", so only the rejection dialog counts
         val inDialog = hasAnyAncestor(isDialog())
-        compose
-            .onNode(inDialog and hasText("request", substring = true, ignoreCase = true))
-            .assertIsDisplayed()
+        val asksForRequest = compose.onNode(inDialog and hasText("request", substring = true, ignoreCase = true))
+
+        // the dialog's text exists as soon as Paste is handled, but its window can still be
+        // opening, and the nightly emulator caught it before it was shown
+        compose.waitUntil(timeoutMillis = 5_000) { asksForRequest.isDisplayed() }
+        asksForRequest.assertIsDisplayed()
 
         val mentionsResponse =
             compose

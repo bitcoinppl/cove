@@ -302,7 +302,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             )
         }
 
-        layout.reachAndTap(app.secureTextFields.matching(identifier: "Teleport Password"), "password: field").typeText(response.password)
+        layout.reachAndTap(app.secureTextFields.matching(identifier: "Teleport Password"), "password: field").typeTextOnceFocused(response.password)
         layout.reachAndTap(button("Unlock"), "password: Unlock")
 
         return response.parts.count

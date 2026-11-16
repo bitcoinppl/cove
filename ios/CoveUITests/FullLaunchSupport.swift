@@ -94,15 +94,27 @@ extension XCUIApplication {
     func acceptTermsIfNeeded() {
         guard staticTexts["Terms & Conditions"].waitForExistence(timeout: 3) else { return }
 
-        [
+        // a tap while the screen still slides in does nothing, and a box left unchecked keeps Agree
+        // disabled, so each box is tapped until it reads as checked
+        for identifier in [
             "onboarding.terms.check.backup",
             "onboarding.terms.check.legal",
             "onboarding.terms.check.financial",
             "onboarding.terms.check.recovery",
             "onboarding.terms.check.agreement",
-        ].forEach { buttons[$0].tap() }
+        ] {
+            let box = buttons[identifier]
+            for _ in 0 ..< 3 where !box.isSelected {
+                box.tap()
+                _ = box.wait(for: \.isSelected, toEqual: true, timeout: 2)
+            }
 
-        buttons["onboarding.terms.agree"].tap()
+            XCTAssertTrue(box.isSelected, "terms: \(identifier) never checked")
+        }
+
+        let agree = buttons["onboarding.terms.agree"]
+        waitUntil(agree, matches: NSPredicate(format: "enabled == true"), timeout: 5, "terms: Agree stayed disabled")
+        agree.tap()
     }
 
     /// Walks Add Wallet from the sidebar to the 12-word import, enters the test mnemonic and
@@ -282,11 +294,18 @@ extension XCUIApplication {
         button.tap()
     }
 
-    /// On CI a tap can land while the screen settles or a system banner passes over it and do
-    /// nothing, so tap again while the button is still showing
     func tapButton(startingWith labelPrefix: String, until target: XCUIElement) {
-        let button = button(startingWith: labelPrefix)
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for button starting with '\(labelPrefix)'")
+        tap(button(startingWith: labelPrefix), until: target, described: "the button starting with '\(labelPrefix)'")
+    }
+
+    func tapButton(named name: String, until target: XCUIElement) {
+        tap(buttons[name], until: target, described: "button '\(name)'")
+    }
+
+    /// On CI a tap can land while the screen settles, a menu animates in, or a system banner
+    /// passes over the button and do nothing, so tap again while the button is still showing
+    private func tap(_ button: XCUIElement, until target: XCUIElement, described description: String) {
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for \(description)")
 
         for _ in 0 ..< 3 {
             if button.exists, button.isHittable {
@@ -300,11 +319,37 @@ extension XCUIApplication {
             if target.waitForExistence(timeout: 5) { return }
         }
 
-        XCTFail("Tapping the button starting with '\(labelPrefix)' never showed \(target)")
+        XCTFail("Tapping \(description) never showed \(target)")
     }
 
     func goBack() {
         navigationBars.buttons.element(boundBy: 0).tap()
+    }
+}
+
+// MARK: - Typing
+
+extension XCUIElement {
+    /// Whether this field holds the keyboard focus, so typed text reaches it
+    var hasKeyboardFocus: Bool {
+        (value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+    }
+
+    /// Types into a field the caller has tapped, tapping it again while it still lacks the
+    /// keyboard focus
+    ///
+    /// On CI a tap can land while the screen settles and leave the field unfocused, and
+    /// `typeText` then retries without tapping, failing with "Neither element nor any descendant
+    /// has keyboard focus"
+    func typeTextOnceFocused(_ text: String) {
+        for _ in 0 ..< 3 where !hasKeyboardFocus {
+            if wait(for: \.hasKeyboardFocus, toEqual: true, timeout: 2) { break }
+
+            tap()
+        }
+
+        XCTAssertTrue(hasKeyboardFocus, "\(self) never took the keyboard focus")
+        typeText(text)
     }
 }
 

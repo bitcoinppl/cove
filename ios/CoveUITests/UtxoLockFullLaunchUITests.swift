@@ -152,11 +152,7 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
         XCTAssertTrue(more.waitForExistence(timeout: 15))
         more.tap()
 
-        let manageUtxos = app.buttons["selectedWallet.manageUtxos"]
-        XCTAssertTrue(manageUtxos.waitForExistence(timeout: 10))
-        manageUtxos.tap()
-
-        XCTAssertTrue(app.navigationBars["Manage UTXOs"].waitForExistence(timeout: 15))
+        app.tapButton(named: "selectedWallet.manageUtxos", until: app.navigationBars["Manage UTXOs"])
         XCTAssertTrue(utxoRows.firstMatch.waitForExistence(timeout: 30))
     }
 
