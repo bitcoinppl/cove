@@ -126,6 +126,10 @@ paths = ["ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupTurnOffFullAppUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/PrivateKeyExportFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/PrivateKeyExportFullAppUITests"]
 
