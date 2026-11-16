@@ -116,6 +116,8 @@ internal fun VerificationSection(
             }
 
             CloudBackupVerificationState.NotCompleted -> {
+                // repeats the top banner, since this section can be scrolled far below it
+                section.unlockHint?.let { PasskeyUnlockBanner(it) }
                 NotCompletedVerificationContent()
                 controls(VerifyControl.Card("Verify Now"))
             }

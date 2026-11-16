@@ -47,13 +47,13 @@ mod debug {
         CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupEnableContext, CloudBackupEnableFlow,
         CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
         CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyState,
-        CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
-        CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupRootPrompt,
-        CloudBackupSettingsRowStatus, CloudBackupSyncState, CloudBackupVerificationPresentation,
-        CloudBackupVerificationState, CloudBackupWalletItem, CloudBackupWalletStatus,
-        CloudBackupWalletVerificationIssues, CloudOnlyOperation, DeepVerificationFailure,
-        DeepVerificationReport, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
-        RecordId,
+        CloudBackupPasskeyUnlockHint, CloudBackupPendingEnableCleanupState,
+        CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
+        CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupSyncState,
+        CloudBackupVerificationPresentation, CloudBackupVerificationState, CloudBackupWalletItem,
+        CloudBackupWalletStatus, CloudBackupWalletVerificationIssues, CloudOnlyOperation,
+        DeepVerificationFailure, DeepVerificationReport, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+        OtherBackupsOperation, RecordId,
     };
     use crate::manager::cloud_backup_manager::{
         CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
@@ -356,6 +356,7 @@ mod debug {
                 recovery: CloudBackupRecoveryOperation::Idle,
             },
             controls,
+            unlock_hint: None,
         })
     }
 
@@ -669,10 +670,21 @@ mod debug {
         screen
     }
 
-    /// The user dismissed the passkey sheet: the outcome shows beside Verify, with no repair
+    /// The passkey sheet ended without a passkey, as when 1Password is locked: a banner at the
+    /// top and another above the section ask to unlock it, and the section offers Verify again
+    /// with no repair
     fn verification_not_completed() -> CloudBackupScreen {
         let mut screen = configured(CloudBackupDisableScreen::Idle, None);
-        set_verification_state(&mut screen, CloudBackupVerificationState::NotCompleted);
+        let CloudBackupScreenBody::Configured(configured) = &mut screen.body else { return screen };
+        let hint = CloudBackupPasskeyUnlockHint::Provider { name: "1Password".into() };
+        for section in &mut configured.sections {
+            if let CloudBackupSection::Verification(verification) = section {
+                verification.view.state = CloudBackupVerificationState::NotCompleted;
+                verification.unlock_hint = Some(hint.clone());
+            }
+        }
+
+        configured.sections.insert(0, CloudBackupSection::PasskeyUnlock(hint));
         screen
     }
 

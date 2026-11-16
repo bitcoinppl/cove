@@ -742,6 +742,31 @@ provider that refused. Both platforms draw one line on the card: "Created in
 ({suffix})" when the provider isn't one Cove recognizes. No provider gets an
 unlock step. With no stored hint, the card has no line.
 
+A passkey request that didn't finish names what to unlock, because a locked
+third-party password manager ends the request the same way as a cancel. On iOS
+the system shows its own "Unable to use passkey" alert, which Cove can't
+replace, and Cove only sees a cancel (1001). Rust sends a
+`CloudBackupPasskeyUnlockHint` with the `PasskeyNotCompleted` outcome, read
+from the hint stored for the credential the keychain holds when the request
+ends. While the verification's state is `NotCompleted`, the configured screen
+also leads with a `CloudBackupSection::PasskeyUnlock` banner, with the hint read
+at projection like the card's. The verification section sits near the bottom,
+below the wallets, so the banner puts the step where the user lands. The
+verification section carries the same hint as `unlock_hint` and draws the same
+banner above itself, since it can be scrolled far below the top; its own copy
+stays a neutral "Verify again". A saved-passkey
+confirmation that didn't finish, automatic or after Confirm, records the
+outcome on the pause with the hint of the passkey just registered, since the
+keychain doesn't hold that passkey yet; the Enable step shows it above
+Confirm. A provider with a lock of its own, such as 1Password or Bitwarden, is
+named: "If 1Password is locked, unlock it, then try again." The banner reads
+"Unlock 1Password" over the same step. With no stored hint, or a provider Cove doesn't recognize, the copy
+asks to unlock any password manager, naming 1Password as the example. Apple
+Passwords, iCloud Keychain (Managed), Google Password Manager, Chrome on Mac
+and Samsung Pass unlock with the device, so they get no unlock step
+(`KnownPasskeyProvider::has_own_lock`). Error text built without a hint, such
+as a recovery's failure message, uses the generic password-manager step.
+
 When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery
 operation at a time. The screen only shows this body. The body ends when the

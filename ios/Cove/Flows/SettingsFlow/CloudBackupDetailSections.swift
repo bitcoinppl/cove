@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// The banner at the top after a verification whose passkey request didn't finish, naming what to
+/// unlock; the verification itself sits near the bottom of the list
+///
+/// A locked password manager ends the request with the system's own "Unable to use passkey"
+/// alert, which Cove can't replace, so this is where the user learns what to do about it
+struct CloudBackupPasskeyUnlockBanner: View {
+    let hint: CloudBackupPasskeyUnlockHint
+
+    var body: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.statusWarning)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hint.bannerTitle)
+                        .font(.headline)
+                        .uiTestTruncationProbe()
+
+                    Text(hint.bannerMessage)
+                        .font(.subheadline)
+                        .uiTestTruncationProbe()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
 /// The passkey card above the list, for a passkey Cloud Backup can't use
 struct CloudBackupPasskeyCard: View {
     let state: CloudBackupPasskeyState

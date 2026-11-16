@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performClick
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
+import org.bitcoinppl.cove_core.CloudBackupScreenBody
+import org.bitcoinppl.cove_core.CloudBackupSection
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.junit.Assert.assertTrue
@@ -80,6 +82,41 @@ class CloudBackupVerificationSectionTest {
         compose.onNodeWithText("Verify Now").assertIsDisplayed()
         compose.onAllNodesWithText("Add New Passkey").assertCountEquals(0)
         compose.onAllNodesWithText("If your passkey was deleted", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun notCompletedRequestBannerNamesThePasswordManagerToUnlock() {
+        // a locked 1Password ends the request like a cancel, so the banner at the top says to
+        // unlock it before verifying again
+        val screen = cloudBackupFixture("configured-verification-not-completed")
+        val configured = (screen.body as CloudBackupScreenBody.Configured).v1
+        val banner = configured.sections.first() as CloudBackupSection.PasskeyUnlock
+
+        compose.setContent {
+            CoveTheme(darkTheme = false) {
+                PasskeyUnlockBanner(banner.v1)
+            }
+        }
+
+        compose.onNodeWithText("Unlock 1Password").assertIsDisplayed()
+        compose
+            .onNodeWithText(
+                "Verification couldn't use your passkey. If 1Password is locked, unlock it, then tap Verify Now.",
+            ).assertIsDisplayed()
+    }
+
+    @Test
+    fun notCompletedSectionRepeatsTheUnlockBannerAboveItself() {
+        // the section can sit far below the top banner, so it draws the same banner above itself
+        val screen = cloudBackupFixture("configured-verification-not-completed")
+
+        compose.setVerificationSection(screen)
+
+        val bannerBottom = compose.onNodeWithText("Unlock 1Password").getUnclippedBoundsInRoot().bottom
+        val sectionTop = compose.onNodeWithText("Cloud Backup Not Verified").getUnclippedBoundsInRoot().top
+
+        assertTrue("the unlock banner should appear above the section", bannerBottom <= sectionTop)
+        compose.onNodeWithText("Verify Now").assertIsDisplayed()
     }
 
     private fun ComposeContentTestRule.setVerificationSection(screen: CloudBackupScreen) {

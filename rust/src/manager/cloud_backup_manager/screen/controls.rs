@@ -189,7 +189,9 @@ impl Drawn {
                 let actions = controls.iter().map(|control| control.action());
                 self.extend(Surface::InventoryIncomplete, actions);
             }
-            CloudBackupSection::Progress(_) | CloudBackupSection::ExtraCopies(_) => {}
+            CloudBackupSection::PasskeyUnlock(_)
+            | CloudBackupSection::Progress(_)
+            | CloudBackupSection::ExtraCopies(_) => {}
             CloudBackupSection::Verification(verification) => {
                 let actions =
                     verification.controls.iter().map(CloudBackupVerificationControl::action);

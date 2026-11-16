@@ -602,11 +602,20 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::a_cancelled_verification_never_offers_a_passkey_repair",
     "rust:rust/src/manager/cloud_backup_manager/screen/contract.rs::only_a_verification_that_failed_on_the_passkey_offers_a_repair",
     "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::a_not_completed_verify_asks_once_and_does_not_prompt_after_relaunch",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::a_passkey_request_that_did_not_finish_names_what_to_unlock",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::a_restore_whose_passkey_request_did_not_finish_asks_to_unlock_a_password_manager",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::an_unfinished_saved_passkey_confirmation_names_its_provider_to_unlock",
+    "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::an_unfinished_automatic_confirmation_names_its_provider_to_unlock",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationSectionTest.kt::notCompletedRequestBannerNamesThePasswordManagerToUnlock",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationSectionTest.kt::notCompletedSectionRepeatsTheUnlockBannerAboveItself",
     "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testPasskeyNotCompletedKeepsWalletsAndTurnOffWithoutPromptingOnRelaunch",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::passkeyNotCompletedKeepsWalletsAndTurnOff",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::passkeyNotCompletedStage2RelaunchKeepsTurnOffWithoutPrompting",
 ]
-# the verification ends not completed with neutral copy and no passkey repair, and the next launch shows no passkey prompt
+# the verification ends not completed with neutral copy and no passkey repair, and the next launch shows no passkey prompt.
+# a banner at the top of the screen names what to unlock: the provider the passkey was created in when it has its own
+# lock (1Password), any password manager when the device stored no hint, and no banner for apple passwords. the
+# verification section repeats the banner above itself, since it can be scrolled far below the top
 
 [[row]]
 id = "s05-running-row-operation-holds-turn-off"

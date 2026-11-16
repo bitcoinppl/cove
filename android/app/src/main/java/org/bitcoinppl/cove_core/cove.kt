@@ -34545,6 +34545,15 @@ data class CloudBackupVerificationSection (
      * confirmed with nothing to act on, and for a backup only a newer Cove can read
      */
     var `controls`: List<CloudBackupVerificationControl>
+    ,
+    /**
+     * What to unlock before verifying again, drawn above the section as well as at the top of
+     * the screen, since the section can be scrolled far below the top banner
+     *
+     * Set only while the state is `NotCompleted`, with the same hint as
+     * [`CloudBackupSection::PasskeyUnlock`]
+     */
+    var `unlockHint`: CloudBackupPasskeyUnlockHint?
 
 ){
 
@@ -34563,17 +34572,20 @@ public object FfiConverterTypeCloudBackupVerificationSection: FfiConverterRustBu
         return CloudBackupVerificationSection(
             FfiConverterTypeCloudBackupVerificationView.read(buf),
             FfiConverterSequenceTypeCloudBackupVerificationControl.read(buf),
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupVerificationSection) = (
             FfiConverterTypeCloudBackupVerificationView.allocationSize(value.`view`) +
-            FfiConverterSequenceTypeCloudBackupVerificationControl.allocationSize(value.`controls`)
+            FfiConverterSequenceTypeCloudBackupVerificationControl.allocationSize(value.`controls`) +
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.allocationSize(value.`unlockHint`)
     )
 
     override fun write(value: CloudBackupVerificationSection, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupVerificationView.write(value.`view`, buf)
             FfiConverterSequenceTypeCloudBackupVerificationControl.write(value.`controls`, buf)
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.write(value.`unlockHint`, buf)
     }
 }
 
@@ -44698,8 +44710,18 @@ sealed class CloudBackupOutcome {
     /**
      * The passkey request did not complete; nothing changed
      */
-    object PasskeyNotCompleted : CloudBackupOutcome()
+    data class PasskeyNotCompleted(
+        /**
+         * What to unlock before trying again, drawn with the outcome; `None` for a passkey in
+         * the device's own password manager
+         */
+        val `unlockHint`: org.bitcoinppl.cove_core.CloudBackupPasskeyUnlockHint?) : CloudBackupOutcome()
 
+    {
+
+
+        companion object
+    }
 
     data class Failed(
         val `message`: kotlin.String) : CloudBackupOutcome()
@@ -44732,7 +44754,9 @@ public object FfiConverterTypeCloudBackupOutcome : FfiConverterRustBuffer<CloudB
             2 -> CloudBackupOutcome.DisableNotStarted(
                 FfiConverterTypeCloudBackupDisableNotStartedReason.read(buf),
                 )
-            3 -> CloudBackupOutcome.PasskeyNotCompleted
+            3 -> CloudBackupOutcome.PasskeyNotCompleted(
+                FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.read(buf),
+                )
             4 -> CloudBackupOutcome.Failed(
                 FfiConverterString.read(buf),
                 )
@@ -44759,6 +44783,7 @@ public object FfiConverterTypeCloudBackupOutcome : FfiConverterRustBuffer<CloudB
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.allocationSize(value.`unlockHint`)
             )
         }
         is CloudBackupOutcome.Failed -> {
@@ -44784,6 +44809,7 @@ public object FfiConverterTypeCloudBackupOutcome : FfiConverterRustBuffer<CloudB
             }
             is CloudBackupOutcome.PasskeyNotCompleted -> {
                 buf.putInt(3)
+                FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.write(value.`unlockHint`, buf)
                 Unit
             }
             is CloudBackupOutcome.Failed -> {
@@ -45220,6 +45246,95 @@ public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<C
             is CloudBackupPasskeyState.NeedsRepair -> {
                 buf.putInt(4)
                 FfiConverterTypeCloudBackupPasskeyRepairState.write(value.`state`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * The password manager to unlock before trying a passkey request that didn't finish again
+ *
+ * A locked third-party password manager, such as 1Password, ends a passkey request with no
+ * prompt to unlock it; on iOS the system shows "Unable to use passkey" and Cove only sees the
+ * request end, the same as a cancel. So the copy for a request that didn't finish names what to
+ * unlock. There is none for a passkey in the device's own password manager, which unlocks with
+ * the device
+ */
+sealed class CloudBackupPasskeyUnlockHint {
+
+    /**
+     * The passkey was created in this password manager, which has a lock of its own
+     */
+    data class Provider(
+        val `name`: kotlin.String) : CloudBackupPasskeyUnlockHint()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Where the passkey was created isn't known, so it may be in a password manager with a lock
+     * of its own: this device stored no hint, or the registration's AAGUID named no provider
+     */
+    object PasswordManager : CloudBackupPasskeyUnlockHint()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPasskeyUnlockHint : FfiConverterRustBuffer<CloudBackupPasskeyUnlockHint>{
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyUnlockHint {
+        return when(buf.getInt()) {
+            1 -> CloudBackupPasskeyUnlockHint.Provider(
+                FfiConverterString.read(buf),
+                )
+            2 -> CloudBackupPasskeyUnlockHint.PasswordManager
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyUnlockHint): ULong = when(value) {
+        is CloudBackupPasskeyUnlockHint.Provider -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`name`)
+            )
+        }
+        is CloudBackupPasskeyUnlockHint.PasswordManager -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupPasskeyUnlockHint, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupPasskeyUnlockHint.Provider -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`name`, buf)
+                Unit
+            }
+            is CloudBackupPasskeyUnlockHint.PasswordManager -> {
+                buf.putInt(2)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -47150,6 +47265,20 @@ public object FfiConverterTypeCloudBackupScreenBody : FfiConverterRustBuffer<Clo
 sealed class CloudBackupSection {
 
     /**
+     * A banner above everything else: the verification's passkey request didn't finish, and its
+     * passkey may be in a password manager with a lock of its own, so it says what to unlock
+     * before verifying again; the verification itself sits near the bottom of the screen
+     */
+    data class PasskeyUnlock(
+        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyUnlockHint) : CloudBackupSection()
+
+    {
+
+
+        companion object
+    }
+
+    /**
      * Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
      */
     data class PasskeyCard(
@@ -47237,33 +47366,43 @@ sealed class CloudBackupSection {
 public object FfiConverterTypeCloudBackupSection : FfiConverterRustBuffer<CloudBackupSection>{
     override fun read(buf: ByteBuffer): CloudBackupSection {
         return when(buf.getInt()) {
-            1 -> CloudBackupSection.PasskeyCard(
+            1 -> CloudBackupSection.PasskeyUnlock(
+                FfiConverterTypeCloudBackupPasskeyUnlockHint.read(buf),
+                )
+            2 -> CloudBackupSection.PasskeyCard(
                 FfiConverterTypeCloudBackupPasskeyState.read(buf),
                 )
-            2 -> CloudBackupSection.Progress(
+            3 -> CloudBackupSection.Progress(
                 FfiConverterTypeCloudBackupProgressSection.read(buf),
                 )
-            3 -> CloudBackupSection.Verification(
+            4 -> CloudBackupSection.Verification(
                 FfiConverterTypeCloudBackupVerificationSection.read(buf),
                 )
-            4 -> CloudBackupSection.Wallets(
+            5 -> CloudBackupSection.Wallets(
                 FfiConverterTypeCloudBackupWalletsSection.read(buf),
                 )
-            5 -> CloudBackupSection.NotOnDevice(
+            6 -> CloudBackupSection.NotOnDevice(
                 FfiConverterTypeCloudBackupNotOnDeviceSection.read(buf),
                 )
-            6 -> CloudBackupSection.ExtraCopies(
+            7 -> CloudBackupSection.ExtraCopies(
                 FfiConverterTypeCloudBackupExtraCopiesSection.read(buf),
                 )
-            7 -> CloudBackupSection.OtherBackups(
+            8 -> CloudBackupSection.OtherBackups(
                 FfiConverterTypeCloudBackupOtherBackupsSection.read(buf),
                 )
-            8 -> CloudBackupSection.TurnOff
+            9 -> CloudBackupSection.TurnOff
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: CloudBackupSection): ULong = when(value) {
+        is CloudBackupSection.PasskeyUnlock -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupPasskeyUnlockHint.allocationSize(value.v1)
+            )
+        }
         is CloudBackupSection.PasskeyCard -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -47323,43 +47462,48 @@ public object FfiConverterTypeCloudBackupSection : FfiConverterRustBuffer<CloudB
 
     override fun write(value: CloudBackupSection, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupSection.PasskeyCard -> {
+            is CloudBackupSection.PasskeyUnlock -> {
                 buf.putInt(1)
+                FfiConverterTypeCloudBackupPasskeyUnlockHint.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupSection.PasskeyCard -> {
+                buf.putInt(2)
                 FfiConverterTypeCloudBackupPasskeyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.Progress -> {
-                buf.putInt(2)
+                buf.putInt(3)
                 FfiConverterTypeCloudBackupProgressSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.Verification -> {
-                buf.putInt(3)
+                buf.putInt(4)
                 FfiConverterTypeCloudBackupVerificationSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.Wallets -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterTypeCloudBackupWalletsSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.NotOnDevice -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeCloudBackupNotOnDeviceSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.ExtraCopies -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterTypeCloudBackupExtraCopiesSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.OtherBackups -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterTypeCloudBackupOtherBackupsSection.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSection.TurnOff -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -73013,6 +73157,38 @@ public object FfiConverterOptionalTypeCloudBackupHealNotice: FfiConverterRustBuf
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupHealNotice.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint: FfiConverterRustBuffer<CloudBackupPasskeyUnlockHint?> {
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyUnlockHint? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupPasskeyUnlockHint.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyUnlockHint?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupPasskeyUnlockHint.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupPasskeyUnlockHint?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupPasskeyUnlockHint.write(value, buf)
         }
     }
 }

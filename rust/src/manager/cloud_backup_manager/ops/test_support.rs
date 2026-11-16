@@ -1276,6 +1276,15 @@ impl MockPasskeyProviderImpl {
         }));
     }
 
+    /// Registrations make `credential_id` in the iOS provider `aaguid` names
+    pub(crate) fn set_ios_registration(&self, credential_id: Vec<u8>, aaguid: &str) {
+        *self.create_result.lock() = Some(Ok(PasskeyRegistrationResult {
+            credential_id,
+            provider_aaguid: aaguid.into(),
+            registered_platform: PasskeyRegistrationPlatform::Ios,
+        }));
+    }
+
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
         self.authenticate_results.lock().clear();
         *self.authenticate_result_default.lock() = Some(result);

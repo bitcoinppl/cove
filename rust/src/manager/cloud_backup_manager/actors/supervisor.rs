@@ -70,7 +70,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnableState, CloudBackupError, CloudBackupInventoryAuthority,
     CloudBackupInventoryIncompleteReason, CloudBackupNoDiscoveryEnablePreparation,
     CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPasskeyHint, CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedRestoreAll, CloudBackupPreparedUndecryptableWalletDeletion,
     CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
     CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupReuploadedWallets,
@@ -583,21 +583,19 @@ impl CloudBackupSupervisor {
         let notices =
             Notices::new(&RustCloudBackupManager::load_persisted_state(), &self.screen_outcome);
 
-        // only a missing passkey's card shows where it was created, so the keychain is read only
-        // while the reducer holds a missing passkey, not on every publish
-        let shows_hint =
-            manager.state.read().configured_presentation().passkey.shows_provider_hint();
-        let passkey_hint = shows_hint
-            .then(|| CloudBackupKeychain::global().active_provider_hint())
-            .flatten()
-            .map(|hint| CloudBackupPasskeyHint::from_provider_hint(&hint));
+        // only a missing passkey's card and a verification that didn't finish draw where the
+        // passkey was created, so the keychain is read only while one is shown, not on every
+        // publish
+        let reads_hint = manager.state.read().configured_presentation().reads_provider_hint();
+        let provider_hint =
+            reads_hint.then(|| CloudBackupKeychain::global().active_provider_hint()).flatten();
 
         ScreenInputs {
             configuration: self.runtime.generation(),
             admission,
             inventory,
             notices,
-            passkey_hint,
+            provider_hint,
         }
     }
 

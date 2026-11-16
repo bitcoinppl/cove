@@ -160,6 +160,8 @@ internal fun CloudBackupOutcome.message(): String =
     when (this) {
         is CloudBackupOutcome.Rejected -> reason.caption()
         is CloudBackupOutcome.DisableNotStarted -> reason.caption()
-        CloudBackupOutcome.PasskeyNotCompleted -> "The passkey request didn't finish. Nothing changed."
+        is CloudBackupOutcome.PasskeyNotCompleted ->
+            unlockHint?.let { "The passkey request didn't finish, so nothing changed. ${it.retryStep()}" }
+                ?: "The passkey request didn't finish. Nothing changed."
         is CloudBackupOutcome.Failed -> message
     }

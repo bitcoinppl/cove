@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Card
@@ -31,6 +32,7 @@ import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
 import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
+import org.bitcoinppl.cove_core.CloudBackupPasskeyUnlockHint
 import org.bitcoinppl.cove_core.CloudBackupProgressSection
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
@@ -94,6 +96,7 @@ private fun CloudBackupSectionContent(
     onReinitialize: () -> Unit,
 ) {
     when (section) {
+        is CloudBackupSection.PasskeyUnlock -> PasskeyUnlockBanner(section.v1)
         is CloudBackupSection.PasskeyCard -> PasskeyCardSection(manager, screen, section.v1, configured.passkeyHint)
         is CloudBackupSection.Progress -> ProgressSection(manager, screen, section.v1)
         is CloudBackupSection.Verification ->
@@ -168,6 +171,17 @@ private fun CloudBackupHealNoticeCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * The banner at the top after a verification whose passkey request didn't finish, naming what to
+ * unlock; the verification itself sits near the bottom of the screen
+ */
+@Composable
+internal fun PasskeyUnlockBanner(hint: CloudBackupPasskeyUnlockHint) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        ErrorStateCard(icon = Icons.Default.Lock, title = hint.bannerTitle(), body = hint.bannerMessage())
     }
 }
 

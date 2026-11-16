@@ -48,6 +48,11 @@ struct VerificationSection: View {
             CloudBackupUploadConfirmationPendingSection()
 
         case .notCompleted:
+            // repeats the top banner, since this section can be scrolled far below it
+            if let unlockHint = section.unlockHint {
+                CloudBackupPasskeyUnlockBanner(hint: unlockHint)
+            }
+
             CloudBackupVerificationNotCompletedSection(controls: controls(verify: verifyNow))
 
         case let .failed(failure):

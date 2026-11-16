@@ -53,6 +53,23 @@ impl KnownPasskeyProvider {
             Self::Enpass => "Enpass",
         }
     }
+
+    /// Whether the provider is an app with a lock of its own, apart from the device's
+    ///
+    /// A locked one can refuse a passkey request with no prompt to unlock it: iOS shows its own
+    /// "Unable to use passkey" alert and the app only sees the request end, so the copy after a
+    /// request that didn't finish asks the user to unlock it. The device's own password managers
+    /// unlock with the device
+    pub const fn has_own_lock(self) -> bool {
+        !matches!(
+            self,
+            Self::ApplePasswords
+                | Self::IcloudKeychainManaged
+                | Self::GooglePasswordManager
+                | Self::ChromeOnMac
+                | Self::SamsungPass
+        )
+    }
 }
 
 struct KnownPasskeyProviderEntry {
@@ -100,19 +117,33 @@ const KNOWN_PASSKEY_PROVIDERS: &[KnownPasskeyProviderEntry] = known_passkey_prov
 };
 
 impl PasskeyProviderHint {
+    /// The provider to name as where the passkey was created, reading a zero AAGUID on iOS as
+    /// Apple Passwords
     pub fn known_provider(&self) -> Option<KnownPasskeyProvider> {
-        let aaguid = self.aaguid.to_ascii_lowercase();
-
-        if let Some(entry) = KNOWN_PASSKEY_PROVIDERS.iter().find(|entry| entry.aaguid == aaguid) {
-            return Some(entry.provider);
+        if let Some(provider) = self.reported_provider() {
+            return Some(provider);
         }
 
         // zero AAGUID is an iOS fallback used when Apple does not provide attestation data
-        if aaguid == ZERO_AAGUID && self.registered_platform == PasskeyRegistrationPlatform::Ios {
+        if self.aaguid.eq_ignore_ascii_case(ZERO_AAGUID)
+            && self.registered_platform == PasskeyRegistrationPlatform::Ios
+        {
             return Some(KnownPasskeyProvider::ApplePasswords);
         }
 
         None
+    }
+
+    /// The provider the registration's own AAGUID names, with no fallback for a zero AAGUID
+    ///
+    /// iOS can zero a third-party provider's AAGUID too, so a zero one doesn't rule out a
+    /// password manager with a lock of its own, such as 1Password
+    pub fn reported_provider(&self) -> Option<KnownPasskeyProvider> {
+        let aaguid = self.aaguid.to_ascii_lowercase();
+        KNOWN_PASSKEY_PROVIDERS
+            .iter()
+            .find(|entry| entry.aaguid == aaguid)
+            .map(|entry| entry.provider)
     }
 }
 
@@ -160,6 +191,7 @@ mod tests {
         };
 
         assert_eq!(ios_hint.known_provider(), Some(KnownPasskeyProvider::ApplePasswords));
+        assert_eq!(ios_hint.reported_provider(), None);
         assert_eq!(android_hint.known_provider(), None);
     }
 

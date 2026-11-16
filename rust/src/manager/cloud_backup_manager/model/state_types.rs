@@ -142,6 +142,15 @@ pub struct CloudBackupConfiguredState {
     pub verification_presentation: CloudBackupVerificationPresentation,
 }
 
+impl CloudBackupConfiguredState {
+    /// Whether the screen draws anything from where this device's passkey was created: the
+    /// missing passkey's card, or the unlock step of a verification that didn't finish
+    pub(crate) fn reads_provider_hint(&self) -> bool {
+        self.passkey.shows_provider_hint()
+            || self.verification == CloudBackupVerificationState::NotCompleted
+    }
+}
+
 /// Public enable flow state for onboarding and settings
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupEnableFlow {

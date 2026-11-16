@@ -120,6 +120,12 @@ reports `CreateCredentialCancellationException` and
 user cancelled, so the copy never says they did, and neither result marks a
 passkey missing.
 
+A locked third-party password manager is one such cancellation. With the
+passkey in a locked 1Password, iOS shows its own "Unable to use passkey" alert
+within a moment of the tap, with no unlock prompt, and Cove then gets 1001.
+Cove can't suppress that alert, so the copy it draws afterwards says what to
+unlock; [cloud_backup.md](cloud_backup.md) describes the unlock hint.
+
 Automatic retry of a pre-presentation platform authorization failure has a
 budget per platform: iOS retries any operation for up to 15 seconds, and
 Android retries only a discovery assertion for up to 2 seconds.
