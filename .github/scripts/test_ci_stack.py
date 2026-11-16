@@ -16,7 +16,7 @@ import unittest
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from ci_changes import (
     ALL_JOBS,
@@ -47,8 +47,11 @@ from ci_stack_gate import (
     CI_WORKFLOW,
     MARKER_JOB,
     MARKER_STEP,
+    TRIGGER_RUN_NAME_PREFIX,
+    TRIGGER_WORKFLOW_PATH,
     UI_TESTS_MERGE_JOB_PREFIX,
     UI_TESTS_WORKFLOW,
+    GateError,
     Green,
     Job as RunJob,
     Red,
@@ -430,6 +433,20 @@ def stacked(
     )
 
 
+def trigger_event(number: int) -> dict[str, Any]:
+    """A workflow_run event for a finished Stack gate trigger run on pull request `number`"""
+    return {
+        "repository": {"full_name": "bitcoinppl/cove"},
+        "workflow_run": {
+            "path": TRIGGER_WORKFLOW_PATH,
+            "display_title": f"{TRIGGER_RUN_NAME_PREFIX}{number}",
+            "head_sha": "e" * 40,
+            "head_repository": {"full_name": "bitcoinppl/cove"},
+            "pull_requests": [],
+        },
+    }
+
+
 def statuses(github: FakeGitHub, seeds: Seeds) -> dict[str, type]:
     return {item.label: type(item.verdict) for item in evaluate(github, seeds)}
 
@@ -575,8 +592,8 @@ class GateTests(unittest.TestCase):
         closed_top = replace(TOP, is_open=False)
         github = stacked(dict(self.SLICE_RUNS))
         github.stack_value = stack_of(BOTTOM, MIDDLE, closed_top)
-        event = {"action": "closed", "pull_request": {"number": 103, "base": {"ref": "backup/pr2"}}}
-        seeds = seeds_for("pull_request_target", event, github)
+        github.pulls = (BOTTOM, MIDDLE, closed_top)
+        seeds = seeds_for("workflow_run", trigger_event(closed_top.number), github)
 
         self.assertEqual(seeds, Seeds((MIDDLE.number,)))
         # the new top ran only as a slice, so it fails until its CI runs again
@@ -587,12 +604,17 @@ class GateTests(unittest.TestCase):
         github = stacked(dict(self.SLICE_RUNS))
         github.stack_value = stack_of(replace(BOTTOM, is_open=False), retargeted, TOP)
         github.pulls = (retargeted, TOP)
-        event = {"action": "edited", "pull_request": {"number": 102}}
+        seeds = seeds_for("workflow_run", trigger_event(retargeted.number), github)
 
         # its CI ran while it was a slice, so it fails until that runs again
-        self.assertEqual(
-            statuses(github, seeds_for("pull_request_target", event, github))["#102"], Red
-        )
+        self.assertEqual(statuses(github, seeds)["#102"], Red)
+
+    def test_a_trigger_run_without_a_number_fails_rather_than_gating_nothing(self) -> None:
+        event = trigger_event(102)
+        event["workflow_run"]["display_title"] = "Stack gate trigger for #102; rm -rf /"
+
+        with self.assertRaises(GateError):
+            seeds_for("workflow_run", event, stacked({}))
 
 
 class WorkflowNameTests(unittest.TestCase):
@@ -618,14 +640,27 @@ class WorkflowNameTests(unittest.TestCase):
     def test_ui_tests_names_the_android_jobs(self) -> None:
         self.assertIn(f"name: {UI_TESTS_MERGE_JOB_PREFIX}", self.read(UI_TESTS_WORKFLOW))
 
-    def test_the_gate_watches_both_workflows_by_name(self) -> None:
+    def test_the_gate_watches_every_workflow_by_name(self) -> None:
         gate = self.read("stack-gate.yml")
+        trigger = Path(TRIGGER_WORKFLOW_PATH).name
 
-        for workflow in (CI_WORKFLOW, UI_TESTS_WORKFLOW):
+        for workflow in (CI_WORKFLOW, UI_TESTS_WORKFLOW, trigger):
             with self.subTest(workflow=workflow):
                 name = re.search(r"(?m)^name: (.+)$", self.read(workflow))
                 assert name is not None
                 self.assertIn(name[1], gate.split("workflows:")[1].splitlines()[0])
+
+    def test_the_trigger_names_its_pull_request_as_the_gate_reads_it(self) -> None:
+        trigger = self.read(Path(TRIGGER_WORKFLOW_PATH).name)
+        name = re.search(r"(?m)^name: (.+)$", trigger)
+        assert name is not None
+
+        self.assertIn(
+            f"run-name: {TRIGGER_RUN_NAME_PREFIX}${{{{ github.event.pull_request.number }}}}\n",
+            trigger,
+        )
+        # the gate's if tells trigger runs apart by this name
+        self.assertIn(f"workflow_run.name == '{name[1]}'", self.read("stack-gate.yml"))
 
 
 # ci.yml's jobs that no changes output skips. The quarantine checks fail on a date rather than on a
