@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use act_zero::call;
 use cove_cspp::backup_data::{PasskeyProviderHint, PasskeyRegistrationPlatform};
+use cove_cspp::master_key::MasterKey;
+use cove_cspp::master_key_crypto::encrypt_master_key;
 use cove_device::cloud_storage::{CloudAccessPolicy, CloudStorageError};
 use cove_device::passkey::{PasskeyError, PasskeyFailureReason, PasskeyOperation};
 
@@ -45,9 +47,9 @@ use crate::manager::cloud_backup_manager::screen::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupInventoryIncompleteReason, CloudBackupManagerAction,
-    CloudBackupNoticeKind, CloudBackupPasskeyHint, CloudBackupPasskeyState, CloudBackupRootPrompt,
-    CloudBackupSettingsRowStatus, CloudBackupVerificationSource, CloudBackupVerificationState,
-    DeepVerificationFailure, RecordId,
+    CloudBackupNoticeKind, CloudBackupPasskeyHint, CloudBackupPasskeyState,
+    CloudBackupPasskeyUnlockHint, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure, RecordId,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
@@ -1880,6 +1882,118 @@ fn a_cancelled_verification_never_offers_a_passkey_repair() {
         assert_eq!(app.manager().published_screen().root_prompt, CloudBackupRootPrompt::None);
         assert_eq!(persisted().status(), status);
     });
+}
+
+/// A locked password manager ends the passkey request like a cancel, with iOS's own "Unable to use
+/// passkey" alert, so a request that didn't finish names what to unlock: the provider the passkey
+/// was created in when it has a lock of its own, any password manager when this device doesn't
+/// know or the AAGUID was zeroed, and nothing for Apple Passwords, which unlocks with the device
+#[test]
+fn a_passkey_request_that_did_not_finish_names_what_to_unlock() {
+    let test =
+        concat!(module_path!(), "::a_passkey_request_that_did_not_finish_names_what_to_unlock");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
+        app.passkey.set_mode(PasskeyMode::NotCompleted);
+
+        let one_password = provider_hint("bada5566-a7aa-401f-bd96-45619a55120d");
+        save_device_passkey(&[1, 2, 3], Some(&one_password));
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert_eq!(verification_state(&app), Some(CloudBackupVerificationState::NotCompleted));
+        assert_eq!(
+            passkey_unlock_banner(&app),
+            Some(CloudBackupPasskeyUnlockHint::Provider { name: "1Password".into() })
+        );
+
+        save_device_passkey(&[4, 5, 6], None);
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert_eq!(
+            passkey_unlock_banner(&app),
+            Some(CloudBackupPasskeyUnlockHint::PasswordManager)
+        );
+
+        let apple_passwords = provider_hint("fbfc3007-154e-4ecc-8c0b-6e020557d7bd");
+        save_device_passkey(&[7, 8, 9], Some(&apple_passwords));
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert_eq!(verification_state(&app), Some(CloudBackupVerificationState::NotCompleted));
+        assert_eq!(passkey_unlock_banner(&app), None);
+
+        // iOS can zero a third-party provider's AAGUID, so a zero one may still be 1Password
+        let zeroed = provider_hint("00000000-0000-0000-0000-000000000000");
+        save_device_passkey(&[10, 11, 12], Some(&zeroed));
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert_eq!(
+            passkey_unlock_banner(&app),
+            Some(CloudBackupPasskeyUnlockHint::PasswordManager)
+        );
+
+        // a verification that finishes draws no unlock step
+        app.passkey.set_mode(PasskeyMode::Succeeds);
+        save_device_passkey(&[1, 2, 3], Some(&one_password));
+        app.dispatch(verify()).then_can(&[N::Verify]);
+        assert!(
+            matches!(verification_state(&app), Some(CloudBackupVerificationState::Verified { .. })),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(passkey_unlock_banner(&app), None);
+    });
+}
+
+/// A restore on a device that never stored where its passkey was created, whose passkey request
+/// didn't finish, shows the outcome next to Restore with the step to unlock any password manager
+#[test]
+fn a_restore_whose_passkey_request_did_not_finish_asks_to_unlock_a_password_manager() {
+    let test = concat!(
+        module_path!(),
+        "::a_restore_whose_passkey_request_did_not_finish_asks_to_unlock_a_password_manager"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let existing = MasterKey::generate();
+        let namespace = existing.namespace_id();
+        let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
+        app.cloud.inner.set_wallet_files(namespace.clone(), vec!["wallet-1.json".into()]);
+        app.cloud.inner.set_master_key_backup(
+            namespace,
+            serde_json::to_vec(&encrypted).expect("encode master key"),
+        );
+        app.passkey.set_mode(PasskeyMode::NotCompleted);
+
+        app.dispatch(CloudBackupManagerAction::RestoreFromCloudBackup).then_cannot(&[N::TurnOff]);
+        let last = app.manager().published_screen().last_outcome.expect("the Restore's outcome");
+        assert_eq!(
+            last.target,
+            CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::RestoreFromCloudBackup)
+        );
+        assert_eq!(
+            last.outcome,
+            CloudBackupOutcome::PasskeyNotCompleted {
+                unlock_hint: Some(CloudBackupPasskeyUnlockHint::PasswordManager)
+            },
+            "{}",
+            app.describe()
+        );
+    });
+}
+
+fn provider_hint(aaguid: &str) -> PasskeyProviderHint {
+    PasskeyProviderHint {
+        aaguid: aaguid.into(),
+        registered_platform: PasskeyRegistrationPlatform::Ios,
+        registered_at: 1_700_000_000,
+        name_suffix: "09IX".into(),
+    }
+}
+
+/// What the published screen's banner asks the user to unlock
+fn passkey_unlock_banner(app: &TestApp) -> Option<CloudBackupPasskeyUnlockHint> {
+    configured_sections(app).into_iter().find_map(|section| match section {
+        CloudBackupSection::PasskeyUnlock(hint) => Some(hint),
+        _ => None,
+    })
 }
 
 /// A verification that fails reading the cloud, or on a passkey that answered moments before,

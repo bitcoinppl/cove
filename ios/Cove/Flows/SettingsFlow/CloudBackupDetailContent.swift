@@ -97,6 +97,9 @@ private struct CloudBackupSectionContent: View {
 
     var body: some View {
         switch section {
+        case let .passkeyUnlock(hint):
+            CloudBackupPasskeyUnlockBanner(hint: hint)
+
         case let .passkeyCard(state):
             CloudBackupPasskeyCard(
                 state: state,

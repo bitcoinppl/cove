@@ -43,7 +43,9 @@ pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
     "This cloud backup was created by an unsupported version of Cove.";
 const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
-const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request did not complete. Try again.";
+// a locked third-party password manager ends the request the same way as a cancel, so the copy
+// names the unlock step; this message has no hint of where the passkey lives, so it names none
+const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request didn't finish. If your passkey is in a password manager like 1Password, unlock it, then try again.";
 const NEEDS_PASSKEY_MESSAGE: &str =
     "Cloud Backup needs your passkey. Open Cloud Backup and tap Verify to continue.";
 const PASSKEY_BUSY_MESSAGE: &str =
@@ -517,15 +519,10 @@ impl CloudBackupError {
 
     /// The user didn't finish a passkey request, or its sheet couldn't show; nothing changed and
     /// nothing is wrong
+    ///
+    /// Read from [`Self::passkey_request_failure`], so a discovery that didn't finish counts too
     pub(crate) fn is_passkey_not_completed(&self) -> bool {
-        matches!(
-            self,
-            Self::Passkey(error)
-                if matches!(
-                    error.passkey_error(),
-                    Some(PasskeyError::NotCompleted | PasskeyError::NotReady { .. })
-                )
-        )
+        matches!(self.passkey_request_failure(), Some(PasskeyRequestFailure::NotCompleted))
     }
 
     /// What this error says about a passkey request, or `None` when it isn't a passkey error

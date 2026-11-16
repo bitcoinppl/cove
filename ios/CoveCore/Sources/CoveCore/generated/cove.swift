@@ -28021,7 +28021,12 @@ public enum CloudBackupOutcome: Equatable, Hashable {
     /**
      * The passkey request did not complete; nothing changed
      */
-    case passkeyNotCompleted
+    case passkeyNotCompleted(
+        /**
+         * What to unlock before trying again, drawn with the outcome; `None` for a passkey in
+         * the device's own password manager
+         */unlockHint: CloudBackupPasskeyUnlockHint?
+    )
     case failed(message: String
     )
 
@@ -28051,7 +28056,8 @@ public struct FfiConverterTypeCloudBackupOutcome: FfiConverterRustBuffer {
         case 2: return .disableNotStarted(reason: try FfiConverterTypeCloudBackupDisableNotStartedReason.read(from: &buf)
         )
 
-        case 3: return .passkeyNotCompleted
+        case 3: return .passkeyNotCompleted(unlockHint: try FfiConverterOptionTypeCloudBackupPasskeyUnlockHint.read(from: &buf)
+        )
 
         case 4: return .failed(message: try FfiConverterString.read(from: &buf)
         )
@@ -28074,8 +28080,9 @@ public struct FfiConverterTypeCloudBackupOutcome: FfiConverterRustBuffer {
             FfiConverterTypeCloudBackupDisableNotStartedReason.write(reason, into: &buf)
 
 
-        case .passkeyNotCompleted:
+        case let .passkeyNotCompleted(unlockHint):
             writeInt(&buf, Int32(3))
+            FfiConverterOptionTypeCloudBackupPasskeyUnlockHint.write(unlockHint, into: &buf)
 
 
         case let .failed(message):
@@ -28516,6 +28523,91 @@ public func FfiConverterTypeCloudBackupPasskeyState_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeCloudBackupPasskeyState_lower(_ value: CloudBackupPasskeyState) -> RustBuffer {
     return FfiConverterTypeCloudBackupPasskeyState.lower(value)
+}
+
+
+
+/**
+ * The password manager to unlock before trying a passkey request that didn't finish again
+ *
+ * A locked third-party password manager, such as 1Password, ends a passkey request with no
+ * prompt to unlock it; on iOS the system shows "Unable to use passkey" and Cove only sees the
+ * request end, the same as a cancel. So the copy for a request that didn't finish names what to
+ * unlock. There is none for a passkey in the device's own password manager, which unlocks with
+ * the device
+ */
+
+public enum CloudBackupPasskeyUnlockHint: Equatable, Hashable {
+
+    /**
+     * The passkey was created in this password manager, which has a lock of its own
+     */
+    case provider(name: String
+    )
+    /**
+     * Where the passkey was created isn't known, so it may be in a password manager with a lock
+     * of its own: this device stored no hint, or the registration's AAGUID named no provider
+     */
+    case passwordManager
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupPasskeyUnlockHint: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupPasskeyUnlockHint: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupPasskeyUnlockHint
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPasskeyUnlockHint {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .provider(name: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .passwordManager
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupPasskeyUnlockHint, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .provider(name):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(name, into: &buf)
+
+
+        case .passwordManager:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPasskeyUnlockHint_lift(_ buf: RustBuffer) throws -> CloudBackupPasskeyUnlockHint {
+    return try FfiConverterTypeCloudBackupPasskeyUnlockHint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPasskeyUnlockHint_lower(_ value: CloudBackupPasskeyUnlockHint) -> RustBuffer {
+    return FfiConverterTypeCloudBackupPasskeyUnlockHint.lower(value)
 }
 
 
@@ -30459,6 +30551,13 @@ public func FfiConverterTypeCloudBackupScreenBody_lower(_ value: CloudBackupScre
 public enum CloudBackupSection: Equatable, Hashable {
 
     /**
+     * A banner above everything else: the verification's passkey request didn't finish, and its
+     * passkey may be in a password manager with a lock of its own, so it says what to unlock
+     * before verifying again; the verification itself sits near the bottom of the screen
+     */
+    case passkeyUnlock(CloudBackupPasskeyUnlockHint
+    )
+    /**
      * Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
      */
     case passkeyCard(CloudBackupPasskeyState
@@ -30500,28 +30599,31 @@ public struct FfiConverterTypeCloudBackupSection: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .passkeyCard(try FfiConverterTypeCloudBackupPasskeyState.read(from: &buf)
+        case 1: return .passkeyUnlock(try FfiConverterTypeCloudBackupPasskeyUnlockHint.read(from: &buf)
         )
 
-        case 2: return .progress(try FfiConverterTypeCloudBackupProgressSection.read(from: &buf)
+        case 2: return .passkeyCard(try FfiConverterTypeCloudBackupPasskeyState.read(from: &buf)
         )
 
-        case 3: return .verification(try FfiConverterTypeCloudBackupVerificationSection.read(from: &buf)
+        case 3: return .progress(try FfiConverterTypeCloudBackupProgressSection.read(from: &buf)
         )
 
-        case 4: return .wallets(try FfiConverterTypeCloudBackupWalletsSection.read(from: &buf)
+        case 4: return .verification(try FfiConverterTypeCloudBackupVerificationSection.read(from: &buf)
         )
 
-        case 5: return .notOnDevice(try FfiConverterTypeCloudBackupNotOnDeviceSection.read(from: &buf)
+        case 5: return .wallets(try FfiConverterTypeCloudBackupWalletsSection.read(from: &buf)
         )
 
-        case 6: return .extraCopies(try FfiConverterTypeCloudBackupExtraCopiesSection.read(from: &buf)
+        case 6: return .notOnDevice(try FfiConverterTypeCloudBackupNotOnDeviceSection.read(from: &buf)
         )
 
-        case 7: return .otherBackups(try FfiConverterTypeCloudBackupOtherBackupsSection.read(from: &buf)
+        case 7: return .extraCopies(try FfiConverterTypeCloudBackupExtraCopiesSection.read(from: &buf)
         )
 
-        case 8: return .turnOff
+        case 8: return .otherBackups(try FfiConverterTypeCloudBackupOtherBackupsSection.read(from: &buf)
+        )
+
+        case 9: return .turnOff
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30531,43 +30633,48 @@ public struct FfiConverterTypeCloudBackupSection: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .passkeyCard(v1):
+        case let .passkeyUnlock(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeCloudBackupPasskeyUnlockHint.write(v1, into: &buf)
+
+
+        case let .passkeyCard(v1):
+            writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupPasskeyState.write(v1, into: &buf)
 
 
         case let .progress(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeCloudBackupProgressSection.write(v1, into: &buf)
 
 
         case let .verification(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeCloudBackupVerificationSection.write(v1, into: &buf)
 
 
         case let .wallets(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeCloudBackupWalletsSection.write(v1, into: &buf)
 
 
         case let .notOnDevice(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeCloudBackupNotOnDeviceSection.write(v1, into: &buf)
 
 
         case let .extraCopies(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeCloudBackupExtraCopiesSection.write(v1, into: &buf)
 
 
         case let .otherBackups(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeCloudBackupOtherBackupsSection.write(v1, into: &buf)
 
 
         case .turnOff:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -51247,6 +51354,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupHealNotice: FfiConverterRust
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCloudBackupHealNotice.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCloudBackupPasskeyUnlockHint: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupPasskeyUnlockHint?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupPasskeyUnlockHint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupPasskeyUnlockHint.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

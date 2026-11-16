@@ -149,20 +149,22 @@ pub(crate) fn misordered_section_kinds(screen: &CloudBackupScreen) -> Vec<&'stat
 /// builds it
 fn section_rank(section: &CloudBackupSection) -> u8 {
     match section {
-        CloudBackupSection::PasskeyCard(_) => 0,
-        CloudBackupSection::Progress(_) => 1,
-        CloudBackupSection::Wallets(_) => 2,
-        CloudBackupSection::NotOnDevice(_) => 3,
-        CloudBackupSection::ExtraCopies(_) => 4,
-        CloudBackupSection::OtherBackups(_) => 5,
-        CloudBackupSection::Verification(_) => 6,
-        CloudBackupSection::TurnOff => 7,
+        CloudBackupSection::PasskeyUnlock(_) => 0,
+        CloudBackupSection::PasskeyCard(_) => 1,
+        CloudBackupSection::Progress(_) => 2,
+        CloudBackupSection::Wallets(_) => 3,
+        CloudBackupSection::NotOnDevice(_) => 4,
+        CloudBackupSection::ExtraCopies(_) => 5,
+        CloudBackupSection::OtherBackups(_) => 6,
+        CloudBackupSection::Verification(_) => 7,
+        CloudBackupSection::TurnOff => 8,
     }
 }
 
 /// A section's identity as the platforms key it, matching iOS's `CloudBackupSection.kind`
 pub(crate) fn section_kind(section: &CloudBackupSection) -> &'static str {
     match section {
+        CloudBackupSection::PasskeyUnlock(_) => "passkeyUnlock",
         CloudBackupSection::PasskeyCard(_) => "passkeyCard",
         CloudBackupSection::Progress(_) => "progress",
         CloudBackupSection::Verification(_) => "verification",
@@ -275,7 +277,8 @@ fn misplaced_configured_controls(
             CloudBackupSection::OtherBackups(other) => {
                 misplaced.extend(misplaced_other_backups_controls(other));
             }
-            CloudBackupSection::PasskeyCard(_)
+            CloudBackupSection::PasskeyUnlock(_)
+            | CloudBackupSection::PasskeyCard(_)
             | CloudBackupSection::Progress(_)
             | CloudBackupSection::NotOnDevice(_)
             | CloudBackupSection::ExtraCopies(_)
@@ -731,6 +734,13 @@ mod tests {
         assert_eq!(passkey_card(&not_completed), None);
         assert_eq!(not_completed.actions.availability(A::RepairPasskey), None);
         assert_eq!(not_completed.actions.availability(A::Verify), available);
+        let Body::Configured(configured) = &not_completed.body else {
+            panic!("a configured screen")
+        };
+        assert!(
+            matches!(configured.sections.first(), Some(CloudBackupSection::PasskeyUnlock(_))),
+            "the unlock banner leads a verification that didn't finish"
+        );
 
         let failed = named("configured-verification-failed");
         assert!(matches!(verification(&failed), Some(CloudBackupVerificationState::Failed(_))));

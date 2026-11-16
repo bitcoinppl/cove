@@ -77,11 +77,12 @@ pub use self::dto::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupOnboardingCompletionReadiness, CloudBackupOtherBackupsState,
     CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
-    CloudBackupProgress, CloudBackupRestoreReport, CloudBackupRetryAction, CloudBackupRootPrompt,
-    CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata, CloudBackupWalletItem,
-    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, CloudBackupWalletVerificationIssues,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
-    RecordId, SavedPasskeyConfirmationMode,
+    CloudBackupPasskeyUnlockHint, CloudBackupProgress, CloudBackupRestoreReport,
+    CloudBackupRetryAction, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupVerificationMetadata, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
+    CloudBackupWalletStatus, CloudBackupWalletVerificationIssues, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RecordId,
+    SavedPasskeyConfirmationMode,
 };
 
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;

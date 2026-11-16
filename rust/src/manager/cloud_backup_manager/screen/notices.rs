@@ -9,12 +9,16 @@ use super::types::{
     CloudBackupHealNotice, CloudBackupLastOutcome, CloudBackupOutcome, CloudBackupOutcomeTarget,
     CloudBackupRejection, CloudBackupRowControl, CloudBackupRowTarget, CloudBackupScreenAction,
 };
+use cove_cspp::backup_data::PasskeyProviderHint;
+
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::admission::{Admission, ReviewExit, UserIntent};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
 };
-use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupNoticeKind, RecordId};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupNoticeKind, CloudBackupPasskeyUnlockHint, RecordId,
+};
 
 /// The notices the screen projection reads
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -93,6 +97,21 @@ impl LastOutcome {
         self.operation_ended(claim, failure(error))
     }
 
+    /// The operation `claim` ended with `error` on a passkey the keychain doesn't hold yet, such as
+    /// one just saved and waiting to be confirmed; true when the shown outcome changed
+    ///
+    /// A request for it that didn't finish names what to unlock from where that passkey was
+    /// created, `passkey`, not from the passkey the keychain holds
+    pub(crate) fn operation_failed_on_passkey(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        error: &CloudBackupError,
+        passkey: Option<&PasskeyProviderHint>,
+    ) -> bool {
+        let outcome = failure_on(error, || CloudBackupPasskeyUnlockHint::for_provider(passkey));
+        self.operation_ended(claim, outcome)
+    }
+
     /// The operation `claim` ended with `outcome` instead of doing all it was asked, such as a
     /// batch delete that stopped partway; true when the shown outcome changed
     pub(crate) fn operation_ended(
@@ -146,9 +165,20 @@ impl LastOutcome {
 }
 
 /// A cancelled passkey prompt is the user's choice, not a failure to report
+///
+/// A locked password manager ends the request the same way as a cancel, so the outcome carries
+/// what to unlock for the passkey this device holds, read only when the request didn't finish
 fn failure(error: &CloudBackupError) -> CloudBackupOutcome {
+    failure_on(error, CloudBackupPasskeyUnlockHint::for_active_passkey)
+}
+
+/// [`failure`] for a request on the passkey `unlock_hint` reads what to unlock for
+fn failure_on(
+    error: &CloudBackupError,
+    unlock_hint: impl FnOnce() -> Option<CloudBackupPasskeyUnlockHint>,
+) -> CloudBackupOutcome {
     if error.is_passkey_not_completed() {
-        return CloudBackupOutcome::PasskeyNotCompleted;
+        return CloudBackupOutcome::PasskeyNotCompleted { unlock_hint: unlock_hint() };
     }
 
     CloudBackupOutcome::Failed { message: error.reader_message() }

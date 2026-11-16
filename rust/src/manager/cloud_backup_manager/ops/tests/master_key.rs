@@ -140,5 +140,8 @@ async fn cancelled_master_key_recovery_keeps_cancel_reader_message() {
     };
 
     // an incomplete request shows its own copy, not the generic passkey failure
-    assert_eq!(error.reader_message(), "The passkey request did not complete. Try again.");
+    assert_eq!(
+        error.reader_message(),
+        "The passkey request didn't finish. If your passkey is in a password manager like 1Password, unlock it, then try again."
+    );
 }

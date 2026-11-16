@@ -267,6 +267,15 @@ impl PendingEnableSession {
         }
     }
 
+    /// Where the passkey waiting to be confirmed was created, when the registration said
+    pub(crate) fn provider_hint(&self) -> Option<&PasskeyProviderHint> {
+        match self {
+            Self::AwaitingSavedPasskeyConfirmation(material) => {
+                material.passkey.provider_hint.as_ref()
+            }
+        }
+    }
+
     pub(crate) fn awaiting_saved_passkey_confirmation(
         master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
         passkey: Zeroizing<StagedPrfKey>,

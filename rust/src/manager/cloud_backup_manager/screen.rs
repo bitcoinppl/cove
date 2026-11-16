@@ -52,15 +52,15 @@ pub(crate) use self::types::{
     CloudBackupRowControl, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
     CloudBackupSavedPasskeyScreen, CloudBackupSection, CloudBackupVerificationControl,
 };
+use cove_cspp::backup_data::PasskeyProviderHint;
+
 use crate::database::cloud_backup::PersistedHealNotice;
 
 use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
 use super::admission::{AdmissionBody, AdmissionSnapshot};
 use super::inventory::InventoryFacts;
-use super::{
-    CloudBackupPasskeyHint, CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager,
-};
+use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
 
 /// The screen last sent to the platform, which the next projection is diffed against
 #[derive(Debug)]
@@ -84,9 +84,9 @@ pub(crate) struct ScreenInputs {
     pub(crate) admission: AdmissionSnapshot,
     pub(crate) inventory: InventoryFacts,
     pub(crate) notices: Notices,
-    /// Where this device's passkey was created, read from the keychain only while a card that
-    /// shows it is drawn
-    pub(crate) passkey_hint: Option<CloudBackupPasskeyHint>,
+    /// Where this device's passkey was created, read from the keychain only while the screen
+    /// draws something from it
+    pub(crate) provider_hint: Option<PasskeyProviderHint>,
 }
 
 /// What the platform was last sent: the screen, and whether the owner rested off
@@ -198,7 +198,7 @@ impl RustCloudBackupManager {
         runtime: &Runtime,
         inputs: &ScreenInputs,
     ) -> CloudBackupScreen {
-        let ScreenInputs { configuration, admission, inventory, notices, passkey_hint } = inputs;
+        let ScreenInputs { configuration, admission, inventory, notices, provider_hint } = inputs;
         project::project(
             runtime,
             *configuration,
@@ -206,7 +206,7 @@ impl RustCloudBackupManager {
             &self.state.read(),
             inventory,
             notices,
-            passkey_hint.as_ref(),
+            provider_hint.as_ref(),
         )
     }
 

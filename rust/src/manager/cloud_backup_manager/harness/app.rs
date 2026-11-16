@@ -129,6 +129,7 @@ impl NextAction {
 /// One kind of section on the configured screen, declared in the order the screen draws them
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum SectionKind {
+    PasskeyUnlock,
     PasskeyCard,
     Progress,
     Wallets,
@@ -142,6 +143,7 @@ pub(crate) enum SectionKind {
 impl SectionKind {
     pub(crate) fn of(section: &CloudBackupSection) -> Self {
         match section {
+            CloudBackupSection::PasskeyUnlock(_) => Self::PasskeyUnlock,
             CloudBackupSection::PasskeyCard(_) => Self::PasskeyCard,
             CloudBackupSection::Progress(_) => Self::Progress,
             CloudBackupSection::Verification(_) => Self::Verification,

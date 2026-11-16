@@ -1,3 +1,4 @@
+use cove_cspp::backup_data::PasskeyProviderHint;
 use cove_types::network::Network;
 use serde::{Deserialize, Serialize};
 
@@ -288,6 +289,43 @@ impl CloudBackupPasskeyHint {
     /// Whether this hint was registered after `other`, so it describes the newer passkey
     pub(crate) fn is_newer_than(&self, other: &Self) -> bool {
         self.registered_at > other.registered_at
+    }
+}
+
+/// The password manager to unlock before trying a passkey request that didn't finish again
+///
+/// A locked third-party password manager, such as 1Password, ends a passkey request with no
+/// prompt to unlock it; on iOS the system shows "Unable to use passkey" and Cove only sees the
+/// request end, the same as a cancel. So the copy for a request that didn't finish names what to
+/// unlock. There is none for a passkey in the device's own password manager, which unlocks with
+/// the device
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupPasskeyUnlockHint {
+    /// The passkey was created in this password manager, which has a lock of its own
+    Provider { name: String },
+    /// Where the passkey was created isn't known, so it may be in a password manager with a lock
+    /// of its own: this device stored no hint, or the registration's AAGUID named no provider
+    PasswordManager,
+}
+
+impl CloudBackupPasskeyUnlockHint {
+    /// What to unlock for the passkey `hint` says was created, or for an unknown passkey when this
+    /// device stored no hint
+    ///
+    /// Reads only the provider the AAGUID names: iOS can zero a third-party provider's AAGUID,
+    /// so a zero one, which the passkey card reads as Apple Passwords, may still be 1Password
+    pub(crate) fn for_provider(hint: Option<&PasskeyProviderHint>) -> Option<Self> {
+        let Some(provider) = hint.and_then(PasskeyProviderHint::reported_provider) else {
+            return Some(Self::PasswordManager);
+        };
+
+        provider.has_own_lock().then(|| Self::Provider { name: provider.display_name().into() })
+    }
+
+    /// What to unlock for the passkey this device's keychain holds now
+    pub(crate) fn for_active_passkey() -> Option<Self> {
+        let hint = super::CloudBackupKeychain::global().active_provider_hint();
+        Self::for_provider(hint.as_ref())
     }
 }
 

@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use cove_device::keychain::Keychain;
+use cove_device::passkey::PasskeyError;
 
 use super::{
     FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp,
@@ -16,9 +17,13 @@ use super::{
 use crate::manager::cloud_backup_manager::CloudBackupStore;
 use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
 use crate::manager::cloud_backup_manager::detail::CloudBackupVerificationPresentation;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupOutcome, CloudBackupOutcomeTarget, CloudBackupScreenAction,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupKeychain,
-    CloudBackupManagerAction, CloudBackupVerificationSource, VerificationState,
+    CloudBackupManagerAction, CloudBackupPasskeyUnlockHint, CloudBackupVerificationSource,
+    SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -265,6 +270,93 @@ fn manual_saved_passkey_confirmation_presents_under_its_own_tap() {
         assert_eq!(
             calls.iter().map(|call| call.kind).collect::<Vec<_>>(),
             vec![PasskeyCall::Create, PasskeyCall::Authenticate],
+            "{}",
+            app.describe()
+        );
+    });
+}
+
+/// A passkey just saved in 1Password whose confirmation didn't finish, as when 1Password's
+/// extension refuses it and iOS shows "Unable to use passkey", waits on the saved-passkey pause
+/// with the outcome naming 1Password to unlock before Confirm
+#[test]
+fn an_unfinished_saved_passkey_confirmation_names_its_provider_to_unlock() {
+    let test = concat!(
+        module_path!(),
+        "::an_unfinished_saved_passkey_confirmation_names_its_provider_to_unlock"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.passkey
+            .inner
+            .set_ios_registration(vec![4, 5, 6], "bada5566-a7aa-401f-bd96-45619a55120d");
+        app.passkey.inner.set_authenticate_result(Err(PasskeyError::NotCompleted));
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackupForceNew(
+            CloudBackupEnableContext::settings_manual(),
+        ))
+        .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(5)).then_cannot(&[N::TurnOff]);
+        assert!(app.saved_passkey_confirmation().is_some(), "{}", app.describe());
+
+        assert_eq!(app.manager().published_screen().last_outcome, None, "{}", app.describe());
+
+        // Confirm asks for the passkey, and the outcome stays on the same pause when it doesn't
+        // finish
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::TurnOff]);
+        assert!(app.saved_passkey_confirmation().is_some(), "{}", app.describe());
+        let last = app.manager().published_screen().last_outcome.expect("the Confirm's outcome");
+        assert_eq!(
+            last.target,
+            CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::ConfirmSavedPasskey)
+        );
+        assert_eq!(
+            last.outcome,
+            CloudBackupOutcome::PasskeyNotCompleted {
+                unlock_hint: Some(CloudBackupPasskeyUnlockHint::Provider {
+                    name: "1Password".into()
+                }),
+            },
+            "{}",
+            app.describe()
+        );
+    });
+}
+
+/// Onboarding confirms the saved passkey on its own after the save settles; when that request
+/// doesn't finish, the outcome on Enable names 1Password to unlock before Confirm
+#[test]
+fn an_unfinished_automatic_confirmation_names_its_provider_to_unlock() {
+    let test = concat!(
+        module_path!(),
+        "::an_unfinished_automatic_confirmation_names_its_provider_to_unlock"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.passkey
+            .inner
+            .set_ios_registration(vec![4, 5, 6], "bada5566-a7aa-401f-bd96-45619a55120d");
+        app.passkey.inner.set_authenticate_result(Err(PasskeyError::NotCompleted));
+        let context = CloudBackupEnableContext {
+            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+            verification_source: CloudBackupVerificationSource::Onboarding,
+        };
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackupForceNew(context))
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(5)).then_cannot(&[N::TurnOff]);
+        assert!(app.saved_passkey_confirmation().is_some(), "{}", app.describe());
+        assert_eq!(app.passkey.inner.authenticate_count(), 1, "{}", app.describe());
+
+        let last = app.manager().published_screen().last_outcome.expect("the Enable's outcome");
+        assert_eq!(last.target, CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::Enable));
+        assert_eq!(
+            last.outcome,
+            CloudBackupOutcome::PasskeyNotCompleted {
+                unlock_hint: Some(CloudBackupPasskeyUnlockHint::Provider {
+                    name: "1Password".into()
+                }),
+            },
             "{}",
             app.describe()
         );

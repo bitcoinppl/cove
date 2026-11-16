@@ -218,10 +218,47 @@ extension CloudBackupOutcome {
             reason.caption
         case let .disableNotStarted(reason):
             "Cloud Backup is still on. \(reason.message)"
-        case .passkeyNotCompleted:
+        case let .passkeyNotCompleted(unlockHint: unlockHint?):
+            "The passkey request didn't finish, so nothing changed. \(unlockHint.retryStep)"
+        case .passkeyNotCompleted(unlockHint: nil):
             "The passkey request didn't finish. Nothing changed."
         case let .failed(message):
             message
+        }
+    }
+}
+
+extension CloudBackupPasskeyUnlockHint {
+    /// The step to take before trying a passkey request that didn't finish again
+    ///
+    /// A locked password manager ends the request with the system's own "Unable to use passkey"
+    /// alert, which Cove can't replace, so the copy after it says what to unlock
+    var retryStep: String {
+        switch self {
+        case let .provider(name: name):
+            "If \(name) is locked, unlock it, then try again."
+        case .passwordManager:
+            "If your passkey is in a password manager like 1Password, unlock it, then try again."
+        }
+    }
+
+    /// The banner's title, naming what to unlock
+    var bannerTitle: String {
+        switch self {
+        case let .provider(name: name):
+            "Unlock \(name)"
+        case .passwordManager:
+            "Unlock Your Password Manager"
+        }
+    }
+
+    /// The banner's message: the verification below didn't finish, and what to unlock first
+    var bannerMessage: String {
+        switch self {
+        case let .provider(name: name):
+            "Verification couldn't use your passkey. If \(name) is locked, unlock it, then tap Verify Now."
+        case .passwordManager:
+            "Verification couldn't use your passkey. If it's in a password manager like 1Password, unlock it, then tap Verify Now."
         }
     }
 }
@@ -281,6 +318,7 @@ extension CloudBackupSection {
     /// A stable identity for the section, since each kind appears at most once
     var kind: String {
         switch self {
+        case .passkeyUnlock: "passkeyUnlock"
         case .passkeyCard: "passkeyCard"
         case .progress: "progress"
         case .verification: "verification"

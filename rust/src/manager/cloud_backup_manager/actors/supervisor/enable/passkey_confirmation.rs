@@ -53,8 +53,15 @@ impl CloudBackupSupervisor {
                 manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
+            // the outcome shows on the pause, so a request a locked password manager refused says
+            // what to unlock before Confirm
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
                 warn!("Confirm saved passkey requires manual retry: {error}");
+                self.screen_outcome.operation_failed_on_passkey(
+                    claim,
+                    &error,
+                    pending.provider_hint(),
+                );
                 self.keep_enable_continuation(claim, pending);
                 self.pause_for_saved_passkey_confirmation(manager, claim);
             }

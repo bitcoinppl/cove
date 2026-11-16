@@ -12,10 +12,10 @@ use crate::manager::cloud_backup_manager::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableFlow, CloudBackupEnablePromptChoice, CloudBackupInventoryIncompleteReason,
     CloudBackupOtherBackupsState, CloudBackupPasskeyHint, CloudBackupPasskeyState,
-    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
-    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupSyncState,
-    CloudBackupVerificationPresentation, CloudBackupVerificationState, CloudBackupWalletItem,
-    CloudOnlyOperation, OtherBackupsOperation, RecordId,
+    CloudBackupPasskeyUnlockHint, CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState,
+    CloudBackupRestoreFlow, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupSyncState, CloudBackupVerificationPresentation, CloudBackupVerificationState,
+    CloudBackupWalletItem, CloudOnlyOperation, OtherBackupsOperation, RecordId,
 };
 
 /// Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
@@ -83,6 +83,10 @@ pub struct CloudBackupConfiguredScreen {
 /// section names
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupSection {
+    /// A banner above everything else: the verification's passkey request didn't finish, and its
+    /// passkey may be in a password manager with a lock of its own, so it says what to unlock
+    /// before verifying again; the verification itself sits near the bottom of the screen
+    PasskeyUnlock(CloudBackupPasskeyUnlockHint),
     /// Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
     PasskeyCard(CloudBackupPasskeyState),
     Progress(CloudBackupProgressSection),
@@ -497,7 +501,11 @@ pub enum CloudBackupOutcome {
         reason: CloudBackupDisableNotStartedReason,
     },
     /// The passkey request did not complete; nothing changed
-    PasskeyNotCompleted,
+    PasskeyNotCompleted {
+        /// What to unlock before trying again, drawn with the outcome; `None` for a passkey in
+        /// the device's own password manager
+        unlock_hint: Option<CloudBackupPasskeyUnlockHint>,
+    },
     Failed {
         message: String,
     },
