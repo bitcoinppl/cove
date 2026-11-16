@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::{fiat::client::PriceResponse, manager::wallet_manager::WalletManagerError};
 use act_zero::call;
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee, psbt::Psbt, unit::BitcoinUnit};
-use cove_util::format::NumberFormatter as _;
+use cove_util::{ResultExt as _, format::NumberFormatter as _};
 use tracing::{debug, trace};
 
 use super::{
@@ -325,9 +325,10 @@ impl RustSendFlowManager {
 
             let psbt: Psbt = drain.await.unwrap_or(Err(WalletManagerError::ActorNotFound))?.into();
             let amount = Arc::new(psbt.output_total_amount());
-            trace!("max drain: {amount:?} at {:?}", request.fee_rate);
+            let fee = psbt.fee().map_err_str(SendFlowError::UnableToGetFeeDetails)?;
+            trace!("max drain: {amount:?} paying {fee:?} at {:?}", request.fee_rate);
 
-            match self.commit_max_drain(trigger, MaxSelection { amount, request }) {
+            match self.commit_max_drain(trigger, MaxSelection { amount, fee, request }) {
                 MaxCommit::Applied(amount) => return Ok(Some(amount)),
                 MaxCommit::Dropped => return Ok(None),
 

@@ -90,10 +90,13 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn amount_exceeds_balance(&self) -> bool {
         let state = self.state.lock();
-        let total_fee_sats = state
-            .fee_selection
-            .as_ref()
-            .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats()));
+        let total_fee_sats = match state.current_max_fee() {
+            Some(fee) => Some(fee.to_sat()),
+            None => state
+                .fee_selection
+                .as_ref()
+                .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats())),
+        };
         let spendable_balance =
             validation::spendable_balance_limit(state.unlocked_spendable_sats, &state.mode);
 

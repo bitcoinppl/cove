@@ -61,6 +61,9 @@ pub struct SendFlowManagerState {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MaxSelection {
     pub amount: Arc<Amount>,
+
+    /// The fee the drain pays, which with `amount` spends every coin it drew on
+    pub fee: Amount,
     pub request: MaxSendRequest,
 }
 
@@ -209,6 +212,36 @@ impl SendFlowManagerState {
 
         // an address that no longer resolves is for address validation to report
         self.max_send_request().is_ok_and(|request| request != max.request)
+    }
+
+    /// The fee of the drain behind the amount, while the amount is a selected Max whose drain
+    /// still answers the current address and fee rate
+    ///
+    /// Balance checks price such an amount with this fee rather than the fee selection's total:
+    /// committing a drain schedules a fee update, and until it lands the selection can still hold
+    /// a total priced for the earlier amount, which would put Max over the balance it was drawn from
+    pub(crate) fn current_max_fee(&self) -> Option<Amount> {
+        let max = self.max_selected.as_ref()?;
+        if self.amount_sats != Some(max.amount.to_sat()) {
+            return None;
+        }
+
+        let is_current = self.max_send_request().is_ok_and(|request| request == max.request);
+        is_current.then_some(max.fee)
+    }
+
+    /// The total fee to check the amount against the balance with: a current Max's drain fee, or
+    /// else the selected fee rate's total, which is zero before any fee rate is selected and
+    /// missing while it is priced
+    pub(crate) fn balance_check_fee_sats(&self) -> Option<u64> {
+        if let Some(fee) = self.current_max_fee() {
+            return Some(fee.to_sat());
+        }
+
+        match self.fee_selection.as_ref() {
+            Some(selection) => selection.selected.total_fee.map(|fee| fee.as_sats()),
+            None => Some(0),
+        }
     }
 
     pub(crate) fn acknowledge_warning(&mut self, kind: SendFlowWarningKind) {

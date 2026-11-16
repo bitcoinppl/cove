@@ -297,10 +297,7 @@ impl RustSendFlowManager {
             let spendable_balance_for_validation =
                 validation::spendable_balance_for_validation(spendable_balance);
 
-            let total_fee_sats = match state.fee_selection.as_ref() {
-                Some(selection) => selection.selected.total_fee.map(|fee| fee.as_sats()),
-                None => Some(0),
-            };
+            let total_fee_sats = state.balance_check_fee_sats();
 
             let fee_consumes_coin_control_balance = state.mode.is_coin_control()
                 && spendable_balance_for_validation > 0
@@ -2198,6 +2195,41 @@ mod tests {
         assert_eq!(output_values(&details), vec![99_645], "Max sends with no change output");
     }
 
+    // Max closes the keyboard, and the screen reports the amount field losing focus before the fee
+    // update Max scheduled reprices the selection, which can still hold a total built for another
+    // amount; the iOS nightly caught that total pushing Max over the balance and focus going back
+    // to the amount behind an "Exceeds available balance" warning
+    #[tokio::test(flavor = "current_thread")]
+    async fn max_closes_the_keyboard_before_its_fee_total_is_repriced() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_with_max_at_5_sat_per_vb().await;
+
+        // the same 5 sat/vB rate, with a total priced for a send with change rather than the drain
+        {
+            let mut options = FeeRateOptionsWithTotalFee::without_totals(base_fee_rates(5.0));
+            options.medium.total_fee = Some(cove_types::amount::Amount::from_sat(1_100));
+            let selected = Arc::new(options.medium);
+
+            let mut state = manager.state.lock();
+            state.fee_selection = Some(super::FeeSelection::new(Arc::new(options), selected));
+        }
+
+        drain_reconcile_messages(&manager);
+        assert!(!manager.amount_exceeds_balance(), "Max must not warn that it exceeds the balance");
+
+        manager.handle_focus_field_changed(Some(super::SetAmountFocusField::Amount), None);
+
+        let messages = drain_reconcile_messages(&manager);
+        assert_eq!(manager.state.lock().focus_field, None, "the keyboard must stay closed");
+        assert!(
+            !messages.iter().any(|message| matches!(
+                message,
+                super::Message::UpdateFocusField(Some(_)) | super::Message::SetAlert(_)
+            )),
+            "leaving the amount after Max must neither refocus nor alert: {messages:?}"
+        );
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn max_drains_that_finish_after_newer_edits_yield_to_them() {
         use super::{
@@ -2219,6 +2251,7 @@ mod tests {
         // Max selected, but less than the new Max of 99,645 sats
         let drain_at_2 = MaxSelection {
             amount: Arc::new(cove_types::amount::Amount::from_sat(99_645)),
+            fee: cove_types::amount::Amount::from_sat(355),
             request: manager.state.lock().max_send_request().expect("address and rate are set"),
         };
 
