@@ -26,9 +26,9 @@ struct VerificationSection: View {
         case .notVerified, .required:
             CloudBackupVerificationStartSection(controls: controls(verify: verifyNow))
 
-        // the progress section draws a running verification
+        // drawn where Verify was tapped, so starting it doesn't move the rows above
         case .running:
-            EmptyView()
+            CloudBackupVerificationRunningSection()
 
         case let .verified(report: report, lastVerifiedAt: _):
             if let report {
@@ -192,6 +192,29 @@ private struct CloudBackupVerificationStartSection: View {
                 .foregroundStyle(.secondary)
 
             controls
+        }
+    }
+}
+
+/// A verification in progress, in place of the section that started it
+private struct CloudBackupVerificationRunningSection: View {
+    var body: some View {
+        Section {
+            HStack(spacing: 12) {
+                ProgressView()
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Verifying Cloud Backup")
+                        .uiTestTruncationProbe()
+
+                    Text("Confirming that your backups can be decrypted and restored")
+                        .font(.caption)
+                        .uiTestTruncationProbe()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
         }
     }
 }

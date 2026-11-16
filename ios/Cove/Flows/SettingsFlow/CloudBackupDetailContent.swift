@@ -207,10 +207,6 @@ private struct CloudBackupProgressContent: View {
                 actions: actions,
                 manager: manager
             )
-        case .verificationCard:
-            CloudBackupVerificationCard()
-        case .verificationInline:
-            CloudBackupVerificationInlineSection()
         }
     }
 }
@@ -268,31 +264,6 @@ private struct CloudBackupInventoryIncompleteSection: View {
             }
         }
         .onAppear { isFocused = true }
-    }
-}
-
-private struct CloudBackupVerificationCard: View {
-    var body: some View {
-        Section {
-            VStack {
-                ProgressView("Verifying cloud backup...")
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-        }
-    }
-}
-
-private struct CloudBackupVerificationInlineSection: View {
-    var body: some View {
-        Section {
-            HStack {
-                ProgressView()
-                    .padding(.trailing, 8)
-
-                Text("Verifying backup integrity...")
-            }
-        }
     }
 }
 

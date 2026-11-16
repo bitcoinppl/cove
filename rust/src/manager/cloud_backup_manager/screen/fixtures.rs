@@ -857,31 +857,21 @@ mod debug {
         )
     }
 
-    /// Verify runs while the inventory check is still incomplete: the verification holds the one
-    /// progress section, inline above the rows, and the incomplete section's Check Again waits
-    /// until it ends
+    /// Verify runs while the inventory check is still incomplete: the verification draws in its
+    /// own section, and the incomplete section above the rows keeps its Check Again
     fn verifying_inventory_incomplete() -> CloudBackupScreen {
-        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        let mut screen = inventory_incomplete();
         screen.actions.entries.retain(|entry| entry.action != A::Verify);
 
         let CloudBackupScreenBody::Configured(configured) = &mut screen.body else {
             return screen;
         };
 
-        let mut running = None;
         for section in &mut configured.sections {
             if let CloudBackupSection::Verification(verification) = section {
                 verification.view.state = CloudBackupVerificationState::Running;
                 verification.controls.clear();
-                running = Some(verification.view.clone());
             }
-        }
-
-        if let Some(view) = running {
-            configured.sections.insert(
-                0,
-                CloudBackupSection::Progress(CloudBackupProgressSection::VerificationInline(view)),
-            );
         }
 
         screen

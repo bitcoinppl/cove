@@ -271,16 +271,6 @@ private fun ProgressSection(
             }
         is CloudBackupProgressSection.InventoryIncomplete ->
             InventoryIncompleteSection(manager, screen, progress.reason, progress.controls)
-        is CloudBackupProgressSection.VerificationCard ->
-            CloudBackupProgressCard(
-                title = "Verifying cloud backup",
-                message = "Confirming that your backups can be decrypted and restored",
-            )
-        is CloudBackupProgressSection.VerificationInline ->
-            CloudBackupProgressCard(
-                title = "Verifying backup integrity",
-                message = "Confirming that wallet backups can be decrypted and restored",
-            )
     }
 }
 

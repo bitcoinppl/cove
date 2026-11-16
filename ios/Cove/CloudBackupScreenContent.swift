@@ -81,19 +81,10 @@ extension CloudBackupScreen {
 }
 
 extension CloudBackupConfiguredScreen {
-    /// The verification view, from its own section or from the progress section that shows it
-    /// running
+    /// The verification view, from its own section, which also draws it running
     var verification: CloudBackupVerificationView? {
-        for section in sections {
-            switch section {
-            case let .verification(section):
-                return section.view
-            case let .progress(.verificationCard(view)),
-                 let .progress(.verificationInline(view)):
-                return view
-            default:
-                continue
-            }
+        for case let .verification(section) in sections {
+            return section.view
         }
 
         return nil
