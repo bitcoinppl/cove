@@ -28724,16 +28724,6 @@ public enum CloudBackupProgressSection: Equatable, Hashable {
          * In the order they are drawn
          */controls: [CloudBackupInventoryControl]
     )
-    /**
-     * A running verification in place of the rows; it draws no control
-     */
-    case verificationCard(CloudBackupVerificationView
-    )
-    /**
-     * A running verification above the rows it will update; it draws no control
-     */
-    case verificationInline(CloudBackupVerificationView
-    )
 
 
 
@@ -28760,12 +28750,6 @@ public struct FfiConverterTypeCloudBackupProgressSection: FfiConverterRustBuffer
         case 2: return .inventoryIncomplete(reason: try FfiConverterTypeCloudBackupInventoryIncompleteReason.read(from: &buf), controls: try FfiConverterSequenceTypeCloudBackupInventoryControl.read(from: &buf)
         )
 
-        case 3: return .verificationCard(try FfiConverterTypeCloudBackupVerificationView.read(from: &buf)
-        )
-
-        case 4: return .verificationInline(try FfiConverterTypeCloudBackupVerificationView.read(from: &buf)
-        )
-
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -28782,16 +28766,6 @@ public struct FfiConverterTypeCloudBackupProgressSection: FfiConverterRustBuffer
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupInventoryIncompleteReason.write(reason, into: &buf)
             FfiConverterSequenceTypeCloudBackupInventoryControl.write(controls, into: &buf)
-
-
-        case let .verificationCard(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterTypeCloudBackupVerificationView.write(v1, into: &buf)
-
-
-        case let .verificationInline(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterTypeCloudBackupVerificationView.write(v1, into: &buf)
 
         }
     }
