@@ -155,12 +155,6 @@ private fun cloudBackupPreviewScreen(): CloudBackupScreen {
                 CloudBackupConfiguredScreen(
                     sections =
                         listOf(
-                            CloudBackupSection.Verification(
-                                CloudBackupVerificationSection(
-                                    view = verification,
-                                    controls = listOf(CloudBackupVerificationControl.Verify),
-                                ),
-                            ),
                             CloudBackupSection.Wallets(
                                 CloudBackupWalletsSection(
                                     upToDate = upToDate.map { CloudBackupOwnRow(it, CloudBackupOwnRecord.CURRENT) },
@@ -194,6 +188,12 @@ private fun cloudBackupPreviewScreen(): CloudBackupScreen {
                                         ),
                                     restoreAll = CloudBackupRestoreAllState.StartAvailable(walletCount = 1u),
                                     operation = CloudOnlyOperation.Idle,
+                                ),
+                            ),
+                            CloudBackupSection.Verification(
+                                CloudBackupVerificationSection(
+                                    view = verification,
+                                    controls = listOf(CloudBackupVerificationControl.Verify),
                                 ),
                             ),
                             CloudBackupSection.TurnOff,

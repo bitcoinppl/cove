@@ -307,10 +307,6 @@ fn configured_screen(
         sections.push(CloudBackupSection::Progress(progress));
     }
 
-    let controls = verification_controls(&configured, consents);
-    sections
-        .push(CloudBackupSection::Verification(CloudBackupVerificationSection { view, controls }));
-
     let last_sync = inventory.rows.as_ref().and_then(|rows| rows.last_sync);
     if let Some(rows) = &inventory.rows {
         push_inventory_sections(&mut sections, rows, inventory, &configured, admission, consents);
@@ -324,6 +320,11 @@ fn configured_screen(
             controls,
         }));
     }
+
+    // verification sits below the inventory, just above Turn Off
+    let controls = verification_controls(&configured, consents);
+    sections
+        .push(CloudBackupSection::Verification(CloudBackupVerificationSection { view, controls }));
 
     sections.push(CloudBackupSection::TurnOff);
 

@@ -265,13 +265,6 @@ mod debug {
         }
 
         sections.extend([
-            verification_section(
-                CloudBackupVerificationState::Verified {
-                    report: None,
-                    last_verified_at: Some(VERIFIED_AT),
-                },
-                vec![CloudBackupVerificationControl::Verify],
-            ),
             CloudBackupSection::Wallets(CloudBackupWalletsSection {
                 up_to_date: vec![CloudBackupOwnRow {
                     wallet: wallet(
@@ -339,6 +332,13 @@ mod debug {
                     }],
                 )],
             }),
+            verification_section(
+                CloudBackupVerificationState::Verified {
+                    report: None,
+                    last_verified_at: Some(VERIFIED_AT),
+                },
+                vec![CloudBackupVerificationControl::Verify],
+            ),
             CloudBackupSection::TurnOff,
         ]);
 

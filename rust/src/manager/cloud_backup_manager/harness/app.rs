@@ -131,11 +131,11 @@ impl NextAction {
 pub(crate) enum SectionKind {
     PasskeyCard,
     Progress,
-    Verification,
     Wallets,
     NotOnDevice,
     ExtraCopies,
     OtherBackups,
+    Verification,
     TurnOff,
 }
 

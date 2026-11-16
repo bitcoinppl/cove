@@ -599,7 +599,7 @@ mod tests {
 
         assert_eq!(
             kinds,
-            ["progress", "verification", "wallets", "notOnDevice", "extraCopies", "turnOff"]
+            ["progress", "wallets", "notOnDevice", "extraCopies", "verification", "turnOff"]
         );
         assert!(matches!(
             &configured.sections[0],
