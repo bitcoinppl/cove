@@ -8,8 +8,8 @@ the top still holds the slice's head. Every other pull request's status follows 
 also catches a slice retargeted at master after its CI ran as a slice
 
 stack-gate.yml runs this from master on workflow_run, when a CI run starts or a CI or UI tests run
-ends, and on pull_request_target, when a base is retargeted or a pull request closes, so a status
-changes as soon as its inputs do without any job waiting. A run that tested the merge tier is one
+ends, or a Stack gate trigger run, which follows a retargeted base or a closed pull request, ends,
+so a status changes as soon as its inputs do without any job waiting. A run that tested the merge tier is one
 whose changes job ran the MARKER_STEP; a commit's newest run that finished those jobs decides
 
     python3 -I .github/scripts/ci_stack_gate.py             # as stack-gate.yml runs it
@@ -54,6 +54,11 @@ CONTEXT: Final = "stack-top"
 
 CI_WORKFLOW: Final = "ci.yml"
 UI_TESTS_WORKFLOW: Final = "ui-tests.yml"
+
+# the workflow that follows a retargeted base or a closed pull request, and its run-name up to the
+# pull request's number
+TRIGGER_WORKFLOW_PATH: Final = ".github/workflows/stack-gate-trigger.yml"
+TRIGGER_RUN_NAME_PREFIX: Final = "Stack gate trigger for #"
 
 # the step of CI's changes job that runs only when the run tests the merge tier, since a slice's
 # merge-tier jobs skip just as path-filtered ones do
@@ -327,53 +332,67 @@ class Seeds:
     fork_heads: tuple[str, ...] = ()
 
 
+def trigger_number(run: Mapping[str, object]) -> int | None:
+    """The pull request a Stack gate trigger run names in its run name, or None for any other run.
+    The trigger runs from the pull request's own workflow file, so the number is only a hint: the
+    gate reads that pull request's state from the API and re-evaluates stacks from there"""
+    if run.get("path") != TRIGGER_WORKFLOW_PATH:
+        return None
+
+    title = run.get("display_title")
+    if not isinstance(title, str) or not title.startswith(TRIGGER_RUN_NAME_PREFIX):
+        raise GateError(f"the trigger run's name doesn't name a pull request: {title!r}")
+
+    number = title.removeprefix(TRIGGER_RUN_NAME_PREFIX)
+    if not number.isdigit():
+        raise GateError(f"the trigger run's name doesn't name a pull request: {title!r}")
+
+    return int(number)
+
+
 def seeds_for(event_name: str, event: Mapping[str, object], github: GitHub) -> Seeds:
     """The pull requests and heads whose statuses an event can change"""
-    match event_name:
-        case "workflow_run":
-            run = event.get("workflow_run")
-            repository = event.get("repository")
-            if not isinstance(run, dict) or not isinstance(repository, dict):
-                raise GateError("the workflow_run event has no run or repository")
+    if event_name != "workflow_run":
+        return Seeds()
 
-            head_repo = run.get("head_repository")
-            fork = isinstance(head_repo, dict) and head_repo.get("full_name") != repository.get(
-                "full_name"
-            )
-            # GitHub leaves a fork's pull_requests empty, and a fork's pull request is never in
-            # a stack, so its own head is all it gates
-            if fork:
-                head_sha = run.get("head_sha")
-                return Seeds(fork_heads=(head_sha,) if isinstance(head_sha, str) else ())
+    run = event.get("workflow_run")
+    repository = event.get("repository")
+    if not isinstance(run, dict) or not isinstance(repository, dict):
+        raise GateError("the workflow_run event has no run or repository")
 
-            pulls = run.get("pull_requests") or []
-            return Seeds(
-                tuple(
-                    pull["number"]
-                    for pull in pulls
-                    if isinstance(pull, dict) and isinstance(pull.get("number"), int)
-                )
-            )
+    number = trigger_number(run)
+    if number is not None:
+        return trigger_seeds(number, github)
 
-        case "pull_request_target":
-            pull = event.get("pull_request")
-            if not isinstance(pull, dict):
-                raise GateError("the pull_request_target event has no pull request")
+    head_repo = run.get("head_repository")
+    fork = isinstance(head_repo, dict) and head_repo.get("full_name") != repository.get("full_name")
 
-            # closing a stack's top makes the pull request below it the top, the one whose head is
-            # the closed one's base
-            if event.get("action") == "closed":
-                base = pull.get("base")
-                ref = base.get("ref") if isinstance(base, dict) else None
-                return Seeds(
-                    tuple(github.open_pulls_with_head(ref)) if isinstance(ref, str) else ()
-                )
+    # GitHub leaves a fork's pull_requests empty, and a fork's pull request is never in a stack, so
+    # its own head is all it gates
+    if fork:
+        head_sha = run.get("head_sha")
+        return Seeds(fork_heads=(head_sha,) if isinstance(head_sha, str) else ())
 
-            number = pull.get("number")
-            return Seeds((number,) if isinstance(number, int) else ())
+    pulls = run.get("pull_requests") or []
+    return Seeds(
+        tuple(
+            pull["number"]
+            for pull in pulls
+            if isinstance(pull, dict) and isinstance(pull.get("number"), int)
+        )
+    )
 
-        case _:
-            return Seeds()
+
+def trigger_seeds(number: int, github: GitHub) -> Seeds:
+    """The pull requests a retargeted or closed pull request's change reaches"""
+    pr, _ = github.stack(number)
+
+    # closing a stack's top makes the pull request below it the top, the one whose head is the
+    # closed one's base
+    if not pr.is_open:
+        return Seeds(tuple(github.open_pulls_with_head(pr.base_ref)))
+
+    return Seeds((number,))
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,7 +547,11 @@ def main(env: Mapping[str, str], argv: Sequence[str]) -> int:
         if not isinstance(event, dict):
             raise GateError("the event payload isn't an object")
 
-        seeds = seeds_for(env.get("GITHUB_EVENT_NAME", ""), event, github)
+        try:
+            seeds = seeds_for(env.get("GITHUB_EVENT_NAME", ""), event, github)
+        except NoStack as error:
+            raise GateError(str(error)) from error
+
         repository = event.get("repository")
         default_branch = repository.get("default_branch") if isinstance(repository, dict) else None
         trunk = default_branch if isinstance(default_branch, str) else trunk

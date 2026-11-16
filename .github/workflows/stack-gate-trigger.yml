@@ -1,0 +1,27 @@
+name: Stack gate trigger
+
+# tells stack-gate.yml that a base was retargeted or a pull request closed, which changes which
+# head tests a slice without starting CI. GitHub blocks pull_request_target in public repositories
+# by default, and this needs no token, so it runs on pull_request, for forks' pull requests too, and
+# stack-gate.yml picks it up on workflow_run, which posts the statuses from master. The run name
+# carries the pull request's number, the one thing workflow_run's payload lacks for a closed one
+on:
+  pull_request:
+    types: [edited, closed]
+
+# quoted, since YAML reads an unquoted ` #` as the start of a comment
+run-name: "Stack gate trigger for #${{ github.event.pull_request.number }}"
+
+permissions: {}
+
+jobs:
+  changed:
+    # an edit matters only when it moves the base; a skipped job leaves the run skipped, which the
+    # gate ignores
+    if: github.event.action == 'closed' || github.event.changes.base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - env:
+          PR: ${{ github.event.pull_request.number }}
+        run: echo "the stack of pull request $PR changed"
