@@ -265,13 +265,6 @@ mod debug {
         }
 
         sections.extend([
-            verification_section(
-                CloudBackupVerificationState::Verified {
-                    report: None,
-                    last_verified_at: Some(VERIFIED_AT),
-                },
-                vec![CloudBackupVerificationControl::Verify],
-            ),
             CloudBackupSection::Wallets(CloudBackupWalletsSection {
                 up_to_date: vec![CloudBackupOwnRow {
                     wallet: wallet(
@@ -339,6 +332,13 @@ mod debug {
                     }],
                 )],
             }),
+            verification_section(
+                CloudBackupVerificationState::Verified {
+                    report: None,
+                    last_verified_at: Some(VERIFIED_AT),
+                },
+                vec![CloudBackupVerificationControl::Verify],
+            ),
             CloudBackupSection::TurnOff,
         ]);
 
@@ -405,13 +405,6 @@ mod debug {
     /// A verified backup holding one up-to-date wallet, with this device's record of it
     fn verified_with_one_wallet(record: CloudBackupOwnRecord) -> CloudBackupScreen {
         let sections = vec![
-            verification_section(
-                CloudBackupVerificationState::Verified {
-                    report: None,
-                    last_verified_at: Some(VERIFIED_AT),
-                },
-                vec![CloudBackupVerificationControl::Verify],
-            ),
             CloudBackupSection::Wallets(CloudBackupWalletsSection {
                 up_to_date: vec![CloudBackupOwnRow {
                     wallet: wallet(
@@ -425,6 +418,13 @@ mod debug {
                 sync: CloudBackupSyncState::Idle,
                 controls: Vec::new(),
             }),
+            verification_section(
+                CloudBackupVerificationState::Verified {
+                    report: None,
+                    last_verified_at: Some(VERIFIED_AT),
+                },
+                vec![CloudBackupVerificationControl::Verify],
+            ),
             CloudBackupSection::TurnOff,
         ];
 
@@ -444,16 +444,16 @@ mod debug {
     /// A loaded inventory with no wallets in it: no rows, so nothing to sync
     fn empty_inventory() -> CloudBackupScreen {
         let sections = vec![
-            verification_section(
-                CloudBackupVerificationState::NotVerified,
-                vec![CloudBackupVerificationControl::Verify],
-            ),
             CloudBackupSection::Wallets(CloudBackupWalletsSection {
                 up_to_date: Vec::new(),
                 needs_sync: Vec::new(),
                 sync: CloudBackupSyncState::Idle,
                 controls: Vec::new(),
             }),
+            verification_section(
+                CloudBackupVerificationState::NotVerified,
+                vec![CloudBackupVerificationControl::Verify],
+            ),
             CloudBackupSection::TurnOff,
         ];
 
@@ -534,21 +534,6 @@ mod debug {
             detail: None,
         };
         let sections = vec![
-            verification_section(
-                CloudBackupVerificationState::NeedsAttention {
-                    report,
-                    checked_at: Some(VERIFIED_AT),
-                },
-                vec![
-                    CloudBackupVerificationControl::DeleteUnreadableBackups {
-                        consent: CloudBackupBatchDeleteConsent::fixture(&[
-                            "record-undecryptable-1",
-                            "record-undecryptable-2",
-                        ]),
-                    },
-                    CloudBackupVerificationControl::Verify,
-                ],
-            ),
             CloudBackupSection::NotOnDevice(CloudBackupNotOnDeviceSection {
                 rows: ["record-undecryptable-1", "record-undecryptable-2"]
                     .into_iter()
@@ -569,6 +554,21 @@ mod debug {
                 restore_all: CloudBackupRestoreAllState::NotShown,
                 operation: CloudOnlyOperation::Idle,
             }),
+            verification_section(
+                CloudBackupVerificationState::NeedsAttention {
+                    report,
+                    checked_at: Some(VERIFIED_AT),
+                },
+                vec![
+                    CloudBackupVerificationControl::DeleteUnreadableBackups {
+                        consent: CloudBackupBatchDeleteConsent::fixture(&[
+                            "record-undecryptable-1",
+                            "record-undecryptable-2",
+                        ]),
+                    },
+                    CloudBackupVerificationControl::Verify,
+                ],
+            ),
             CloudBackupSection::TurnOff,
         ];
 
@@ -611,6 +611,11 @@ mod debug {
         controls: Vec<CloudBackupOtherBackupsControl>,
     ) -> Vec<CloudBackupSection> {
         vec![
+            CloudBackupSection::OtherBackups(CloudBackupOtherBackupsSection {
+                state,
+                operation: OtherBackupsOperation::Idle,
+                controls,
+            }),
             verification_section(
                 CloudBackupVerificationState::Verified {
                     report: None,
@@ -618,11 +623,6 @@ mod debug {
                 },
                 vec![CloudBackupVerificationControl::Verify],
             ),
-            CloudBackupSection::OtherBackups(CloudBackupOtherBackupsSection {
-                state,
-                operation: OtherBackupsOperation::Idle,
-                controls,
-            }),
             CloudBackupSection::TurnOff,
         ]
     }
