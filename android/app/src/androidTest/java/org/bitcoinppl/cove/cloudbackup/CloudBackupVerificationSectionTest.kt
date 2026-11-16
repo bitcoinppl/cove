@@ -119,6 +119,17 @@ class CloudBackupVerificationSectionTest {
         compose.onNodeWithText("Verify Now").assertIsDisplayed()
     }
 
+    @Test
+    fun runningVerificationDrawsInItsOwnSection() {
+        // drawn where Verify was tapped, so starting it doesn't move the rows above
+        val screen = cloudBackupFixture("configured-verifying-inventory-incomplete")
+
+        compose.setVerificationSection(screen)
+
+        compose.onNodeWithText("Verifying cloud backup").assertIsDisplayed()
+        compose.onAllNodesWithText("Verify Now").assertCountEquals(0)
+    }
+
     private fun ComposeContentTestRule.setVerificationSection(screen: CloudBackupScreen) {
         setContent {
             CoveTheme(darkTheme = false) {

@@ -98,7 +98,12 @@ internal fun VerificationSection(
             CloudBackupVerificationState.Required,
             -> controls(VerifyControl.Card("Verify Now"))
 
-            CloudBackupVerificationState.Running -> Unit
+            // drawn where Verify was tapped, so starting it doesn't move the rows above
+            CloudBackupVerificationState.Running ->
+                CloudBackupProgressCard(
+                    title = "Verifying cloud backup",
+                    message = "Confirming that your backups can be decrypted and restored",
+                )
 
             is CloudBackupVerificationState.Verified -> {
                 verification.report?.let { VerifiedSectionContent(report = it) }

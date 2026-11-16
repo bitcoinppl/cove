@@ -110,10 +110,6 @@ pub enum CloudBackupProgressSection {
         /// In the order they are drawn
         controls: Vec<CloudBackupInventoryControl>,
     },
-    /// A running verification in place of the rows; it draws no control
-    VerificationCard(CloudBackupVerificationView),
-    /// A running verification above the rows it will update; it draws no control
-    VerificationInline(CloudBackupVerificationView),
 }
 
 /// A control the incomplete-inventory section draws

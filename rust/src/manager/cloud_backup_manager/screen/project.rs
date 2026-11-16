@@ -304,21 +304,10 @@ fn configured_screen(
         .filter(|_| configured.passkey.shows_provider_hint())
         .map(CloudBackupPasskeyHint::from_provider_hint);
 
-    // the screen has one progress section, and a running verification takes it over the
-    // inventory's: inline above rows it will update, or a card in their place
-    let rows_visible = inventory.rows.as_ref().is_some_and(InventoryRows::has_rows);
-    let progress = match configured.verification {
-        CloudBackupVerificationState::Running if rows_visible => {
-            Some(CloudBackupProgressSection::VerificationInline(view.clone()))
-        }
-        CloudBackupVerificationState::Running => {
-            Some(CloudBackupProgressSection::VerificationCard(view.clone()))
-        }
-        _ => inventory.progress.map(|progress| inventory_progress(progress, &configured)),
-    };
-
-    if let Some(progress) = progress {
-        sections.push(CloudBackupSection::Progress(progress));
+    // the progress section is the inventory's alone; a running verification draws in its own
+    // section, where it was started, so starting one doesn't move the rows above it
+    if let Some(progress) = inventory.progress {
+        sections.push(CloudBackupSection::Progress(inventory_progress(progress, &configured)));
     }
 
     let last_sync = inventory.rows.as_ref().and_then(|rows| rows.last_sync);

@@ -624,10 +624,10 @@ mod tests {
         assert!(empty.actions.availability(A::Verify).is_some());
     }
 
-    /// A running Verify takes the one progress section from an incomplete inventory check, and a
-    /// second progress section is caught
+    /// A running Verify draws in its own section, where it was started, and leaves the one
+    /// progress section to the incomplete inventory check; a second progress section is caught
     #[test]
-    fn a_running_verification_holds_the_only_progress_section() {
+    fn a_running_verification_draws_in_its_own_section() {
         let mut screen = named("configured-verifying-inventory-incomplete");
         let Body::Configured(configured) = &screen.body else { panic!("a configured screen") };
         let kinds: Vec<_> = configured.sections.iter().map(section_kind).collect();
@@ -638,9 +638,9 @@ mod tests {
         );
         assert!(matches!(
             &configured.sections[0],
-            CloudBackupSection::Progress(CloudBackupProgressSection::VerificationInline(view))
-                if view.state == CloudBackupVerificationState::Running
+            CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete { .. })
         ));
+        assert_eq!(verification(&screen), Some(&CloudBackupVerificationState::Running));
 
         let Body::Configured(configured) = &mut screen.body else { unreachable!() };
         configured

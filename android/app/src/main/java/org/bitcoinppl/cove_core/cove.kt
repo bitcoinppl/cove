@@ -45410,30 +45410,6 @@ sealed class CloudBackupProgressSection {
         companion object
     }
 
-    /**
-     * A running verification in place of the rows; it draws no control
-     */
-    data class VerificationCard(
-        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationView) : CloudBackupProgressSection()
-
-    {
-
-
-        companion object
-    }
-
-    /**
-     * A running verification above the rows it will update; it draws no control
-     */
-    data class VerificationInline(
-        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationView) : CloudBackupProgressSection()
-
-    {
-
-
-        companion object
-    }
-
 
 
 
@@ -45455,12 +45431,6 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
                 FfiConverterTypeCloudBackupInventoryIncompleteReason.read(buf),
                 FfiConverterSequenceTypeCloudBackupInventoryControl.read(buf),
                 )
-            3 -> CloudBackupProgressSection.VerificationCard(
-                FfiConverterTypeCloudBackupVerificationView.read(buf),
-                )
-            4 -> CloudBackupProgressSection.VerificationInline(
-                FfiConverterTypeCloudBackupVerificationView.read(buf),
-                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45480,20 +45450,6 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
                 + FfiConverterSequenceTypeCloudBackupInventoryControl.allocationSize(value.`controls`)
             )
         }
-        is CloudBackupProgressSection.VerificationCard -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupVerificationView.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupProgressSection.VerificationInline -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupVerificationView.allocationSize(value.v1)
-            )
-        }
     }
 
     override fun write(value: CloudBackupProgressSection, buf: ByteBuffer) {
@@ -45506,16 +45462,6 @@ public object FfiConverterTypeCloudBackupProgressSection : FfiConverterRustBuffe
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupInventoryIncompleteReason.write(value.`reason`, buf)
                 FfiConverterSequenceTypeCloudBackupInventoryControl.write(value.`controls`, buf)
-                Unit
-            }
-            is CloudBackupProgressSection.VerificationCard -> {
-                buf.putInt(3)
-                FfiConverterTypeCloudBackupVerificationView.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupProgressSection.VerificationInline -> {
-                buf.putInt(4)
-                FfiConverterTypeCloudBackupVerificationView.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

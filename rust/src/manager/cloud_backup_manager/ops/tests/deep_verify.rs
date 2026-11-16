@@ -629,16 +629,18 @@ async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
     }
 }
 
-/// Verify run while the inventory is still loading, or after a load failed, keeps one progress
-/// section, the verification's, since the platforms key sections by kind
+/// Verify run while the inventory is still loading, or after a load failed, draws in its own
+/// section and leaves the one progress section to the inventory, so starting it doesn't move the
+/// rows; the platforms key sections by kind
 #[tokio::test(flavor = "current_thread")]
-async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
+async fn verifying_leaves_the_progress_section_to_an_unfinished_inventory() {
     use crate::manager::cloud_backup_manager::screen::{
-        CloudBackupProgressSection, CloudBackupSection, misordered_section_kinds,
-        repeated_section_kinds, section_kind,
+        CloudBackupActionAvailability, CloudBackupProgressSection, CloudBackupScreenAction,
+        CloudBackupSection, misordered_section_kinds, repeated_section_kinds, section_kind,
     };
     use crate::manager::cloud_backup_manager::{
-        CloudBackupInventoryIncompleteReason, CloudBackupWalletItem, CloudBackupWalletStatus,
+        CloudBackupInventoryIncompleteReason, CloudBackupVerificationState, CloudBackupWalletItem,
+        CloudBackupWalletStatus,
     };
 
     let _guard = async_test_lock().lock().await;
@@ -665,7 +667,16 @@ async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
             .collect::<Vec<_>>()
     };
 
-    // the first load is still running, with no rows to show, so the verification is a card
+    let verification_state = |manager: &RustCloudBackupManager| {
+        let screen = manager.published_screen();
+        let CloudBackupScreenBody::Configured(configured) = screen.body else { return None };
+        configured.sections.into_iter().find_map(|section| match section {
+            CloudBackupSection::Verification(verification) => Some(verification.view.state),
+            _ => None,
+        })
+    };
+
+    // the first load is still running, with no rows to show
     configure_enabled_cloud_backup(&manager, globals, 0);
     manager.apply_detail_outcome(manager.inventory_scope(), CloudBackupDetailOutcome::Checking);
     manager.apply_verification_state(VerificationState::Verifying);
@@ -673,10 +684,11 @@ async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
 
     assert!(matches!(
         progress_sections(&manager).as_slice(),
-        [CloudBackupProgressSection::VerificationCard(_)]
+        [CloudBackupProgressSection::InventoryChecking]
     ));
+    assert_eq!(verification_state(&manager), Some(CloudBackupVerificationState::Running));
 
-    // a refresh failed and kept its rows, so the verification runs inline above them
+    // a refresh failed and kept its rows, and its Check Again stays available while Verify runs
     configure_enabled_cloud_backup(&manager, globals, 1);
     let mut wallet = crate::wallet::metadata::WalletMetadata::preview_new();
     wallet.wallet_type = crate::wallet::metadata::WalletType::WatchOnly;
@@ -718,10 +730,15 @@ async fn verifying_takes_the_progress_section_from_an_unfinished_inventory() {
 
     assert!(matches!(
         progress_sections(&manager).as_slice(),
-        [CloudBackupProgressSection::VerificationInline(_)]
+        [CloudBackupProgressSection::InventoryIncomplete { .. }]
     ));
+    assert_eq!(verification_state(&manager), Some(CloudBackupVerificationState::Running));
+    assert_eq!(
+        manager.published_screen().actions.availability(CloudBackupScreenAction::RefreshDetail),
+        Some(CloudBackupActionAvailability::Available)
+    );
 
-    // once the verification ends, the incomplete load's progress returns
+    // once the verification ends, the incomplete load's progress stays
     manager.apply_verification_state(VerificationState::Idle);
     supervisor_checkpoint(&manager).await;
 

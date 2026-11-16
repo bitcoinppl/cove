@@ -543,10 +543,11 @@ mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.
 The platform result feeds the same Rust inventory owner on both platforms.
 
-Rust projects the progress section from verification and inventory state. A
-running verification's progress comes first: a card when no wallet rows are
-listed, an inline row when they are. Inventory progress still shows below it.
-The verification section draws no second running indicator.
+Rust projects the progress section from inventory state alone: a load still
+checking, or one that could not be confirmed complete, with its Check Again. A
+running verification draws in the verification section, near the bottom where
+Verify was tapped, so starting or finishing one doesn't move the rows above
+it.
 
 Each listed record is one typed row: Not on This Device, Extra Copy,
 Unsupported, Unreadable (with why: the download, the provider, parsing or

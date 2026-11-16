@@ -133,7 +133,6 @@ enum CloudBackupUITestStateProbe {
             switch progress {
             case .inventoryChecking: return "checking"
             case .inventoryIncomplete: return "incomplete"
-            case .verificationCard, .verificationInline: continue
             }
         }
 

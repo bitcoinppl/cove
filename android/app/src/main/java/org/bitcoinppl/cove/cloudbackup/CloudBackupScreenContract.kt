@@ -39,7 +39,6 @@ import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupNoticeKind
 import org.bitcoinppl.cove_core.CloudBackupOutcomeTarget
-import org.bitcoinppl.cove_core.CloudBackupProgressSection
 import org.bitcoinppl.cove_core.CloudBackupRowAction
 import org.bitcoinppl.cove_core.CloudBackupRowActionKind
 import org.bitcoinppl.cove_core.CloudBackupRowControl
@@ -172,20 +171,11 @@ internal inline fun <reified T : CloudBackupSection> CloudBackupConfiguredScreen
     sections.firstOrNull { it is T } as T?
 
 /**
- * Verification status wherever Rust put it: the verification section, or a progress card while it
- * runs; onboarding and the root prompt read it to describe the verification they are waiting on
+ * Verification status from the verification section, which also draws it running; onboarding and
+ * the root prompt read it to describe the verification they are waiting on
  */
 internal val CloudBackupScreen.verification: CloudBackupVerificationView?
-    get() {
-        val configured = configured ?: return null
-        configured.section<CloudBackupSection.Verification>()?.let { return it.v1.view }
-
-        return when (val progress = configured.section<CloudBackupSection.Progress>()?.v1) {
-            is CloudBackupProgressSection.VerificationCard -> progress.v1
-            is CloudBackupProgressSection.VerificationInline -> progress.v1
-            else -> null
-        }
-    }
+    get() = configured?.section<CloudBackupSection.Verification>()?.v1?.view
 
 /** The verification sheet and feedback state, hidden when Rust shows no verification */
 internal val CloudBackupScreen.verificationPresentation: CloudBackupVerificationPresentation

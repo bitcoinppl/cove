@@ -204,13 +204,6 @@ impl ListedRecord {
     }
 }
 
-impl InventoryRows {
-    /// Any row is drawn, so progress over them shows inline rather than in their place
-    pub(crate) fn has_rows(&self) -> bool {
-        !self.up_to_date.is_empty() || !self.needs_sync.is_empty() || !self.listed.is_empty()
-    }
-}
-
 impl RustCloudBackupManager {
     /// The inventory facts as the owner and the reducer hold them now
     pub(crate) fn inventory_facts(&self) -> InventoryFacts {
