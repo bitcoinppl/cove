@@ -39,6 +39,13 @@ fi
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
+# git exports GIT_DIR, and sometimes other repository variables, to hooks, which pins every git
+# command the checks run to this repository with the current directory as its top level, so a
+# `git rev-parse --show-toplevel` from rust/ answers rust/; clearing them lets each git command
+# find the repository from its own directory, as it does when `just pre-push` runs by hand
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+
 # the oids and options never contain spaces, so splitting the list on them is safe
 # shellcheck disable=SC2086
 exec just pre-push $revisions --not --remotes </dev/null

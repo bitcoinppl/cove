@@ -1,8 +1,10 @@
 //! Runs `just pre-push` in a throwaway clone, directly and through the git hook `just install-hooks`
-//! enables, and checks which commits its Rust format check lets through
+//! enables, and checks which commits its Rust format check lets through and that the hook leaves no
+//! git hook environment behind for the checks
 
 use std::{
     fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -214,4 +216,47 @@ fn rustfmt_gates_pushes_by_the_commits_they_add() {
     let output = repo.push(&["origin", "--delete", "feature"]);
     assert!(output.status.success(), "{}", text(&output));
     assert_eq!(repo.remote_branch("feature"), None);
+}
+
+#[test]
+fn hook_hands_the_checks_a_repository_they_find_from_any_directory() {
+    assert_installed("just", &["--version"]);
+
+    let repo = Repo::new();
+    let linked = repo.dir.path().join("linked");
+    let linked_path = linked.to_str().unwrap();
+    repo.git(&["worktree", "add", "-q", "-b", "linked", linked_path]);
+
+    // core.hooksPath is per worktree, so the linked worktree enables the hook itself
+    let output = repo.program_in("just", &linked, &["install-hooks"]).output().unwrap();
+    assert!(output.status.success(), "{}", text(&output));
+
+    fs::write(linked.join("README.md"), "linked\n").unwrap();
+    repo.git_in(&linked, &["add", "-A"]);
+    repo.git_in(&linked, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "linked"]);
+
+    // a stand-in for `just` that records the top level git finds from rust/, as the qa check's
+    // xtask does, where git's hook environment would make it answer rust/ itself
+    let bin = repo.dir.path().join("bin");
+    let found = repo.dir.path().join("toplevel");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("just"),
+        format!("#!/bin/sh\ncd rust && git rev-parse --show-toplevel > '{}'\n", found.display()),
+    )
+    .unwrap();
+
+    fs::set_permissions(bin.join("just"), fs::Permissions::from_mode(0o755)).unwrap();
+
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let output = repo
+        .command_in(&linked, &["push", "-q", "origin", "linked"])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", text(&output));
+
+    let toplevel = fs::read_to_string(&found).unwrap();
+    assert_eq!(Path::new(toplevel.trim()), linked.canonicalize().unwrap());
 }

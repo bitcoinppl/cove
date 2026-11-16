@@ -469,7 +469,7 @@ just install-hooks all   # every worktree of this clone, including ones created 
 just uninstall-hooks     # or `just uninstall-hooks all`
 ```
 
-Both set `core.hooksPath` to `tools/git-hooks`, for one worktree through `git config --worktree` or for the whole clone, and refuse to replace a `core.hooksPath` that is already set to something else. In a bare clone with worktrees, use `just install-hooks all`, since per-worktree settings would make git apply the shared `core.bare` to every worktree. Each worktree runs the hook from its own checkout.
+Both set `core.hooksPath` to `tools/git-hooks`, for one worktree through `git config --worktree` or for the whole clone, and refuse to replace a `core.hooksPath` that is already set to something else. In a bare clone with worktrees, use `just install-hooks all`, since per-worktree settings would make git apply the shared `core.bare` to every worktree. Each worktree runs the hook from its own checkout. The hook clears the repository variables git exports to hooks, such as `GIT_DIR`, before it runs `just pre-push`, so the checks find the repository from their own directories just as they do when run by hand; otherwise a git command run from `rust/` in a linked worktree treats `rust/` as the top level.
 
 `just pre-push` runs only the checks that the commits' files need, with the commands and configs of the CI jobs they stand in for:
 
@@ -491,4 +491,4 @@ A check whose tool is missing is skipped with a one-line warning rather than fai
 
 To push without the hook's checks once, use `git push --no-verify`. To skip some of them, list them in `COVE_PRE_PUSH_SKIP`, as in `COVE_PRE_PUSH_SKIP=bindings git push` or `COVE_PRE_PUSH_SKIP=bindings just pre-push`, or use `COVE_PRE_PUSH_SKIP=all`.
 
-[`rust/xtask/tests/pre_push_hook.rs`](../rust/xtask/tests/pre_push_hook.rs) enables the hook with `just install-hooks` in a throwaway clone. It checks that `just pre-push` exits 1 for an unformatted Rust commit, 0 once a later commit formats it and 2 for an unknown revision. It also checks that the hook stops an unformatted commit on a new branch and in a force push, and lets a formatted one, a push without Rust changes and a delete through.
+[`rust/xtask/tests/pre_push_hook.rs`](../rust/xtask/tests/pre_push_hook.rs) enables the hook with `just install-hooks` in a throwaway clone. It checks that `just pre-push` exits 1 for an unformatted Rust commit, 0 once a later commit formats it and 2 for an unknown revision. It also checks that the hook stops an unformatted commit on a new branch and in a force push, and lets a formatted one, a push without Rust changes and a delete through, and that a push from a linked worktree hands the checks an environment in which git finds the worktree's top level from `rust/`.
