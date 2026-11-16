@@ -41,6 +41,7 @@ mod debug {
         CloudBackupVerificationSection, CloudBackupVerificationView, CloudBackupWalletsControl,
         CloudBackupWalletsSection,
     };
+    use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
     use crate::manager::cloud_backup_manager::model::CloudBackupPasskeyRepairState;
     use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
     use crate::manager::cloud_backup_manager::{
@@ -56,7 +57,7 @@ mod debug {
         OtherBackupsOperation, RecordId,
     };
     use crate::manager::cloud_backup_manager::{
-        CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
+        CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent,
     };
 
     /// Prefixes every fixture name; the release-seam check looks for it

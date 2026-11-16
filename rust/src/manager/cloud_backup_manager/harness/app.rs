@@ -24,6 +24,7 @@ use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, EnableIntent, ReviewExit, UserIntent,
 };
+use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     TestGlobals, install_test_globals, register_test_supervisor,
 };
@@ -36,11 +37,10 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupUnreadableKind, CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory,
-    CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupPendingEnableRecovery,
-    CloudBackupResetPermit, CloudBackupRowDeleteConsent, CloudBackupRuntimeOwnership,
-    CloudBackupVerificationSource, RecordId, RustCloudBackupManager,
-    initialize_cloud_backup_manager_with,
+    CLOUD_BACKUP_MANAGER, CloudBackupBatchDeleteConsent, CloudBackupEnableContext,
+    CloudBackupManagerAction, CloudBackupPendingEnableRecovery, CloudBackupResetPermit,
+    CloudBackupRowDeleteConsent, CloudBackupRuntimeOwnership, CloudBackupVerificationSource,
+    RecordId, RustCloudBackupManager, initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 

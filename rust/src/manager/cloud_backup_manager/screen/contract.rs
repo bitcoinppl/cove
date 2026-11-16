@@ -450,9 +450,8 @@ mod tests {
     /// names a record no undecryptable row shows or leaves one out, are caught
     #[test]
     fn a_delete_whose_consent_does_not_match_its_rows_is_caught() {
-        use super::super::super::{
-            CloudBackupBatchDeleteConsent, CloudBackupDeleteCategory, CloudBackupRowDeleteConsent,
-        };
+        use super::super::super::delete_consent::CloudBackupDeleteCategory;
+        use super::super::super::{CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent};
         use super::super::types::CloudBackupDeleteConfirmation;
 
         let delete = |record_id: &str, category| CloudBackupRowActionKind::Delete {
