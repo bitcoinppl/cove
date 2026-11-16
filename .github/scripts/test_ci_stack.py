@@ -651,12 +651,13 @@ class WorkflowNameTests(unittest.TestCase):
                 self.assertIn(name[1], gate.split("workflows:")[1].splitlines()[0])
 
     def test_the_trigger_names_its_pull_request_as_the_gate_reads_it(self) -> None:
+        # the quotes matter: unquoted, YAML drops the ` #` and the number after it as a comment
         trigger = self.read(Path(TRIGGER_WORKFLOW_PATH).name)
         name = re.search(r"(?m)^name: (.+)$", trigger)
         assert name is not None
 
         self.assertIn(
-            f"run-name: {TRIGGER_RUN_NAME_PREFIX}${{{{ github.event.pull_request.number }}}}\n",
+            f'run-name: "{TRIGGER_RUN_NAME_PREFIX}${{{{ github.event.pull_request.number }}}}"\n',
             trigger,
         )
         # the gate's if tells trigger runs apart by this name

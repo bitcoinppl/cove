@@ -9,7 +9,8 @@ on:
   pull_request:
     types: [edited, closed]
 
-run-name: Stack gate trigger for #${{ github.event.pull_request.number }}
+# quoted, since YAML reads an unquoted ` #` as the start of a comment
+run-name: "Stack gate trigger for #${{ github.event.pull_request.number }}"
 
 permissions: {}
 
