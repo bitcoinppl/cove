@@ -112,18 +112,23 @@ paths = ["ios/CoveUITests/CloudBackupOnboardingLateOfferFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests"]
 
 # its record ids, openDetailWithTwoCloudOnlyWallets and RestoreAllScreen are shared with the Large
-# Text and Network suites
+# Text, Network and Turn Off suites
 [[rule]]
 paths = ["ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift"]
 suites = [
     "CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupTurnOffFullAppUITests",
 ]
 
 [[rule]]
 paths = ["ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupTurnOffFullAppUITests"]
 
 [[rule]]
 paths = ["ios/CoveUITests/PrivateKeyExportFullAppUITests.swift"]
@@ -182,11 +187,13 @@ suites = [
     "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
 ]
 
-# the Cloud Backup host app and its controls run only under CoveCloudBackupUITests
+# the Cloud Backup host app, its controls and its accessibility identifiers run only under
+# CoveCloudBackupUITests; CoveTests also compiles the identifiers, but no UI suite runs it
 [[rule]]
 paths = [
     "ios/CoveUITests/CloudBackupHostControl.swift",
     "ios/CoveUITests/CloudBackupHostUITestSupport.swift",
+    "ios/CoveUITests/CloudBackupUIIdentifiers.swift",
     "ios/CoveCloudBackupUITestHost/*",
 ]
 suites = [
@@ -200,6 +207,7 @@ suites = [
     "CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupDisableFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupTurnOffFullAppUITests",
 ]
 
 # app flows behind one entry point that only these suites open. The Cloud Backup host app also
