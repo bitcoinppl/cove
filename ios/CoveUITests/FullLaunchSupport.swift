@@ -294,11 +294,18 @@ extension XCUIApplication {
         button.tap()
     }
 
-    /// On CI a tap can land while the screen settles or a system banner passes over it and do
-    /// nothing, so tap again while the button is still showing
     func tapButton(startingWith labelPrefix: String, until target: XCUIElement) {
-        let button = button(startingWith: labelPrefix)
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for button starting with '\(labelPrefix)'")
+        tap(button(startingWith: labelPrefix), until: target, described: "the button starting with '\(labelPrefix)'")
+    }
+
+    func tapButton(named name: String, until target: XCUIElement) {
+        tap(buttons[name], until: target, described: "button '\(name)'")
+    }
+
+    /// On CI a tap can land while the screen settles, a menu animates in, or a system banner
+    /// passes over the button and do nothing, so tap again while the button is still showing
+    private func tap(_ button: XCUIElement, until target: XCUIElement, described description: String) {
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for \(description)")
 
         for _ in 0 ..< 3 {
             if button.exists, button.isHittable {
@@ -312,7 +319,7 @@ extension XCUIApplication {
             if target.waitForExistence(timeout: 5) { return }
         }
 
-        XCTFail("Tapping the button starting with '\(labelPrefix)' never showed \(target)")
+        XCTFail("Tapping \(description) never showed \(target)")
     }
 
     func goBack() {
