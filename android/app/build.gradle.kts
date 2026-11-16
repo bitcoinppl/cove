@@ -33,7 +33,7 @@ android {
         applicationId = "org.bitcoinppl.cove"
         minSdk = 33
         targetSdk = 36
-        versionCode = 48
+        versionCode = 49
         versionName = "1.4.0"
         manifestPlaceholders["keyTeleportAppLinksEnabled"] = "false"
 
