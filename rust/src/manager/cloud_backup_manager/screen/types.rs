@@ -140,6 +140,12 @@ pub struct CloudBackupVerificationSection {
     /// In the order they are drawn; empty while verification runs, while an upload waits to be
     /// confirmed with nothing to act on, and for a backup only a newer Cove can read
     pub controls: Vec<CloudBackupVerificationControl>,
+    /// What to unlock before verifying again, drawn above the section as well as at the top of
+    /// the screen, since the section can be scrolled far below the top banner
+    ///
+    /// Set only while the state is `NotCompleted`, with the same hint as
+    /// [`CloudBackupSection::PasskeyUnlock`]
+    pub unlock_hint: Option<CloudBackupPasskeyUnlockHint>,
 }
 
 /// A control the verification section draws

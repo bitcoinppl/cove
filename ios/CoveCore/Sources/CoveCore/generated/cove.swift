@@ -18219,6 +18219,14 @@ public struct CloudBackupVerificationSection: Equatable, Hashable {
      * confirmed with nothing to act on, and for a backup only a newer Cove can read
      */
     public var controls: [CloudBackupVerificationControl]
+    /**
+     * What to unlock before verifying again, drawn above the section as well as at the top of
+     * the screen, since the section can be scrolled far below the top banner
+     *
+     * Set only while the state is `NotCompleted`, with the same hint as
+     * [`CloudBackupSection::PasskeyUnlock`]
+     */
+    public var unlockHint: CloudBackupPasskeyUnlockHint?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -18226,9 +18234,17 @@ public struct CloudBackupVerificationSection: Equatable, Hashable {
         /**
          * In the order they are drawn; empty while verification runs, while an upload waits to be
          * confirmed with nothing to act on, and for a backup only a newer Cove can read
-         */controls: [CloudBackupVerificationControl]) {
+         */controls: [CloudBackupVerificationControl],
+        /**
+         * What to unlock before verifying again, drawn above the section as well as at the top of
+         * the screen, since the section can be scrolled far below the top banner
+         *
+         * Set only while the state is `NotCompleted`, with the same hint as
+         * [`CloudBackupSection::PasskeyUnlock`]
+         */unlockHint: CloudBackupPasskeyUnlockHint?) {
         self.view = view
         self.controls = controls
+        self.unlockHint = unlockHint
     }
 
 
@@ -18248,13 +18264,15 @@ public struct FfiConverterTypeCloudBackupVerificationSection: FfiConverterRustBu
         return
             try CloudBackupVerificationSection(
                 view: FfiConverterTypeCloudBackupVerificationView.read(from: &buf),
-                controls: FfiConverterSequenceTypeCloudBackupVerificationControl.read(from: &buf)
+                controls: FfiConverterSequenceTypeCloudBackupVerificationControl.read(from: &buf),
+                unlockHint: FfiConverterOptionTypeCloudBackupPasskeyUnlockHint.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudBackupVerificationSection, into buf: inout [UInt8]) {
         FfiConverterTypeCloudBackupVerificationView.write(value.view, into: &buf)
         FfiConverterSequenceTypeCloudBackupVerificationControl.write(value.controls, into: &buf)
+        FfiConverterOptionTypeCloudBackupPasskeyUnlockHint.write(value.unlockHint, into: &buf)
     }
 }
 

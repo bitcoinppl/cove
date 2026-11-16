@@ -356,6 +356,7 @@ mod debug {
                 recovery: CloudBackupRecoveryOperation::Idle,
             },
             controls,
+            unlock_hint: None,
         })
     }
 
@@ -670,17 +671,19 @@ mod debug {
     }
 
     /// The passkey sheet ended without a passkey, as when 1Password is locked: a banner at the
-    /// top asks to unlock it, and the section offers Verify again with no repair
+    /// top and another above the section ask to unlock it, and the section offers Verify again
+    /// with no repair
     fn verification_not_completed() -> CloudBackupScreen {
         let mut screen = configured(CloudBackupDisableScreen::Idle, None);
         let CloudBackupScreenBody::Configured(configured) = &mut screen.body else { return screen };
+        let hint = CloudBackupPasskeyUnlockHint::Provider { name: "1Password".into() };
         for section in &mut configured.sections {
             if let CloudBackupSection::Verification(verification) = section {
                 verification.view.state = CloudBackupVerificationState::NotCompleted;
+                verification.unlock_hint = Some(hint.clone());
             }
         }
 
-        let hint = CloudBackupPasskeyUnlockHint::Provider { name: "1Password".into() };
         configured.sections.insert(0, CloudBackupSection::PasskeyUnlock(hint));
         screen
     }

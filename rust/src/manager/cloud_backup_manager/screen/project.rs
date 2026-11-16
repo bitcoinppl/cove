@@ -292,8 +292,8 @@ fn configured_screen(
         .then(|| CloudBackupPasskeyUnlockHint::for_provider(provider_hint))
         .flatten();
 
-    if let Some(hint) = unlock_hint {
-        sections.push(CloudBackupSection::PasskeyUnlock(hint));
+    if let Some(hint) = &unlock_hint {
+        sections.push(CloudBackupSection::PasskeyUnlock(hint.clone()));
     }
 
     if configured.passkey != CloudBackupPasskeyState::Available {
@@ -337,8 +337,8 @@ fn configured_screen(
 
     // verification sits below the inventory, just above Turn Off
     let controls = verification_controls(&configured, consents);
-    sections
-        .push(CloudBackupSection::Verification(CloudBackupVerificationSection { view, controls }));
+    let verification = CloudBackupVerificationSection { view, controls, unlock_hint };
+    sections.push(CloudBackupSection::Verification(verification));
 
     sections.push(CloudBackupSection::TurnOff);
 

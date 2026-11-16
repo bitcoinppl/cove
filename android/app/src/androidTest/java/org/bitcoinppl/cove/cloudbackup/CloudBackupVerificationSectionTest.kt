@@ -105,6 +105,20 @@ class CloudBackupVerificationSectionTest {
             ).assertIsDisplayed()
     }
 
+    @Test
+    fun notCompletedSectionRepeatsTheUnlockBannerAboveItself() {
+        // the section can sit far below the top banner, so it draws the same banner above itself
+        val screen = cloudBackupFixture("configured-verification-not-completed")
+
+        compose.setVerificationSection(screen)
+
+        val bannerBottom = compose.onNodeWithText("Unlock 1Password").getUnclippedBoundsInRoot().bottom
+        val sectionTop = compose.onNodeWithText("Cloud Backup Not Verified").getUnclippedBoundsInRoot().top
+
+        assertTrue("the unlock banner should appear above the section", bannerBottom <= sectionTop)
+        compose.onNodeWithText("Verify Now").assertIsDisplayed()
+    }
+
     private fun ComposeContentTestRule.setVerificationSection(screen: CloudBackupScreen) {
         setContent {
             CoveTheme(darkTheme = false) {

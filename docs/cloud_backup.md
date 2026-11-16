@@ -751,8 +751,10 @@ from the hint stored for the credential the keychain holds when the request
 ends. While the verification's state is `NotCompleted`, the configured screen
 also leads with a `CloudBackupSection::PasskeyUnlock` banner, with the hint read
 at projection like the card's. The verification section sits near the bottom,
-below the wallets, so the banner puts the step where the user lands; the
-verification section keeps its own neutral "Verify again" copy. A saved-passkey
+below the wallets, so the banner puts the step where the user lands. The
+verification section carries the same hint as `unlock_hint` and draws the same
+banner above itself, since it can be scrolled far below the top; its own copy
+stays a neutral "Verify again". A saved-passkey
 confirmation that didn't finish, automatic or after Confirm, records the
 outcome on the pause with the hint of the passkey just registered, since the
 keychain doesn't hold that passkey yet; the Enable step shows it above

@@ -34545,6 +34545,15 @@ data class CloudBackupVerificationSection (
      * confirmed with nothing to act on, and for a backup only a newer Cove can read
      */
     var `controls`: List<CloudBackupVerificationControl>
+    ,
+    /**
+     * What to unlock before verifying again, drawn above the section as well as at the top of
+     * the screen, since the section can be scrolled far below the top banner
+     *
+     * Set only while the state is `NotCompleted`, with the same hint as
+     * [`CloudBackupSection::PasskeyUnlock`]
+     */
+    var `unlockHint`: CloudBackupPasskeyUnlockHint?
 
 ){
 
@@ -34563,17 +34572,20 @@ public object FfiConverterTypeCloudBackupVerificationSection: FfiConverterRustBu
         return CloudBackupVerificationSection(
             FfiConverterTypeCloudBackupVerificationView.read(buf),
             FfiConverterSequenceTypeCloudBackupVerificationControl.read(buf),
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupVerificationSection) = (
             FfiConverterTypeCloudBackupVerificationView.allocationSize(value.`view`) +
-            FfiConverterSequenceTypeCloudBackupVerificationControl.allocationSize(value.`controls`)
+            FfiConverterSequenceTypeCloudBackupVerificationControl.allocationSize(value.`controls`) +
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.allocationSize(value.`unlockHint`)
     )
 
     override fun write(value: CloudBackupVerificationSection, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupVerificationView.write(value.`view`, buf)
             FfiConverterSequenceTypeCloudBackupVerificationControl.write(value.`controls`, buf)
+            FfiConverterOptionalTypeCloudBackupPasskeyUnlockHint.write(value.`unlockHint`, buf)
     }
 }
 

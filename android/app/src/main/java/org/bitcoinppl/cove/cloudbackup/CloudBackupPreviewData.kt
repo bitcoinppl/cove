@@ -194,6 +194,7 @@ private fun cloudBackupPreviewScreen(): CloudBackupScreen {
                                 CloudBackupVerificationSection(
                                     view = verification,
                                     controls = listOf(CloudBackupVerificationControl.Verify),
+                                    unlockHint = null,
                                 ),
                             ),
                             CloudBackupSection.TurnOff,

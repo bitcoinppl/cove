@@ -607,13 +607,15 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::an_unfinished_saved_passkey_confirmation_names_its_provider_to_unlock",
     "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::an_unfinished_automatic_confirmation_names_its_provider_to_unlock",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationSectionTest.kt::notCompletedRequestBannerNamesThePasswordManagerToUnlock",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationSectionTest.kt::notCompletedSectionRepeatsTheUnlockBannerAboveItself",
     "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testPasskeyNotCompletedKeepsWalletsAndTurnOffWithoutPromptingOnRelaunch",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffFullLaunchTest.kt::passkeyNotCompletedKeepsWalletsAndTurnOff",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupTurnOffRelaunchFullLaunchTest.kt::passkeyNotCompletedStage2RelaunchKeepsTurnOffWithoutPrompting",
 ]
 # the verification ends not completed with neutral copy and no passkey repair, and the next launch shows no passkey prompt.
 # a banner at the top of the screen names what to unlock: the provider the passkey was created in when it has its own
-# lock (1Password), any password manager when the device stored no hint, and no banner for apple passwords
+# lock (1Password), any password manager when the device stored no hint, and no banner for apple passwords. the
+# verification section repeats the banner above itself, since it can be scrolled far below the top
 
 [[row]]
 id = "s05-running-row-operation-holds-turn-off"

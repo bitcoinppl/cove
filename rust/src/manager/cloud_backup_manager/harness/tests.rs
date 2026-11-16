@@ -1988,12 +1988,21 @@ fn provider_hint(aaguid: &str) -> PasskeyProviderHint {
     }
 }
 
-/// What the published screen's banner asks the user to unlock
+/// What the published screen's banner asks the user to unlock, which the verification section
+/// repeats above itself, since it can be scrolled far below the banner
 fn passkey_unlock_banner(app: &TestApp) -> Option<CloudBackupPasskeyUnlockHint> {
-    configured_sections(app).into_iter().find_map(|section| match section {
-        CloudBackupSection::PasskeyUnlock(hint) => Some(hint),
+    let sections = configured_sections(app);
+    let banner = sections.iter().find_map(|section| match section {
+        CloudBackupSection::PasskeyUnlock(hint) => Some(hint.clone()),
         _ => None,
-    })
+    });
+    let above_verification = sections.iter().find_map(|section| match section {
+        CloudBackupSection::Verification(verification) => verification.unlock_hint.clone(),
+        _ => None,
+    });
+
+    assert_eq!(banner, above_verification, "the verification repeats the top banner");
+    banner
 }
 
 /// A verification that fails reading the cloud, or on a passkey that answered moments before,

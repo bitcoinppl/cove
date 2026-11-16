@@ -252,7 +252,7 @@ extension CloudBackupPasskeyUnlockHint {
         }
     }
 
-    /// The banner's message: the verification below didn't finish, and what to unlock first
+    /// The banner's message: the verification didn't finish, and what to unlock first
     var bannerMessage: String {
         switch self {
         case let .provider(name: name):
