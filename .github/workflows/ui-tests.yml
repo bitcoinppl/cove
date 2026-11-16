@@ -363,8 +363,8 @@ jobs:
           printf '%s\n' "$tests"
           echo "count=$(printf '%s' "$tests" | grep -c . || true)" >>"$GITHUB_OUTPUT"
 
-      # restores the library compile-ios saved on master for the same Rust, toolchain, Xcode and
-      # flags, or builds it; RUSTFLAGS matches compile-ios's, which the key includes
+      # restores the library ios-ffi-cache.yml saved on master for the same Rust, toolchain, Xcode
+      # and flags, or builds it; RUSTFLAGS matches compile-ios's, which the key includes
       - name: Build or restore Rust FFI bindings
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: ./.github/actions/ios-ffi

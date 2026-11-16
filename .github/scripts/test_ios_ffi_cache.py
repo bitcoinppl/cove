@@ -5,6 +5,7 @@ against a throwaway git repository and faked tool versions
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -13,9 +14,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar, override
 
-from ios_ffi_cache import CACHED_PATHS, KeyInputs, Unkeyable
+from ios_ffi_cache import CACHED_PATHS, TRACKED_INPUTS, KeyInputs, Unkeyable
 
 SCRIPT = Path(__file__).with_name("ios_ffi_cache.py")
+SAVE_WORKFLOW = Path(__file__).resolve().parent.parent / "workflows" / "ios-ffi-cache.yml"
 
 # the developer's own git config, such as commit signing, stays out of the throwaway repository
 GIT_ENV: Mapping[str, str] = {
@@ -216,6 +218,21 @@ class KeyTests(unittest.TestCase):
         self.assertIn("::warning title=iOS Rust library cache::", result.stdout)
         expected = ["key=", "paths<<EOF", *CACHED_PATHS, "EOF"]
         self.assertEqual(written, "".join(f"{line}\n" for line in expected))
+
+
+class SaveWorkflowTests(unittest.TestCase):
+    """ios-ffi-cache.yml saves an entry only when a push changes one of its paths, so a key input
+    its filter leaves out would leave master without an entry for its new key"""
+
+    def test_the_push_paths_cover_every_tracked_input(self) -> None:
+        workflow = SAVE_WORKFLOW.read_text(encoding="utf-8")
+        push = re.search(r"(?ms)^  push:\n.*?^    paths:\n((?:      .*\n)+)", workflow)
+        assert push is not None
+        paths = set(re.findall(r'^      - "([^"]+)"$', push[1], re.MULTILINE))
+
+        for tracked in (*TRACKED_INPUTS, ".github/workflows/ios-ffi-cache.yml"):
+            with self.subTest(path=tracked):
+                self.assertTrue({tracked, f"{tracked}/**"} & paths, f"{tracked} isn't in {paths}")
 
 
 if __name__ == "__main__":

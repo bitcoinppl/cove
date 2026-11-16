@@ -1,0 +1,110 @@
+name: iOS Rust library cache
+
+# Saves the iOS Rust library and Swift bindings that .github/actions/ios-ffi restores, for each
+# master commit whose key inputs changed. CI's compile-ios used to save them, but CI cancels a
+# master run when the next merge lands, and merges often come faster than its macOS jobs finish, so
+# most master commits never got an entry and every pull request opened on them built the library
+# again. Here a run on master is never cancelled once it starts: GitHub queues one newer run behind
+# it and drops the older queued ones, so the newest master commit always ends up with an entry
+on:
+  push:
+    branches:
+      - master
+    # every path ios_ffi_cache.py's TRACKED_INPUTS names, which test_ios_ffi_cache.py checks, and
+    # this workflow
+    paths:
+      - "rust/**"
+      - "justfile"
+      - ".cargo/**"
+      - "rust-toolchain"
+      - "rust-toolchain.toml"
+      - ".github/actions/ios-ffi/**"
+      - ".github/scripts/ios_ffi_cache.py"
+      - ".github/workflows/ios-ffi-cache.yml"
+  # a pull request that changes this workflow runs it without saving, so it's checked before merge
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/ios-ffi-cache.yml"
+  # the key also covers the runner's toolchain and Xcode, which change without a commit; 00:30 UTC
+  # is before the nightly UI tests at 01:17, so they find an entry for the runner image of the day
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# ci.yml's, since rust-cache hashes CARGO_ variables into its key
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+# master runs queue rather than cancel, as the header says; a pull request's newer push replaces
+# its older run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    # compile-ios's flags, which the key includes, so the entries are the ones it reads
+    env:
+      RUSTFLAGS: -D warnings
+    outputs:
+      key: ${{ steps.ios_ffi.outputs.key }}
+      saved: ${{ steps.ios_ffi.outputs.saved }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # restores compile-ios's dependency cache, which it alone saves
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          cache-targets: false
+          prefix-key: v2-rust-ios
+          shared-key: compile-ios
+          save-if: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build or restore Rust FFI bindings
+        id: ios_ffi
+        uses: ./.github/actions/ios-ffi
+        with:
+          save: ${{ github.ref == 'refs/heads/master' }}
+
+  # a job of its own so the code the build job runs never holds a token that can delete caches
+  prune:
+    needs: build
+    if: ${{ needs.build.outputs.saved == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      # keeps the new entry and the four other master entries read most recently, so a pull request
+      # whose base is a few Rust changes behind master still hits; each is about 100 MB of the
+      # repository's 10 GB
+      - name: Delete master's older iOS Rust library entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ needs.build.outputs.key }}
+        run: |
+          gh cache list --repo "$REPO" --ref refs/heads/master --key ios-ffi- --limit 100 \
+            --sort last_accessed_at --order desc --json id,key \
+            --jq '[.[] | select(.key != env.KEEP)] | .[4:][] | .id' |
+            while read -r id; do
+              gh cache delete "$id" --repo "$REPO"
+            done
