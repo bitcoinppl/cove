@@ -148,6 +148,15 @@ impl Platform {
             (os, arch) => Err(eyre!("swift-tools has no pinned release for {os} on {arch}")),
         }
     }
+
+    /// The name `tools/swift-tools.json` and the binary cache use for this platform
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Macos => "macos",
+            Self::LinuxX86_64 => "linux-x86_64",
+            Self::LinuxAarch64 => "linux-aarch64",
+        }
+    }
 }
 
 /// A release archive and the binary to extract from it
@@ -280,7 +289,7 @@ fn run_tool(tool: SwiftTool, args: &[String]) -> Result<()> {
 fn print_cached_path(tool: SwiftTool) -> Result<()> {
     let pins = Pins::load()?;
     let pin = pins.get(tool);
-    let binary = install_dir(tool, pin)?.join(tool.name());
+    let binary = install_dir(tool, pin, Platform::host()?)?.join(tool.name());
 
     ensure!(
         binary.is_file(),
@@ -367,7 +376,7 @@ fn ensure_installed(
     platform: Platform,
 ) -> Result<PathBuf> {
     let name = tool.name();
-    let install_dir = install_dir(tool, pin)?;
+    let install_dir = install_dir(tool, pin, platform)?;
     let binary = install_dir.join(name);
 
     if binary.is_file() {
@@ -406,9 +415,10 @@ fn ensure_installed(
     Ok(binary)
 }
 
-/// The directory a pin's binary is cached in, whether or not it has been downloaded yet
-fn install_dir(tool: SwiftTool, pin: &Pin) -> Result<PathBuf> {
-    Ok(cache_dir()?.join(format!("{}-{}", tool.name(), pin.version)))
+/// The directory a pin's binary for a platform is cached in, whether or not it has been downloaded
+/// yet; the platform keeps a cache shared by a Mac and a Linux container from mixing binaries
+fn install_dir(tool: SwiftTool, pin: &Pin, platform: Platform) -> Result<PathBuf> {
+    Ok(cache_dir()?.join(format!("{}-{}-{}", tool.name(), pin.version, platform.slug())))
 }
 
 /// Fetches the digests GitHub reports for every platform's archive of a release
