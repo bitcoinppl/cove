@@ -147,14 +147,9 @@ needs_cargo_and_just() {
     fi
 }
 
-# the pinned swiftformat is a macOS binary that `just swift-tool` downloads on first use, which the
-# hook must not do
+# `just swift-tool` downloads the pinned swiftformat on first use, which the hook must not do, and
+# `swift-tools path` also fails on a platform the pins have no release for
 needs_swiftformat() {
-    if [ "$(uname -s)" != Darwin ]; then
-        echo "the pinned swiftformat only runs on macOS"
-        return
-    fi
-
     local missing
     missing=$(needs_cargo_and_just)
     if [ -n "$missing" ]; then

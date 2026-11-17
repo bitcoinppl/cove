@@ -2,14 +2,16 @@
 //!
 //! Homebrew only ships the latest release, so CI and local machines drift apart
 //! whenever a new version adds or changes a rule. `run` downloads the release
-//! pinned in `tools/swift-tools.json`, verifies its checksum, and caches it per
-//! version. `sync` re-pins to the versions installed locally, so editor
-//! format-on-save, `just lint-swift`, and CI all use the same release
+//! pinned in `tools/swift-tools.json` for the host platform, verifies its
+//! checksum, and caches it per version. Every platform shares one version, so
+//! local lint on macOS and CI on Linux use the same release. `sync` re-pins to
+//! the versions installed locally, so editor format-on-save, `just lint-swift`,
+//! and CI all use the same release
 
 use crate::common::{print_info, print_success};
 use clap::{Subcommand, ValueEnum};
 use color_eyre::{
-    eyre::{ensure, Context, ContextCompat},
+    eyre::{ensure, eyre, Context, ContextCompat},
     Result,
 };
 use colored::Colorize;
@@ -76,12 +78,30 @@ impl SwiftTool {
         }
     }
 
-    // both are universal macOS binaries; portable_swiftlint is the one without a pkg installer
-    fn release_asset(self) -> &'static str {
-        match self {
-            Self::Swiftformat => "swiftformat.zip",
-            Self::Swiftlint => "portable_swiftlint.zip",
-        }
+    /// The release archive built for a platform, and the binary inside it
+    fn asset(self, platform: Platform) -> Asset {
+        let (archive, binary) = match (self, platform) {
+            // both macOS archives hold universal binaries; portable_swiftlint is the one without a
+            // pkg installer
+            (Self::Swiftformat, Platform::Macos) => ("swiftformat.zip", "swiftformat"),
+            (Self::Swiftlint, Platform::Macos) => ("portable_swiftlint.zip", "swiftlint"),
+            (Self::Swiftformat, Platform::LinuxX86_64) => {
+                ("swiftformat_linux.zip", "swiftformat_linux")
+            }
+            (Self::Swiftformat, Platform::LinuxAarch64) => {
+                ("swiftformat_linux_aarch64.zip", "swiftformat_linux_aarch64")
+            }
+            // the static build needs no Swift runtime or libxml2, and the configured rules are all
+            // SwiftSyntax based, so it lints the same as the macOS build without SourceKit
+            (Self::Swiftlint, Platform::LinuxX86_64) => {
+                ("swiftlint_linux_amd64.zip", "swiftlint-static")
+            }
+            (Self::Swiftlint, Platform::LinuxAarch64) => {
+                ("swiftlint_linux_arm64.zip", "swiftlint-static")
+            }
+        };
+
+        Asset { archive, binary }
     }
 
     fn version_args(self) -> &'static [&'static str] {
@@ -91,11 +111,11 @@ impl SwiftTool {
         }
     }
 
-    fn release_url(self, version: &str) -> String {
+    fn release_url(self, version: &str, asset: Asset) -> String {
         format!(
             "https://github.com/{}/releases/download/{version}/{}",
             self.github_repo(),
-            self.release_asset()
+            asset.archive
         )
     }
 
@@ -111,10 +131,66 @@ impl SwiftTool {
     }
 }
 
+/// A host the pinned tools publish release binaries for
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Platform {
+    Macos,
+    LinuxX86_64,
+    LinuxAarch64,
+}
+
+impl Platform {
+    fn host() -> Result<Self> {
+        match (env::consts::OS, env::consts::ARCH) {
+            ("macos", _) => Ok(Self::Macos),
+            ("linux", "x86_64") => Ok(Self::LinuxX86_64),
+            ("linux", "aarch64") => Ok(Self::LinuxAarch64),
+            (os, arch) => Err(eyre!("swift-tools has no pinned release for {os} on {arch}")),
+        }
+    }
+
+    /// The name `tools/swift-tools.json` and the binary cache use for this platform
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Macos => "macos",
+            Self::LinuxX86_64 => "linux-x86_64",
+            Self::LinuxAarch64 => "linux-aarch64",
+        }
+    }
+}
+
+/// A release archive and the binary to extract from it
+#[derive(Debug, Clone, Copy)]
+struct Asset {
+    archive: &'static str,
+    binary: &'static str,
+}
+
+/// SHA-256 of each platform's release archive, all required so a pin never misses a platform
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Digests {
+    macos: String,
+    #[serde(rename = "linux-x86_64")]
+    linux_x86_64: String,
+    #[serde(rename = "linux-aarch64")]
+    linux_aarch64: String,
+}
+
+impl Digests {
+    fn get(&self, platform: Platform) -> &str {
+        match platform {
+            Platform::Macos => &self.macos,
+            Platform::LinuxX86_64 => &self.linux_x86_64,
+            Platform::LinuxAarch64 => &self.linux_aarch64,
+        }
+    }
+}
+
+/// One version for every platform, so lint results match wherever the tool runs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Pin {
     version: String,
-    sha256: String,
+    sha256: Digests,
 }
 
 /// Contents of `tools/swift-tools.json`
@@ -162,18 +238,35 @@ impl Pins {
 
 #[derive(Deserialize)]
 struct Release {
-    assets: Vec<ReleaseAsset>,
+    assets: Vec<GithubAsset>,
 }
 
 #[derive(Deserialize)]
-struct ReleaseAsset {
+struct GithubAsset {
     name: String,
     digest: Option<String>,
 }
 
-pub fn run(command: SwiftToolsCommand) -> Result<()> {
-    ensure!(cfg!(target_os = "macos"), "swift-tools only supports the macOS release binaries");
+impl Release {
+    fn digest(&self, tool: SwiftTool, version: &str, platform: Platform) -> Result<String> {
+        let archive = tool.asset(platform).archive;
+        let digest = self
+            .assets
+            .iter()
+            .find(|asset| asset.name == archive)
+            .with_context(|| format!("{} {version} has no {archive} asset", tool.name()))?
+            .digest
+            .as_deref()
+            .with_context(|| format!("GitHub has no digest for {archive} in {version}"))?;
 
+        digest
+            .strip_prefix("sha256:")
+            .map(ToOwned::to_owned)
+            .with_context(|| format!("Unexpected digest format for {archive}: {digest}"))
+    }
+}
+
+pub fn run(command: SwiftToolsCommand) -> Result<()> {
     match command {
         SwiftToolsCommand::Run { tool, args } => run_tool(tool, &args),
         SwiftToolsCommand::Path { tool } => print_cached_path(tool),
@@ -186,7 +279,7 @@ fn run_tool(tool: SwiftTool, args: &[String]) -> Result<()> {
     let pin = pins.get(tool);
 
     warn_on_local_drift(tool, pin);
-    let binary = ensure_installed(&http_client()?, tool, pin)?;
+    let binary = ensure_installed(&http_client()?, tool, pin, Platform::host()?)?;
 
     // paths in the lint commands and configs are relative to the repository root
     let error = Command::new(&binary).args(args).current_dir(repo_root()).exec();
@@ -196,7 +289,7 @@ fn run_tool(tool: SwiftTool, args: &[String]) -> Result<()> {
 fn print_cached_path(tool: SwiftTool) -> Result<()> {
     let pins = Pins::load()?;
     let pin = pins.get(tool);
-    let binary = install_dir(tool, pin)?.join(tool.name());
+    let binary = install_dir(tool, pin, Platform::host()?)?.join(tool.name());
 
     ensure!(
         binary.is_file(),
@@ -211,6 +304,7 @@ fn print_cached_path(tool: SwiftTool) -> Result<()> {
 
 fn sync() -> Result<()> {
     let client = http_client()?;
+    let platform = Platform::host()?;
     let mut pins = Pins::load()?;
 
     for tool in SwiftTool::ALL {
@@ -225,16 +319,16 @@ fn sync() -> Result<()> {
             continue;
         }
 
-        let sha256 = release_digest(&client, tool, &version)?;
+        let sha256 = release_digests(&client, tool, &version)?;
         print_info(&format!("Pinning {name} {version} (was {})", pin.version));
         *pin = Pin { version, sha256 };
     }
 
     pins.save()?;
 
-    // installing now checks the downloaded assets against the digests GitHub reported
+    // installing now checks this host's downloaded assets against the digests GitHub reported
     for tool in SwiftTool::ALL {
-        ensure_installed(&client, tool, pins.get(tool))?;
+        ensure_installed(&client, tool, pins.get(tool), platform)?;
     }
 
     Ok(())
@@ -275,9 +369,14 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 }
 
 /// Returns the cached binary for a pin, downloading and verifying it first if needed
-fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathBuf> {
+fn ensure_installed(
+    client: &Client,
+    tool: SwiftTool,
+    pin: &Pin,
+    platform: Platform,
+) -> Result<PathBuf> {
     let name = tool.name();
-    let install_dir = install_dir(tool, pin)?;
+    let install_dir = install_dir(tool, pin, platform)?;
     let binary = install_dir.join(name);
 
     if binary.is_file() {
@@ -286,7 +385,9 @@ fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathB
 
     eprintln!("{} Installing {name} {} to {}", "→".blue(), pin.version, install_dir.display());
 
-    let url = tool.release_url(&pin.version);
+    let asset = tool.asset(platform);
+    let url = tool.release_url(&pin.version, asset);
+    let expected = pin.sha256.get(platform);
     let archive = client
         .get(&url)
         .send()
@@ -295,17 +396,13 @@ fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathB
         .wrap_err_with(|| format!("Failed to download {url}"))?;
 
     let actual = hex::encode(Sha256::digest(&archive));
-    ensure!(
-        actual == pin.sha256,
-        "checksum mismatch for {url}: expected {}, got {actual}",
-        pin.sha256
-    );
+    ensure!(actual == expected, "checksum mismatch for {url}: expected {expected}, got {actual}");
 
     let mut contents = Vec::new();
     ZipArchive::new(Cursor::new(archive))
         .wrap_err_with(|| format!("Failed to open {url}"))?
-        .by_name(name)
-        .wrap_err_with(|| format!("{url} does not contain {name}"))?
+        .by_name(asset.binary)
+        .wrap_err_with(|| format!("{url} does not contain {}", asset.binary))?
         .read_to_end(&mut contents)?;
 
     // write beside the final path and rename, so an interrupted install never leaves a partial binary
@@ -318,12 +415,14 @@ fn ensure_installed(client: &Client, tool: SwiftTool, pin: &Pin) -> Result<PathB
     Ok(binary)
 }
 
-/// The directory a pin's binary is cached in, whether or not it has been downloaded yet
-fn install_dir(tool: SwiftTool, pin: &Pin) -> Result<PathBuf> {
-    Ok(cache_dir()?.join(format!("{}-{}", tool.name(), pin.version)))
+/// The directory a pin's binary for a platform is cached in, whether or not it has been downloaded
+/// yet; the platform keeps a cache shared by a Mac and a Linux container from mixing binaries
+fn install_dir(tool: SwiftTool, pin: &Pin, platform: Platform) -> Result<PathBuf> {
+    Ok(cache_dir()?.join(format!("{}-{}-{}", tool.name(), pin.version, platform.slug())))
 }
 
-fn release_digest(client: &Client, tool: SwiftTool, version: &str) -> Result<String> {
+/// Fetches the digests GitHub reports for every platform's archive of a release
+fn release_digests(client: &Client, tool: SwiftTool, version: &str) -> Result<Digests> {
     let url =
         format!("https://api.github.com/repos/{}/releases/tags/{version}", tool.github_repo());
     let release: Release = client
@@ -334,19 +433,11 @@ fn release_digest(client: &Client, tool: SwiftTool, version: &str) -> Result<Str
         .and_then(Response::json)
         .wrap_err_with(|| format!("Failed to fetch release {version} from {url}"))?;
 
-    let asset_name = tool.release_asset();
-    let digest = release
-        .assets
-        .into_iter()
-        .find(|asset| asset.name == asset_name)
-        .with_context(|| format!("{} {version} has no {asset_name} asset", tool.name()))?
-        .digest
-        .with_context(|| format!("GitHub has no digest for {asset_name} in {version}"))?;
-
-    digest
-        .strip_prefix("sha256:")
-        .map(ToOwned::to_owned)
-        .with_context(|| format!("Unexpected digest format for {asset_name}: {digest}"))
+    Ok(Digests {
+        macos: release.digest(tool, version, Platform::Macos)?,
+        linux_x86_64: release.digest(tool, version, Platform::LinuxX86_64)?,
+        linux_aarch64: release.digest(tool, version, Platform::LinuxAarch64)?,
+    })
 }
 
 fn http_client() -> Result<Client> {

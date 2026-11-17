@@ -1,5 +1,5 @@
-"""Finds the macOS CI jobs a trusted maintainer already passed on their own Mac for this commit, so
-CI can skip them instead of waiting for one of GitHub's few macOS runners
+"""Finds the CI jobs a trusted maintainer already passed on their own Mac for this commit, so CI can
+skip them, mostly to spare GitHub's few macOS runners
 
 In CI's changes job, `python3 -I .github/scripts/ci_local_results.py` fetches the statuses of $SHA
 and appends one `<job>_local=true|false` line per job to $GITHUB_OUTPUT
@@ -29,7 +29,7 @@ from typing import Final, Self
 
 
 class LocalJob(StrEnum):
-    """A macOS CI job a local run can stand in for, named as the changes job outputs it"""
+    """A CI job a local run can stand in for, named as the changes job outputs it"""
 
     COMPILE_IOS = "compile_ios"
     SWIFT_LINT = "swift_lint"
@@ -147,7 +147,7 @@ def main(env: Mapping[str, str], fetch: Callable[[str, str], str] = fetch_status
     try:
         statuses = parse_statuses(fetch(repo, sha))
     except (subprocess.CalledProcessError, OSError, BadStatuses) as error:
-        print(f"::warning::couldn't read the commit statuses of {sha}, so every macOS job runs")
+        print(f"::warning::couldn't read the commit statuses of {sha}, so every job runs")
         print(error)
         jobs = frozenset[LocalJob]()
     else:
@@ -169,7 +169,7 @@ def main(env: Mapping[str, str], fetch: Callable[[str, str], str] = fetch_status
     if jobs:
         append(
             env.get("GITHUB_STEP_SUMMARY"),
-            [f"### macOS jobs passed by cove-local-ci on {sha}"]
+            [f"### Jobs passed by cove-local-ci on {sha}"]
             + [f"- {job}" for job in LocalJob if job in jobs],
         )
 

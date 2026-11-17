@@ -108,9 +108,9 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 
 ### Swift Lint Tools
 
-`just lint-swift`, `just fmt-swift`, and CI run the swiftformat and swiftlint releases pinned in `tools/swift-tools.json`, so a new Homebrew release can't change lint results on one machine only. `just swift-tool <swiftformat|swiftlint> [args]` downloads the pinned release on first use, verifies its checksum, and caches it under `~/.cache/cove/swift-tools`.
+`just lint-swift`, `just fmt-swift`, and CI run the swiftformat and swiftlint releases pinned in `tools/swift-tools.json`, so a new Homebrew release can't change lint results on one machine only. `just swift-tool <swiftformat|swiftlint> [args]` downloads the pinned release for the host on first use, verifies its checksum, and caches it under `~/.cache/cove/swift-tools`. The pins hold one version per tool and a checksum for each platform it runs on, macOS and Linux on x86_64 or arm64, so the CI `swift-lint` job, which runs on Ubuntu, uses the same release as a Mac.
 
-Editors still format with the Homebrew tools on `PATH`, and the lint recipes warn when those versions differ from the pins. When Homebrew upgrades swiftformat or swiftlint, run `just swift-tools-sync`. It pins the locally installed versions with their GitHub release checksums, then reformats and lints with them. Commit `tools/swift-tools.json` together with any fixes the new rules need. If the pins are newer than your local tools, run `brew upgrade swiftformat swiftlint` instead.
+Editors still format with the Homebrew tools on `PATH`, and the lint recipes warn when those versions differ from the pins. When Homebrew upgrades swiftformat or swiftlint, run `just swift-tools-sync`. It pins the locally installed versions with the GitHub release checksums for every platform, then reformats and lints with them. Commit `tools/swift-tools.json` together with any fixes the new rules need. If the pins are newer than your local tools, run `brew upgrade swiftformat swiftlint` instead.
 
 ### Debugging Tips
 

@@ -38,8 +38,8 @@ jobs:
   # workflow paths filter because a skipped job still reports, and branch protection counts it as
   # passed. A job skips only when the changes job succeeded and said 'false', so a failed or broken
   # changes job runs everything
-  # It also skips a macOS job a trusted maintainer's cove-local-ci run already passed on this
-  # commit, see .github/scripts/ci_local_results.py, since GitHub runs only a few macOS jobs at once
+  # It also skips a job a trusted maintainer's cove-local-ci run already passed on this commit, see
+  # .github/scripts/ci_local_results.py, since GitHub runs only a few macOS jobs at once
   # A slice below the top of a GitHub stack skips the merge-tier jobs too, test (macos-latest) and
   # the iOS unit tests, which the stack's top runs for the whole stack, diffing against the stack's
   # base; stack-gate.yml holds the slice until the top passes them
@@ -97,9 +97,9 @@ jobs:
         if: steps.plan.outputs.merge_tiers == 'true'
         run: echo "this run tests the merge tier, see .github/scripts/ci_changes.py"
 
-      # a failure here leaves its outputs empty, which runs the macOS jobs, without failing the
+      # a failure here leaves its outputs empty, which runs those jobs, without failing the
       # job and with it the path filter above
-      - name: Find macOS jobs a local run passed
+      - name: Find jobs a local run passed
         id: local
         continue-on-error: true
         env:
@@ -130,9 +130,15 @@ jobs:
   swift-lint:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift_lint != 'false') && needs.changes.outputs.swift_lint_local != 'true' }}
-    runs-on: macos-26
+    # lint needs no Xcode, so it stays off the few macOS runners; the official image pins the Swift
+    # toolchain that builds tools/cove-swift-lint, which the runner image's own Swift doesn't
+    runs-on: ubuntu-24.04
+    container: swift:6.2.4-noble
     steps:
       - uses: actions/checkout@v6
+      # the Swift image has no curl, which installs rustup, or gcc, which links Rust
+      - name: Install Rust build dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gcc
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust builds
