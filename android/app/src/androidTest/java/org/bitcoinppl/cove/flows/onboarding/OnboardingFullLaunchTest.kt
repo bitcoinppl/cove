@@ -38,6 +38,11 @@ class OnboardingFullLaunchTest {
     }
 
     @Test
+    @QuarantinedInCi(
+        reason = "needs live mainnet: the selection sheet opens only when discovery finds history, and a runner without DNS fails with Node Connection Failed",
+        issue = "https://github.com/bitcoinppl/cove/issues/1098",
+        expires = "2026-12-09",
+    )
     fun importedWalletCanAcceptTermsAndReachWalletSelection() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 
