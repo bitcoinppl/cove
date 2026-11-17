@@ -1,4 +1,4 @@
-"""Tests ci_local_results.py: which commit statuses let CI skip a macOS job, and that a failure to
+"""Tests ci_local_results.py: which commit statuses let CI skip a job, and that a failure to
 read them skips nothing
 
     python3 -I -m unittest discover -s .github/scripts -p "test_*.py"
