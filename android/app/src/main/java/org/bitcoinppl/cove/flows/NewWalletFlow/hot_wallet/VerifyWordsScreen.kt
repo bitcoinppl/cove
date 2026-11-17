@@ -77,6 +77,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.WordCheckId
 import org.bitcoinppl.cove_core.WordCheckState
 import org.bitcoinppl.cove_core.WordVerifyStateMachine
 import kotlin.math.hypot
@@ -110,8 +111,10 @@ fun VerifyWordsScreen(
     var travelDistance by remember { mutableStateOf(1f) }
     var isPositionReady by remember { mutableStateOf(false) }
 
-    // UI state derived from state machine
+    // UI state derived from state machine; checkId is the running pick, which every follow-up
+    // event names so the state machine can reject one from a pick that already ended
     var checkState by remember { mutableStateOf(stateMachine.state()) }
+    var checkId by remember { mutableStateOf<WordCheckId?>(null) }
     var wordNumber by remember { mutableIntStateOf(stateMachine.wordNumber().toInt()) }
     var possibleWords by remember { mutableStateOf(stateMachine.possibleWords().map { it.lowercase() }) }
     val config = remember { stateMachine.config() }
@@ -129,13 +132,21 @@ fun VerifyWordsScreen(
             else -> CoveColor.midnightBlue
         }
 
-    // handle state machine transitions
+    // handle state machine transitions; a new state cancels the effect of the previous one, so a
+    // cancelled flight never reports landing, and the state machine drops any stale event anyway
     LaunchedEffect(checkState) {
+        val id = checkId ?: return@LaunchedEffect
+
         when (val state = checkState) {
             is WordCheckState.Checking -> {
                 // animate chip to target
                 val word = state.word
-                val startPos = wordPositions[word] ?: return@LaunchedEffect
+                val startPos = wordPositions[word]
+                if (startPos == null) {
+                    // nothing to animate from, so land at once rather than leave the check running
+                    stateMachine.animationComplete(id)?.let { checkState = it.newState }
+                    return@LaunchedEffect
+                }
 
                 val dist = hypot(targetPosition.x - startPos.x, targetPosition.y - startPos.y)
                 travelDistance = if (dist <= 0f) 1f else dist
@@ -169,14 +180,13 @@ fun VerifyWordsScreen(
                 }
 
                 // animation complete - transition to correct/incorrect
-                val transition = stateMachine.animationComplete()
-                checkState = transition.newState
+                stateMachine.animationComplete(id)?.let { checkState = it.newState }
             }
 
             is WordCheckState.Correct -> {
                 // brief dwell to show green, then advance (matching iOS spring timing)
                 delay(DWELL_MS_CORRECT)
-                val transition = stateMachine.dwellComplete()
+                val transition = stateMachine.dwellComplete(id) ?: return@LaunchedEffect
                 checkState = transition.newState
 
                 if (transition.shouldAdvanceWord) {
@@ -192,14 +202,17 @@ fun VerifyWordsScreen(
             is WordCheckState.Incorrect -> {
                 // brief dwell to show red before returning (matching iOS spring timing)
                 delay(DWELL_MS_INCORRECT)
-                val transition = stateMachine.dwellComplete()
-                checkState = transition.newState
+                stateMachine.dwellComplete(id)?.let { checkState = it.newState }
             }
 
             is WordCheckState.Returning -> {
                 // animate back to origin
                 val word = state.word
-                val originPos = wordPositions[word] ?: return@LaunchedEffect
+                val originPos = wordPositions[word]
+                if (originPos == null) {
+                    stateMachine.returnComplete(id)?.let { checkState = it.newState }
+                    return@LaunchedEffect
+                }
 
                 // spring animation matching iOS spring().speed(3.0)
                 val springSpec =
@@ -223,8 +236,7 @@ fun VerifyWordsScreen(
                     }
                 }
 
-                val transition = stateMachine.returnComplete()
-                checkState = transition.newState
+                stateMachine.returnComplete(id)?.let { checkState = it.newState }
             }
 
             WordCheckState.None -> {
@@ -396,9 +408,9 @@ fun VerifyWordsScreen(
                                                         text = word,
                                                         selected = false,
                                                         onClick = {
-                                                            if (checkState == WordCheckState.None) {
-                                                                val transition = stateMachine.selectWord(word)
-                                                                checkState = transition.newState
+                                                            stateMachine.selectWord(word)?.let {
+                                                                checkId = it.checkId
+                                                                checkState = it.newState
                                                             }
                                                         },
                                                         onPositionCaptured = { position ->
@@ -548,7 +560,11 @@ fun VerifyWordsScreen(
                             }.width(actualChipWidth)
                             .height(chipHeight)
                             .background(overlayBg, RoundedCornerShape(14.dp))
-                            .zIndex(10f),
+                            .zIndex(10f)
+                            // tapping the chip while it flies to the slot sends it back unchecked
+                            .clickable(enabled = checkState is WordCheckState.Checking) {
+                                stateMachine.cancelCheck()?.let { checkState = it.newState }
+                            },
                     contentAlignment = Alignment.Center,
                 ) {
                     BasicText(

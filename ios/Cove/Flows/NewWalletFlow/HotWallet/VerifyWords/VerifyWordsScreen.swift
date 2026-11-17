@@ -239,58 +239,52 @@ struct VerifyWordsScreen: View {
         }
     }
 
+    // every handler below draws the state Rust returns and drops an event Rust rejects as stale,
+    // so an animation completion that outlives its pick, such as a cancelled chip's flight
+    // finishing after the next pick began, can't move the screen or the state machine
+
     @MainActor
     func selectWord(_ word: String) {
-        // if already checking, skip
-        if checkState != .none {
-            withAnimation(.spring().speed(6)) { checkState = .none }
-            return
-        }
+        guard let transition = stateMachine.selectWord(word: word) else { return }
 
-        let transition = stateMachine.selectWord(word: word)
-
-        let animation = Animation.spring().speed(2.0)
-
-        withAnimation(animation) {
+        withAnimation(.spring().speed(2.0)) {
             checkState = transition.newState
         } completion: {
-            checkWord(word)
+            finishFlight(transition.checkId)
         }
     }
 
     @MainActor
-    func deselectWord(_ animation: Animation = .spring(), completion: @escaping () -> Void = {}) {
+    private func finishFlight(_ id: WordCheckId) {
+        guard let transition = stateMachine.animationComplete(id: id) else { return }
+
+        if case .incorrect = transition.newState {
+            incorrectGuesses += 1
+        }
+
+        let animation: Animation = if case .correct = transition.newState {
+            .spring().speed(3)
+        } else {
+            .spring().speed(2)
+        }
+
         withAnimation(animation, completionCriteria: .logicallyComplete) {
-            checkState = .returning(word: currentWord ?? "")
+            checkState = transition.newState
         } completion: {
-            checkState = .none
-            completion()
+            finishDwell(id)
         }
     }
 
     @MainActor
-    func checkWord(_: String) {
-        let transition = stateMachine.animationComplete()
+    private func finishDwell(_ id: WordCheckId) {
+        guard let transition = stateMachine.dwellComplete(id: id) else { return }
 
-        guard case .correct = transition.newState else {
-            handleIncorrectWord(transition: transition)
+        guard transition.shouldAdvanceWord else {
+            returnChip(transition)
             return
         }
 
-        withAnimation(Animation.spring().speed(3), completionCriteria: .logicallyComplete) {
-            checkState = transition.newState
-        } completion: {
-            self.handleCorrectWordDwell()
-        }
-    }
-
-    @MainActor
-    private func handleCorrectWordDwell() {
-        let dwellTransition = stateMachine.dwellComplete()
-        checkState = .none
-
-        guard dwellTransition.shouldAdvanceWord else { return }
-
+        checkState = transition.newState
         if stateMachine.isComplete() {
             withAnimation(.easeInOut(duration: 0.3)) {
                 verificationComplete = true
@@ -303,17 +297,22 @@ struct VerifyWordsScreen: View {
         }
     }
 
+    /// Flies the chip back to its place after a wrong pick or a cancel
     @MainActor
-    private func handleIncorrectWord(transition: StateTransition) {
-        incorrectGuesses += 1
-        withAnimation(Animation.spring().speed(2)) {
+    private func returnChip(_ transition: StateTransition, animation: Animation = .spring().speed(3)) {
+        withAnimation(animation, completionCriteria: .logicallyComplete) {
             checkState = transition.newState
         } completion: {
-            _ = self.stateMachine.dwellComplete()
-            self.deselectWord(.spring().speed(3)) {
-                _ = self.stateMachine.returnComplete()
-            }
+            guard let returned = stateMachine.returnComplete(id: transition.checkId) else { return }
+            checkState = returned.newState
         }
+    }
+
+    /// Tapping the chip while it flies to the slot sends it back unchecked
+    @MainActor
+    private func cancelCheck() {
+        guard let transition = stateMachine.cancelCheck() else { return }
+        returnChip(transition, animation: .spring())
     }
 
     func matchedGeoId(for word: String) -> String {
@@ -373,7 +372,7 @@ struct VerifyWordsScreen: View {
             namespace: namespace,
             matchedGeometryId: matchedGeoId,
             selectWord: selectWord,
-            deselectWord: deselectCheckingWord,
+            cancelCheck: cancelCheck,
             showWords: showWordsAlert,
             skipVerification: showSkipAlert
         )
@@ -389,12 +388,6 @@ struct VerifyWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-    }
-
-    private func deselectCheckingWord() {
-        guard case .checking = checkState else { return }
-
-        deselectWord()
     }
 
     private func showWordsAlert() {
@@ -425,7 +418,7 @@ private struct VerifyWordsLayout: View {
     let namespace: Namespace.ID
     let matchedGeometryId: (String) -> String
     let selectWord: (String) -> Void
-    let deselectWord: () -> Void
+    let cancelCheck: () -> Void
     let showWords: () -> Void
     let skipVerification: () -> Void
 
@@ -453,7 +446,7 @@ private struct VerifyWordsLayout: View {
                                 namespace: namespace,
                                 matchedGeometryId: matchedGeometryId,
                                 selectWord: selectWord,
-                                deselectWord: deselectWord,
+                                cancelCheck: cancelCheck,
                                 usesFlexibleMiddleSpacer: false,
                                 includesActions: false,
                                 showWords: showWords,
@@ -483,7 +476,7 @@ private struct VerifyWordsLayout: View {
                         namespace: namespace,
                         matchedGeometryId: matchedGeometryId,
                         selectWord: selectWord,
-                        deselectWord: deselectWord,
+                        cancelCheck: cancelCheck,
                         usesFlexibleMiddleSpacer: true,
                         includesActions: true,
                         showWords: showWords,
@@ -509,7 +502,7 @@ private struct VerifyWordsMainContent: View {
     let namespace: Namespace.ID
     let matchedGeometryId: (String) -> String
     let selectWord: (String) -> Void
-    let deselectWord: () -> Void
+    let cancelCheck: () -> Void
     let usesFlexibleMiddleSpacer: Bool
     let includesActions: Bool
     let showWords: () -> Void
@@ -530,7 +523,7 @@ private struct VerifyWordsMainContent: View {
                 namespace: namespace,
                 matchedGeometryId: matchedGeometryId,
                 selectWord: selectWord,
-                deselectWord: deselectWord
+                cancelCheck: cancelCheck
             )
 
             if usesFlexibleMiddleSpacer {
@@ -571,7 +564,7 @@ private struct VerifyWordsSelection: View {
     let namespace: Namespace.ID
     let matchedGeometryId: (String) -> String
     let selectWord: (String) -> Void
-    let deselectWord: () -> Void
+    let cancelCheck: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
@@ -582,7 +575,7 @@ private struct VerifyWordsSelection: View {
 
             VStack(spacing: 10) {
                 if let checkingWord = currentWord {
-                    Button(action: deselectWord) {
+                    Button(action: cancelCheck) {
                         Text(checkingWord)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -596,6 +589,7 @@ private struct VerifyWordsSelection: View {
                             .background(checkingWordBackground)
                             .cornerRadius(10)
                     }
+                    .accessibilityIdentifier("verifyWords.checkingWord")
                     .matchedGeometryEffect(
                         id: matchedGeometryId(checkingWord),
                         in: namespace,
@@ -624,6 +618,7 @@ private struct VerifyWordsSelection: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .disabled(isDisabled || currentWord == word)
+                    .accessibilityIdentifier("verifyWords.option.\(word)")
                     .contentShape(Rectangle())
                     .padding(.horizontal)
                     .padding(.vertical, 12)

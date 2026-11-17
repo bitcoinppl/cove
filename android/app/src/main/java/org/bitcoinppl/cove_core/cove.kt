@@ -2017,6 +2017,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_wordverifystatemachine_animation_complete(
     ): Short
+    external fun uniffi_cove_checksum_method_wordverifystatemachine_cancel_check(
+    ): Short
     external fun uniffi_cove_checksum_method_wordverifystatemachine_config(
     ): Short
     external fun uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete(
@@ -3417,17 +3419,19 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_wordverifystatemachine_new(`validator`: Long,`startingWordNumber`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_wordverifystatemachine_animation_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_wordverifystatemachine_animation_complete(`ptr`: Long,`id`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_wordverifystatemachine_cancel_check(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wordverifystatemachine_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(`ptr`: Long,`id`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wordverifystatemachine_is_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_wordverifystatemachine_possible_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_wordverifystatemachine_return_complete(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_wordverifystatemachine_return_complete(`ptr`: Long,`id`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wordverifystatemachine_select_word(`ptr`: Long,`word`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -5326,13 +5330,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_wordvalidator_possible_words() != 20003.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 38406.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 33513.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_cancel_check() != 61542.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_config() != 39348.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 24167.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 37693.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_is_complete() != 19976.toShort()) {
@@ -5341,10 +5348,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_possible_words() != 5700.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 53818.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 23675.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 49272.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 33564.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_state() != 57576.toShort()) {
@@ -31868,18 +31875,27 @@ public object FfiConverterTypeWordValidator: FfiConverter<WordValidator, Long> {
 /**
  * State machine for word verification flow
  *
- * UI sends events (select_word, animation_complete, etc.) and receives
- * StateTransition results that tell it what state to render and what
- * animations to play.
+ * The UI sends events and draws the state each returned transition carries. A pick starts a
+ * check with its own id; the events that move it along (`animation_complete`,
+ * `dwell_complete`, `cancel_check`, `return_complete`) take that id and return None when they
+ * are stale or out of order, so the UI drops them instead of drawing a state the machine is not
+ * in. One check runs at a time, and a pick made while one runs returns None too
  */
 public interface WordVerifyStateMachineInterface {
 
     /**
-     * Animation to target complete - transition to Correct or Incorrect
+     * The chip reached the answer slot: show it as correct or incorrect
      *
-     * Returns a transition with the result state and dwell duration.
+     * Returns the transition with the dwell duration, or None unless check `id` is flying
      */
-    fun `animationComplete`(): StateTransition
+    fun `animationComplete`(`id`: WordCheckId): StateTransition?
+
+    /**
+     * User tapped the chip while it flies to the slot: send it back without checking it
+     *
+     * Returns a Returning transition, or None unless a check is flying
+     */
+    fun `cancelCheck`(): StateTransition?
 
     /**
      * Get the animation configuration
@@ -31887,12 +31903,12 @@ public interface WordVerifyStateMachineInterface {
     fun `config`(): WordVerifyAnimationConfig
 
     /**
-     * Dwell time complete - advance word or start return animation
+     * Dwell time complete: advance on a correct word or send a wrong one back
      *
-     * If correct: transitions to None and signals to advance word.
-     * If incorrect: transitions to Returning state.
+     * A correct check ends here, moving to the next word with `should_advance_word` set; a
+     * wrong one starts Returning. Returns None unless check `id` is dwelling
      */
-    fun `dwellComplete`(): StateTransition
+    fun `dwellComplete`(`id`: WordCheckId): StateTransition?
 
     /**
      * Check if all words have been verified
@@ -31905,17 +31921,19 @@ public interface WordVerifyStateMachineInterface {
     fun `possibleWords`(): List<kotlin.String>
 
     /**
-     * Return animation complete (after incorrect) - back to None
+     * Return animation complete: the chip is back in its place and another word can be picked
+     *
+     * Returns None unless check `id` is returning
      */
-    fun `returnComplete`(): StateTransition
+    fun `returnComplete`(`id`: WordCheckId): StateTransition?
 
     /**
-     * User tapped a word - start the checking animation
+     * User tapped a word: start a check, with the chip flying to the answer slot
      *
-     * Returns a transition with Checking state and the animation duration.
-     * If already animating, returns no-change.
+     * Returns None while another check runs or once every word is verified, and the tap does
+     * nothing
      */
-    fun `selectWord`(`word`: kotlin.String): StateTransition
+    fun `selectWord`(`word`: kotlin.String): StateTransition?
 
     /**
      * Get the current state
@@ -31933,9 +31951,11 @@ public interface WordVerifyStateMachineInterface {
 /**
  * State machine for word verification flow
  *
- * UI sends events (select_word, animation_complete, etc.) and receives
- * StateTransition results that tell it what state to render and what
- * animations to play.
+ * The UI sends events and draws the state each returned transition carries. A pick starts a
+ * check with its own id; the events that move it along (`animation_complete`,
+ * `dwell_complete`, `cancel_check`, `return_complete`) take that id and return None when they
+ * are stale or out of order, so the UI drops them instead of drawing a state the machine is not
+ * in. One check runs at a time, and a pick made while one runs returns None too
  */
 open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMachineInterface
 {
@@ -32053,14 +32073,33 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
 
 
     /**
-     * Animation to target complete - transition to Correct or Incorrect
+     * The chip reached the answer slot: show it as correct or incorrect
      *
-     * Returns a transition with the result state and dwell duration.
-     */override fun `animationComplete`(): StateTransition {
-            return FfiConverterTypeStateTransition.lift(
+     * Returns the transition with the dwell duration, or None unless check `id` is flying
+     */override fun `animationComplete`(`id`: WordCheckId): StateTransition? {
+            return FfiConverterOptionalTypeStateTransition.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_animation_complete(
+        it,
+
+        FfiConverterTypeWordCheckId.lower(`id`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * User tapped the chip while it flies to the slot: send it back without checking it
+     *
+     * Returns a Returning transition, or None unless a check is flying
+     */override fun `cancelCheck`(): StateTransition? {
+            return FfiConverterOptionalTypeStateTransition.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_cancel_check(
         it,
         _status)
 }
@@ -32087,17 +32126,18 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
 
 
     /**
-     * Dwell time complete - advance word or start return animation
+     * Dwell time complete: advance on a correct word or send a wrong one back
      *
-     * If correct: transitions to None and signals to advance word.
-     * If incorrect: transitions to Returning state.
-     */override fun `dwellComplete`(): StateTransition {
-            return FfiConverterTypeStateTransition.lift(
+     * A correct check ends here, moving to the next word with `should_advance_word` set; a
+     * wrong one starts Returning. Returns None unless check `id` is dwelling
+     */override fun `dwellComplete`(`id`: WordCheckId): StateTransition? {
+            return FfiConverterOptionalTypeStateTransition.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(
         it,
-        _status)
+
+        FfiConverterTypeWordCheckId.lower(`id`),_status)
 }
     }
     )
@@ -32138,14 +32178,17 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
 
 
     /**
-     * Return animation complete (after incorrect) - back to None
-     */override fun `returnComplete`(): StateTransition {
-            return FfiConverterTypeStateTransition.lift(
+     * Return animation complete: the chip is back in its place and another word can be picked
+     *
+     * Returns None unless check `id` is returning
+     */override fun `returnComplete`(`id`: WordCheckId): StateTransition? {
+            return FfiConverterOptionalTypeStateTransition.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_return_complete(
         it,
-        _status)
+
+        FfiConverterTypeWordCheckId.lower(`id`),_status)
 }
     }
     )
@@ -32154,12 +32197,12 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
 
 
     /**
-     * User tapped a word - start the checking animation
+     * User tapped a word: start a check, with the chip flying to the answer slot
      *
-     * Returns a transition with Checking state and the animation duration.
-     * If already animating, returns no-change.
-     */override fun `selectWord`(`word`: kotlin.String): StateTransition {
-            return FfiConverterTypeStateTransition.lift(
+     * Returns None while another check runs or once every word is verified, and the tap does
+     * nothing
+     */override fun `selectWord`(`word`: kotlin.String): StateTransition? {
+            return FfiConverterOptionalTypeStateTransition.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_select_word(
@@ -36809,6 +36852,11 @@ public object FfiConverterTypeShutdownAttemptId: FfiConverterRustBuffer<Shutdown
  */
 data class StateTransition (
     /**
+     * The pick this transition belongs to, passed back with the next event for it
+     */
+    var `checkId`: WordCheckId
+    ,
+    /**
      * The new state after the transition
      */
     var `newState`: WordCheckState
@@ -36838,6 +36886,7 @@ data class StateTransition (
 public object FfiConverterTypeStateTransition: FfiConverterRustBuffer<StateTransition> {
     override fun read(buf: ByteBuffer): StateTransition {
         return StateTransition(
+            FfiConverterTypeWordCheckId.read(buf),
             FfiConverterTypeWordCheckState.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalUInt.read(buf),
@@ -36845,12 +36894,14 @@ public object FfiConverterTypeStateTransition: FfiConverterRustBuffer<StateTrans
     }
 
     override fun allocationSize(value: StateTransition) = (
+            FfiConverterTypeWordCheckId.allocationSize(value.`checkId`) +
             FfiConverterTypeWordCheckState.allocationSize(value.`newState`) +
             FfiConverterBoolean.allocationSize(value.`shouldAdvanceWord`) +
             FfiConverterOptionalUInt.allocationSize(value.`animationDurationMs`)
     )
 
     override fun write(value: StateTransition, buf: ByteBuffer) {
+            FfiConverterTypeWordCheckId.write(value.`checkId`, buf)
             FfiConverterTypeWordCheckState.write(value.`newState`, buf)
             FfiConverterBoolean.write(value.`shouldAdvanceWord`, buf)
             FfiConverterOptionalUInt.write(value.`animationDurationMs`, buf)
@@ -72953,6 +73004,38 @@ public object FfiConverterOptionalTypeSendConfirmationLock: FfiConverterRustBuff
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeStateTransition: FfiConverterRustBuffer<StateTransition?> {
+    override fun read(buf: ByteBuffer): StateTransition? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeStateTransition.read(buf)
+    }
+
+    override fun allocationSize(value: StateTransition?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeStateTransition.allocationSize(value)
+        }
+    }
+
+    override fun write(value: StateTransition?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeStateTransition.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeWalletMetadata: FfiConverterRustBuffer<WalletMetadata?> {
     override fun read(buf: ByteBuffer): WalletMetadata? {
         if (buf.get().toInt() == 0) {
@@ -74952,6 +75035,11 @@ public typealias FfiConverterTypeRecordId = FfiConverterString
 
 public typealias Timestamp = kotlin.ULong
 public typealias FfiConverterTypeTimestamp = FfiConverterULong
+
+
+
+public typealias WordCheckId = kotlin.ULong
+public typealias FfiConverterTypeWordCheckId = FfiConverterULong
 
 
 

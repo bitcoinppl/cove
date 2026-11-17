@@ -13,6 +13,7 @@ This document covers platform-specific gotchas and patterns for achieving visual
 - [Button Text Centering](#button-text-centering)
 - [NFC Scanning UI](#nfc-scanning-ui)
 - [Slider Step Behavior](#slider-step-behavior)
+- [Recovery Word Verification](#recovery-word-verification)
 - [Cloud Backup Recovery](#cloud-backup-recovery)
 - [Lifecycle and Effect Modifiers](#lifecycle-and-effect-modifiers)
   - [View Lifecycle](#view-lifecycle)
@@ -187,6 +188,19 @@ Since Android has no system NFC UI, `TapSignerScanningOverlay` composable provid
 **Critical**: These are not equivalent! Calculating `steps = (max - min) / stepSize` can create millions of discrete positions, causing severe lag/freeze.
 
 **Guideline**: For continuous sliders matching iOS, omit `steps` entirely on Android. Handle step snapping in `onValueChange` if needed.
+
+---
+
+## Recovery Word Verification
+
+The verify words screen draws a picked chip flying to the answer slot, turning green or red, and flying back after a wrong pick. Rust's `WordVerifyStateMachine` owns that state on both platforms; the screens only animate it.
+
+- A pick (`select_word`) starts a check with a `WordCheckId`, and every later event for it (`animation_complete`, `dwell_complete`, `return_complete`) passes that id back. An event from a pick that already ended returns `nil`/`null`, and the screen drops it instead of drawing anything. SwiftUI runs an interrupted animation's completion anyway, so on iOS this is what keeps a cancelled flight from checking the next pick
+- A pick made while a check runs also returns `nil`/`null` and does nothing
+- Tapping the chip while it flies to the slot calls `cancel_check`, which sends it back unchecked. On Android the new state cancels the running `LaunchedEffect`, so the flight never reports landing
+- Neither screen sets a check state Rust didn't return
+
+`CoveUITests/VerifyWordsFullLaunchUITests` drives the iOS screen with timed bursts of taps that cancel picks mid-flight and pick again right after.
 
 ---
 
