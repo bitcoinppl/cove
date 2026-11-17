@@ -1,3 +1,4 @@
+// scratch: stack-top gate check, slice 2/2 (throwaway)
 //! `AppManager`
 
 pub mod alert_state;
