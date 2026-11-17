@@ -820,7 +820,7 @@ private fun UiDevice.dismissKeyboardIfShown() {
         return
     }
 
-    pressBack()
+    pressBackInApp()
     val deadline = System.currentTimeMillis() + 5_000
 
     while (System.currentTimeMillis() < deadline) {
