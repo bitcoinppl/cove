@@ -6,10 +6,14 @@ import XCTest
 /// Regression for #927: going back from Send at the largest text size pinned the main thread
 /// in lazy layout until the watchdog killed the app
 ///
-/// Run with `-test-timeouts-enabled YES` so a hang fails the test instead of stalling the run
+/// Runs on a phone only, as described under "Device-only iOS tests" in docs/testing.md. Run it
+/// with `-test-timeouts-enabled YES` so a hang fails the test instead of stalling the run
 @MainActor
 final class SendFlowBackNavigationTests: XCTestCase {
     func testBackFromSendAtLargestAccessibilitySizeFinishes() async throws {
+        // on CI's simulators the keyboard service can stall the app past the Back wait (#1108),
+        // while phones finish each Back in under a second
+        try XCTSkipIf(Self.runsOnSimulator, "runs on a phone only (#1108)")
         executionTimeAllowance = 60
         try await waitForBootstrap()
 
@@ -86,6 +90,14 @@ final class SendFlowBackNavigationTests: XCTestCase {
 
             try await Task.sleep(for: .milliseconds(50))
         }
+    }
+
+    private static var runsOnSimulator: Bool {
+        #if targetEnvironment(simulator)
+            true
+        #else
+            false
+        #endif
     }
 
     private func findNavigationController(in controller: UIViewController) -> UINavigationController? {
