@@ -18,13 +18,6 @@ struct WalletSettingsContainer: View {
     /// private
     @State private var error: String? = nil
 
-    func walletNameBinding(_ manager: WalletManager) -> Binding<String> {
-        Binding(
-            get: { manager.walletMetadata.name },
-            set: { manager.dispatch(action: .updateName($0)) }
-        )
-    }
-
     var body: some View {
         WalletManagerHost(walletId: id, loading: {
             WalletSettingsLoadingOrError(error: error, metadata: app.walletMetadata(id: id)) {
@@ -34,11 +27,7 @@ struct WalletSettingsContainer: View {
             self.error = "Failed to get wallet \(error.localizedDescription)"
             Log.error(self.error!)
         }) { manager in
-            WalletSettingsRouteView(
-                manager: manager,
-                route: route,
-                walletName: walletNameBinding(manager)
-            )
+            WalletSettingsRouteView(manager: manager, route: route)
         }
     }
 }
@@ -46,12 +35,12 @@ struct WalletSettingsContainer: View {
 private struct WalletSettingsRouteView: View {
     private let content: AnyView
 
-    init(manager: WalletManager, route: WalletSettingsRoute, walletName: Binding<String>) {
+    init(manager: WalletManager, route: WalletSettingsRoute) {
         content = switch route {
         case .main:
             AnyView(WalletSettingsView(manager: manager))
         case .changeName:
-            AnyView(WalletSettingsChangeNameView(name: walletName))
+            AnyView(WalletSettingsChangeNameView(manager: manager))
         }
     }
 

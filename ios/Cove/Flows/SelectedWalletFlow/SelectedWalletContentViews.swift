@@ -68,6 +68,7 @@ struct SelectedWalletTitleContent: View {
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .accessibilityIdentifier("selectedWallet.title")
         }
         .padding(.vertical, 20)
         .padding(.horizontal, 28)

@@ -30,8 +30,6 @@ struct SelectedWalletScreen: View {
     /// nav bar height (~50) + scroll view system insets (~50)
     /// safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
     private let navBarAndScrollInsets: CGFloat = 100
-    /// Delay long enough for SwiftUI to dismiss the title context menu before routing
-    private let contextMenuDismissNavigationDelay: Duration = .milliseconds(350)
 
     /// public
     var manager: WalletManager
@@ -44,7 +42,6 @@ struct SelectedWalletScreen: View {
     @State private var cloudBackupManager = CloudBackupManager.shared
 
     @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
-    @State private var pendingRenameNavigationTask: Task<Void, Never>? = nil
 
     /// private
     @State private var runPostRefresh = false
@@ -166,19 +163,8 @@ struct SelectedWalletScreen: View {
         presentationCoordinator.present(.receive)
     }
 
-    private func showRenameFromTitleMenu() {
-        let walletId = metadata.id
-
-        pendingRenameNavigationTask?.cancel()
-        pendingRenameNavigationTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: contextMenuDismissNavigationDelay)
-            } catch {
-                return
-            }
-
-            app.pushRoute(Route.settings(.wallet(id: walletId, route: .changeName)))
-        }
+    private func showRenameScreen() {
+        app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
     }
 
     private func shareExport(
@@ -315,7 +301,7 @@ struct SelectedWalletScreen: View {
                 updater: updater,
                 showReceiveSheet: showReceiveSheet,
                 headerBottomChanged: handleHeaderBottomChanged,
-                changeName: showRenameFromTitleMenu,
+                changeName: showRenameScreen,
                 importLabelsFile: importLabelsFile,
                 scannedLabelsChanged: onChangeOfScannedLabels,
                 showLabelsQrExport: { presentationCoordinator.present(.labelsQrExport) },
@@ -425,9 +411,6 @@ struct SelectedWalletScreen: View {
     }
 
     private func cleanUp() {
-        pendingRenameNavigationTask?.cancel()
-        pendingRenameNavigationTask = nil
-
         app.isPastHeader = false
         UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
     }

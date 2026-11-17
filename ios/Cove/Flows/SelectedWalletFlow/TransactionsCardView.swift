@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 7/31/24.
 //
 
-import MijickPopups
 import SwiftUI
 
 private let scrollThresholdIndex = 5
@@ -78,11 +77,6 @@ struct TransactionsCardView: View {
             .padding()
             .padding(.top, 5)
         }
-        .onDisappear(perform: dismissPopups)
-    }
-
-    private func dismissPopups() {
-        Task { await dismissAllPopups() }
     }
 }
 
