@@ -128,6 +128,7 @@ impl PendingUploadVerifier {
 
             if matches!(next_state.state, PersistedCloudBlobState::Failed(_)) {
                 any_failed = true;
+                self.0.show_upload_state(&next_state);
             }
 
             self.log_blob_result(&next_state, &result);

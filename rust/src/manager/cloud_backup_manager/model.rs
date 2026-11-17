@@ -9,10 +9,12 @@ use super::{
     CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupInventoryAuthority,
     CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, DeepVerificationReport, PendingUploadVerificationState,
-    RecoveryAction, RecoveryState, SyncState, VerificationState, is_connectivity_related_issue,
+    CloudBackupVerificationReason, CloudBackupWalletStatus, DeepVerificationReport,
+    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
+    is_connectivity_related_issue,
 };
 
+use super::cloud_inventory::LocalUploadStatus;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 use std::collections::{HashMap, HashSet};
@@ -135,6 +137,29 @@ impl CloudBackupDetail {
         self.needs_sync.retain(|wallet| local_record_ids.contains(&wallet.record_id));
 
         removed.into_iter().map(|wallet| wallet.record_id).collect()
+    }
+
+    /// Shows the upload state of `record_id`, as the next refresh would from its persisted state,
+    /// returning whether a row changed
+    ///
+    /// Every status an upload state decides is one that needs a sync, so the row keeps its place
+    pub(crate) fn apply_local_upload_status(
+        &mut self,
+        record_id: &str,
+        status: LocalUploadStatus,
+    ) -> bool {
+        let Some(wallet) = self.needs_sync.iter_mut().find(|wallet| wallet.record_id == record_id)
+        else {
+            return false;
+        };
+
+        let status = CloudBackupWalletStatus::from(status);
+        let changes = wallet.sync_status != status && wallet.sync_status.follows_upload_state();
+        if changes {
+            wallet.sync_status = status;
+        }
+
+        changes
     }
 }
 

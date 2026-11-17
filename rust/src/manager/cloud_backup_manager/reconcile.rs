@@ -124,7 +124,24 @@ impl RustCloudBackupManager {
     /// Applies one input to the inventory owner, then publishes the screen and asks for a
     /// cloud-only fetch when the input invalidated the rows
     pub(crate) fn apply_inventory(&self, input: InventoryInput) -> InventoryEffects {
-        let effects = self.inventory.write().apply(input);
+        self.apply_inventory_with(|| Some(input))
+    }
+
+    /// Like `apply_inventory`, building the input while holding the inventory lock, and applying
+    /// nothing when it builds none
+    ///
+    /// An input read from this device's state, such as its persisted upload states, sees every
+    /// change whose own input has not been applied yet, since that input waits for the lock, so
+    /// inputs land in the order their reads saw the changes
+    pub(crate) fn apply_inventory_with(
+        &self,
+        input: impl FnOnce() -> Option<InventoryInput>,
+    ) -> InventoryEffects {
+        let effects = {
+            let mut inventory = self.inventory.write();
+            let Some(input) = input() else { return InventoryEffects::default() };
+            inventory.apply(input)
+        };
 
         if effects.changed {
             self.request_screen_publish();

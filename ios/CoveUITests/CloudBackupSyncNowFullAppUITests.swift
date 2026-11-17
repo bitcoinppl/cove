@@ -8,12 +8,10 @@ import XCTest
 final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     private static let walletOneRecordId = "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d"
 
-    /// A failure that requests no detail refresh can land after the last one, so the detail is
-    /// reopened this many times before the test gives up on seeing it
-    private static let failureReopenAttempts = 6
-
     /// The Settings row's title while a wallet's upload has failed
     private static let errorRowTitle = "Cloud Backup Error"
+
+    private static let heldRejectedUpload = "rejected-new-wallet-upload"
 
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
@@ -38,6 +36,41 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
         control.waitUntil("Sync Now should upload the pending wallet") { acceptedNewWalletUploads($0) == 1 }
         assertSyncedDetailShows(pending, control)
+    }
+
+    /// The rejected upload's failure lands while the detail is open, and the detail shows it
+    /// without being opened again
+    func testRejectedUploadShowsFailedOnTheOpenDetail() throws {
+        let control = try restoreFixtureAndOpenDetail(verify: false)
+        try control.update { $0.newWalletUploadFailures = [.quotaExceeded] }
+        try control.holdNextWalletUpload(id: Self.heldRejectedUpload)
+
+        importWalletFromSettings()
+        control.waitForHold(Self.heldRejectedUpload)
+        dismissVerifyPrompt()
+
+        // the detail's entry refresh reads the wallet while its upload is held, so the rejection
+        // lands after the detail already lists the wallet as dirty or uploading
+        robot.openSettings()
+        robot.openCloudBackupDetailFromSettingsRow()
+        control.waitForAppState("the open detail should list the new wallet as needing sync before its upload fails", timeout: 30) { state in
+            state.inventoryLoaded
+                && state.wallets.contains { $0.recordId != Self.walletOneRecordId && $0.needsSync && $0.status != "failed" }
+        }
+
+        control.release(Self.heldRejectedUpload)
+        control.waitUntil("the automatic upload of the new wallet should be rejected") {
+            $0.uploads.filter { $0.isNewWallet && !$0.accepted }.count == 1
+        }
+
+        control.waitForAppState("the open detail should show the rejected upload as failed", timeout: 15) { state in
+            state.wallets.contains { $0.recordId != Self.walletOneRecordId && $0.needsSync && $0.status == "failed" }
+        }
+        let failed = try XCTUnwrap(control.appState?.wallets.first { $0.recordId != Self.walletOneRecordId })
+        let row = app.descendants(matching: .any)[CloudBackupUIIdentifier.wallet(failed.recordId)]
+        robot.scrollToHittable(row)
+        XCTAssertTrue(row.label.contains("Failed"), "the rejected wallet's row does not show Failed: \(row.label)")
+        control.assertNextActions("a failed upload should offer Sync Now to retry it", available: ["syncUnsynced", "turnOff"])
     }
 
     func testOfflineSyncNowUploadsNothingThenUploadsAfterReconnect() throws {
@@ -150,29 +183,13 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
         let control = try restoreFixtureAndOpenDetail(verify: false)
         try control.update { $0.newWalletUploadFailures = [.quotaExceeded] }
 
-        robot.goBack()
-        let backToWallet = app.navigationBars["Settings"].buttons.firstMatch
-        XCTAssertTrue(backToWallet.waitForExistence(timeout: 10))
-        backToWallet.tap()
-        app.importTestMnemonicFromAddWallet()
+        importWalletFromSettings()
 
         control.waitUntil("the automatic upload of the new wallet should be rejected") {
             $0.uploads.filter { $0.isNewWallet && !$0.accepted }.count == 1
         }
 
-        // the new wallet changed the backup, so the root asks whether to verify it, over the
-        // sidebar Settings is opened from
-        let verifyPrompt = app.descendants(matching: .any)[CloudBackupUIIdentifier.promptVerification]
-        XCTAssertTrue(verifyPrompt.waitForExistence(timeout: 15), "a new wallet should ask to verify the backup")
-        verifyPrompt.buttons["Not Now"].tap()
-        XCTAssertTrue(verifyPrompt.waitForNonExistence(timeout: 10), "Not Now should close the verify prompt")
-
-        // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
-        // upload's saved failure; the failure itself requests no refresh, so a refresh that ran
-        // before it keeps showing the dirty wallet until the detail is opened again
-        let showsFailure: (CloudBackupUITestAppState) -> Bool = { state in
-            state.wallets.contains { $0.recordId != Self.walletOneRecordId && $0.needsSync && $0.status == "failed" }
-        }
+        dismissVerifyPrompt()
 
         // Settings names the rejection before the detail is opened
         robot.openSettings()
@@ -181,13 +198,12 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
             "Settings should show the rejected upload's quota error"
         )
         robot.openCloudBackupDetail(rowTitle: Self.errorRowTitle)
-        for _ in 0 ..< Self.failureReopenAttempts {
-            if waitForAppState(control, timeout: 5, showsFailure) { break }
 
-            robot.goBack()
-            robot.openCloudBackupDetail(rowTitle: Self.errorRowTitle)
+        // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
+        // upload's failure
+        control.waitForAppState("the detail should list the new wallet as needing sync after its upload failed", timeout: 15) { state in
+            state.wallets.contains { $0.recordId != Self.walletOneRecordId && $0.needsSync && $0.status == "failed" }
         }
-        control.waitForAppState("the detail should list the new wallet as needing sync after its upload failed", timeout: 1, showsFailure)
 
         let pending = try XCTUnwrap(control.appState?.wallets.first { $0.recordId != Self.walletOneRecordId })
         robot.scrollToHittable(app.buttons["Sync Now"])
@@ -197,6 +213,24 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
     }
 
     // MARK: - Steps and assertions
+
+    /// Leaves the detail for the wallet and adds the test mnemonic from Add Wallet
+    private func importWalletFromSettings() {
+        robot.goBack()
+        let backToWallet = app.navigationBars["Settings"].buttons.firstMatch
+        XCTAssertTrue(backToWallet.waitForExistence(timeout: 10))
+        backToWallet.tap()
+        app.importTestMnemonicFromAddWallet()
+    }
+
+    /// The new wallet changed the backup, so the root asks whether to verify it, over the sidebar
+    /// Settings is opened from
+    private func dismissVerifyPrompt() {
+        let verifyPrompt = app.descendants(matching: .any)[CloudBackupUIIdentifier.promptVerification]
+        XCTAssertTrue(verifyPrompt.waitForExistence(timeout: 15), "a new wallet should ask to verify the backup")
+        verifyPrompt.buttons["Not Now"].tap()
+        XCTAssertTrue(verifyPrompt.waitForNonExistence(timeout: 10), "Not Now should close the verify prompt")
+    }
 
     private func tapSyncNow() {
         let syncNow = app.buttons["Sync Now"]
@@ -221,22 +255,6 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
             app.buttons["Sync Now"].waitForNonExistence(timeout: 10),
             "Sync Now should disappear once nothing needs sync"
         )
-    }
-
-    /// Waits without failing, for a condition the caller retries
-    private func waitForAppState(
-        _ control: CloudBackupHostControl,
-        timeout: TimeInterval,
-        _ condition: (CloudBackupUITestAppState) -> Bool
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let state = control.appState, condition(state) { return true }
-
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-
-        return false
     }
 
     private func acceptedNewWalletUploads(_ state: CloudBackupUITestHostState) -> Int {

@@ -570,6 +570,8 @@ impl RustCloudBackupManager {
             }),
         );
 
+        // the detail isn't shown that the upload started: a deferred upload goes back to Dirty,
+        // whose row only a refresh can derive from the cloud copy, so Uploading would outlive it
         let wrote_uploading = Database::global()
             .cloud_blob_sync_states
             .set_if_current(&current_state, &uploading_state)

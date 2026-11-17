@@ -55,17 +55,21 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
             script.uploadFailures.first { $0.kind == .wallet && $0.attempt == attempt }?.error
         }
 
-        try recordUpload(
-            script,
-            kind: .wallet,
-            failure: failure,
-            namespace: namespace,
-            recordId: recordId,
-            isNewWallet: isNewWallet
-        )
+        let recorded = Result {
+            try recordUpload(
+                script,
+                kind: .wallet,
+                failure: failure,
+                namespace: namespace,
+                recordId: recordId,
+                isNewWallet: isNewWallet
+            )
+        }
 
-        // a hold here proves which action made the upload, since it can't return until released
+        // a hold here proves which action made the upload, since it can't return until released,
+        // and holds a rejected upload too, so a test decides when its failure lands
         await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
+        try recorded.get()
         try validateWritable(namespace: namespace, script: script)
         try store.storeWallet(namespace: namespace, recordId: recordId, data: data)
     }

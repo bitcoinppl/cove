@@ -107,7 +107,8 @@ final class CloudBackupHostControl {
         }
     }
 
-    /// Holds the next wallet upload made after this call, from whichever action makes it
+    /// Holds the next wallet upload made after this call, from whichever action makes it, and
+    /// whether the provider accepts or rejects it
     func holdNextWalletUpload(id: String) throws {
         let uploadsSoFar = state.count(.walletUpload)
         try update {

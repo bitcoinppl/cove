@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use act_zero::send;
+
+use super::cloud_inventory::LocalUploadStatus;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -384,7 +386,37 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.apply_inventory(InventoryInput::Result { scope, result });
+        // the result may have read an upload before its latest state, such as a failure, and
+        // that state's own input may have landed before this result replaced the rows it marked
+        self.apply_inventory_with(|| {
+            let mut result = result;
+            if let Some(detail) = result.detail_mut() {
+                Self::apply_local_upload_states(detail);
+            }
+
+            Some(InventoryInput::Result { scope, result })
+        });
+    }
+
+    /// Shows each row's current upload state where that state decides the row, as a refresh
+    /// reading it now would
+    ///
+    /// Called under the inventory lock, so an upload state persisted after this read sends its own
+    /// `LocalUploadStateChanged` once this detail is applied
+    fn apply_local_upload_states(detail: &mut CloudBackupDetail) {
+        let sync_states = match CloudBackupStore::global().sync_states_by_record_id() {
+            Ok(sync_states) => sync_states,
+            Err(error) => {
+                error!("read upload states to apply a detail refresh: {error}");
+                return;
+            }
+        };
+
+        for (record_id, sync_state) in sync_states {
+            if let Some(status) = LocalUploadStatus::from_persisted(&sync_state.state) {
+                detail.apply_local_upload_status(&record_id, status);
+            }
+        }
     }
 
     fn apply_cloud_only_state(&self, scope: InventoryScope, cloud_only: CloudOnlyState) {

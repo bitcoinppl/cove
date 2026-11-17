@@ -282,36 +282,79 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
     }
 }
 
+/// The status an upload's persisted state alone decides for its wallet's row, wherever the cloud
+/// copy stands
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalUploadStatus {
+    Uploading,
+    UploadedPendingConfirmation,
+    Failed,
+}
+
+impl LocalUploadStatus {
+    /// `None` for a dirty or confirmed upload, whose row the cloud copy decides
+    pub(crate) fn from_persisted(state: &PersistedCloudBlobState) -> Option<Self> {
+        match state {
+            PersistedCloudBlobState::Uploading(_) => Some(Self::Uploading),
+            PersistedCloudBlobState::UploadedPendingConfirmation(_) => {
+                Some(Self::UploadedPendingConfirmation)
+            }
+            PersistedCloudBlobState::Failed(_) => Some(Self::Failed),
+            PersistedCloudBlobState::Dirty(_) | PersistedCloudBlobState::Confirmed(_) => None,
+        }
+    }
+}
+
+impl From<LocalUploadStatus> for CloudBackupWalletStatus {
+    fn from(status: LocalUploadStatus) -> Self {
+        match status {
+            LocalUploadStatus::Uploading => Self::Uploading,
+            LocalUploadStatus::UploadedPendingConfirmation => Self::UploadedPendingConfirmation,
+            LocalUploadStatus::Failed => Self::Failed,
+        }
+    }
+}
+
+impl CloudBackupWalletStatus {
+    /// Whether this row's status comes from its upload's persisted state, so a newer upload
+    /// state replaces it as a refresh would, following `sync_status_for_wallet`
+    ///
+    /// A row whose status comes from the remote copy or the local wallet keeps it: a matching
+    /// cloud copy is confirmed whatever the upload did, and a wallet whose cloud copy holds a key
+    /// this device lacks never uploads
+    pub(crate) fn follows_upload_state(&self) -> bool {
+        match self {
+            Self::Confirmed
+            | Self::SecretMissingLocally
+            | Self::DeletedFromDevice
+            | Self::AlreadyOnDevice => false,
+            Self::Dirty
+            | Self::Uploading
+            | Self::UploadedPendingConfirmation
+            | Self::Failed
+            | Self::UnsupportedVersion
+            | Self::RemoteStateUnknown => true,
+        }
+    }
+}
+
 fn sync_status_from_state(
     sync_state: Option<&PersistedCloudBlobSyncState>,
     fallback_status: CloudBackupWalletStatus,
 ) -> CloudBackupWalletStatus {
-    match sync_state.map(|state| &state.state) {
-        Some(PersistedCloudBlobState::Uploading(_)) => CloudBackupWalletStatus::Uploading,
-        Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-            CloudBackupWalletStatus::UploadedPendingConfirmation
-        }
-        Some(PersistedCloudBlobState::Failed(_)) => CloudBackupWalletStatus::Failed,
-        Some(PersistedCloudBlobState::Dirty(_))
-        | Some(PersistedCloudBlobState::Confirmed(_))
-        | None => fallback_status,
-    }
+    sync_state
+        .and_then(|state| LocalUploadStatus::from_persisted(&state.state))
+        .map_or(fallback_status, CloudBackupWalletStatus::from)
 }
 
 fn sync_status_for_unknown_remote(
     sync_state: Option<&PersistedCloudBlobSyncState>,
 ) -> CloudBackupWalletStatus {
-    match sync_state.map(|state| &state.state) {
-        Some(PersistedCloudBlobState::Dirty(_)) => CloudBackupWalletStatus::Dirty,
-        Some(PersistedCloudBlobState::Uploading(_)) => CloudBackupWalletStatus::Uploading,
-        Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-            CloudBackupWalletStatus::UploadedPendingConfirmation
-        }
-        Some(PersistedCloudBlobState::Failed(_)) => CloudBackupWalletStatus::Failed,
-        Some(PersistedCloudBlobState::Confirmed(_)) | None => {
-            CloudBackupWalletStatus::RemoteStateUnknown
-        }
+    if let Some(PersistedCloudBlobState::Dirty(_)) = sync_state.map(|state| &state.state) {
+        return CloudBackupWalletStatus::Dirty;
     }
+
+    sync_status_from_state(sync_state, CloudBackupWalletStatus::RemoteStateUnknown)
 }
 
 fn has_local_upload_candidate(sync_state: Option<&PersistedCloudBlobSyncState>) -> bool {

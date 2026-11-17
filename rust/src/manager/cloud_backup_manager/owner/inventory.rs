@@ -17,6 +17,7 @@ pub(crate) use self::listing::{
 };
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::DetailInventory;
+use crate::manager::cloud_backup_manager::cloud_inventory::LocalUploadStatus;
 use crate::manager::cloud_backup_manager::model::CloudBackupRestoreAllRuntimeState;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
@@ -186,6 +187,14 @@ pub(crate) enum InventoryInput {
     LocalWalletsChanged {
         local_record_ids: Option<HashSet<String>>,
     },
+    /// The upload of this wallet record persisted a state that decides its row on its own, such
+    /// as `Failed`, which no refresh reads until one runs again
+    ///
+    /// Like a local wallet change it describes this device's own state, so it carries no scope
+    LocalUploadStateChanged {
+        record_id: String,
+        status: LocalUploadStatus,
+    },
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
     /// A caller, such as Turn Off's Check Again, wants a fresh classification: it settles once a
@@ -224,6 +233,24 @@ pub(crate) enum InventoryResult {
     CloudOnlyFetchLoaded(CloudOnlyFetch),
     /// The other-backups scan, a supplemental read of the other namespaces
     OtherBackupsStateResolved(CloudBackupOtherBackupsState),
+}
+
+impl InventoryResult {
+    /// The detail this result lists, for a check against this device's current state before it
+    /// is applied
+    pub(crate) fn detail_mut(&mut self) -> Option<&mut CloudBackupDetail> {
+        match self {
+            Self::DetailRefreshProvisional(detail)
+            | Self::DetailRefreshApplied { detail, .. }
+            | Self::VerifiedDetailApplied { detail, .. } => Some(detail),
+            Self::DetailRefreshStarted
+            | Self::DetailCleared
+            | Self::DetailRefreshFailed { .. }
+            | Self::CloudOnlyStateResolved(_)
+            | Self::CloudOnlyFetchLoaded(_)
+            | Self::OtherBackupsStateResolved(_) => None,
+        }
+    }
 }
 
 /// What applying an input asks of the caller
@@ -447,6 +474,11 @@ impl InventoryOwner {
             InventoryInput::RecordsRead(reads) => self.apply_record_reads(reads),
             InventoryInput::LocalWalletsChanged { local_record_ids } => {
                 return self.apply_local_wallets_changed(local_record_ids.as_ref());
+            }
+            InventoryInput::LocalUploadStateChanged { record_id, status } => {
+                if let Some(state) = self.loaded_detail_mut() {
+                    state.detail.apply_local_upload_status(&record_id, status);
+                }
             }
             InventoryInput::CloudOnlyOperationResolved(cloud_only_operation) => {
                 if let Some(state) = self.loaded_detail_mut() {
@@ -1834,6 +1866,57 @@ mod tests {
         assert_eq!(error, "iCloud unavailable");
         assert_eq!(retained.detail, detail);
         assert_eq!(owner.detail(), Some(detail));
+    }
+
+    /// A detail listing a confirmed wallet and a new one whose upload is still running
+    fn detail_with_uploading_wallet() -> CloudBackupDetail {
+        CloudBackupDetail {
+            last_sync: None,
+            up_to_date: vec![cloud_only_wallet("confirmed", CloudBackupWalletStatus::Confirmed)],
+            needs_sync: vec![cloud_only_wallet("new", CloudBackupWalletStatus::Uploading)],
+        }
+    }
+
+    fn apply_provider_detail(owner: &mut InventoryOwner, detail: CloudBackupDetail) {
+        owner.apply_current(InventoryResult::DetailRefreshApplied {
+            detail,
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+            own_secrets: OwnSecretUpdate::Unread,
+        });
+    }
+
+    fn upload_failed(record_id: &str) -> InventoryInput {
+        InventoryInput::LocalUploadStateChanged {
+            record_id: record_id.into(),
+            status: LocalUploadStatus::Failed,
+        }
+    }
+
+    #[test]
+    fn upload_failure_shows_on_the_loaded_detail_without_a_refresh() {
+        let mut owner = InventoryOwner::default();
+        apply_provider_detail(&mut owner, detail_with_uploading_wallet());
+
+        let effects = owner.apply(upload_failed("new"));
+
+        assert!(effects.changed, "the failure must publish the screen again");
+        assert_eq!(
+            visible_rows(&owner),
+            vec![
+                ("confirmed".into(), CloudBackupWalletStatus::Confirmed),
+                ("new".into(), CloudBackupWalletStatus::Failed),
+            ]
+        );
+
+        // a matching cloud copy is confirmed whatever its upload did
+        let effects = owner.apply(upload_failed("confirmed"));
+
+        assert!(!effects.changed);
+        assert_eq!(
+            visible_rows(&owner)[0],
+            ("confirmed".into(), CloudBackupWalletStatus::Confirmed)
+        );
     }
 
     #[test]
