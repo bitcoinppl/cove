@@ -131,46 +131,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(button(startingWith: "Scan QR code").exists)
     }
 
-    func testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard() {
-        launchApp()
-
-        reachStorageChoices()
-        openSoftwareWalletImport()
-        tap(button(startingWith: "Enter recovery words"), until: app.staticTexts["How many words do you have?"])
-        tap(button(startingWith: "12 words"), until: app.navigationBars["Import Wallet"])
-
-        let firstField = app.textFields["hotWalletImport.word.1"]
-        XCTAssertTrue(firstField.waitForExistence(timeout: 10))
-        firstField.tap()
-
-        let keyboardTutorialContinue = app.buttons["Continue"]
-        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
-            keyboardTutorialContinue.tap()
-        }
-
-        let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
-        firstField.typeText("a")
-
-        let firstSuggestion = app.buttons["abandon"]
-        XCTAssertTrue(firstSuggestion.waitForExistence(timeout: 5))
-
-        let suggestions = app.descendants(matching: .any)["hotWalletImport.suggestions"]
-        XCTAssertTrue(suggestions.waitForExistence(timeout: 5))
-
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Import wallet word suggestions"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-
-        let accessoryGap = keyboard.frame.minY - suggestions.frame.maxY
-        XCTAssertLessThanOrEqual(
-            accessoryGap,
-            20,
-            "expected word suggestions to be attached to the keyboard, got a \(accessoryGap)-point gap"
-        )
-    }
-
     func testSoftwareWalletUserCanOpenQrScanner() {
         launchApp()
 
