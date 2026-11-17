@@ -5,15 +5,3 @@
 # CoveUITests or CoveCloudBackupUITests, an issue for its fix, the last day it may stay quarantined
 # and why. `cargo xtask ios-quarantine check` fails once that day has passed: fix the test and
 # remove its entry, or extend `expires` with a note on the issue saying why
-
-[[test]]
-id = "CoveUITests/HardwareSigningFullLaunchUITests/testTapSignerImportRetriesAfterWrongPinAndDroppedSession"
-issue = "https://github.com/bitcoinppl/cove/issues/1109"
-expires = 2026-12-09
-reason = "A fake node control request times out"
-
-[[test]]
-id = "CoveUITests/TapSignerLayoutFullLaunchUITests/testTapSignerSetupScreensFitAtLargestTextSize"
-issue = "https://github.com/bitcoinppl/cove/issues/1169"
-expires = 2027-01-14
-reason = "The hardware signer host's TAPSIGNER start request times out"
