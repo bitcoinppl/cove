@@ -2303,6 +2303,40 @@ pub(crate) async fn finalize_pending_verification_for_test(manager: &RustCloudBa
     }
 }
 
+/// Ends a manager the way an app exit does, before a test starts the manager that replaces it
+///
+/// The Cloud Backup actors and the pending upload verifier loop hold their manager weakly, so
+/// while a test keeps the old manager its loop keeps running passes over the process-global
+/// persisted queue. One of those passes can settle a confirmation through the old supervisor,
+/// leaving the replacement's model without the result. Once the last handle is gone, a wake
+/// makes the loop's next pass see the manager dropped and stop
+pub(crate) async fn shut_down_manager_for_restart(manager: Arc<RustCloudBackupManager>) {
+    let supervisor = manager.supervisor.clone();
+    let released = Arc::downgrade(&manager);
+    drop(manager);
+
+    // a verifier pass or sync-health refresh in flight holds the manager until it finishes
+    wait_for_test_condition(
+        Duration::from_secs(5),
+        "the old manager's last handle is released",
+        || released.strong_count() == 0,
+    )
+    .await;
+
+    send!(supervisor.wake_pending_upload_verifier());
+    async {
+        while !call!(supervisor.background_refreshes_idle_for_test())
+            .await
+            .expect("background refresh state")
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+    .with_timeout(loaded_host_wait(Duration::from_secs(5)))
+    .await
+    .expect("the old manager's pending upload verifier stops");
+}
+
 pub(crate) async fn verify_pending_uploads_once_for_test_async(
     manager: &RustCloudBackupManager,
 ) -> bool {
