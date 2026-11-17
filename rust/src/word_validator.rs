@@ -84,13 +84,7 @@ impl WordValidator {
     #[uniffi::method]
     pub fn is_word_correct(&self, word: String, for_: u8) -> bool {
         let Some(word_index) = for_.checked_sub(1) else { return false };
-        let word_index = word_index as usize;
-        if word_index > self.words.len() {
-            return false;
-        }
-
-        let correct_word = self.words[word_index];
-        correct_word == word
+        self.words.get(word_index as usize).is_some_and(|correct_word| *correct_word == word)
     }
 
     #[uniffi::method]
@@ -210,5 +204,20 @@ mod tests {
                 "Wrong word should not be correct for position {word_position}"
             );
         }
+    }
+
+    #[test]
+    fn is_word_correct_rejects_positions_outside_the_mnemonic() {
+        let twelve = WordValidator::new(NumberOfBip39Words::Twelve.generate_mnemonic());
+        let twenty_four = WordValidator::new(NumberOfBip39Words::TwentyFour.generate_mnemonic());
+
+        let first_word = twelve.words[0].to_string();
+        assert!(!twelve.is_word_correct(first_word, 0));
+
+        let last_word = twelve.words[11].to_string();
+        assert!(!twelve.is_word_correct(last_word, 13));
+
+        let last_word = twenty_four.words[23].to_string();
+        assert!(!twenty_four.is_word_correct(last_word, 25));
     }
 }

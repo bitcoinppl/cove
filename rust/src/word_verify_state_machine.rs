@@ -336,4 +336,30 @@ mod tests {
         // should return current state, no change
         assert_eq!(transition.new_state, original_state);
     }
+
+    #[test]
+    fn select_word_after_last_word_is_rejected() {
+        let validator = create_test_validator();
+        let sm = WordVerifyStateMachine::new(validator.clone(), 1);
+
+        for word_number in 1..=12u8 {
+            let correct_word = sm
+                .possible_words()
+                .into_iter()
+                .find(|word| validator.is_word_correct(word.clone(), word_number))
+                .expect("possible words include the correct word");
+
+            sm.select_word(correct_word);
+            sm.animation_complete();
+            sm.dwell_complete();
+        }
+
+        assert_eq!(sm.word_number(), 13);
+        assert!(sm.is_complete());
+
+        // the word number now points past the mnemonic, so any selection must fail
+        sm.select_word("abandon".to_string());
+        let transition = sm.animation_complete();
+        assert!(matches!(transition.new_state, WordCheckState::Incorrect { .. }));
+    }
 }
