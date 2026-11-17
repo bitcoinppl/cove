@@ -431,7 +431,7 @@ These still need hands and eyes:
 - How strong PIN keypad haptics feel, on both platforms, and duplicate haptics on iOS, which no test can record without a production hook
 - Spoken VoiceOver and TalkBack output and natural focus order
 - COLDCARD and other hardware signers
-- Passkey creation and approval with a real account when enabling or restoring Cloud Backup, including restoring a backup that a real 1.3.0 install made
+- Passkey creation and approval with a real account when enabling or restoring Cloud Backup, including restoring a backup that a real 1.3.0 install made. On Android this includes Credential Manager's create-passkey sheet opening when a new user taps Enable in onboarding's Cloud Backup details, which the emulator never shows; the `UiTest` flavour's tests check that the app asks the scripted provider to create a passkey there, and `s18-journey-cloud-backup` sends a person to the real sheet
 - Signing in or out of iCloud or Google accounts
 
 The [Cloud Backup UI tests](#cloud-backup-ui-tests) run the Cloud Backup flows that stopped short of the production path on both platforms with scripted passkey and cloud providers: recovering an interrupted setup, a partly finished Restore All after a restart, the inventory refresh after reconnecting, background verification, Sync Now and Verify Now (`CloudBackupEnableRecoveryFullAppUITests` and `CloudBackupSyncNowFullAppUITests` on iOS), and retrying a failed setup upload (`testFailedSetupUploadRetriesWithoutNewPasskey` on iOS, `CloudBackupRetryInterruptedSetupFullLaunchTest` on Android). What stays manual is the real passkey and account above, and each row's manifest comment says which part that is.

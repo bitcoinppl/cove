@@ -454,60 +454,6 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    fun assertCreatePasskeySheetShown(): FullLaunchOnboardingRobot {
-        val wrongSheetSelectors =
-            listOf(
-                textContains("Sign in another way"),
-                textContains("Use passkey from"),
-            )
-        val createSheetSelectors =
-            listOf(
-                textContains("Create a passkey"),
-                textContains("Create passkey"),
-                textContains("Save a passkey"),
-                textContains("Save passkey"),
-            )
-        val deadline = System.currentTimeMillis() + 20_000
-
-        while (System.currentTimeMillis() < deadline) {
-            selectGoogleAuthorizationAccountIfNeeded()
-            chooseNewPasskeyIfExistingBackupPromptShown()
-
-            if (createSheetSelectors.any { device.findObject(it.value) != null }) {
-                device.pressBack()
-                return this
-            }
-
-            wrongSheetSelectors.firstOrNull { device.findObject(it.value) != null }?.let { selector ->
-                fail("Expected passkey creation sheet, but saw ${selector.description}\n${device.dumpWindowHierarchy()}")
-            }
-
-            Thread.sleep(100)
-        }
-
-        error("Timed out waiting for passkey creation sheet\n${device.dumpWindowHierarchy()}")
-    }
-
-    private fun chooseNewPasskeyIfExistingBackupPromptShown() {
-        if (device.findObject(textContains("previous backup").value) == null) {
-            return
-        }
-
-        val clicked =
-            device.clickCenterIfVisible(text("Create New Backup")) ||
-                device.clickCenterIfVisible(text("Create New Passkey"))
-        if (clicked) Thread.sleep(500)
-    }
-
-    private fun selectGoogleAuthorizationAccountIfNeeded() {
-        if (device.findObject(text("Choose an account").value) == null) {
-            return
-        }
-
-        device.retryingStale { findObject(textContains("@").value)?.click() }
-        Thread.sleep(500)
-    }
-
     private fun assertQrScannerVisible() {
         device.waitUntilAnyVisible(text("1x"), text("Camera Access Required"))
     }

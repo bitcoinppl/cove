@@ -2,17 +2,14 @@ package org.bitcoinppl.cove.flows.cloudbackup
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
-import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.junit.Before
-import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,29 +55,5 @@ class CloudBackupOnboardingFullLaunchTest {
             .systemBackFromCloudBackupDetails()
 
         FullLaunchOnboardingRobot(device).assertBackupWallet()
-    }
-
-    @Test
-    @QuarantinedInCi(
-        reason = "the system create-passkey sheet never appears on the emulator",
-        issue = "https://github.com/bitcoinppl/cove/issues/1101",
-        expires = "2026-12-09",
-    )
-    fun newUserCloudBackupEnableOpensCreatePasskeySheet() {
-        val targetPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        assumeFalse(
-            "the uiTest flavor uses a scripted passkey provider without a system Credential Manager sheet",
-            targetPackage.endsWith(".uitest"),
-        )
-
-        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
-
-        FullLaunchOnboardingRobot(device)
-            .tapGetStarted()
-            .chooseNewUser()
-            .openCloudBackupFromBackupWallet()
-            .assertCloudBackupDetails()
-            .enableCloudBackupFromDetails()
-            .assertCreatePasskeySheetShown()
     }
 }
