@@ -24,7 +24,6 @@ import org.bitcoinppl.cove.test.FullLaunchWalletRobot
 import org.bitcoinppl.cove.test.HardwareSignerControl
 import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.QrScript
-import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
@@ -194,11 +193,6 @@ class HardwareSigningFullLaunchTest {
     // MARK: QR error paths
 
     @Test
-    @QuarantinedInCi(
-        reason = "typed text or the keyboard is sometimes not settled when the test reads it",
-        issue = "https://github.com/bitcoinppl/cove/issues/1099",
-        expires = "2026-12-09",
-    )
     fun signaturesThatMatchNoDraftAreRejected() {
         fundTestWallet()
         importWatchOnlyWallet()
@@ -417,15 +411,13 @@ class HardwareSigningFullLaunchTest {
 
     private fun deleteDraft() {
         device.waitFor(By.desc("Delete")).click()
-        device.wait(Until.gone(By.text("Import Signature")), 10_000L)
-
-        // deleting returns to the send screen, which Back leaves for the wallet
-        wallet.dismissKeyboard()
-        repeat(3) {
-            if (device.wait(Until.hasObject(By.res("selectedWallet.balance")), 3_000L)) return
-            device.pressBack()
+        check(device.wait(Until.gone(By.text("Import Signature")), 10_000L)) {
+            "expected deleting the draft to leave the hardware export screen\n${device.hierarchy()}"
         }
 
+        // deleting returns to the send screen, which raises the keyboard a moment after it shows,
+        // so system Back there may only close the keyboard; the screen's own Back always leaves
+        device.waitFor(By.res("sendFlow.back")).click()
         device.waitFor(By.res("selectedWallet.balance"))
     }
 

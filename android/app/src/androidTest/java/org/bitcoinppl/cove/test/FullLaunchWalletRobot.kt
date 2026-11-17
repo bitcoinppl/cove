@@ -257,7 +257,7 @@ class FullLaunchWalletRobot(
     fun dismissKeyboard() {
         if (!isImeVisible()) return
 
-        device.pressBack()
+        device.pressBackInApp()
         waitUntil("expected the keyboard to close") { !isImeVisible() }
     }
 

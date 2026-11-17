@@ -2,6 +2,9 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -10,6 +13,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -22,8 +26,8 @@ import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
 import org.bitcoinppl.cove.cloudbackup.cloudBackupFixture
-import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.pressBackInApp
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudRestoreProviderHint
@@ -34,6 +38,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+
+private const val AFTER_BACK_TIMEOUT_MILLIS = 5_000L
 
 class OnboardingBranchScreensTest {
     @get:Rule
@@ -349,7 +355,7 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.button("Back").assertIsDisplayed()
         compose.pressSystemBack()
-        assertEquals("skip-standard", selected)
+        compose.awaitSelection("skip-standard") { selected }
 
         selected = ""
         compose.setOnboardingContent {
@@ -365,7 +371,7 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.button("Back").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Protect this wallet with Cloud Backup?").assertIsDisplayed()
+        compose.awaitDisplayed("Protect this wallet with Cloud Backup?")
         compose.button("Not Now").performClick()
         assertEquals("skip-software", selected)
 
@@ -383,7 +389,7 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.button("Back").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
+        compose.awaitDisplayed("Protect this hardware wallet with Cloud Backup?")
         compose.button("Not Now").performClick()
         assertEquals("skip-hardware", selected)
     }
@@ -600,19 +606,19 @@ class OnboardingBranchScreensTest {
         compose.card("Enter recovery words").performClick()
         compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+        compose.awaitDisplayed("Import your software wallet")
 
         compose.card("Enter recovery words").performClick()
         compose.card("12 words").performClick()
         compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+        compose.awaitDisplayed("How many words do you have?")
 
         compose.pressSystemBack()
-        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+        compose.awaitDisplayed("Import your software wallet")
 
         compose.pressSystemBack()
-        assertEquals("back", selected)
+        compose.awaitSelection("back") { selected }
     }
 
     @Test
@@ -722,11 +728,6 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    @QuarantinedInCi(
-        reason = "the hardware import step is sometimes not displayed after system back",
-        issue = "https://github.com/bitcoinppl/cove/issues/1097",
-        expires = "2026-12-09",
-    )
     fun hardwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
         var selected = ""
 
@@ -743,20 +744,20 @@ class OnboardingBranchScreensTest {
         compose.card("Import export file").performClick()
         compose.onNodeWithText("Import a hardware export file").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+        compose.awaitDisplayed("Import your hardware wallet")
 
         compose.card("Scan with NFC").performClick()
         compose.onNodeWithText("Scan your hardware wallet with NFC").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+        compose.awaitDisplayed("Import your hardware wallet")
 
         compose.card("Scan export QR").performClick()
         compose.onNodeWithText("Scan Hardware QR").assertIsDisplayed()
         compose.pressSystemBack()
-        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+        compose.awaitDisplayed("Import your hardware wallet")
 
         compose.pressSystemBack()
-        assertEquals("back", selected)
+        compose.awaitSelection("back") { selected }
     }
 
     @Test
@@ -807,9 +808,40 @@ class OnboardingBranchScreensTest {
         onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)), useUnmergedTree = true)
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.pressSystemBack() {
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBackInApp()
         waitForIdle()
     }
+
+    // Back reaches Compose through the window system rather than the test clock, so wait for the
+    // screen it leads to and name what showed instead if it never comes
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.awaitDisplayed(text: String) {
+        try {
+            waitUntil(timeoutMillis = AFTER_BACK_TIMEOUT_MILLIS) {
+                onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() && onAllNodesWithText(text)[0].isDisplayed()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("expected \"$text\" after Back, but the screen showed ${shownTexts()}", e)
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.awaitSelection(
+        expected: String,
+        selected: () -> String,
+    ) {
+        try {
+            waitUntil(timeoutMillis = AFTER_BACK_TIMEOUT_MILLIS) { selected() == expected }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "expected Back to select \"$expected\", but the selection was \"${selected()}\" and the screen showed ${shownTexts()}",
+                e,
+            )
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.shownTexts(): List<String> =
+        onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .flatMap { node -> node.config[SemanticsProperties.Text].map { it.text } }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.assertNodeBelow(
         lowerTag: String,

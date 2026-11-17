@@ -198,8 +198,8 @@ fun SendFlowSetAmountScreen(
                     ),
                 title = { Text("") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("sendFlow.back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
