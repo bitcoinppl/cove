@@ -122,21 +122,6 @@ impl FiatOnChangeHandler {
             });
         }
 
-        // convert the fiat amount to btc amount
-        let btc_amount = self.converter.convert_from_fiat_string(
-            &new_value_raw,
-            self.selected_currency,
-            self.prices,
-        );
-
-        // if the amount is too large, don't allow it
-        if btc_amount > Amount::MAX_MONEY {
-            return Ok(Changeset {
-                entering_fiat_amount: Some(old_value.to_string()),
-                ..Default::default()
-            });
-        }
-
         let mut fiat_value_to_parse = new_value_raw.as_str();
 
         // if its already 0.00, just start entering dollars
@@ -147,6 +132,21 @@ impl FiatOnChangeHandler {
         // if the old value is 0.00, and we are erasing, erase all of it
         if old_value_raw == "0.00" && new_value_raw == "0.0" {
             fiat_value_to_parse = "";
+        }
+
+        // convert the fiat amount to btc amount
+        let btc_amount = self.converter.convert_from_fiat_string(
+            fiat_value_to_parse,
+            self.selected_currency,
+            self.prices,
+        );
+
+        // if the amount is too large, don't allow it
+        if btc_amount > Amount::MAX_MONEY {
+            return Ok(Changeset {
+                entering_fiat_amount: Some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // get fiat value as a f64
@@ -300,6 +300,15 @@ mod tests {
         let result = h.on_change("$100", "USD 100").unwrap();
         assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
         assert!(result.fiat_value.is_none());
+    }
+
+    #[test]
+    fn typing_digit_over_zero_amount_converts_trimmed_value() {
+        let h = handler();
+        let result = h.on_change("$0.00", "$0.005").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$5"));
+        assert_eq!(result.fiat_value, Some(5.0));
+        assert_eq!(result.btc_amount, Some(Amount::from_sat(5_000)));
     }
 
     #[test]
