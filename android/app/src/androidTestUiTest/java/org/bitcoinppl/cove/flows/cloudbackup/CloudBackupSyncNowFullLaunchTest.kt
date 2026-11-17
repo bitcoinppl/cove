@@ -20,6 +20,8 @@ import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
 import org.bitcoinppl.cove.test.TestWalletWords
+import org.bitcoinppl.cove.test.dismissCloudBackupVerificationPrompts
+import org.bitcoinppl.cove.test.dumpWindowHierarchy
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.test.launchFullApp
@@ -348,6 +350,9 @@ class CloudBackupSyncNowFullLaunchTest {
             AppManager.getInstance().resetRoute(Route.Settings(SettingsRoute.Main))
         }
 
+        // the detail holds back the imported wallet's verify prompt, so leaving it lets the
+        // prompt cover settings
+        dismissCloudBackupVerificationPrompts()
         waitForText("Security")
     }
 
@@ -363,7 +368,9 @@ class CloudBackupSyncNowFullLaunchTest {
         value: String,
         timeoutMs: Long = 20_000L,
     ) {
-        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) error("Timed out waiting for text \"$value\"")
+        if (!wait(Until.hasObject(By.text(value)), timeoutMs)) {
+            error("Timed out waiting for text \"$value\"\n${dumpWindowHierarchy()}")
+        }
     }
 
     private fun UiDevice.waitForTextContaining(
@@ -371,7 +378,7 @@ class CloudBackupSyncNowFullLaunchTest {
         timeoutMs: Long = 20_000L,
     ) {
         if (!wait(Until.hasObject(By.textContains(value)), timeoutMs)) {
-            error("Timed out waiting for text containing \"$value\"")
+            error("Timed out waiting for text containing \"$value\"\n${dumpWindowHierarchy()}")
         }
     }
 

@@ -18,7 +18,6 @@ import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportFlowDirection
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportResponseCopy
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportTestPeer
@@ -33,6 +32,7 @@ import org.bitcoinppl.cove.test.QrScript
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.deleteTestWallet
+import org.bitcoinppl.cove.test.dismissCloudBackupVerificationPrompts
 import org.bitcoinppl.cove.test.dumpWindowHierarchy
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.importTestWalletOrNull
@@ -44,7 +44,6 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.BootstrapStep
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -215,7 +214,7 @@ class PrivateKeyExportFullLaunchTest {
         // reopening the screen resumes the stored session in a new one, read through receiveState
         deleteTestWallet(walletId)
         waitUntil("the private-key wallet should be deleted") { app.wallets.none { it.id == walletId } }
-        dismissCloudBackupVerificationPrompts()
+        device.dismissCloudBackupVerificationPrompts()
         onMain {
             if (app.router.routes.lastOrNull() != RouteFactory().keyTeleportReceive()) {
                 app.pushRoute(RouteFactory().keyTeleportReceive())
@@ -252,7 +251,7 @@ class PrivateKeyExportFullLaunchTest {
         device.waitForLockScreen()
         device.assertPrivateKeyNotShown()
         device.enterPin(MAIN_PIN)
-        dismissCloudBackupVerificationPrompts()
+        device.dismissCloudBackupVerificationPrompts()
         device.waitForText(XPRV_REVIEW_TITLE)
         device.waitForText("Reveal")
         device.assertPrivateKeyNotShown()
@@ -264,7 +263,7 @@ class PrivateKeyExportFullLaunchTest {
             }
 
         // a new wallet can raise the cloud backup verification prompt over the result screen
-        dismissCloudBackupVerificationPrompts()
+        device.dismissCloudBackupVerificationPrompts()
         device.waitForText("Wallet imported")
         device.clickText("Done")
         waitUntil("Done should open the imported wallet") {
@@ -515,33 +514,6 @@ class PrivateKeyExportFullLaunchTest {
                 it is KeyTeleportManagerState.ReceiveImportedWallet ||
                     it is KeyTeleportManagerState.ReceiveAlreadyImportedWallet
             }
-        }
-    }
-
-    /**
-     * Wave away the restored cloud backup's verification prompt with Not Now, as a person would
-     *
-     * Each wallet change asks to verify the updated backup, in a dialog over whatever screen is
-     * showing. It has nothing to do with the screen under test but blocks it, so this waits until
-     * no prompt has shown for [PROMPT_QUIET_MS], dismissing each one that does
-     */
-    private fun dismissCloudBackupVerificationPrompts() {
-        val deadline = SystemClock.uptimeMillis() + PROMPT_SETTLE_TIMEOUT_MS
-        var quietSince = SystemClock.uptimeMillis()
-
-        while (SystemClock.uptimeMillis() - quietSince < PROMPT_QUIET_MS) {
-            check(SystemClock.uptimeMillis() < deadline) { "the cloud backup verification prompt kept coming back" }
-
-            if (onMainValue { CloudBackupManager.getInstance().screen.rootPrompt } is CloudBackupRootPrompt.Verification) {
-                device.clickText("Not Now")
-                waitUntil("Not Now should dismiss the verification prompt") {
-                    CloudBackupManager.getInstance().screen.rootPrompt !is CloudBackupRootPrompt.Verification
-                }
-
-                quietSince = SystemClock.uptimeMillis()
-            }
-
-            Thread.sleep(SETTLE_POLL_MS)
         }
     }
 
@@ -797,8 +769,6 @@ class PrivateKeyExportFullLaunchTest {
         // RustHandleGuard's message for a closed WalletManager
         const val CLOSED_WALLET_MANAGER = "WalletManager is closed"
 
-        const val PROMPT_QUIET_MS = 3_000L
-        const val PROMPT_SETTLE_TIMEOUT_MS = 30_000L
         const val WALLET_SETTINGS_SECTION = "Wallet information"
 
         // published BIP39 test vector, never used for funds; the same bystander RepeatedSecretAccessTest uses
