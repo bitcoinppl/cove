@@ -310,11 +310,12 @@ jobs:
     # each shard spends 10 to 24 minutes building the Rust library, unless compile-ios cached it,
     # the fake node and the test bundles, then about 100 minutes on its tests by the checked-in
     # timings, a CoveUITests test taking about 5 minutes on its own simulator and each simulator
-    # retry as long again; shards took 93 to 148 minutes in three full runs, the longest with a
-    # test stopped at its 25-minute allowance, and one runner ran its tests 1.34 times slower than
-    # the timings and needed about 155, so the headroom covers that on the heaviest shard plus a
-    # test stopped at its allowance
-    timeout-minutes: 180
+    # retry as long again; shards took 93 to 148 minutes in three full runs, but in the November 17
+    # 2026 nightly one runner ran its tests about twice as slowly as the timings, timed out nine
+    # app launches whose retries cost about 5 minutes each, and hung one launch for its test's
+    # whole 25-minute allowance, which would have needed about 255 minutes, so the headroom covers
+    # a runner that slow; a test's allowance, not this timeout, is what stops a hang
+    timeout-minutes: 270
     strategy:
       fail-fast: false
       matrix:
