@@ -474,6 +474,11 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     configure_enabled_cloud_backup(&manager, globals, 1);
     let master_revision = seed_verifiable_cloud_master_key(globals);
 
+    // marking the uploads starts the manager's own verifier loop, whose first pass would confirm
+    // them against the seeded cloud before the Uploading check, so this test holds the pass
+    let verifier_pass =
+        crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass().await;
+
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let metadata = xpub_only_wallet_metadata();
     let record_id = wallet_record_id(metadata.id.as_ref());
@@ -529,9 +534,9 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
 
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
 
-    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
+    let verification = verifier_pass.verify_once(&manager).await;
 
-    assert!(!has_more_pending);
+    assert_eq!(verification, PendingUploadVerificationState::Idle);
     assert!(manager.pending_verification_completion().is_none());
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded,);
 
@@ -545,6 +550,11 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     }
 
     assert_eq!(manager.model_snapshot().sync_health, CloudSyncHealth::AllUploaded);
+
+    // the manager's loop is waiting for the held pass on the process-wide runtime, so release it
+    // and let that loop stop before the test lock lets another test share the upload rows
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
