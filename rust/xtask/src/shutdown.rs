@@ -200,7 +200,7 @@ fn stop_all() {
 
     // commands the run waits on without registering, such as xcodebuild, a build or adb, would
     // otherwise keep building into, or testing against, what was just stopped. This also stops
-    // a card emulator whose stop was skipped because an exchange with it had stalled
+    // a card emulator that outlived its own stop
     Processes::ChildrenOf(process::id()).terminate();
 }
 

@@ -291,7 +291,7 @@ jobs:
           # a re-run job uploads under the same name
           overwrite: true
 
-      # a separate artifact keeps the report layout; the host overwrites the log at each card start
+      # a separate artifact keeps the report layout; each card the host starts writes its own log
       - name: Upload TAPSIGNER emulator log
         if: failure() && steps.shard.outputs.run == 'true'
         uses: actions/upload-artifact@v7
@@ -418,7 +418,7 @@ jobs:
           path: ${{ runner.temp }}/ios-ui-results
           retention-days: 7
 
-      # a separate artifact keeps the results layout; the host overwrites the log at each card start
+      # a separate artifact keeps the results layout; each card the host starts writes its own log
       - name: Upload TAPSIGNER emulator log
         if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: actions/upload-artifact@v7

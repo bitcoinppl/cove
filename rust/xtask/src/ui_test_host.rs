@@ -27,16 +27,11 @@
 //!   dropped NFC session looks to the app
 
 use std::{
-    env,
-    fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
-    os::unix::net::UnixStream,
-    path::{Path, PathBuf},
-    process::{Child, Command},
+    process::Command,
     sync::Arc,
     thread,
-    time::{Duration, Instant},
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -59,32 +54,20 @@ use color_eyre::{
 use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use xshell::Shell;
 
+mod card_emulator;
 mod export_frames;
 mod key_teleport;
 
+use self::card_emulator::{CardKind, Cards};
 use crate::{
     android_device::AndroidDevice,
-    common::{log_tail, print_info, print_success, print_warning},
+    common::{print_info, print_success, print_warning},
     fake_node::{AndroidPorts, AndroidTarget, FakeNodeGuard, ReversedPorts},
     shutdown::{self, Registration, Stop},
-    tapsigner_emulator::{emulator_script, EmulatorPaths},
     ui_test_ports::{PortReservation, UiTestPorts},
     util,
 };
-
-/// How long stopping the signer waits for an exchange with the card emulator to finish
-const EMULATOR_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// The emulator derives every key from this seed, so the card and its wallet
-/// are the same on every run
-const EMULATOR_RNG_SEED: &str = "1337";
-
-// ecard.py starts in well under a second, but on a busy macOS runner a start that overlaps a
-// simulator boot and app install has spent more than 20 seconds in its first imports. This stays
-// under the iOS tests' 60 second request timeout, so a start that still fails reports its log
-const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(45);
 
 // rust-cktap opens every session with this applet SELECT; the emulator has no
 // applet, so the bridge answers it with a status command as a real card does
@@ -176,14 +159,8 @@ impl HardwareSignerGuard {
         let control = listen(ports.signer_control())?;
         let bridge = listen(ports.tapsigner_bridge())?;
 
-        // one log per port block, so concurrent runs from one worktree keep their own
-        let state = Arc::new(SignerState {
-            emulator_paths: prepare_emulator(),
-            emulator_log: host_dir()?.join(format!("ecard-{}.log", ports.base())),
-            emulator: Mutex::new(None),
-            drop_after: Mutex::new(None),
-            key_teleport_receivers: key_teleport::Receivers::default(),
-        });
+        // logs named for the port block, so concurrent runs from one worktree keep their own
+        let state = Arc::new(SignerState::new(Cards::prepare(ports.base())?));
 
         let signer =
             Arc::new(HardwareSigner { state: state.clone(), reversed: ReversedPorts::default() });
@@ -216,17 +193,7 @@ impl HardwareSigner {
 impl Stop for HardwareSigner {
     fn stop(&self) {
         self.reversed.remove(UiTestPorts::DEVICE.signer());
-
-        // bounded, since an exchange with a card that stopped replying holds the lock; after a
-        // signal, the card then stops with the run's other commands
-        match self.state.emulator.try_lock_for(EMULATOR_LOCK_TIMEOUT) {
-            Some(mut emulator) => {
-                if let Some(mut emulator) = emulator.take() {
-                    emulator.stop();
-                }
-            }
-            None => print_warning("The card emulator is stuck in an exchange and was not stopped"),
-        }
+        self.state.cards.stop();
     }
 }
 
@@ -237,13 +204,20 @@ impl Drop for HardwareSignerGuard {
 }
 
 struct SignerState {
-    // the error is a string because each /tapsigner/start reports it again
-    emulator_paths: Result<EmulatorPaths, String>,
-    emulator_log: PathBuf,
-    emulator: Mutex<Option<CardEmulator>>,
+    cards: Cards,
     // the next bridge session closes after this many exchanges
     drop_after: Mutex<Option<u32>>,
     key_teleport_receivers: key_teleport::Receivers,
+}
+
+impl SignerState {
+    fn new(cards: Cards) -> Self {
+        Self {
+            cards,
+            drop_after: Mutex::new(None),
+            key_teleport_receivers: key_teleport::Receivers::default(),
+        }
+    }
 }
 
 fn spawn_server(
@@ -493,17 +467,10 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
                 serde_json::from_slice(body)?
             };
 
-            let mut emulator = state.emulator.lock();
-            if let Some(mut old) = emulator.take() {
-                old.stop();
-            }
-
-            let paths = state.emulator_paths.as_ref().map_err(|error| {
-                eyre!("The TAPSIGNER emulator could not be prepared when the host started: {error}")
-            })?;
-
+            let kind = if request.needs_setup { CardKind::NeedsSetup } else { CardKind::SetUp };
             *state.drop_after.lock() = None;
-            *emulator = Some(CardEmulator::start(paths, &state.emulator_log, request.needs_setup)?);
+            state.cards.start(kind)?;
+
             Ok(json!({ "ok": true }))
         }
         ("POST", "/tapsigner/drop") => {
@@ -851,23 +818,9 @@ fn exchange(state: &SignerState, apdu: &[u8]) -> Result<Vec<u8>> {
         return Ok(INSTRUCTION_NOT_SUPPORTED.to_vec());
     };
 
-    // holding the lock serializes card commands, as one card would
-    let emulator = state.emulator.lock();
-    let emulator = emulator
-        .as_ref()
-        .ok_or_else(|| eyre!("The test sent a TAPSIGNER command before POST /tapsigner/start"))?;
-
-    let mut card = UnixStream::connect(&emulator.socket).wrap_err_with(|| {
-        format!("Failed to reach the emulator at {}", emulator.socket.display())
-    })?;
-    card.write_all(request)?;
-
-    // the emulator answers each request with one CBOR value and closes the
-    // connection once our side is done writing, so the response ends at EOF
-    card.shutdown(Shutdown::Write)?;
-    let mut response = Vec::new();
-    card.read_to_end(&mut response)?;
-
+    // ecard.py serves one connection at a time, so its commands run one after another, as one
+    // card's would
+    let mut response = state.cards.exchange(request)?;
     response.extend_from_slice(&STATUS_OK);
     Ok(response)
 }
@@ -892,136 +845,4 @@ fn write_frame(stream: &mut TcpStream, frame: &[u8]) -> Result<()> {
     stream.write_all(frame)?;
 
     Ok(stream.flush()?)
-}
-
-// ----------------------------------------------------------------------------
-// Card emulator
-// ----------------------------------------------------------------------------
-
-/// A running `ecard.py` TAPSIGNER with factory CVC 123456, set up with a key
-/// unless it was started factory fresh
-struct CardEmulator {
-    child: Child,
-    socket: PathBuf,
-}
-
-impl CardEmulator {
-    fn start(paths: &EmulatorPaths, log_path: &Path, needs_setup: bool) -> Result<Self> {
-        // Unix socket paths are limited to about 100 bytes, which rules out the
-        // per-user temporary directory on macOS
-        let socket = PathBuf::from(format!("/tmp/cove-ecard-{}.sock", std::process::id()));
-        if socket.exists() {
-            fs::remove_file(&socket)?;
-        }
-
-        let log = File::create(log_path)?;
-        // --no-init leaves the card's slot without a key, as a new card ships
-        let mut command = Command::new(&paths.python);
-        command.arg(&paths.script).args([
-            "--rng-seed",
-            EMULATOR_RNG_SEED,
-            "emulate",
-            "--tapsigner",
-        ]);
-
-        if needs_setup {
-            command.arg("--no-init");
-        }
-
-        let child = command
-            .arg("--pipe")
-            .arg(&socket)
-            .env("PYTHONUNBUFFERED", "1")
-            // a SIGABRT then writes every thread's Python stack to the log
-            .env("PYTHONFAULTHANDLER", "1")
-            .stdout(log.try_clone()?)
-            .stderr(log)
-            .spawn()
-            .wrap_err_with(|| format!("Failed to start {}", paths.script.display()))?;
-
-        let mut emulator = Self { child, socket };
-        let started = Instant::now();
-        let deadline = started + EMULATOR_START_TIMEOUT;
-        while !emulator.socket.exists() {
-            if let Some(status) = emulator.child.try_wait()? {
-                bail!("ecard.py exited with {status}; {}", log_tail(log_path));
-            }
-
-            if Instant::now() > deadline {
-                emulator.abort_with_stacks();
-                bail!(
-                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; {}",
-                    log_tail(log_path)
-                );
-            }
-
-            thread::sleep(Duration::from_millis(100));
-        }
-
-        print_info(&format!(
-            "TAPSIGNER emulator listening on {} after {:.1?}",
-            emulator.socket.display(),
-            started.elapsed()
-        ));
-
-        Ok(emulator)
-    }
-
-    /// Stops an emulator that hung, after asking Python to log where each thread was
-    fn abort_with_stacks(&mut self) {
-        let pid = self.child.id().to_string();
-        if Command::new("kill").args(["-ABRT", &pid]).status().is_ok_and(|status| status.success())
-        {
-            let deadline = Instant::now() + Duration::from_secs(2);
-            while Instant::now() < deadline && matches!(self.child.try_wait(), Ok(None)) {
-                thread::sleep(Duration::from_millis(50));
-            }
-        }
-
-        self.stop();
-    }
-
-    fn stop(&mut self) {
-        if let Err(error) = self.child.kill().and_then(|()| self.child.wait().map(drop)) {
-            print_warning(&format!("Failed to stop ecard.py: {error}"));
-        }
-
-        let _ = fs::remove_file(&self.socket);
-    }
-}
-
-/// Prepares the card emulator's Python and script before any test asks for a card
-///
-/// Building the venv takes most of a minute on a fresh CI runner, longer than the UI tests wait
-/// for `/tapsigner/start`. A failure only fails the TAPSIGNER tests, so the other UI tests still
-/// run on a host without uv
-fn prepare_emulator() -> Result<EmulatorPaths, String> {
-    print_info("Preparing the TAPSIGNER emulator");
-
-    emulator_paths().map_err(|error| {
-        let error = format!("{error:#}");
-        print_warning(&format!("TAPSIGNER emulator unavailable, its tests will fail: {error}"));
-        error
-    })
-}
-
-/// `COVE_ECARD_PYTHON` with the pinned `ecard.py`, or the shared uv venv
-fn emulator_paths() -> Result<EmulatorPaths> {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
-    let sh = Shell::new()?;
-    sh.change_dir(workspace);
-
-    match env::var_os("COVE_ECARD_PYTHON") {
-        Some(python) => Ok(EmulatorPaths { python: python.into(), script: emulator_script(&sh)? }),
-        None => EmulatorPaths::prepare(&sh),
-    }
-}
-
-/// A directory under the cargo target dir for the emulator's log
-fn host_dir() -> Result<PathBuf> {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
-    let dir = workspace.join("target").join("ui-test-host");
-    fs::create_dir_all(&dir)?;
-
-    Ok(dir)
 }
