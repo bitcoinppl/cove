@@ -32,8 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
@@ -71,7 +74,11 @@ fun WalletSettingsChangeNameScreen(
         return
     }
 
-    var name by remember(metadata.name) { mutableStateOf(metadata.name) }
+    // the field owns its text for this wallet, so a saved name reconciled back mid-typing can't
+    // reset it, and it opens with the cursor after the name, ready to type onto it
+    var name by remember(metadata.id) {
+        mutableStateOf(TextFieldValue(metadata.name, selection = TextRange(metadata.name.length)))
+    }
     var isError by remember { mutableStateOf(false) }
 
     // auto-focus the text field when screen appears
@@ -101,8 +108,12 @@ fun WalletSettingsChangeNameScreen(
             ) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { newName ->
-                        name = newName
+                    onValueChange = { newValue ->
+                        val textChanged = newValue.text != name.text
+                        name = newValue
+                        if (!textChanged) return@OutlinedTextField
+
+                        val newName = newValue.text
                         isError = newName.isBlank()
                         // only dispatch if name is not blank
                         if (newName.isNotBlank()) {
@@ -111,8 +122,8 @@ fun WalletSettingsChangeNameScreen(
                     },
                     label = { Text(stringResource(R.string.label_wallet_name)) },
                     trailingIcon = {
-                        if (name.isNotEmpty()) {
-                            IconButton(onClick = { name = "" }) {
+                        if (name.text.isNotEmpty()) {
+                            IconButton(onClick = { name = TextFieldValue("") }) {
                                 Icon(
                                     imageVector = Icons.Filled.Clear,
                                     contentDescription = "Clear",
@@ -143,7 +154,8 @@ fun WalletSettingsChangeNameScreen(
                         Modifier
                             .fillMaxWidth()
                             .padding(vertical = 16.dp)
-                            .focusRequester(focusRequester),
+                            .focusRequester(focusRequester)
+                            .testTag("walletSettings.changeName.field"),
                 )
             }
         },
