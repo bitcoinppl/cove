@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 private let sendConfirmationActionTopPadding: CGFloat = 20
-private let sendConfirmationActionBottomPadding: CGFloat = 24
+private let sendConfirmationActionBottomPadding: CGFloat = 8
 
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
@@ -27,8 +27,6 @@ struct SendFlowConfirmScreen: View {
     // private
     @State private var finalizedTransaction: BitcoinTransaction? = nil
     @State private var sendState: SendState = .idle
-
-    @State private var sendConfirmationFooterHeight: CGFloat = 0
 
     /// popover to change btc and sats
     @State private var showingMenu: Bool = false
@@ -86,7 +84,6 @@ struct SendFlowConfirmScreen: View {
                 fiatAmount: fiatAmount,
                 showingMenu: $showingMenu,
                 sendState: $sendState,
-                footerHeight: $sendConfirmationFooterHeight,
                 lockingTask: $lockingTask,
                 walletType: metadata.walletType,
                 confirmSend: confirmSend,
@@ -94,6 +91,9 @@ struct SendFlowConfirmScreen: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
+            // nothing here takes text, and the amount screen's keyboard and its toolbar must not
+            // lift the swipe control while they leave
+            .ignoresSafeArea(.keyboard)
             .onDisappear(perform: handleDisappear)
             .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
@@ -223,7 +223,6 @@ private struct SendFlowConfirmationContent: View {
     let fiatAmount: String
     @Binding var showingMenu: Bool
     @Binding var sendState: SendState
-    @Binding var footerHeight: CGFloat
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
     let confirmSend: () -> Void
@@ -241,7 +240,6 @@ private struct SendFlowConfirmationContent: View {
                     fiatAmount: fiatAmount,
                     showingMenu: $showingMenu,
                     sendState: $sendState,
-                    footerHeight: $footerHeight,
                     lockingTask: $lockingTask,
                     walletType: walletType,
                     confirmSend: confirmSend,
@@ -261,7 +259,6 @@ private struct SendFlowConfirmationBody: View {
     let fiatAmount: String
     @Binding var showingMenu: Bool
     @Binding var sendState: SendState
-    @Binding var footerHeight: CGFloat
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
     let confirmSend: () -> Void
@@ -269,29 +266,36 @@ private struct SendFlowConfirmationBody: View {
     let size: CGSize
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    SendFlowConfirmationSummary(
-                        manager: manager,
-                        details: details,
-                        fiatAmount: fiatAmount,
-                        showingMenu: $showingMenu
-                    )
-
-                    SendFlowAccountSection(manager: manager)
-                        .padding(.top)
-
-                    Divider()
-
-                    SendFlowDetailsView(manager: manager, details: details, prices: prices)
-                }
-                .padding(.horizontal)
-                .padding(.bottom, footerHeight)
+        // the swipe control scrolls with the details, and filling the visible height keeps it at
+        // the bottom of the screen whenever the details are short enough to fit
+        ScrollView {
+            FillHeightLayout(minHeight: size.height) {
+                content
             }
-            .scrollIndicators(.hidden)
-            .frame(width: size.width, height: size.height)
-            .background(Color.coveBg)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color.coveBg)
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 24) {
+                SendFlowConfirmationSummary(
+                    manager: manager,
+                    details: details,
+                    fiatAmount: fiatAmount,
+                    showingMenu: $showingMenu
+                )
+
+                SendFlowAccountSection(manager: manager)
+                    .padding(.top)
+
+                Divider()
+
+                SendFlowDetailsView(manager: manager, details: details, prices: prices)
+            }
+
+            Spacer(minLength: 0)
 
             SendFlowConfirmationFooter(
                 sendState: $sendState,
@@ -300,17 +304,8 @@ private struct SendFlowConfirmationBody: View {
                 confirmSend: confirmSend,
                 lockWallet: lockWallet
             )
-            .offset(y: -sendConfirmationActionBottomPadding)
-            .padding(.bottom, sendConfirmationActionBottomPadding)
-            .background(Color.coveBg)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { height in
-                if footerHeight != height {
-                    footerHeight = height
-                }
-            }
         }
+        .padding(.horizontal)
     }
 }
 
@@ -476,17 +471,12 @@ private struct SendFlowConfirmationFooter: View {
     let lockWallet: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            SwipeToSendView(
-                sendState: $sendState,
-                onConfirm: confirmSend
-            )
-            .padding(.horizontal)
-        }
+        SwipeToSendView(
+            sendState: $sendState,
+            onConfirm: confirmSend
+        )
         .padding(.top, sendConfirmationActionTopPadding)
-        .frame(maxWidth: .infinity)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color.coveBg)
+        .padding(.bottom, sendConfirmationActionBottomPadding)
         .onAppear(perform: lockAfterAppearance)
     }
 

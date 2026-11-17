@@ -8,7 +8,7 @@ import Foundation
 import SwiftUI
 
 private let swipeToSendVerticalTextPadding: CGFloat = 48
-private let swipeToSendMinimumTrailingTextPadding: CGFloat = 16
+private let swipeToSendTextHandleGap: CGFloat = 16
 
 enum SendState: Hashable, Equatable {
     case idle
@@ -130,24 +130,41 @@ private struct SwipeToSendPrompt: View {
     let fontColor: Color
     let fontOpacity: Double
 
+    private var handleInset: CGFloat {
+        circleSize + swipeToSendTextHandleGap
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            Color.clear
-                .frame(width: circleSize + swipeToSendMinimumTrailingTextPadding)
+        ViewThatFits(in: .horizontal) {
+            // center on the whole track, matching Android, when the label clears the handle
+            // with the same inset on both sides
+            label
+                .fixedSize()
+                .padding(.horizontal, handleInset)
 
-            Text("Swipe to Send")
-                .foregroundColor(fontColor)
-                .fontWeight(.medium)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .opacity(fontOpacity)
-                .recordSwipeToSendTextHeight()
+            // large text grows the handle too, so center in the space after it and wrap there
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: handleInset)
 
-            Color.clear
-                .frame(width: swipeToSendMinimumTrailingTextPadding)
+                label
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+
+                Color.clear
+                    .frame(width: swipeToSendTextHandleGap)
+            }
         }
+    }
+
+    private var label: some View {
+        Text("Swipe to Send")
+            .foregroundColor(fontColor)
+            .fontWeight(.medium)
+            .opacity(fontOpacity)
+            .recordSwipeToSendTextHeight()
     }
 }
 

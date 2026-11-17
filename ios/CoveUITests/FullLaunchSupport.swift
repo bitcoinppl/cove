@@ -201,6 +201,25 @@ extension XCUIApplication {
         let swipe = element("sendFlowConfirm.swipeToSend")
         XCTAssertTrue(swipe.waitForExistence(timeout: 30), "the send didn't reach the confirm screen")
 
+        // the control scrolls with the details, so small screens and large text need it scrolled in;
+        // hittable only means its center shows, so scroll until the whole control is on screen
+        let window = windows.firstMatch
+        for _ in 0 ..< 5 where !(swipe.isHittable && window.frame.contains(swipe.frame)) {
+            swipeUp()
+        }
+
+        XCTAssertTrue(swipe.isHittable, "the swipe to send control never scrolled into view")
+        XCTAssertTrue(window.frame.contains(swipe.frame), "the swipe to send control is cut off at \(swipe.frame)")
+
+        // whether the details fit or scroll, the control ends 8pt above the home indicator's
+        // 34pt inset, so a bigger gap means extra padding or an inset such as the amount
+        // screen's keyboard lifted it
+        let bottomGap = window.frame.maxY - swipe.frame.maxY
+        XCTAssertTrue(
+            (0 ... 50).contains(bottomGap),
+            "expected the swipe to send control at the bottom of the screen, it ends \(bottomGap)pt above it"
+        )
+
         // drag the handle from the leading edge all the way across
         let frame = swipe.frame
         let start = swipe.coordinate(withNormalizedOffset: CGVector(dx: frame.height / 2 / frame.width, dy: 0.5))

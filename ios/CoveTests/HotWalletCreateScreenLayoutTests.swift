@@ -272,76 +272,52 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
     }
 
-    func testCompactSendFlowConfirmActionIsVisible() async throws {
+    func testCompactSendFlowConfirmActionIsReachable() async throws {
         try await bootstrapIfNeeded()
 
-        let size = CGSize(width: 375, height: 667)
-        let manager = WalletManager(preview: .only)
-        let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
-        let image = render(
-            view: NavigationStack {
-                SendFlowConfirmScreen(
-                    id: WalletId(),
-                    manager: manager,
-                    details: confirmDetailsPreviewNew(),
-                    input: .unsigned,
-                    payjoinEndpoint: nil
-                )
-                .environment(AppManager.shared)
-                .environment(AuthManager.shared)
-                .environment(presenter)
-            }
-            .frame(width: size.width, height: size.height),
-            size: size
-        )
-        addScreenshotAttachment(image, name: "compact-send-flow-confirm")
-        try saveAuditScreenshotIfDirectoryRequested(image, screenName: "send-flow-confirm")
-        try assertLightScreenBottomEdgeIsClear(in: image)
+        let render = renderSendFlowConfirm(size: CGSize(width: 375, height: 667), scroll: .end)
+        addScreenshotAttachment(render.image, name: "compact-send-flow-confirm")
+        try saveAuditScreenshotIfDirectoryRequested(render.image, screenName: "send-flow-confirm")
 
-        let recognizedText = try normalizedRecognizedText(in: image)
-
-        XCTAssertTrue(
-            recognizedText.contains("swipe to send"),
-            "expected compact send confirmation screen to show Swipe to Send, got:\n\(recognizedText)"
-        )
+        try assertSwipeToSendLayout(in: render, labelCentered: true)
     }
 
-    func testLargeDynamicTypeSendFlowConfirmActionIsVisibleOnTallViewport() async throws {
+    func testSendFlowConfirmActionSitsAtBottomOfStandardViewport() async throws {
         try await bootstrapIfNeeded()
 
-        let size = CGSize(width: 430, height: 932)
-        let manager = WalletManager(preview: .only)
-        let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
-        let image = render(
-            view: NavigationStack {
-                SendFlowConfirmScreen(
-                    id: WalletId(),
-                    manager: manager,
-                    details: confirmDetailsPreviewNew(),
-                    input: .unsigned,
-                    payjoinEndpoint: nil
-                )
-                .environment(AppManager.shared)
-                .environment(AuthManager.shared)
-                .environment(presenter)
-            }
-            .environment(\.sizeCategory, .accessibilityExtraExtraLarge)
-            .frame(width: size.width, height: size.height),
-            size: size
+        // the details fit here, so the control must sit at the bottom as soon as the screen opens
+        let render = renderSendFlowConfirm(size: CGSize(width: 402, height: 874), scroll: .asOpened)
+        addScreenshotAttachment(render.image, name: "standard-send-flow-confirm")
+
+        try assertSwipeToSendLayout(in: render, labelCentered: true)
+    }
+
+    func testSendFlowConfirmActionSitsAtBottomOfLargeViewport() async throws {
+        try await bootstrapIfNeeded()
+
+        // the details fit here, so the control must sit at the bottom as soon as the screen opens
+        let render = renderSendFlowConfirm(size: CGSize(width: 440, height: 956), scroll: .asOpened)
+        addScreenshotAttachment(render.image, name: "large-send-flow-confirm")
+
+        try assertSwipeToSendLayout(in: render, labelCentered: true)
+    }
+
+    func testLargeDynamicTypeSendFlowConfirmActionIsReachableOnTallViewport() async throws {
+        try await bootstrapIfNeeded()
+
+        let render = renderSendFlowConfirm(
+            size: CGSize(width: 430, height: 932),
+            sizeCategory: .accessibilityExtraExtraLarge,
+            scroll: .end
         )
-        addScreenshotAttachment(image, name: "large-dynamic-type-send-flow-confirm")
+        addScreenshotAttachment(render.image, name: "large-dynamic-type-send-flow-confirm")
         try saveAuditScreenshotIfDirectoryRequested(
-            image,
+            render.image,
             name: "send-flow-confirm-large-dynamic-type-after.png"
         )
-        try assertLightScreenBottomEdgeIsClear(in: image)
 
-        let recognizedText = try normalizedRecognizedText(in: image)
-
-        XCTAssertTrue(
-            recognizedText.contains("swipe to send"),
-            "expected large Dynamic Type send confirmation screen to show Swipe to Send, got:\n\(recognizedText)"
-        )
+        // the handle grows with the text, so the label sits after it instead of centering
+        try assertSwipeToSendLayout(in: render, labelCentered: false)
     }
 
     func testCompactHotWalletImportActionIsVisible() async throws {
@@ -581,6 +557,11 @@ private extension HotWalletCreateScreenLayoutTests {
         } catch AppInitError.AlreadyCalled(_) {}
     }
 
+    private func firstScrollView(in view: UIView) -> UIScrollView? {
+        if let scrollView = view as? UIScrollView { return scrollView }
+        return view.subviews.lazy.compactMap { self.firstScrollView(in: $0) }.first
+    }
+
     private func findVerticallyScrollableView(in view: UIView) -> UIScrollView? {
         if let scrollView = view as? UIScrollView {
             let minimumOffsetY = -scrollView.adjustedContentInset.top
@@ -647,9 +628,24 @@ private extension HotWalletCreateScreenLayoutTests {
         return render(hostingController: hostingController, size: size)
     }
 
-    private func renderAfterScrollingToBottom(view: some View, size: CGSize) -> UIImage {
-        let hostingController = hostingController(rootView: view, size: size)
+    private func renderAsOpened(hostingController: UIHostingController<some View>, size: CGSize) -> UIImage {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        hostingController.view.layoutIfNeeded()
 
+        return render(hostingController: hostingController, size: size)
+    }
+
+    private func renderAfterScrollingToBottom(view: some View, size: CGSize) -> UIImage {
+        renderAfterScrollingToBottom(
+            hostingController: hostingController(rootView: view, size: size),
+            size: size
+        )
+    }
+
+    private func renderAfterScrollingToBottom(
+        hostingController: UIHostingController<some View>,
+        size: CGSize
+    ) -> UIImage {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
         hostingController.view.layoutIfNeeded()
 
@@ -994,6 +990,152 @@ private extension HotWalletCreateScreenLayoutTests {
             blue < 245
     }
 
+    /// Renders the send confirmation screen as it opens or scrolled to its end
+    ///
+    /// The screen fills the window on its own, a fixed frame would be taller than the space below
+    /// the top safe area and push the bottom of the screen past the window
+    private func renderSendFlowConfirm(
+        size: CGSize,
+        sizeCategory: ContentSizeCategory = .large,
+        scroll: SendFlowConfirmScroll
+    ) -> SendFlowConfirmRender {
+        let manager = WalletManager(preview: .only)
+        let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
+
+        let hostingController = hostingController(
+            rootView: NavigationStack {
+                SendFlowConfirmScreen(
+                    id: WalletId(),
+                    manager: manager,
+                    details: confirmDetailsPreviewNew(),
+                    input: .unsigned,
+                    payjoinEndpoint: nil
+                )
+                .environment(AppManager.shared)
+                .environment(AuthManager.shared)
+                .environment(presenter)
+            }
+            .environment(\.sizeCategory, sizeCategory),
+            size: size
+        )
+        let image = switch scroll {
+        case .asOpened: renderAsOpened(hostingController: hostingController, size: size)
+        case .end: renderAfterScrollingToBottom(hostingController: hostingController, size: size)
+        }
+
+        // the scroll view runs under the bottom safe area and insets its content past it, so its
+        // content area ends that inset above its frame
+        let hostView = hostingController.view!
+        let scrollView = firstScrollView(in: hostView)
+        let scrollFrame = scrollView.flatMap { $0.superview?.convert($0.frame, to: hostView) }
+        let scrollInset = scrollView?.adjustedContentInset.bottom ?? 0
+        let contentBottom = min((scrollFrame?.maxY ?? size.height) - scrollInset, size.height)
+
+        return SendFlowConfirmRender(image: image, bottomInset: size.height - contentBottom)
+    }
+
+    /// Checks the swipe control shows its whole label and ends just above the content area's end
+    ///
+    /// The send confirmation screen leaves 8pt below the control whether the details fit or
+    /// scroll, so a larger gap means padding came back or the content stopped filling the screen
+    private func assertSwipeToSendLayout(
+        in render: SendFlowConfirmRender,
+        labelCentered: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let image = render.image
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let recognizedText = try normalizedRecognizedText(in: image)
+        XCTAssertTrue(
+            recognizedText.contains("swipe to send"),
+            "expected the whole Swipe to Send label, got:\n\(recognizedText)",
+            file: file,
+            line: line
+        )
+
+        if labelCentered {
+            let label = try XCTUnwrap(
+                recognizedTextBox(containing: "swipe to send", in: cgImage),
+                "expected Swipe to Send on one line",
+                file: file,
+                line: line
+            )
+
+            // the track spans the screen less equal side margins, so its center is the image's
+            let offset = (label.midX - CGFloat(cgImage.width) / 2) / scale
+            XCTAssertLessThan(
+                abs(offset),
+                4,
+                "expected Swipe to Send centered on the track, it is \(offset)pt off center",
+                file: file,
+                line: line
+            )
+        }
+
+        // the track's flat bottom edge runs under the middle of the control at any text size,
+        // where the round handle never reaches
+        let midX = cgImage.width / 2
+        let trackBottom = try XCTUnwrap(
+            lowestRow(in: cgImage, xRange: midX - Int(8 * scale) ..< midX + Int(8 * scale), where: isTrackPixel),
+            "expected the swipe track under the label",
+            file: file,
+            line: line
+        )
+        let gap = CGFloat(cgImage.height - 1 - trackBottom) / scale - render.bottomInset
+        XCTAssertTrue(
+            (4 ... 16).contains(gap),
+            "expected the swipe control about 8pt above the end of the content area, got \(gap)pt with a \(render.bottomInset)pt bottom inset",
+            file: file,
+            line: line
+        )
+    }
+
+    /// The pixel frame, top-left origin, of the first recognized line containing `text`
+    private func recognizedTextBox(containing text: String, in image: CGImage) throws -> CGRect? {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: image).perform([request])
+
+        let observation = request.results?.first { observation in
+            observation.topCandidates(1).first?.string.lowercased().contains(text) == true
+        }
+        guard let box = observation?.boundingBox else { return nil }
+
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        return CGRect(
+            x: box.minX * width,
+            y: (1 - box.maxY) * height,
+            width: box.width * width,
+            height: box.height * height
+        )
+    }
+
+    /// The lowest pixel row with a matching pixel inside `xRange`, scanning up from the bottom
+    private func lowestRow(
+        in image: CGImage,
+        xRange: Range<Int>,
+        where matches: (UInt8, UInt8, UInt8) -> Bool
+    ) throws -> Int? {
+        let pixels = try rgbaPixels(in: image)
+        let bytesPerRow = image.width * 4
+
+        return (0 ..< image.height).reversed().first { row in
+            xRange.contains { column in
+                let offset = row * bytesPerRow + column * 4
+                return matches(pixels[offset], pixels[offset + 1], pixels[offset + 2])
+            }
+        }
+    }
+
+    /// The light gray of the swipe track, darker than the white screen behind it
+    private func isTrackPixel(red: UInt8, green: UInt8, blue: UInt8) -> Bool {
+        [red, green, blue].allSatisfy { (215 ... 242).contains($0) }
+    }
+
     private func rgbaPixels(in image: CGImage) throws -> [UInt8] {
         let bytesPerPixel = 4
         let bytesPerRow = image.width * bytesPerPixel
@@ -1080,4 +1222,20 @@ private extension HotWalletCreateScreenLayoutTests {
 
         return environment[key] ?? environment["TEST_RUNNER_\(key)"]
     }
+}
+
+/// A rendered send confirmation screen and the space between its content area and the image's
+/// bottom edge
+/// Where the send confirmation render leaves its scroll view
+private enum SendFlowConfirmScroll {
+    /// Untouched, as the screen first shows
+    case asOpened
+
+    /// Scrolled to the end, to check the control can be reached
+    case end
+}
+
+private struct SendFlowConfirmRender {
+    let image: UIImage
+    let bottomInset: CGFloat
 }
