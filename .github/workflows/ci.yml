@@ -257,9 +257,6 @@ jobs:
     runs-on: macos-26
     env:
       RUSTFLAGS: -D warnings
-    outputs:
-      ios_ffi_key: ${{ steps.ios_ffi.outputs.key }}
-      ios_ffi_saved: ${{ steps.ios_ffi.outputs.saved }}
     steps:
       - uses: actions/checkout@v6
 
@@ -282,13 +279,12 @@ jobs:
         with:
           tool: just
 
-      # restores the library and bindings master last built from the same Rust, toolchain, Xcode
-      # and flags, or runs `just build-ios`; the check below compares the bindings either way
+      # restores the library and bindings ios-ffi-cache.yml built on master from the same Rust,
+      # toolchain, Xcode and flags, or runs `just build-ios`; the check below compares the bindings
+      # either way. It never saves: a newer merge cancels master's CI run, so ios-ffi-cache.yml,
+      # which master merges never cancel, saves instead
       - name: Build or restore Rust FFI bindings
-        id: ios_ffi
         uses: ./.github/actions/ios-ffi
-        with:
-          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
 
       - name: Verify iOS bindings are up to date
         shell: bash
@@ -319,28 +315,6 @@ jobs:
           cd ios
           # shellcheck disable=SC2086
           xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests $skip_args -parallel-testing-enabled NO test
-
-  # each Rust change on master saves a new iOS library entry that no later run reads, and the
-  # repository's caches share 10 GB, so once compile-ios saves one the older master entries go;
-  # a job of its own so the code compile-ios builds never holds a token that can delete caches
-  prune-ios-ffi-cache:
-    needs: compile-ios
-    if: ${{ needs.compile-ios.outputs.ios_ffi_saved == 'true' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      actions: write
-    steps:
-      - name: Delete older iOS Rust library entries on master
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          KEEP: ${{ needs.compile-ios.outputs.ios_ffi_key }}
-        run: |
-          gh cache list --repo "$REPO" --ref refs/heads/master --key ios-ffi- --limit 100 \
-            --json id,key --jq ".[] | select(.key != env.KEEP) | .id" |
-            while read -r id; do
-              gh cache delete "$id" --repo "$REPO"
-            done
 
   qa-manifest:
     needs: changes

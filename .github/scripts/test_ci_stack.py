@@ -667,8 +667,8 @@ class WorkflowNameTests(unittest.TestCase):
 # ci.yml's jobs that no changes output skips. The quarantine checks fail on a date rather than on a
 # change, so like tier 0 they run on every push, at every stack position
 EVERY_PUSH_CI_JOBS: Final = frozenset({"quarantine", "ios-quarantine"})
-# the planner, and the cache upkeep that runs only after compile-ios saves an entry on master
-UNTIERED_CI_JOBS: Final = frozenset({"changes", "prune-ios-ffi-cache"})
+# the planner, which every other job reads
+UNTIERED_CI_JOBS: Final = frozenset({"changes"})
 
 
 def job_blocks(workflow: str) -> dict[str, str]:
