@@ -408,17 +408,26 @@ id = "s16-ios-maximum-text-send-back-navigation"
 section = "16"
 title = "iOS maximum-text Send Back navigation"
 platforms = ["ios"]
-target = "ui"
+target = "device"
 paths = [
     "ios/Cove/Flows/SendFlow/SendFlowContainer.swift",
     "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
     "ios/Cove/Flows/SendFlow/Common/SendFlowHeaderView.swift",
+    "ios/CoveTests/SendFlowBackNavigationTests.swift",
 ]
 coverage = [
     "ios-unit:ios/CoveTests/AdaptiveToolbarStyleTests.swift::testNavBarToggleKeepsTheStyledScreenIdentity",
-    "ios-unit:ios/CoveTests/SendFlowBackNavigationTests.swift::testBackFromSendAtLargestAccessibilitySizeFinishes",
+    "agent",
 ]
 # 1.4.0: ios FAIL, android N/A
+# with a phone connected and unlocked, from ios/ run
+# xcodebuild test -scheme Cove -destination 'platform=iOS,id=<udid>' -test-timeouts-enabled YES
+#   -only-testing:CoveTests/SendFlowBackNavigationTests/testBackFromSendAtLargestAccessibilitySizeFinishes
+#   -test-iterations 10 -run-tests-until-failure -allowProvisioningUpdates
+# and check the result bundle shows 10 passed repetitions, none skipped. the test pushes Send at the
+# largest text size and goes back three times a repetition. it skips itself on a simulator (#1108):
+# the CI simulators' keyboard service stalled the app past its 10-second Back wait, while an iPhone SE
+# on iOS 27.2 finished each Back in under a second and an iPhone 15 on iOS 27.2.1 passed 10 of 10
 
 [[row]]
 id = "s16-restore-original-ios-text-size-tick"

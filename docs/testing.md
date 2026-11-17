@@ -150,6 +150,10 @@ A quarantined test costs no simulator or `xcodebuild` call. `xtask ios-ui` leave
 
 CI's `ios-quarantine` job runs `cargo xtask ios-quarantine check`, which adds a note to the run for each quarantined test and fails once the UTC date is past an entry's `expires` or on an entry more than 60 days ahead; run it from `rust/` to see what the job would report. Every command that reads the list also fails on an entry that names no test method its target builds, so renaming a quarantined test means renaming its entry.
 
+### Device-only iOS tests
+
+A test whose simulator failures come from the simulator, and that passes on a phone, runs on a phone instead of being quarantined. It skips itself on a simulator with `XCTSkipIf` under `targetEnvironment(simulator)`, so CI and local simulator runs report it as skipped, and its checklist row targets `device` with an `agent` entry whose comment gives the `xcodebuild test -destination 'platform=iOS,id=<udid>' -only-testing:<Target>/<Class>/<method>` command an agent pass runs. Count a run as passed only when the result bundle (`xcrun xcresulttool get test-results summary --path <bundle>`) shows the repetitions passed with none skipped. `SendFlowBackNavigationTests/testBackFromSendAtLargestAccessibilitySizeFinishes` is one: on CI's simulators the keyboard service stalled the app past its Back wait (#1108), while a phone finished each Back in under a second, and `s16-ios-maximum-text-send-back-navigation` runs it.
+
 ## Hardware signer tests
 
 These Rust tests run the PSBT signing loops that a release pass would otherwise leave to a person with a camera or a card.

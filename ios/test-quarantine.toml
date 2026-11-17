@@ -7,12 +7,6 @@
 # remove its entry, or extend `expires` with a note on the issue saying why
 
 [[test]]
-id = "CoveTests/SendFlowBackNavigationTests/testBackFromSendAtLargestAccessibilitySizeFinishes"
-issue = "https://github.com/bitcoinppl/cove/issues/1108"
-expires = 2026-12-09
-reason = "The back transition misses its 10-second wait on slow simulators"
-
-[[test]]
 id = "CoveUITests/HardwareSigningFullLaunchUITests/testTapSignerImportRetriesAfterWrongPinAndDroppedSession"
 issue = "https://github.com/bitcoinppl/cove/issues/1109"
 expires = 2026-12-09
