@@ -19,12 +19,6 @@ expires = 2026-12-09
 reason = "A fake node control request times out"
 
 [[test]]
-id = "CoveUITests/OnboardingFullLaunchUITests/testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard"
-issue = "https://github.com/bitcoinppl/cove/issues/1110"
-expires = 2026-12-09
-reason = "No import suggestion appears on the iPhone 17 iOS 27 simulator"
-
-[[test]]
 id = "CoveUITests/TapSignerLayoutFullLaunchUITests/testTapSignerSetupScreensFitAtLargestTextSize"
 issue = "https://github.com/bitcoinppl/cove/issues/1169"
 expires = 2027-01-14

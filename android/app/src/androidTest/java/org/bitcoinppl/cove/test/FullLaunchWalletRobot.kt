@@ -49,6 +49,21 @@ class FullLaunchWalletRobot(
         }
         assertTrue("expected the network change to dispatch", dispatched)
 
+        saveFakeNode(Network.SIGNET)
+    }
+
+    /**
+     * Points mainnet, the network a fresh install starts on, at the fake node, which must have been
+     * reset onto mainnet with `FakeNodeControl.reset(Network.BITCOIN)`
+     *
+     * Saving checks the node, so this fails at once if the fake node is unreachable, rather than the
+     * import later falling back on a live mainnet node
+     */
+    fun selectMainnetFakeNode() {
+        saveFakeNode(Network.BITCOIN)
+    }
+
+    private fun saveFakeNode(network: Network) {
         runBlocking {
             NodeSelector().use { selector ->
                 val node = selector.parseCustomNode(FAKE_NODE_ESPLORA_URL, ApiType.ESPLORA, "Fake node")
@@ -57,7 +72,7 @@ class FullLaunchWalletRobot(
         }
 
         Database().globalConfig().use { config ->
-            assertEquals(Network.SIGNET, config.selectedNetwork())
+            assertEquals(network, config.selectedNetwork())
             assertEquals(FAKE_NODE_ESPLORA_URL, config.selectedNode().url.trimEnd('/'))
         }
     }

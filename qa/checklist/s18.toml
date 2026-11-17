@@ -100,6 +100,8 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# on android this is the only check that the system create-passkey sheet opens from onboarding's
+# enable, which no emulator shows (#1101); the uitest flavour checks the scripted create request
 # the one pass on real providers: enable with the platform passkey sheet and a real authenticator's prf, on a real icloud or google drive account, then verify and restore. the same flow with scripted providers is covered in s12-enable-backup-without-existing-data and the other s12 rows
 
 [[row]]

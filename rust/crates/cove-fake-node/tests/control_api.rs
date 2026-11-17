@@ -321,3 +321,66 @@ fn ui_test_fixture_flow_runs_over_the_control_api() {
     let status = node.stop();
     assert!(status.success(), "SIGTERM is a clean exit: {status}");
 }
+
+#[test]
+fn reset_switches_network_and_fund_wallet_funds_each_address_type() {
+    let node = RunningNode::start();
+
+    // a reset onto mainnet serves mainnet's genesis, which an import's address discovery needs
+    let reset = node.ok("POST", "/reset", json!({ "network": "bitcoin" }));
+    assert_eq!(reset["tip"], RESET_BLOCKS);
+    assert_eq!(node.ok("GET", "/health", Value::Null)["network"], "bitcoin");
+
+    let genesis = http(&node.esplora, "GET", "/block-height/0", "").1;
+    assert_eq!(genesis, "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+
+    // index 0 of each type's first mainnet account, the BIP84, BIP49 and BIP44 test vectors
+    for (address_type, address) in [
+        ("native_segwit", "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
+        ("wrapped_segwit", "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf"),
+        ("legacy", "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA"),
+    ] {
+        let funded = node.ok(
+            "POST",
+            "/fund-wallet",
+            json!({
+                "mnemonic": MNEMONIC,
+                "address_type": address_type,
+                "outputs": [{ "index": 0, "sats": 20_000 }],
+            }),
+        );
+        assert_eq!(funded["outputs"][0]["address"], address, "{address_type}: {funded}");
+
+        let stats = node.esplora_json(&format!("/address/{address}"));
+        assert_eq!(stats["chain_stats"]["funded_txo_sum"], 20_000, "{address_type}: {stats}");
+    }
+
+    // addresses must match the chain's network, which the reset changed
+    let signet = json!({ "address": FIRST_RECEIVE, "sats": [1] });
+    assert_eq!(node.control("POST", "/fund", &signet).0, 400);
+
+    let unknown_type = json!({ "mnemonic": MNEMONIC, "address_type": "taproot", "outputs": [{ "index": 0, "sats": 1 }] });
+    assert_eq!(node.control("POST", "/fund-wallet", &unknown_type).0, 400);
+
+    let (status, error) = node.control("POST", "/reset", &json!({ "network": "mainnet" }));
+    assert_eq!(status, 400, "{error}");
+    assert_eq!(
+        node.ok("GET", "/health", Value::Null)["network"],
+        "bitcoin",
+        "a bad reset changes nothing"
+    );
+
+    // a plain reset returns to the network the node started on, so the next test finds Signet
+    node.ok("POST", "/reset", Value::Null);
+    let health = node.ok("GET", "/health", Value::Null);
+    assert_eq!(
+        (health["network"].as_str(), health["tip"].as_u64()),
+        (Some("signet"), Some(u64::from(RESET_BLOCKS)))
+    );
+
+    let stats = node.esplora_json("/address/bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu");
+    assert_eq!(stats["chain_stats"]["funded_txo_sum"], 0, "{stats}");
+
+    let status = node.stop();
+    assert!(status.success(), "SIGTERM is a clean exit: {status}");
+}

@@ -3,13 +3,18 @@ package org.bitcoinppl.cove.flows.onboarding
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.uiautomator.UiDevice
-import org.bitcoinppl.cove.test.FullLaunchTestRule
+import org.bitcoinppl.cove.test.FakeNodeControl
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
+import org.bitcoinppl.cove.test.FullLaunchTestRule
+import org.bitcoinppl.cove.test.FullLaunchWalletRobot
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
-import org.bitcoinppl.cove.test.QuarantinedInCi
+import org.bitcoinppl.cove.test.TEST_MNEMONIC
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
+import org.bitcoinppl.cove_core.WalletAddressType
+import org.bitcoinppl.cove_core.types.Network
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -24,10 +29,38 @@ class OnboardingFullLaunchTest {
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
+    // set only by the tests that switch the fake node to mainnet, so the others don't need it running
+    private var mainnetNode: FakeNodeControl? = null
+
     @Before
     fun launchActivity() {
         device = fullLaunchDevice()
         launchFullApp()
+    }
+
+    // a plain reset returns the node to its own network, so the next class finds the chain it expects
+    @After
+    fun restoreFakeNodeNetwork() {
+        mainnetNode?.reset()
+    }
+
+    /**
+     * Gives the imported words mainnet history on the fake node and points mainnet at it
+     *
+     * After a mainnet import, address type discovery looks for history on the wrapped segwit and
+     * legacy accounts, and the wallet selection sheet opens only when it finds some. Serving that
+     * from the fake node keeps the import off live mainnet, which CI jobs can't always reach
+     */
+    private fun serveMainnetHistoryFromFakeNode() {
+        val node = FakeNodeControl()
+        mainnetNode = node
+        node.reset(Network.BITCOIN)
+
+        WalletAddressType.entries.forEach { addressType ->
+            node.fundWallet(TEST_MNEMONIC, listOf(0 to IMPORTED_WALLET_SATS), addressType)
+        }
+
+        FullLaunchWalletRobot(device).selectMainnetFakeNode()
     }
 
     @Test
@@ -40,6 +73,7 @@ class OnboardingFullLaunchTest {
     @Test
     fun importedWalletCanAcceptTermsAndReachWalletSelection() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        serveMainnetHistoryFromFakeNode()
 
         FullLaunchOnboardingRobot(device)
             .tapGetStarted()
@@ -186,13 +220,9 @@ class OnboardingFullLaunchTest {
     }
 
     @Test
-    @QuarantinedInCi(
-        reason = "races the screen transition after import: stale UiAutomator nodes or a wallet selection timeout",
-        issue = "https://github.com/bitcoinppl/cove/issues/1098",
-        expires = "2026-12-09",
-    )
     fun softwareWalletUserCanImportKnownWords() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        serveMainnetHistoryFromFakeNode()
 
         FullLaunchOnboardingRobot(device)
             .tapGetStarted()
@@ -214,5 +244,9 @@ class OnboardingFullLaunchTest {
             .tapGetStarted()
             .chooseNewUser()
             .assertBackupWallet()
+    }
+
+    private companion object {
+        const val IMPORTED_WALLET_SATS = 50_000L
     }
 }

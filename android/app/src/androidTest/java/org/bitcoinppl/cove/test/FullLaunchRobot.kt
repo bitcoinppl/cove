@@ -324,7 +324,20 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseNativeImportedWalletFromSelectionSheet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Multiple wallets found, please choose one"), timeoutMillis = 30_000)
+        val selectionSheet = text("Multiple wallets found, please choose one")
+        val nodeFailure = text("Node Connection Failed")
+
+        // the sheet opens only after address type discovery hears from the node, so a node the app
+        // can't reach would otherwise show up as a timeout waiting for the sheet
+        val shown = device.waitUntilAnyVisible(selectionSheet, nodeFailure, timeoutMillis = 30_000)
+        if (shown.description == nodeFailure.description) {
+            error(
+                "The app could not reach its node during address type discovery. Reset the fake node onto mainnet " +
+                    "and point the app at it with FullLaunchWalletRobot.selectMainnetFakeNode() before importing\n" +
+                    device.dumpWindowHierarchy(),
+            )
+        }
+
         device.waitUntilVisible(text("Keep Current"))
         device.waitUntilVisible(text("Wrapped Segwit"))
         device.waitUntilVisible(text("Legacy"))
@@ -439,60 +452,6 @@ class FullLaunchOnboardingRobot(
         device.waitUntilVisible(text("Cove can finish confirming cloud visibility in the background."))
 
         return this
-    }
-
-    fun assertCreatePasskeySheetShown(): FullLaunchOnboardingRobot {
-        val wrongSheetSelectors =
-            listOf(
-                textContains("Sign in another way"),
-                textContains("Use passkey from"),
-            )
-        val createSheetSelectors =
-            listOf(
-                textContains("Create a passkey"),
-                textContains("Create passkey"),
-                textContains("Save a passkey"),
-                textContains("Save passkey"),
-            )
-        val deadline = System.currentTimeMillis() + 20_000
-
-        while (System.currentTimeMillis() < deadline) {
-            selectGoogleAuthorizationAccountIfNeeded()
-            chooseNewPasskeyIfExistingBackupPromptShown()
-
-            if (createSheetSelectors.any { device.findObject(it.value) != null }) {
-                device.pressBack()
-                return this
-            }
-
-            wrongSheetSelectors.firstOrNull { device.findObject(it.value) != null }?.let { selector ->
-                fail("Expected passkey creation sheet, but saw ${selector.description}\n${device.dumpWindowHierarchy()}")
-            }
-
-            Thread.sleep(100)
-        }
-
-        error("Timed out waiting for passkey creation sheet\n${device.dumpWindowHierarchy()}")
-    }
-
-    private fun chooseNewPasskeyIfExistingBackupPromptShown() {
-        if (device.findObject(textContains("previous backup").value) == null) {
-            return
-        }
-
-        val clicked =
-            device.clickCenterIfVisible(text("Create New Backup")) ||
-                device.clickCenterIfVisible(text("Create New Passkey"))
-        if (clicked) Thread.sleep(500)
-    }
-
-    private fun selectGoogleAuthorizationAccountIfNeeded() {
-        if (device.findObject(text("Choose an account").value) == null) {
-            return
-        }
-
-        device.retryingStale { findObject(textContains("@").value)?.click() }
-        Thread.sleep(500)
     }
 
     private fun assertQrScannerVisible() {

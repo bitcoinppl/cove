@@ -468,3 +468,23 @@ coverage = [
 ]
 # the turn off review, the heal notice and turn off incomplete keep every action reachable. android doesn't cover the first
 # dialog's restore them first, verify first or check again, the offline dialog or the settings rows at max font
+
+[[row]]
+id = "s16-ios-import-word-suggestions-anchored-to-keyboard"
+section = "16"
+title = "Import word suggestions sit on the iOS keyboard"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletImportScreen.swift",
+    "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletImportScreenSections.swift",
+    "ios/Cove/Components/KeyboardAccessory/KeyboardAccessoryHost.swift",
+    "ios/Cove/Extention/KeyboardObserver.swift",
+]
+coverage = [
+    "agent",
+]
+# on a phone, open Add Wallet, Software Wallet, Enter recovery words, 12 words, tap the first word and type "a": an
+# abandon suggestion shows in a bar touching the top of the keyboard (hotWalletImport.suggestions), not floating above
+# it. the simulator ui test for this was removed (#1110): on the iOS 27 simulator no suggestion appears, while it passed
+# on the iOS 26.6 simulator of the github runners and on a phone, so a simulator can't stand in for the keyboard here
