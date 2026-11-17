@@ -10,6 +10,7 @@ mod clock;
 mod continuation_tests;
 mod crash_tests;
 mod deadline;
+mod detail_refresh_tests;
 mod enable_entry_tests;
 mod fakes;
 mod finishing_tests;

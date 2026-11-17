@@ -29,7 +29,6 @@
 7	org.bitcoinppl.cove.flows.SettingsFlow.WalletSettingsChangeNameScreenTest
 175	org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerLayoutFullLaunchTest
 40	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupDeleteFromCloudFullLaunchTest
-47	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupDisableFullLaunchTest
 122	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupDurableCompletionFullLaunchTest
 62	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupInventoryActionsFullLaunchTest
 74	org.bitcoinppl.cove.flows.cloudbackup.CloudBackupLocalDeleteFullLaunchTest

@@ -231,14 +231,14 @@ paths = [
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupDisableFullAppUITests.swift::testDisableWaitsForAHeldUploadThenDeletesTheWholeBackup",
-    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDisableFullLaunchTest.kt::disableWaitsForAHeldUploadThenDeletesTheWholeBackup",
+    "rust:rust/src/manager/cloud_backup_manager/harness/finishing_tests.rs::turn_off_commits_on_one_confirmation_after_draining_a_new_wallet_s_upload",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_waits_for_the_write_in_flight_before_it_commits_and_deletes",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::persisted_disabling_on_restart_resumes_to_disabled",
     "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::paused_background_write_answers_paused_at_the_queue_head_and_the_drain_runs",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::turn_off_mid_batch_pauses_the_rest_of_the_batch",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms hold a new wallet's upload in the scripted cloud, then turn off through rust's review, which asks once for a backup that holds only this device's wallets: the backup stays in the cloud and the app stays disabling while the write is held, and once it is released the disable deletes the whole backup once, leaving no master key or wallet record behind
+# the rust sequence test and the ios ui test hold a new wallet's upload in the scripted cloud, then turn off through rust's review, which asks once for a backup that holds only this device's wallets: the backup stays in the cloud and turn off stays uncommitted while the write is held, and once it is released the disable deletes the whole backup once, with no other upload let through. android's turn off wiring is covered by its turn off ui tests
 
 [[row]]
 id = "s05-delete-from-cloud-confirmation-and-selected-backup"

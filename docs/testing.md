@@ -347,6 +347,8 @@ Rust sequence tests for Cloud Backup run the real manager through `rust/src/mana
 
 Cloud Backup UI tests run the whole app against a scripted cloud provider and passkey provider, so they need no iCloud or Google account and no real passkey. Neither provider ships: on iOS they live in the `CoveCloudBackupUITestHost` app, which builds all of `ios/Cove` with its own entry point, and on Android in the `uiTest` flavour's `ScriptedCloudStorageAccess` and `ScriptedPasskeyProvider`.
 
+Test what Rust decides in Rust. Coordination such as whether a passkey request is retried, how provider signals during a detail refresh coalesce into one trailing refresh, what Restore All does when it is cancelled or a wallet fails, and when Turn Off may delete the backup belongs in the [sequence tests](#cloud-backup-sequence-tests) or the supervisor's tests, which settle the real manager and move its paused clock past every retry and refresh timer. A UI test checks what Rust can't see: that a tap reaches its action and that the screen draws what Rust sends, which a Compose test that hosts the screen with a Rust fixture, such as `CloudBackupDialogContractTest`, often checks without a full launch. A UI test that sleeps and then counts provider calls to show something didn't happen proves nothing on a slow emulator, so leave that to Rust.
+
 ### iOS host controls
 
 A `CoveCloudBackupUITests` test that creates a `CloudBackupHostControl` scripts the host through a directory under `/tmp`, which the simulator shares with the Mac. The control passes the directory to the app in `COVE_CLOUD_BACKUP_UI_CONTROL_DIR`. The directory holds:

@@ -11,8 +11,9 @@ use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyError;
 
 use super::{
-    FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp,
-    change_a_wallet, load_detail, run_case, seed_other_namespace, seed_verifiable_master_key,
+    CloudCall, FakeAccount, Hold, NextAction as N, PasskeyCall, PasskeyMode, PhaseEnd, TestApp,
+    change_a_wallet, keychain_namespace, load_detail, run_case, seed_other_namespace,
+    seed_verifiable_master_key,
 };
 use crate::manager::cloud_backup_manager::CloudBackupStore;
 use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
@@ -26,6 +27,7 @@ use crate::manager::cloud_backup_manager::{
     SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
+use crate::manager::onboarding_manager::{CloudRestoreDiscovery, RustOnboardingManager};
 
 fn verify() -> CloudBackupManagerAction {
     CloudBackupManagerAction::StartVerification(CloudBackupVerificationSource::CloudBackupDetail)
@@ -412,5 +414,40 @@ fn recovering_another_namespace_presents_only_under_its_tap() {
             "the other backup's wallet is not on this device: {}",
             app.describe()
         );
+    });
+}
+
+/// A registration that fails after the platform presented its sheet is never retried, even when a
+/// retry would succeed: onboarding's Enable asks once, writes nothing to the provider, and leaves
+/// Cloud Backup off with Enable offered again once every retry timer has had its time
+#[test]
+fn a_registration_that_fails_after_presenting_is_not_retried() {
+    let test =
+        concat!(module_path!(), "::a_registration_that_fails_after_presenting_is_not_retried");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+
+        // the scripted results would answer a second request
+        app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.passkey.set_mode(PasskeyMode::ProviderFailure);
+
+        app.event("onboarding starts Cloud Backup with no backup found", |_| {
+            RustOnboardingManager::begin_cloud_backup_enable(CloudRestoreDiscovery::NoBackupFound);
+        })
+        .then_cannot(&[N::TurnOff]);
+        app.passkey.set_mode(PasskeyMode::Succeeds);
+        app.quiesce().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+
+        let calls = app.passkey.interactive_calls();
+        assert_eq!(
+            calls.iter().map(|call| call.kind).collect::<Vec<_>>(),
+            vec![PasskeyCall::Create],
+            "{}",
+            app.describe()
+        );
+        assert_eq!(app.cloud.count(CloudCall::UploadMasterKey), 0, "{}", app.describe());
+        assert_eq!(app.cloud.count(CloudCall::UploadWallet), 0, "{}", app.describe());
+        assert_eq!(keychain_namespace(), None, "{}", app.describe());
     });
 }

@@ -50,7 +50,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private val masterDownloads = AtomicInteger(0)
     private val walletLists = AtomicInteger(0)
-    private val walletListNamespaces = CopyOnWriteArrayList<String>()
     private val walletDownloads = AtomicInteger(0)
     private val fixtureWalletDownloadRequests = CopyOnWriteArrayList<String>()
 
@@ -66,18 +65,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private val fixtureWalletDownloadResults =
         ConcurrentHashMap<String, ConcurrentLinkedQueue<FixtureWalletDownloadResult>>()
-    private val fixtureWalletDownloadDefaults =
-        ConcurrentHashMap<String, FixtureWalletDownloadResult>()
 
-    @Volatile
-    private var walletListBlock: WalletListBlock? = null
-
-    // unlike walletListBlock, parks every plain listing until released, so concurrent readers such
+    // parks every plain listing until released, so concurrent readers such
     // as discovery, sync health and passkey verification can't confirm an inventory around a hold
     @Volatile
     private var walletListGate: WalletListBlock? = null
 
-    // held apart from walletListBlock because a detail refresh also starts a sync-health check,
+    // held apart from walletListGate because a detail refresh also starts a sync-health check,
     // whose plain listing could otherwise take the hold meant for the refresh's snapshot
     @Volatile
     private var walletSnapshotListBlock: WalletListBlock? = null
@@ -223,7 +217,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespaceScenario = NamespaceScenario.sequence(listOf(NamespaceResult.BACKUP_FOUND), null)
         masterDownloads.set(0)
         walletLists.set(0)
-        walletListNamespaces.clear()
         walletDownloads.set(0)
         uploadedFixtureWalletBackups.clear()
         acceptedNewWalletUploads.set(0)
@@ -234,8 +227,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         deletedFixtureWalletRecordIds.clear()
         deleteLocationErrors.clear()
         fixtureWalletDownloadResults.clear()
-        fixtureWalletDownloadDefaults.clear()
-        walletListBlock = null
         walletListGate?.release?.complete(Unit)
         walletListGate = null
         walletSnapshotListBlock = null
@@ -280,17 +271,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         }
         require(results.isNotEmpty()) { "at least one wallet download result is required" }
         fixtureWalletDownloadResults[recordId] = ConcurrentLinkedQueue(results.toList())
-    }
-
-    fun configureFixtureWalletDownloadDefault(
-        recordId: String,
-        result: FixtureWalletDownloadResult,
-    ) {
-        require(recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS) {
-            "unknown fixture wallet record id"
-        }
-
-        fixtureWalletDownloadDefaults[recordId] = result
     }
 
     /**
@@ -380,8 +360,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     fun walletListCount(): Int = walletLists.get()
 
-    fun walletListNamespaces(): List<String> = walletListNamespaces.toList()
-
     fun walletDownloadCount(): Int = walletDownloads.get()
 
     fun walletDownloadCount(recordId: String): Int =
@@ -404,20 +382,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     /** Deletes refused because their locations didn't name the record being deleted */
     fun deleteLocationErrors(): List<String> = deleteLocationErrors.toList()
-
-    /** Wallet listings that returned a result, so a test can tell a refresh's listing finished */
-
-    fun blockNextWalletList() {
-        check(walletListBlock?.claimed?.get() != false) { "a wallet-list block is already pending" }
-        walletListBlock = WalletListBlock()
-    }
-
-    fun awaitBlockedWalletList(timeoutMs: Long = 10_000): Boolean =
-        walletListBlock?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
-
-    fun releaseBlockedWalletList() {
-        walletListBlock?.release?.complete(Unit)
-    }
 
     /** Holds every plain wallet listing from now until [releaseWalletListGate] */
     fun closeWalletListGate() {
@@ -710,14 +674,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ): List<String> {
         ScriptedConnectivityAccess.throwIfOffline()
         walletLists.incrementAndGet()
-        walletListNamespaces += namespace
-        walletListBlock?.let { block ->
-            if (block.claimed.compareAndSet(false, true)) {
-                block.entered.countDown()
-                block.release.await()
-            }
-        }
-
         walletListGate?.let { gate ->
             gate.entered.countDown()
             gate.release.await()
@@ -965,7 +921,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
                 return when (
                     fixtureWalletDownloadResults[recordId]?.poll()
-                        ?: fixtureWalletDownloadDefaults[recordId]
                         ?: FixtureWalletDownloadResult.VALID
                 ) {
                     FixtureWalletDownloadResult.VALID -> {

@@ -3885,6 +3885,85 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
     ));
 }
 
+/// After a mixed Restore All, the failed wallet's own row restores it once its backup reads again,
+/// and that leaves no remaining batch, so Retry Remaining is no longer offered
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_mixed_result_row_retry_restores_the_failed_wallet_and_ends_the_batch() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let restored_wallet = xpub_only_wallet_metadata();
+    let mut failed_wallet = xpub_only_wallet_metadata();
+    failed_wallet.network = Network::Testnet;
+    let mut damaged_entry = wallet_entry_with_labels(&failed_wallet, None);
+    damaged_entry.xpub = Some("not-an-xpub".into());
+    let (namespace, items) = prepare_restore_all_queue_fixture(
+        &manager,
+        vec![
+            (restored_wallet.clone(), wallet_entry_with_labels(&restored_wallet, None)),
+            (failed_wallet.clone(), damaged_entry),
+        ],
+    );
+    let restored_record_id = items[0].record_id.as_str();
+    let failed_record_id = items[1].record_id.as_str();
+    let is_local = |wallet: &WalletMetadata| {
+        Database::global()
+            .wallets()
+            .get(&wallet.id, wallet.network, wallet.wallet_mode)
+            .unwrap()
+            .is_some()
+    };
+
+    call!(manager.supervisor.start_restore_all_operation(false, Some(tap(PermitIntent::RestoreAll)))).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // only the failed wallet's row is left, carrying its failure, and the batch keeps it
+    let rows =
+        wait_for_rows_refetched_after_restore_all(&manager, &[failed_record_id], &[restored_record_id])
+            .await;
+    let failed_row = rows.iter().find(|wallet| wallet.record_id == failed_record_id).unwrap();
+    assert!(failed_row.restore_failure.is_some());
+    assert!(is_local(&restored_wallet));
+    assert!(!is_local(&failed_wallet));
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+    assert!(matches!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 }
+    ));
+
+    // the provider now serves a readable copy of the failed wallet's backup
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    test_globals().cloud.set_wallet_backup(
+        namespace,
+        failed_record_id.to_string(),
+        encrypted_wallet_backup_bytes_for_entry(
+            &wallet_entry_with_labels(&failed_wallet, None),
+            &master_key,
+            1,
+        ),
+    );
+
+    // the row's own Retry restore, not Retry Remaining
+    let retry = Some(tap(PermitIntent::RestoreCloudWallet));
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(failed_record_id.to_string(), retry))
+        .await
+        .unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the row restore should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    wait_for_cloud_only_rows(&manager, &[], &[failed_record_id, restored_record_id]).await;
+    assert!(is_local(&failed_wallet));
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+    assert_eq!(manager.projected_restore_all_state(), CloudBackupRestoreAllState::NotShown);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn restore_all_provider_failure_stops_before_scheduling_the_next_wallet() {
     let _guard = async_test_lock().lock().await;

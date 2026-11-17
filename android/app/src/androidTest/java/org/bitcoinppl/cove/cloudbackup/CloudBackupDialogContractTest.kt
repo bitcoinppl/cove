@@ -29,6 +29,7 @@ import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupDeleteCategory
 import org.bitcoinppl.cove_core.CloudBackupDeleteConfirmation
 import org.bitcoinppl.cove_core.CloudBackupLastOutcome
+import org.bitcoinppl.cove_core.CloudBackupListedRecord
 import org.bitcoinppl.cove_core.CloudBackupListedRow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOperationKind
@@ -42,6 +43,7 @@ import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.CloudBackupSection
+import org.bitcoinppl.cove_core.CloudBackupWalletRestoreFailure
 import org.bitcoinppl.cove_core.cloudBackupScreenFixtures
 import org.bitcoinppl.cove_core.cloudBackupUiElements
 import org.junit.Assert.assertEquals
@@ -158,6 +160,24 @@ class CloudBackupDialogContractTest {
         show(cloudBackupFixture("configured-extra-copy-gone"))
         compose.onAllNodesWithTag(confirmTag).assertCountEquals(0)
         assertEquals("deleted from a test", emptyList<CloudBackupManagerAction>(), dispatched)
+    }
+
+    /**
+     * A cloud-only row whose restore failed, as one Restore All couldn't read, offers Retry restore
+     * in place of Restore to this device, and the retry restores that row's wallet alone
+     */
+    @Test
+    fun aRowWhoseRestoreFailedOffersARetryThatRestoresItsWallet() {
+        val (start, row) = rowWithRestore()
+        showDetail(start.withRow(row.recordId) { it.withRestoreFailure("Couldn't decrypt this backup") })
+
+        compose.onNodeWithTag(CloudBackupTags.walletRow(row.recordId)).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Restore to this device").assertCountEquals(0)
+        compose.onNodeWithText("Retry restore").performClick()
+        compose.waitForIdle()
+
+        assertEquals(listOf(CloudBackupManagerAction.RestoreCloudWallet(row.recordId)), dispatched)
     }
 
     /**
@@ -305,6 +325,32 @@ class CloudBackupDialogContractTest {
                     ?.let { fixture.screen to it }
             }
         }
+
+    // the first fixture row not on this device whose restore Rust offers, with the screen it is listed on
+    private fun rowWithRestore(): Pair<CloudBackupScreen, CloudBackupListedRow> =
+        cloudBackupScreenFixtures().firstNotNullOf { fixture ->
+            fixture.screen.configured
+                ?.sections
+                .orEmpty()
+                .filterIsInstance<CloudBackupSection.NotOnDevice>()
+                .flatMap { it.v1.rows }
+                .firstOrNull { row ->
+                    row.record is CloudBackupListedRecord.NotOnDevice &&
+                        row.actions.any { it.action == CloudBackupRowActionKind.Restore && it.availability.isAvailable }
+                }?.let { fixture.screen to it }
+        }
+
+    // the row as Rust lists it once a restore of its wallet failed
+    private fun CloudBackupListedRow.withRestoreFailure(message: String): CloudBackupListedRow {
+        val record = record as CloudBackupListedRecord.NotOnDevice
+
+        return copy(
+            record =
+                CloudBackupListedRecord.NotOnDevice(
+                    record.wallet.copy(restoreFailure = CloudBackupWalletRestoreFailure(message)),
+                ),
+        )
+    }
 
     private fun CloudBackupListedRow.delete() = action(CloudBackupRowControl.DELETE)!!
 
