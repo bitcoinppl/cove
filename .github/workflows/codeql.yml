@@ -4,14 +4,13 @@ name: CodeQL
 # runner. Its autobuild never built the app: Xcode stops at the missing cove_core_ffi.xcframework,
 # which only `just build-ios` makes, so each run held one of GitHub's few macOS runners for about
 # 25 minutes without analyzing the app. Here Swift builds the Rust library first and runs on a
-# schedule, while the languages CodeQL reads without a build still run on every pull request on
-# Linux. Code scanning rejects these uploads while default setup is on, so it stays off
+# schedule, while the languages CodeQL reads without a build run on Linux for each push to master.
+# Pull requests skip CodeQL: its Rust analysis held a runner for about 12 minutes on every push and
+# no required check waits on it, so a new alert shows up after the merge instead. Code scanning
+# rejects these uploads while default setup is on, so it stays off
 on:
   workflow_dispatch:
   push:
-    branches:
-      - master
-  pull_request:
     branches:
       - master
   schedule:
@@ -24,7 +23,7 @@ permissions:
 
 # the event is part of the group so a push to master doesn't cancel the scheduled Swift analysis
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -52,7 +51,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   # Swift needs a real build, and only a macOS runner can make one, so it runs nightly and on
-  # demand rather than holding a macOS runner for every pull request and push
+  # demand rather than holding a macOS runner for every push to master
   analyze-swift:
     name: Analyze (swift)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
