@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.test
 
+import org.bitcoinppl.cove_core.WalletAddressType
+import org.bitcoinppl.cove_core.types.Network
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -57,9 +59,17 @@ class FakeNodeControl(
                 "`just android-instrumented-ci` or `cargo xtask fake-node run --android -- <command>`"
         }
 
-    /** Replaces the chain with a fresh one and clears the broadcast log */
-    fun reset() {
-        request("POST", "/reset", JSONObject())
+    /**
+     * Replaces the chain with a fresh one and clears the broadcast log
+     *
+     * With [network] the new chain starts from that network's genesis block instead of the one the
+     * node was started on, until the next reset without it
+     */
+    fun reset(network: Network? = null) {
+        val body = JSONObject()
+        network?.let { body.put("network", it.fakeNodeName()) }
+
+        request("POST", "/reset", body)
     }
 
     /** Pays each amount to the address in its own confirmed transaction */
@@ -76,10 +86,14 @@ class FakeNodeControl(
         return fundedOutputs(request("POST", "/fund", body))
     }
 
-    /** Funds the BIP84 receive addresses `index` of the mnemonic, one confirmed transaction per amount */
+    /**
+     * Funds the receive addresses `index` of the mnemonic's first account of [addressType], one
+     * confirmed transaction per amount
+     */
     fun fundWallet(
         mnemonic: String,
         satsByIndex: List<Pair<Int, Long>>,
+        addressType: WalletAddressType = WalletAddressType.NATIVE_SEGWIT,
     ): List<FakeNodeFundedOutput> {
         val outputs = JSONArray()
         satsByIndex.forEach { (index, sats) ->
@@ -89,6 +103,7 @@ class FakeNodeControl(
         val body =
             JSONObject()
                 .put("mnemonic", mnemonic)
+                .put("address_type", addressType.fakeNodeName())
                 .put("outputs", outputs)
                 .put("confirm", true)
 
@@ -129,6 +144,21 @@ class FakeNodeControl(
                 sats = output.getLong("sats"),
                 address = output.getString("address"),
             )
+        }
+
+    private fun Network.fakeNodeName(): String =
+        when (this) {
+            Network.BITCOIN -> "bitcoin"
+            Network.TESTNET -> "testnet"
+            Network.TESTNET4 -> "testnet4"
+            Network.SIGNET -> "signet"
+        }
+
+    private fun WalletAddressType.fakeNodeName(): String =
+        when (this) {
+            WalletAddressType.NATIVE_SEGWIT -> "native_segwit"
+            WalletAddressType.WRAPPED_SEGWIT -> "wrapped_segwit"
+            WalletAddressType.LEGACY -> "legacy"
         }
 
     private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map(::getJSONObject)

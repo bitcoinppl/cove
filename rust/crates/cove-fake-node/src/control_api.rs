@@ -117,6 +117,13 @@ const fn one_block() -> u32 {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ResetRequest {
+    /// Starts the new chain on this network instead of the one the node started on
+    network: Option<Network>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FundRequest {
     address: String,
     sats: Vec<u64>,
@@ -128,10 +135,46 @@ struct FundRequest {
 #[serde(deny_unknown_fields)]
 struct FundWalletRequest {
     mnemonic: String,
+    #[serde(default)]
+    address_type: AddressType,
     account_path: Option<String>,
     outputs: Vec<WalletOutput>,
     #[serde(default = "confirm_by_default")]
     confirm: bool,
+}
+
+/// The single-key address types a wallet import discovers, each with the BIP
+/// that sets its account path
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AddressType {
+    /// BIP84 P2WPKH
+    #[default]
+    NativeSegwit,
+    /// BIP49 P2SH-P2WPKH
+    WrappedSegwit,
+    /// BIP44 P2PKH
+    Legacy,
+}
+
+impl AddressType {
+    const fn purpose(self) -> u32 {
+        match self {
+            Self::NativeSegwit => 84,
+            Self::WrappedSegwit => 49,
+            Self::Legacy => 44,
+        }
+    }
+
+    fn address(self, key: &Xpub, network: Network) -> Address {
+        let public_key = key.to_pub();
+
+        match self {
+            Self::NativeSegwit => Address::p2wpkh(&public_key, network),
+            Self::WrappedSegwit => Address::p2shwpkh(&public_key, network),
+            Self::Legacy => Address::p2pkh(public_key, network),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -198,7 +241,8 @@ fn route(shared: &Shared, urls: &NodeUrls, request: &Request) -> Result<Value, A
         })),
 
         ("POST", ["reset"]) => {
-            shared.reset();
+            let request: ResetRequest = body(&request.body)?;
+            shared.reset(request.network);
 
             Ok(json!({ "ok": true, "tip": chain.tip_height() }))
         }
@@ -228,14 +272,15 @@ fn fund(chain: &FakeChain, request: FundRequest) -> Result<Value, ApiError> {
     pay_outputs(chain, outputs, request.confirm)
 }
 
-/// Funds BIP84 receive addresses of a mnemonic, so a test can fund the wallet
-/// it imports without hardcoding its addresses
+/// Funds receive addresses of a mnemonic, so a test can fund the wallet it
+/// imports without hardcoding its addresses
 fn fund_wallet(chain: &FakeChain, request: FundWalletRequest) -> Result<Value, ApiError> {
     let network = chain.network();
+    let address_type = request.address_type;
     let mnemonic = Mnemonic::parse(&request.mnemonic)?;
     let account = match request.account_path {
         Some(path) => DerivationPath::from_str(&path)?,
-        None => default_account_path(network),
+        None => default_account_path(address_type, network),
     };
 
     let secp = Secp256k1::new();
@@ -247,7 +292,7 @@ fn fund_wallet(chain: &FakeChain, request: FundWalletRequest) -> Result<Value, A
         .into_iter()
         .map(|output| {
             let key = receive.derive_priv(&secp, &[ChildNumber::from_normal_idx(output.index)?])?;
-            let address = Address::p2wpkh(&Xpub::from_priv(&secp, &key).to_pub(), network);
+            let address = address_type.address(&Xpub::from_priv(&secp, &key), network);
 
             Ok((address, output.sats))
         })
@@ -256,12 +301,12 @@ fn fund_wallet(chain: &FakeChain, request: FundWalletRequest) -> Result<Value, A
     pay_outputs(chain, outputs, request.confirm)
 }
 
-/// The account BIP84 uses for the first native segwit account on `network`
-fn default_account_path(network: Network) -> DerivationPath {
+/// The first account of `address_type`'s BIP on `network`
+fn default_account_path(address_type: AddressType, network: Network) -> DerivationPath {
     let coin_type = if network == Network::Bitcoin { 0 } else { 1 };
 
     DerivationPath::from(vec![
-        ChildNumber::Hardened { index: 84 },
+        ChildNumber::Hardened { index: address_type.purpose() },
         ChildNumber::Hardened { index: coin_type },
         ChildNumber::Hardened { index: 0 },
     ])

@@ -112,6 +112,8 @@ struct Block {
 
 #[derive(Debug)]
 struct ChainState {
+    /// The network whose genesis block is block 0
+    network: Network,
     blocks: Vec<Block>,
     txs: HashMap<Txid, ChainTx>,
     /// Mempool and confirmed transactions in the order they were first added
@@ -131,26 +133,38 @@ struct ChainState {
 /// roots (nothing in BDK or the node clients checks proof of work)
 #[derive(Debug, Clone)]
 pub struct FakeChain {
-    network: Network,
+    /// The network the chain was created on, which a plain [`FakeChain::reset`] returns to
+    default_network: Network,
     state: Arc<Mutex<ChainState>>,
 }
 
 impl FakeChain {
     /// Creates a chain that contains only the genesis block of `network`
     pub fn new(network: Network) -> Self {
-        Self { network, state: Arc::new(Mutex::new(ChainState::new(network))) }
+        Self { default_network: network, state: Arc::new(Mutex::new(ChainState::new(network))) }
     }
 
-    /// Drops every block after genesis, every transaction and the broadcast log
+    /// Drops every block after genesis, every transaction and the broadcast log,
+    /// starting over on the network the chain was created on
     ///
     /// Clones of this chain see the reset too, since they share its state
     pub fn reset(&self) {
-        *self.state.lock() = ChainState::new(self.network);
+        self.reset_to(self.default_network);
+    }
+
+    /// Resets the chain as [`FakeChain::reset`] does, but onto the genesis block
+    /// of `network`
+    ///
+    /// One node can then serve a test that needs another network's history,
+    /// such as mainnet address discovery, while the next plain reset returns
+    /// it to the network it was created on
+    pub fn reset_to(&self, network: Network) {
+        *self.state.lock() = ChainState::new(network);
     }
 
     /// The network whose genesis block the chain starts from
-    pub const fn network(&self) -> Network {
-        self.network
+    pub fn network(&self) -> Network {
+        self.state.lock().network
     }
 
     /// Height of the newest block, 0 when the chain holds only genesis
@@ -512,6 +526,7 @@ impl ChainState {
         let genesis = Block { txids: Vec::new(), header: genesis_block(network).header };
 
         Self {
+            network,
             blocks: vec![genesis],
             txs: HashMap::new(),
             order: Vec::new(),

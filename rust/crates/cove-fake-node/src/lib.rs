@@ -56,9 +56,14 @@ pub(crate) struct Shared {
 
 impl Shared {
     /// Starts over on a fresh chain of [`RESET_BLOCKS`] empty blocks with no
-    /// logged requests and no scripted rules
-    fn reset(&self) {
-        self.chain.reset();
+    /// logged requests and no scripted rules, on `network` or else the network
+    /// the node started on
+    fn reset(&self, network: Option<Network>) {
+        match network {
+            Some(network) => self.chain.reset_to(network),
+            None => self.chain.reset(),
+        }
+
         self.chain.mine(RESET_BLOCKS);
         self.control.clear_requests();
         self.control.clear_rules();
@@ -172,7 +177,7 @@ impl FakeNode {
     /// Replaces the chain with genesis plus [`RESET_BLOCKS`] empty blocks and
     /// clears the request log, the broadcast log and every scripted rule
     pub fn reset(&self) {
-        self.shared.reset();
+        self.shared.reset(None);
     }
 
     /// Scripts requests whose Esplora path or Electrum method contains `pattern`

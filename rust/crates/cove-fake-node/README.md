@@ -63,9 +63,13 @@ Every response is JSON. Errors are `{"error":"…"}` with status 400 for bad inp
 {"ok":true,"esplora":"http://127.0.0.1:39001","electrum":"tcp://127.0.0.1:39002","network":"signet","tip":10}
 ```
 
+`network` is the chain's current network, which a `/reset` with `network` changes.
+
 ### `POST /reset`
 
 Replaces the chain with genesis plus 10 empty blocks (`RESET_BLOCKS`) and clears the broadcast log, the request log and any scripted rules. Returns `{"ok":true,"tip":10}`.
+
+`{"network":"bitcoin"}` starts the new chain from that network's genesis block instead of the one `--network` named, taking the same names as the flag. Every route then works on that network, so a test that needs mainnet history, such as the address type discovery that follows a wallet import on mainnet, can get it from a node started on Signet. The next reset without `network` returns to the `--network` one, so a test that switches networks resets without it when it finishes.
 
 ### `POST /fund`
 
@@ -82,10 +86,10 @@ Pays each amount to the address from its own funding transaction, so each amount
 ### `POST /fund-wallet`
 
 ```json
-{"mnemonic":"abandon … about","account_path":"m/84'/1'/0'","outputs":[{"index":0,"sats":100000}],"confirm":true}
+{"mnemonic":"abandon … about","address_type":"native_segwit","account_path":"m/84'/1'/0'","outputs":[{"index":0,"sats":100000}],"confirm":true}
 ```
 
-Derives the BIP84 native segwit receive address `account_path/0/index` of the mnemonic (no passphrase) on the node's network and funds it as `/fund` does. `account_path` defaults to `m/84'/0'/0'` on mainnet and `m/84'/1'/0'` elsewhere. Returns the same shape as `/fund`. For the abandon ×11 about mnemonic on Signet, index 0 is `tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl`.
+Derives the receive address `account_path/0/index` of the mnemonic (no passphrase) on the node's network and funds it as `/fund` does. `address_type` is `native_segwit` (BIP84 P2WPKH, the default), `wrapped_segwit` (BIP49 P2SH-P2WPKH) or `legacy` (BIP44 P2PKH). `account_path` defaults to that BIP's first account: purpose 84, 49 or 44, coin type 0 on mainnet and 1 elsewhere, account 0. Returns the same shape as `/fund`. For the abandon ×11 about mnemonic, index 0 is `tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl` native segwit on Signet, and on mainnet `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu` native segwit, `37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf` wrapped segwit and `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` legacy.
 
 ### `POST /mine`
 

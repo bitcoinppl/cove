@@ -324,7 +324,20 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseNativeImportedWalletFromSelectionSheet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Multiple wallets found, please choose one"), timeoutMillis = 30_000)
+        val selectionSheet = text("Multiple wallets found, please choose one")
+        val nodeFailure = text("Node Connection Failed")
+
+        // the sheet opens only after address type discovery hears from the node, so a node the app
+        // can't reach would otherwise show up as a timeout waiting for the sheet
+        val shown = device.waitUntilAnyVisible(selectionSheet, nodeFailure, timeoutMillis = 30_000)
+        if (shown.description == nodeFailure.description) {
+            error(
+                "The app could not reach its node during address type discovery. Reset the fake node onto mainnet " +
+                    "and point the app at it with FullLaunchWalletRobot.selectMainnetFakeNode() before importing\n" +
+                    device.dumpWindowHierarchy(),
+            )
+        }
+
         device.waitUntilVisible(text("Keep Current"))
         device.waitUntilVisible(text("Wrapped Segwit"))
         device.waitUntilVisible(text("Legacy"))
