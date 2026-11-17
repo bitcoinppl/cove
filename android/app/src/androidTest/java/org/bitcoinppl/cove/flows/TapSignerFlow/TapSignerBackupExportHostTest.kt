@@ -10,12 +10,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
 import org.junit.After
@@ -26,7 +26,7 @@ import org.junit.Test
 
 class TapSignerBackupExportHostTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val savedFile = File(instrumentation.targetContext.cacheDir, "tapsigner-backup-export-test.txt")

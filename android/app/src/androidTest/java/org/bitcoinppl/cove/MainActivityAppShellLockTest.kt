@@ -3,13 +3,13 @@ package org.bitcoinppl.cove
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AppLockReason
@@ -22,7 +22,7 @@ import org.junit.Test
 
 class MainActivityAppShellLockTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 

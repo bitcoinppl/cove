@@ -3,13 +3,13 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.WalletManagerReconcileMessage
 import org.bitcoinppl.cove_core.transactionPreviewConfirmedNew
@@ -21,7 +21,7 @@ import org.junit.Test
 
 class WalletMoreOptionsSheetTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private lateinit var manager: WalletManager
     private var dismissCount = 0

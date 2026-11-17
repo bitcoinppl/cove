@@ -11,7 +11,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.platform.app.InstrumentationRegistry
@@ -21,6 +20,7 @@ import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.flows.SettingsFlow.FullScreenSettingsModal
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -36,7 +36,7 @@ import org.junit.Test
 
 class LockAwareActivityResultTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val pickedFile = Uri.parse("content://org.bitcoinppl.cove.test/signed.psbt")

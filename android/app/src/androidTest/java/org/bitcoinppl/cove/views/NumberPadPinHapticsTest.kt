@@ -4,10 +4,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import kotlinx.coroutines.CompletableDeferred
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -22,7 +22,7 @@ import java.util.Collections
  */
 class NumberPadPinHapticsTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private val haptics: MutableList<HapticFeedbackType> = Collections.synchronizedList(mutableListOf())
     private val checked: MutableList<String> = Collections.synchronizedList(mutableListOf())

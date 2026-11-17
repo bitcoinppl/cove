@@ -6,18 +6,17 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isNotEnabled
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
-import kotlinx.coroutines.test.StandardTestDispatcher
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.AppAction
@@ -41,11 +40,8 @@ import java.net.InetAddress
  * Electrum" was re-saved as Electrum
  */
 class NodeSettingsCustomNodeResaveTest {
-    // the screen resumes its node checks after withContext(Dispatchers.IO), and the rule's default
-    // unconfined dispatcher runs that resume, and the frame it triggers, on the IO thread while the
-    // UI thread is laying out. A standard dispatcher queues the resume for the UI thread
     @get:Rule
-    val compose = createComposeRule(effectContext = StandardTestDispatcher())
+    val compose = coveComposeRule()
 
     private val esplora = MockWebServer()
     private lateinit var app: AppManager

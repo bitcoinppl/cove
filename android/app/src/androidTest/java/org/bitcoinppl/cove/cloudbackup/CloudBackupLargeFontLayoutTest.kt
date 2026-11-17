@@ -8,7 +8,6 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -19,6 +18,7 @@ import androidx.compose.ui.unit.height
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
 import org.bitcoinppl.cove.test.WithFontScale
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupScreen
@@ -38,7 +38,7 @@ import org.junit.Test
 @LayoutRegressionTest
 class CloudBackupLargeFontLayoutTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Test
     fun setupDescriptionAcknowledgementsAndEnableAreReachable() {

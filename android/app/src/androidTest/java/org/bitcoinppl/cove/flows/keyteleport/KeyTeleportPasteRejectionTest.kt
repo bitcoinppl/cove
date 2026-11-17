@@ -13,7 +13,6 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -22,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.assertTextsMatchTheirReferences
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.test.matchTextReference
 import org.bitcoinppl.cove.test.saveNodeScreenshotToLayoutAudit
 import org.bitcoinppl.cove.test.textLabel
@@ -42,7 +42,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class KeyTeleportPasteRejectionTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Before
     fun bootstrapRustRuntime() {

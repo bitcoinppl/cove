@@ -5,10 +5,10 @@ package org.bitcoinppl.cove.flows.SettingsFlow
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -16,7 +16,7 @@ import org.junit.Test
 
 class SendDiagnosticsCopyReportIdTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Test
     fun copyIdPutsTheExactReportIdOnTheClipboard() {
