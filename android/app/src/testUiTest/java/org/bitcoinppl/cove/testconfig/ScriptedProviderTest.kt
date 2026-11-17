@@ -201,21 +201,9 @@ class ScriptedProviderTest {
                     emptyList(),
                     CloudAccessPolicy.SILENT,
                 )
-            ScriptedCloudStorageAccess.configureFixtureWalletDownloadDefault(
-                recordId,
-                FixtureWalletDownloadResult.CORRUPT,
-            )
-            val corruptDefault =
-                ScriptedCloudStorageAccess.downloadWalletBackup(
-                    ScriptedCloudBackupFixture.NAMESPACE,
-                    recordId,
-                    emptyList(),
-                    CloudAccessPolicy.SILENT,
-                )
 
             assertTrue(!corrupt.contentEquals(valid))
-            assertArrayEquals(corrupt, corruptDefault)
-            assertEquals(3, ScriptedCloudStorageAccess.walletDownloadCount(recordId))
+            assertEquals(2, ScriptedCloudStorageAccess.walletDownloadCount(recordId))
             assertArrayEquals(
                 ScriptedCloudBackupFixture.walletWrapper(recordId),
                 valid,

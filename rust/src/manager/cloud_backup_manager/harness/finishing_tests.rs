@@ -306,8 +306,11 @@ fn turn_off_commits_on_one_confirmation_after_draining_a_new_wallet_s_upload() {
         assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
         assert_eq!((review.impact.own_backups, review.impact.unchecked), (1, 0), "{review:?}");
 
+        let uploads = app.cloud.count(CloudCall::UploadWallet);
         app.confirm_turn_off().then_can(&[N::CancelDisable]).then_cannot(&[N::Enable]);
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "committed before the drain");
+        assert!(app.cloud.inner.has_namespace(&namespace), "the backup went before the drain");
+        assert_ne!(persisted(), PersistedCloudBackupState::Disabled, "disabled before the drain");
 
         let downloads = app.cloud.count(CloudCall::DownloadWallet);
         app.event("the new wallet's upload finishes", |_| hold.release())
@@ -322,5 +325,6 @@ fn turn_off_commits_on_one_confirmation_after_draining_a_new_wallet_s_upload() {
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled);
         assert!(!app.cloud.inner.has_namespace(&namespace));
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 1);
+        assert_eq!(app.cloud.count(CloudCall::UploadWallet), uploads, "another upload ran");
     });
 }

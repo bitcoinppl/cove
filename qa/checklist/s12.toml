@@ -263,6 +263,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_treats_missing_credential_as_no_match",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::post_presentation_saved_passkey_failure_attempts_confirmation_once",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::does_not_retry_cancellation_or_post_presentation_failure",
+  "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::a_registration_that_fails_after_presenting_is_not_retried",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::ios_retries_platform_authorization_failures_for_every_interactive_operation",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::ios_retry_recovers_without_retrying_non_transient_failures",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::sequential_operations_share_one_platform_authorization_retry_deadline",
@@ -434,6 +435,8 @@ paths = [
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_provider_failure_stops_before_scheduling_the_next_wallet",
+  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_result_row_retry_restores_the_failed_wallet_and_ends_the_batch",
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDialogContractTest.kt::aRowWhoseRestoreFailedOffersARetryThatRestoresItsWallet",
   "rust:rust/src/manager/cloud_backup_manager/owner/inventory.rs::restore_all_retry_allows_one_remaining_wallet_only_when_complete",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::retryAvailabilityNeverRetainsAStartAction",
 ]
