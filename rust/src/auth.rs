@@ -1,3 +1,4 @@
+// scratch: stack-top gate check, slice 1/2 (throwaway)
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
