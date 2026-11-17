@@ -1,3 +1,4 @@
+// scratch: stack-top gate check, slice 3/3 (throwaway)
 pub mod diagnostics;
 pub mod migration;
 pub use migration::Migration;
