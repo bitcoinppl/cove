@@ -48,6 +48,12 @@
 - Give each hypothesis about a flaky or hanging test at most 45 minutes; when one runs out, quarantine the test with an issue as [docs/testing.md](docs/testing.md#time-box-debugging) describes instead of starting another
 - Wrap every repro command in a hard timeout, such as `timeout 10m cargo nextest run ...`, and never loop a repro without one; nextest's profiles already kill a single test that hangs
 
+### Reported UI Bugs
+
+- Before fixing a reported UI bug, reproduce it in a Full Automation test: an XCUITest in `ios/CoveUITests` run with `just ios-ui-background "iPhone 17" "CoveUITests/<Class>/<test>"`, or a uiAutomator test run with `just android-instrumented-ci UiTest <package.Class#method>`
+- Run the new test on the unfixed code and confirm it fails the way the report describes, then fix the bug and confirm the same test passes; a test that passes before the fix does not reproduce the bug, so tighten it before changing app code
+- Fall back to AAA only when Full Automation cannot observe the bug, and say why in the report
+
 ### Verification and Side Effects
 
 - After local UniFFI changes, run `just build-ios` for affected iOS bindings and call sites and `just build-android` for affected Android bindings and call sites; run both when the exported API affects both platforms

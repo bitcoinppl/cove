@@ -114,6 +114,7 @@ struct WalletSettingsNameRow: View {
         .contentShape(Rectangle())
         .font(.subheadline)
         .onTapGesture(perform: changeName)
+        .accessibilityIdentifier("walletSettings.name")
     }
 }
 

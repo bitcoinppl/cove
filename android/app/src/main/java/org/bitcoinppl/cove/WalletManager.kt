@@ -104,6 +104,10 @@ class WalletManager :
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    // one lane keeps actions reaching Rust in the order the UI sent them, as iOS's serial bridge
+    // queue does, so an earlier rename keystroke can't be saved after a later one
+    private val dispatchLane = Dispatchers.IO.limitedParallelism(1)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
@@ -991,7 +995,7 @@ class WalletManager :
         val actionKind = action::class.simpleName
         logDebug("dispatch: $actionKind")
 
-        mainScope.launch(Dispatchers.IO) {
+        mainScope.launch(dispatchLane) {
             try {
                 withRustOr(Unit) {
                     dispatch(action)

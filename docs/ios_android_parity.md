@@ -424,7 +424,7 @@ On iOS, leaving the foreground dismisses every presented sheet and alert before 
 | iOS (SwiftUI) | Android (Compose) | Notes |
 |---------------|-------------------|-------|
 | `DispatchQueue.main.async { }` | `mainScope.launch { }` | Post to main thread |
-| `DispatchQueue(label:).async { }` | `launch(Dispatchers.IO) { }` | Background work |
+| `DispatchQueue(label:).async { }` | `launch(Dispatchers.IO.limitedParallelism(1)) { }` from one dispatcher the owner keeps | Background work in order: a labeled queue is serial, while plain `Dispatchers.IO` runs launches in parallel and in any order |
 | `Task { }` | `LaunchedEffect { }` or `rememberCoroutineScope()` | Structured concurrency |
 | `Task.detached { }` | `CoroutineScope(Dispatchers.Default).launch { }` | Unstructured (avoid) |
 

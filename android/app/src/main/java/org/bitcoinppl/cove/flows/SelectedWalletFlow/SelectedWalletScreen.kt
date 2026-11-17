@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -257,7 +258,8 @@ fun SelectedWalletScreen(
                                             }
                                         },
                                         onLongClick = { showRenameMenu = true },
-                                    ).padding(vertical = 8.dp, horizontal = 16.dp),
+                                    ).padding(vertical = 8.dp, horizontal = 16.dp)
+                                    .testTag("selectedWallet.title"),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
