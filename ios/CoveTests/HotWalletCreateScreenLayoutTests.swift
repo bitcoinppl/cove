@@ -275,7 +275,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
     func testCompactSendFlowConfirmActionIsReachable() async throws {
         try await bootstrapIfNeeded()
 
-        let render = renderSendFlowConfirm(size: CGSize(width: 375, height: 667))
+        let render = renderSendFlowConfirm(size: CGSize(width: 375, height: 667), scroll: .end)
         addScreenshotAttachment(render.image, name: "compact-send-flow-confirm")
         try saveAuditScreenshotIfDirectoryRequested(render.image, screenName: "send-flow-confirm")
 
@@ -285,7 +285,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
     func testSendFlowConfirmActionSitsAtBottomOfStandardViewport() async throws {
         try await bootstrapIfNeeded()
 
-        let render = renderSendFlowConfirm(size: CGSize(width: 402, height: 874))
+        // the details fit here, so the control must sit at the bottom as soon as the screen opens
+        let render = renderSendFlowConfirm(size: CGSize(width: 402, height: 874), scroll: .asOpened)
         addScreenshotAttachment(render.image, name: "standard-send-flow-confirm")
 
         try assertSwipeToSendLayout(in: render, labelCentered: true)
@@ -294,7 +295,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
     func testSendFlowConfirmActionSitsAtBottomOfLargeViewport() async throws {
         try await bootstrapIfNeeded()
 
-        let render = renderSendFlowConfirm(size: CGSize(width: 440, height: 956))
+        // the details fit here, so the control must sit at the bottom as soon as the screen opens
+        let render = renderSendFlowConfirm(size: CGSize(width: 440, height: 956), scroll: .asOpened)
         addScreenshotAttachment(render.image, name: "large-send-flow-confirm")
 
         try assertSwipeToSendLayout(in: render, labelCentered: true)
@@ -305,7 +307,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
 
         let render = renderSendFlowConfirm(
             size: CGSize(width: 430, height: 932),
-            sizeCategory: .accessibilityExtraExtraLarge
+            sizeCategory: .accessibilityExtraExtraLarge,
+            scroll: .end
         )
         addScreenshotAttachment(render.image, name: "large-dynamic-type-send-flow-confirm")
         try saveAuditScreenshotIfDirectoryRequested(
@@ -621,6 +624,13 @@ private extension HotWalletCreateScreenLayoutTests {
 
     private func render(view: some View, size: CGSize) -> UIImage {
         let hostingController = hostingController(rootView: view, size: size)
+
+        return render(hostingController: hostingController, size: size)
+    }
+
+    private func renderAsOpened(hostingController: UIHostingController<some View>, size: CGSize) -> UIImage {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        hostingController.view.layoutIfNeeded()
 
         return render(hostingController: hostingController, size: size)
     }
@@ -980,13 +990,14 @@ private extension HotWalletCreateScreenLayoutTests {
             blue < 245
     }
 
-    /// Renders the send confirmation screen scrolled to its end
+    /// Renders the send confirmation screen as it opens or scrolled to its end
     ///
     /// The screen fills the window on its own, a fixed frame would be taller than the space below
     /// the top safe area and push the bottom of the screen past the window
     private func renderSendFlowConfirm(
         size: CGSize,
-        sizeCategory: ContentSizeCategory = .large
+        sizeCategory: ContentSizeCategory = .large,
+        scroll: SendFlowConfirmScroll
     ) -> SendFlowConfirmRender {
         let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
@@ -1007,7 +1018,10 @@ private extension HotWalletCreateScreenLayoutTests {
             .environment(\.sizeCategory, sizeCategory),
             size: size
         )
-        let image = renderAfterScrollingToBottom(hostingController: hostingController, size: size)
+        let image = switch scroll {
+        case .asOpened: renderAsOpened(hostingController: hostingController, size: size)
+        case .end: renderAfterScrollingToBottom(hostingController: hostingController, size: size)
+        }
 
         // the scroll view runs under the bottom safe area and insets its content past it, so its
         // content area ends that inset above its frame
@@ -1212,6 +1226,15 @@ private extension HotWalletCreateScreenLayoutTests {
 
 /// A rendered send confirmation screen and the space between its content area and the image's
 /// bottom edge
+/// Where the send confirmation render leaves its scroll view
+private enum SendFlowConfirmScroll {
+    /// Untouched, as the screen first shows
+    case asOpened
+
+    /// Scrolled to the end, to check the control can be reached
+    case end
+}
+
 private struct SendFlowConfirmRender {
     let image: UIImage
     let bottomInset: CGFloat
