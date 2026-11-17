@@ -57,5 +57,5 @@
 
 ### Glossary
 
-Full Automation (FA) - Fully automated testing using web drive on iOS and uiAutomator on android
-AAA (Agent Assisted Automation) - The agent runs the simulator and device and uses vision to check UI for regressions and correctness
+- Full Automation (FA): Fully automated testing using web drive on iOS and uiAutomator on android
+- AAA (Agent Assisted Automation): The agent runs the simulator and device and uses vision to check UI for regressions and correctness
