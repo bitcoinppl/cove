@@ -84,6 +84,10 @@ paths = ["ios/CoveUITests/VerifyWordsFullLaunchUITests.swift"]
 suites = ["CoveUITests/VerifyWordsFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/RenameWalletFullLaunchUITests.swift"]
+suites = ["CoveUITests/RenameWalletFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
 suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
 
