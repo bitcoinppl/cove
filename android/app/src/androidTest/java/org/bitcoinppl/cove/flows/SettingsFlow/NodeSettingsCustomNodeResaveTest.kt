@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import kotlinx.coroutines.test.StandardTestDispatcher
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -40,8 +41,11 @@ import java.net.InetAddress
  * Electrum" was re-saved as Electrum
  */
 class NodeSettingsCustomNodeResaveTest {
+    // the screen resumes its node checks after withContext(Dispatchers.IO), and the rule's default
+    // unconfined dispatcher runs that resume, and the frame it triggers, on the IO thread while the
+    // UI thread is laying out. A standard dispatcher queues the resume for the UI thread
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createComposeRule(effectContext = StandardTestDispatcher())
 
     private val esplora = MockWebServer()
     private lateinit var app: AppManager

@@ -109,6 +109,12 @@ class ScanCancelFullLaunchTest {
             device.wait(Until.gone(By.pkg(PERMISSION_CONTROLLER)), 10_000L),
         )
 
+        // the dialog leaves the accessibility tree before the app's window returns to it, and until
+        // then no text is found, so wait for any of the app's nodes, which the scanner has too; the
+        // camera screen must already be there then, or a scanner that opened could close unseen
+        device.waitFor(By.pkg(packageName))
+        assertTrue("the app should be back on its camera screen", device.hasObject(By.text("Camera Access Required")))
+
         // gives a scanner that would open after the denial time to replace the screen; without the
         // camera it shows no preview, so the screen going is what a wrongly opened scanner looks like
         assertFalse(
