@@ -730,7 +730,8 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
     // fail before bumping/building if Apple has not associated this TestFlight app id
     validate_testflight_associated_domain()?;
 
-    let archive = BuildNumberFile::IosProject.bump_for_release(&sh, || {
+    let used = distribution.highest_build_number()?;
+    let archive = BuildNumberFile::IosProject.bump_for_release(&sh, used, || {
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
         archive_testflight(&credentials, verbose)
     })?;

@@ -1,3 +1,4 @@
+use super::play_api::PlayApi;
 use super::{
     build_android, bundle_android, play_aab_path, remove_file_if_exists, AndroidBuildTargets,
     BuildProfile,
@@ -27,6 +28,10 @@ impl GooglePlayCredentials {
 
         resolve_json_key_path(json_key_path).map(Self)
     }
+
+    fn play_api(&self) -> Result<PlayApi> {
+        PlayApi::new(&self.0, PLAY_PACKAGE_NAME)
+    }
 }
 
 fn resolve_json_key_path(value: Option<&str>) -> Result<String> {
@@ -40,6 +45,14 @@ pub fn upload_google_play(json_key_path: Option<&str>, verbose: bool) -> Result<
     ensure_rust_directory(&sh)?;
     let credentials = GooglePlayCredentials::resolve(json_key_path)?;
 
+    // an earlier upload may have landed even though supply reported failure, and Play rejects a
+    // reused versionCode, so a retry for an accepted bundle has nothing left to do
+    let version_code = BuildNumberFile::AndroidGradle.current(&sh)?;
+    if credentials.play_api()?.used_version_codes()?.contains(&version_code) {
+        print_info(&format!("Google Play already has versionCode {version_code}; skipping upload"));
+        return Ok(());
+    }
+
     upload_with_credentials(&sh, &credentials, verbose)
 }
 
@@ -51,11 +64,12 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
     let credentials = GooglePlayCredentials::resolve(json_key_path)?;
     super::AndroidReleaseSigning::resolve()?;
     super::ensure_android_build_output_dirs_resolve()?;
+    let used = credentials.play_api()?.highest_version_code()?;
 
     // an older bundle left for a `just ugp` retry must survive a release that fails before Gradle
     // replaces it
     let previous_bundle = bundle_modified_at();
-    BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
+    BuildNumberFile::AndroidGradle.bump_for_release(&sh, used, || {
         build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
 
         // the rollback restores the old versionCode, so a bundle signed with the new one must not

@@ -1,4 +1,5 @@
 use crate::common::{http_client_without_redirects, print_info, print_success, print_warning};
+use crate::version::StoreBuildNumber;
 use color_eyre::eyre::{bail, ensure, eyre, Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, Response};
@@ -107,6 +108,41 @@ impl Distribution {
     /// Wait for this exact build, copy all saved test descriptions, and add it to me-only
     pub(crate) fn distribute(&self, identity: &BuildIdentity) -> Result<()> {
         self.distribute_with_timeout(identity, PROCESSING_TIMEOUT, POLL_INTERVAL)
+    }
+
+    /// The highest build number App Store Connect has accepted for the app, in any state
+    ///
+    /// Releases share one build-number counter across marketing versions, so the most recent
+    /// uploads hold the highest number
+    pub(crate) fn highest_build_number(&self) -> Result<Option<StoreBuildNumber>> {
+        let recent: Page<BuildNumber> = self
+            .api
+            .get(self.api.url(
+                "v1/builds",
+                &[
+                    ("filter[app]", &self.app_id),
+                    ("filter[preReleaseVersion.platform]", "IOS"),
+                    ("sort", "-uploadedDate"),
+                    ("limit", "20"),
+                    ("fields[builds]", "version"),
+                ],
+            )?)?
+            .json()
+            .wrap_err("Invalid recent-build response")?;
+
+        let numbers = recent
+            .data
+            .into_iter()
+            .map(|build| {
+                let version = build.attributes.version;
+                version
+                    .parse()
+                    .map(StoreBuildNumber)
+                    .wrap_err_with(|| format!("Non-numeric iOS build number {version}"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(numbers.into_iter().max())
     }
 
     /// Whether App Store Connect already has this exact build in any processing state
@@ -550,6 +586,12 @@ enum ExternalBetaState {
     BetaRejected,
     BetaApproved,
     NotApplicable,
+}
+
+/// Only the build number, so a processing state this tool does not know cannot fail the lookup
+#[derive(Deserialize)]
+struct BuildNumber {
+    version: String,
 }
 
 #[derive(Deserialize)]

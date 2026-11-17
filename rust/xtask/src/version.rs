@@ -11,6 +11,8 @@ use xshell::{cmd, Shell};
 const CARGO_TOML_PATH: &str = "Cargo.toml";
 const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
 const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
+const IOS_BUILD_NUMBER_KEY: &str = "CURRENT_PROJECT_VERSION = ";
+const ANDROID_BUILD_NUMBER_KEY: &str = "versionCode = ";
 
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
     let sh = Shell::new()?;
@@ -50,11 +52,11 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
         println!("{} {:?}", "Bumping build numbers for:".blue().bold(), targets);
 
         if targets.contains(&"ios") {
-            bump_ios_build_number(&sh)?;
+            bump_ios_build_number(&sh, None)?;
         }
 
         if targets.contains(&"android") {
-            bump_android_build_number(&sh)?;
+            bump_android_build_number(&sh, None)?;
         }
 
         println!("{} Build numbers bumped", "SUCCESS:".green().bold());
@@ -176,7 +178,7 @@ fn prepare_ios(sh: &Shell, current_version: &str, new_version: &str) -> Result<O
     }
 
     let new_pbx = pbx.replace(&current_setting, &format!("MARKETING_VERSION = {new_version};"));
-    let new_pbx = increment_and_replace_ios(new_pbx);
+    let new_pbx = increment_and_replace_ios(new_pbx, None);
 
     Ok(Some(new_pbx))
 }
@@ -196,7 +198,7 @@ fn prepare_android(sh: &Shell, current_version: &str, new_version: &str) -> Resu
     }
 
     let new_gradle = gradle.replace(&current_setting, &format!("versionName = \"{new_version}\""));
-    let new_gradle = increment_and_replace_android(new_gradle);
+    let new_gradle = increment_and_replace_android(new_gradle, None);
 
     Ok(Some(new_gradle))
 }
@@ -230,15 +232,32 @@ impl BuildNumberFile {
         }
     }
 
-    fn bump(self, sh: &Shell) -> Result<()> {
+    fn bump(self, sh: &Shell, used: Option<StoreBuildNumber>) -> Result<()> {
         match self {
-            Self::IosProject => bump_ios_build_number(sh),
-            Self::AndroidGradle => bump_android_build_number(sh),
+            Self::IosProject => bump_ios_build_number(sh, used),
+            Self::AndroidGradle => bump_android_build_number(sh, used),
         }
     }
 
-    /// Bumps the build number, then runs the release steps that happen before the store may have
-    /// accepted the build, restoring the original file if the bump or any of those steps fail
+    /// The highest build number in the file, which the artifacts built from it carry
+    pub(crate) fn current(self, sh: &Shell) -> Result<u32> {
+        let (key, terminator) = match self {
+            Self::IosProject => (IOS_BUILD_NUMBER_KEY, ';'),
+            Self::AndroidGradle => (ANDROID_BUILD_NUMBER_KEY, '\n'),
+        };
+
+        extract_u32_values(&sh.read_file(self.path())?, key, terminator)
+            .into_iter()
+            .max()
+            .with_context(|| format!("Could not parse the {}", self.build_number_label()))
+    }
+
+    /// Bumps the build number past both the file and the store's highest used number, then runs
+    /// the release steps that happen before the store may have accepted the build, restoring the
+    /// original file if the bump or any of those steps fail
+    ///
+    /// The store can hold a number the file never recorded, such as from a release whose bump was
+    /// not committed, so counting from the file alone would reuse a consumed number
     ///
     /// Steps that run once the store may hold the build, such as distribution or an upload whose
     /// failure can still mean acceptance, belong after this call so the consumed build number is
@@ -246,11 +265,12 @@ impl BuildNumberFile {
     pub(crate) fn bump_for_release<T>(
         self,
         sh: &Shell,
+        used: Option<StoreBuildNumber>,
         before_store_accepts: impl FnOnce() -> Result<T>,
     ) -> Result<T> {
         let snapshot =
             sh.path_exists(self.path()).then(|| sh.read_file(self.path())).transpose()?;
-        let error = match self.bump(sh).and_then(|()| before_store_accepts()) {
+        let error = match self.bump(sh, used).and_then(|()| before_store_accepts()) {
             Ok(value) => return Ok(value),
             Err(error) => error,
         };
@@ -278,6 +298,12 @@ impl BuildNumberFile {
     }
 }
 
+/// The highest build number a store has already consumed for this app
+///
+/// A store rejects any upload that reuses it, so the next release must exceed it
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct StoreBuildNumber(pub(crate) u32);
+
 /// Release failure context that keeps the bumped build number
 ///
 /// Restoring the old number is only safe when no signed artifact carrying the new one survives;
@@ -292,27 +318,27 @@ impl std::fmt::Display for KeepBuildNumber {
     }
 }
 
-fn bump_ios_build_number(sh: &Shell) -> Result<()> {
+fn bump_ios_build_number(sh: &Shell, used: Option<StoreBuildNumber>) -> Result<()> {
     if !sh.path_exists(IOS_PROJECT_PATH) {
         print_warning(&format!("iOS project file not found at {}", IOS_PROJECT_PATH));
         return Ok(());
     }
 
     let pbx = sh.read_file(IOS_PROJECT_PATH)?;
-    let new_pbx = increment_and_replace_ios(pbx);
+    let new_pbx = increment_and_replace_ios(pbx, used);
     sh.write_file(IOS_PROJECT_PATH, new_pbx)?;
 
     Ok(())
 }
 
-fn bump_android_build_number(sh: &Shell) -> Result<()> {
+fn bump_android_build_number(sh: &Shell, used: Option<StoreBuildNumber>) -> Result<()> {
     if !sh.path_exists(ANDROID_GRADLE_PATH) {
         print_warning(&format!("Android build.gradle.kts not found at {}", ANDROID_GRADLE_PATH));
         return Ok(());
     }
 
     let gradle = sh.read_file(ANDROID_GRADLE_PATH)?;
-    let new_gradle = increment_and_replace_android(gradle);
+    let new_gradle = increment_and_replace_android(gradle, used);
     sh.write_file(ANDROID_GRADLE_PATH, new_gradle)?;
 
     Ok(())
@@ -325,11 +351,15 @@ struct IncrementReplaceArgs<'a> {
     field_label: &'a str,
 }
 
-fn increment_and_replace(content: String, args: IncrementReplaceArgs) -> String {
+fn increment_and_replace(
+    content: String,
+    args: IncrementReplaceArgs,
+    used: Option<StoreBuildNumber>,
+) -> String {
     let codes = extract_u32_values(&content, args.key, args.terminator);
 
     if let Some(code) = codes.into_iter().max() {
-        let new_code = code + 1;
+        let new_code = code.max(used.map_or(0, |StoreBuildNumber(used)| used)) + 1;
         let new_content = replace_u32_values(&content, args.key, args.terminator, |value, raw| {
             if value.is_some() {
                 new_code.to_string()
@@ -348,27 +378,29 @@ fn increment_and_replace(content: String, args: IncrementReplaceArgs) -> String 
     }
 }
 
-fn increment_and_replace_ios(content: String) -> String {
+fn increment_and_replace_ios(content: String, used: Option<StoreBuildNumber>) -> String {
     increment_and_replace(
         content,
         IncrementReplaceArgs {
-            key: "CURRENT_PROJECT_VERSION = ",
+            key: IOS_BUILD_NUMBER_KEY,
             terminator: ';',
             platform: "iOS",
             field_label: "CURRENT_PROJECT_VERSION",
         },
+        used,
     )
 }
 
-fn increment_and_replace_android(content: String) -> String {
+fn increment_and_replace_android(content: String, used: Option<StoreBuildNumber>) -> String {
     increment_and_replace(
         content,
         IncrementReplaceArgs {
-            key: "versionCode = ",
+            key: ANDROID_BUILD_NUMBER_KEY,
             terminator: '\n',
             platform: "Android",
             field_label: "versionCode",
         },
+        used,
     )
 }
 
@@ -421,6 +453,7 @@ fn replace_u32_values(
 mod tests {
     use super::{
         increment_and_replace_ios, prepare_android, prepare_ios, BuildNumberFile, KeepBuildNumber,
+        StoreBuildNumber,
     };
     use color_eyre::eyre::eyre;
     use xshell::Shell;
@@ -477,7 +510,7 @@ CURRENT_PROJECT_VERSION = 75;
 CURRENT_PROJECT_VERSION = 75;
 ";
 
-        let updated = increment_and_replace_ios(content.to_string());
+        let updated = increment_and_replace_ios(content.to_string(), None);
 
         assert_eq!(
             updated,
@@ -517,7 +550,7 @@ CURRENT_PROJECT_VERSION = 89;
 ";
         let (_temp_dir, sh, project_path) = fixture(IOS_PROJECT, original);
 
-        let result = BuildNumberFile::IosProject.bump_for_release(&sh, || {
+        let result = BuildNumberFile::IosProject.bump_for_release(&sh, None, || {
             assert!(std::fs::read_to_string(&project_path).unwrap().contains("= 90;"));
             Err::<(), _>(eyre!("upload failed"))
         });
@@ -530,7 +563,7 @@ CURRENT_PROJECT_VERSION = 89;
     fn keeps_android_version_code_once_release_steps_succeed() {
         let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
-        BuildNumberFile::AndroidGradle.bump_for_release(&sh, || Ok(())).unwrap();
+        BuildNumberFile::AndroidGradle.bump_for_release(&sh, None, || Ok(())).unwrap();
 
         assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
     }
@@ -540,7 +573,7 @@ CURRENT_PROJECT_VERSION = 89;
         let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
         let result = BuildNumberFile::AndroidGradle
-            .bump_for_release(&sh, || Err::<(), _>(eyre!("bundle failed")));
+            .bump_for_release(&sh, None, || Err::<(), _>(eyre!("bundle failed")));
 
         assert!(result.is_err());
         assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), GRADLE_28);
@@ -550,7 +583,7 @@ CURRENT_PROJECT_VERSION = 89;
     fn keeps_android_version_code_when_signed_outputs_survive() {
         let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
-        let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
+        let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, None, || {
             Err::<(), _>(
                 eyre!("bundle failed").wrap_err(KeepBuildNumber(vec!["cove-1.4.0-29.aab".into()])),
             )
@@ -558,5 +591,31 @@ CURRENT_PROJECT_VERSION = 89;
 
         assert!(result.is_err());
         assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
+    }
+
+    #[test]
+    fn bumps_past_a_store_build_number_the_file_never_recorded() {
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
+
+        BuildNumberFile::AndroidGradle
+            .bump_for_release(&sh, Some(StoreBuildNumber(51)), || Ok(()))
+            .unwrap();
+
+        assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 52\n"));
+        assert_eq!(BuildNumberFile::AndroidGradle.current(&sh).unwrap(), 52);
+    }
+
+    #[test]
+    fn bumps_from_the_file_when_it_is_ahead_of_the_store() {
+        let (_temp_dir, sh, project_path) = fixture(
+            IOS_PROJECT,
+            "CURRENT_PROJECT_VERSION = 141;\nCURRENT_PROJECT_VERSION = 141;\n",
+        );
+
+        BuildNumberFile::IosProject
+            .bump_for_release(&sh, Some(StoreBuildNumber(140)), || Ok(()))
+            .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&project_path).unwrap().matches("= 142;").count(), 2);
     }
 }

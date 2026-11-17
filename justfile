@@ -578,7 +578,7 @@ fix *flags="":
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
 
-# xtask restores the iOS build number if the build or archive fails; a failed upload keeps it for upload-testflight
+# xtask bumps past App Store Connect's highest build; it restores the number if the build or archive fails, and a failed upload keeps it for upload-testflight
 # [long, external] Bump iOS build, rebuild release bindings, and upload to TestFlight
 [group('release')]
 release-ios:
@@ -588,7 +588,7 @@ alias reli := release-ios
 alias tf := release-ios
 alias testflight := release-ios
 
-# xtask restores the Android versionCode if Google Play has not been invoked
+# xtask bumps past Google Play's highest versionCode and restores it if Google Play has not been invoked
 # [long, external] Bump Android build, build signed artifacts, and release to Google Play internal testing
 [group('release')]
 release-android:
@@ -596,7 +596,7 @@ release-android:
 
 alias rela := release-android
 
-# use this when the versionCode was already bumped and the signed bundle already exists
+# use this when the versionCode was already bumped and the signed bundle already exists; it skips the upload when Google Play already has that versionCode, so it is safe to retry
 # [external] Upload the existing signed Android bundle to Google Play internal testing without bumping
 [group('release')]
 upload-google-play:

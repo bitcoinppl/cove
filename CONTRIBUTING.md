@@ -44,9 +44,11 @@ The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed A
 just testflight
 ```
 
-This bumps the iOS build number, rebuilds the release iOS bindings, archives the app, and uploads it to App Store Connect for TestFlight processing using App Store Connect API key credentials.
+This bumps the iOS build number past both the project file and the highest build App Store Connect already has, rebuilds the release iOS bindings, archives the app, and uploads it to App Store Connect for TestFlight processing using App Store Connect API key credentials.
 
 Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key must have access to cloud-managed distribution certificates.
+
+If the upload or distribution fails after the bump, retry with `just upload-testflight`, which skips the upload when App Store Connect already has that build.
 
 ### Android
 
@@ -54,11 +56,11 @@ Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key m
 just release-android    # alias: just rela
 ```
 
-This bumps the Android versionCode, rebuilds the release Android bindings, builds the signed Play bundle, and uploads it to Google Play internal testing.
+This bumps the Android versionCode past both `build.gradle.kts` and the highest versionCode Google Play already has, rebuilds the release Android bindings, builds the signed Play bundle, and uploads it to Google Play internal testing.
 
 Set `GOOGLE_PLAY_JSON_KEY_PATH` to a readable Google Play service account JSON file. Install fastlane (`brew install fastlane`). The service account must have access to testing releases for `org.bitcoinppl.cove`.
 
-Use `just upload-google-play` (`just ugp`) when the versionCode was already bumped and the signed bundle already exists.
+Use `just upload-google-play` (`just ugp`) when the versionCode was already bumped and the signed bundle already exists. It skips the upload when Google Play already has that versionCode, so it is safe to retry.
 
 ## Development Workflow
 

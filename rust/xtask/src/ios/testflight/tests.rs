@@ -1,4 +1,5 @@
 use super::{exact_group, Api, BuildIdentity, Distribution, Group, Resource};
+use crate::version::StoreBuildNumber;
 use reqwest::Url;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -337,4 +338,21 @@ fn pagination_cannot_send_credentials_to_another_origin() {
     assert!(api.url("http://api.appstoreconnect.apple.com/v1/apps", &[]).is_err());
     assert!(api.url("https://user@api.appstoreconnect.apple.com/v1/apps", &[]).is_err());
     assert!(api.url("https://api.appstoreconnect.apple.com/v1/apps?cursor=next", &[]).is_ok());
+}
+
+#[test]
+fn highest_build_number_covers_recent_uploads_in_any_state() {
+    let server = Server::new(vec![page(json!([
+        {"id": "a", "attributes": {"version": "140"}},
+        {"id": "b", "attributes": {"version": "141"}},
+        {"id": "c", "attributes": {"version": "99"}}
+    ]))]);
+
+    let highest = distribution(&server, true).highest_build_number().unwrap();
+
+    let requests = server.handle.join().unwrap();
+    let recent_query = query(&requests[0]);
+    assert_eq!(highest, Some(StoreBuildNumber(141)));
+    assert_eq!(recent_query["sort"], "-uploadedDate");
+    assert!(!recent_query.contains_key("filter[processingState]"));
 }
