@@ -49,7 +49,6 @@ class CloudBackupSyncNowFullLaunchTest {
     private companion object {
         const val SYNC_NOW = "Sync Now"
         const val DETAIL_SCAN_MAX_SCROLLS = 20
-        const val FAILURE_REOPEN_ATTEMPTS = 6
 
         // every label the wallet row's status badge can show
         val STATUS_BADGE_LABELS =
@@ -122,6 +121,45 @@ class CloudBackupSyncNowFullLaunchTest {
     }
 
     @Test
+    fun rejectedUploadShowsFailedOnTheOpenDetail() {
+        restoreFixtureAndOpenCloudBackupDetail()
+        ScriptedCloudStorageAccess.rejectNextNewWalletUploadForQuota()
+        ScriptedCloudStorageAccess.blockNextWalletUpload()
+
+        val wallet =
+            requireNotNull(importTestWalletOrNull(PENDING_WALLET)) {
+                "a freshly reset app should not hold the pending test wallet"
+            }
+        assertTrue(
+            "the automatic upload of the new wallet should start",
+            ScriptedCloudStorageAccess.awaitBlockedWalletUpload(),
+        )
+
+        // the refresh the import asked for reads the wallet before its held upload can fail, so
+        // the rejection lands after the detail already lists the wallet as dirty or uploading
+        waitUntil("the open detail should list the new wallet as needing sync before its upload fails") {
+            val manager = CloudBackupManager.getInstance()
+
+            !manager.isInventoryChecking &&
+                manager.walletsSection?.needsSync?.any { row ->
+                    row.wallet.name == wallet.name && row.wallet.syncStatus != CloudBackupWalletStatus.FAILED
+                } == true
+        }
+
+        ScriptedCloudStorageAccess.releaseBlockedWalletUpload()
+        waitUntil("the automatic upload of the new wallet should be rejected") {
+            ScriptedCloudStorageAccess.rejectedNewWalletUploadCount() == 1
+        }
+
+        waitUntil("the open detail should show the rejected upload as failed", timeoutMs = 15_000L) {
+            CloudBackupManager.getInstance().walletsSection?.needsSync?.any { row ->
+                row.wallet.name == wallet.name && row.wallet.syncStatus == CloudBackupWalletStatus.FAILED
+            } == true
+        }
+        device.scrollUntilText("Failed")
+    }
+
+    @Test
     fun cancelledVerificationRetriesWithTheSamePasskey() {
         restoreFixtureAndOpenCloudBackupDetail()
 
@@ -182,24 +220,12 @@ class CloudBackupSyncNowFullLaunchTest {
         waitUntil("the automatic upload of the new wallet should be rejected") {
             ScriptedCloudStorageAccess.rejectedNewWalletUploadCount() == 1
         }
-        // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
-        // upload's persisted failure; the failure itself requests no detail refresh, so a refresh
-        // that ran before it keeps showing the dirty wallet until the detail is opened again
-        val showsFailure = {
+        // Sync Now skips a wallet still uploading, so wait for the open detail to show the rejected
+        // upload's failure
+        waitUntil("the detail should list the new wallet as needing sync after its upload failed", 15_000L) {
             CloudBackupManager.getInstance().walletsSection?.needsSync?.any { row ->
                 row.wallet.name == wallet.name && row.wallet.syncStatus == CloudBackupWalletStatus.FAILED
             } == true
-        }
-        var reopens = 0
-
-        while (!pollUntil(5_000L, showsFailure) && reopens < FAILURE_REOPEN_ATTEMPTS) {
-            device.openSettings()
-            device.openCloudBackup()
-            reopens += 1
-        }
-
-        waitUntil("the detail should list the new wallet as needing sync after its upload failed", 1_000L) {
-            showsFailure()
         }
         device.scrollUntilText(SYNC_NOW)
 

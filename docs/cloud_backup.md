@@ -435,7 +435,7 @@ writes the fact itself.
 | Keys a worker proved (passkey credential, master key) | The write lane, which decides each save under the producer's `WriteOwner` and runs it off the actor | `OwnedKeychainWrite` saves |
 | Pending Enable journal (keychain), and the in-memory view of it admission and the screen read (`PendingWork`) | `PendingEnableCoordinator`; the journal's keychain accessors update the view on every write, read and delete | The Enable and recovery operations; the supervisor names the work that owns the journal when that work starts or the recovery takes it up |
 | Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim; the restart, a reset abandoned before its wipe, and any Confirm, Discard or run that finds none held, which take it up from the journal |
-| Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, the other-backups scan |
+| Inventory: the active namespace's detail, its cloud-only rows and listing, and the other-backups scan | `InventoryOwner` (`owner/inventory.rs`), through `RustCloudBackupManager::apply_inventory` | `InventoryInput`s: detail refresh results, cloud-only fetches, restore and delete results, local wallet changes, wallet upload state changes, the other-backups scan |
 | Upload confirmations proved by a remote read (a pending wallet upload marked confirmed) | The supervisor (`confirm_remote_revisions`), only for rows in the namespace the read came from and only while the producer's configuration is current | `RemoteRevisionEvidence` from detail refreshes and verification passes, tagged with that namespace and configuration generation |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
 
@@ -508,6 +508,24 @@ local wallet changes it applies. A backup integrity check's detail, and a deep
 verification's or an upload confirmation's, carries the count from before it
 read the local wallets: one read before a wallet was added, restored or deleted
 is dropped, since the change already asked for the refresh that replaces it.
+
+A wallet upload's result doesn't wait for a refresh either. The detail reads
+upload states only when it refreshes, and an upload asks for no refresh, so
+whoever persists an `UploadedPendingConfirmation` or `Failed` state, the upload
+worker or the pending-upload verifier, also sends the owner
+`LocalUploadStateChanged`. It reads the row again under the inventory lock, so
+a notice that arrives after a newer write shows the newer state. The owner sets
+the row's status at once when it came from the upload, leaving a row that is
+Confirmed or whose cloud copy holds a key this device lacks as it is, and the
+screen delta carries the change. So a failure shows Failed, and a retry that
+uploads after it replaces Failed. An upload that starts sends nothing, since a
+deferred one goes back to `Dirty`, whose row only a refresh can derive from the
+cloud copy. A detail result may have read an upload before its latest state, so
+when one lands it is checked against the persisted upload states, as it is
+against the local wallets, and each row whose upload has moved on since shows
+its current state. The check reads them under the inventory lock, so a state
+persisted after it sends its own `LocalUploadStateChanged` once the result is
+applied.
 
 The inventory also belongs to one configuration. The owner's `InventoryScope`
 names the configuration generation the write policy publishes, and it advances

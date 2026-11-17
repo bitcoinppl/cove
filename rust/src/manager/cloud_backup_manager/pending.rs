@@ -7,8 +7,11 @@ use std::time::Duration;
 use act_zero::send;
 use backon::{BackoffBuilder as _, FibonacciBuilder};
 use tokio::sync::Mutex;
+use tracing::error;
 
 use self::queue_processor::PendingUploadVerifier;
+use super::cloud_inventory::LocalUploadStatus;
+use super::owner::inventory::InventoryInput;
 use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -81,6 +84,7 @@ impl RustCloudBackupManager {
         Database::global().cloud_blob_sync_states.set(&sync_state).map_err(|source| {
             CloudBackupError::internal_context("persist uploaded cloud blob state", source)
         })?;
+        self.show_upload_state(&sync_state);
 
         if starts_master_key_grace {
             send!(
@@ -127,6 +131,8 @@ impl RustCloudBackupManager {
             return Ok(false);
         }
 
+        self.show_upload_state(&next_state);
+
         if next_state.is_master_key_wrapper() {
             send!(
                 self.supervisor
@@ -151,17 +157,47 @@ impl RustCloudBackupManager {
     ) -> Result<bool, CloudBackupError> {
         let failed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
-        self.replace_blob_state_if_current(
+        let failed = PersistedCloudBlobState::Failed(CloudBlobFailedState {
+            revision_hash,
+            retryable,
+            error,
+            issue,
+            failed_at,
+        });
+        let updated = self.replace_blob_state_if_current(
             current_state,
-            PersistedCloudBlobState::Failed(CloudBlobFailedState {
-                revision_hash,
-                retryable,
-                error,
-                issue,
-                failed_at,
-            }),
+            failed.clone(),
             "persist failed cloud blob state",
-        )
+        )?;
+
+        if updated {
+            self.show_upload_state(&current_state.with_state(failed));
+        }
+
+        Ok(updated)
+    }
+
+    /// Shows a wallet upload's state on the detail after its row was written, when that state
+    /// decides the wallet's row on its own
+    ///
+    /// The detail reads upload states only when it refreshes, and an upload asks for no refresh,
+    /// so without this the detail keeps the state it read before, such as a failure after its
+    /// retry succeeded. The row is read again under the inventory lock rather than taken from
+    /// `sync_state`, since a newer write, such as the verifier failing an upload that just
+    /// finished, may have landed and been shown before this call
+    pub(crate) fn show_upload_state(&self, sync_state: &PersistedCloudBlobSyncState) {
+        let CloudBackupRecordKey::Wallet(_, record_id) = sync_state.record_key() else { return };
+
+        self.apply_inventory_with(|| {
+            let current = Database::global()
+                .cloud_blob_sync_states
+                .get(record_id)
+                .inspect_err(|error| error!("read upload state to show on the detail: {error}"))
+                .ok()??;
+            let status = LocalUploadStatus::from_persisted(&current.state)?;
+
+            Some(InventoryInput::LocalUploadStateChanged { record_id: record_id.clone(), status })
+        });
     }
 
     /// Puts an upload's row back to Dirty, only while the row is still the one the upload wrote

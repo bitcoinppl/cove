@@ -1,6 +1,7 @@
 use super::*;
 use crate::manager::cloud_backup_manager::model::CloudBackupSyncState;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
+use crate::manager::cloud_backup_manager::{CloudBackupDetail, CloudBackupWalletItem};
 
 #[test]
 fn persist_xpub_wallets_saves_each_wallet_in_its_own_scope() {
@@ -971,4 +972,143 @@ async fn a_late_dirty_write_keeps_a_removed_or_newer_row() {
         table.get(&record_id).unwrap(),
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
     ));
+}
+
+/// The status each wallet the detail lists as needing a sync shows, by record id
+fn needs_sync_statuses(manager: &RustCloudBackupManager) -> Vec<(String, CloudBackupWalletStatus)> {
+    let detail = manager.model_snapshot().detail.expect("expected a loaded detail");
+
+    detail.needs_sync.into_iter().map(|wallet| (wallet.record_id, wallet.sync_status)).collect()
+}
+
+fn needs_sync_wallet(
+    record_id: &str,
+    sync_status: CloudBackupWalletStatus,
+) -> CloudBackupWalletItem {
+    CloudBackupWalletItem {
+        name: record_id.into(),
+        network: None,
+        wallet_mode: None,
+        wallet_type: None,
+        fingerprint: None,
+        label_count: None,
+        backup_updated_at: None,
+        sync_status,
+        restore_failure: None,
+        record_id: record_id.into(),
+    }
+}
+
+// a failed upload's persisted state reaches the detail without a refresh, and a refresh that read
+// an upload before it failed doesn't show it as running again, while a retry that started since
+// keeps its own status
+#[tokio::test(flavor = "current_thread")]
+async fn failed_uploads_show_on_the_detail_without_a_refresh() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 2);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let failed_wallet = xpub_only_wallet_metadata();
+    let retried_wallet = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![failed_wallet.clone(), retried_wallet.clone()]);
+
+    let failed_record = wallet_record_id(failed_wallet.id.as_ref());
+    let retried_record = wallet_record_id(retried_wallet.id.as_ref());
+    let uploading = |wallet: &WalletMetadata, record_id: &str| {
+        PersistedCloudBlobSyncState::wallet(
+            namespace.clone(),
+            wallet.id.clone(),
+            record_id.to_string(),
+            PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+                revision_hash: "attempt".into(),
+                started_at: cove_util::time::unix_timestamp_secs_or_zero(),
+            }),
+        )
+    };
+    let failed_uploading = uploading(&failed_wallet, &failed_record);
+    let retried_uploading = uploading(&retried_wallet, &retried_record);
+    let table = &Database::global().cloud_blob_sync_states;
+    table.set(&failed_uploading).unwrap();
+    table.set(&retried_uploading).unwrap();
+
+    // the refresh read both uploads running; one failed before it landed, and the other failed
+    // and is uploading again on a retry
+    manager
+        .mark_blob_failed_if_current(&failed_uploading, None, false, None, "quota".into())
+        .unwrap();
+    let stale_detail = CloudBackupDetail {
+        last_sync: None,
+        up_to_date: Vec::new(),
+        needs_sync: vec![
+            needs_sync_wallet(&failed_record, CloudBackupWalletStatus::Uploading),
+            needs_sync_wallet(&retried_record, CloudBackupWalletStatus::Uploading),
+        ],
+    };
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::RefreshedWithAuthority {
+            listed: crate::manager::cloud_backup_manager::CloudBackupListedDetail {
+                detail: stale_detail,
+                cloud_only_record_ids: Default::default(),
+                own_secrets: Default::default(),
+            },
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+        },
+    );
+
+    assert_eq!(
+        needs_sync_statuses(&manager),
+        vec![
+            (failed_record.clone(), CloudBackupWalletStatus::Failed),
+            (retried_record.clone(), CloudBackupWalletStatus::Uploading),
+        ]
+    );
+
+    // the retry fails too, with the detail open and no refresh running
+    manager
+        .mark_blob_failed_if_current(&retried_uploading, None, false, None, "quota".into())
+        .unwrap();
+
+    assert!(
+        needs_sync_statuses(&manager)
+            .iter()
+            .all(|(_, status)| *status == CloudBackupWalletStatus::Failed),
+        "both failures should show on the detail"
+    );
+
+    // a late notice from an older write shows the row as it is now, not as that write left it
+    let finished = PersistedCloudBlobSyncState::wallet(
+        namespace.clone(),
+        failed_wallet.id.clone(),
+        failed_record.clone(),
+        PersistedCloudBlobState::UploadedPendingConfirmation(
+            CloudBlobUploadedPendingConfirmationState {
+                revision_hash: "attempt".into(),
+                uploaded_at: 1,
+                attempt_count: 0,
+                last_checked_at: None,
+            },
+        ),
+    );
+    manager.show_upload_state(&finished);
+
+    assert_eq!(needs_sync_statuses(&manager)[0].1, CloudBackupWalletStatus::Failed);
+
+    // a later retry succeeds, so the row leaves Failed without a refresh
+    let retry = uploading(&failed_wallet, &failed_record);
+    table.set(&retry).unwrap();
+    let uploaded = manager
+        .mark_blob_uploaded_pending_confirmation_if_current(&retry, &namespace, "retry".into(), 1)
+        .unwrap();
+
+    assert!(uploaded);
+    assert_eq!(
+        needs_sync_statuses(&manager),
+        vec![
+            (failed_record, CloudBackupWalletStatus::UploadedPendingConfirmation),
+            (retried_record, CloudBackupWalletStatus::Failed),
+        ]
+    );
 }
