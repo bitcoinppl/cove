@@ -203,7 +203,7 @@ alias bir := build-ios-release
 
 # keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
 # xtask verifies Apple's AASA CDN before upload
-# use this when the build number was already bumped and committed
+# use this when the build number was already bumped; it skips the upload when App Store Connect already has that build, so it is safe to retry
 # [long, external] Upload to TestFlight without bumping, copy previous test notes, and add to me-only
 [group('build')]
 upload-testflight:

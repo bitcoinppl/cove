@@ -751,7 +751,16 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     validate_testflight_associated_domain()?;
 
     let archive = archive_testflight(&credentials, verbose)?;
-    archive.upload(&credentials, verbose)?;
+
+    // an earlier attempt may have landed even though xcodebuild reported failure
+    if distribution.has_build(&archive.identity)? {
+        let BuildIdentity { version, build_number } = &archive.identity;
+        print_info(&format!(
+            "App Store Connect already has {version} ({build_number}); skipping upload"
+        ));
+    } else {
+        archive.upload(&credentials, verbose)?;
+    }
 
     finish_testflight_distribution(&distribution, &archive.identity)
 }

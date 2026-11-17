@@ -109,6 +109,39 @@ impl Distribution {
         self.distribute_with_timeout(identity, PROCESSING_TIMEOUT, POLL_INTERVAL)
     }
 
+    /// Whether App Store Connect already has this exact build in any processing state
+    ///
+    /// An upload can land even when xcodebuild reports failure, so a retry checks this first
+    /// instead of re-uploading a build number App Store Connect already rejects as used
+    pub(crate) fn has_build(&self, identity: &BuildIdentity) -> Result<bool> {
+        Ok(self.find_build(identity)?.is_some())
+    }
+
+    fn find_build(&self, identity: &BuildIdentity) -> Result<Option<Resource<Build>>> {
+        let builds: Vec<Resource<Build>> = self.api.list(
+            "v1/builds",
+            &[
+                ("filter[app]", &self.app_id),
+                ("filter[preReleaseVersion.platform]", "IOS"),
+                ("filter[preReleaseVersion.version]", &identity.version),
+                ("filter[version]", &identity.build_number),
+            ],
+        )?;
+
+        ensure!(builds.len() <= 1, "Multiple builds match the uploaded archive");
+
+        let Some(build) = builds.into_iter().next() else {
+            return Ok(None);
+        };
+
+        ensure!(
+            build.attributes.version == identity.build_number,
+            "App Store Connect returned a different build number"
+        );
+
+        Ok(Some(build))
+    }
+
     fn distribute_with_timeout(
         &self,
         identity: &BuildIdentity,
@@ -119,26 +152,9 @@ impl Distribution {
         let deadline = Instant::now() + timeout;
 
         loop {
-            let builds: Vec<Resource<Build>> = self.api.list(
-                "v1/builds",
-                &[
-                    ("filter[app]", &self.app_id),
-                    ("filter[preReleaseVersion.platform]", "IOS"),
-                    ("filter[preReleaseVersion.version]", &identity.version),
-                    ("filter[version]", &identity.build_number),
-                ],
-            )?;
-
-            ensure!(builds.len() <= 1, "Multiple builds match the uploaded archive");
-
-            if let Some(build) = builds.first() {
-                ensure!(
-                    build.attributes.version == identity.build_number,
-                    "App Store Connect returned a different build number"
-                );
-
+            if let Some(build) = self.find_build(identity)? {
                 match build.attributes.processing_state {
-                    ProcessingState::Valid => return self.assign(build),
+                    ProcessingState::Valid => return self.assign(&build),
                     ProcessingState::Processing => {}
                     ProcessingState::Failed | ProcessingState::Invalid => {
                         bail!(
