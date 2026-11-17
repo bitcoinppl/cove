@@ -21,11 +21,7 @@ final class RenameWalletFullLaunchUITests: XCTestCase {
 
     func testRenameFromTitleMenuKeepsTheKeyboard() {
         launchWallet()
-
-        app.element("selectedWallet.title").press(forDuration: 1.0)
-        app.tapButton(named: "Change Name")
-
-        assertNameFieldKeepsKeyboard()
+        assertRenameKeepsKeyboardAndSaves(openRename: openRenameFromTitleMenu)
     }
 
     func testRenameFromWalletSettingsKeepsTheKeyboard() {
@@ -33,11 +29,8 @@ final class RenameWalletFullLaunchUITests: XCTestCase {
 
         app.tapButton(named: "selectedWallet.more")
         app.tapButton(named: "Wallet Settings")
-        let nameRow = app.element("walletSettings.name")
-        XCTAssertTrue(nameRow.waitForExistence(timeout: 10), "wallet settings never showed the name row")
-        nameRow.tap()
 
-        assertNameFieldKeepsKeyboard()
+        assertRenameKeepsKeyboardAndSaves(openRename: openRenameFromWalletSettings)
     }
 
     // MARK: - Steps
@@ -48,7 +41,39 @@ final class RenameWalletFullLaunchUITests: XCTestCase {
         app.importTestMnemonic()
     }
 
-    private func assertNameFieldKeepsKeyboard() {
+    private func openRenameFromTitleMenu() {
+        app.element("selectedWallet.title").press(forDuration: 1.0)
+        app.tapButton(named: "Change Name")
+    }
+
+    private func openRenameFromWalletSettings() {
+        let nameRow = app.element("walletSettings.name")
+        XCTAssertTrue(nameRow.waitForExistence(timeout: 10), "wallet settings never showed the name row")
+        nameRow.tap()
+    }
+
+    /// Renames the wallet through the rename screen, then reopens it to check the name was saved
+    private func assertRenameKeepsKeyboardAndSaves(openRename: () -> Void) {
+        openRename()
+        let renamed = assertNameFieldKeepsKeyboard()
+
+        // the field keeps its own draft, so only a freshly opened screen shows the saved name
+        let field = app.textFields["walletSettings.changeName.field"]
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 10), "the rename screen never closed")
+
+        openRename()
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "rename screen never reopened")
+        waitUntil(
+            field,
+            matches: NSPredicate(format: "value == %@", renamed),
+            timeout: 10,
+            "the reopened rename screen didn't show the typed name, so it was never saved"
+        )
+    }
+
+    /// Returns the name the field holds after typing into it
+    private func assertNameFieldKeepsKeyboard() -> String {
         let field = app.textFields["walletSettings.changeName.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 10), "rename screen never opened")
         let originalName = field.value as? String ?? ""
@@ -61,12 +86,15 @@ final class RenameWalletFullLaunchUITests: XCTestCase {
         )
 
         // typing without tapping the field proves typed text still reaches it
+        let renamed = "\(originalName) Renamed"
         app.typeText(" Renamed")
         waitUntil(
             field,
-            matches: NSPredicate(format: "value == %@", "\(originalName) Renamed"),
+            matches: NSPredicate(format: "value == %@", renamed),
             timeout: 5,
             "typed text never reached the name field"
         )
+
+        return renamed
     }
 }

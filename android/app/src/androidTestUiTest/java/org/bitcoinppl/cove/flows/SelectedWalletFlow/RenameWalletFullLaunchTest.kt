@@ -5,6 +5,7 @@ import androidx.test.filters.LargeTest
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.FakeNodeControl
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
@@ -77,8 +78,7 @@ class RenameWalletFullLaunchTest {
     fun renameFromTitleMenuKeepsFocusAndEveryTypedKey() {
         launchPastOnboarding()
 
-        device.waitFor(By.res(TITLE)).longClick()
-        device.waitFor(By.text("Change Name")).click()
+        openRenameFromTitleMenu()
 
         val originalName = device.waitFor(By.res(NAME_FIELD)).text.orEmpty()
         wallet.waitUntil("rename screen never focused the name field", timeoutMs = FOCUS_TIMEOUT_MS) {
@@ -99,6 +99,21 @@ class RenameWalletFullLaunchTest {
         wallet.waitUntil("expected the name field to hold '$expected' after typing", timeoutMs = TYPED_TIMEOUT_MS) {
             device.findText(By.res(NAME_FIELD)) == expected
         }
+
+        // the field keeps its own draft for the wallet, so only a freshly opened screen shows the
+        // saved name
+        wallet.dismissKeyboard()
+        device.pressBack()
+        assertTrue("the rename screen never closed", device.wait(Until.gone(By.res(NAME_FIELD)), TYPED_TIMEOUT_MS))
+        openRenameFromTitleMenu()
+        wallet.waitUntil("expected the reopened rename screen to show the saved name '$expected'", timeoutMs = TYPED_TIMEOUT_MS) {
+            device.findText(By.res(NAME_FIELD)) == expected
+        }
+    }
+
+    private fun openRenameFromTitleMenu() {
+        device.waitFor(By.res(TITLE)).longClick()
+        device.waitFor(By.text("Change Name")).click()
     }
 
     private fun nameFieldIsFocused(): Boolean =
