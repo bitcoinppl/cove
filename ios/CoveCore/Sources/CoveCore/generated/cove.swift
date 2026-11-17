@@ -14889,18 +14889,27 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> UInt6
 /**
  * State machine for word verification flow
  *
- * UI sends events (select_word, animation_complete, etc.) and receives
- * StateTransition results that tell it what state to render and what
- * animations to play.
+ * The UI sends events and draws the state each returned transition carries. A pick starts a
+ * check with its own id; the events that move it along (`animation_complete`,
+ * `dwell_complete`, `cancel_check`, `return_complete`) take that id and return None when they
+ * are stale or out of order, so the UI drops them instead of drawing a state the machine is not
+ * in. One check runs at a time, and a pick made while one runs returns None too
  */
 public protocol WordVerifyStateMachineProtocol: AnyObject, Sendable {
 
     /**
-     * Animation to target complete - transition to Correct or Incorrect
+     * The chip reached the answer slot: show it as correct or incorrect
      *
-     * Returns a transition with the result state and dwell duration.
+     * Returns the transition with the dwell duration, or None unless check `id` is flying
      */
-    func animationComplete()  -> StateTransition
+    func animationComplete(id: WordCheckId)  -> StateTransition?
+
+    /**
+     * User tapped the chip while it flies to the slot: send it back without checking it
+     *
+     * Returns a Returning transition, or None unless a check is flying
+     */
+    func cancelCheck()  -> StateTransition?
 
     /**
      * Get the animation configuration
@@ -14908,12 +14917,12 @@ public protocol WordVerifyStateMachineProtocol: AnyObject, Sendable {
     func config()  -> WordVerifyAnimationConfig
 
     /**
-     * Dwell time complete - advance word or start return animation
+     * Dwell time complete: advance on a correct word or send a wrong one back
      *
-     * If correct: transitions to None and signals to advance word.
-     * If incorrect: transitions to Returning state.
+     * A correct check ends here, moving to the next word with `should_advance_word` set; a
+     * wrong one starts Returning. Returns None unless check `id` is dwelling
      */
-    func dwellComplete()  -> StateTransition
+    func dwellComplete(id: WordCheckId)  -> StateTransition?
 
     /**
      * Check if all words have been verified
@@ -14926,17 +14935,19 @@ public protocol WordVerifyStateMachineProtocol: AnyObject, Sendable {
     func possibleWords()  -> [String]
 
     /**
-     * Return animation complete (after incorrect) - back to None
+     * Return animation complete: the chip is back in its place and another word can be picked
+     *
+     * Returns None unless check `id` is returning
      */
-    func returnComplete()  -> StateTransition
+    func returnComplete(id: WordCheckId)  -> StateTransition?
 
     /**
-     * User tapped a word - start the checking animation
+     * User tapped a word: start a check, with the chip flying to the answer slot
      *
-     * Returns a transition with Checking state and the animation duration.
-     * If already animating, returns no-change.
+     * Returns None while another check runs or once every word is verified, and the tap does
+     * nothing
      */
-    func selectWord(word: String)  -> StateTransition
+    func selectWord(word: String)  -> StateTransition?
 
     /**
      * Get the current state
@@ -14952,9 +14963,11 @@ public protocol WordVerifyStateMachineProtocol: AnyObject, Sendable {
 /**
  * State machine for word verification flow
  *
- * UI sends events (select_word, animation_complete, etc.) and receives
- * StateTransition results that tell it what state to render and what
- * animations to play.
+ * The UI sends events and draws the state each returned transition carries. A pick starts a
+ * check with its own id; the events that move it along (`animation_complete`,
+ * `dwell_complete`, `cancel_check`, `return_complete`) take that id and return None when they
+ * are stale or out of order, so the UI drops them instead of drawing a state the machine is not
+ * in. One check runs at a time, and a pick made while one runs returns None too
  */
 open class WordVerifyStateMachine: WordVerifyStateMachineProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -15023,14 +15036,29 @@ public convenience init(validator: WordValidator, startingWordNumber: UInt8) {
 
 
     /**
-     * Animation to target complete - transition to Correct or Incorrect
+     * The chip reached the answer slot: show it as correct or incorrect
      *
-     * Returns a transition with the result state and dwell duration.
+     * Returns the transition with the dwell duration, or None unless check `id` is flying
      */
-open func animationComplete() -> StateTransition  {
-    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+open func animationComplete(id: WordCheckId) -> StateTransition?  {
+    return try!  FfiConverterOptionTypeStateTransition.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_wordverifystatemachine_animation_complete(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWordCheckId_lower(id),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * User tapped the chip while it flies to the slot: send it back without checking it
+     *
+     * Returns a Returning transition, or None unless a check is flying
+     */
+open func cancelCheck() -> StateTransition?  {
+    return try!  FfiConverterOptionTypeStateTransition.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_wordverifystatemachine_cancel_check(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -15049,16 +15077,17 @@ open func config() -> WordVerifyAnimationConfig  {
 }
 
     /**
-     * Dwell time complete - advance word or start return animation
+     * Dwell time complete: advance on a correct word or send a wrong one back
      *
-     * If correct: transitions to None and signals to advance word.
-     * If incorrect: transitions to Returning state.
+     * A correct check ends here, moving to the next word with `should_advance_word` set; a
+     * wrong one starts Returning. Returns None unless check `id` is dwelling
      */
-open func dwellComplete() -> StateTransition  {
-    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+open func dwellComplete(id: WordCheckId) -> StateTransition?  {
+    return try!  FfiConverterOptionTypeStateTransition.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_wordverifystatemachine_dwell_complete(
-            self.uniffiCloneHandle(),uniffiCallStatus
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWordCheckId_lower(id),uniffiCallStatus
     )
 })
 }
@@ -15088,25 +15117,28 @@ open func possibleWords() -> [String]  {
 }
 
     /**
-     * Return animation complete (after incorrect) - back to None
+     * Return animation complete: the chip is back in its place and another word can be picked
+     *
+     * Returns None unless check `id` is returning
      */
-open func returnComplete() -> StateTransition  {
-    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+open func returnComplete(id: WordCheckId) -> StateTransition?  {
+    return try!  FfiConverterOptionTypeStateTransition.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_wordverifystatemachine_return_complete(
-            self.uniffiCloneHandle(),uniffiCallStatus
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWordCheckId_lower(id),uniffiCallStatus
     )
 })
 }
 
     /**
-     * User tapped a word - start the checking animation
+     * User tapped a word: start a check, with the chip flying to the answer slot
      *
-     * Returns a transition with Checking state and the animation duration.
-     * If already animating, returns no-change.
+     * Returns None while another check runs or once every word is verified, and the tap does
+     * nothing
      */
-open func selectWord(word: String) -> StateTransition  {
-    return try!  FfiConverterTypeStateTransition_lift(try! rustCall() {
+open func selectWord(word: String) -> StateTransition?  {
+    return try!  FfiConverterOptionTypeStateTransition.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_wordverifystatemachine_select_word(
             self.uniffiCloneHandle(),
@@ -21107,6 +21139,10 @@ public func FfiConverterTypeShutdownAttemptId_lower(_ value: ShutdownAttemptId) 
  */
 public struct StateTransition: Equatable, Hashable {
     /**
+     * The pick this transition belongs to, passed back with the next event for it
+     */
+    public var checkId: WordCheckId
+    /**
      * The new state after the transition
      */
     public var newState: WordCheckState
@@ -21123,6 +21159,9 @@ public struct StateTransition: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
+         * The pick this transition belongs to, passed back with the next event for it
+         */checkId: WordCheckId,
+        /**
          * The new state after the transition
          */newState: WordCheckState,
         /**
@@ -21131,6 +21170,7 @@ public struct StateTransition: Equatable, Hashable {
         /**
          * Suggested animation/delay duration in ms (None if no animation needed)
          */animationDurationMs: UInt32?) {
+        self.checkId = checkId
         self.newState = newState
         self.shouldAdvanceWord = shouldAdvanceWord
         self.animationDurationMs = animationDurationMs
@@ -21152,6 +21192,7 @@ public struct FfiConverterTypeStateTransition: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StateTransition {
         return
             try StateTransition(
+                checkId: FfiConverterTypeWordCheckId.read(from: &buf),
                 newState: FfiConverterTypeWordCheckState.read(from: &buf),
                 shouldAdvanceWord: FfiConverterBool.read(from: &buf),
                 animationDurationMs: FfiConverterOptionUInt32.read(from: &buf)
@@ -21159,6 +21200,7 @@ public struct FfiConverterTypeStateTransition: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: StateTransition, into buf: inout [UInt8]) {
+        FfiConverterTypeWordCheckId.write(value.checkId, into: &buf)
         FfiConverterTypeWordCheckState.write(value.newState, into: &buf)
         FfiConverterBool.write(value.shouldAdvanceWord, into: &buf)
         FfiConverterOptionUInt32.write(value.animationDurationMs, into: &buf)
@@ -51234,6 +51276,30 @@ fileprivate struct FfiConverterOptionTypeSendConfirmationLock: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeStateTransition: FfiConverterRustBuffer {
+    typealias SwiftType = StateTransition?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStateTransition.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStateTransition.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WalletMetadata?
 
@@ -52985,6 +53051,46 @@ public func FfiConverterTypeTimestamp_lift(_ value: UInt64) throws -> Timestamp 
 #endif
 public func FfiConverterTypeTimestamp_lower(_ value: Timestamp) -> UInt64 {
     return FfiConverterTypeTimestamp.lower(value)
+}
+
+
+
+public typealias WordCheckId = UInt64
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWordCheckId: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WordCheckId {
+        return try FfiConverterUInt64.read(from: &buf)
+    }
+
+    public static func write(_ value: WordCheckId, into buf: inout [UInt8]) {
+        return FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: UInt64) throws -> WordCheckId {
+        return try FfiConverterUInt64.lift(value)
+    }
+
+    public static func lower(_ value: WordCheckId) -> UInt64 {
+        return FfiConverterUInt64.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordCheckId_lift(_ value: UInt64) throws -> WordCheckId {
+    return try FfiConverterTypeWordCheckId.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWordCheckId_lower(_ value: WordCheckId) -> UInt64 {
+    return FfiConverterTypeWordCheckId.lower(value)
 }
 
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
@@ -55216,13 +55322,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_wordvalidator_possible_words() != 20003) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 38406) {
+    if (uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 33513) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordverifystatemachine_cancel_check() != 61542) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordverifystatemachine_config() != 39348) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 24167) {
+    if (uniffi_cove_checksum_method_wordverifystatemachine_dwell_complete() != 37693) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordverifystatemachine_is_complete() != 19976) {
@@ -55231,10 +55340,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_wordverifystatemachine_possible_words() != 5700) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 53818) {
+    if (uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 23675) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 49272) {
+    if (uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 33564) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordverifystatemachine_state() != 57576) {
