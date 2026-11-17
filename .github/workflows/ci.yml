@@ -175,14 +175,11 @@ jobs:
           java-version: "17"
       # a cold Gradle User Home downloads kotlin-compiler-embeddable, which Maven Central
       # redirects to a GitHub release asset; a 504 there fails the configuration cache store,
-      # so restore the dependency cache master wrote instead of downloading it every run
-      # the basic provider shares one key across jobs, so only compile-android writes it;
-      # otherwise this faster job would save first without the compile dependencies
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-          cache-read-only: true
+      # so restore the Gradle User Home master saved instead of downloading it every run.
+      # Only compile-android saves it: this faster job would save first without the compile
+      # dependencies
+      - name: Restore Gradle User Home and set up Gradle
+        uses: ./.github/actions/gradle-home
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
       - name: Run detekt
@@ -192,6 +189,9 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_android != 'false') }}
     runs-on: ubuntu-24.04
+    outputs:
+      gradle-key: ${{ steps.gradle-home.outputs.key }}
+      gradle-saved: ${{ steps.gradle-save.outcome == 'success' }}
     env:
       RUSTFLAGS: -D warnings
     steps:
@@ -220,10 +220,9 @@ jobs:
           java-version: "17"
 
       # the only writer of the shared Gradle User Home cache, from master; see the ktlint job
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
+      - name: Restore Gradle User Home and set up Gradle
+        id: gradle-home
+        uses: ./.github/actions/gradle-home
 
       - name: Install build dependencies
         run: cd rust && cargo --locked xtask install-deps
@@ -256,6 +255,56 @@ jobs:
       # which pull requests run only when labeled; its own step so the run shows what it costs
       - name: Compile Android instrumented tests
         run: cd android && ./gradlew compileDevDebugAndroidTestKotlin compileUiTestDebugAndroidTestKotlin
+
+      # only master saves, and only when no entry has this key yet; the daemon stops first so
+      # the saved caches hold no lock or half-written file
+      - name: Stop the Gradle daemon
+        if: github.ref == 'refs/heads/master' && steps.gradle-home.outputs.cache-hit != 'true'
+        run: cd android && ./gradlew --stop
+
+      - name: Save Gradle User Home
+        id: gradle-save
+        if: github.ref == 'refs/heads/master' && steps.gradle-home.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          key: ${{ steps.gradle-home.outputs.key }}
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+
+  # a job of its own so the Gradle build compile-android runs never holds a token that can delete
+  # caches
+  prune-gradle-home:
+    needs: compile-android
+    if: ${{ needs.compile-android.outputs.gradle-saved == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      # keeps the new entry and master's one other entry read most recently, which a run whose
+      # build scripts differ from the new entry's can fall back to; each is about 720 MB of the
+      # repository's 10 GB. actions/cache/save only warns when its upload fails, so nothing is
+      # deleted unless the new entry is listed
+      - name: Delete master's older Gradle User Home entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ needs.compile-android.outputs.gradle-key }}
+        run: |
+          entries="$(
+            gh cache list --repo "$REPO" --ref refs/heads/master --key gradle-home- --limit 100 \
+              --sort last_accessed_at --order desc --json id,key
+          )"
+
+          if ! jq -e 'any(.[]; .key == env.KEEP)' <<<"$entries" >/dev/null; then
+            echo "::warning title=Gradle User Home cache::$KEEP isn't listed, so no older entry was deleted"
+            exit 0
+          fi
+
+          jq -r '[.[] | select(.key != env.KEEP)] | .[1:][] | .id' <<<"$entries" |
+            while read -r id; do
+              gh cache delete "$id" --repo "$REPO"
+            done
 
   compile-ios:
     needs: changes
