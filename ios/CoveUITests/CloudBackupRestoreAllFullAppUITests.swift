@@ -190,6 +190,78 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
     }
 
+    /// A Restore All left behind the navigation bar with only its lower edge showing is scrolled
+    /// back into view before the tap, since the bar takes a tap on that edge and no batch starts
+    /// (#1201)
+    func testRestoreAllTapReachesAButtonScrolledBehindTheNavigationBar() throws {
+        // the extra copy's section below the rows leaves room to scroll Restore All under the bar
+        let duplicate = CloudBackupUITestScript.duplicateWalletRecordId
+        let control = try Self.openDetailWithTwoCloudOnlyWallets(
+            app: app,
+            robot: robot,
+            alsoListing: [duplicate]
+        )
+        let screen = RestoreAllScreen(app: app, robot: robot)
+        robot.scrollToHittable(screen.row(duplicate), initialWait: 15)
+
+        // Rust offers the batch, so a tap that reaches the button starts one
+        control.assertNextActions("two cloud-only wallets should offer Restore All", available: ["startRestoreAll"])
+
+        let restoreAll = robot.button(startingWith: "Restore All (2)")
+        placeLowerEdgeAtTopBar(restoreAll)
+        XCTAssertTrue(restoreAll.isHittable, "XCUITest should still call the button hittable at \(restoreAll.frame)")
+        XCTAssertLessThan(restoreAll.frame.midY, app.navigationBars.firstMatch.frame.maxY, "the button should sit behind the bar")
+
+        robot.scrollToHittable(restoreAll)
+        XCTAssertGreaterThanOrEqual(
+            restoreAll.frame.midY,
+            app.navigationBars.firstMatch.frame.maxY,
+            "the button should be scrolled out from under the bar before the tap"
+        )
+
+        restoreAll.tap()
+        screen.waitUntilOnDevice(Self.walletTwoRecordId, timeout: 30)
+        screen.waitUntilOnDevice(Self.walletThreeRecordId, timeout: 30)
+        XCTAssertGreaterThan(
+            control.state.count(.walletDownload(recordId: Self.walletTwoRecordId)),
+            1,
+            "the wallet arrived without a batch reading it again"
+        )
+    }
+
+    /// Drags the list until `element` sits behind the navigation bar with only its lower edge
+    /// showing, so XCUITest still calls it hittable, which is where the failure in #1201 left
+    /// Restore All
+    private func placeLowerEdgeAtTopBar(_ element: XCUIElement) {
+        let bar = app.navigationBars.firstMatch.frame
+
+        // a long drag first, then short ones that nudge the edge in or out from under the bar
+        for _ in 0 ..< 12 {
+            let hittable = element.isHittable
+            let frame = element.frame
+            if hittable, frame.midY < bar.maxY { return }
+
+            if frame.maxY > bar.maxY {
+                drag(by: min(app.windows.firstMatch.frame.height / 3, frame.maxY - bar.minY))
+            } else {
+                drag(by: hittable ? 6 : -6)
+            }
+        }
+    }
+
+    /// Drags the list's content up by about `distance` points, or down when it is negative
+    ///
+    /// The drag runs along the leading margin, clear of the rows' buttons, and holds before
+    /// lifting so the list doesn't coast. A touch moves about 10 points before the list takes it
+    /// as a drag, so that slop is added to the finger's travel
+    private func drag(by distance: CGFloat) {
+        let window = app.windows.firstMatch
+        let travel = distance + (distance < 0 ? -10 : 10)
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.6))
+        let end = start.withOffset(CGVector(dx: 0, dy: -travel))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+
     /// Restores Fixture Wallet One from onboarding while the cloud lists only it, then lists all
     /// three, so the detail screen shows wallets two and three as cloud-only with Restore All (2)
     private func openDetailWithTwoCloudOnlyWallets(
