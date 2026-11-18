@@ -13,6 +13,7 @@ enum HotWalletImportAlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
     case scanError(String)
+    case invalidSeedQr
     case importError(String)
 }
 
@@ -208,11 +209,9 @@ struct HotWalletImportScreen: View {
                         }
                     }
                 } else {
+                    // raised on this screen, whose presenter waits for the scanner to close
                     sheetState = .none
-                    app.alertState = TaggedItem(.general(
-                        title: "Invalid QR Code",
-                        message: "Please scan a valid seed phrase QR code"
-                    ))
+                    alertState = TaggedItem(.invalidSeedQr)
                 }
                 scanner.reset()
 
@@ -366,8 +365,13 @@ struct HotWalletImportScreen: View {
         .navigationTitle("Import Wallet")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .presentingSheet($sheetState, context: presentationContext)
-        .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
+        .presentingSheetAndAlert(
+            sheet: $sheetState,
+            sheetContext: presentationContext,
+            alert: $alertState,
+            alertContext: presentationContext,
+            defaultTitle: "Error"
+        )
         .modifier(ConditionalTintModifier())
         .onAppear(perform: initOnAppear)
         .onChange(of: sheetState, initial: true, handleSheetStateChange)

@@ -86,6 +86,13 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         try assertSendsMax(spending: funding)
     }
 
+    /// A label QR already in front of the camera scans while the scanner sheet is still sliding
+    /// up, and the import must still report its result once the sheet has gone
+    func testLabelQrAlreadyInViewReportsTheImport() throws {
+        let funding = try fundAndImportWatchOnlyWallet()
+        try labelTransaction(funding.txid, alreadyInView: true)
+    }
+
     // MARK: - Steps
 
     /// Funds the test mnemonic's first address, imports its account as a watch-only hardware
@@ -142,14 +149,18 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         XCTAssertTrue(try node.outspend(funding).spent, "the node doesn't show the funded output spent")
     }
 
-    /// Scans a BIP329 label for the transaction from the wallet screen's QR scanner
-    private func labelTransaction(_ txid: String) throws {
+    /// Scans a BIP329 label for the transaction from the wallet screen's QR scanner, shown once
+    /// the scanner is open, or `alreadyInView` before it opens, so the scan lands while the
+    /// scanner sheet is still being presented
+    private func labelTransaction(_ txid: String, alreadyInView: Bool = false) throws {
         let record = try JSONSerialization.data(withJSONObject: ["type": "tx", "ref": txid, "label": Self.label])
+        let frames = [String(decoding: record, as: UTF8.self)]
         let scan = app.buttons.matching(NSPredicate(format: "label ==[c] %@ OR identifier == %@", "QR Code", "qrcode")).firstMatch
         XCTAssertTrue(scan.waitForExistence(timeout: 10), "the wallet screen's QR scanner button is missing")
-        scan.tap()
 
-        try qr.show([String(decoding: record, as: UTF8.self)])
+        if alreadyInView { try qr.show(frames) }
+        scan.tap()
+        if !alreadyInView { try qr.show(frames) }
 
         let imported = app.alerts["Success"]
         XCTAssertTrue(imported.waitForExistence(timeout: 15), "the scanned label was not imported")

@@ -248,8 +248,14 @@ struct MainSettingsScreen: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .presentingFullScreenCover($sheetState, context: presentationContext)
-        .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
+        .presentingSheetAndAlert(
+            sheet: $sheetState,
+            sheetContext: presentationContext,
+            style: .fullScreenCover,
+            alert: $alertState,
+            alertContext: presentationContext,
+            defaultTitle: "Error"
+        )
     }
 
     // MARK: Setter functions
