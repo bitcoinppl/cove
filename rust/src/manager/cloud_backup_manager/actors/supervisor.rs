@@ -2082,6 +2082,20 @@ pub(crate) mod test_support {
             Produces::ok(receiver)
         }
 
+        /// Answers `held`, then holds this mailbox until `release` answers or is dropped
+        ///
+        /// Messages sent meanwhile queue in order behind the hold, so the harness can queue
+        /// several intents before the supervisor handles the first
+        pub(crate) async fn harness_hold_mailbox(
+            &mut self,
+            held: oneshot::Sender<()>,
+            release: oneshot::Receiver<()>,
+        ) -> ActorResult<()> {
+            held.send(()).ok();
+            release.await.ok();
+            Produces::ok(())
+        }
+
         pub(crate) async fn harness_last_outcome(
             &mut self,
         ) -> ActorResult<Option<DispatchOutcome>> {

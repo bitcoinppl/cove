@@ -428,6 +428,29 @@ impl TestApp {
         Step(self)
     }
 
+    /// User taps sent back to back, all queued on the supervisor before it handles the first
+    ///
+    /// The test thread can be descheduled between two dispatches long enough for work the first
+    /// starts to end before the second is sent, so the supervisor's mailbox is held while they
+    /// are sent and each later tap is decided in the turn right after the one before it
+    pub(crate) fn dispatch_queued(&mut self, actions: &[CloudBackupManagerAction]) -> Step<'_> {
+        self.begin_event(format!("dispatch queued {actions:?}"));
+        let (held, entered) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        act_zero::send!(self.manager.supervisor.harness_hold_mailbox(held, released));
+        self.block_on("the supervisor's mailbox to be held", entered)
+            .expect("the supervisor holds its mailbox");
+
+        for action in actions {
+            self.invariants.expect_dispatch(action.clone().into());
+            self.manager.dispatch(action.clone());
+        }
+
+        release.send(()).ok();
+        self.settle_and_check();
+        Step(self)
+    }
+
     /// Soft relaunch: a new manager on the open database handle
     ///
     /// Keeps the database, keychain and fake cloud, and drops the in-memory caches a relaunch
