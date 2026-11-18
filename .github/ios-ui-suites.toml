@@ -68,6 +68,10 @@ paths = ["ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift"]
 suites = ["CoveUITests/PublicKeyImportFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/ReceiveFailureFullLaunchUITests.swift"]
+suites = ["CoveUITests/ReceiveFailureFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/ReceiveTextSizeFullLaunchUITests.swift"]
 suites = ["CoveUITests/ReceiveTextSizeFullLaunchUITests"]
 

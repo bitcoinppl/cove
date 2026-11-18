@@ -33,7 +33,9 @@ use crate::{
 };
 
 #[cfg(debug_assertions)]
-use crate::manager::wallet_manager::receive_address::ui_test_refresh_failure::RefreshScope;
+use crate::manager::wallet_manager::receive_address::{
+    ui_test_open_failure, ui_test_refresh_failure::RefreshScope,
+};
 
 const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
 
@@ -76,6 +78,13 @@ impl WalletActor {
     }
 
     fn open_receive_address_decision(&mut self) -> OpenReceiveAddressDecision {
+        #[cfg(debug_assertions)]
+        if ui_test_open_failure::open_fails() {
+            return OpenReceiveAddressDecision::Complete(Err(Error::ReceiveAddressError(
+                "UI test failed opening Receive".to_string(),
+            )));
+        }
+
         let now = cove_util::time::unix_timestamp_secs_or_zero();
 
         let cache = match self.receive_address_cache() {
