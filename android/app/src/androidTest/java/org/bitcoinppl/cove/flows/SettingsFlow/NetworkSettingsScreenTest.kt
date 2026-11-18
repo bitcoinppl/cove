@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -42,9 +42,13 @@ class NetworkSettingsScreenTest {
             }
         }
 
-        // the confirmation dialog only appears after choosing a different network
+        // the confirmation dialog only appears after choosing a different network. It is its own
+        // window, which can still be laying out once Compose is idle, so wait for it to show
         compose.onNodeWithText(otherNetwork.toString()).performClick()
-        compose.onNodeWithText("Warning: Network Changed").assertIsDisplayed()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            val warning = compose.onAllNodesWithText("Warning: Network Changed")
+            warning.fetchSemanticsNodes().isNotEmpty() && warning[0].isDisplayed()
+        }
     }
 
     @Test
