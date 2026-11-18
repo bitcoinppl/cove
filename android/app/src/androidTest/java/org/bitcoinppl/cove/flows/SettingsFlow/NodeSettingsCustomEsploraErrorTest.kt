@@ -4,13 +4,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
-import kotlinx.coroutines.test.StandardTestDispatcher
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.types.Network
@@ -28,11 +27,8 @@ import org.junit.Test
  * `ssl://host:50002/api` and the alert named a node nobody typed
  */
 class NodeSettingsCustomEsploraErrorTest {
-    // the screen resumes its node checks after withContext(Dispatchers.IO), and the rule's default
-    // unconfined dispatcher runs that resume, and the frame it triggers, on the IO thread while the
-    // UI thread is laying out. A standard dispatcher queues the resume for the UI thread
     @get:Rule
-    val compose = createComposeRule(effectContext = StandardTestDispatcher())
+    val compose = coveComposeRule()
 
     private lateinit var app: AppManager
     private lateinit var initialNetwork: Network

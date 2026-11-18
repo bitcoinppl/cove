@@ -11,12 +11,12 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupControlSurface
@@ -49,7 +49,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CloudBackupScreenContractTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private var shown by mutableStateOf<Shown?>(null)
 

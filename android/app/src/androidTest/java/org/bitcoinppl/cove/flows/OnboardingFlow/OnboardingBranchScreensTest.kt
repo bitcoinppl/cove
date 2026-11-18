@@ -14,7 +14,6 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,6 +26,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupTags
 import org.bitcoinppl.cove.cloudbackup.cloudBackupFixture
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.test.pressBackInApp
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupScreenAction
@@ -43,7 +43,7 @@ private const val AFTER_BACK_TIMEOUT_MILLIS = 5_000L
 
 class OnboardingBranchScreensTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private var updateContent: ((@Composable () -> Unit) -> Unit)? = null
 

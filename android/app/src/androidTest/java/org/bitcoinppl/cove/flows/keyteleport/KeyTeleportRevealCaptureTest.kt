@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -28,6 +27,7 @@ import org.bitcoinppl.cove.test.TextReferenceMatch
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.captureToImageWithRetry
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.test.matchTextReference
@@ -62,7 +62,7 @@ import kotlin.math.abs
  */
 class KeyTeleportRevealCaptureTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = coveAndroidComposeRule<ComponentActivity>()
 
     private val app get() = AppManager.getInstance()
     private var walletId: WalletId? = null

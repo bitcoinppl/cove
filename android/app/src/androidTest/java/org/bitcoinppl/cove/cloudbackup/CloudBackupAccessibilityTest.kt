@@ -7,9 +7,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CloudBackupAccessibilityTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Test
     fun asynchronousErrorIsAPoliteLiveRegion() {

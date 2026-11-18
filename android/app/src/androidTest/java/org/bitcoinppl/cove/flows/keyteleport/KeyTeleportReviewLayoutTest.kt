@@ -12,7 +12,6 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -27,6 +26,7 @@ import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.WithFontScale
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.textLayoutProblem
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -54,7 +54,7 @@ import org.junit.Test
  */
 class KeyTeleportReviewLayoutTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = coveAndroidComposeRule<ComponentActivity>()
 
     // set once setUp's guards pass, so a skipped test never ends a session it found
     private var ownsReceiveSession = false

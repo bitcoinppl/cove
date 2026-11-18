@@ -5,11 +5,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.WalletManagerReconcileMessage
 import org.junit.Before
@@ -18,7 +18,7 @@ import org.junit.Test
 
 class SelectedWalletScreenTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Before
     fun bootstrapRustRuntime() {

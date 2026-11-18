@@ -1,9 +1,9 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.Route
 import org.junit.Assert.assertTrue
@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SelectedWalletContainerRecoveryTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Before
     fun bootstrapRustRuntime() {

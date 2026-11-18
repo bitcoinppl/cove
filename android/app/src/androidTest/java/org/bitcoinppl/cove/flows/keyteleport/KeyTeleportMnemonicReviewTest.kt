@@ -9,7 +9,6 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,6 +20,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -52,7 +52,7 @@ import org.junit.Test
  */
 class KeyTeleportMnemonicReviewTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = coveAndroidComposeRule<ComponentActivity>()
 
     // set once setUp's guards pass, so a skipped test never ends a session or deletes a wallet it found
     private var ownsReceiveSession = false

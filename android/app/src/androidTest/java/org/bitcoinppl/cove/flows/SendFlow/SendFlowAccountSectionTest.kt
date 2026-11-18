@@ -3,13 +3,13 @@
 package org.bitcoinppl.cove.flows.SendFlow
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import org.bitcoinppl.cove.flows.SendFlow.Common.SEND_FLOW_ACCOUNT_HOT_ICON_TAG
 import org.bitcoinppl.cove.flows.SendFlow.Common.SEND_FLOW_ACCOUNT_SHIELD_ICON_TAG
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletType
@@ -20,7 +20,7 @@ import org.junit.Test
 
 class SendFlowAccountSectionTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     @Before
     fun bootstrap() {

@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Dp
@@ -22,6 +21,7 @@ import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.LayoutRegressionTest
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.saveNodeScreenshotToLayoutAudit
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.NumberOfBip39Words
@@ -34,7 +34,7 @@ import org.junit.rules.RuleChain
 
 @LayoutRegressionTest
 class HotWalletCreateScreenTest {
-    private val compose = createAndroidComposeRule<ComponentActivity>()
+    private val compose = coveAndroidComposeRule<ComponentActivity>()
 
     @get:Rule
     val rules: RuleChain =

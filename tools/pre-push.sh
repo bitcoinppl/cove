@@ -7,7 +7,7 @@
 # Usage: just pre-push [<revision>...]
 # The revisions select the commits to check, as `git log` takes them; with none it checks the
 # commits on HEAD that origin/master doesn't have. Skip some checks with
-# COVE_PRE_PUSH_SKIP=rustfmt,qa,bindings,swiftformat,ktlint (any of them, or `all`)
+# COVE_PRE_PUSH_SKIP=rustfmt,qa,bindings,swiftformat,ktlint,compose-rules (any of them, or `all`)
 #
 # Exit codes, which the git hook and other callers rely on:
 #   0  every check that ran passed, or the commits need none
@@ -139,6 +139,12 @@ needs_rustfmt() {
     fi
 }
 
+needs_python3() {
+    if ! have python3; then
+        echo "python3 isn't installed"
+    fi
+}
+
 needs_cargo_and_just() {
     if ! have cargo; then
         echo "cargo isn't installed"
@@ -225,6 +231,13 @@ fi
 # ktlint job, its ktlint step; detekt stays in CI, since it compiles the app first
 if [ "$run_ktlint" = true ]; then
     run_check ktlint needs_gradle_and_just "run 'just fmt-android'" just ktlint --offline
+fi
+
+# ktlint job, its Compose test rules step
+if [ "$run_ktlint" = true ]; then
+    run_check compose-rules needs_python3 \
+        "make each rule with coveComposeRule or coveAndroidComposeRule, see android/app/src/androidTest/java/org/bitcoinppl/cove/test/CoveComposeRule.kt" \
+        python3 -I .github/scripts/ci_compose_rules.py
 fi
 
 # compile-android's and compile-ios's bindings checks, from a host build instead of device builds

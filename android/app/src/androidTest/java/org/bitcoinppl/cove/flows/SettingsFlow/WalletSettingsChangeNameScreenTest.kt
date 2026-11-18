@@ -2,13 +2,13 @@ package org.bitcoinppl.cove.flows.SettingsFlow
 
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -18,7 +18,7 @@ import org.junit.Test
 
 class WalletSettingsChangeNameScreenTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private lateinit var manager: WalletManager
 

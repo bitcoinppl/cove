@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -36,6 +35,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.awaitCancellation
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -68,7 +68,7 @@ import org.junit.Test
  */
 class LockAwareWindowsTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = coveAndroidComposeRule<ComponentActivity>()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private var shown by mutableStateOf<LockAwareWindow?>(null)

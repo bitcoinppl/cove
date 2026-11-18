@@ -3,7 +3,6 @@ package org.bitcoinppl.cove.secretwords
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
@@ -14,6 +13,7 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.enterPinDigits
@@ -40,7 +40,7 @@ import org.junit.Test
  */
 class SecretWordsLockTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = coveAndroidComposeRule<ComponentActivity>()
 
     private lateinit var walletId: WalletId
 

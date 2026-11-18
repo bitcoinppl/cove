@@ -14,7 +14,6 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupActionEntry
@@ -61,7 +61,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CloudBackupDialogContractTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = coveComposeRule()
 
     private val dispatched = mutableListOf<CloudBackupManagerAction>()
     private var detail by mutableStateOf<CloudBackupScreen?>(null)
