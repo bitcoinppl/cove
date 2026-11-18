@@ -5,3 +5,9 @@
 # CoveUITests or CoveCloudBackupUITests, an issue for its fix, the last day it may stay quarantined
 # and why. `cargo xtask ios-quarantine check` fails once that day has passed: fix the test and
 # remove its entry, or extend `expires` with a note on the issue saying why
+
+[[test]]
+id = "CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests/testRestoreAllSkipsACloudCopyOfAWalletAlreadyOnDevice"
+issue = "https://github.com/bitcoinppl/cove/issues/1201"
+expires = 2026-12-31
+reason = "A Restore All tap sometimes starts no batch, so the download hold is never reached"
