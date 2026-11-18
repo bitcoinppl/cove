@@ -216,15 +216,12 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      # restores the Gradle User Home that CI's compile-android job writes on master, so the job
+      # restores the Gradle User Home that CI's compile-android job saves on master, so the job
       # rarely downloads the Kotlin compiler from its GitHub release redirect, which can 504;
-      # read-only so the nightly master run doesn't save a different set under the shared key
-      - name: Setup Gradle
+      # only compile-android saves, so every entry holds what its compile and tests download
+      - name: Restore Gradle User Home and set up Gradle
         if: steps.shard.outputs.run == 'true'
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-          cache-read-only: true
+        uses: ./.github/actions/gradle-home
 
       - name: Install build dependencies
         if: steps.shard.outputs.run == 'true'

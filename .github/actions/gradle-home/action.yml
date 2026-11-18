@@ -1,0 +1,55 @@
+name: Gradle User Home
+description: >-
+  Restores the Gradle User Home that CI's compile-android job saves on master, then sets up Gradle
+  with its own caching off. Set up Java first. A job that saves runs `./gradlew --stop` and
+  actions/cache/save with the `key` output after its last Gradle step, as compile-android does
+
+outputs:
+  key:
+    description: The cache key for this checkout's Gradle build
+    value: ${{ steps.key.outputs.key }}
+  cache-hit:
+    description: "'true' when the restore matched the key exactly, not through a restore key"
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # hashes what decides the downloaded dependencies: the wrapper's Gradle version and the build
+    # scripts with their plugin and library versions, minus versionCode and versionName, so a
+    # release bump no longer moves every run that hasn't caught up with it onto a key no entry
+    # has yet
+    - name: Compute the Gradle User Home cache key
+      id: key
+      shell: bash
+      run: |
+        hash="$(
+          {
+            cat android/gradle/wrapper/gradle-wrapper.properties android/gradle.properties \
+              android/settings.gradle.kts android/build.gradle.kts
+            grep -Ev '^[[:space:]]*version(Code|Name)[[:space:]]*=' android/app/build.gradle.kts
+          } | sha256sum | cut -c1-16
+        )"
+
+        echo "key=gradle-home-v1-$RUNNER_OS-$hash" >>"$GITHUB_OUTPUT"
+        echo "prefix=gradle-home-v1-$RUNNER_OS-" >>"$GITHUB_OUTPUT"
+
+    # the restore key falls back to master's newest entry after a build script change, which
+    # still holds most of the dependencies, the ~57 MB Kotlin compiler among them, whose download
+    # through a GitHub release redirect can 504 and fail the configuration cache store
+    - name: Restore the Gradle User Home
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+
+    # keeps setup-gradle's wrapper validation; its caching stays off, since its MIT basic provider
+    # has no restore keys and its Enhanced provider needs Gradle's proprietary terms
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v6
+      with:
+        cache-disabled: true
