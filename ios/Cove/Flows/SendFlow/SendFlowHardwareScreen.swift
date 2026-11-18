@@ -138,8 +138,13 @@ struct SendFlowHardwareScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
             .background(Color.background)
-            .presentingSheet(sheetPresentation, context: presentationContext)
-            .presentingAlert(alertPresentation, context: presentationContext, defaultTitle: "Error")
+            .presentingSheetAndAlert(
+                sheet: sheetPresentation,
+                sheetContext: presentationContext,
+                alert: alertPresentation,
+                alertContext: presentationContext,
+                defaultTitle: "Error"
+            )
             .fileImporter(
                 isPresented: fileImporterIsPresented,
                 allowedContentTypes: [.plainText, .psbt, .txn],

@@ -218,8 +218,12 @@ private struct CoveMainPresentedContent: View {
             .onChange(of: app.selectedNetwork) { resetIdentity() }
             .onChange(of: scannedCode, onChangeQr)
             .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
-            .presentingAlert($app.alertState, context: presentationContext)
-            .presentingSheet($app.sheetState, context: presentationContext)
+            .presentingSheetAndAlert(
+                sheet: $app.sheetState,
+                sheetContext: presentationContext,
+                alert: $app.alertState,
+                alertContext: presentationContext
+            )
             .onOpenURL(perform: ScanManager.shared.handleFileOpen)
     }
 }

@@ -53,6 +53,13 @@ extension HotWalletImportAlertState: TaggedAlertPresentable {
                 }
             ).eraseToAny()
 
+        case .invalidSeedQr:
+            return AlertBuilder(
+                title: "Invalid QR Code",
+                message: "Please scan a valid seed phrase QR code",
+                actions: singleOkCancel
+            ).eraseToAny()
+
         case let .scanError(error):
             return AlertBuilder(
                 title: "Error Scanning QR Code",
