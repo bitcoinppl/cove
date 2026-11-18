@@ -1902,9 +1902,11 @@ impl IosUiEnvironmentFailure {
             return Some(Self::TestRunnerBootstrap);
         }
 
-        // XCUIApplication.launch() timing out or losing the process, or the app's own
-        // bootstrap watchdog firing on both launches of a UI test's launch helper
+        // XCUIApplication.launch() timing out, waiting on the simulator for the background
+        // assertion it takes before launching, or losing the process, or the app's own bootstrap
+        // watchdog firing on both launches of a UI test's launch helper
         let app_launch_failed = output.contains("Timed out while launching application")
+            || output.contains("Timed out while acquiring background assertion")
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
 
@@ -3091,9 +3093,10 @@ mod tests {
             let launch_timeout = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testCanReachExistingWalletStorageChoices] : Failed to launch <XCUIApplicationImpl: 0x109c16800 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
             let lost_process = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testExchangeUserCanReachFundingAfterBackup] : Application 'org.bitcoinppl.cove' does not have a process ID";
             let watchdog = "OnboardingFullLaunchUITests.swift:290: error: -[CoveUITests.OnboardingFullLaunchUITests testWelcomeScreenShowsFirstLaunchEntryPoint] : failed - App startup timed out on relaunch";
+            let assertion_timeout = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testSoftwareWalletUserCanCreateNewWallet] : Failed to launch <XCUIApplicationImpl: 0x1 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while acquiring background assertion.";
             let runner = "Early unexpected exit, operation never finished bootstrapping - no restart will be attempted. (Underlying Error: Test crashed with signal kill while preparing to run tests.)";
 
-            for output in [launch_timeout, lost_process, watchdog] {
+            for output in [launch_timeout, assertion_timeout, lost_process, watchdog] {
                 assert_eq!(
                     IosUiEnvironmentFailure::detect(output),
                     Some(IosUiEnvironmentFailure::AppLaunch)

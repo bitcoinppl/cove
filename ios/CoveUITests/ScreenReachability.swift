@@ -27,6 +27,10 @@ struct ScreenReachability {
     /// Room for one line of a text at the largest text size, about 50 points, with margin
     private static let endLineHeight: CGFloat = 80
 
+    /// How long a tap that leaves the screen gets to show its outcome before the match is tapped
+    /// again, longer than any screen change takes on a slow CI simulator
+    private static let retapInterval: TimeInterval = 10
+
     let app: XCUIApplication
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
@@ -255,6 +259,36 @@ struct ScreenReachability {
     func reachAndTap(_ query: XCUIElementQuery, _ name: String) -> XCUIElement {
         let element = assertReachable(query, name, needsHit: true)
         element.tap()
+        return element
+    }
+
+    /// Taps a match that leaves the screen, and taps it again while `outcome` hasn't shown and
+    /// the match still takes taps, then fails unless `outcome` shows within `timeout`
+    ///
+    /// A system gesture can take a synthesized tap between its touch down and up, which cancels
+    /// the touch in the app, so the button's action never runs and the screen stays put; a user
+    /// would tap again. A tap the app did take leaves the screen, so the match stops taking taps
+    /// and isn't tapped twice unless the app is slower than `retapInterval` to move on
+    ///
+    /// A retry also passes an action that only works on a second tap, so use this only where the
+    /// test checks a screen's layout and another test proves the action works on one tap, as the
+    /// KeyTeleport receive behavior tests do for Done, which runs the same action as Open Wallet
+    @discardableResult
+    func reachAndTap(
+        _ query: XCUIElementQuery,
+        _ name: String,
+        until outcome: XCUIElement,
+        timeout: TimeInterval = 30
+    ) -> XCUIElement {
+        let element = reachAndTap(query, name)
+        let deadline = Date().addingTimeInterval(timeout)
+        while !outcome.waitForExistence(timeout: Self.retapInterval), Date() < deadline {
+            guard element.exists, element.isHittable else { continue }
+
+            XCTContext.runActivity(named: "\(name) took no tap, tapping again") { _ in element.tap() }
+        }
+
+        XCTAssertTrue(outcome.exists, "\(name) never led to \(outcome)")
         return element
     }
 

@@ -178,8 +178,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30))
         layout.assertScreenFits("imported", texts: ["Wallet imported", message(endingWith: " is ready to use in Cove.")], buttons: [button("Done")])
-        layout.reachAndTap(button("Done"), "imported: Done")
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+        layout.reachAndTap(button("Done"), "imported: Done", until: app.element("selectedWallet.balance"))
 
         // the words onboarding imported are already in the app
         openKeyTeleportReceive()
@@ -193,8 +192,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             texts: ["Wallet already imported", message(endingWith: " is already available in Cove.")],
             buttons: [button("Open Wallet")]
         )
-        layout.reachAndTap(button("Open Wallet"), "already imported: Open Wallet")
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+        layout.reachAndTap(button("Open Wallet"), "already imported: Open Wallet", until: app.element("selectedWallet.balance"))
     }
 
     /// The private key and message reviews keep their text and actions reachable at the largest text
