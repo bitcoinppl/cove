@@ -163,9 +163,11 @@ final class VerifyWordsFullLaunchUITests: XCTestCase {
             switch outcome {
             case .cancelled, .neverSeen:
                 return true
+
             case .checkedAfterCancel:
                 XCTFail("\(context): the cancelled word '\(cancelled)' came back into the slot as checked after it flew home, so its check kept running after the cancel (slot: \(trail))")
                 return false
+
             case .checkedWithoutCancel:
                 // a correct pick late in the burst may still have moved the screen on, which
                 // leaves no word to send the burst at again
