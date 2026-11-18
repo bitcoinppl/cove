@@ -21,6 +21,9 @@ use parking_lot::Mutex;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::io::{BufRead, BufReader};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
@@ -1266,6 +1269,8 @@ fn ios_runtime_version(runtime: &str) -> Vec<u32> {
 }
 
 const IOS_UI_SIMULATOR_NAME: &str = "Cove UI Test";
+// the launchd label of the simulator's Apple Push Notification service daemon
+const SIMULATOR_PUSH_DAEMON: &str = "com.apple.apsd";
 
 /// The simulators one UI test run uses: a golden simulator, and a clone of it for each attempt
 ///
@@ -1277,6 +1282,7 @@ const IOS_UI_SIMULATOR_NAME: &str = "Cove UI Test";
 struct IosUiSimulators<'a> {
     sh: &'a Shell,
     created: Arc<CreatedSimulators>,
+    push_daemon: String,
     _registration: Registration,
 }
 
@@ -1298,9 +1304,14 @@ impl<'a> IosUiSimulators<'a> {
         let (runtime, device) = devices.find(device)?;
         let device_type = &device.device_type;
 
+        // a simulator runs its user's services as the host user, under the host user's uid
+        let uid = cmd!(sh, "id -u").quiet().read().wrap_err("Failed to read the user id")?;
+        let push_daemon = format!("user/{}/{SIMULATOR_PUSH_DAEMON}", uid.trim());
+
         // registered before anything is created, so a signal deletes whatever exists by then
         let created = Arc::new(CreatedSimulators::default());
-        let simulators = Self { sh, _registration: shutdown::register(created.clone()), created };
+        let registration = shutdown::register(created.clone());
+        let simulators = Self { sh, created, push_daemon, _registration: registration };
 
         let name = format!("{IOS_UI_SIMULATOR_NAME} golden (pid {})", std::process::id());
         let golden = cmd!(sh, "xcrun simctl create {name} {device_type} {runtime}")
@@ -1332,8 +1343,31 @@ impl<'a> IosUiSimulators<'a> {
         let clone = clone.trim().to_string();
         self.created.0.lock().clone = Some(clone.clone());
         boot_simulator(self.sh, &clone)?;
+        self.stop_push_daemon(&clone);
 
         Ok(clone)
+    }
+
+    /// Boots the clone's push daemon out until its next boot
+    ///
+    /// A simulator has no device identity to sign in to Apple's push service with, so its apsd
+    /// retries the connection as fast as it can for as long as the simulator runs, logging about
+    /// 5,000 lines a second. On a 3-core hosted runner apsd and the simulator's diagnosticd
+    /// writing its log took about one core between them, which slowed Xcode's app launches past
+    /// XCTest's fixed 60-second launch timeout. Nothing under test uses push notifications
+    ///
+    /// Best effort, since a test still runs, only more slowly, with apsd running. Each boot
+    /// starts it again, and disabling it in the golden simulator didn't carry over to clones
+    fn stop_push_daemon(&self, udid: &str) {
+        let push_daemon = &self.push_daemon;
+        let stopped = cmd!(self.sh, "xcrun simctl spawn {udid} launchctl bootout {push_daemon}")
+            .quiet()
+            .ignore_stdout()
+            .run();
+
+        if let Err(error) = stopped {
+            print_warning(&format!("Failed to stop the simulator's push daemon: {error}"));
+        }
     }
 
     fn delete_clone(&mut self) {
@@ -1542,27 +1576,23 @@ fn run_ios_ui_run(
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
-        let output = test_cmd
-            .quiet()
-            .ignore_status()
-            .output()
+        let outcome = run_ui_test_attempt(sh, test_cmd.into())
             .wrap_err_with(|| format!("Failed to run iOS UI {label}"))?;
 
-        if output.status.success() {
+        let Err(failure) = outcome else {
             if let Some(artifacts) = &artifacts {
                 artifacts.discard_passing_result();
             }
             print_success(&format!("iOS UI {label} passed"));
 
             return Ok(());
-        }
+        };
 
         // collected before a retry or the next run deletes the simulator
         if let Some(artifacts) = &artifacts {
             artifacts.collect_app_logs(sh, &udid, run.suite, started);
         }
 
-        let failure = XcodebuildFailure::from_output(output)?;
         retry_reason = failure.environment_failure();
 
         if retry_reason.is_some() && attempt < IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
@@ -1770,6 +1800,87 @@ impl IosUiAttemptArtifacts {
     }
 }
 
+/// Runs one attempt's `xcodebuild`, stopping it once a test reports a launch Xcode lost, since
+/// every later launch in that session waits on the lost one; the tests it stopped before they ran
+/// count as not passed, so a retry runs them on a fresh simulator
+fn run_ui_test_attempt(
+    sh: &Shell,
+    mut command: Command,
+) -> Result<std::result::Result<(), XcodebuildFailure>> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .wrap_err("Failed to start xcodebuild")?;
+
+    let stdout = child.stdout.take().context("xcodebuild has no stdout")?;
+    let stderr = child.stderr.take().context("xcodebuild has no stderr")?;
+
+    // read on a thread of its own, so neither pipe fills up and blocks xcodebuild
+    let (stderr_lines, stderr_received) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stderr).split(b'\n').map_while(std::io::Result::ok) {
+            if stderr_lines.send(String::from_utf8_lossy(&line).into_owned()).is_err() {
+                return;
+            }
+        }
+    });
+
+    let mut stdout_text = String::new();
+    let mut stopped = false;
+    for line in BufReader::new(stdout).split(b'\n') {
+        let line = line.wrap_err("Failed to read xcodebuild's output")?;
+        let line = String::from_utf8_lossy(&line);
+        stdout_text.push_str(&line);
+        stdout_text.push('\n');
+
+        let launch_lost = test_errors(&line)
+            .any(|(_, message)| IosUiEnvironmentFailure::launch_lost_by_xcode(message));
+
+        if launch_lost {
+            print_info("Stopping xcodebuild, since Xcode lost an app launch");
+            stop_xcodebuild(sh, &mut child)?;
+            stopped = true;
+            break;
+        }
+    }
+
+    let status = child.wait().wrap_err("Failed to wait for xcodebuild")?;
+    if status.success() && !stopped {
+        return Ok(Ok(()));
+    }
+
+    // a helper xcodebuild started can outlive it with stderr still open, so stop collecting
+    // once no line has come for a few seconds
+    let mut stderr_text = String::new();
+    while let Ok(line) = stderr_received.recv_timeout(Duration::from_secs(5)) {
+        stderr_text.push_str(&line);
+        stderr_text.push('\n');
+    }
+
+    Ok(Err(XcodebuildFailure { status, stdout: stdout_text, stderr: stderr_text }))
+}
+
+/// Interrupts `xcodebuild`, which then finishes writing its result bundle, and kills it if it
+/// hasn't exited within a minute
+fn stop_xcodebuild(sh: &Shell, child: &mut Child) -> Result<()> {
+    let pid = child.id().to_string();
+    if let Err(error) = cmd!(sh, "kill -INT {pid}").quiet().run() {
+        print_warning(&format!("Failed to interrupt xcodebuild: {error}"));
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while Instant::now() < deadline {
+        if child.try_wait().wrap_err("Failed to check on xcodebuild")?.is_some() {
+            return Ok(());
+        }
+
+        std::thread::sleep(Duration::from_millis(250));
+    }
+
+    child.kill().wrap_err("Failed to kill xcodebuild")
+}
+
 struct XcodebuildFailure {
     status: std::process::ExitStatus,
     stdout: String,
@@ -1777,16 +1888,6 @@ struct XcodebuildFailure {
 }
 
 impl XcodebuildFailure {
-    fn from_output(output: std::process::Output) -> Result<Self> {
-        Ok(Self {
-            status: output.status,
-            stdout: String::from_utf8(output.stdout)
-                .wrap_err("Failed to parse xcodebuild stdout")?,
-            stderr: String::from_utf8(output.stderr)
-                .wrap_err("Failed to parse xcodebuild stderr")?,
-        })
-    }
-
     /// The simulator failure to retry the run for, unless a test also failed for a reason of
     /// its own, since a retry could pass that test on the second try
     ///
@@ -1902,11 +2003,9 @@ impl IosUiEnvironmentFailure {
             return Some(Self::TestRunnerBootstrap);
         }
 
-        // XCUIApplication.launch() timing out, waiting on the simulator for the background
-        // assertion it takes before launching, or losing the process, or the app's own bootstrap
-        // watchdog firing on both launches of a UI test's launch helper
-        let app_launch_failed = output.contains("Timed out while launching application")
-            || output.contains("Timed out while acquiring background assertion")
+        // XCUIApplication.launch() losing its launch in Xcode or losing the process, or the
+        // app's own bootstrap watchdog firing on both launches of a UI test's launch helper
+        let app_launch_failed = Self::launch_lost_by_xcode(output)
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
 
@@ -1927,6 +2026,20 @@ impl IosUiEnvironmentFailure {
 }
 
 impl IosUiEnvironmentFailure {
+    /// Whether XCUIApplication.launch() gave up on a launch Xcode never finished: timing out on
+    /// the launch, or on the background assertion the simulator takes before launching, or
+    /// asking Xcode about a launch it no longer tracks, as the launch after a timed-out one did in
+    /// the same session
+    ///
+    /// Xcode keeps working on a timed-out launch, so every later launch in that `xcodebuild`
+    /// session waits on it, and one waited out its test's whole 25-minute allowance before
+    /// failing with `Failed to get launch progress for <XCUIApplicationImpl ...>`
+    fn launch_lost_by_xcode(output: &str) -> bool {
+        output.contains("Timed out while launching application")
+            || output.contains("Timed out while acquiring background assertion")
+            || output.contains("Failed to get launch progress for")
+    }
+
     /// Whether Xcode lost an app it launched for a test before resuming it, from its launcher's
     /// `Failed to send signal 19 to process 10281: 3`
     ///
@@ -3086,7 +3199,12 @@ mod tests {
     }
 
     mod ui_environment_failure {
-        use crate::ios::{IosUiEnvironmentFailure, IosUiRun, IosUiSuite, XcodebuildFailure};
+        use crate::ios::{
+            run_ui_test_attempt, IosUiEnvironmentFailure, IosUiRun, IosUiSuite, XcodebuildFailure,
+        };
+        use std::process::Command;
+        use std::time::{Duration, Instant};
+        use xshell::Shell;
 
         #[test]
         fn retries_simulator_failures_seen_in_runs() {
@@ -3177,6 +3295,69 @@ mod tests {
 
         /// The two class runs the Nov 18 2026 nightly lost to a launch timeout followed by an
         /// error about the app having no process, with their lines as xcodebuild printed them
+        /// The Nov 18 2026 class run whose second launch waited on the first, timed-out one for
+        /// its test's whole allowance, with no lost-launch signal in Xcode's output
+        #[test]
+        fn a_launch_waiting_on_a_timed_out_one_is_the_simulators() {
+            let error = |method: &str, message: &str| {
+                format!(
+                    "CloudBackupHostUITestSupport.swift:22: error: -[CoveCloudBackupUITests.CloudBackupOnboardingLateOfferFullAppUITests {method}] : {message}"
+                )
+            };
+            let stdout = [
+                error(
+                    "testLateDiscoveryOffersRestoreDuringHardwareImport",
+                    "Failed to launch <XCUIApplicationImpl: 0x104863ac0 org.bitcoinppl.cove at CoveCloudBackupUITestHost.app> via Xcode: Timed out while launching application via Xcode.",
+                ),
+                error(
+                    "testLateDiscoveryOffersRestoreDuringSoftwareImport",
+                    "Failed to get launch progress for <XCUIApplicationImpl: 0x104863ac0 org.bitcoinppl.cove at CoveCloudBackupUITestHost.app>: No failure details provided",
+                ),
+            ];
+            let failure = XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout: stdout.join("\n"),
+                stderr: String::new(),
+            };
+
+            assert_eq!(failure.environment_failure(), Some(IosUiEnvironmentFailure::AppLaunch));
+        }
+
+        #[test]
+        fn an_attempt_stops_once_xcode_loses_a_launch() {
+            let sh = Shell::new().unwrap();
+            let lost = "FullLaunchSupport.swift:10: error: -[CoveUITests.RenameWalletFullLaunchUITests testRename] : Failed to launch <XCUIApplicationImpl: 0x1 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
+
+            // stands in for an xcodebuild whose next launch hangs after the lost one
+            let mut hung = Command::new("sh");
+            hung.args(["-c", &format!("echo started; echo '{lost}'; exec sleep 600")]);
+
+            let started = Instant::now();
+            let failure = run_ui_test_attempt(&sh, hung).unwrap().unwrap_err();
+
+            assert!(started.elapsed() < Duration::from_secs(30), "{:?}", started.elapsed());
+            assert!(!failure.status.success());
+            assert_eq!(failure.stdout, format!("started\n{lost}\n"));
+            assert_eq!(failure.environment_failure(), Some(IosUiEnvironmentFailure::AppLaunch));
+        }
+
+        #[test]
+        fn an_attempt_keeps_the_output_of_a_failing_run_to_its_end() {
+            let sh = Shell::new().unwrap();
+            let mut failing = Command::new("sh");
+            failing.args(["-c", "echo one; echo two >&2; echo three; exit 65"]);
+
+            let failure = run_ui_test_attempt(&sh, failing).unwrap().unwrap_err();
+
+            assert_eq!(failure.status.code(), Some(65));
+            assert_eq!(failure.stdout, "one\nthree\n");
+            assert_eq!(failure.stderr, "two\n");
+
+            let mut passing = Command::new("sh");
+            passing.args(["-c", "echo ok"]);
+            assert!(run_ui_test_attempt(&sh, passing).unwrap().is_ok());
+        }
+
         #[test]
         fn a_launch_xcode_could_not_resume_retries_the_errors_about_its_missing_app() {
             let launch_timeout = |class: &str, method: &str| {
