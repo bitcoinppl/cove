@@ -447,6 +447,14 @@ private struct LargeTextLayout {
     /// Inside the Form's 16 to 20 point side padding, so a drag there lands on no row's action
     private static let dragMargin: CGFloat = 8
 
+    /// About how far a touch moves before a scroll view takes it as a drag, added to each drag so
+    /// the content moves about as far as asked
+    private static let touchSlop: CGFloat = 10
+
+    /// How far past the edge of the readable area a drag aims, so a text that fits with little to
+    /// spare lands inside it rather than on its edge
+    private static let scrollRoom: CGFloat = 8
+
     let app: XCUIApplication
     let robot: CloudBackupHostRobot
 
@@ -571,9 +579,10 @@ private struct LargeTextLayout {
     /// an action until it takes a tap there
     ///
     /// The robot's scroll stops once the element's center can take a tap, which leaves a tall
-    /// row or a text half under the navigation bar, so short drags then move it the rest of the
-    /// way. A text or a row that takes no taps is never hittable, so it scrolls until it shows
-    /// instead
+    /// row or a text half under the navigation bar, so drags measured from its frame then move it
+    /// the rest of the way. A fixed step longer than the room the element leaves in the readable
+    /// area swings it from under the bar to past the bottom and back on every drag. A text or a
+    /// row that takes no taps is never hittable, so it scrolls until it shows instead
     private func scrollWhollyIntoView(_ element: XCUIElement, _ name: String, needsHit: Bool, initialWait: TimeInterval) {
         if needsHit {
             robot.scrollToHittable(element, initialWait: initialWait)
@@ -582,7 +591,7 @@ private struct LargeTextLayout {
         }
 
         for _ in 0 ..< 6 where !isWhollyReadable(element) {
-            drag(revealingContentBelow: element.frame.maxY > readableArea.maxY)
+            drag(by: scrollDistance(showing: element.frame, in: readableArea))
         }
 
         if !isWhollyReadable(element) { robot.attachScreen(named: "\(name) clipped") }
@@ -640,13 +649,32 @@ private struct LargeTextLayout {
         return CGRect(x: window.minX, y: barBottom, width: window.width, height: window.maxY - barBottom)
     }
 
-    /// Drags the screen by a fifth of its height along its leading margin
-    private func drag(revealingContentBelow: Bool) {
+    /// How far to scroll so `frame` lies inside `area`, positive to bring content below into view,
+    /// or zero when it already lies there from top to bottom
+    ///
+    /// An element taller than the area can't fit, so it is dragged until its top reaches the area
+    /// and the caller reports it
+    private func scrollDistance(showing frame: CGRect, in area: CGRect) -> CGFloat {
+        let room = max(0, min(Self.scrollRoom, (area.height - frame.height) / 2))
+        if frame.minY < area.minY { return frame.minY - area.minY - room }
+        if frame.maxY > area.maxY { return frame.maxY - area.maxY + room }
+
+        return 0
+    }
+
+    /// Drags the screen's content by about `distance` points along its leading margin, positive to
+    /// bring content below into view, and at most a fifth of the window per drag
+    private func drag(by distance: CGFloat) {
         let window = app.windows.firstMatch
+        let height = window.frame.height
+        let step = max(-height / 5, min(height / 5, distance))
+        guard step != 0 else { return }
+
+        let travel = (step + (step < 0 ? -Self.touchSlop : Self.touchSlop)) / max(height, 1)
         let x = Self.dragMargin / max(window.frame.width, 1)
         let point = { (y: CGFloat) in window.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)) }
 
-        let (start, end) = revealingContentBelow ? (point(0.6), point(0.4)) : (point(0.4), point(0.6))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        let start = 0.5 + travel / 2
+        point(start).press(forDuration: 0.05, thenDragTo: point(start - travel), withVelocity: .slow, thenHoldForDuration: 0.1)
     }
 }
