@@ -1516,43 +1516,12 @@ fn run_ios_ui_run(
     let mut label = run.label();
     print_info(&format!("Running iOS UI {label}"));
 
-    let only_testing = &run.only_testing_args();
     let xctestrun = build.xctestrun(run.suite)?;
     let time_limit = &ios_ui_test_time_limit_args();
 
     // xcodebuild hands TEST_RUNNER_ variables to the test runner without the prefix
     let port_base_env = format!("TEST_RUNNER_{PORT_BASE_ENV}");
     let port_base = ports.base().to_string();
-
-    // nothing reads UI test coverage, and collecting it added about 40 seconds after each call
-    // and slowed the instrumented app; the autocreated test plans turn it on otherwise
-    if verbose {
-        let started = Instant::now();
-        let udid = simulators.fresh()?;
-        let destination = format!("platform=iOS Simulator,id={udid}");
-        let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, run.name(), 0));
-        let test_cmd = cmd!(
-            sh,
-            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
-        )
-        .env(&port_base_env, &port_base)
-        .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
-
-        if let Err(error) = test_cmd.run() {
-            if let Some(artifacts) = &artifacts {
-                artifacts.collect_app_logs(sh, &udid, run.suite, started);
-            }
-
-            return Err(error).wrap_err_with(|| format!("Failed to run iOS UI {label}"));
-        }
-
-        if let Some(artifacts) = &artifacts {
-            artifacts.discard_passing_result();
-        }
-        print_success(&format!("iOS UI {label} passed"));
-
-        return Ok(());
-    }
 
     // artifacts stay filed under the first attempt's name, a class's, when a retry runs fewer
     let name = run.name();
@@ -1569,6 +1538,9 @@ fn run_ios_ui_run(
         let destination = format!("platform=iOS Simulator,id={udid}");
 
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, name, attempt));
+
+        // nothing reads UI test coverage, and collecting it added about 40 seconds after each
+        // call and slowed the instrumented app; the autocreated test plans turn it on otherwise
         let test_cmd = cmd!(
             sh,
             "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {time_limit...} {only_testing...}"
@@ -1576,7 +1548,7 @@ fn run_ios_ui_run(
         .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
-        let outcome = run_ui_test_attempt(sh, test_cmd.into())
+        let outcome = run_ui_test_attempt(sh, test_cmd.into(), verbose)
             .wrap_err_with(|| format!("Failed to run iOS UI {label}"))?;
 
         let Err(failure) = outcome else {
@@ -1603,7 +1575,7 @@ fn run_ios_ui_run(
             continue;
         }
 
-        return fail_ios_ui_run(&label, failure);
+        return fail_ios_ui_run(&label, failure, verbose);
     }
 
     unreachable!("iOS UI test retry loop should return from every branch")
@@ -1803,9 +1775,12 @@ impl IosUiAttemptArtifacts {
 /// Runs one attempt's `xcodebuild`, stopping it once a test reports a launch Xcode lost, since
 /// every later launch in that session waits on the lost one; the tests it stopped before they ran
 /// count as not passed, so a retry runs them on a fresh simulator
+///
+/// With `verbose`, it also prints each line of output as it arrives
 fn run_ui_test_attempt(
     sh: &Shell,
     mut command: Command,
+    verbose: bool,
 ) -> Result<std::result::Result<(), XcodebuildFailure>> {
     let mut child = command
         .stdout(Stdio::piped())
@@ -1816,27 +1791,36 @@ fn run_ui_test_attempt(
     let stdout = child.stdout.take().context("xcodebuild has no stdout")?;
     let stderr = child.stderr.take().context("xcodebuild has no stderr")?;
 
-    // read on a thread of its own, so neither pipe fills up and blocks xcodebuild
-    let (stderr_lines, stderr_received) = mpsc::channel();
-    std::thread::spawn(move || {
-        for line in BufReader::new(stderr).split(b'\n').map_while(std::io::Result::ok) {
-            if stderr_lines.send(String::from_utf8_lossy(&line).into_owned()).is_err() {
-                return;
+    // each pipe is read on a thread of its own until it closes, so neither fills up and blocks
+    // xcodebuild, including while it shuts down after an interrupt; both send to one channel, so
+    // lines are collected in the order they came whichever stream they came on
+    let (lines, received) = mpsc::channel();
+    read_lines(stdout, OutputStream::Stdout, verbose, lines.clone());
+    read_lines(stderr, OutputStream::Stderr, verbose, lines);
+
+    let mut output = AttemptOutput::default();
+    let mut stopped = false;
+    let mut checked = Instant::now();
+    loop {
+        // a helper xcodebuild started can outlive it with a pipe still open, and keep writing to
+        // it, so whether xcodebuild exited is checked every second rather than when output ends
+        if checked.elapsed() >= Duration::from_secs(1) {
+            checked = Instant::now();
+            if child.try_wait().wrap_err("Failed to check on xcodebuild")?.is_some() {
+                break;
             }
         }
-    });
 
-    let mut stdout_text = String::new();
-    let mut stopped = false;
-    for line in BufReader::new(stdout).split(b'\n') {
-        let line = line.wrap_err("Failed to read xcodebuild's output")?;
-        let line = String::from_utf8_lossy(&line);
-        stdout_text.push_str(&line);
-        stdout_text.push('\n');
+        let (stream, line) = match received.recv_timeout(Duration::from_secs(1)) {
+            Ok(received) => received,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+        };
 
         let launch_lost = test_errors(&line)
-            .any(|(_, message)| IosUiEnvironmentFailure::launch_lost_by_xcode(message));
+            .any(|(_, message)| IosUiEnvironmentFailure::launch_timed_out(message));
 
+        output.push(stream, &line);
         if launch_lost {
             print_info("Stopping xcodebuild, since Xcode lost an app launch");
             stop_xcodebuild(sh, &mut child)?;
@@ -1846,19 +1830,80 @@ fn run_ui_test_attempt(
     }
 
     let status = child.wait().wrap_err("Failed to wait for xcodebuild")?;
+
+    // collected on success too, so a verbose run prints its last lines before the next starts
+    output.collect_remaining(&received);
+
     if status.success() && !stopped {
         return Ok(Ok(()));
     }
 
-    // a helper xcodebuild started can outlive it with stderr still open, so stop collecting
-    // once no line has come for a few seconds
-    let mut stderr_text = String::new();
-    while let Ok(line) = stderr_received.recv_timeout(Duration::from_secs(5)) {
-        stderr_text.push_str(&line);
-        stderr_text.push('\n');
+    let AttemptOutput { stdout, stderr } = output;
+    Ok(Err(XcodebuildFailure { status, stdout, stderr }))
+}
+
+/// One of a child's output streams
+#[derive(Clone, Copy)]
+enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+/// Reads a pipe's lines on a thread of its own until it closes, sending each to `lines` tagged
+/// with its `stream`, and printing it to that stream too with `echo`
+fn read_lines(
+    pipe: impl std::io::Read + Send + 'static,
+    stream: OutputStream,
+    echo: bool,
+    lines: mpsc::Sender<(OutputStream, String)>,
+) {
+    std::thread::spawn(move || {
+        for line in BufReader::new(pipe).split(b'\n').map_while(std::io::Result::ok) {
+            let line = String::from_utf8_lossy(&line).into_owned();
+            match (echo, stream) {
+                (true, OutputStream::Stdout) => println!("{line}"),
+                (true, OutputStream::Stderr) => eprintln!("{line}"),
+                (false, _) => {}
+            }
+
+            // once the attempt stops listening, the pipe is still read to its end, so a verbose
+            // run prints every line and a helper still writing to it isn't blocked
+            let _ = lines.send((stream, line));
+        }
+    });
+}
+
+/// The output an attempt's `xcodebuild` wrote, by stream
+#[derive(Default)]
+struct AttemptOutput {
+    stdout: String,
+    stderr: String,
+}
+
+impl AttemptOutput {
+    fn push(&mut self, stream: OutputStream, line: &str) {
+        let text = match stream {
+            OutputStream::Stdout => &mut self.stdout,
+            OutputStream::Stderr => &mut self.stderr,
+        };
+
+        text.push_str(line);
+        text.push('\n');
     }
 
-    Ok(Err(XcodebuildFailure { status, stdout: stdout_text, stderr: stderr_text }))
+    /// Appends the lines still to come, until both pipes close, none has come for a few seconds,
+    /// or ten seconds have passed, since a helper `xcodebuild` started can outlive it with a pipe
+    /// still open
+    fn collect_remaining(&mut self, received: &mpsc::Receiver<(OutputStream, String)>) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            let Ok((stream, line)) = received.recv_timeout(left.min(Duration::from_secs(5))) else {
+                return;
+            };
+
+            self.push(stream, &line);
+        }
+    }
 }
 
 /// Interrupts `xcodebuild`, which then finishes writing its result bundle, and kills it if it
@@ -1896,18 +1941,27 @@ impl XcodebuildFailure {
     /// an error line, is its own
     ///
     /// XCTest's errors about an app with no process count as the simulator's only in a run where
-    /// Xcode lost an app it launched before resuming it, since that is when they were seen
+    /// Xcode lost an app it launched before resuming it, since that is when they were seen. Its
+    /// error about launch progress counts as the simulator's only after a launch timed out earlier
+    /// in the run, since it also follows a test running out its own time allowance during a launch
     fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
         let outputs = [self.stdout.as_str(), self.stderr.as_str()];
         let failure = outputs.into_iter().find_map(IosUiEnvironmentFailure::detect)?;
         let launch_lost = outputs.into_iter().any(IosUiEnvironmentFailure::launch_not_resumed);
 
         let mut failed_by_environment = BTreeMap::<(&str, &str), bool>::new();
-        for (test, message) in outputs.into_iter().flat_map(test_errors) {
-            failed_by_environment.entry(test).or_insert_with(|| {
-                IosUiEnvironmentFailure::detect(message).is_some()
-                    || (launch_lost && IosUiEnvironmentFailure::app_without_process(message))
-            });
+        for output in outputs {
+            let mut launch_timed_out = false;
+            for (test, message) in test_errors(output) {
+                failed_by_environment.entry(test).or_insert_with(|| {
+                    IosUiEnvironmentFailure::detect(message).is_some()
+                        || (launch_lost && IosUiEnvironmentFailure::app_without_process(message))
+                        || (launch_timed_out
+                            && IosUiEnvironmentFailure::launch_progress_lost(message))
+                });
+
+                launch_timed_out |= IosUiEnvironmentFailure::launch_timed_out(message);
+            }
         }
 
         let failed = test_cases(&self.stdout, "failed").chain(tests_restarted(&self.stdout));
@@ -2005,7 +2059,7 @@ impl IosUiEnvironmentFailure {
 
         // XCUIApplication.launch() losing its launch in Xcode or losing the process, or the
         // app's own bootstrap watchdog firing on both launches of a UI test's launch helper
-        let app_launch_failed = Self::launch_lost_by_xcode(output)
+        let app_launch_failed = Self::launch_timed_out(output)
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
 
@@ -2026,18 +2080,23 @@ impl IosUiEnvironmentFailure {
 }
 
 impl IosUiEnvironmentFailure {
-    /// Whether XCUIApplication.launch() gave up on a launch Xcode never finished: timing out on
-    /// the launch, or on the background assertion the simulator takes before launching, or
-    /// asking Xcode about a launch it no longer tracks, as the launch after a timed-out one did in
-    /// the same session
+    /// Whether XCUIApplication.launch() gave up on a launch Xcode never finished, timing out on
+    /// the launch or on the background assertion the simulator takes before launching
     ///
     /// Xcode keeps working on a timed-out launch, so every later launch in that `xcodebuild`
     /// session waits on it, and one waited out its test's whole 25-minute allowance before
-    /// failing with `Failed to get launch progress for <XCUIApplicationImpl ...>`
-    fn launch_lost_by_xcode(output: &str) -> bool {
+    /// failing with [`Self::launch_progress_lost`]
+    fn launch_timed_out(output: &str) -> bool {
         output.contains("Timed out while launching application")
             || output.contains("Timed out while acquiring background assertion")
-            || output.contains("Failed to get launch progress for")
+    }
+
+    /// Whether an XCTest error is about a launch Xcode no longer reports progress on, from
+    /// `Failed to get launch progress for <XCUIApplicationImpl ...>: No failure details provided`,
+    /// which follows both a launch waiting on a timed-out one and a test running out its time
+    /// allowance during a launch
+    fn launch_progress_lost(message: &str) -> bool {
+        message.contains("Failed to get launch progress for")
     }
 
     /// Whether Xcode lost an app it launched for a test before resuming it, from its launcher's
@@ -2077,8 +2136,14 @@ impl std::fmt::Display for IosUiEnvironmentFailure {
     }
 }
 
-fn fail_ios_ui_run(label: &str, failure: XcodebuildFailure) -> Result<()> {
-    Err(eyre!("xcodebuild exited with status {}", failure.status)).with_context(|| {
+/// Fails the run with `xcodebuild`'s exit status, and its output unless `verbose` already printed it
+fn fail_ios_ui_run(label: &str, failure: XcodebuildFailure, verbose: bool) -> Result<()> {
+    let error = Err(eyre!("xcodebuild exited with status {}", failure.status));
+    if verbose {
+        return error.wrap_err_with(|| format!("Failed to run iOS UI {label}"));
+    }
+
+    error.with_context(|| {
         format!(
             "Failed to run iOS UI {label}\nstdout:\n{}\nstderr:\n{}",
             non_empty_output(&failure.stdout, "<empty>"),
@@ -3321,24 +3386,74 @@ mod tests {
             };
 
             assert_eq!(failure.environment_failure(), Some(IosUiEnvironmentFailure::AppLaunch));
+
+            // without the timed-out launch before it, the test ran out its own allowance
+            let own_timeout = XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout: stdout[1].clone(),
+                stderr: String::new(),
+            };
+            assert_eq!(own_timeout.environment_failure(), None);
+
+            // nor does a timed-out launch after it
+            let timed_out_later = XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout: [stdout[1].clone(), stdout[0].clone()].join("\n"),
+                stderr: String::new(),
+            };
+            assert_eq!(timed_out_later.environment_failure(), None);
         }
 
         #[test]
-        fn an_attempt_stops_once_xcode_loses_a_launch() {
+        fn an_attempt_stops_once_xcode_loses_a_launch_and_keeps_what_it_prints_after() {
             let sh = Shell::new().unwrap();
             let lost = "FullLaunchSupport.swift:10: error: -[CoveUITests.RenameWalletFullLaunchUITests testRename] : Failed to launch <XCUIApplicationImpl: 0x1 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
 
-            // stands in for an xcodebuild whose next launch hangs after the lost one
+            // stands in for an xcodebuild whose next launch hangs after the lost one, and which
+            // reports more as it shuts down on the interrupt
+            let script = format!(
+                "trap 'echo interrupted; exit 130' INT; echo started; echo '{lost}'; while :; do sleep 1; done"
+            );
             let mut hung = Command::new("sh");
-            hung.args(["-c", &format!("echo started; echo '{lost}'; exec sleep 600")]);
+            hung.args(["-c", &script]);
 
             let started = Instant::now();
-            let failure = run_ui_test_attempt(&sh, hung).unwrap().unwrap_err();
+            let failure = run_ui_test_attempt(&sh, hung, false).unwrap().unwrap_err();
 
             assert!(started.elapsed() < Duration::from_secs(30), "{:?}", started.elapsed());
-            assert!(!failure.status.success());
-            assert_eq!(failure.stdout, format!("started\n{lost}\n"));
+            assert_eq!(failure.status.code(), Some(130));
+            assert_eq!(failure.stdout, format!("started\n{lost}\ninterrupted\n"));
             assert_eq!(failure.environment_failure(), Some(IosUiEnvironmentFailure::AppLaunch));
+        }
+
+        #[test]
+        fn an_attempt_ends_when_xcodebuild_exits_while_a_helper_holds_its_output_open() {
+            let sh = Shell::new().unwrap();
+            let mut silent = Command::new("sh");
+            silent.args(["-c", "sleep 20 & echo done; exit 65"]);
+
+            let started = Instant::now();
+            let failure = run_ui_test_attempt(&sh, silent, false).unwrap().unwrap_err();
+
+            assert!(started.elapsed() < Duration::from_secs(16), "{:?}", started.elapsed());
+            assert_eq!(failure.status.code(), Some(65));
+            assert_eq!(failure.stdout, "done\n");
+
+            // a helper still writing to stdout; each helper outlives its runner by a few seconds,
+            // just long enough to show the runner didn't wait for it
+            let mut writing = Command::new("sh");
+            writing.args([
+                "-c",
+                "(for i in $(seq 70); do echo tick; sleep 0.3; done) & echo done; echo signal >&2; exit 65",
+            ]);
+
+            let started = Instant::now();
+            let failure = run_ui_test_attempt(&sh, writing, false).unwrap().unwrap_err();
+
+            assert!(started.elapsed() < Duration::from_secs(16), "{:?}", started.elapsed());
+            assert_eq!(failure.status.code(), Some(65));
+            assert!(failure.stdout.lines().any(|line| line == "done"), "{}", failure.stdout);
+            assert_eq!(failure.stderr, "signal\n");
         }
 
         #[test]
@@ -3347,7 +3462,7 @@ mod tests {
             let mut failing = Command::new("sh");
             failing.args(["-c", "echo one; echo two >&2; echo three; exit 65"]);
 
-            let failure = run_ui_test_attempt(&sh, failing).unwrap().unwrap_err();
+            let failure = run_ui_test_attempt(&sh, failing, false).unwrap().unwrap_err();
 
             assert_eq!(failure.status.code(), Some(65));
             assert_eq!(failure.stdout, "one\nthree\n");
@@ -3355,7 +3470,7 @@ mod tests {
 
             let mut passing = Command::new("sh");
             passing.args(["-c", "echo ok"]);
-            assert!(run_ui_test_attempt(&sh, passing).unwrap().is_ok());
+            assert!(run_ui_test_attempt(&sh, passing, false).unwrap().is_ok());
         }
 
         #[test]
