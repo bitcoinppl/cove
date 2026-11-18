@@ -89,12 +89,14 @@ fn a_restore_queued_behind_a_prompt_answer_finds_its_enable_running() {
             app.describe()
         );
 
-        app.event("Use Existing, and a Restore queued right behind it", |app| {
-            app.manager().dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+        // queued together, so the Restore is decided in the turn after the answer's and finds
+        // its Enable running only if the answer started that Enable in its own turn
+        app.dispatch_queued(&[
+            CloudBackupManagerAction::AcceptEnablePrompt(
                 CloudBackupEnablePromptChoice::UseExisting,
-            ));
-            app.manager().dispatch(CloudBackupManagerAction::RestoreFromCloudBackup);
-        })
+            ),
+            CloudBackupManagerAction::RestoreFromCloudBackup,
+        ])
         .then_cannot(&[N::TurnOff]);
 
         let outcome = app.last_outcome().expect("the Restore was decided");
