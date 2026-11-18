@@ -181,7 +181,7 @@ Every Rust test run has a hard limit, so a test that hangs fails within minutes 
 | The full-scan tests in `ops::tests::restored_history` | 5 minutes, in periods of 60 seconds |
 | Doctests | 10 minutes, as a step limit in CI and with GNU `timeout` in `just test-gh` |
 | `just ctest` | 20 minutes for the whole run, with GNU `timeout`, since libtest has no per-test limit |
-| CI's `test` jobs | 20 minutes each, and 12 for `tapsigner-emulator`, a cold build included |
+| CI's `test` jobs | 20 minutes for `test (ubuntu-24.04)`, 30 for `test (macos-latest)`, whose hosted runners vary about 4x in speed, and 12 for `tapsigner-emulator`, a cold build included |
 | The nightly model test in `model-nightly.yml` | 90 minutes for the job. It runs one long `cargo test` of `model_sequences` on purpose, so it stays on libtest |
 
 The per-test limits live in [`rust/.config/nextest.toml`](../rust/.config/nextest.toml), with the measurements behind them. On 2026-11-11, p99 was 5 to 7 seconds, and the slowest test outside `restored_history` took 26 seconds even with every core of a 24-core machine busy. Those tests wait on timers and the fake node more than on the CPU, so load stretched them by at most a quarter. The `ci` profile keeps the default profile's limits and doesn't stop at the first failure. When a test needs longer, give it an override with its measured time, as `restored_history` has, rather than raising the default. nextest prints each test's time, so `cargo nextest run --workspace 2>&1 | grep -E 'PASS|SLOW' | sort -t'[' -k2 -r | head` lists the slowest.

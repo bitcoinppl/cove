@@ -501,7 +501,12 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test_macos != 'false') && needs.changes.outputs.test_macos_local != 'true' }}
     runs-on: macos-latest
-    timeout-minutes: 20
+    # hosted macOS runners vary about 4x in speed: over 64 runs from Nov 16 to 18, all full cache
+    # hits, the job took 4 minutes at the fastest, a median of 10 and at most 17, while one runner
+    # was cancelled at 20.5 minutes during the doctest build, its build 2.6x and its tests 1.9x the
+    # median, an estimated 24 to 25 minutes had it finished; ubuntu's slowest was 9. The same commit
+    # then passed in 9 minutes, so a slow run is the runner, not a test, and 30 minutes leaves margin
+    timeout-minutes: 30
     env:
       RUSTFLAGS: -D warnings
     steps: *rust-test-steps
