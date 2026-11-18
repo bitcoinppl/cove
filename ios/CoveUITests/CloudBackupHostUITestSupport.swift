@@ -218,18 +218,39 @@ struct CloudBackupHostRobot {
             XCTFail("the terms screen never appeared")
         }
 
-        [
+        // a box left unchecked keeps Agree disabled, so each box is tapped until it reads as checked
+        for identifier in [
             "onboarding.terms.check.backup",
             "onboarding.terms.check.legal",
             "onboarding.terms.check.financial",
             "onboarding.terms.check.recovery",
             "onboarding.terms.check.agreement",
-            "onboarding.terms.agree",
-        ].forEach { identifier in
-            let element = app.buttons[identifier]
-            scrollToHittable(element)
-            element.tap()
+        ] {
+            let box = app.buttons[identifier]
+            for _ in 0 ..< 3 where !box.isSelected {
+                scrollToHittable(box)
+                box.tap()
+                _ = box.wait(for: \.isSelected, toEqual: true, timeout: 2)
+            }
+
+            XCTAssertTrue(box.isSelected, "terms: \(identifier) never checked")
         }
+
+        let agree = app.buttons["onboarding.terms.agree"]
+        scrollToHittable(agree)
+        XCTAssertTrue(agree.wait(for: \.isEnabled, toEqual: true, timeout: 5), "terms: Agree stayed disabled")
+
+        // Agree sits just above the home indicator, where the simulator's system gesture gate can
+        // swallow a synthesized tap even though the button shows the press, so it is tapped again
+        // while the terms stay on screen
+        let title = app.staticTexts["Terms & Conditions"]
+        for _ in 0 ..< 3 where title.exists {
+            agree.tap()
+            _ = title.waitForNonExistence(timeout: 5)
+        }
+
+        if title.exists { attachScreen(named: "terms stuck") }
+        XCTAssertFalse(title.exists, "terms: Agree never moved past the terms")
     }
 
     func openSettings() {
