@@ -1793,16 +1793,20 @@ impl XcodebuildFailure {
     /// A failed test is the simulator's when its first error is, as the errors after a lost app
     /// follow from it. One whose first error is the test's own, or that failed or crashed without
     /// an error line, is its own
+    ///
+    /// XCTest's errors about an app with no process count as the simulator's only in a run where
+    /// Xcode lost an app it launched before resuming it, since that is when they were seen
     fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
-        let failure = IosUiEnvironmentFailure::detect(&self.stdout)
-            .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))?;
+        let outputs = [self.stdout.as_str(), self.stderr.as_str()];
+        let failure = outputs.into_iter().find_map(IosUiEnvironmentFailure::detect)?;
+        let launch_lost = outputs.into_iter().any(IosUiEnvironmentFailure::launch_not_resumed);
 
         let mut failed_by_environment = BTreeMap::<(&str, &str), bool>::new();
-        let outputs = [self.stdout.as_str(), self.stderr.as_str()];
         for (test, message) in outputs.into_iter().flat_map(test_errors) {
-            failed_by_environment
-                .entry(test)
-                .or_insert_with(|| IosUiEnvironmentFailure::detect(message).is_some());
+            failed_by_environment.entry(test).or_insert_with(|| {
+                IosUiEnvironmentFailure::detect(message).is_some()
+                    || (launch_lost && IosUiEnvironmentFailure::app_without_process(message))
+            });
         }
 
         let failed = test_cases(&self.stdout, "failed").chain(tests_restarted(&self.stdout));
@@ -1908,11 +1912,43 @@ impl IosUiEnvironmentFailure {
             return Some(Self::AppLaunch);
         }
 
+        if Self::launch_not_resumed(output) {
+            return Some(Self::AppLaunch);
+        }
+
         // the clone was booted, but CoreSimulator briefly lost track of the iOS runtime and with
         // it the clone, which happened once in 32 tests on a busy local machine
         output
             .contains("Unable to find a device matching the provided destination specifier")
             .then_some(Self::MissingSimulator)
+    }
+}
+
+impl IosUiEnvironmentFailure {
+    /// Whether Xcode lost an app it launched for a test before resuming it, from its launcher's
+    /// `Failed to send signal 19 to process 10281: 3`
+    ///
+    /// Xcode starts the app suspended and resumes it with SIGCONT, signal 19 on Darwin, so a
+    /// process that is gone by then (errno 3, ESRCH) was killed before any of the app's code ran
+    /// and can't have crashed on its own
+    fn launch_not_resumed(output: &str) -> bool {
+        output.contains("Failed to send signal 19 to process")
+    }
+
+    /// Whether an XCTest error is about an app that has no process, pid 0, from
+    /// `Failed to get background assertion for target app with pid 0: No failure details provided`
+    /// when launching it, or
+    /// `Failed to terminate org.bitcoinppl.cove:75972: Failed to terminate org.bitcoinppl.cove:0`
+    /// when stopping the last test's app before launching it again
+    ///
+    /// The pid is the one Xcode's launch holds, and an app that launched and later crashed had a
+    /// process, so its launch holds that pid instead. Stopping the app is a kill it can't block,
+    /// so a stop that fails because Xcode holds no process is never the app's doing
+    fn app_without_process(message: &str) -> bool {
+        let message = message.trim_end();
+        let no_assertion = message.contains("background assertion for target app with pid 0:");
+        let no_terminate = message.starts_with("Failed to terminate ") && message.ends_with(":0");
+        no_assertion || no_terminate
     }
 }
 
@@ -3134,6 +3170,82 @@ mod tests {
                 format!("A.swift:40: error: {test} : {lost_app}"),
             ];
             assert_eq!(failure(&failed_without_error).environment_failure(), None);
+        }
+
+        /// The two class runs the Nov 18 2026 nightly lost to a launch timeout followed by an
+        /// error about the app having no process, with their lines as xcodebuild printed them
+        #[test]
+        fn a_launch_xcode_could_not_resume_retries_the_errors_about_its_missing_app() {
+            let launch_timeout = |class: &str, method: &str| {
+                format!(
+                    "CloudBackupHostUITestSupport.swift:22: error: -[CoveCloudBackupUITests.{class} {method}] : Failed to launch <XCUIApplicationImpl: 0x102fb2880 org.bitcoinppl.cove at /Users/runner/Library/Developer/Xcode/DerivedData/Cove-cove-ui-tests/Build/Products/Debug-iphonesimulator/CoveCloudBackupUITestHost.app> via Xcode: Timed out while launching application via Xcode."
+                )
+            };
+            let error = |class: &str, method: &str, message: &str| {
+                format!(
+                    "CloudBackupHostUITestSupport.swift:22: error: -[CoveCloudBackupUITests.{class} {method}] : {message}"
+                )
+            };
+            let not_resumed = "Details:  DTServiceHub - Error resuming pid 10281 'Error Domain=DTXMessage Code=1 \"Failed to send signal 19 to process 10281: 3\" UserInfo={NSLocalizedDescription=Failed to send signal 19 to process 10281: 3}'";
+            let failure = |stdout: &[String], stderr: &str| XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout: stdout.join("\n"),
+                stderr: stderr.to_owned(),
+            };
+
+            let late_offer = "CloudBackupOnboardingLateOfferFullAppUITests";
+            let no_assertion = [
+                launch_timeout(late_offer, "testLateDiscoveryOffersRestoreDuringHardwareImport"),
+                error(
+                    late_offer,
+                    "testLateDiscoveryOffersRestoreDuringSoftwareImport",
+                    "Failed to get background assertion for target app with pid 0: No failure details provided",
+                ),
+            ];
+            assert_eq!(
+                failure(&no_assertion, not_resumed).environment_failure(),
+                Some(IosUiEnvironmentFailure::AppLaunch)
+            );
+
+            let export = "PrivateKeyExportFullAppUITests";
+            let no_terminate = [
+                launch_timeout(export, "testExportWithoutAppPinIsRefused"),
+                error(
+                    export,
+                    "testRevealCopiesTheKeyAndKeyTeleportNeedsAFreshMainPin",
+                    "Failed to terminate org.bitcoinppl.cove:75972: Failed to terminate org.bitcoinppl.cove:0",
+                ),
+            ];
+            assert_eq!(
+                failure(&no_terminate, not_resumed).environment_failure(),
+                Some(IosUiEnvironmentFailure::AppLaunch)
+            );
+
+            // a lost launch alone is the simulator's too
+            assert_eq!(
+                failure(&no_terminate[1..], not_resumed).environment_failure(),
+                Some(IosUiEnvironmentFailure::AppLaunch)
+            );
+
+            // without Xcode losing a launch, an app with no process could be one the test lost
+            assert_eq!(failure(&no_assertion, "").environment_failure(), None);
+            assert_eq!(failure(&no_terminate, "").environment_failure(), None);
+
+            // an app that launched and then failed to stop had a process, so it is the app's
+            let stuck = [
+                no_terminate[0].clone(),
+                error(
+                    export,
+                    "testRevealCopiesTheKeyAndKeyTeleportNeedsAFreshMainPin",
+                    "Failed to terminate org.bitcoinppl.cove:75972: Failed to terminate org.bitcoinppl.cove:75972",
+                ),
+            ];
+            assert_eq!(failure(&stuck, not_resumed).environment_failure(), None);
+
+            // a test's own failure still blocks the retry
+            let own =
+                [no_assertion[1].clone(), error(late_offer, "testOther", "XCTAssertTrue failed")];
+            assert_eq!(failure(&own, not_resumed).environment_failure(), None);
         }
 
         #[test]
