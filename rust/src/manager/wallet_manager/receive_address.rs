@@ -4,6 +4,8 @@ use std::time::Duration;
 use cove_types::address::AddressInfoWithDerivation;
 
 #[cfg(debug_assertions)]
+pub(crate) mod ui_test_open_failure;
+#[cfg(debug_assertions)]
 pub(crate) mod ui_test_refresh_failure;
 
 const CACHE_WINDOW: Duration = Duration::from_secs(5 * 60);

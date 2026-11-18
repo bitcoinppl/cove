@@ -59,6 +59,7 @@ env:
   IOS_UI_SUITES: >-
     CoveUITests/OnboardingFullLaunchUITests,
     CoveUITests/ReceiveTextSizeFullLaunchUITests,
+    CoveUITests/ReceiveFailureFullLaunchUITests,
     CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
