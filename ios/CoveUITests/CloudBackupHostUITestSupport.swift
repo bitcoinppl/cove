@@ -322,17 +322,19 @@ struct CloudBackupHostRobot {
         }
     }
 
-    /// Scrolls the current screen until `element` can be tapped
+    /// Scrolls the current screen until `element` can be tapped, with its center below the top
+    /// navigation bar
     func scrollToHittable(_ element: XCUIElement, initialWait: TimeInterval = 5, maxSwipes: Int = 20) {
         // lists only build rows near the screen, so a row further down doesn't exist until a
         // swipe brings it close; wait first for content that is still loading
         _ = element.waitForExistence(timeout: initialWait)
 
         // slow swipes, since a fling at large text sizes can carry a row past the screen, and a
-        // second pass back up for an element the test already scrolled past
+        // second pass back up for an element the test already scrolled past; one behind the bar
+        // is just above, so it scrolls back down at once
         var swipes = 0
-        while !(element.exists && element.isHittable), swipes < maxSwipes * 2 {
-            if swipes < maxSwipes {
+        while !canTakeTap(element), swipes < maxSwipes * 2 {
+            if swipes < maxSwipes, !isBehindTopBar(element) {
                 app.swipeUp(velocity: .slow)
             } else {
                 app.swipeDown(velocity: .slow)
@@ -340,9 +342,47 @@ struct CloudBackupHostRobot {
             swipes += 1
         }
 
-        let reachable = element.exists && element.isHittable
+        let reachable = canTakeTap(element)
         if !reachable { attachScreen(named: "unreachable \(element)") }
         XCTAssertTrue(reachable, "\(element) is not reachable after \(swipes) swipes")
+    }
+
+    /// Whether a tap on `element` reaches it
+    ///
+    /// XCUITest calls an element hittable while any point of it is visible and taps that point.
+    /// For a button scrolled behind the translucent navigation bar with only its edge showing,
+    /// that point is on the bar, which takes the tap, so the button never sees it (#1201)
+    private func canTakeTap(_ element: XCUIElement) -> Bool {
+        element.exists && element.isHittable && !isBehindTopBar(element)
+    }
+
+    /// Whether `element`'s center lies behind the top navigation bar, for an element that isn't
+    /// on the bar itself
+    private func isBehindTopBar(_ element: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+
+        let frame = element.frame
+        let window = app.windows.firstMatch.frame
+        let bars = app.navigationBars.allElementsBoundByIndex
+            .filter { !$0.frame.isEmpty && $0.frame.minY >= 0 && $0.frame.maxY < window.midY }
+
+        if bars.contains(where: { isOnBar(element, frame: frame, bar: $0) }) { return false }
+
+        let barBottom = bars.map(\.frame.maxY).max() ?? window.minY
+        return frame.midY < barBottom
+    }
+
+    /// Whether `element` is one of `bar`'s own controls, such as Back or Done, which are tapped
+    /// on the bar
+    ///
+    /// A row button scrolled under the bar can fit inside its frame, so the element has to be
+    /// found among the bar's descendants
+    private func isOnBar(_ element: XCUIElement, frame: CGRect, bar: XCUIElement) -> Bool {
+        guard bar.frame.insetBy(dx: -1, dy: -1).contains(frame) else { return false }
+
+        return bar.descendants(matching: element.elementType)
+            .allElementsBoundByIndex
+            .contains { $0.frame == frame }
     }
 
     /// Keeps a screenshot and the element tree in the result bundle, since layout failures are
