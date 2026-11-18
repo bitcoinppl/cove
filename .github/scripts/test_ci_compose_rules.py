@@ -145,6 +145,26 @@ class CheckTest(unittest.TestCase):
 
         self.assertEqual(found, [(7, "AndroidComposeTestRule")])
 
+    def test_comments_and_strings_pass(self) -> None:
+        text = """class DocumentedTest {
+    @get:Rule
+    val compose = coveComposeRule() // createComposeRule() uses the wrong dispatcher
+
+    /* outer /* createComposeRule() */ still a comment: createAndroidComposeRule<A>() */
+    val label = "createComposeRule() \\" createAndroidComposeRule<A>()"
+    val raw = \"\"\"runComposeUiTest { }\"\"\"
+    val quote = '"'
+
+    @get:Rule
+    val bare = createComposeRule()
+}
+"""
+        self.write(ANDROID_SOURCES / "androidTest/java/DocumentedTest.kt", text)
+
+        found = [(problem.line, problem.factory) for problem in check(self.root)]
+
+        self.assertEqual(found, [(11, "createComposeRule")])
+
     def test_marker_on_the_line_above_allows_the_default(self) -> None:
         self.write(ANDROID_SOURCES / "androidTest/java/AllowedTest.kt", ALLOWED_TEST)
         self.assertEqual(check(self.root), [])

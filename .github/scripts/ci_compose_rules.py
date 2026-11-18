@@ -10,8 +10,8 @@ helpers in CoveComposeRule.kt pass a StandardTestDispatcher instead, see the not
 that must keep the default needs `// compose-rule-default: <reason>` on the line above it or
 above its annotations
 
-The check reads the source text, so a call inside a block comment that doesn't start its lines with
-`*` is still reported. test_ci_compose_rules.py tests it
+The check blanks out comments and string literals first, so a factory named in a comment or a string
+isn't reported. test_ci_compose_rules.py tests it
 
 Environment:
     GITHUB_ACTIONS  when "true", problems are also printed as workflow error annotations
@@ -75,8 +75,58 @@ def kotlin_files(root: Path) -> Iterator[Path]:
             yield path
 
 
-def is_comment(line: str) -> bool:
-    return line.lstrip().startswith(("//", "*", "/*"))
+def blank(text: str, start: int, end: int, out: list[str]) -> None:
+    """Appends text[start:end] to out with everything but its newlines turned into spaces"""
+    out.append(re.sub(r"[^\n]", " ", text[start:end]))
+
+
+def code_only(text: str) -> str:
+    """The Kotlin source text with its comments and string literals blanked, newlines kept
+
+    Templates inside strings are blanked too: a rule made in one is still a rule, but no test does
+    that, and reading templates would need a real Kotlin lexer
+    """
+    out: list[str] = []
+    index = 0
+    while index < len(text):
+        start = index
+        if text.startswith("//", index):
+            index = text.find("\n", index)
+            index = len(text) if index < 0 else index
+        elif text.startswith("/*", index):
+            # Kotlin block comments nest
+            depth = 0
+            while index < len(text):
+                if text.startswith("/*", index):
+                    depth += 1
+                    index += 2
+                elif text.startswith("*/", index):
+                    depth -= 1
+                    index += 2
+                    if depth == 0:
+                        break
+                else:
+                    index += 1
+        elif text.startswith('"""', index):
+            index = text.find('"""', index + 3)
+            index = len(text) if index < 0 else index + 3
+            # a raw string may end with extra quotes, which belong to it
+            while index < len(text) and text[index] == '"':
+                index += 1
+        elif text[index] in "\"'":
+            quote = text[index]
+            index += 1
+            while index < len(text) and text[index] not in (quote, "\n"):
+                index += 2 if text[index] == "\\" else 1
+            index += 1
+        else:
+            index += 1
+            out.append(text[start])
+            continue
+
+        blank(text, start, min(index, len(text)), out)
+
+    return "".join(out)
 
 
 def skip_space(text: str, index: int) -> int:
@@ -116,12 +166,13 @@ def marker_line(lines: list[str], index: int) -> str:
 
 
 def check_file(path: Path, relative: Path) -> list[Problem]:
-    text = path.read_text()
-    lines = text.splitlines()
+    source = path.read_text()
+    lines = source.splitlines()
+    text = code_only(source)
     problems = []
     for match in FACTORY.finditer(text):
         index = text.count("\n", 0, match.start())
-        if is_comment(lines[index]) or ALLOW_MARKER.search(marker_line(lines, index)):
+        if ALLOW_MARKER.search(marker_line(lines, index)):
             continue
 
         factory = next(group for group in match.groups() if group)
