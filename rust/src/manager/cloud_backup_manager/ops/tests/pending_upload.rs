@@ -572,6 +572,7 @@ async fn pending_upload_verification_survives_restart() {
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
     assert!(manager.pending_verification_completion().is_some());
 
+    shut_down_manager_for_restart(manager).await;
     let restarted_manager = init_manager();
 
     assert!(restarted_manager.pending_verification_completion().is_some());

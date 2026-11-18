@@ -192,6 +192,8 @@ Under nextest no two tests share a process. Each test process gets a temporary d
 
 Until 2026-11-16 a `shared-root-data` test group ran the backup and wallet-data tests one at a time. It predates the per-process data root. When it still held 442 tests, the full suite took 226 to 232 seconds with it and 56 to 64 seconds without it on the same machine. Without it, three runs alongside other work at load 32 to 57, and a run at load 70 with every core busy beside a second copy of the suite, found no test that depends on another.
 
+Within one test process, every Cloud Backup manager reads and writes the same persisted state. A test that simulates an app restart by starting a second manager first passes the old one to `shut_down_manager_for_restart` (`ops::test_support`). The old manager's actors and its pending upload verifier hold it weakly, so they keep running while the test holds it and can settle work through the old manager instead of the new one.
+
 A test that must use something outside its process, such as a fixed port or a fixed path under `/tmp`, should take a free port or a temporary directory instead. If it can't, put just that test in a nextest [test group](https://nexte.st/docs/configuration/test-groups/) with `max-threads = 1`, and explain in a comment what it shares.
 
 ### Time-box debugging
