@@ -52,11 +52,9 @@ final class VerifyWordsFullLaunchUITests: XCTestCase {
                 }
             }
 
-            sendTimedTaps(taps)
-
-            if burst.cancelsFirstWrongPick {
-                assertCancelledWordStaysOut(wrong[0], context: "word #\(wordNumber) after \(burst)")
-            }
+            let context = "word #\(wordNumber) after \(burst)"
+            let cancelled = burst.cancelsFirstWrongPick ? wrong[0] : nil
+            guard sendBurst(taps, cancelling: cancelled, on: wordNumber, of: words.count, context: context) else { return }
 
             wordNumber = settleAndConfirm(wordNumber, after: burst, correct: correct, of: words.count)
         }
@@ -118,22 +116,102 @@ final class VerifyWordsFullLaunchUITests: XCTestCase {
         }
     }
 
-    /// Watches the answer slot for a second after the burst and fails if the cancelled word
-    /// shows there again
+    /// What the answer slot showed of the word a burst picked and then tapped to cancel
+    private enum CancelOutcome {
+        /// The word flew home as cancelled and never showed as checked
+        case cancelled
+        /// The word never showed in the slot, so either it flew home before the slot was first
+        /// read or the pick missed, which a single burst can't tell apart. The slot is first read
+        /// once the whole burst is sent, by when a cancelled chip has almost always flown home,
+        /// so this is the usual outcome of a landed cancel
+        case neverSeen
+        /// The word showed as checked with no cancel seen first: either every tap on the slot
+        /// missed the flight, which an app slow to draw the flying chip makes possible, or the
+        /// cancel landed and its check ran on anyway, which a single burst can't tell apart
+        case checkedWithoutCancel
+        /// The word flew home as cancelled and then showed as checked
+        case checkedAfterCancel
+    }
+
+    /// Sends a burst, and for one that cancels `cancelled` in flight checks that the word never
+    /// shows as checked afterwards, sending the burst again when its cancel may have missed
     ///
     /// Before the fix a cancel only reset the screen: the cancelled check ran on in Rust, landed
     /// about a quarter second after the pick, and put the cancelled word back in the slot as a
-    /// wrong guess until about 0.7 s, swallowing any pick made meanwhile
-    private func assertCancelledWordStaysOut(_ cancelled: String, context: String) {
-        let chip = app.buttons["verifyWords.checkingWord"]
-        let deadline = Date().addingTimeInterval(1)
+    /// wrong guess until about 0.7 s, swallowing any pick made meanwhile. That looks the same as
+    /// a cancel that missed, so a burst is sent up to three times and every one of them showing
+    /// the word checked fails, which a missed tap alone makes very unlikely. Returns false when
+    /// the test failed
+    private func sendBurst(
+        _ taps: [(CGPoint, TimeInterval)],
+        cancelling cancelled: String?,
+        on wordNumber: Int,
+        of wordCount: Int,
+        context: String
+    ) -> Bool {
+        let attempts = 3
+        var trail = ""
 
-        while Date() < deadline {
-            guard (try? chip.snapshot())?.label == cancelled else { continue }
+        for _ in 0 ..< attempts {
+            sendTimedTaps(taps)
+            guard let cancelled else { return true }
 
-            XCTFail("\(context): the cancelled word '\(cancelled)' came back into the slot, so its check kept running after the cancel")
-            return
+            let outcome: CancelOutcome
+            (outcome, trail) = watchCancelledWord(cancelled)
+            print("\(context): '\(cancelled)' \(outcome) (slot: \(trail))")
+
+            switch outcome {
+            case .cancelled, .neverSeen:
+                return true
+            case .checkedAfterCancel:
+                XCTFail("\(context): the cancelled word '\(cancelled)' came back into the slot as checked after it flew home, so its check kept running after the cancel (slot: \(trail))")
+                return false
+            case .checkedWithoutCancel:
+                // a correct pick late in the burst may still have moved the screen on, which
+                // leaves no word to send the burst at again
+                print("\(context): '\(cancelled)' showed as checked, so the burst is sent again (slot: \(trail))")
+                waitForIdleChip(context)
+                if advanced(past: wordNumber, of: wordCount) { return true }
+            }
         }
+
+        XCTFail("\(context): '\(cancelled ?? "")' showed as checked after each of \(attempts) bursts that tapped it in flight, so either its cancel never stops the check or no tap ever reached the flying chip (last slot: \(trail))")
+        return false
+    }
+
+    /// Watches the answer slot for a second and reports whether `cancelled` showed there as
+    /// checked, with the states it went through
+    ///
+    /// The chip's accessibility value names its state, so a cancelled chip flying home, which
+    /// still carries its word, isn't taken for a checked one
+    private func watchCancelledWord(_ cancelled: String) -> (CancelOutcome, String) {
+        let chip = app.buttons["verifyWords.checkingWord"]
+        let start = Date()
+        var trail: [String] = []
+        var flewHome = false
+
+        while Date().timeIntervalSince(start) < 1 {
+            guard let snapshot = try? chip.snapshot() else { continue }
+
+            let state = (snapshot.value as? String) ?? ""
+            let entry = "\(snapshot.label)/\(state)"
+            if trail.last?.hasSuffix(" \(entry)") != true {
+                trail.append(String(format: "%.2fs %@", Date().timeIntervalSince(start), entry))
+            }
+
+            guard snapshot.label == cancelled else { continue }
+
+            switch state {
+            case "Returning":
+                flewHome = true
+            case "Correct", "Incorrect":
+                return (flewHome ? .checkedAfterCancel : .checkedWithoutCancel, trail.joined(separator: ", "))
+            default:
+                continue
+            }
+        }
+
+        return (flewHome ? .cancelled : .neverSeen, trail.joined(separator: ", "))
     }
 
     /// Waits for the burst's animations to finish, then checks that the screen either moved on

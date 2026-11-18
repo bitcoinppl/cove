@@ -404,6 +404,19 @@ struct VerifyWordsScreen: View {
     }
 }
 
+private extension WordCheckState {
+    /// What the picked chip is doing, which the screen otherwise shows only by color and motion
+    var accessibilityValue: String {
+        switch self {
+        case .none: ""
+        case .checking: "Checking"
+        case .correct: "Correct"
+        case .incorrect: "Incorrect"
+        case .returning: "Returning"
+        }
+    }
+}
+
 private struct VerifyWordsLayout: View {
     let sizeCategory: ContentSizeCategory
     let wordNumber: Int
@@ -590,6 +603,7 @@ private struct VerifyWordsSelection: View {
                             .cornerRadius(10)
                     }
                     .accessibilityIdentifier("verifyWords.checkingWord")
+                    .accessibilityValue(checkState.accessibilityValue)
                     .matchedGeometryEffect(
                         id: matchedGeometryId(checkingWord),
                         in: namespace,

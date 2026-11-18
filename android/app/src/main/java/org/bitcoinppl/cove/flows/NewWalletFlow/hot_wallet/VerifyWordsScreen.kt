@@ -61,6 +61,8 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -561,6 +563,8 @@ fun VerifyWordsScreen(
                             .height(chipHeight)
                             .background(overlayBg, RoundedCornerShape(14.dp))
                             .zIndex(10f)
+                            // the chip shows its state only by color and motion
+                            .semantics { stateDescription = checkState.accessibilityState() }
                             // tapping the chip while it flies to the slot sends it back unchecked
                             .clickable(enabled = checkState is WordCheckState.Checking) {
                                 stateMachine.cancelCheck()?.let { checkState = it.newState }
@@ -589,6 +593,16 @@ fun VerifyWordsScreen(
         }
     }
 }
+
+/** What the picked chip is doing, matching the iOS chip's accessibility value */
+private fun WordCheckState.accessibilityState(): String =
+    when (this) {
+        WordCheckState.None -> ""
+        is WordCheckState.Checking -> "Checking"
+        is WordCheckState.Correct -> "Correct"
+        is WordCheckState.Incorrect -> "Incorrect"
+        is WordCheckState.Returning -> "Returning"
+    }
 
 @Composable
 private fun OptionChip(
