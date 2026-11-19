@@ -74,14 +74,20 @@ pub(crate) fn project(
     let root_prompt = root_prompt(&body, presentation, wallet_mode);
     let actions = global_actions(&body, &root_prompt, notices, admission, &consents);
 
-    CloudBackupScreen {
+    let mut screen = CloudBackupScreen {
         body,
         settings_row,
         heal_notice: notices.heal,
         last_outcome: notices.last_outcome.clone(),
         root_prompt,
         actions,
+    };
+
+    if wallet_mode == WalletMode::Decoy {
+        screen.hide_root_presentations();
     }
+
+    screen
 }
 
 /// The prompt to raise over the app, if the body has one to raise

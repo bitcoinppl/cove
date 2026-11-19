@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthType
+import java.util.concurrent.atomic.AtomicBoolean
 
 private enum class CredentialScreen {
     BIOMETRIC,
@@ -63,6 +65,17 @@ fun MainCredentialVerificationDialog(
     }
     var isPrompting by remember { mutableStateOf(false) }
 
+    // the prompt can deliver a result after the caller took this dialog down, such as when a
+    // pause cancelled the request, and that result must not complete the cancelled export
+    val isShown = remember { AtomicBoolean(true) }
+    var biometricPrompt by remember { mutableStateOf<BiometricPrompt?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            isShown.set(false)
+            biometricPrompt?.cancelAuthentication()
+        }
+    }
+
     val promptInfo =
         remember {
             BiometricPolicy.promptInfo(
@@ -77,28 +90,33 @@ fun MainCredentialVerificationDialog(
         if (isPrompting) return
         isPrompting = true
 
-        BiometricPrompt(
-            act,
-            ContextCompat.getMainExecutor(context),
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    isPrompting = false
-                    Log.i("MainCredentialVerification", "biometric prompt ended: code $errorCode")
-                }
+        val prompt =
+            BiometricPrompt(
+                act,
+                ContextCompat.getMainExecutor(context),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        isPrompting = false
+                        Log.i("MainCredentialVerification", "biometric prompt ended: code $errorCode")
+                    }
 
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    isPrompting = false
-                    onVerified()
-                }
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        isPrompting = false
+                        if (!isShown.get()) return
+                        onVerified()
+                    }
 
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    Log.w("MainCredentialVerification", "biometric authentication failed, user can retry")
-                }
-            },
-        ).authenticate(promptInfo)
+                    override fun onAuthenticationFailed() {
+                        super.onAuthenticationFailed()
+                        Log.w("MainCredentialVerification", "biometric authentication failed, user can retry")
+                    }
+                },
+            )
+
+        biometricPrompt = prompt
+        prompt.authenticate(promptInfo)
     }
 
     Dialog(

@@ -265,12 +265,22 @@ impl RustAuthManager {
     /// Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
     pub fn set_pin(&self, pin: String) -> Result<()> {
         self.validate_new_pin(&pin)?;
+
+        // a lock type that can't be read or saved fails the call, so the PIN screen never closes
+        // as if the lock were on while the app still opens without one; it is read before the
+        // PIN changes, so a failed read leaves the old PIN in place
+        let config = &Database::global().global_config;
+        let lock_type = match config.auth_type()? {
+            AuthType::None => Some(AuthType::Pin),
+            AuthType::Biometric => Some(AuthType::Both),
+            AuthType::Pin | AuthType::Both => None,
+        };
+
         AuthPin::new().set(pin).map_err(AuthManagerError::PinSave)?;
 
-        match self.auth_type() {
-            AuthType::None => self.set_auth_type(AuthType::Pin),
-            AuthType::Biometric => self.set_auth_type(AuthType::Both),
-            _ => {}
+        if let Some(lock_type) = lock_type {
+            config.set_auth_type(lock_type)?;
+            self.send(Message::AuthTypeChanged(lock_type));
         }
 
         Ok(())
@@ -403,7 +413,7 @@ impl RustAuthManager {
     /// Switch from main mode to decoy mode
     pub fn switch_to_decoy_mode(&self) {
         Database::global().global_config.set_decoy_mode().expect("failed to set decoy mode");
-        self.republish_cloud_backup_screen();
+        self.republish_cloud_backup_screen(WalletMode::Decoy);
 
         Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Decoy));
     }
@@ -411,7 +421,7 @@ impl RustAuthManager {
     /// Switch from decoy mode to main mode
     pub fn switch_to_main_mode(&self) {
         Database::global().global_config.set_main_mode().expect("failed to set main mode");
-        self.republish_cloud_backup_screen();
+        self.republish_cloud_backup_screen(WalletMode::Main);
 
         Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Main));
     }
@@ -669,11 +679,11 @@ impl RustAuthManager {
 
     /// Asks Cloud Backup to publish its screen again after the wallet mode changed, since its
     /// root prompts show in main mode only
-    fn republish_cloud_backup_screen(&self) {
+    fn republish_cloud_backup_screen(&self, wallet_mode: WalletMode) {
         // a manager that was never started has published nothing, and starting one here would
         // begin Cloud Backup work just for a mode switch
         if let Some(cloud_backup) = LazyLock::get(&CLOUD_BACKUP_MANAGER) {
-            cloud_backup.request_screen_publish();
+            cloud_backup.wallet_mode_changed(wallet_mode);
         }
     }
 
