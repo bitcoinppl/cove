@@ -259,9 +259,9 @@
 
                 private func handleCameraPermission() {
                     switch AVCaptureDevice.authorizationStatus(for: .video) {
-                    case .restricted:
-                        break
-                    case .denied:
+                    // Screen Time or a device profile blocking the camera never prompts, so it
+                    // closes the scanner and explains as a denial does, instead of a black preview
+                    case .denied, .restricted:
                         didFail(reason: .permissionDenied)
                     case .notDetermined:
                         // SwiftUI can replace `parentView` before the answer comes back, so the
@@ -284,8 +284,8 @@
                         )
 
                         adoptCaptureSession(session)
-                    default:
-                        break
+                    @unknown default:
+                        didFail(reason: .permissionDenied)
                     }
                 }
 

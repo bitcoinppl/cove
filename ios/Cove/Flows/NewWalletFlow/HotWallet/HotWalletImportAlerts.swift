@@ -53,6 +53,28 @@ extension HotWalletImportAlertState: TaggedAlertPresentable {
                 }
             ).eraseToAny()
 
+        case let .scan(alert):
+            return alert.alert(context: context)
+
+        case let .importError(message):
+            return AlertBuilder(
+                title: "Import Failed",
+                message: message,
+                actions: singleOkCancel
+            ).eraseToAny()
+        }
+    }
+}
+
+extension HotWalletImportScanAlert {
+    func alert(context: HotWalletImportPresentationContext) -> AnyAlertBuilder {
+        let singleOkCancel = {
+            Button("Ok", role: .cancel) {
+                context.dismissAlert()
+            }
+        }
+
+        switch self {
         case .invalidSeedQr:
             return AlertBuilder(
                 title: "Invalid QR Code",
@@ -60,18 +82,38 @@ extension HotWalletImportAlertState: TaggedAlertPresentable {
                 actions: singleOkCancel
             ).eraseToAny()
 
-        case let .scanError(error):
+        case .invalidNfcTag:
             return AlertBuilder(
-                title: "Error Scanning QR Code",
-                message: error,
+                title: "Invalid NFC Tag",
+                message: "Please scan a valid seed phrase NFC tag",
                 actions: singleOkCancel
             ).eraseToAny()
 
-        case let .importError(message):
+        case let .unsupportedWordCount(wordCount):
             return AlertBuilder(
-                title: "Import Failed",
-                message: message,
+                title: "Unsupported Recovery Phrase",
+                message: "This phrase has \(wordCount) words. Cove supports 12 or 24 word recovery phrases.",
                 actions: singleOkCancel
+            ).eraseToAny()
+
+        case .noCameraPermission:
+            // the same words as the app's own camera alert, which Rust writes
+            let appAlert = AppAlertState.noCameraPermission
+            return AlertBuilder(
+                title: appAlert.title(),
+                message: appAlert.message(),
+                actions: {
+                    Button("Settings") {
+                        context.dismissAlert()
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+
+                    Button("Cancel", role: .cancel) {
+                        context.dismissAlert()
+                    }
+                }
             ).eraseToAny()
         }
     }

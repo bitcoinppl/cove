@@ -144,7 +144,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         reachStorageChoices()
         openSoftwareWalletImport()
-        tap(button(startingWith: "Scan QR code"), until: app.buttons["1x"], app.alerts["Camera Access Required"])
+        tap(button(startingWith: "Scan QR code"), until: app.buttons["1x"], app.alerts["Camera Access is Required"])
     }
 
     func testSoftwareWalletUserCanImportKnownWords() {
