@@ -278,8 +278,17 @@ impl RustAuthManager {
 
         AuthPin::new().set(pin).map_err(AuthManagerError::PinSave)?;
 
+        // the lock had no PIN before, so a failed switch removes the new one rather than leave a
+        // PIN the export prompt would accept with the lock still off
         if let Some(lock_type) = lock_type {
-            config.set_auth_type(lock_type)?;
+            if let Err(error) = config.set_auth_type(lock_type) {
+                if let Err(delete_error) = AuthPin::new().delete() {
+                    error!("unable to remove the PIN after the lock type failed: {delete_error:?}");
+                }
+
+                return Err(error.into());
+            }
+
             self.send(Message::AuthTypeChanged(lock_type));
         }
 

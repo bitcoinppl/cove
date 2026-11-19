@@ -837,6 +837,9 @@ extension AppManager {
     private func applyWalletPresentationMessage(_ message: AppStateReconcileMessage) {
         switch message {
         case .walletModeChanged:
+            // an alert raised in the other mode, such as a Cloud Backup result for the main
+            // wallets, must not show in this one
+            alertState = .none
             isLoading = true
             loadWallets()
 

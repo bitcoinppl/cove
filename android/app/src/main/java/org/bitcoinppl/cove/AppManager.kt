@@ -933,6 +933,9 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {
+                    // an alert raised in the other mode, such as a Cloud Backup result for the
+                    // main wallets, must not show in this one
+                    alertState = null
                     isLoading = true
                     loadWallets()
                     launch {

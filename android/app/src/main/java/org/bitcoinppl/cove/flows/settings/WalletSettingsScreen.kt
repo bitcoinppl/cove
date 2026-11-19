@@ -305,8 +305,12 @@ fun WalletSettingsScreen(
         MainCredentialVerificationDialog(
             lockType = request.lockType,
             onVerified = {
-                xprvCredentialRequest = null
-                performXprvExport(request.action)
+                // a pause can cancel the request before the dialog leaves, so a credential that
+                // arrives after that finishes nothing
+                if (xprvCredentialRequest === request) {
+                    xprvCredentialRequest = null
+                    performXprvExport(request.action)
+                }
             },
             onCancel = { xprvCredentialRequest = null },
         )

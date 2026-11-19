@@ -55,6 +55,7 @@ pub(crate) use self::types::{
 };
 use cove_cspp::backup_data::PasskeyProviderHint;
 
+use crate::database::Database;
 use crate::database::cloud_backup::PersistedHealNotice;
 use crate::wallet::metadata::WalletMode;
 
@@ -232,9 +233,16 @@ impl RustCloudBackupManager {
         self.published_screen.requested.store(false, Ordering::Release);
 
         let inputs = inputs();
-        let next = self.project_screen(runtime, &inputs);
+        let mut next = self.project_screen(runtime, &inputs);
         let rest = Rest::of(&inputs.admission, &next);
         let mut published = self.published_screen.screen.lock();
+
+        // entering decoy mode saves the mode before it takes this lock to hide the root
+        // presentations, so a projection from main-mode inputs read before that never undoes it
+        let is_decoy = Database::global().global_config.wallet_mode() == WalletMode::Decoy;
+        if is_decoy && inputs.wallet_mode != WalletMode::Decoy {
+            next.hide_root_presentations();
+        }
 
         if let Some(delta) = CloudBackupScreenDelta::between(&published.screen, &next) {
             published.screen =
