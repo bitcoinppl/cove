@@ -34,19 +34,58 @@ fn main() {
 
 /// The `--out-dir` of a Kotlin `generate` call, in any form clap accepts
 fn kotlin_out_dir(args: &[String]) -> Option<PathBuf> {
-    let mut args = args.iter();
+    let mut args = args.iter().skip(1);
     while let Some(arg) = args.next() {
-        if arg == "--out-dir" || arg == "-o" {
+        if arg == "--out-dir" {
             return args.next().map(PathBuf::from);
         }
 
-        let inline = arg.strip_prefix("--out-dir=").or_else(|| arg.strip_prefix("-o"));
-        if let Some(dir) = inline {
-            return Some(PathBuf::from(dir.strip_prefix('=').unwrap_or(dir)));
+        // clap keeps everything after the first `=` of a long flag, so `--out-dir==out` is `=out`
+        if let Some(dir) = arg.strip_prefix("--out-dir=") {
+            return Some(PathBuf::from(dir));
+        }
+
+        let Some(cluster) = arg.strip_prefix('-').filter(|rest| !rest.starts_with('-')) else {
+            continue;
+        };
+
+        match short_out_dir(cluster) {
+            ShortOutDir::Inline(dir) => return Some(PathBuf::from(dir)),
+            ShortOutDir::NextArg => return args.next().map(PathBuf::from),
+            ShortOutDir::Absent => {}
         }
     }
 
     None
+}
+
+enum ShortOutDir<'a> {
+    Inline(&'a str),
+    NextArg,
+    Absent,
+}
+
+/// Reads `-o` from a cluster of short flags such as `-noout`
+///
+/// Of `generate`'s short flags only `-n` takes no value, so a cluster ends at the first other
+/// flag, and an `o` after `-l` or `-c` is part of their value
+fn short_out_dir(cluster: &str) -> ShortOutDir<'_> {
+    for (index, flag) in cluster.char_indices() {
+        match flag {
+            'n' => continue,
+            'o' => {
+                let rest = &cluster[index + 1..];
+                if rest.is_empty() {
+                    return ShortOutDir::NextArg;
+                }
+
+                return ShortOutDir::Inline(rest.strip_prefix('=').unwrap_or(rest));
+            }
+            _ => return ShortOutDir::Absent,
+        }
+    }
+
+    ShortOutDir::Absent
 }
 
 /// The output directory of a Swift call that writes Swift sources
@@ -92,9 +131,17 @@ mod tests {
             "uniffi_cli generate lib.so --language kotlin -o out",
             "uniffi_cli generate lib.so --language kotlin -o=out",
             "uniffi_cli generate lib.so --language kotlin -oout",
+            "uniffi_cli generate lib.so -lkotlin -noout",
+            "uniffi_cli generate lib.so -lkotlin -no out",
         ] {
             assert_eq!(kotlin_out_dir(&args(line)), Some(PathBuf::from("out")), "{line}");
         }
+
+        let line = "uniffi_cli generate lib.so --language kotlin --out-dir==out";
+        assert_eq!(kotlin_out_dir(&args(line)), Some(PathBuf::from("=out")));
+
+        // the `o` in `-lkotlin` belongs to the language value
+        assert_eq!(kotlin_out_dir(&args("uniffi_cli generate lib.so -lkotlin")), None);
     }
 
     #[test]
