@@ -86,6 +86,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -521,5 +522,5 @@ fun formatTimestamp(timestamp: ULong): String {
 
 private fun backupVerifyErrorMessage(e: Exception): String = when (e) {
     is BackupException -> e.userMessage()
-    else -> e.message ?: "Unknown error"
+    else -> e.displayMessage("Unknown error")
 }

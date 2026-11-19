@@ -58,6 +58,7 @@ import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DatabaseException
 import org.bitcoinppl.cove_core.DiagnosticsReportRecord
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "SubmittedDiagnostics"
 

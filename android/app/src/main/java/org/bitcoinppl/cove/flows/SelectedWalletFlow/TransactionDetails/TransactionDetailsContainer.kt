@@ -22,6 +22,7 @@ import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException as KotlinCancellationException
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "TransactionDetailsContainer"
 
@@ -96,7 +97,7 @@ fun TransactionDetailsContainer(
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load wallet", e)
-            error = e.message ?: "failed to load wallet"
+            error = e.displayMessage("failed to load wallet")
             loading = false
             recoverWalletSelection()
         }
@@ -119,7 +120,7 @@ fun TransactionDetailsContainer(
         } catch (e: KotlinCancellationException) {
             throw e
         } catch (e: Exception) {
-            detailsError = e.message ?: "failed to load transaction"
+            detailsError = e.displayMessage("failed to load transaction")
             Log.e(TAG, "Failed to load transaction details", e)
         }
     }

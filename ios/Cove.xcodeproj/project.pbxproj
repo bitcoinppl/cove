@@ -48,7 +48,7 @@
 		C0B000A02F00000000000001 /* MoreInfoPopoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */; };
 		C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */; };
 		C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */; };
-		C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */; };
+		C0B000902F00000000000001 /* UniffiErrorTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* UniffiErrorTextTests.swift */; };
 		C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */; };
 		C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */; };
 		C5EC00012F00000000000001 /* SecretWordsLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EC00022F00000000000001 /* SecretWordsLockTests.swift */; };
@@ -164,7 +164,7 @@
 		C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreInfoPopoverTests.swift; sourceTree = "<group>"; };
 		C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingBackupViewsTests.swift; sourceTree = "<group>"; };
 		C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomFeeRateErrorTests.swift; sourceTree = "<group>"; };
-		C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareImportErrorMessageTests.swift; sourceTree = "<group>"; };
+		C0B000912F00000000000001 /* UniffiErrorTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniffiErrorTextTests.swift; sourceTree = "<group>"; };
 		C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowHeaderLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowBackNavigationTests.swift; sourceTree = "<group>"; };
 		C5EC00022F00000000000001 /* SecretWordsLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretWordsLockTests.swift; sourceTree = "<group>"; };
@@ -332,7 +332,7 @@
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
 				F3F300032F80000000000001 /* ScenePhasePrivacyTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
-				C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */,
+				C0B000912F00000000000001 /* UniffiErrorTextTests.swift */,
 				C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */,
 				C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */,
 				C5EC00022F00000000000001 /* SecretWordsLockTests.swift */,
@@ -660,7 +660,7 @@
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
 				F3F300042F80000000000001 /* ScenePhasePrivacyTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
-				C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */,
+				C0B000902F00000000000001 /* UniffiErrorTextTests.swift in Sources */,
 				C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */,
 				C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */,
 				C5EC00012F00000000000001 /* SecretWordsLockTests.swift in Sources */,

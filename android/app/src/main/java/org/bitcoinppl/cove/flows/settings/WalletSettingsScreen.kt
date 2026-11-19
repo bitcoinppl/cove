@@ -48,6 +48,7 @@ import org.bitcoinppl.cove_core.ShutdownAttemptId
 import org.bitcoinppl.cove_core.WalletLifecycleFailure
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletType
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +95,7 @@ fun WalletSettingsScreen(
                 deletionDialog = if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
                     WalletDeletionDialog.ShutdownBlocked(lifecycle.attemptId)
                 } else {
-                    WalletDeletionDialog.Error(e.message ?: "Failed to delete wallet")
+                    WalletDeletionDialog.Error(e.displayMessage("Failed to delete wallet"))
                 }
 
                 Log.e("WalletSettingsScreen", "failed to delete wallet", e)
@@ -190,7 +191,7 @@ fun WalletSettingsScreen(
                 } catch (e: Exception) {
                     xprvExportDialog =
                         XprvExportDialog.Error(
-                            e.message ?: "Unable to reveal the private key.",
+                            e.displayMessage("Unable to reveal the private key."),
                         )
                     Log.e("WalletSettingsScreen", "failed to reveal private key", e)
                 }

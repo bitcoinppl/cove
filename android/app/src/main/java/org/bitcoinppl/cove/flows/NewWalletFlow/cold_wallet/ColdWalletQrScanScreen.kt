@@ -30,6 +30,7 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +93,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 app.alertState =
                                     TaggedItem(
                                         AppAlertState.ErrorImportingHardwareWallet(
-                                            message = e.message ?: "Unknown error",
+                                            message = e.displayMessage("Unknown error"),
                                         ),
                                     )
                             }

@@ -41,6 +41,7 @@ import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "NfcScanSheet"
 
@@ -95,7 +96,7 @@ fun NfcScanSheet(
                         Log.e(TAG, "Failed to process NFC data: ${e.message}", e)
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.InvalidFormat(e.message ?: "Failed to process NFC data"),
+                                AppAlertState.InvalidFormat(e.displayMessage("Failed to process NFC data")),
                             )
                     }
                 }

@@ -490,7 +490,6 @@
     <ID>FunctionNaming:WalletSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun WalletSheetsHost</ID>
     <ID>FunctionNaming:WipeDataPinView.kt:@Composable fun WipeDataPinView</ID>
     <ID>HasPlatformType:TapSignerManager.kt:TapSignerManager$var id by mutableStateOf(UUID.randomUUID()) private set</ID>
-    <ID>ImplicitDefaultLocale:NodeSettingsScreen.kt:errorUnknown.format(e.message ?: &quot;&quot;)</ID>
     <ID>ImplicitDefaultLocale:TapSignerAdvancedChainCode.kt:&quot;%02x&quot;.format(it)</ID>
     <ID>InjectDispatcher:AboutDebugSection.kt:IO</ID>
     <ID>InjectDispatcher:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$IO</ID>
@@ -1028,7 +1027,6 @@
     <ID>MaxLineLength:TransactionDetailsWidget.kt:AutoSizeText(primary, color = primaryColor, maxFontSize = 15.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:TransactionsRows.kt:formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)</ID>
     <ID>MaxLineLength:TransactionsRows.kt:formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)</ID>
-    <ID>MaxLineLength:TransactionsRows.kt:message = &quot;Unable to delete transaction: ${e.localizedMessage ?: e.message ?: &quot;Unknown error&quot;}&quot;</ID>
     <ID>MaxLineLength:TransactionsRows.kt:showsLockedTreatment &amp;&amp; type == TransactionType.RECEIVED -&gt; CoveColor.TransactionReceived.copy(alpha = 0.72f)</ID>
     <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (amountPresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
     <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (changePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
@@ -1044,9 +1042,6 @@
     <ID>MaxLineLength:WalletBalanceHeaderView.kt:contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue</ID>
     <ID>MaxLineLength:WalletManager.kt:WalletManager$var</ID>
     <ID>MaxLineLength:WalletSettingsScreen.kt:if</ID>
-    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share labels: ${e.localizedMessage ?: e.message}&quot;)</ID>
-    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share transactions: ${e.localizedMessage ?: e.message}&quot;)</ID>
-    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share xpub: ${e.localizedMessage ?: e.message}&quot;)</ID>
     <ID>NestedBlockDepth:NfcReader.kt:NfcReader$private fun processNdefMessage</ID>
     <ID>PackageNaming:AboutDebugSection.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
     <ID>PackageNaming:AboutSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
@@ -1419,7 +1414,6 @@
     <ID>UseCheckOrError:TapSignerEnterPinView.kt:throw IllegalStateException(&quot;Backup not available for this TapSigner&quot;)</ID>
     <ID>UseCheckOrError:WalletMoreOptionsSheet.kt:throw IllegalStateException(&quot;Backup not available&quot;)</ID>
     <ID>UseOrEmpty:CoinControlCustomAmountSheet.kt:enteringAmount ?: &quot;&quot;</ID>
-    <ID>UseOrEmpty:NodeSettingsScreen.kt:e.message ?: &quot;&quot;</ID>
     <ID>UseOrEmpty:QrExportView.kt:qrStrings.getOrNull(safeIndex) ?: qrStrings.firstOrNull() ?: &quot;&quot;</ID>
     <ID>UseOrEmpty:SendFlowHardwareSigning.kt:clipData?.getItemAt(0)?.text?.toString() ?: &quot;&quot;</ID>
     <ID>UseOrEmpty:WalletSettingsScreen.kt:manager.masterFingerprint() ?: &quot;&quot;</ID>

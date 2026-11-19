@@ -777,6 +777,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_nfcreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_nfcmessageerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_nfc_fn_method_resumeerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_nfc_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2962,6 +2968,15 @@ sealed class NfcMessageException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcmessageerror_uniffi_trait_display(FfiConverterTypeNfcMessageError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcMessageException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcMessageException = FfiConverterTypeNfcMessageError.lift(error_buf)
@@ -3032,6 +3047,15 @@ sealed class NfcReaderException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_method_nfcreadererror_uniffi_trait_display(FfiConverterTypeNfcReaderError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcReaderException = FfiConverterTypeNfcReaderError.lift(error_buf)
@@ -3330,6 +3354,15 @@ sealed class ResumeException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_nfc_fn_method_resumeerror_uniffi_trait_display(FfiConverterTypeResumeError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ResumeException> {
         override fun lift(error_buf: RustBuffer.ByValue): ResumeException = FfiConverterTypeResumeError.lift(error_buf)

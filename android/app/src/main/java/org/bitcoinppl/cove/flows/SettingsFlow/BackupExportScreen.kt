@@ -73,6 +73,7 @@ import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupResult
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,7 +149,7 @@ fun BackupExportScreen(
                 }.onFailure { e ->
                     isExporting = false
                     pendingResult = null
-                    errorMessage = "Failed to save backup: ${e.message}"
+                    errorMessage = "Failed to save backup: ${e.displayMessage()}"
                 }
             } catch (e: CancellationException) {
                 isExporting = false
@@ -438,5 +439,5 @@ fun BackupExportScreen(
 
 private fun backupExportErrorMessage(e: Exception): String = when (e) {
     is BackupException -> e.userMessage()
-    else -> e.message ?: "Unknown error"
+    else -> e.displayMessage("Unknown error")
 }

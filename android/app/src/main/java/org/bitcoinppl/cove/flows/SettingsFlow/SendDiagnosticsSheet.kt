@@ -47,6 +47,7 @@ import org.bitcoinppl.cove_core.DiagnosticsReport
 import org.bitcoinppl.cove_core.DiagnosticsException
 import org.bitcoinppl.cove_core.buildDiagnosticsReport
 import org.bitcoinppl.cove_core.clearDiagnosticsLogs
+import org.bitcoinppl.cove.displayMessage
 
 private const val PREVIEW_CHUNK_SIZE = 4096
 private const val PREVIEW_REFRESH_DEBOUNCE_MS = 250L

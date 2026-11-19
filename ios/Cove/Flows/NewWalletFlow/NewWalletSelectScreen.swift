@@ -8,17 +8,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Alert text for a hardware wallet import that failed
-func hardwareImportErrorMessage(_ error: Error) -> String {
-    switch error {
-    // generated UniFFI errors describe themselves with a reflection dump, Display is the real message
-    case let error as WalletError:
-        error.description
-    default:
-        error.localizedDescription
-    }
-}
-
 struct NewWalletSelectScreen: View {
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
@@ -94,7 +83,7 @@ struct NewWalletSelectScreen: View {
             newWalletFromXpub(fileContents)
         } catch {
             alert = AlertItem(
-                type: .error(hardwareImportErrorMessage(error))
+                type: .error(error.localizedDescription)
             )
         }
     }
@@ -123,7 +112,7 @@ struct NewWalletSelectScreen: View {
             try app.selectWalletOrThrow(id)
             app.alertState = TaggedItem(.importedSuccessfully)
         } catch {
-            alert = AlertItem(type: .error(hardwareImportErrorMessage(error)))
+            alert = AlertItem(type: .error(error.localizedDescription))
         }
     }
 

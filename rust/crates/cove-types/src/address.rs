@@ -79,14 +79,15 @@ type Error = AddressError;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum AddressError {
-    #[error("no ouputs")]
+    #[error("no outputs")]
     NoOutputs,
 
     #[error("unable to create address from script: {0}")]
     ScriptError(String),
 
-    #[error("invalid not a valid address for any network")]
+    #[error("not a valid address for any network")]
     InvalidAddress,
 
     #[error("valid address, but for an unsupported network")]

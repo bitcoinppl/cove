@@ -69,7 +69,7 @@ internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
         }
 
         is AppInitException.KeychainUnavailable -> {
-            BootstrapFailure.KeychainUnavailable(error.message ?: "keychain unavailable")
+            BootstrapFailure.KeychainUnavailable(error.displayMessage("keychain unavailable"))
         }
 
         is AppInitException.AlreadyCalled -> {
@@ -83,7 +83,7 @@ internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
         }
 
         else -> {
-            BootstrapFailure.Fatal(error.message ?: "Unknown error")
+            BootstrapFailure.Fatal(error.displayMessage("Unknown error"))
         }
     }
 

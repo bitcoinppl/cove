@@ -75,6 +75,7 @@ impl TapSigner {
 
 // For uniffi
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum TapCardParseError {
     #[error("not a valid url")]
     InvalidUrl,

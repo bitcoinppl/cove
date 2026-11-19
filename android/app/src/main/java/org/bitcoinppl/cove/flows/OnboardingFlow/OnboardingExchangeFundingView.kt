@@ -50,6 +50,7 @@ import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.displayMessage
 
 @Composable
 internal fun OnboardingExchangeFundingView(
@@ -88,7 +89,7 @@ internal fun OnboardingExchangeFundingView(
             errorMessage = null
         } catch (error: Exception) {
             Log.e("OnboardingExchangeFunding", "failed to load first address", error)
-            errorMessage = error.message ?: "Unable to load a deposit address for this wallet."
+            errorMessage = error.displayMessage("Unable to load a deposit address for this wallet.")
         }
     }
 

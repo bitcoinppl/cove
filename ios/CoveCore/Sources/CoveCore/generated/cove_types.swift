@@ -4904,6 +4904,17 @@ enum AddressError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_addresserror_uniffi_trait_display(
+            FfiConverterTypeAddressError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -5168,6 +5179,17 @@ enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.Localized
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_confirmdetailserror_uniffi_trait_display(
+            FfiConverterTypeConfirmDetailsError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -5679,6 +5701,17 @@ enum PsbtError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_psbterror_uniffi_trait_display(
+            FfiConverterTypePsbtError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {

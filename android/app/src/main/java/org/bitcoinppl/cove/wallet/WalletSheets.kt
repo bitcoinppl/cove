@@ -43,6 +43,7 @@ import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.LabelManager
 import java.io.File
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +103,7 @@ internal fun WalletSheetsHost(
                         shareTransactionsFile(context, manager)
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to share transactions", e)
-                        snackbarHostState.showSnackbar("Unable to share transactions: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar("Unable to share transactions: ${e.displayMessage()}")
                     }
                 }
             },
@@ -145,7 +146,7 @@ internal fun WalletSheetsHost(
                                     shareLabelsFile(context, manager)
                                 } catch (e: Exception) {
                                     Log.e(tag, "Failed to share labels", e)
-                                    snackbarHostState.showSnackbar("Unable to share labels: ${e.localizedMessage ?: e.message}")
+                                    snackbarHostState.showSnackbar("Unable to share labels: ${e.displayMessage()}")
                                 }
                             }
                         },
@@ -205,7 +206,7 @@ internal fun WalletSheetsHost(
                         shareXpubFile(context, manager)
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to share xpub", e)
-                        snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar("Unable to share xpub: ${e.displayMessage()}")
                     }
                 }
             },

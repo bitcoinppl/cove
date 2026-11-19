@@ -37,6 +37,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 /** UI state for tracking send transaction progress */
 sealed interface SendState {
@@ -501,7 +502,7 @@ private fun SendFlowRouteToScreen(
                             TaggedItem(
                                 AppAlertState.General(
                                     title = "Unable to finalize transaction",
-                                    message = e.message ?: "Unknown error",
+                                    message = e.displayMessage("Unknown error"),
                                 ),
                             )
                         app.popRoute()
@@ -510,7 +511,7 @@ private fun SendFlowRouteToScreen(
                             TaggedItem(
                                 AppAlertState.General(
                                     title = "Unknown error",
-                                    message = e.message ?: "Unknown error",
+                                    message = e.displayMessage("Unknown error"),
                                 ),
                             )
                         app.popRoute()
@@ -562,10 +563,10 @@ private fun SendFlowRouteToScreen(
                             sendState = SendState.Sent
                             showSuccessAlert = true
                         } catch (e: WalletManagerException) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            sendState = SendState.Error(e.displayMessage("Unknown error"))
                             showErrorAlert = true
                         } catch (e: Exception) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            sendState = SendState.Error(e.displayMessage("Unknown error"))
                             showErrorAlert = true
                         }
                     }

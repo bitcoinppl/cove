@@ -74,6 +74,7 @@ import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove.displayMessage
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
@@ -139,7 +140,7 @@ fun HotWalletCreateScreen(
             app.resetRoute(result.routes)
         } catch (e: Exception) {
             Log.e("HotWalletCreate", "error saving wallet", e)
-            saveErrorMessage = e.message ?: "Unknown error occurred"
+            saveErrorMessage = e.displayMessage("Unknown error occurred")
             showSaveError = true
             isSaving = false
         }

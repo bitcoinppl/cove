@@ -65,6 +65,7 @@ impl TransportError {
 
 /// Card errors defined by the CkTap protocol
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum CkTapError {
     /// The card reported a rare or unlucky value
     #[error("Rare or unlucky value used/occurred. Start again")]

@@ -7,6 +7,7 @@ pub enum NfcMessage {
 }
 
 #[derive(Debug, Copy, Clone, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum NfcMessageError {
     #[error("neither string nor data was provided")]
     NoStringNorData,

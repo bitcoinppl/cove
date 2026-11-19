@@ -76,6 +76,7 @@ import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
@@ -150,7 +151,7 @@ fun NewWalletSelectScreen(
             app.alertState =
                 TaggedItem(
                     AppAlertState.ErrorImportingHardwareWallet(
-                        message = e.message ?: "Unknown error",
+                        message = e.displayMessage("Unknown error"),
                     ),
                 )
         }

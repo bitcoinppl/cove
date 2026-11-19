@@ -31,6 +31,7 @@ import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySettingsAction
 import org.bitcoinppl.cove_core.SecuritySettingsResult
 import org.bitcoinppl.cove_core.SecuritySheetState
+import org.bitcoinppl.cove.displayMessage
 
 @Composable
 internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
@@ -114,7 +115,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         try {
             auth.setWipeDataPin(pin)
         } catch (e: AuthManagerException) {
-            alertState = SecurityAlertState.ExtraSetPinError(e.message ?: "Unknown error")
+            alertState = SecurityAlertState.ExtraSetPinError(e.displayMessage("Unknown error"))
         }
     }
 
@@ -128,7 +129,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         try {
             auth.setDecoyPin(pin)
         } catch (e: AuthManagerException) {
-            alertState = SecurityAlertState.ExtraSetPinError(e.message ?: "Unknown error")
+            alertState = SecurityAlertState.ExtraSetPinError(e.displayMessage("Unknown error"))
         }
     }
 

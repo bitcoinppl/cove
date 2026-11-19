@@ -45,6 +45,7 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -216,7 +217,7 @@ fun WalletMoreOptionsSheet(
                             app.alertState = TaggedItem(
                                 AppAlertState.General(
                                     title = "Error",
-                                    message = "Failed to retrieve backup: ${e.message ?: "Unknown error"}",
+                                    message = "Failed to retrieve backup: ${e.displayMessage("Unknown error")}",
                                 )
                             )
                         }

@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.utils.writeExportBytes
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 // what a wallet file export writes
 sealed class ExportType {
@@ -80,7 +81,7 @@ fun rememberWalletExportLaunchers(
                         snackbarHostState.showSnackbar("Labels imported successfully")
                     } catch (e: Exception) {
                         Log.e(tag, "error importing labels", e)
-                        snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar("Unable to import labels: ${e.displayMessage()}")
                     } finally {
                         exportState.isImporting = false
                     }
@@ -148,7 +149,7 @@ private fun rememberExportFileLauncher(
                 throw e
             } catch (e: Exception) {
                 Log.e(tag, "error exporting file", e)
-                snackbarHostState.showSnackbar("Unable to export $exportName: ${e.localizedMessage ?: e.message}")
+                snackbarHostState.showSnackbar("Unable to export $exportName: ${e.displayMessage()}")
             } finally {
                 exportState.isExporting = false
             }

@@ -27,7 +27,7 @@ pub type Error = DescriptorKeyParseError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DescriptorKeyParseError {
-    #[error("invalid descriptor: {0:?}")]
+    #[error("invalid descriptor: {0}")]
     InvalidDescriptor(#[from] bdk_wallet::miniscript::Error),
 
     #[error("unsupported descriptor: {0}")]

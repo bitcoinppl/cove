@@ -216,7 +216,7 @@ class MainActivity : FragmentActivity() {
                     Log.e(TAG, "[STARTUP] catastrophic recovery $logContext failed", e)
                     needsCatastrophicRecovery = false
                     bootstrapFailure =
-                        BootstrapFailure.Fatal("Failed to reset local data: ${e.message ?: "Unknown error"}")
+                        BootstrapFailure.Fatal("Failed to reset local data: ${e.displayMessage("Unknown error")}")
                 }
             }
 

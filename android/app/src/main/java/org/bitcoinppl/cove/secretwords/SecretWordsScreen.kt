@@ -58,6 +58,7 @@ import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.MnemonicException
 import org.bitcoinppl.cove_core.types.WalletId
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 /**
  * Whether the recovery words are loaded
@@ -353,8 +354,8 @@ private fun loadWords(
         )
     } catch (e: MnemonicException) {
         // Rust already logged this load failure
-        SecretWordsState.Failed(e.message ?: "failed to load recovery words")
+        SecretWordsState.Failed(e.displayMessage("failed to load recovery words"))
     } catch (e: Exception) {
         Log.e("SecretWordsScreen", "error loading mnemonic: ${e.javaClass.simpleName}")
-        SecretWordsState.Failed(e.message ?: "failed to load recovery words")
+        SecretWordsState.Failed(e.displayMessage("failed to load recovery words"))
     }

@@ -39,10 +39,10 @@ type Result<T, E = AuthError> = std::result::Result<T, E>;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum AuthError {
-    #[error("Unable to save pin to database {0:?}")]
+    #[error("Unable to save PIN to database: {0}")]
     DatabaseSaveError(database::Error),
 
-    #[error("Unable to get pin from database {0:?}")]
+    #[error("Unable to get PIN from database: {0}")]
     DatabaseGetError(database::Error),
 
     #[error("Unable to hash pin {0}")]
