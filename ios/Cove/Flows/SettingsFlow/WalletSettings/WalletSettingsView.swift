@@ -200,8 +200,9 @@ struct WalletSettingsView: View {
     }
 
     private func startXprvExport(_ action: XprvPostVerificationAction) {
+        // without an app lock the unlocked session is trusted, so there is no credential to verify
         guard auth.isAuthEnabled else {
-            queuePresentation(.appLockRequired)
+            performXprvExport(action)
             return
         }
 

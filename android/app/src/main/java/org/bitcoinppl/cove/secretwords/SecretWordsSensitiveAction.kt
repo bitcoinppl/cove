@@ -89,8 +89,9 @@ internal enum class SecretWordsSensitiveAction(
 /**
  * Build the KeyTeleport send request for this wallet's secret words.
  *
- * The send is held until the main credential is entered again, so neither a decoy session nor an
- * unlock that happened before the request can start a transfer.
+ * With an app lock set, the send is held until the main credential is entered again, so neither a
+ * decoy session nor an unlock that happened before the request can start a transfer. Without one,
+ * the unlocked session is trusted and the send starts at once
  */
 @Composable
 internal fun rememberKeyTeleportSendRequest(
@@ -101,11 +102,7 @@ internal fun rememberKeyTeleportSendRequest(
     var pendingGeneration by remember(walletId) { mutableStateOf<Long?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(auth.mainCredentialGeneration) {
-        val requestedAt = pendingGeneration ?: return@LaunchedEffect
-        if (!hasFreshMainCredential(auth.mainCredentialGeneration, requestedAt)) return@LaunchedEffect
-
-        pendingGeneration = null
+    val startSend = {
         if (!app.startKeyTeleportSend(walletId)) {
             app.alertState =
                 TaggedItem(
@@ -115,6 +112,14 @@ internal fun rememberKeyTeleportSendRequest(
                     ),
                 )
         }
+    }
+
+    LaunchedEffect(auth.mainCredentialGeneration) {
+        val requestedAt = pendingGeneration ?: return@LaunchedEffect
+        if (!hasFreshMainCredential(auth.mainCredentialGeneration, requestedAt)) return@LaunchedEffect
+
+        pendingGeneration = null
+        startSend()
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -134,14 +139,9 @@ internal fun rememberKeyTeleportSendRequest(
 
     return remember(app, auth, walletId) {
         {
+            // an unlocked session is trusted to send, so without an app lock there is nothing to verify
             if (!auth.isAuthEnabled) {
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.General(
-                            title = "KeyTeleport",
-                            message = "Set up a PIN or biometric unlock before sending secret words with KeyTeleport.",
-                        ),
-                    )
+                startSend()
             } else {
                 pendingGeneration = auth.mainCredentialGeneration
                 auth.lock(AppLockReason.REAUTHENTICATION)

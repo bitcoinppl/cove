@@ -209,11 +209,10 @@ fun WalletSettingsScreen(
 
     fun startXprvExport(action: XprvExportAction) {
         xprvExportDialog = null
+
+        // without an app lock the unlocked session is trusted, so there is no credential to verify
         if (!auth.isAuthEnabled) {
-            xprvExportDialog =
-                XprvExportDialog.Error(
-                    "Set up a PIN or biometric unlock before exporting a private key.",
-                )
+            performXprvExport(action)
             return
         }
 

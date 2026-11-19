@@ -71,9 +71,9 @@ coverage = [
 # the ui tests restore an xprv-only wallet from the scripted cloud backup, then cancel, enter a wrong pin and the decoy pin before the main pin
 
 [[row]]
-id = "s02-no-pin-private-key-export-safe-failure"
+id = "s02-no-pin-private-key-export-works"
 section = "2"
-title = "No-PIN private-key export safe failure"
+title = "No-PIN private-key export reveals and sends by KeyTeleport"
 platforms = ["ios", "android"]
 target = "ui"
 paths = [
@@ -82,12 +82,14 @@ paths = [
     "rust/src/auth.rs",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsXprvReveal.swift",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
 ]
 coverage = [
-    "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testExportWithoutAppPinIsRefused",
-    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::exportWithoutAppPinIsRefused",
+    "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testWithoutAppPinBothExportRoutesWork",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::withoutAppPinBothExportRoutesWork",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests restore an xprv-only wallet from the scripted cloud backup instead of a two-phone KeyTeleport receive
