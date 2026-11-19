@@ -39,7 +39,7 @@ private const val FRAMES_AFTER_CLEAR = 60
  * its bottom row scrolls the PIN boxes out of view. A wrong PIN typed there must bring them back
  * into view before they shake, and clear them only after, or the pad looks like it ignored the
  * PIN. The test steps the clock one frame at a time, so it sees the order whatever the speed, and
- * a swipe that interrupts the scroll back must not stop the feedback
+ * a swipe while the boxes scroll back or shake must not move them out of view
  */
 @LayoutRegressionTest
 class NumberPadPinWrongPinTest {
@@ -60,11 +60,12 @@ class NumberPadPinWrongPinTest {
     }
 
     @Test
-    fun aSwipeDuringTheScrollBackStillShakesAndClearsThePinBoxesInView() {
+    fun aSwipeDuringTheFeedbackKeepsThePinBoxesInView() {
         setContent()
 
-        checkWrongPin(attempt = 1, swipeWhileScrollingBack = true)
-        checkWrongPin(attempt = 2)
+        checkWrongPin(attempt = 1, swipeWhen = SwipeWhen.SCROLLING_BACK)
+        checkWrongPin(attempt = 2, swipeWhen = SwipeWhen.SHAKING)
+        checkWrongPin(attempt = 3)
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
@@ -85,10 +86,10 @@ class NumberPadPinWrongPinTest {
         }
     }
 
-    /** Types a wrong PIN on the bottom row, optionally swiping toward the keypad as the pad scrolls the boxes back */
+    /** Types a wrong PIN on the bottom row, optionally swiping toward the keypad once during the feedback */
     private fun checkWrongPin(
         attempt: Int,
-        swipeWhileScrollingBack: Boolean = false,
+        swipeWhen: SwipeWhen? = null,
     ) {
         val zero = compose.onNodeWithTag("numberPadPin.digit.0")
         zero.performScrollTo()
@@ -103,7 +104,7 @@ class NumberPadPinWrongPinTest {
         // the shake moves the boxes sideways from here, and the scroll back moves them down
         val rest = pinBoxes()
         val feedback = WrongPinFeedback()
-        var swiped = !swipeWhileScrollingBack
+        var swiped = swipeWhen == null
 
         compose.mainClock.autoAdvance = false
         repeat(PIN_LENGTH) { zero.performClick() }
@@ -111,8 +112,16 @@ class NumberPadPinWrongPinTest {
         while (feedback.framesAfterClear < FRAMES_AFTER_CLEAR && feedback.frames < MAX_FEEDBACK_FRAMES) {
             compose.mainClock.advanceTimeByFrame()
 
-            // a user dragging the keypad back up takes the scroll over from the pad
-            if (!swiped && pinBoxes().top != rest.top) {
+            // a user dragging the keypad back up would scroll the boxes away again
+            val now = pinBoxes()
+            val swipeNow =
+                when (swipeWhen) {
+                    SwipeWhen.SCROLLING_BACK -> now.top != rest.top
+                    SwipeWhen.SHAKING -> now.left != rest.left
+                    null -> false
+                }
+
+            if (!swiped && swipeNow) {
                 compose.onNodeWithTag("numberPadPin.viewport").performTouchInput { swipeUp() }
                 swiped = true
             }
@@ -123,7 +132,7 @@ class NumberPadPinWrongPinTest {
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
 
-        if (!swiped) failures += "attempt $attempt: the pad should scroll the boxes back, but they never moved, so the swipe never ran"
+        if (!swiped) failures += "attempt $attempt: the boxes never moved, so the swipe while ${swipeWhen?.name?.lowercase()} never ran"
         feedback.failures().forEach { failures += "attempt $attempt: $it" }
         if (wrongPins.size != attempt) failures += "attempt $attempt: the pad should report each wrong PIN, but it reported ${wrongPins.size}"
     }
@@ -143,6 +152,9 @@ class NumberPadPinWrongPinTest {
             .fetchSemanticsNodes()
             .size
 }
+
+/** When the test swipes toward the keypad during a wrong PIN's feedback */
+private enum class SwipeWhen { SCROLLING_BACK, SHAKING }
 
 /** What one wrong PIN's feedback showed, frame by frame, until the boxes settled after clearing */
 private class WrongPinFeedback {
@@ -166,12 +178,6 @@ private class WrongPinFeedback {
     ) {
         frames += 1
         if (cleared) framesAfterClear += 1
-        if (shaking && inView) shookInView = true
-        if (shaking && !inView) shookOutOfView = true
-
-        // the boxes can pass through their resting place mid-shake, so a shake that goes on
-        // after they clear means they cleared before it ended
-        if (shaking && cleared) shookAfterClear = true
         if (filled == PIN_LENGTH) showedPin = true
 
         if (showedPin && filled == 0 && !cleared) {
@@ -179,6 +185,13 @@ private class WrongPinFeedback {
             clearedInView = inView
             shookBeforeClear = shookInView
         }
+
+        if (shaking && inView) shookInView = true
+        if (shaking && !inView) shookOutOfView = true
+
+        // the boxes can pass through their resting place mid-shake, so boxes off their resting
+        // place on the frame they clear, or any frame after, cleared before the shake ended
+        if (shaking && cleared) shookAfterClear = true
     }
 
     fun failures(): List<String> =
