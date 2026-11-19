@@ -180,11 +180,15 @@ impl RustCloudBackupManager {
     /// starts from
     ///
     /// Read fresh rather than taken from the last update, since the first publish of a launch
-    /// may not have run yet. An update sent later carries a higher revision and replaces it
+    /// may not have run yet; a read that differs from the last update is sent as a new one first,
+    /// so the snapshot always carries the revision of what it holds. An update sent later carries
+    /// a higher revision and replaces it
     pub(crate) fn recovery_snapshot(&self) -> CloudBackupPublishedRecovery {
-        let revision = self.published_recovery.lock().revision;
-
-        CloudBackupPublishedRecovery { revision, recovery: CloudBackupRecovery::load() }
+        // a read that differs from the last publish is published first, so the next publish
+        // compares against what the platform now holds; otherwise a snapshot read that failed
+        // would stay on the platform while every later publish matched the older value
+        self.publish_recovery(CloudBackupRecovery::load());
+        self.published_recovery.lock().clone()
     }
 
     /// Sends what Cloud Backup can restore when it changed since the last update

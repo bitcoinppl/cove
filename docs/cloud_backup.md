@@ -1456,7 +1456,9 @@ recovered from the Cloud Backup screen; any other gets "not backed up" and
 Delete Forever. Open Cloud Backup shows whenever a backup is configured.
 
 The platform reads `recovery()` before `listen_for_updates`, so the answer is
-right from the first frame after launch. Every screen publish recomputes it from
+right from the first frame after launch. That read is fresh, and when it
+differs from the last update it is sent as the next one first, so a later
+publish compares against what the platform holds. Every screen publish recomputes it from
 the record it already reads and sends a `Recovery` message when it changed, at
 the next revision, and the platform applies it with
 `CloudBackupPublishedRecovery.applying`, which skips one its snapshot already

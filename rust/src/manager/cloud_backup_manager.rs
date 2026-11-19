@@ -1904,6 +1904,51 @@ mod tests {
     }
 
     #[test]
+    fn a_snapshot_that_reads_another_recovery_than_the_last_update_still_gets_later_updates() {
+        use super::recovery_coverage::CloudBackupRecovery;
+        use crate::manager::deferred_sender::SingleOrMany;
+
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        super::ops::test_support::block_on_supervisor_checkpoint(&manager);
+
+        let receiver = manager.reconciler.receiver();
+        let drained_updates = || {
+            receiver
+                .try_iter()
+                .flat_map(|field| match field {
+                    SingleOrMany::Single(message) => vec![message],
+                    SingleOrMany::Many(messages) => messages,
+                })
+                .filter_map(|message| match message {
+                    CloudBackupReconcileMessage::Recovery(update) => Some(update),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        drained_updates();
+
+        let confirmed = CloudBackupRecovery {
+            configured: true,
+            confirmed_wallets: vec![WalletId::from("confirmed")],
+        };
+        manager.publish_recovery(confirmed.clone());
+
+        // the record is off, so the snapshot's own read disagrees with the update just sent, as a
+        // snapshot whose keychain or database read failed would
+        let snapshot = manager.recovery();
+        assert_eq!(snapshot.recovery, CloudBackupRecovery::default());
+
+        // once the reads agree with the earlier update again, the platform must hear about it
+        manager.publish_recovery(confirmed.clone());
+        let platform = drained_updates()
+            .into_iter()
+            .fold(snapshot, |platform, update| platform.applying(update));
+
+        assert_eq!(platform.recovery, confirmed);
+    }
+
+    #[test]
     fn sync_persisted_state_preserves_in_flight_lifecycle() {
         let _guard = test_lock().lock();
         let manager = init_manager();
