@@ -4211,7 +4211,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 64135.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 56708.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_version() != 27942.toShort()) {
@@ -11920,6 +11920,9 @@ public interface FfiAppInterface {
      *
      * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
      * waiting for its first confirmed upload does, since wiping it would lose its only keys
+     *
+     * Every network counts, since the wipe deletes them all. The selected network's wallets come
+     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
      */
     fun `unverifiedWalletIds`(): List<WalletId>
 
@@ -12533,6 +12536,9 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
      *
      * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
      * waiting for its first confirmed upload does, since wiping it would lose its only keys
+     *
+     * Every network counts, since the wipe deletes them all. The selected network's wallets come
+     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
      */override fun `unverifiedWalletIds`(): List<WalletId> {
             return FfiConverterSequenceTypeWalletId.lift(
     callWithHandle {

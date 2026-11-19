@@ -1344,6 +1344,35 @@ verification failed with its retry action, and nothing verifies again by
 itself on reconnect, on foreground or on opening the detail screen, since
 verifying may need a passkey request that only the user's tap may start.
 
+### Wipe Data PIN coverage
+
+The Wipe Data PIN erases every wallet on every network, so it can't be turned
+on while a hot wallet with unverified words has no other copy of its keys.
+`CloudBackupRecoveryCoverage` decides which of those wallets Cloud Backup
+covers, and `unverified_wallet_ids` lists the rest across every network of the
+current wallet mode. A wallet counts as covered only when, in persisted state,
+Cloud Backup is configured with its passkey available, no sync row is
+unreadable, the master key wrapper's row in the current namespace isn't
+unconfirmed, and the wallet's own row there is `Confirmed`. A first upload that
+never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
+uncovered. The rule reads no live verification, inventory or sync health
+state. Those start over on every launch and need the network, so a gate built
+on them refused the PIN after every relaunch.
+
+The alert's Go To Wallet switches the selected network when the wallet it names
+is on another one, since a wallet loads only on its own network.
+
+Two gaps are known and accepted as rare. Closing them would need live provider
+proof, which would refuse the PIN offline and right after launch:
+
+- On iOS, a wallet row can turn `Confirmed` once the file staged in the
+  ubiquity container reads back, before iCloud has it, for example while
+  iCloud storage is full
+- The rows are this device's record, not the provider's. If another device
+  turns Cloud Backup off and deletes the shared namespace, the `Confirmed` rows
+  here still count. A namespace with no master key wrapper row also passes,
+  since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
+
 ## Related Notes
 
 - Read `docs/passkeys.md` before changing passkey registration, targeted auth,

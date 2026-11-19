@@ -471,9 +471,17 @@ impl FfiApp {
     ///
     /// A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
     /// waiting for its first confirmed upload does, since wiping it would lose its only keys
+    ///
+    /// Every network counts, since the wipe deletes them all. The selected network's wallets come
+    /// first, so the alert's Go To Wallet needs no network switch when one of them qualifies
     pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
-        let all_wallets = read_health::observe("wallet list", Database::global().wallets().all())
-            .unwrap_or_default();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
+        let all_wallets = read_health::observe(
+            "wallet list on every network",
+            Database::global().wallets().all_networks(mode, network),
+        )
+        .unwrap_or_default();
         let cloud_coverage = CloudBackupRecoveryCoverage::load();
 
         all_wallets
@@ -1007,6 +1015,17 @@ impl FfiApp {
         let mut deferred = DeferredDispatch::<AppAction>::new();
         deferred.queue(AppAction::UpdateFees);
         deferred.queue(AppAction::UpdateFiatPrices);
+
+        // a wallet on another network loads only once that network is selected, as Settings
+        // selects a wallet after changing the network
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
+        if let Some(wallet_network) = Database::global().wallets().network_of(&id, mode)?
+            && wallet_network != network
+        {
+            Database::global().global_config.set_selected_network(wallet_network)?;
+            refresh_selected_block_height();
+        }
 
         Database::global().global_config.select_wallet(id.clone())?;
 
