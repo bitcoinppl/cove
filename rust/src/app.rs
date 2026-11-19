@@ -21,7 +21,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupRecoveryCoverage},
+    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
@@ -35,7 +35,7 @@ use crate::{
         PreparedFullWipe, PreparedWalletDeletion, WalletDeletionFailure, WalletDeletionIntent,
         WalletInventoryFailure, targets_from_inventory,
     },
-    wallet::metadata::{WalletId, WalletMetadata},
+    wallet::metadata::{WalletId, WalletMetadata, WalletType},
     wallet_lifecycle::{
         ShutdownAttemptId, ShutdownDeadlineTier, WalletLifecycleCoordinator, WalletLifecycleFailure,
     },
@@ -467,17 +467,23 @@ impl FfiApp {
             .unwrap_or(0)
     }
 
-    /// Get wallets that have not been backed up and verified
+    /// Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
+    ///
+    /// None while Cloud Backup is on, since it uploads every wallet, including one still waiting
+    /// for its first upload; otherwise every hot wallet whose words were never verified
     pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
+        // the persisted record, not live state, since live verification and inventory reset on
+        // every launch while the backup itself stays on
+        if RustCloudBackupManager::load_persisted_state().is_configured() {
+            return Vec::new();
+        }
+
         let all_wallets = read_health::observe("wallet list", Database::global().wallets().all())
-            .unwrap_or_default();
-        let cloud_coverage = LazyLock::get(&CLOUD_BACKUP_MANAGER)
-            .map(|manager| CloudBackupRecoveryCoverage::load(manager.as_ref()))
             .unwrap_or_default();
 
         all_wallets
             .into_iter()
-            .filter(|wallet| cloud_coverage.needs_backup(wallet))
+            .filter(|wallet| wallet.wallet_type == WalletType::Hot && !wallet.verified)
             .map(|wallet| wallet.id)
             .collect::<Vec<WalletId>>()
     }

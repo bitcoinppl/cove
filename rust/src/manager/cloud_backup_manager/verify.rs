@@ -75,29 +75,6 @@ impl IntegrityDowngrade {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::{
-        DeepVerificationResult, IntegrityDowngrade, PersistedCloudBackupState,
-        apply_persisted_verification_result,
-    };
-
-    pub(crate) fn apply_startup_integrity_downgrade(
-        current: &PersistedCloudBackupState,
-    ) -> Option<PersistedCloudBackupState> {
-        IntegrityDowngrade::Unverified.apply_to(current)
-    }
-
-    pub(crate) fn apply_verification_result(
-        current: &PersistedCloudBackupState,
-        result: &DeepVerificationResult,
-    ) -> PersistedCloudBackupState {
-        let mut updated = current.clone();
-        apply_persisted_verification_result(&mut updated, result, 30);
-        updated
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupPasskeyRepairFinalization {
     pub(crate) wallet_count: u32,

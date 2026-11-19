@@ -67,7 +67,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
     // toggle handlers using Rust validation
     // rust only reads unverified wallet ids when enabling the wipe data PIN, so the other
-    // toggles skip the keychain and database reads behind unverifiedWalletIds()
+    // toggles skip the database reads behind unverifiedWalletIds()
     fun onBiometricToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleBiometric(enable)
         val result = auth.validateSecurityAction(action, emptyList())

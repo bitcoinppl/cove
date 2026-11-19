@@ -4211,7 +4211,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 44634.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 40630.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_version() != 27942.toShort()) {
@@ -11916,7 +11916,10 @@ public interface FfiAppInterface {
     fun `state`(): AppState
 
     /**
-     * Get wallets that have not been backed up and verified
+     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
+     *
+     * None while Cloud Backup is on, since it uploads every wallet, including one still waiting
+     * for its first upload; otherwise every hot wallet whose words were never verified
      */
     fun `unverifiedWalletIds`(): List<WalletId>
 
@@ -12526,7 +12529,10 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
 
     /**
-     * Get wallets that have not been backed up and verified
+     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
+     *
+     * None while Cloud Backup is on, since it uploads every wallet, including one still waiting
+     * for its first upload; otherwise every hot wallet whose words were never verified
      */override fun `unverifiedWalletIds`(): List<WalletId> {
             return FfiConverterSequenceTypeWalletId.lift(
     callWithHandle {
