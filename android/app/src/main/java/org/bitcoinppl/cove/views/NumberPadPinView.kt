@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.performPinKeyPressHaptic
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -67,6 +70,7 @@ fun NumberPadPinView(
     val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
     val pinBoxes = remember { BringIntoViewRequester() }
+    val scrollState = rememberScrollState()
 
     fun enterDigit(digit: String) {
         if (isSubmitting || pin.length >= pinLength) return
@@ -89,7 +93,7 @@ fun NumberPadPinView(
                         // when the pad is taller than the screen, reaching its bottom row scrolls
                         // the boxes away, so they come back into view before they shake, and the
                         // PIN clears only once the shake ends, however slowly animations run
-                        pinBoxes.bringIntoView()
+                        pinBoxes.bringIntoViewPastSwipes(scrollState)
                         offsetX.shake()
                         pin = ""
                         onWrongPin(submittedPin)
@@ -107,7 +111,7 @@ fun NumberPadPinView(
                 .fillMaxSize()
                 .background(CoveColor.midnightBlue)
                 .testTag("numberPadPin.viewport")
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -315,5 +319,21 @@ private fun NumberButton(
 private suspend fun Animatable<Float, AnimationVector1D>.shake() {
     for (offset in listOf(30f, -30f, 20f, -20f, 10f, -10f, 0f)) {
         animateTo(offset, animationSpec = tween(70, easing = LinearEasing))
+    }
+}
+
+/**
+ * Brings the PIN boxes into view, even if the user swipes while they scroll back
+ *
+ * A swipe takes the scroll over and ends the request before the boxes are in view, so while a
+ * scroll is still running when the request returns, it waits for that scroll and its fling to end
+ * and asks again, rather than shaking and clearing boxes the user can't see
+ */
+private suspend fun BringIntoViewRequester.bringIntoViewPastSwipes(scrollState: ScrollState) {
+    while (true) {
+        bringIntoView()
+        if (!scrollState.isScrollInProgress) return
+
+        snapshotFlow { scrollState.isScrollInProgress }.first { !it }
     }
 }
