@@ -191,6 +191,10 @@ struct HotWalletImportScreen: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
+        // the scanner stops camera codes once it starts to close, but a photo from the library
+        // can hold several codes, reported together after the first one closed the sheet
+        guard sheetState != nil else { return }
+
         switch result {
         case let .failure(error):
             handleScanFailure(error)

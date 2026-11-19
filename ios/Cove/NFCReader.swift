@@ -22,6 +22,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var readBytes: Data
     var messageInfo: MessageInfo?
 
+    /// The hardware identifier of the tag `readBytes` came from
+    private var partialReadTag: Data?
+
     var readingMessage = ""
     var currentBlock = 0
 
@@ -118,6 +121,12 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         isScanning = false
         scriptedScan?.cancel()
         scriptedScan = nil
+        discardPartialRead()
+        partialReadTag = nil
+    }
+
+    /// Forgets a block read part way, leaving the scan itself going
+    private func discardPartialRead() {
         reader = FfiNfcReader()
         readBytes = Data()
         messageInfo = nil
@@ -164,6 +173,13 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         readingMessage = "Reading tag, please hold still"
         session.alertMessage = readingMessage
 
+        // saved bytes only resume on the tag they came from, since another tag can start with the
+        // same bytes, such as the unsigned and the signed export of one transaction
+        if partialReadTag != tag.identifier {
+            discardPartialRead()
+            partialReadTag = tag.identifier
+        }
+
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
         guard reader.isStarted(), !readBytes.isEmpty else {
             readNextBlock(tag: tag, session: session)
@@ -207,10 +223,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             } else {
                 // reset reader and bytes read
                 Log.warn("Trying to scan a different NFC message, resetting")
-                self.resetReader()
-
-                // resetReader marks the scan over, but this read goes on from the first block
-                self.isScanning = true
+                self.discardPartialRead()
             }
 
             self.readNextBlock(tag: tag, session: session)
@@ -334,7 +347,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         // the caller decides whether to close the session or fall back to CoreNFC's NDEF reader
         case let .failure(error):
             Log.debug("parse and handle result error: \(error)")
-            resetReader()
+            discardPartialRead()
             return .error(error)
         }
     }
@@ -343,9 +356,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     func readNDEF(from tag: some NFCNDEFTag, session: NFCTagReaderSession) {
         Log.debug("reading NDEF message from tag: \(tag)")
         session.alertMessage = "Reading data please hold still..."
-
-        // the ISO 15693 fallback comes after resetReader, which marks the scan over
-        isScanning = true
 
         tag.readNDEF { message, error in
             if let error, message == nil {
