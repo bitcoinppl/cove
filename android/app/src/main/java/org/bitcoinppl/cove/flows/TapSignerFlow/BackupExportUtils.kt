@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.utils.writeExportBytes
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "TapSignerBackupExport"
 
@@ -121,7 +122,7 @@ fun TapSignerBackupExportHost(app: AppManager) {
                         TaggedItem(
                             AppAlertState.General(
                                 title = "Saving Backup Failed!",
-                                message = "Failed to save backup: ${e.message ?: "Unknown error occurred"}",
+                                message = "Failed to save backup: ${e.displayMessage("Unknown error occurred")}",
                             ),
                         )
                 }

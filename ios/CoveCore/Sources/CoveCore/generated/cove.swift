@@ -25424,6 +25424,17 @@ enum CkTapError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cktaperror_uniffi_trait_display(
+            FfiConverterTypeCkTapError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -34565,7 +34576,7 @@ enum FiatAmountError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
 
 
     /**
-     * Unable to convert to fiat amount, prices client unavailable {0}
+     * Unable to convert to fiat amount, because the prices client is unavailable
      */
     case PricesUnavailable(String
     )
@@ -34573,6 +34584,17 @@ enum FiatAmountError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_fiatamounterror_uniffi_trait_display(
+            FfiConverterTypeFiatAmountError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -38806,6 +38828,17 @@ enum NodeSelectorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_nodeselectorerror_uniffi_trait_display(
+            FfiConverterTypeNodeSelectorError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -45289,11 +45322,11 @@ enum TrickPinError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
      */
     case PinNotEnabled
     /**
-     * Unable to set trick PIN, because its the same as the current pin
+     * Unable to set trick PIN, because it is the same as the current PIN
      */
     case SameAsCurrentPin
     /**
-     * Unable to set trick PIN, its the same as another PIN
+     * Unable to set trick PIN, because it is the same as another PIN
      */
     case SameAsAnotherPin
     /**
@@ -45304,6 +45337,17 @@ enum TrickPinError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_trickpinerror_uniffi_trait_display(
+            FfiConverterTypeTrickPinError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {

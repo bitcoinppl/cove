@@ -1822,6 +1822,17 @@ enum NfcMessageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_nfc_fn_method_nfcmessageerror_uniffi_trait_display(
+            FfiConverterTypeNfcMessageError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -1896,6 +1907,17 @@ enum NfcReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_nfc_fn_method_nfcreadererror_uniffi_trait_display(
+            FfiConverterTypeNfcReaderError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {
@@ -2151,6 +2173,17 @@ enum ResumeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_nfc_fn_method_resumeerror_uniffi_trait_display(
+            FfiConverterTypeResumeError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {

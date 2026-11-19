@@ -36,6 +36,7 @@ import org.bitcoinppl.cove.nfc.NfcWriteSheet
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import java.io.File
+import org.bitcoinppl.cove.displayMessage
 
 internal enum class ConfirmationState {
     ExportTxn,
@@ -100,7 +101,7 @@ internal fun HardwareConfirmationDialogs(
                                     try {
                                         sharePsbtFile(context, details)
                                     } catch (e: Exception) {
-                                        onAlert(AlertState.FileError, e.message ?: "Unknown error")
+                                        onAlert(AlertState.FileError, e.displayMessage("Unknown error"))
                                     }
                                 }
                             },
@@ -167,7 +168,7 @@ internal fun HardwareConfirmationDialogs(
                                         } catch (e: Exception) {
                                             onAlert(
                                                 AlertState.PasteError,
-                                                e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
+                                                e.displayMessage(TransactionImportErrors.FAILED_TO_IMPORT),
                                             )
                                         }
                                     }

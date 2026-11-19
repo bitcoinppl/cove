@@ -58,6 +58,8 @@ import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove.displayMessage
+import java.util.Locale
 
 private const val TAG = "NodeSettings"
 
@@ -170,7 +172,7 @@ fun NodeSettingsScreen(
             } catch (e: Exception) {
                 Log.e(TAG, "Preset node selection failed for $nodeName", e)
                 errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
+                errorMessage = errorUnknown.format(Locale.ROOT, e.displayMessage(""))
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -219,7 +221,7 @@ fun NodeSettingsScreen(
                 showErrorDialog = true
             } catch (e: Exception) {
                 errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
+                errorMessage = errorUnknown.format(Locale.ROOT, e.displayMessage(""))
                 showErrorDialog = true
             } finally {
                 isLoading = false

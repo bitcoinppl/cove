@@ -1281,7 +1281,11 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_types_fn_free_utxolist(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_types_fn_method_addresserror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_confirmdetailserror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -1290,6 +1294,8 @@ internal object UniffiLib {
     external fun uniffi_cove_types_fn_method_network_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_psbterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -9713,6 +9719,15 @@ sealed class AddressException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_addresserror_uniffi_trait_display(FfiConverterTypeAddressError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AddressException> {
         override fun lift(error_buf: RustBuffer.ByValue): AddressException = FfiConverterTypeAddressError.lift(error_buf)
@@ -9915,6 +9930,15 @@ sealed class ConfirmDetailsException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_confirmdetailserror_uniffi_trait_display(FfiConverterTypeConfirmDetailsError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ConfirmDetailsException> {
         override fun lift(error_buf: RustBuffer.ByValue): ConfirmDetailsException = FfiConverterTypeConfirmDetailsError.lift(error_buf)
@@ -10530,6 +10554,15 @@ sealed class PsbtException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_psbterror_uniffi_trait_display(FfiConverterTypePsbtError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<PsbtException> {
         override fun lift(error_buf: RustBuffer.ByValue): PsbtException = FfiConverterTypePsbtError.lift(error_buf)

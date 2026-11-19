@@ -321,7 +321,9 @@ private fun QrScannerContent(
                                     TaggedItem(
                                         AppAlertState.General(
                                             title = "QR Scan Error",
-                                            message = "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                            message =
+                                                "Failed to initialize camera: " +
+                                                    e.displayMessage("Unknown error"),
                                         ),
                                     )
                             }
@@ -518,6 +520,6 @@ private fun handleQrCode(
     } catch (e: Exception) {
         // the scan ends here; the message can quote scanned content, so log only the kind
         Log.w("QrCodeScanView", "QR scan failed: ${e.javaClass.simpleName}")
-        onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
+        onError("Unable to scan QR code: ${e.displayMessage("Unknown scanning error")}")
     }
 }

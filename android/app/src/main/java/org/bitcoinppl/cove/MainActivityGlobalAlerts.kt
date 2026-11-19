@@ -459,7 +459,9 @@ private fun GlobalAlertDialog(
                                 } catch (e: Exception) {
                                     app.alertState =
                                         TaggedItem(
-                                            AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                                            AppAlertState.ErrorImportingHardwareWallet(
+                                                e.displayMessage("Unknown error"),
+                                            ),
                                         )
                                 }
                             }

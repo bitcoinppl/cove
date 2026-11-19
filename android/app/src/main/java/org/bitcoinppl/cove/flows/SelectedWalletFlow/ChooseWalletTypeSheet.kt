@@ -40,6 +40,7 @@ import org.bitcoinppl.cove_core.WalletAddressType
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.previewNewLegacyFoundAddress
 import org.bitcoinppl.cove_core.previewNewWrappedFoundAddress
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,7 +105,7 @@ fun ChooseWalletTypeSheet(
                             TaggedItem(
                                 AppAlertState.General(
                                     title = "Switch Failed",
-                                    message = e.message ?: "Could not switch wallet address type",
+                                    message = e.displayMessage("Could not switch wallet address type"),
                                 ),
                             )
                     } finally {

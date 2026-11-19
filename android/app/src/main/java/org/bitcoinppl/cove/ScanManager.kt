@@ -25,7 +25,7 @@ class ScanManager private constructor() {
             Log.e(tag, "Unable to handle scanned code", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                    AppAlertState.InvalidFileFormat(e.displayMessage("Unknown error")),
                 )
         }
     }
@@ -105,7 +105,7 @@ class ScanManager private constructor() {
             app.alertState =
                 TaggedItem(
                     AppAlertState.InvalidFileFormat(
-                        e.message ?: "Failed to import labels",
+                        e.displayMessage("Failed to import labels"),
                     ),
                 )
         }
@@ -131,7 +131,7 @@ class ScanManager private constructor() {
             Log.e(tag, "Unable to import wallet", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
+                    AppAlertState.ErrorImportingHotWallet(e.displayMessage("Unknown error")),
                 )
         } finally {
             manager.close()
@@ -162,7 +162,7 @@ class ScanManager private constructor() {
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.ErrorImportingHardwareWallet(
-                                        e.message ?: "Failed to convert wallet to hardware wallet",
+                                        e.displayMessage("Failed to convert wallet to hardware wallet"),
                                     ),
                                 )
                         }
@@ -185,7 +185,7 @@ class ScanManager private constructor() {
             Log.e(tag, "Error importing hardware wallet", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                    AppAlertState.ErrorImportingHardwareWallet(e.displayMessage("Unknown error")),
                 )
         }
     }

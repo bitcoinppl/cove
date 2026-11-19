@@ -34,6 +34,7 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
 import kotlin.coroutines.cancellation.CancellationException
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 /**
  * Wallet settings container - lazy loads WalletManager for wallet settings
@@ -115,7 +116,7 @@ fun WalletSettingsContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val message = e.message ?: "Unknown error"
+            val message = e.displayMessage("Unknown error")
 
             Log.e(tag, "failed to load wallet", e)
             recoveryGeneration += 1

@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppLogStore
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove_core.DiagnosticsPlatformInfo
+import org.bitcoinppl.cove.displayMessage
 
 private const val DIAGNOSTICS_FILENAME = "cove-diagnostics.txt"
 private const val MAX_LOGCAT_CHARS = 256 * 1024
@@ -148,8 +149,6 @@ internal fun copyReportId(
         Toast.makeText(context, "Report ID copied", Toast.LENGTH_SHORT).show()
     }
 }
-
-internal fun Throwable.displayMessage(): String = message ?: javaClass.simpleName
 
 internal fun String.takeLastAtRedactionBoundary(maxChars: Int): String {
     if (length <= maxChars) return this

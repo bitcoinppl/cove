@@ -86,6 +86,7 @@ import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.groupedPlainWordsOf
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.displayMessage
 
 private enum class AlertState {
     None,
@@ -241,7 +242,7 @@ fun HotWalletImportScreen(
             alertState = AlertState.DuplicateWallet
         } catch (e: Exception) {
             Log.e("HotWalletImport", "import error", e)
-            genericErrorMessage = e.message ?: "Unknown error occurred"
+            genericErrorMessage = e.displayMessage("Unknown error occurred")
             alertState = AlertState.GenericError
         }
     }

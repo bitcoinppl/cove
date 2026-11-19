@@ -16,6 +16,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 enum class NfcWritingState {
     WAITING,
@@ -134,7 +135,7 @@ class NfcWriter(
             sendError("Tag doesn't support NDEF")
         } catch (e: Exception) {
             Log.e(TAG, "Error writing NFC tag", e)
-            sendError("Error writing tag: ${e.message}")
+            sendError("Error writing tag: ${e.displayMessage()}")
         }
     }
 
@@ -186,7 +187,7 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            sendError("Write failed: ${e.message}")
+            sendError("Write failed: ${e.displayMessage()}")
         }
     }
 
@@ -224,7 +225,7 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            sendError("Format failed: ${e.message}")
+            sendError("Format failed: ${e.displayMessage()}")
         }
     }
 

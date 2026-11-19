@@ -43,6 +43,7 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
+import org.bitcoinppl.cove.displayMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -161,7 +162,7 @@ fun AboutSettingsScreen(
                         Database().globalFlag().set(GlobalFlagKey.BETA_FEATURES_ENABLED, newValue)
                         isBetaEnabled = newValue
                     } catch (e: Exception) {
-                        betaError = "Failed to update beta features: ${e.message}"
+                        betaError = "Failed to update beta features: ${e.displayMessage()}"
                     }
                     showBetaDialog = false
                     if (newValue) showBetaEnabledDialog = true

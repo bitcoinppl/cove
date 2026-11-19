@@ -23,6 +23,7 @@ pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 pub struct Psbt(pub BdkPsbt);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum PsbtError {
     #[error("Missing UTXO")]
     MissingUtxo,

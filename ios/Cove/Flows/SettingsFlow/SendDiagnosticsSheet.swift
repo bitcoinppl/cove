@@ -144,7 +144,7 @@ struct SendDiagnosticsSheet: View {
             refreshPreview(report: nextReport)
             loadState = .ready
         } catch {
-            loadState = .failed(diagnosticsErrorMessage(error))
+            loadState = .failed(error.localizedDescription)
         }
     }
 
@@ -160,7 +160,7 @@ struct SendDiagnosticsSheet: View {
             reportId = submission.reportId
             submissionWarning = submission.warning
         } catch {
-            alertState = .error(diagnosticsErrorMessage(error))
+            alertState = .error(error.localizedDescription)
         }
     }
 
@@ -505,21 +505,6 @@ private struct SendDiagnosticsSubmitButton: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(isDisabled)
-    }
-}
-
-private func diagnosticsErrorMessage(_ error: Error) -> String {
-    guard let diagnosticsError = error as? DiagnosticsError else {
-        return error.localizedDescription
-    }
-
-    switch diagnosticsError {
-    case let .Build(message):
-        return message
-    case let .ClearLogs(message):
-        return message
-    case let .Submit(message):
-        return message
     }
 }
 

@@ -52,6 +52,7 @@ pub enum NodeSelection {
 type Error = NodeSelectorError;
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum NodeSelectorError {
     #[error("node with name {0} not found")]
     NodeNotFound(String),

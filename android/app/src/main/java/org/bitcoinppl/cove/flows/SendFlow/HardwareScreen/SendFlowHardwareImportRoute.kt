@@ -22,6 +22,7 @@ import org.bitcoinppl.cove_core.SignedTransactionOrPsbt
 import org.bitcoinppl.cove_core.UnsignedTransactionRecord
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryFromBytes
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryParse
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "SignedImport"
 
@@ -52,7 +53,7 @@ internal fun rememberSignedImportFilePicker(
 
                     app.pushRoute(signedImportRoute(fileData))
                 } catch (e: Exception) {
-                    onError(e.message ?: TransactionImportErrors.FAILED_TO_IMPORT)
+                    onError(e.displayMessage(TransactionImportErrors.FAILED_TO_IMPORT))
                 }
             }
         }

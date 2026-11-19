@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.uitest.UiTestSeams
 import java.nio.charset.Charset
+import org.bitcoinppl.cove.displayMessage
 
 enum class NfcReadingState {
     WAITING,
@@ -115,7 +116,7 @@ class NfcReader(
                     .map { NfcScanResult.Success(it, null) }
                     .getOrElse {
                         Log.e("NfcReader", "UI test bridge read failed", it)
-                        NfcScanResult.Error("Error reading tag: ${it.message}")
+                        NfcScanResult.Error("Error reading tag: ${it.displayMessage()}")
                     }
 
             mainHandler.post {
@@ -151,7 +152,7 @@ class NfcReader(
                     processNdefMessage(NdefMessage(bytes))
                 } catch (e: FormatException) {
                     Log.e("NfcReader", "UI test NDEF message is not valid", e)
-                    _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.message}"))
+                    _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.displayMessage()}"))
                 }
             }
     }
@@ -194,7 +195,7 @@ class NfcReader(
             _scanResults.trySend(NfcScanResult.Error("Unable to read NFC tag"))
         } catch (e: Exception) {
             Log.e("NfcReader", "Error reading NFC tag", e)
-            _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.message}"))
+            _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.displayMessage()}"))
         }
     }
 

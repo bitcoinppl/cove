@@ -709,6 +709,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_tap_card_fn_method_tapsigner_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_tap_card_fn_method_tapcardparseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_tap_card_fn_func_tap_signer_preview_new(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_tap_card_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1696,6 +1698,15 @@ sealed class TapCardParseException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_tap_card_fn_method_tapcardparseerror_uniffi_trait_display(FfiConverterTypeTapCardParseError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TapCardParseException> {
         override fun lift(error_buf: RustBuffer.ByValue): TapCardParseException = FfiConverterTypeTapCardParseError.lift(error_buf)

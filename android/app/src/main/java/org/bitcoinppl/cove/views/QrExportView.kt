@@ -67,6 +67,7 @@ import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.QrExportFormat
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 /**
  * Generic QR export view that can display animated BBQr or UR QR codes.
@@ -103,7 +104,7 @@ fun QrExportView(
             error = null
             currentIndex = 0
         } catch (e: Exception) {
-            error = e.message ?: "Unknown error"
+            error = e.displayMessage("Unknown error")
             qrStrings = emptyList()
         }
     }

@@ -55,6 +55,7 @@ pub struct SplitOutput {
 }
 
 #[derive(Debug, Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum ConfirmDetailsError {
     #[error("unable to represent PSBT as QR code: {0}")]
     QrCodeCreation(String),

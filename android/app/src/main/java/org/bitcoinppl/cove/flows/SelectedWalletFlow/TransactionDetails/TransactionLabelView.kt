@@ -51,6 +51,7 @@ import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.types.TxId
+import org.bitcoinppl.cove.displayMessage
 
 private const val TAG = "TransactionLabel"
 
@@ -95,7 +96,7 @@ fun TransactionLabelView(
             val presentation = manager.refreshTransactionDetails(txId)
             currentLabel = presentation.details().transactionLabel()
         }.onFailure { e ->
-            val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
+            val message = context.getString(R.string.label_update_error, e.displayMessage("Unknown error"))
             snackbarHostState.showSnackbar(
                 message = message,
                 duration = SnackbarDuration.Short,
@@ -124,7 +125,7 @@ fun TransactionLabelView(
 
                     updateDetails()
                 }.onFailure { e ->
-                    val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
+                    val message = context.getString(R.string.label_save_error, e.displayMessage("Unknown error"))
                     snackbarHostState.showSnackbar(
                         message = message,
                         duration = SnackbarDuration.Short,
@@ -151,7 +152,7 @@ fun TransactionLabelView(
 
                     updateDetails()
                 }.onFailure { e ->
-                    val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
+                    val message = context.getString(R.string.label_delete_error, e.displayMessage("Unknown error"))
                     snackbarHostState.showSnackbar(
                         message = message,
                         duration = SnackbarDuration.Short,

@@ -2,9 +2,11 @@ use crate::transaction::SentAndReceived;
 
 use super::{FiatCurrency, client::PRICES};
 
-#[derive(Debug, thiserror::Error, derive_more::Display, uniffi::Error)]
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum FiatAmountError {
-    /// Unable to convert to fiat amount, prices client unavailable {0}
+    /// Unable to convert to fiat amount, because the prices client is unavailable
+    #[error("Unable to convert to fiat amount: {0}")]
     PricesUnavailable(String),
 }
 

@@ -60,6 +60,7 @@ import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
 import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.displayMessage
 
 private const val SCROLL_THRESHOLD_INDEX = 5
 private const val TAG = "TransactionsRows"
@@ -644,7 +645,7 @@ internal fun UnsignedTransactionWidget(
                             TaggedItem(
                                 AppAlertState.General(
                                     title = "Delete Failed",
-                                    message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
+                                    message = "Unable to delete transaction: ${e.displayMessage("Unknown error")}",
                                 ),
                             )
                     }

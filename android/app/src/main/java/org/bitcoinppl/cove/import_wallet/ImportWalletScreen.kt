@@ -26,6 +26,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import java.util.Locale
+import org.bitcoinppl.cove.displayMessage
 
 @Preview
 @Composable
@@ -164,7 +165,7 @@ fun ImportWalletScreen(
                         } catch (e: Exception) {
                             Log.e("ImportWalletScreen", "Failed to import wallet", e)
                             snackbarHostState.showSnackbar(
-                                message = "Failed to import wallet: $e",
+                                message = "Failed to import wallet: ${e.displayMessage()}",
                                 duration = SnackbarDuration.Short,
                             )
                         } finally {

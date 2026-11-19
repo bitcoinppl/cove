@@ -3515,6 +3515,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_fiatcurrency_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_fiatamounterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3524,6 +3526,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_trickpinerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_deepverificationfailure_message(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3571,6 +3575,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselection_to_node(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselectorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_scanprogress_detail_text(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3597,6 +3603,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_signedtransactionorpsbt_unsignedtxid(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_cktaperror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignercvcerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -42045,6 +42053,15 @@ sealed class CkTapException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cktaperror_uniffi_trait_display(FfiConverterTypeCkTapError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<CkTapException> {
         override fun lift(error_buf: RustBuffer.ByValue): CkTapException = FfiConverterTypeCkTapError.lift(error_buf)
@@ -52639,7 +52656,7 @@ public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRust
 sealed class FiatAmountException: kotlin.Exception() {
 
     /**
-     * Unable to convert to fiat amount, prices client unavailable {0}
+     * Unable to convert to fiat amount, because the prices client is unavailable
      */
     class PricesUnavailable(
 
@@ -52652,6 +52669,15 @@ sealed class FiatAmountException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_fiatamounterror_uniffi_trait_display(FfiConverterTypeFiatAmountError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FiatAmountException> {
         override fun lift(error_buf: RustBuffer.ByValue): FiatAmountException = FfiConverterTypeFiatAmountError.lift(error_buf)
@@ -57857,6 +57883,15 @@ sealed class NodeSelectorException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodeselectorerror_uniffi_trait_display(FfiConverterTypeNodeSelectorError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NodeSelectorException> {
         override fun lift(error_buf: RustBuffer.ByValue): NodeSelectorException = FfiConverterTypeNodeSelectorError.lift(error_buf)
@@ -66222,7 +66257,7 @@ sealed class TrickPinException: kotlin.Exception() {
     }
 
     /**
-     * Unable to set trick PIN, because its the same as the current pin
+     * Unable to set trick PIN, because it is the same as the current PIN
      */
     class SameAsCurrentPin(
         ) : TrickPinException() {
@@ -66231,7 +66266,7 @@ sealed class TrickPinException: kotlin.Exception() {
     }
 
     /**
-     * Unable to set trick PIN, its the same as another PIN
+     * Unable to set trick PIN, because it is the same as another PIN
      */
     class SameAsAnotherPin(
         ) : TrickPinException() {
@@ -66251,6 +66286,15 @@ sealed class TrickPinException: kotlin.Exception() {
 
 
 
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_trickpinerror_uniffi_trait_display(FfiConverterTypeTrickPinError.lower(this),
+        _status)
+}
+    )
+    }
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TrickPinException> {
         override fun lift(error_buf: RustBuffer.ByValue): TrickPinException = FfiConverterTypeTrickPinError.lift(error_buf)

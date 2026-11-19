@@ -1028,6 +1028,17 @@ enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
 
 
 
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_tap_card_fn_method_tapcardparseerror_uniffi_trait_display(
+            FfiConverterTypeTapCardParseError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
 
 
     public var errorDescription: String? {

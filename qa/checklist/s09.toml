@@ -293,7 +293,7 @@ title = "Invalid public-key alert shows internal error types"
 platforms = ["ios"]
 target = "ui"
 paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "rust/src/wallet/**", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
-coverage = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
+coverage = ["ios-unit:ios/CoveTests/UniffiErrorTextTests.swift::testNestedErrorShowsTheInnerReason"]
 # 1.4.0: ios FAIL, android N/A
 # ios maps the rust error to alert text
 
@@ -352,6 +352,6 @@ title = "Clear saved screenshot of invalid public-key error"
 platforms = ["ios"]
 target = "ui"
 paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "rust/src/wallet/**", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
-coverage = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
+coverage = ["ios-unit:ios/CoveTests/UniffiErrorTextTests.swift::testNestedErrorShowsTheInnerReason"]
 # 1.4.0: ios PASS, android N/A
 # same defect as the invalid public-key alert row, evidence capture

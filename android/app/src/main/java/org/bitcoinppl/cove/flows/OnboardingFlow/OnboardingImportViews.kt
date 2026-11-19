@@ -67,6 +67,7 @@ import org.bitcoinppl.cove_core.WalletException
 import org.bitcoinppl.cove_core.multiFormatTryFromNfcMessage
 import org.bitcoinppl.cove_core.nfc.NfcMessage
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.displayMessage
 
 private sealed interface SoftwareImportMode {
     data object Chooser : SoftwareImportMode
@@ -381,7 +382,7 @@ private fun OnboardingHardwareQrImportView(
                 runCatching { importHardwareWalletFromMultiFormat(multiFormat) }
                     .onSuccess(onImported)
                     .onFailure { error ->
-                        errorMessage = error.message ?: "Unable to import hardware wallet from QR."
+                        errorMessage = error.displayMessage("Unable to import hardware wallet from QR.")
                     }
             },
             onDismiss = onBack,
@@ -457,7 +458,7 @@ private fun OnboardingHardwareFileImportView(
                         }
                     onImported(walletId)
                 } catch (error: Exception) {
-                    errorMessage = error.message ?: "Unable to import hardware wallet from file."
+                    errorMessage = error.displayMessage("Unable to import hardware wallet from file.")
                 } finally {
                     isImporting = false
                 }
@@ -524,7 +525,7 @@ private fun OnboardingHardwareNfcImportView(
                         nfcReader.reset()
                         onImported(walletId)
                     } catch (error: Exception) {
-                        errorMessage = error.message ?: "Unable to import hardware wallet from NFC."
+                        errorMessage = error.displayMessage("Unable to import hardware wallet from NFC.")
                     }
                 }
                 is NfcScanResult.Error -> {

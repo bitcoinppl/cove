@@ -25,11 +25,12 @@ pub const NUMBER_OF_BLOCKS_PER_CHUNK: u16 = 32;
 pub const BYTES_PER_BLOCK: u16 = 4;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
 pub enum NfcReaderError {
     #[error("Error parsing the NDEF message: {0}")]
     ParsingError(String),
 
-    #[error("Not enough data to parse, need atleast enough to parse the message info")]
+    #[error("Not enough data to parse, need at least enough to parse the message info")]
     NotEnoughData,
 
     #[error("Trying to parse a message that has already been parsed")]

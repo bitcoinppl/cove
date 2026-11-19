@@ -21,7 +21,7 @@ pub enum FileHandlerError {
     #[error("Unable to read file {0}")]
     ReadFile(String),
 
-    #[error("File is not a recognized format: {0:?}")]
+    #[error("File is not a recognized format: {0}")]
     NotRecognizedFormat(#[from] MultiFormatError),
 }
 

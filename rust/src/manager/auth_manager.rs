@@ -145,17 +145,18 @@ pub enum AuthManagerError {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
 pub enum TrickPinError {
     /// Unable to set trick PIN, because PIN is not enabled
     #[error("PIN is not enabled")]
     PinNotEnabled,
 
-    /// Unable to set trick PIN, because its the same as the current pin
-    #[error("its is the same as the current pin")]
+    /// Unable to set trick PIN, because it is the same as the current PIN
+    #[error("it is the same as your current PIN")]
     SameAsCurrentPin,
 
-    /// Unable to set trick PIN, its the same as another PIN
-    #[error("its is the same as another PIN")]
+    /// Unable to set trick PIN, because it is the same as another PIN
+    #[error("it is the same as another PIN")]
     SameAsAnotherPin,
 
     /// Unable to set trick PIN, because biometrics is enabled

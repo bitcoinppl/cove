@@ -17,6 +17,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import org.bitcoinppl.cove.displayMessage
 
 /** send flow presenter - manages UI state for send flow screens */
 class SendFlowPresenter(
@@ -175,7 +176,7 @@ class SendFlowPresenter(
                 when (error.v1) {
                     is WalletManagerException.LockedOutputsSelected ->
                         "Selected coins include locked coins. Unlock them or choose different coins."
-                    else -> error.v1.message ?: "Wallet Manager Error"
+                    else -> error.v1.displayMessage("Wallet Manager Error")
                 }
 
             is SendFlowException.UnableToGetFeeDetails ->

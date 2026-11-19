@@ -64,7 +64,7 @@ pub enum DescriptorError {
     #[error("Missing fingerprint (xfp)")]
     MissingFingerprint,
 
-    #[error("Unable to parse xpub: {0:?}")]
+    #[error("Unable to parse xpub: {0}")]
     InvalidXpub(String),
 
     #[error("Unable to parse xpub: {0}")]
