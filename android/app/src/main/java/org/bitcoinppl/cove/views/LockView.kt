@@ -8,7 +8,6 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.biometric.BiometricPrompt.PromptInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.slideInVertically
@@ -67,6 +66,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.BiometricPolicy
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove.WIPE_FAILURE_MESSAGE
@@ -90,20 +90,16 @@ fun LockView(
     val activity = context.findFragmentActivity()
     val biometricManager = remember { BiometricManager.from(context) }
 
-    val isBiometricAvailable =
-        remember {
-            biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
-        }
+    val isBiometricAvailable = remember { BiometricPolicy.isAvailable(biometricManager) }
 
     // keep promptInfo cached (it's just config, doesn't go stale)
     val promptInfo =
         remember {
-            PromptInfo
-                .Builder()
-                .setTitle("Unlock Cove")
-                .setSubtitle("Use your biometric to unlock")
-                .setNegativeButtonText("Cancel")
-                .build()
+            BiometricPolicy.promptInfo(
+                title = "Unlock Cove",
+                subtitle = "Use your biometric to unlock",
+                negativeButtonText = "Cancel",
+            )
         }
 
     // track timeout job to cancel if biometric completes normally

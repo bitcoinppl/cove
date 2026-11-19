@@ -57,7 +57,12 @@ style:
       - '**/src/testUiTest/**'
       - '**/src/screenshotTest/**'
       - '**/src/main/java/org/bitcoinppl/cove/Log.kt'
+      - '**/src/main/java/org/bitcoinppl/cove/BiometricPolicy.kt'
     methods:
+      # a prompt built without allowed authenticators defaults to weak biometrics, which offers
+      # camera face unlock on phones such as Samsung Galaxy devices
+      - value: 'androidx.biometric.BiometricPrompt.PromptInfo.Builder.<init>'
+        reason: 'Use org.bitcoinppl.cove.BiometricPolicy.promptInfo, which only allows strong biometrics'
       - value: 'android.util.Log.v'
         reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'
       - value: 'android.util.Log.d'
