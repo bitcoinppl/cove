@@ -519,6 +519,20 @@ internal class CloudBackupRootPromptHost(
     val onOpenCloudBackup: () -> Unit,
 )
 
+/** The prompt for backup folders whose files haven't reached this device */
+private fun backupFilesUnavailablePrompt(): CloudBackupChoicePrompt =
+    CloudBackupChoicePrompt(
+        title = "Backup Files Not Available Yet",
+        // the files may still be syncing, so the prompt never calls the backup gone
+        message =
+            "Google Drive has a Cloud Backup folder, but its files haven't reached this device yet. " +
+                "Wait for Google Drive to finish syncing, then try again. " +
+                "A new Cloud Backup will not include wallets from that backup.",
+        testTag = CloudBackupTags.PROMPT_BACKUP_FILES_UNAVAILABLE,
+        choices = backupFilesUnavailablePromptChoices(),
+        dismissIntent = CloudBackupManagerAction.DiscardPendingEnableCloudBackup,
+    )
+
 /**
  * The prompt Rust projects, drawn from the latest screen
  *
@@ -547,22 +561,7 @@ internal fun CloudBackupRootPromptDialog(
             )
 
         is CloudBackupRootPresentation.BackupFilesUnavailable ->
-            CloudBackupPromptChoiceDialog(
-                prompt =
-                    CloudBackupChoicePrompt(
-                        title = "Backup Files Not Available Yet",
-                        // the files may still be syncing, so the prompt never calls the backup gone
-                        message =
-                            "Google Drive has a Cloud Backup folder, but its files haven't reached this device yet. " +
-                                "Wait for Google Drive to finish syncing, then try again. " +
-                                "A new Cloud Backup will not include wallets from that backup.",
-                        testTag = CloudBackupTags.PROMPT_BACKUP_FILES_UNAVAILABLE,
-                        choices = backupFilesUnavailablePromptChoices(),
-                        dismissIntent = CloudBackupManagerAction.DiscardPendingEnableCloudBackup,
-                    ),
-                screen = screen,
-                host = host,
-            )
+            CloudBackupPromptChoiceDialog(prompt = backupFilesUnavailablePrompt(), screen = screen, host = host)
 
         is CloudBackupRootPresentation.PasskeyChoice ->
             CloudBackupPromptChoiceDialog(
