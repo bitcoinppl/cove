@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -89,7 +90,7 @@ fun NumberPadPinView(
                         // when the pad is taller than the screen, reaching its bottom row scrolls
                         // the boxes away, so they come back into view before they shake, and the
                         // PIN clears only once the shake ends, however slowly animations run;
-                        // swipes are off meanwhile, so the boxes stay in view throughout
+                        // swipes and keys are off meanwhile, so the boxes stay in view throughout
                         pinBoxes.bringIntoView()
                         offsetX.shake()
                         pin = ""
@@ -108,8 +109,10 @@ fun NumberPadPinView(
                 .fillMaxSize()
                 .background(CoveColor.midnightBlue)
                 .testTag("numberPadPin.viewport")
-                // a swipe during a wrong PIN's feedback would scroll the PIN boxes away
+                // a swipe or a keyboard focus move during a wrong PIN's feedback would scroll
+                // the PIN boxes away, so the pad takes neither while it checks a PIN
                 .verticalScroll(rememberScrollState(), enabled = !isSubmitting)
+                .onPreviewKeyEvent { isSubmitting }
                 .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

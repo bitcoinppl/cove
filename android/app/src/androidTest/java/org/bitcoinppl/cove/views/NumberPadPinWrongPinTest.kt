@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.views
 
+import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.hasAnyAncestor
@@ -9,8 +10,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.toSize
+import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.test.CompactViewport
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
@@ -39,7 +42,8 @@ private const val FRAMES_AFTER_CLEAR = 60
  * its bottom row scrolls the PIN boxes out of view. A wrong PIN typed there must bring them back
  * into view before they shake, and clear them only after, or the pad looks like it ignored the
  * PIN. The test steps the clock one frame at a time, so it sees the order whatever the speed, and
- * a swipe while the boxes scroll back or shake must not move them out of view
+ * a swipe or a hardware keyboard's Tab while the boxes scroll back or shake must not move them out
+ * of view
  */
 @LayoutRegressionTest
 class NumberPadPinWrongPinTest {
@@ -63,9 +67,19 @@ class NumberPadPinWrongPinTest {
     fun aSwipeDuringTheFeedbackKeepsThePinBoxesInView() {
         setContent()
 
-        checkWrongPin(attempt = 1, swipeWhen = SwipeWhen.SCROLLING_BACK)
-        checkWrongPin(attempt = 2, swipeWhen = SwipeWhen.SHAKING)
+        checkWrongPin(attempt = 1, interruption = Interruption.SWIPE_WHILE_SCROLLING_BACK)
+        checkWrongPin(attempt = 2, interruption = Interruption.SWIPE_WHILE_SHAKING)
         checkWrongPin(attempt = 3)
+
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test
+    fun aKeyboardTabDuringTheFeedbackKeepsThePinBoxesInView() {
+        setContent()
+
+        checkWrongPin(attempt = 1, interruption = Interruption.TAB_WHILE_SCROLLING_BACK)
+        checkWrongPin(attempt = 2, interruption = Interruption.TAB_WHILE_SHAKING)
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
@@ -86,12 +100,23 @@ class NumberPadPinWrongPinTest {
         }
     }
 
-    /** Types a wrong PIN on the bottom row, optionally swiping toward the keypad once during the feedback */
+    /**
+     * Types a wrong PIN on the bottom row, by touch or, for a Tab [interruption], with a hardware
+     * keyboard's Enter, and runs the [interruption] once during the feedback
+     */
     private fun checkWrongPin(
         attempt: Int,
-        swipeWhen: SwipeWhen? = null,
+        interruption: Interruption? = null,
     ) {
         val zero = compose.onNodeWithTag("numberPadPin.digit.0")
+        val usesKeyboard = interruption?.usesKeyboard == true
+
+        // a key press leaves touch mode, so 0 can take focus as it does for a keyboard user
+        if (usesKeyboard) {
+            pressKey(KeyEvent.KEYCODE_TAB)
+            zero.requestFocus()
+        }
+
         zero.performScrollTo()
         compose.waitForIdle()
 
@@ -104,26 +129,21 @@ class NumberPadPinWrongPinTest {
         // the shake moves the boxes sideways from here, and the scroll back moves them down
         val rest = pinBoxes()
         val feedback = WrongPinFeedback()
-        var swiped = swipeWhen == null
+        var interrupted = interruption == null
 
         compose.mainClock.autoAdvance = false
-        repeat(PIN_LENGTH) { zero.performClick() }
+        repeat(PIN_LENGTH) { if (usesKeyboard) pressKey(KeyEvent.KEYCODE_ENTER) else zero.performClick() }
 
         while (feedback.framesAfterClear < FRAMES_AFTER_CLEAR && feedback.frames < MAX_FEEDBACK_FRAMES) {
             compose.mainClock.advanceTimeByFrame()
 
-            // a user dragging the keypad back up would scroll the boxes away again
+            // dragging the keypad back up, or tabbing from 0 to Delete, would scroll the boxes away
             val now = pinBoxes()
-            val swipeNow =
-                when (swipeWhen) {
-                    SwipeWhen.SCROLLING_BACK -> now.top != rest.top
-                    SwipeWhen.SHAKING -> now.left != rest.left
-                    null -> false
-                }
+            val moving = if (interruption?.whileShaking == true) now.left != rest.left else now.top != rest.top
 
-            if (!swiped && swipeNow) {
-                compose.onNodeWithTag("numberPadPin.viewport").performTouchInput { swipeUp() }
-                swiped = true
+            if (!interrupted && moving) {
+                interrupt(interruption)
+                interrupted = true
             }
 
             feedback.observe(shaking = pinBoxes().left != rest.left, inView = pinBoxesInView(), filled = filledPinBoxes())
@@ -132,10 +152,20 @@ class NumberPadPinWrongPinTest {
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
 
-        if (!swiped) failures += "attempt $attempt: the boxes never moved, so the swipe while ${swipeWhen?.name?.lowercase()} never ran"
+        if (!interrupted) failures += "attempt $attempt: the boxes never moved, so ${interruption?.name?.lowercase()} never ran"
         feedback.failures().forEach { failures += "attempt $attempt: $it" }
         if (wrongPins.size != attempt) failures += "attempt $attempt: the pad should report each wrong PIN, but it reported ${wrongPins.size}"
     }
+
+    private fun interrupt(interruption: Interruption?) {
+        if (interruption?.usesKeyboard == true) {
+            pressKey(KeyEvent.KEYCODE_TAB)
+        } else {
+            compose.onNodeWithTag("numberPadPin.viewport").performTouchInput { swipeUp() }
+        }
+    }
+
+    private fun pressKey(keyCode: Int) = InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(keyCode)
 
     private fun pinBoxes(): Rect = compose.onNodeWithTag(PIN_BOXES_TAG).fetchSemanticsNode().ownBoundsPx()
 
@@ -153,8 +183,16 @@ class NumberPadPinWrongPinTest {
             .size
 }
 
-/** When the test swipes toward the keypad during a wrong PIN's feedback */
-private enum class SwipeWhen { SCROLLING_BACK, SHAKING }
+/** What the user does once during a wrong PIN's feedback, which mustn't move the boxes out of view */
+private enum class Interruption(
+    val usesKeyboard: Boolean,
+    val whileShaking: Boolean,
+) {
+    SWIPE_WHILE_SCROLLING_BACK(usesKeyboard = false, whileShaking = false),
+    SWIPE_WHILE_SHAKING(usesKeyboard = false, whileShaking = true),
+    TAB_WHILE_SCROLLING_BACK(usesKeyboard = true, whileShaking = false),
+    TAB_WHILE_SHAKING(usesKeyboard = true, whileShaking = true),
+}
 
 /** What one wrong PIN's feedback showed, frame by frame, until the boxes settled after clearing */
 private class WrongPinFeedback {
