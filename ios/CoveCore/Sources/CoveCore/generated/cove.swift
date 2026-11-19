@@ -3718,8 +3718,8 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     /**
      * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
      *
-     * None while Cloud Backup is on, since it uploads every wallet, including one still waiting
-     * for its first upload; otherwise every hot wallet whose words were never verified
+     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
+     * waiting for its first confirmed upload does, since wiping it would lose its only keys
      */
     func unverifiedWalletIds()  -> [WalletId]
 
@@ -4154,8 +4154,8 @@ open func state() -> AppState  {
     /**
      * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
      *
-     * None while Cloud Backup is on, since it uploads every wallet, including one still waiting
-     * for its first upload; otherwise every hot wallet whose words were never verified
+     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
+     * waiting for its first confirmed upload does, since wiping it would lose its only keys
      */
 open func unverifiedWalletIds() -> [WalletId]  {
     return try!  FfiConverterSequenceTypeWalletId.lift(try! rustCall() {
@@ -54209,7 +54209,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 40630) {
+    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 64135) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_version() != 27942) {
