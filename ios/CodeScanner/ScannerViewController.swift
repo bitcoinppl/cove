@@ -70,6 +70,23 @@
                 openGallery()
             }
 
+            /// Asks for camera access, then reports a denial or runs `completion` on the main thread
+            private func requestCameraAccess(completion: (() -> Void)?) {
+                AVCaptureDevice.requestAccess(for: .video) { [weak self] status in
+                    // AVFoundation answers on a queue of its own, while the prompt's answer also
+                    // brings the app back to active, and both a denial, which closes the scanner's
+                    // sheet, and the camera setup after a grant must run on the main thread
+                    DispatchQueue.main.async {
+                        guard status else {
+                            self?.didFail(reason: .permissionDenied)
+                            return
+                        }
+
+                        completion?()
+                    }
+                }
+            }
+
             #if targetEnvironment(simulator)
                 override public func loadView() {
                     view = UIView()
@@ -111,6 +128,20 @@
                         stackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
                     ])
                 }
+
+                #if DEBUG
+                    override public func viewDidLoad() {
+                        super.viewDidLoad()
+
+                        // the phone's scanner asks here, and a UI test needs the prompt and its
+                        // answer to take the same path
+                        guard UITestCameraPrompt.isEnabled,
+                              AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined
+                        else { return }
+
+                        requestCameraAccess(completion: nil)
+                    }
+                #endif
 
                 override public func touchesBegan(_: Set<UITouch>, with _: UIEvent?) {
                     // Send back their simulated data, as if it was one of the types they were scanning for
@@ -238,25 +269,13 @@
                     case .notDetermined:
                         requestCameraAccess {
                             self.setupCaptureDevice()
-                            DispatchQueue.main.async {
-                                self.setupSession()
-                            }
+                            self.setupSession()
                         }
                     case .authorized:
                         setupCaptureDevice()
                         setupSession()
                     default:
                         break
-                    }
-                }
-
-                private func requestCameraAccess(completion: (() -> Void)?) {
-                    AVCaptureDevice.requestAccess(for: .video) { [weak self] status in
-                        guard status else {
-                            self?.didFail(reason: .permissionDenied)
-                            return
-                        }
-                        completion?()
                     }
                 }
 
@@ -469,12 +488,19 @@
                 Date().timeIntervalSince(lastTime) <= 0.5
             }
 
+            /// Reports a scan to the scanner's owner, on the main thread
+            ///
+            /// Owners change SwiftUI state in their completion, which only the main thread may do,
+            /// so debug builds stop on a result reported anywhere else
             func found(_ result: ScanResult) {
+                assert(Thread.isMainThread, "scanner result reported off the main thread")
                 lastTime = Date()
                 parentView.completion(.success(result))
             }
 
+            /// Reports a failure to the scanner's owner, on the main thread, as `found` does
             func didFail(reason: ScanError) {
+                assert(Thread.isMainThread, "scanner failure reported off the main thread")
                 parentView.completion(.failure(reason))
             }
         }
@@ -681,16 +707,19 @@
             didFinishProcessingPhoto photo: AVCapturePhoto,
             error _: Error?
         ) {
-            isCapturing = false
-            guard let imageData = photo.fileDataRepresentation() else {
-                print("Error while generating image from photo capture data.")
-                return
+            let qrImage = photo.fileDataRepresentation().flatMap(UIImage.init(data:))
+
+            // the photo output calls its delegate on a queue of its own, and the scan the photo
+            // finishes reports its result to the owner, which must happen on the main thread
+            DispatchQueue.main.async {
+                self.isCapturing = false
+                guard let qrImage else {
+                    print("Unable to generate an image from the photo capture data.")
+                    return
+                }
+
+                self.handler?(qrImage)
             }
-            guard let qrImage = UIImage(data: imageData) else {
-                print("Unable to generate UIImage from image data.")
-                return
-            }
-            handler?(qrImage)
         }
 
         public func photoOutput(
