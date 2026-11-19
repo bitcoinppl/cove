@@ -7,7 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
-import org.bitcoinppl.cove.routeStackContainsKeyTeleport
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportContainer
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.coveAndroidComposeRule
@@ -16,6 +16,7 @@ import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.KeyTeleportRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
@@ -50,10 +51,15 @@ class SecretWordsKeyTeleportNoLockTest {
         walletId = requireNotNull(imported).id
         initialRoutes = app.router.routes
 
+        // shows the send screen once its route is pushed, as the app's navigation host would
         compose.setContent {
             CoveTheme {
                 LockView {
-                    SecretWordsScreen(app = app, walletId = walletId)
+                    if (app.router.routes.lastOrNull() == SEND_ROUTE) {
+                        KeyTeleportContainer(app = app, route = KeyTeleportRoute.SEND)
+                    } else {
+                        SecretWordsScreen(app = app, walletId = walletId)
+                    }
                 }
             }
         }
@@ -63,7 +69,8 @@ class SecretWordsKeyTeleportNoLockTest {
     fun tearDown() {
         if (!::walletId.isInitialized) return
 
-        compose.runOnUiThread { app.resetRoute(initialRoutes) }
+        // drops the send route this test pushed, back to the nested routes it started with
+        compose.runOnUiThread { app.setRoute(initialRoutes) }
         deleteTestWallet(walletId)
     }
 
@@ -79,13 +86,15 @@ class SecretWordsKeyTeleportNoLockTest {
         compose.onNodeWithText("Continue").performClick()
 
         compose.waitUntil(timeoutMillis = 10_000) {
-            routeStackContainsKeyTeleport(app.router.default, app.router.routes)
+            compose.onAllNodes(hasText("Scan Receiver Request"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         assertFalse("KeyTeleport locked the app to ask for a credential", Auth.isLocked)
         compose.onNodeWithText("Enter Cove PIN").assertDoesNotExist()
     }
 
     private companion object {
+        val SEND_ROUTE = Route.KeyTeleport(KeyTeleportRoute.SEND)
+
         // published BIP39 test vector, never used for funds; the same one SecretWordsLockTest imports
         // and deletes, so the two never hold it at once
         val TEST_WORDS =

@@ -2,7 +2,7 @@
 
 ## Session authorization
 
-An unlocked Cove session is trusted. Without an app lock, sending recovery words or a private key by KeyTeleport starts straight away. With a PIN or biometric app lock set, the send first asks for a fresh main credential, so a decoy PIN can't start one, and the send entry is hidden in decoy mode.
+An unlocked Cove session is trusted. Without an app lock, a send started from Secret Words or Export Private Key starts straight away. With a PIN or biometric app lock set, those two entries first ask for a fresh main credential, so a decoy PIN can't start a send from them, and both are hidden in decoy mode. A send started by scanning a receiver request with the app's scanner goes to wallet selection without asking for a credential.
 
 PIN or biometric prompts on other secret views are defense-in-depth and convenience controls. These prompts are not a Rust authorization boundary.
 
