@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,10 +19,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material3.Icon
@@ -119,14 +119,15 @@ fun NumberPadPinView(
             Modifier
                 .fillMaxSize()
                 .background(CoveColor.midnightBlue)
-                .padding(16.dp)
-                .testTag("numberPadPin.viewport"),
+                .testTag("numberPadPin.viewport")
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // cancel button header (matches iOS CancelView pattern)
         if (backAction != null) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("numberPadPin.header"),
                 horizontalArrangement = Arrangement.End,
             ) {
                 Text(
@@ -139,9 +140,11 @@ fun NumberPadPinView(
                             .padding(8.dp),
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
+            FlexibleSpacer()
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
 
         // title
         Text(
@@ -153,7 +156,8 @@ fun NumberPadPinView(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 16.dp)
+                    .testTag("numberPadPin.title"),
         )
 
         // PIN boxes with shake animation
@@ -162,7 +166,8 @@ fun NumberPadPinView(
             modifier =
                 Modifier
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                    .padding(top = 15.dp),
+                    .padding(top = 15.dp)
+                    .testTag("numberPadPin.pinBoxes"),
         ) {
             repeat(pinLength) { index ->
                 Box(
@@ -186,27 +191,22 @@ fun NumberPadPinView(
             }
         }
 
-        Spacer(modifier = Modifier.weight(2f))
+        FlexibleSpacer(weight = 2f)
 
-        // number pad
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+        // the page scrolls once the pad doesn't fit, so the pad lays out every key rather than
+        // scrolling its own rows, which could leave 0 and Delete out of reach
+        NumberPadKeys(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // numbers 1-9
-            items((1..9).toList()) { number ->
+                    .padding(vertical = 16.dp)
+                    .testTag("numberPadPin.keypad"),
+            digit = { number ->
                 NumberButton(number.toString()) {
                     enterDigit(number.toString())
                 }
-            }
-
-            // cancel/back button (bottom left)
-            item {
+            },
+            cancel = {
                 if (backAction != null) {
                     Box(
                         modifier =
@@ -223,21 +223,9 @@ fun NumberPadPinView(
                             fontSize = 17.sp,
                         )
                     }
-                } else {
-                    // empty space
-                    Spacer(modifier = Modifier.size(1.dp))
                 }
-            }
-
-            // 0 button (bottom center)
-            item {
-                NumberButton("0") {
-                    enterDigit("0")
-                }
-            }
-
-            // backspace button (bottom right)
-            item {
+            },
+            delete = {
                 Box(
                     modifier =
                         Modifier
@@ -262,8 +250,51 @@ fun NumberPadPinView(
                         modifier = Modifier.size(32.dp),
                     )
                 }
+            },
+        )
+    }
+}
+
+/** Lays out the keys 1 to 9 in rows of three, then [cancel], 0 and [delete] */
+@Composable
+private fun NumberPadKeys(
+    digit: @Composable (Int) -> Unit,
+    cancel: @Composable () -> Unit,
+    delete: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (numbers in (1..9).chunked(3)) {
+            NumberPadRow {
+                for (number in numbers) NumberPadKey { digit(number) }
             }
         }
+
+        NumberPadRow {
+            NumberPadKey(cancel)
+            NumberPadKey { digit(0) }
+            NumberPadKey(delete)
+        }
+    }
+}
+
+@Composable
+private fun NumberPadRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun RowScope.NumberPadKey(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        content()
     }
 }
 

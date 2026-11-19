@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
@@ -44,6 +46,7 @@ import org.bitcoinppl.cove.cloudbackup.lookup
 import org.bitcoinppl.cove.cloudbackup.section
 import org.bitcoinppl.cove.cloudbackup.verification
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -435,6 +438,7 @@ internal fun OnboardingCloudBackupSuccessView(
                 Modifier
                     .fillMaxSize()
                     .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -444,6 +448,7 @@ internal fun OnboardingCloudBackupSuccessView(
                 icon = Icons.Default.Check,
                 tint = OnboardingSuccess,
                 fillColor = OnboardingSuccess.copy(alpha = 0.12f),
+                modifier = Modifier.testTag("onboarding.cloudBackup.success.hero"),
             )
 
             Spacer(modifier = Modifier.height(36.dp))
@@ -464,10 +469,10 @@ internal fun OnboardingCloudBackupSuccessView(
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("onboarding.cloudBackup.success.message"),
             )
 
-            Spacer(modifier = Modifier.weight(1f, fill = true))
+            FlexibleSpacer()
 
             OnboardingPrimaryButton(
                 text = "Continue",

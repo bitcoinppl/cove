@@ -49,24 +49,20 @@ fun TapSignerImportRetryView(
     val scope = rememberCoroutineScope()
     var isSubmitting by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+    TapSignerSheetLayout(
+        testTag = "tapSignerImportRetry",
+        modifier = modifier.padding(horizontal = 16.dp),
+        header = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                TextButton(onClick = { app.sheetState = null }) {
+                    Text("Cancel", fontWeight = FontWeight.SemiBold)
+                }
             }
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+        },
+        content = {
             Icon(
                 imageVector = Icons.Default.Warning,
                 contentDescription = "Warning",
@@ -89,59 +85,60 @@ fun TapSignerImportRetryView(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
             )
-        }
+        },
+        action = {
+            Button(
+                onClick = {
+                    if (isSubmitting) return@Button
+                    isSubmitting = true
+                    scope.launch {
+                        try {
+                            val nfc = manager.getOrCreateNfc(tapSigner)
+                            manager.beginScan("Hold your phone near the TapSigner to continue import")
+                            val result = try {
+                                runCatchingCancellable(
+                                    "TapSignerImportRetry",
+                                    "TapSigner import continuation failed",
+                                ) {
+                                    nfc.continueDerive(manager.operationCallbacks())
+                                }
+                            } finally {
+                                manager.endScan()
+                            }
+                            val deriveInfo = result.getOrNull()
+                            val error = result.exceptionOrNull()
 
-        Button(
-            onClick = {
-                if (isSubmitting) return@Button
-                isSubmitting = true
-                scope.launch {
-                    try {
-                        val nfc = manager.getOrCreateNfc(tapSigner)
-                        manager.beginScan("Hold your phone near the TapSigner to continue import")
-                        val result = try {
-                            runCatchingCancellable(
-                                "TapSignerImportRetry",
-                                "TapSigner import continuation failed",
-                            ) {
-                                nfc.continueDerive(manager.operationCallbacks())
+                            when {
+                                deriveInfo != null -> {
+                                    manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
+                                }
+                                error is TapSignerOperationRetryException -> {
+                                    Log.w("TapSignerImportRetry", "Import continuation still needs a retry")
+                                    manager.errorMessage =
+                                        error.message ?: "Import still needs another card scan"
+                                }
+                                error != null && isAuthError(error) -> {
+                                    app.sheetState = null
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.TapSignerWrongPin(
+                                                tapSigner,
+                                                AfterPinAction.Derive,
+                                            ),
+                                        )
+                                }
+                                error != null -> manager.errorMessage = "Connection failed, please try again"
                             }
                         } finally {
-                            manager.endScan()
+                            isSubmitting = false
                         }
-                        val deriveInfo = result.getOrNull()
-                        val error = result.exceptionOrNull()
-
-                        when {
-                            deriveInfo != null -> {
-                                manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
-                            }
-                            error is TapSignerOperationRetryException -> {
-                                Log.w("TapSignerImportRetry", "Import continuation still needs a retry")
-                                manager.errorMessage =
-                                    error.message ?: "Import still needs another card scan"
-                            }
-                            error != null && isAuthError(error) -> {
-                                app.sheetState = null
-                                app.alertState =
-                                    TaggedItem(
-                                        AppAlertState.TapSignerWrongPin(
-                                            tapSigner,
-                                            AfterPinAction.Derive,
-                                        ),
-                                    )
-                            }
-                            error != null -> manager.errorMessage = "Connection failed, please try again"
-                        }
-                    } finally {
-                        isSubmitting = false
                     }
-                }
-            },
-            enabled = !isSubmitting,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerImportRetry.retry"),
-        ) {
-            Text(if (isSubmitting) "Working…" else "Continue Import")
-        }
-    }
+                },
+                enabled = !isSubmitting,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerImportRetry.retry"),
+            ) {
+                Text(if (isSubmitting) "Working…" else "Continue Import")
+            }
+        },
+    )
 }

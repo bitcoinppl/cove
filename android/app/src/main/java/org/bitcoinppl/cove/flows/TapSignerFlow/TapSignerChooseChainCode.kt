@@ -39,17 +39,11 @@ fun TapSignerChooseChainCode(
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween,
-        ) {
-            // cancel button
+    TapSignerSheetLayout(
+        testTag = "tapSignerChoose",
+        modifier = modifier.background(MaterialTheme.colorScheme.background),
+        contentModifier = Modifier.padding(horizontal = 20.dp),
+        header = {
             Row(
                 modifier =
                     Modifier
@@ -61,93 +55,83 @@ fun TapSignerChooseChainCode(
                     Text("Cancel", fontWeight = FontWeight.SemiBold)
                 }
             }
+        },
+        content = {
+            // title
+            Text(
+                text = "Setup Chain Code",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 20.dp),
+            )
 
-            // main content
+            // description
             Column(
+                modifier = Modifier.padding(horizontal = 30.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "A chain code works with your private key to generate Bitcoin addresses",
+                    style = MaterialTheme.typography.callout,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    text =
+                        "You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.",
+                    style = MaterialTheme.typography.callout,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            // automatic setup button
+            Surface(
+                onClick = {
+                    manager.navigate(
+                        TapSignerRoute.StartingPin(
+                            tapSigner,
+                            generateRandomChainCode(),
+                        ),
+                    )
+                },
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                        .padding(horizontal = 20.dp, vertical = 50.dp)
+                        .testTag("tapSignerChoose.automaticSetup"),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                // title
-                Text(
-                    text = "Setup Chain Code",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 20.dp),
-                )
-
-                // description
                 Column(
-                    modifier = Modifier.padding(horizontal = 30.dp, vertical = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        text = "A chain code works with your private key to generate Bitcoin addresses",
-                        style = MaterialTheme.typography.callout,
-                        textAlign = TextAlign.Center,
-                    )
-
-                    Text(
-                        text =
-                            "You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.",
-                        style = MaterialTheme.typography.callout,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-
-                // automatic setup button
-                Surface(
-                    onClick = {
-                        manager.navigate(
-                            TapSignerRoute.StartingPin(
-                                tapSigner,
-                                generateRandomChainCode(),
-                            ),
-                        )
-                    },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 50.dp)
-                            .testTag("tapSignerChoose.automaticSetup"),
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Automatic Setup",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
                         Text(
-                            text = "Let the app create a chain code for you",
+                            text = "Automatic Setup",
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Next",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+
+                    Text(
+                        text = "Let the app create a chain code for you",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
-
-            // advanced setup link
+        },
+        action = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
@@ -165,6 +149,6 @@ fun TapSignerChooseChainCode(
                     )
                 }
             }
-        }
-    }
+        },
+    )
 }

@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,122 +64,135 @@ fun TapSignerSetupSuccessView(
         }
     }
 
-    Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        // cancel button
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+    TapSignerSetupSuccessContent(
+        onCancel = { app.sheetState = null },
+        onDownloadBackup = {
+            val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
+            app.tapSignerBackupExports.request(fileName) { setup.backup }
+        },
+        onContinue = {
+            walletId?.let { id ->
+                app.selectWallet(id)
             }
-        }
+            app.sheetState = null
+        },
+        modifier = modifier,
+    )
+}
 
-        // main content
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = "Success",
-                modifier = Modifier.size(100.dp),
-                tint = Color.Green,
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+/** What the setup success sheet shows, apart from saving the wallet */
+@Composable
+internal fun TapSignerSetupSuccessContent(
+    onCancel: () -> Unit,
+    onDownloadBackup: () -> Unit,
+    onContinue: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TapSignerSheetLayout(
+        testTag = "tapSignerSetupSuccess",
+        modifier = modifier.padding(horizontal = 16.dp),
+        header = {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.Start,
             ) {
-                Text(
-                    text = "Setup Complete",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                Text(
-                    text = "Your TAPSIGNER is ready to use.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                )
+                TextButton(onClick = onCancel) {
+                    Text("Cancel", fontWeight = FontWeight.SemiBold)
+                }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text =
-                    "If you haven't already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore your wallet.",
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-            )
+        },
+        content = {
+            SetupCompleteMessage()
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // download backup button
-            Surface(
-                onClick = {
-                    val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
-                    app.tapSignerBackupExports.request(fileName) { setup.backup }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            DownloadBackupRow(onClick = onDownloadBackup)
+        },
+        action = {
+            Button(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupSuccess.continue"),
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "Download Backup",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-
-                        Text(
-                            text = "You need this backup to restore your wallet.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text("Continue")
             }
-        }
+        },
+    )
+}
 
-        // continue button
-        Button(
-            onClick = {
-                walletId?.let { id ->
-                    app.selectWallet(id)
-                }
-                app.sheetState = null
-            },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
+@Composable
+private fun SetupCompleteMessage() {
+    Icon(
+        imageVector = Icons.Default.CheckCircle,
+        contentDescription = "Success",
+        modifier = Modifier.size(100.dp),
+        tint = Color.Green,
+    )
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Setup Complete",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Text(
+            text = "Your TAPSIGNER is ready to use.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+        )
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Text(
+        text =
+            "If you haven't already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore your wallet.",
+        style = MaterialTheme.typography.bodySmall,
+        textAlign = TextAlign.Center,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+    )
+}
+
+@Composable
+private fun DownloadBackupRow(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Continue")
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Download Backup",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = "You need this backup to restore your wallet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Next",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
