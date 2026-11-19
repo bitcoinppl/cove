@@ -200,8 +200,9 @@ struct WalletSettingsView: View {
     }
 
     private func startXprvExport(_ action: XprvPostVerificationAction) {
-        // without an app lock the unlocked session is trusted, so there is no credential to verify
-        guard auth.isAuthEnabled else {
+        // without an app lock the unlocked session is trusted, so there is no credential to verify;
+        // rust fails closed, so an unreadable lock setting still asks
+        guard case .mainCredential = auth.secretExportAccess() else {
             performXprvExport(action)
             return
         }

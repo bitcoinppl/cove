@@ -342,7 +342,7 @@ private fun PermissionsNeeded() {
 }
 
 @Composable
-private fun BiometricView(
+internal fun BiometricView(
     showBoth: Boolean,
     onBiometricTap: () -> Unit,
     onEnterPinTap: () -> Unit,

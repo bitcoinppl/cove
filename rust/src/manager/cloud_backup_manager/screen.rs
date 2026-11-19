@@ -56,6 +56,7 @@ pub(crate) use self::types::{
 use cove_cspp::backup_data::PasskeyProviderHint;
 
 use crate::database::cloud_backup::PersistedHealNotice;
+use crate::wallet::metadata::WalletMode;
 
 use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
@@ -88,6 +89,8 @@ pub(crate) struct ScreenInputs {
     /// Where this device's passkey was created, read from the keychain only while the screen
     /// draws something from it
     pub(crate) provider_hint: Option<PasskeyProviderHint>,
+    /// Whether the app shows the main or the decoy wallets; root prompts show in main mode only
+    pub(crate) wallet_mode: WalletMode,
 }
 
 /// What the platform was last sent: the screen, and whether the owner rested off
@@ -199,16 +202,7 @@ impl RustCloudBackupManager {
         runtime: &Runtime,
         inputs: &ScreenInputs,
     ) -> CloudBackupScreen {
-        let ScreenInputs { configuration, admission, inventory, notices, provider_hint } = inputs;
-        project::project(
-            runtime,
-            *configuration,
-            admission,
-            &self.state.read(),
-            inventory,
-            notices,
-            provider_hint.as_ref(),
-        )
+        project::project(runtime, &self.state.read(), inputs)
     }
 
     /// Dismisses the persisted heal notice; the commit around it publishes the screen without it

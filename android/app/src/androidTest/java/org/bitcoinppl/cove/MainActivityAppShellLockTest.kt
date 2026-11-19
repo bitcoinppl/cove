@@ -13,7 +13,6 @@ import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AppLockReason
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -29,7 +28,7 @@ class MainActivityAppShellLockTest {
     @Before
     fun enablePin() {
         bootstrapRustRuntimeForUiTest()
-        instrumentation.runOnMainSync { Auth.dispatch(AuthManagerAction.SetPin(PIN)) }
+        instrumentation.runOnMainSync { Auth.setPin(PIN) }
         compose.waitUntil(timeoutMillis = 5_000) { Auth.isAuthEnabled }
     }
 

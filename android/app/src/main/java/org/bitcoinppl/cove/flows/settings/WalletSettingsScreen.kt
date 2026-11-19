@@ -42,8 +42,9 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsTopAppBar
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove_core.AppLockReason
+import org.bitcoinppl.cove.views.MainCredentialVerificationDialog
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SecretExportAccess
 import org.bitcoinppl.cove_core.ShutdownAttemptId
 import org.bitcoinppl.cove_core.WalletLifecycleFailure
 import org.bitcoinppl.cove_core.WalletManagerException
@@ -62,7 +63,7 @@ fun WalletSettingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var deletionDialog by remember { mutableStateOf<WalletDeletionDialog?>(null) }
     var xprvExportDialog by remember { mutableStateOf<XprvExportDialog?>(null) }
-    var pendingXprvExport by remember { mutableStateOf<PendingXprvExport?>(null) }
+    var xprvCredentialRequest by remember { mutableStateOf<XprvCredentialRequest?>(null) }
     var revealedXprv by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
     val scope = rememberCoroutineScope()
@@ -128,7 +129,7 @@ fun WalletSettingsScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            pendingXprvExport = null
+            xprvCredentialRequest = null
             revealedXprv = null
         }
     }
@@ -137,7 +138,7 @@ fun WalletSettingsScreen(
         val observer =
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                    pendingXprvExport = null
+                    xprvCredentialRequest = null
                     revealedXprv = null
                     if (xprvExportDialog == XprvExportDialog.Options) {
                         xprvExportDialog = null
@@ -211,32 +212,17 @@ fun WalletSettingsScreen(
     fun startXprvExport(action: XprvExportAction) {
         xprvExportDialog = null
 
-        // without an app lock the unlocked session is trusted, so there is no credential to verify
-        if (!auth.isAuthEnabled) {
-            performXprvExport(action)
-            return
+        // without an app lock the unlocked session is trusted, so there is no credential to verify;
+        // rust fails closed, so an unreadable lock setting still asks
+        when (val access = auth.secretExportAccess()) {
+            SecretExportAccess.Trusted -> performXprvExport(action)
+            is SecretExportAccess.MainCredential ->
+                xprvCredentialRequest = XprvCredentialRequest(action, access.lockType)
         }
-
-        pendingXprvExport =
-            PendingXprvExport(
-                action = action,
-                credentialGeneration = auth.mainCredentialGeneration,
-            )
-        auth.lock(AppLockReason.REAUTHENTICATION)
-    }
-
-    LaunchedEffect(auth.mainCredentialGeneration) {
-        val pending = pendingXprvExport ?: return@LaunchedEffect
-        if (!hasFreshMainCredential(auth.mainCredentialGeneration, pending.credentialGeneration)) {
-            return@LaunchedEffect
-        }
-
-        pendingXprvExport = null
-        performXprvExport(pending.action)
     }
 
     LaunchedEffect(auth.sensitiveContentGeneration) {
-        pendingXprvExport = null
+        xprvCredentialRequest = null
         revealedXprv = null
         if (xprvExportDialog == XprvExportDialog.Options) {
             xprvExportDialog = null
@@ -314,6 +300,17 @@ fun WalletSettingsScreen(
         onContinue = { xprvExportDialog = XprvExportDialog.Options },
         onExport = ::startXprvExport,
     )
+
+    xprvCredentialRequest?.let { request ->
+        MainCredentialVerificationDialog(
+            lockType = request.lockType,
+            onVerified = {
+                xprvCredentialRequest = null
+                performXprvExport(request.action)
+            },
+            onCancel = { xprvCredentialRequest = null },
+        )
+    }
 
     revealedXprv?.let { xprv ->
         XprvRevealDialog(

@@ -1,12 +1,9 @@
 package org.bitcoinppl.cove.flows.settings
 
-import android.graphics.Rect
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.BySelector
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import org.bitcoinppl.cove.AuthManager
@@ -21,7 +18,6 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.RustAuthManager
@@ -143,7 +139,7 @@ class DecoyPinSameAsCurrentPinFullLaunchTest {
     // the bug is in the decoy PIN alert, so the app PIN is set in process, as Settings → Enable PIN would
     private fun setAppPin() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.runOnMainSync { AuthManager.getInstance().dispatch(AuthManagerAction.SetPin(PIN)) }
+        instrumentation.runOnMainSync { AuthManager.getInstance().setPin(PIN) }
         pinSet = true
 
         wallet.waitUntil("the app PIN never enabled the app lock") {
@@ -170,30 +166,6 @@ class DecoyPinSameAsCurrentPinFullLaunchTest {
     }
 }
 
-// the switch is the row's trailing content, not a child of its title, so it is the checkable node
-// laid out level with the title
-private fun UiDevice.clickSwitchInRowOf(title: String) {
-    val titleBounds = waitForSettled(By.text(title), "the \"$title\" row").visibleBounds
-    val switch =
-        findObjects(By.checkable(true)).singleOrNull { it.visibleCenter.y in titleBounds.top..titleBounds.bottom }
-            ?: error("no single switch level with \"$title\"\n${hierarchy()}")
-
-    switch.click()
-}
-
-// the decoy PIN pad slides up as a sheet, and a key found mid-slide sends the tap to its neighbour,
-// so the bottom row must hold still first. The pad checks a full PIN after a short delay, which the
-// callers wait out by waiting for the next screen
-private fun UiDevice.enterPin(pin: String) {
-    waitForSettled(pinKey('0'), "the number pad")
-
-    pin.forEach { digit -> waitFor(pinKey(digit), timeoutMs = 5_000L).click() }
-}
-
-// the sheet is a dialog window of its own, which doesn't expose the pad's test tags as resource
-// ids, so a key is the clickable node holding its digit
-private fun pinKey(digit: Char): BySelector = By.clickable(true).hasChild(By.text(digit.toString()))
-
 // everything the alert shows besides its title and button, so a failure prints what the user saw
 private fun UiDevice.alertMessage(alertTitle: String): String {
     val title = waitFor(By.text(alertTitle))
@@ -208,52 +180,3 @@ private fun UiDevice.alertMessage(alertTitle: String): String {
         .filterNot { it == alertTitle || it == "OK" }
         .joinToString("\n")
 }
-
-private fun UiDevice.clickText(value: String) {
-    clickSettled(By.text(value), "text \"$value\"")
-}
-
-private fun UiDevice.clickSettled(
-    selector: BySelector,
-    description: String,
-) {
-    waitFor(selector)
-    var clickable: UiObject2? = waitForSettled(selector, description)
-    while (clickable != null && !clickable.isClickable) {
-        clickable = clickable.parent
-    }
-
-    requireNotNull(clickable) { "expected a clickable ancestor for $description" }.click()
-}
-
-/**
- * Waits until [selector] matches a node whose bounds held still between two looks, so a tap on
- * it lands where it was found rather than where a sliding screen has moved it
- */
-private fun UiDevice.waitForSettled(
-    selector: BySelector,
-    description: String,
-    timeoutMs: Long = 20_000L,
-): UiObject2 {
-    val deadline = System.currentTimeMillis() + timeoutMs
-    var previous: Rect? = null
-
-    while (System.currentTimeMillis() < deadline) {
-        val node = findObject(selector)
-        val bounds =
-            try {
-                node?.visibleBounds
-            } catch (_: StaleObjectException) {
-                null
-            }
-
-        if (node != null && bounds != null && bounds == previous) return node
-
-        previous = bounds
-        Thread.sleep(SETTLE_POLL_MS)
-    }
-
-    error("$description never held still, last bounds $previous\n${hierarchy()}")
-}
-
-private const val SETTLE_POLL_MS = 200L

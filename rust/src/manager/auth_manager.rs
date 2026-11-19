@@ -10,9 +10,9 @@ use cove_types::WalletId;
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
-    auth::{AuthPin, AuthType},
+    auth::{AuthError, AuthPin, AuthType},
     database::{self, Database},
-    manager::reconcile_channel::ReconcileChannel,
+    manager::{cloud_backup_manager::CLOUD_BACKUP_MANAGER, reconcile_channel::ReconcileChannel},
     wallet::metadata::WalletMode,
 };
 
@@ -51,7 +51,6 @@ pub enum AuthManagerAction {
     EnableBiometric,
     DisableBiometric,
     DisablePin,
-    SetPin(String),
     DisableWipeDataPin,
     DisableDecoyPin,
 }
@@ -109,6 +108,17 @@ pub enum SecurityAlertState {
     },
 }
 
+/// What a secret export, such as revealing a private key or sending one with KeyTeleport, must
+/// ask for before it shows or sends the secret
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SecretExportAccess {
+    /// No app lock is set up, so the unlocked session is trusted to export
+    Trusted,
+    /// The user must present the main credential: the app PIN, or biometrics when `lock_type`
+    /// allows them. The decoy and wipe data PINs never satisfy it
+    MainCredential { lock_type: AuthType },
+}
+
 /// Result of validating a security settings action
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SecuritySettingsResult {
@@ -116,8 +126,9 @@ pub enum SecuritySettingsResult {
     ProceedToSheet(SecuritySheetState),
     /// Show an alert dialog
     ShowAlert(SecurityAlertState),
-    /// Decoy mode - just update local UI, don't persist
-    DecoyModeLocalUpdate,
+    /// Decoy mode: ask for the decoy PIN, as main mode asks for its PIN, then apply the action to
+    /// the decoy-local settings only, never the saved ones
+    DecoyPinThenLocalUpdate(SecuritySettingsAction),
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
@@ -139,6 +150,12 @@ pub enum AuthManagerError {
 
     #[error("Unable to set the decoy PIN, because {0}")]
     DecoySet(TrickPinError),
+
+    #[error("Can't update PIN because {0}")]
+    PinSet(NewPinError),
+
+    #[error("{0}")]
+    PinSave(AuthError),
 
     #[error("There was a database error: {0}")]
     Database(#[from] database::Error),
@@ -162,6 +179,20 @@ pub enum TrickPinError {
     /// Unable to set trick PIN, because biometrics is enabled
     #[error("biometrics is enabled")]
     BiometricsEnabled,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum NewPinError {
+    /// Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+    /// wiping them
+    #[error("it's the same as your wipe data PIN")]
+    SameAsWipeDataPin,
+
+    /// Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+    /// the decoy wallets
+    #[error("it's the same as your decoy PIN")]
+    SameAsDecoyPin,
 }
 
 impl RustAuthManager {
@@ -209,6 +240,40 @@ impl RustAuthManager {
                 error!("unable to get auth type: {error:?}");
             })
             .unwrap_or_default()
+    }
+
+    /// What a secret export must ask for before it shows or sends the secret
+    ///
+    /// Fails closed: when the auth type can't be read, the export still asks for the app PIN
+    pub fn secret_export_access(&self) -> SecretExportAccess {
+        match Database::global().global_config.auth_type() {
+            Ok(AuthType::None) => SecretExportAccess::Trusted,
+            Ok(lock_type) => SecretExportAccess::MainCredential { lock_type },
+            Err(error) => {
+                error!(
+                    "unable to read auth type for a secret export, asking for the PIN: {error:?}"
+                );
+                SecretExportAccess::MainCredential { lock_type: AuthType::Pin }
+            }
+        }
+    }
+
+    // MARK: APP PIN
+
+    /// Set the app PIN, turning the PIN lock on when it was off
+    ///
+    /// Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+    pub fn set_pin(&self, pin: String) -> Result<()> {
+        self.validate_new_pin(&pin)?;
+        AuthPin::new().set(pin).map_err(AuthManagerError::PinSave)?;
+
+        match self.auth_type() {
+            AuthType::None => self.set_auth_type(AuthType::Pin),
+            AuthType::Biometric => self.set_auth_type(AuthType::Both),
+            _ => {}
+        }
+
+        Ok(())
     }
 
     // MARK: APP LOCK
@@ -338,6 +403,7 @@ impl RustAuthManager {
     /// Switch from main mode to decoy mode
     pub fn switch_to_decoy_mode(&self) {
         Database::global().global_config.set_decoy_mode().expect("failed to set decoy mode");
+        self.republish_cloud_backup_screen();
 
         Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Decoy));
     }
@@ -345,6 +411,7 @@ impl RustAuthManager {
     /// Switch from decoy mode to main mode
     pub fn switch_to_main_mode(&self) {
         Database::global().global_config.set_main_mode().expect("failed to set main mode");
+        self.republish_cloud_backup_screen();
 
         Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Main));
     }
@@ -456,20 +523,6 @@ impl RustAuthManager {
                 }
             }
 
-            Action::SetPin(pin) => {
-                debug!("set pin");
-
-                if let Err(err) = AuthPin::new().set(pin) {
-                    return error!("unable to set pin: {err:?}");
-                }
-
-                match self.auth_type() {
-                    AuthType::None => self.set_auth_type(AuthType::Pin),
-                    AuthType::Biometric => self.set_auth_type(AuthType::Both),
-                    _ => {}
-                }
-            }
-
             Action::DisablePin => {
                 debug!("disable pin");
 
@@ -500,14 +553,24 @@ impl RustAuthManager {
         use SecuritySettingsAction::{
             ChangePin, ToggleBiometric, ToggleDecoyPin, TogglePin, ToggleWipeDataPin,
         };
-        use SecuritySettingsResult::{DecoyModeLocalUpdate, ProceedToSheet, ShowAlert};
+        use SecuritySettingsResult::{DecoyPinThenLocalUpdate, ProceedToSheet, ShowAlert};
+
+        // decoy mode must look like main mode, so every change main mode guards with a PIN asks
+        // for the decoy PIN; turning the PIN on asks for a new one in both modes, and enabling a
+        // trick PIN takes main mode's path because its sheets only update the decoy-local toggle
+        let is_in_decoy_mode = self.is_in_decoy_mode();
+        let asks_for_decoy_pin = match &action {
+            ToggleBiometric { .. } | TogglePin { enable: false } => true,
+            ToggleWipeDataPin { enable } | ToggleDecoyPin { enable } => !enable,
+            TogglePin { enable: true } | ChangePin => false,
+        };
+
+        if is_in_decoy_mode && asks_for_decoy_pin {
+            return DecoyPinThenLocalUpdate(action);
+        }
 
         match action {
             ToggleBiometric { enable } => {
-                if self.is_in_decoy_mode() {
-                    return DecoyModeLocalUpdate;
-                }
-
                 if !enable {
                     return ProceedToSheet(SecuritySheetState::DisableBiometric);
                 }
@@ -529,10 +592,6 @@ impl RustAuthManager {
             }
 
             TogglePin { enable } => {
-                if self.is_in_decoy_mode() {
-                    return DecoyModeLocalUpdate;
-                }
-
                 if enable {
                     ProceedToSheet(SecuritySheetState::NewPin)
                 } else {
@@ -542,9 +601,6 @@ impl RustAuthManager {
 
             ToggleWipeDataPin { enable } => {
                 if !enable {
-                    if self.is_in_decoy_mode() {
-                        return DecoyModeLocalUpdate;
-                    }
                     return ProceedToSheet(SecuritySheetState::RemoveWipeDataPin);
                 }
 
@@ -570,9 +626,6 @@ impl RustAuthManager {
 
             ToggleDecoyPin { enable } => {
                 if !enable {
-                    if self.is_in_decoy_mode() {
-                        return DecoyModeLocalUpdate;
-                    }
                     return ProceedToSheet(SecuritySheetState::RemoveDecoyPin);
                 }
 
@@ -592,24 +645,38 @@ impl RustAuthManager {
             ChangePin => ProceedToSheet(SecuritySheetState::ChangePin),
         }
     }
-
-    /// Validate a new PIN doesn't conflict with existing PINs
-    pub fn validate_new_pin(&self, new_pin: String) -> Option<String> {
-        if self.check_wipe_data_pin(&new_pin) {
-            return Some(
-                "Can't update PIN because it's the same as your wipe data PIN".to_string(),
-            );
-        }
-
-        if self.check_decoy_pin(&new_pin) {
-            return Some("Can't update PIN because it's the same as your decoy PIN".to_string());
-        }
-
-        None
-    }
 }
 
 impl RustAuthManager {
+    /// Refuses an app PIN equal to a trick PIN
+    ///
+    /// Reads the trick PINs strictly: an unreadable one could be the same PIN, so the new PIN is
+    /// refused instead of treated as clear
+    fn validate_new_pin(&self, pin: &str) -> Result<()> {
+        let config = &Database::global().global_config;
+        let matches = |trick_pin: String| !trick_pin.is_empty() && trick_pin == pin;
+
+        if matches(config.wipe_data_pin()?) {
+            return Err(AuthManagerError::PinSet(NewPinError::SameAsWipeDataPin));
+        }
+
+        if matches(config.decoy_pin()?) {
+            return Err(AuthManagerError::PinSet(NewPinError::SameAsDecoyPin));
+        }
+
+        Ok(())
+    }
+
+    /// Asks Cloud Backup to publish its screen again after the wallet mode changed, since its
+    /// root prompts show in main mode only
+    fn republish_cloud_backup_screen(&self) {
+        // a manager that was never started has published nothing, and starting one here would
+        // begin Cloud Backup work just for a mode switch
+        if let Some(cloud_backup) = LazyLock::get(&CLOUD_BACKUP_MANAGER) {
+            cloud_backup.request_screen_publish();
+        }
+    }
+
     /// Whether the saved settings say no authentication is set up
     ///
     /// Lock decisions fail closed, so a settings read error counts as authentication
@@ -778,10 +845,11 @@ mod tests {
         });
     }
 
-    /// Restores the app PIN and decoy PIN a test replaced
+    /// Restores the app PIN and trick PINs a test replaced
     struct PinGuard {
         hashed_pin: Option<String>,
         decoy_pin: Option<String>,
+        wipe_data_pin: Option<String>,
     }
 
     impl PinGuard {
@@ -789,8 +857,9 @@ mod tests {
             let config = &Database::global().global_config;
             let hashed_pin = config.hashed_pin_code().ok().filter(|pin| !pin.is_empty());
             let decoy_pin = config.decoy_pin().ok().filter(|pin| !pin.is_empty());
+            let wipe_data_pin = config.wipe_data_pin().ok().filter(|pin| !pin.is_empty());
 
-            Self { hashed_pin, decoy_pin }
+            Self { hashed_pin, decoy_pin, wipe_data_pin }
         }
     }
 
@@ -806,7 +875,101 @@ mod tests {
                 Some(decoy_pin) => config.set_decoy_pin(decoy_pin),
                 None => config.delete_decoy_pin(),
             };
+
+            let _ = match self.wipe_data_pin.take() {
+                Some(wipe_data_pin) => config.set_wipe_data_pin(wipe_data_pin),
+                None => config.delete_wipe_data_pin(),
+            };
         }
+    }
+
+    // unlocking checks the app PIN first, so an app PIN equal to a trick PIN would open the main
+    // wallets where the user expects the decoy wallets or a wipe
+    #[test]
+    fn app_pin_can_never_become_a_trick_pin() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let _pins = PinGuard::capture();
+            let main_pin = AuthPin::new();
+            main_pin.set("111111".to_string()).unwrap();
+            manager.set_decoy_pin("222222".to_string()).expect("decoy pin saves");
+            manager.set_wipe_data_pin("333333".to_string()).expect("wipe data pin saves");
+
+            assert_eq!(
+                manager.set_pin("222222".to_string()),
+                Err(AuthManagerError::PinSet(NewPinError::SameAsDecoyPin))
+            );
+            assert_eq!(
+                manager.set_pin("333333".to_string()),
+                Err(AuthManagerError::PinSet(NewPinError::SameAsWipeDataPin))
+            );
+
+            assert!(main_pin.check("111111"), "the app PIN changed to a trick PIN");
+            assert!(!main_pin.check("222222"));
+            assert!(!main_pin.check("333333"));
+
+            manager.set_pin("444444".to_string()).expect("a distinct PIN saves");
+            assert!(main_pin.check("444444"));
+        });
+    }
+
+    // the decoy PIN must open Settings that act like main mode's, so each toggle main mode guards
+    // with a PIN asks for the decoy PIN there, and only the decoy's own copy of the setting changes
+    #[test]
+    fn decoy_mode_settings_ask_for_the_decoy_pin_like_main_mode() {
+        use SecuritySettingsAction::{
+            ToggleBiometric, ToggleDecoyPin, TogglePin, ToggleWipeDataPin,
+        };
+
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let config = &Database::global().global_config;
+            config.set_decoy_mode().expect("enter decoy mode");
+
+            for action in [
+                TogglePin { enable: false },
+                ToggleBiometric { enable: true },
+                ToggleBiometric { enable: false },
+                ToggleWipeDataPin { enable: false },
+                ToggleDecoyPin { enable: false },
+            ] {
+                assert_eq!(
+                    manager.validate_security_action(action.clone(), vec![]),
+                    SecuritySettingsResult::DecoyPinThenLocalUpdate(action)
+                );
+            }
+
+            // turning the PIN on asks for a new one, as main mode does
+            assert_eq!(
+                manager.validate_security_action(TogglePin { enable: true }, vec![]),
+                SecuritySettingsResult::ProceedToSheet(SecuritySheetState::NewPin)
+            );
+
+            config.set_main_mode().expect("leave decoy mode");
+        });
+    }
+
+    // a settings read error must not read as "no app lock", or secrets export with no prompt
+    #[test]
+    fn unreadable_auth_settings_still_guard_secret_exports() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let config = &Database::global().global_config;
+            config
+                .set(database::global_config::GlobalConfigKey::AuthType, "unreadable".into())
+                .expect("write raw auth type");
+
+            assert_eq!(
+                manager.secret_export_access(),
+                SecretExportAccess::MainCredential { lock_type: AuthType::Pin }
+            );
+
+            config.set_auth_type(AuthType::None).unwrap();
+            assert_eq!(manager.secret_export_access(), SecretExportAccess::Trusted);
+
+            config.set_auth_type(AuthType::Both).unwrap();
+            assert_eq!(
+                manager.secret_export_access(),
+                SecretExportAccess::MainCredential { lock_type: AuthType::Both }
+            );
+        });
     }
 
     /// The wallets the sidebar and Settings → All Wallets list for the current mode

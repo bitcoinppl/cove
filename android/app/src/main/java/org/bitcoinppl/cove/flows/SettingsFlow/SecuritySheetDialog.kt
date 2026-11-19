@@ -13,7 +13,7 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthManagerAction
-import org.bitcoinppl.cove_core.SecurityAlertState
+import org.bitcoinppl.cove_core.SecuritySettingsAction
 import org.bitcoinppl.cove_core.SecuritySheetState
 
 @Composable
@@ -70,22 +70,49 @@ internal fun SecuritySheetDialog(
     }
 }
 
+/**
+ * Asks for the decoy PIN where main mode asks for its PIN, so decoy mode's Settings look the
+ * same, then applies [action] to the toggles decoy mode shows
+ */
+@Composable
+internal fun DecoyPinConfirmationDialog(
+    action: SecuritySettingsAction,
+    auth: AuthManager,
+    onConfirmed: (SecuritySettingsAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+        ) {
+            CurrentPinSheet(
+                isPinCorrect = { pin -> auth.checkDecoyPin(pin) },
+                backAction = onDismiss,
+                onUnlock = { onConfirmed(action) },
+            )
+        }
+    }
+}
+
+// rust sends decoy mode to DecoyPinConfirmationDialog instead, so only the app PIN opens this
 @Composable
 private fun RemovePinSheet(
     callbacks: SecuritySheetDialogCallbacks,
     auth: AuthManager,
 ) {
     CurrentPinSheet(
-        isPinCorrect = { pin -> auth.checkActivePin(pin) },
+        isPinCorrect = { pin -> auth.checkPin(pin) },
         backAction = callbacks.onDismiss,
         onUnlock = {
-            if (auth.isInDecoyMode()) {
-                callbacks.onDismiss()
-            } else {
-                auth.dispatch(AuthManagerAction.DisablePin)
-                auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                callbacks.onDismiss()
-            }
+            auth.dispatch(AuthManagerAction.DisablePin)
+            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+            callbacks.onDismiss()
         },
     )
 }
@@ -111,12 +138,8 @@ private fun RemoveWipeDataPinSheet(
         isPinCorrect = { pin -> auth.checkPin(pin) },
         backAction = callbacks.onDismiss,
         onUnlock = {
-            if (auth.isInDecoyMode()) {
-                callbacks.onDismiss()
-            } else {
-                auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                callbacks.onDismiss()
-            }
+            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+            callbacks.onDismiss()
         },
     )
 }
@@ -206,14 +229,7 @@ private fun completePinChange(
         return
     }
 
-    // use Rust validation for new PIN
-    val error = auth.validateNewPin(pin)
-    if (error != null) {
-        callbacks.onDismiss()
-        callbacks.onAlertState(SecurityAlertState.ExtraSetPinError(error))
-        return
-    }
-
+    // rust refuses a PIN equal to a trick PIN, and onSetPin shows why
     callbacks.pinCallbacks.onSetPin(pin)
 }
 

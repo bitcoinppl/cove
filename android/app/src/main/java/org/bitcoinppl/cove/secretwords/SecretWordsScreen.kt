@@ -281,6 +281,8 @@ fun SecretWordsScreen(
         }
     }
 
+    KeyTeleportSendCredentialPrompt(requestKeyTeleportSend)
+
     pendingSensitiveAction?.let { action ->
         SecretWordsActionConfirmation(
             action = action,
@@ -288,7 +290,7 @@ fun SecretWordsScreen(
                 pendingSensitiveAction = null
                 action.perform(
                     showSeedQr = { showSeedQrSheet = true },
-                    startKeyTeleport = requestKeyTeleportSend,
+                    startKeyTeleport = requestKeyTeleportSend::request,
                 )
             },
             onDismiss = { pendingSensitiveAction = null },

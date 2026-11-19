@@ -1503,11 +1503,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock(
     ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_secret_export_access(
+    ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_send(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_set_auth_type(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_set_pin(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin(
     ): Short
@@ -1518,8 +1522,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustauthmanager_validate_new_pin(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings(
     ): Short
@@ -2651,11 +2653,15 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_release_send_confirmation_lock(`ptr`: Long,`lock`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_rustauthmanager_secret_export_access(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_send(`ptr`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_auth_type(`ptr`: Long,`authType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustauthmanager_set_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -2667,8 +2673,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_fn_method_rustauthmanager_validate_new_pin(`ptr`: Long,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_validate_security_action(`ptr`: Long,`action`: RustBuffer.ByValue,`unverifiedWalletIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3526,6 +3530,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_newpinerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_trickpinerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4570,6 +4576,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_secret_export_access() != 37851.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_send() != 57691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4577,6 +4586,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 8681.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_pin() != 64456.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 47802.toShort()) {
@@ -4592,9 +4604,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled() != 13357.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176.toShort()) {
@@ -20173,6 +20182,13 @@ public interface RustAuthManagerInterface {
      */
     fun `releaseSendConfirmationLock`(`lock`: SendConfirmationLock): kotlin.Boolean
 
+    /**
+     * What a secret export must ask for before it shows or sends the secret
+     *
+     * Fails closed: when the auth type can't be read, the export still asks for the app PIN
+     */
+    fun `secretExportAccess`(): SecretExportAccess
+
     fun `send`(`message`: AuthManagerReconcileMessage)
 
     fun `setAuthType`(`authType`: AuthType)
@@ -20181,6 +20197,13 @@ public interface RustAuthManagerInterface {
      * Set the decoy pin
      */
     fun `setDecoyPin`(`pin`: kotlin.String)
+
+    /**
+     * Set the app PIN, turning the PIN lock on when it was off
+     *
+     * Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+     */
+    fun `setPin`(`pin`: kotlin.String)
 
     /**
      * Set the wipe data pin
@@ -20206,11 +20229,6 @@ public interface RustAuthManagerInterface {
      * Clear every lock when no authentication is set up, returns whether the app is locked
      */
     fun `unlockIfAuthDisabled`(): kotlin.Boolean
-
-    /**
-     * Validate a new PIN doesn't conflict with existing PINs
-     */
-    fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String?
 
     /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
@@ -20578,6 +20596,24 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     }
 
 
+
+    /**
+     * What a secret export must ask for before it shows or sends the secret
+     *
+     * Fails closed: when the auth type can't be read, the export still asks for the app PIN
+     */override fun `secretExportAccess`(): SecretExportAccess {
+            return FfiConverterTypeSecretExportAccess.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_secret_export_access(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
     override fun `send`(`message`: AuthManagerReconcileMessage)
         =
     callWithHandle {
@@ -20613,6 +20649,25 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     callWithHandle {
     uniffiRustCallWithError(AuthManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
+        it,
+
+        FfiConverterString.lower(`pin`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Set the app PIN, turning the PIN lock on when it was off
+     *
+     * Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+     */
+    @Throws(AuthManagerException::class)override fun `setPin`(`pin`: kotlin.String)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(AuthManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_pin(
         it,
 
         FfiConverterString.lower(`pin`),_status)
@@ -20693,23 +20748,6 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(
         it,
         _status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Validate a new PIN doesn't conflict with existing PINs
-     */override fun `validateNewPin`(`newPin`: kotlin.String): kotlin.String? {
-            return FfiConverterOptionalString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
-        it,
-
-        FfiConverterString.lower(`newPin`),_status)
 }
     }
     )
@@ -40370,15 +40408,6 @@ sealed class AuthManagerAction {
     object DisablePin : AuthManagerAction()
 
 
-    data class SetPin(
-        val v1: kotlin.String) : AuthManagerAction()
-
-    {
-
-
-        companion object
-    }
-
     object DisableWipeDataPin : AuthManagerAction()
 
 
@@ -40407,11 +40436,8 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
             2 -> AuthManagerAction.EnableBiometric
             3 -> AuthManagerAction.DisableBiometric
             4 -> AuthManagerAction.DisablePin
-            5 -> AuthManagerAction.SetPin(
-                FfiConverterString.read(buf),
-                )
-            6 -> AuthManagerAction.DisableWipeDataPin
-            7 -> AuthManagerAction.DisableDecoyPin
+            5 -> AuthManagerAction.DisableWipeDataPin
+            6 -> AuthManagerAction.DisableDecoyPin
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40440,13 +40466,6 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-            )
-        }
-        is AuthManagerAction.SetPin -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
         }
         is AuthManagerAction.DisableWipeDataPin -> {
@@ -40482,17 +40501,12 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
                 buf.putInt(4)
                 Unit
             }
-            is AuthManagerAction.SetPin -> {
-                buf.putInt(5)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
             is AuthManagerAction.DisableWipeDataPin -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 Unit
             }
             is AuthManagerAction.DisableDecoyPin -> {
-                buf.putInt(7)
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -40518,6 +40532,22 @@ sealed class AuthManagerException: kotlin.Exception() {
     class DecoySet(
 
         val v1: TrickPinException
+        ) : AuthManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class PinSet(
+
+        val v1: NewPinException
+        ) : AuthManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class PinSave(
+
+        val v1: AuthException
         ) : AuthManagerException() {
         override val message
             get() = "v1=${ v1 }"
@@ -40565,7 +40595,13 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
             2 -> AuthManagerException.DecoySet(
                 FfiConverterTypeTrickPinError.read(buf),
                 )
-            3 -> AuthManagerException.Database(
+            3 -> AuthManagerException.PinSet(
+                FfiConverterTypeNewPinError.read(buf),
+                )
+            4 -> AuthManagerException.PinSave(
+                FfiConverterTypeAuthError.read(buf),
+                )
+            5 -> AuthManagerException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -40583,6 +40619,16 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeTrickPinError.allocationSize(value.v1)
+            )
+            is AuthManagerException.PinSet -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeNewPinError.allocationSize(value.v1)
+            )
+            is AuthManagerException.PinSave -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeAuthError.allocationSize(value.v1)
             )
             is AuthManagerException.Database -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -40604,8 +40650,18 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 FfiConverterTypeTrickPinError.write(value.v1, buf)
                 Unit
             }
-            is AuthManagerException.Database -> {
+            is AuthManagerException.PinSet -> {
                 buf.putInt(3)
+                FfiConverterTypeNewPinError.write(value.v1, buf)
+                Unit
+            }
+            is AuthManagerException.PinSave -> {
+                buf.putInt(4)
+                FfiConverterTypeAuthError.write(value.v1, buf)
+                Unit
+            }
+            is AuthManagerException.Database -> {
+                buf.putInt(5)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
             }
@@ -57766,6 +57822,94 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 
 
 
+
+
+sealed class NewPinException: kotlin.Exception() {
+
+    /**
+     * Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+     * wiping them
+     */
+    class SameAsWipeDataPin(
+        ) : NewPinException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+     * the decoy wallets
+     */
+    class SameAsDecoyPin(
+        ) : NewPinException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_newpinerror_uniffi_trait_display(FfiConverterTypeNewPinError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NewPinException> {
+        override fun lift(error_buf: RustBuffer.ByValue): NewPinException = FfiConverterTypeNewPinError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNewPinError : FfiConverterRustBuffer<NewPinException> {
+    override fun read(buf: ByteBuffer): NewPinException {
+
+
+        return when(buf.getInt()) {
+            1 -> NewPinException.SameAsWipeDataPin()
+            2 -> NewPinException.SameAsDecoyPin()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NewPinException): ULong {
+        return when(value) {
+            is NewPinException.SameAsWipeDataPin -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NewPinException.SameAsDecoyPin -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: NewPinException, buf: ByteBuffer) {
+        when(value) {
+            is NewPinException.SameAsWipeDataPin -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NewPinException.SameAsDecoyPin -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
 sealed class NewWalletRoute {
 
     object Select : NewWalletRoute()
@@ -60551,6 +60695,90 @@ public object FfiConverterTypeScannerResponse : FfiConverterRustBuffer<ScannerRe
 
 
 /**
+ * What a secret export, such as revealing a private key or sending one with KeyTeleport, must
+ * ask for before it shows or sends the secret
+ */
+sealed class SecretExportAccess {
+
+    /**
+     * No app lock is set up, so the unlocked session is trusted to export
+     */
+    object Trusted : SecretExportAccess()
+
+
+    /**
+     * The user must present the main credential: the app PIN, or biometrics when `lock_type`
+     * allows them. The decoy and wipe data PINs never satisfy it
+     */
+    data class MainCredential(
+        val `lockType`: org.bitcoinppl.cove_core.AuthType) : SecretExportAccess()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSecretExportAccess : FfiConverterRustBuffer<SecretExportAccess>{
+    override fun read(buf: ByteBuffer): SecretExportAccess {
+        return when(buf.getInt()) {
+            1 -> SecretExportAccess.Trusted
+            2 -> SecretExportAccess.MainCredential(
+                FfiConverterTypeAuthType.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SecretExportAccess): ULong = when(value) {
+        is SecretExportAccess.Trusted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecretExportAccess.MainCredential -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeAuthType.allocationSize(value.`lockType`)
+            )
+        }
+    }
+
+    override fun write(value: SecretExportAccess, buf: ByteBuffer) {
+        when(value) {
+            is SecretExportAccess.Trusted -> {
+                buf.putInt(1)
+                Unit
+            }
+            is SecretExportAccess.MainCredential -> {
+                buf.putInt(2)
+                FfiConverterTypeAuthType.write(value.`lockType`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * What alert to show for validation messages
  */
 sealed class SecurityAlertState {
@@ -60932,10 +61160,17 @@ sealed class SecuritySettingsResult {
     }
 
     /**
-     * Decoy mode - just update local UI, don't persist
+     * Decoy mode: ask for the decoy PIN, as main mode asks for its PIN, then apply the action to
+     * the decoy-local settings only, never the saved ones
      */
-    object DecoyModeLocalUpdate : SecuritySettingsResult()
+    data class DecoyPinThenLocalUpdate(
+        val v1: org.bitcoinppl.cove_core.SecuritySettingsAction) : SecuritySettingsResult()
 
+    {
+
+
+        companion object
+    }
 
 
 
@@ -60959,7 +61194,9 @@ public object FfiConverterTypeSecuritySettingsResult : FfiConverterRustBuffer<Se
             2 -> SecuritySettingsResult.ShowAlert(
                 FfiConverterTypeSecurityAlertState.read(buf),
                 )
-            3 -> SecuritySettingsResult.DecoyModeLocalUpdate
+            3 -> SecuritySettingsResult.DecoyPinThenLocalUpdate(
+                FfiConverterTypeSecuritySettingsAction.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -60979,10 +61216,11 @@ public object FfiConverterTypeSecuritySettingsResult : FfiConverterRustBuffer<Se
                 + FfiConverterTypeSecurityAlertState.allocationSize(value.v1)
             )
         }
-        is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+        is SecuritySettingsResult.DecoyPinThenLocalUpdate -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeSecuritySettingsAction.allocationSize(value.v1)
             )
         }
     }
@@ -60999,8 +61237,9 @@ public object FfiConverterTypeSecuritySettingsResult : FfiConverterRustBuffer<Se
                 FfiConverterTypeSecurityAlertState.write(value.v1, buf)
                 Unit
             }
-            is SecuritySettingsResult.DecoyModeLocalUpdate -> {
+            is SecuritySettingsResult.DecoyPinThenLocalUpdate -> {
                 buf.putInt(3)
+                FfiConverterTypeSecuritySettingsAction.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

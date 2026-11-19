@@ -49,7 +49,7 @@ class LockViewAccessibilityTest {
         // the test sets and removes its own PIN, so never run it over a credential someone relies on
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
-        Auth.dispatch(AuthManagerAction.SetPin(TEST_PIN))
+        Auth.setPin(TEST_PIN)
         pinSet = true
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { Auth.type == AuthType.PIN }
     }

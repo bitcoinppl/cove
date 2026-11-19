@@ -91,7 +91,6 @@ internal sealed class CloudBackupRootPresentation {
 data class CloudBackupPresentationContext(
     val isActivityResumed: Boolean = false,
     val isUnlocked: Boolean = false,
-    val isInDecoyMode: Boolean = false,
     val isCoverPresented: Boolean = true,
     val appHasAlert: Boolean = false,
     val appHasSheet: Boolean = false,
@@ -156,7 +155,6 @@ internal fun isCloudBackupPresentationPresentable(
 ): Boolean {
     if (!context.isActivityResumed) return false
     if (context.presentationPolicy.requiresUnlockedAuth && !context.isUnlocked) return false
-    if (context.isInDecoyMode) return false
     if (context.isCoverPresented) return false
     if (context.appHasAlert) return false
     if (context.appHasSheet) return false
@@ -403,7 +401,6 @@ fun CloudBackupPresentationHost(
         CloudBackupPresentationContext(
             isActivityResumed = isActivityResumed,
             isUnlocked = !auth.isLocked,
-            isInDecoyMode = auth.isInDecoyMode(),
             isCoverPresented = isCoverPresented,
             appHasAlert = app.alertState != null,
             appHasSheet = app.sheetState != null,

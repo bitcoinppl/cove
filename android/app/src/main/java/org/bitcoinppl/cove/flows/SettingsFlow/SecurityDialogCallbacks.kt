@@ -21,5 +21,4 @@ internal class SecuritySheetDialogCallbacks(
     val onDismiss: () -> Unit,
     val onNextState: (SecuritySheetState) -> Unit,
     val pinCallbacks: SecuritySheetPinCallbacks,
-    val onAlertState: (SecurityAlertState) -> Unit,
 )

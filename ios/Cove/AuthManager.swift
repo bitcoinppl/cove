@@ -379,8 +379,30 @@ private enum WipeCallResult: Sendable {
     }
 
     public func dispatch(action: AuthManagerAction) {
-        // log only the case name: setPin carries the PIN
-        logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
+        logger.debug("dispatch: \(action)")
         rust.dispatch(action: action)
+    }
+
+    /// Sets the app PIN, turning the PIN lock on when it was off
+    ///
+    /// Rust refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+    public func setPin(_ pin: String) throws {
+        try rust.setPin(pin: pin)
+    }
+
+    /// What a secret export must ask for before it shows or sends the secret
+    ///
+    /// Rust reads the saved auth type and fails closed, so an unreadable setting still asks for
+    /// the PIN where the cached `type` would read as no lock
+    public func secretExportAccess() -> SecretExportAccess {
+        rust.secretExportAccess()
+    }
+
+    /// What Settings shows for a security toggle, decided by Rust so both platforms agree
+    public func validateSecurityAction(
+        _ action: SecuritySettingsAction,
+        unverifiedWalletIds: [WalletId] = []
+    ) -> SecuritySettingsResult {
+        rust.validateSecurityAction(action: action, unverifiedWalletIds: unverifiedWalletIds)
     }
 }

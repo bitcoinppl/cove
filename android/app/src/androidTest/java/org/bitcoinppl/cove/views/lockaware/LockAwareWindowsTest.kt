@@ -41,7 +41,6 @@ import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AppLockReason
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -81,7 +80,7 @@ class LockAwareWindowsTest {
         // the test sets and removes its own PIN, so never run it over a credential someone relies on
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
-        Auth.dispatch(AuthManagerAction.SetPin(TEST_PIN))
+        Auth.setPin(TEST_PIN)
         pinSet = true
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { Auth.type == AuthType.PIN }
     }

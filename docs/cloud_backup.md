@@ -60,11 +60,13 @@ alone.
 The screen has a body (`Disabled`, `Enabling`, `Restoring`, `Configured`,
 `FinishingDisable`, `DriveAccountSwitch`, `PendingEnableRecovery`, `LoadFailed`
 or `Corrupted`), the Settings row, the persisted heal notice, the last outcome,
-the root prompt and the global actions. A configured body lists its sections in
-the order they are drawn, and Turn Off is in every one. Listed cloud rows carry
-their own row actions. An extra copy offers Delete only while the wallet it
-copies has its own current backup; until then it offers Back up first and Check
-Again.
+the root prompt and the global actions. The root prompt shows in main mode only:
+in decoy mode the screen carries none, and switching modes publishes the screen
+again, so the decoy PIN never shows a prompt about the main wallets' backup. A
+configured body lists its sections in the order they are drawn, and Turn Off is
+in every one. Listed cloud rows carry their own row actions. An extra copy
+offers Delete only while the wallet it copies has its own current backup; until
+then it offers Back up first and Check Again.
 
 Every delete Rust offers carries a consent: each row's Delete carries a
 `CloudBackupRowDeleteConsent`, and the unreadable-backups control carries a

@@ -521,6 +521,7 @@ fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: 
 mod account_switch;
 mod cleanup;
 mod connectivity;
+mod decoy_mode;
 mod deep_verify;
 mod disable;
 mod enable;

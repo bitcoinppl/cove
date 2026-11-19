@@ -56,7 +56,7 @@ class SecretWordsLockTest {
         assumeTrue("a wallet for the test words already exists on this device", imported != null)
         walletId = requireNotNull(imported).id
 
-        Auth.dispatch(AuthManagerAction.SetPin(TEST_PIN))
+        Auth.setPin(TEST_PIN)
         compose.waitUntil(timeoutMillis = 10_000) { Auth.type == AuthType.PIN }
         compose.runOnUiThread { Auth.lock(AppLockReason.REAUTHENTICATION) }
 

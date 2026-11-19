@@ -596,6 +596,7 @@ impl CloudBackupSupervisor {
             inventory,
             notices,
             provider_hint,
+            wallet_mode: Database::global().global_config.wallet_mode(),
         }
     }
 
