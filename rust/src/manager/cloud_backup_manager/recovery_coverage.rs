@@ -42,6 +42,12 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         }
 
+        // a failed check's issue counts name no wallets, so no confirmed row can be trusted
+        // until a check passes
+        if configured.verification.reports_integrity_failure() {
+            return Self::default();
+        }
+
         // an unreadable row could be any record, the master key wrapper included
         if sync_states.iter().any(PersistedCloudBlobSyncState::is_corrupted) {
             return Self::default();
@@ -81,19 +87,40 @@ mod tests {
     use crate::database::cloud_backup::{
         CloudBlobConfirmedState, CloudBlobFailedState, PersistedBackupSyncState,
         PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
+        PersistedVerificationRequirement, PersistedWalletVerificationIssues,
     };
     use cove_cspp::backup_data::wallet_record_id;
 
     const NAMESPACE: &str = "namespace";
 
+    fn verified() -> PersistedBackupVerificationState {
+        PersistedBackupVerificationState::Verified {
+            last_verified_at: 10,
+            requested_at: None,
+            dismissed_at: None,
+        }
+    }
+
+    fn required(reason: PersistedVerificationRequirement) -> PersistedBackupVerificationState {
+        PersistedBackupVerificationState::Required {
+            reason,
+            last_verified_at: Some(10),
+            requested_at: None,
+            dismissed_at: None,
+        }
+    }
+
     fn configured(passkey: PersistedPasskeyState) -> PersistedCloudBackupState {
+        configured_with(passkey, verified())
+    }
+
+    fn configured_with(
+        passkey: PersistedPasskeyState,
+        verification: PersistedBackupVerificationState,
+    ) -> PersistedCloudBackupState {
         PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
             passkey,
-            verification: PersistedBackupVerificationState::Verified {
-                last_verified_at: 10,
-                requested_at: None,
-                dismissed_at: None,
-            },
+            verification,
             sync: PersistedBackupSyncState { last_sync: Some(10), wallet_count: Some(1) },
             pending_verification_completion: None,
             pending_restore_all: None,
@@ -168,6 +195,26 @@ mod tests {
     }
 
     #[test]
+    fn a_new_wallet_since_the_last_check_keeps_coverage() {
+        let wallet = unverified_hot_wallet("wallet");
+        let sync_states = [
+            PersistedCloudBlobSyncState::master_key_wrapper(NAMESPACE.into(), confirmed()),
+            wallet_row(NAMESPACE, &wallet, confirmed()),
+        ];
+
+        let coverage = CloudBackupRecoveryCoverage::from_states(
+            &configured_with(
+                PersistedPasskeyState::Available,
+                required(PersistedVerificationRequirement::WalletSetChanged),
+            ),
+            NAMESPACE,
+            &sync_states,
+        );
+
+        assert!(!coverage.needs_backup(&wallet));
+    }
+
+    #[test]
     fn a_backup_that_cannot_be_decrypted_covers_nothing() {
         let wallet = unverified_hot_wallet("wallet");
         let confirmed_wallet = wallet_row(NAMESPACE, &wallet, confirmed());
@@ -192,6 +239,32 @@ mod tests {
                     confirmed_wallet.clone(),
                     PersistedCloudBlobSyncState::corrupted("bad row".into()),
                 ],
+            ),
+            (
+                "a check that could not decrypt a wallet",
+                configured_with(
+                    PersistedPasskeyState::Available,
+                    PersistedBackupVerificationState::NeedsAttention {
+                        checked_at: 30,
+                        wallets_verified: 0,
+                        issues: PersistedWalletVerificationIssues {
+                            decryption_failed: 1,
+                            ..Default::default()
+                        },
+                        last_verified_at: Some(10),
+                        requested_at: None,
+                        dismissed_at: None,
+                    },
+                ),
+                vec![master_key(confirmed()), confirmed_wallet.clone()],
+            ),
+            (
+                "a failed check",
+                configured_with(
+                    PersistedPasskeyState::Available,
+                    required(PersistedVerificationRequirement::IntegrityIssue),
+                ),
+                vec![master_key(confirmed()), confirmed_wallet.clone()],
             ),
             ("Cloud Backup off", PersistedCloudBackupState::Disabled, vec![confirmed_wallet]),
         ];

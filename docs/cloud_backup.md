@@ -1351,9 +1351,13 @@ on while a hot wallet with unverified words has no other copy of its keys.
 `CloudBackupRecoveryCoverage` decides which of those wallets Cloud Backup
 covers, and `unverified_wallet_ids` lists the rest across every network of the
 current wallet mode. A wallet counts as covered only when, in persisted state,
-Cloud Backup is configured with its passkey available, no sync row is
-unreadable, the master key wrapper's row in the current namespace isn't
-unconfirmed, and the wallet's own row there is `Confirmed`. A first upload that
+Cloud Backup is configured with its passkey available, no verification failure
+is outstanding, no sync row is unreadable, the master key wrapper's row in the
+current namespace isn't unconfirmed, and the wallet's own row there is
+`Confirmed`. A verification that needs attention, or one required for an
+integrity issue or an unrecorded cause, withdraws all coverage until a check
+passes, since its issue counts don't name the wallets. One required only because
+the wallet set changed or the backup was reset keeps it. A first upload that
 never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
 uncovered. The rule reads no live verification, inventory or sync health
 state. Those start over on every launch and need the network, so a gate built
