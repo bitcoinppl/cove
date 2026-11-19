@@ -61,6 +61,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.BiometricPolicy
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
@@ -561,11 +562,11 @@ private fun BackupExportAuthDialog(
                 },
             )
             biometricPrompt.authenticate(
-                BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Unlock Backup Export")
-                    .setSubtitle("Verify your identity to export")
-                    .setNegativeButtonText("Cancel")
-                    .build()
+                BiometricPolicy.promptInfo(
+                    title = "Unlock Backup Export",
+                    subtitle = "Verify your identity to export",
+                    negativeButtonText = "Cancel",
+                )
             )
         }
         return
@@ -593,11 +594,11 @@ private fun BackupExportAuthDialog(
                 },
             )
             biometricPrompt.authenticate(
-                BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Unlock Backup Export")
-                    .setSubtitle("Verify your identity to export")
-                    .setNegativeButtonText("Use PIN")
-                    .build()
+                BiometricPolicy.promptInfo(
+                    title = "Unlock Backup Export",
+                    subtitle = "Verify your identity to export",
+                    negativeButtonText = "Use PIN",
+                )
             )
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.BiometricPolicy
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -39,11 +40,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     val auth = Auth
     val biometricManager = remember { BiometricManager.from(context) }
 
-    val isBiometricAvailable =
-        remember {
-            biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                BiometricManager.BIOMETRIC_SUCCESS
-        }
+    val isBiometricAvailable = remember { BiometricPolicy.isAvailable(biometricManager) }
 
     // sheet and alert state (using Rust enums)
     var sheetState: SecuritySheetState by remember { mutableStateOf(SecuritySheetState.NONE) }
@@ -134,22 +131,20 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
     val enableBiometricPromptInfo =
         remember {
-            BiometricPrompt.PromptInfo
-                .Builder()
-                .setTitle("Enable Biometric")
-                .setSubtitle("Authenticate to enable biometric unlock")
-                .setNegativeButtonText("Cancel")
-                .build()
+            BiometricPolicy.promptInfo(
+                title = "Enable Biometric",
+                subtitle = "Authenticate to enable biometric unlock",
+                negativeButtonText = "Cancel",
+            )
         }
 
     val disableBiometricPromptInfo =
         remember {
-            BiometricPrompt.PromptInfo
-                .Builder()
-                .setTitle("Disable Biometric")
-                .setSubtitle("Authenticate to disable biometric unlock")
-                .setNegativeButtonText("Cancel")
-                .build()
+            BiometricPolicy.promptInfo(
+                title = "Disable Biometric",
+                subtitle = "Authenticate to disable biometric unlock",
+                negativeButtonText = "Cancel",
+            )
         }
 
     // create fresh BiometricPrompt for enabling biometric (avoids stale closure issues)
