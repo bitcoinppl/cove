@@ -1,26 +1,22 @@
 package org.bitcoinppl.cove.flows
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.Lifecycle
 import org.bitcoinppl.cove.AppManager
@@ -48,9 +44,10 @@ import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerManager
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerSetupRetryView
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerSetupSuccessContent
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
+import org.bitcoinppl.cove.test.CompactViewport
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
-import org.bitcoinppl.cove.test.WithFontScale
+import org.bitcoinppl.cove.test.Viewport
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -73,16 +70,6 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
-
-/** A compact phone held upright or turned on its side, as the app doesn't lock its orientation */
-enum class Viewport(
-    val width: Dp,
-    val height: Dp,
-) {
-    // a Galaxy S20 at its default display size is about 360dp wide, and 640dp tall is a short phone
-    PORTRAIT(360.dp, 640.dp),
-    LANDSCAPE(640.dp, 360.dp),
-}
 
 // matches the spacing the screens keep between their pinned sections, as iOS does with VStack spacing
 private val MIN_SECTION_GAP = 24.dp
@@ -124,6 +111,9 @@ class PinnedSectionsGapTest(
     // every broken expectation of the case, so one run shows each way a screen falls apart
     private val failures = mutableListOf<String>()
 
+    // the density the viewport laid out at, which a landscape viewport lowers to fit the window
+    private lateinit var layoutDensity: Density
+
     @Before
     fun bootstrapRustRuntime() {
         bootstrapRustRuntimeForUiTest()
@@ -142,10 +132,8 @@ class PinnedSectionsGapTest(
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.setContent {
             CoveTheme(darkTheme = true) {
-                WithFontScale(fontScale) {
-                    Box(Modifier.size(viewport.width, viewport.height).testTag(VIEWPORT_TAG)) {
-                        content()
-                    }
+                CompactViewport(viewport, fontScale, VIEWPORT_TAG, onDensity = { layoutDensity = it }) {
+                    content()
                 }
             }
         }
@@ -180,36 +168,37 @@ class PinnedSectionsGapTest(
     }
 
     // scrolls the page to each of the screen's primary controls and checks it draws whole inside
-    // the viewport, so a control the page can't reach, or one an inner list left out or scrolled
-    // partly away, fails
+    // the viewport, so a control the page can't reach, or one an inner list can't scroll fully
+    // into view, fails
     private fun checkOnScreen() {
-        val tags = screen.onScreenTags
+        val viewportBounds = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
 
-        val missing = tags.filter { tag -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
-        if (missing.isNotEmpty()) {
-            failures += "$missing should be composed, but an inner list left them out"
-            return
-        }
-
-        val bounds = compose.onNodeWithTag(VIEWPORT_TAG).getBoundsInRoot()
-        tags.forEach { tag ->
+        screen.onScreenTags.forEach { tag ->
             scrollIntoView(tag)
 
-            val node = compose.onNodeWithTag(tag, useUnmergedTree = true)
-            val drawn = node.getBoundsInRoot()
-            val whole = node.getUnclippedBoundsInRoot()
+            val node = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+            if (node == null) {
+                failures += "$tag should be reachable, but no list scrolls it into the composition"
+                return@forEach
+            }
+
+            val whole = node.ownBoundsPx().toLayoutDp()
+            val drawn = node.boundsInRoot.toLayoutDp()
+            val bounds = viewportBounds.toLayoutDp()
 
             check(whole.top >= bounds.top - GAP_ROUNDING_TOLERANCE && whole.bottom <= bounds.bottom + GAP_ROUNDING_TOLERANCE) {
                 "$tag should be drawn whole inside the viewport, but it spans ${whole.top} to ${whole.bottom} " +
                     "in a viewport of ${bounds.top} to ${bounds.bottom}"
             }
-            check(whole.height - drawn.height <= GAP_ROUNDING_TOLERANCE) {
+            check(whole.bottom - whole.top - (drawn.bottom - drawn.top) <= GAP_ROUNDING_TOLERANCE) {
                 "$tag should not be clipped, but only ${drawn.top} to ${drawn.bottom} of ${whole.top} to ${whole.bottom} draws"
             }
         }
     }
 
     private fun scrollIntoView(tag: String) {
+        scrollLazyListsTo(tag)
+
         val scrollParents =
             compose
                 .onAllNodes(hasScrollAction() and hasAnyDescendant(hasTestTag(tag)), useUnmergedTree = true)
@@ -220,14 +209,27 @@ class PinnedSectionsGapTest(
         compose.waitForIdle()
     }
 
+    // a lazy list composes only the items near its scroll position, so each one that can scroll to
+    // an item is asked to bring the tag in before the page scrolls to it, as a swipe would
+    private fun scrollLazyListsTo(tag: String) {
+        val lazyLists = compose.onAllNodes(hasScrollToNodeAction(), useUnmergedTree = true)
+
+        repeat(lazyLists.fetchSemanticsNodes().size) { index ->
+            runCatching { lazyLists[index].performScrollToNode(hasTestTag(tag)) }
+        }
+        compose.waitForIdle()
+    }
+
     // a section is where its content draws: a weighted slot's own bounds fill the space it was
     // given even when its content is small, and content that outgrows a fixed slot draws past them
     private fun sectionExtent(tag: String): VerticalExtent {
         val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
         val extent = node.children.map { it.drawnExtentPx() }.reduceOrNull(Rect::union) ?: node.ownBoundsPx()
 
-        return with(compose.density) { VerticalExtent(extent.top.toDp(), extent.bottom.toDp()) }
+        return extent.toLayoutDp()
     }
+
+    private fun Rect.toLayoutDp(): VerticalExtent = with(layoutDensity) { VerticalExtent(top.toDp(), bottom.toDp()) }
 
     companion object {
         @JvmStatic
