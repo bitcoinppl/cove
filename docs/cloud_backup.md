@@ -1438,6 +1438,37 @@ live provider proof, which would refuse the PIN offline and right after launch:
   follow-up that adds decoy-mode wallets to the check should make a failed read
   refuse the PIN instead
 
+### Wallet recovery
+
+Screens outside Cloud Backup ask whether Cloud Backup can bring one wallet
+back: the selected wallet's Backup your wallet reminder, Wallet Settings'
+Final Warning before deleting an unverified hot wallet, and the missing-keys
+alert's Open Cloud Backup. They ask `CloudBackupRecovery`, never whether the
+screen shows a configured backup. The screen starts as Disabled until the
+first publish of a launch, and Cloud Backup being on says nothing about a
+wallet whose first upload never confirmed.
+
+`CloudBackupRecovery` holds whether a backup is configured, from the persisted
+record, and the wallets with a confirmed copy, by the Wipe Data PIN coverage
+rule above. Its `wallet` answers `Off`, `Unconfirmed` or `Confirmed`. Only a
+`Confirmed` wallet hides the reminder and gets the Final Warning that it can be
+recovered from the Cloud Backup screen; any other gets "not backed up" and
+Delete Forever. Open Cloud Backup shows whenever a backup is configured.
+
+The platform reads `recovery()` before `listen_for_updates`, so the answer is
+right from the first frame after launch. Every screen publish recomputes it from
+the record it already reads and sends a `Recovery` message when it changed, at
+the next revision, and the platform applies it with
+`CloudBackupPublishedRecovery.applying`, which skips one its snapshot already
+includes. A write that grants or withdraws coverage without changing the
+screen still asks for a publish: marking an edited wallet dirty, and a local
+reset's key clear. The harness checks at every boundary that a platform copy
+built from the snapshot and the updates matches a fresh read of the record.
+
+The Settings row's Verification Recommended also reads persisted state: it
+ages the last verification the record holds, since the live verification
+starts over as not verified on every launch.
+
 ## Related Notes
 
 - Read `docs/passkeys.md` before changing passkey registration, targeted auth,

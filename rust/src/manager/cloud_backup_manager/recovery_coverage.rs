@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{CloudBackupKeychain, RustCloudBackupManager};
+use super::{CloudBackupKeychain, CloudBackupReconcileMessage, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     PersistedCloudBackupState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -18,7 +18,19 @@ pub(crate) struct CloudBackupRecoveryCoverage(HashSet<WalletId>);
 impl CloudBackupRecoveryCoverage {
     /// Loads the coverage of the configured backup, or none when any read fails
     pub(crate) fn load() -> Self {
-        let persisted = RustCloudBackupManager::load_persisted_state();
+        Self::from_persisted(&RustCloudBackupManager::load_persisted_state())
+    }
+
+    /// The coverage of `persisted`, reading the namespace and sync rows only when it can cover
+    /// anything, or none when any read fails
+    fn from_persisted(persisted: &PersistedCloudBackupState) -> Self {
+        let PersistedCloudBackupState::Configured(configured) = persisted else {
+            return Self::default();
+        };
+        if configured.passkey != PersistedPasskeyState::Available {
+            return Self::default();
+        }
+
         let Ok(Some(namespace)) = CloudBackupKeychain::global().namespace_id() else {
             return Self::default();
         };
@@ -26,7 +38,7 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         };
 
-        Self::from_states(&persisted, &namespace, &sync_states)
+        Self::from_states(persisted, &namespace, &sync_states)
     }
 
     fn from_states(
@@ -78,6 +90,116 @@ impl CloudBackupRecoveryCoverage {
     /// confirmed too, since the row then shows only the pending edit
     pub(crate) fn needs_backup(&self, wallet: &WalletMetadata) -> bool {
         wallet.wallet_type == WalletType::Hot && !wallet.verified && !self.0.contains(&wallet.id)
+    }
+}
+
+/// Whether Cloud Backup can restore one wallet, as this device's persisted record says
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupWalletRecovery {
+    /// Cloud Backup is off on this device
+    Off,
+    /// Cloud Backup is on but has no confirmed copy of the wallet as it is now, such as while its
+    /// first upload fails or an edit still uploads
+    Unconfirmed,
+    /// Cloud Backup has a confirmed copy of the wallet as it is now
+    Confirmed,
+}
+
+/// What Cloud Backup can restore on this device
+///
+/// Read from persisted state only, by the same rule as the Wipe Data PIN's coverage, so it is
+/// already right at launch and offline, before the backup's live state loads
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupRecovery {
+    /// Whether a backup is configured on this device, whatever its wallets' state
+    pub configured: bool,
+    /// The wallets with a confirmed copy, sorted so the same coverage always compares equal
+    pub confirmed_wallets: Vec<WalletId>,
+}
+
+impl CloudBackupRecovery {
+    /// Loads what the configured backup can restore, or nothing confirmed when any read fails
+    pub(crate) fn load() -> Self {
+        Self::from_persisted(&RustCloudBackupManager::load_persisted_state())
+    }
+
+    /// What `persisted` can restore, or nothing confirmed when any further read fails
+    pub(crate) fn from_persisted(persisted: &PersistedCloudBackupState) -> Self {
+        Self::from_coverage(
+            persisted.is_configured(),
+            CloudBackupRecoveryCoverage::from_persisted(persisted),
+        )
+    }
+
+    fn from_coverage(configured: bool, coverage: CloudBackupRecoveryCoverage) -> Self {
+        let mut confirmed_wallets = coverage.0.into_iter().collect::<Vec<_>>();
+        confirmed_wallets.sort();
+
+        Self { configured, confirmed_wallets }
+    }
+}
+
+#[uniffi::export]
+impl CloudBackupRecovery {
+    /// Whether Cloud Backup can restore the wallet with `wallet_id`
+    pub fn wallet(&self, wallet_id: WalletId) -> CloudBackupWalletRecovery {
+        if !self.configured {
+            return CloudBackupWalletRecovery::Off;
+        }
+
+        if self.confirmed_wallets.binary_search(&wallet_id).is_ok() {
+            CloudBackupWalletRecovery::Confirmed
+        } else {
+            CloudBackupWalletRecovery::Unconfirmed
+        }
+    }
+}
+
+/// [`CloudBackupRecovery`] as the manager last sent it, with its revision
+///
+/// The manager is a process singleton and can send updates before the platform listens, so the
+/// platform starts from `RustCloudBackupManager::recovery()` and applies each later update with
+/// [`CloudBackupPublishedRecovery::applying`], which skips the ones its snapshot already includes
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupPublishedRecovery {
+    /// How many updates the manager had sent when this recovery was current
+    pub revision: u64,
+    pub recovery: CloudBackupRecovery,
+}
+
+#[uniffi::export]
+impl CloudBackupPublishedRecovery {
+    /// `update` when it is newer than this, or this as it is
+    pub fn applying(&self, update: CloudBackupPublishedRecovery) -> CloudBackupPublishedRecovery {
+        if update.revision > self.revision { update } else { self.clone() }
+    }
+}
+
+impl RustCloudBackupManager {
+    /// What Cloud Backup can restore now, at the revision last sent, the snapshot a platform
+    /// starts from
+    ///
+    /// Read fresh rather than taken from the last update, since the first publish of a launch
+    /// may not have run yet. An update sent later carries a higher revision and replaces it
+    pub(crate) fn recovery_snapshot(&self) -> CloudBackupPublishedRecovery {
+        let revision = self.published_recovery.lock().revision;
+
+        CloudBackupPublishedRecovery { revision, recovery: CloudBackupRecovery::load() }
+    }
+
+    /// Sends what Cloud Backup can restore when it changed since the last update
+    ///
+    /// The screen publish calls this, since every persisted change that grants or withdraws
+    /// coverage publishes the screen. The update is sent under the lock so updates reach the
+    /// platform in revision order
+    pub(crate) fn publish_recovery(&self, recovery: CloudBackupRecovery) {
+        let mut published = self.published_recovery.lock();
+        if published.recovery == recovery {
+            return;
+        }
+
+        *published = CloudBackupPublishedRecovery { revision: published.revision + 1, recovery };
+        self.send(CloudBackupReconcileMessage::Recovery(published.clone()));
     }
 }
 
@@ -275,5 +397,46 @@ mod tests {
 
             assert!(coverage.needs_backup(&wallet), "{case} should cover nothing");
         }
+    }
+
+    #[test]
+    fn each_wallet_reads_off_unconfirmed_or_confirmed_from_one_recovery() {
+        let uploaded = unverified_hot_wallet("uploaded");
+        let failed_upload = unverified_hot_wallet("failed-upload");
+        let never_uploaded = unverified_hot_wallet("never-uploaded");
+        let persisted = configured(PersistedPasskeyState::Available);
+        let sync_states = [
+            PersistedCloudBlobSyncState::master_key_wrapper(NAMESPACE.into(), confirmed()),
+            wallet_row(NAMESPACE, &uploaded, confirmed()),
+            wallet_row(NAMESPACE, &failed_upload, failed()),
+        ];
+        let coverage =
+            CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &sync_states);
+        let recovery = CloudBackupRecovery::from_coverage(persisted.is_configured(), coverage);
+
+        assert_eq!(recovery.wallet(uploaded.id.clone()), CloudBackupWalletRecovery::Confirmed);
+        assert_eq!(recovery.wallet(failed_upload.id), CloudBackupWalletRecovery::Unconfirmed);
+        assert_eq!(recovery.wallet(never_uploaded.id), CloudBackupWalletRecovery::Unconfirmed);
+        assert_eq!(
+            CloudBackupRecovery::from_persisted(&PersistedCloudBackupState::Disabled)
+                .wallet(uploaded.id),
+            CloudBackupWalletRecovery::Off
+        );
+    }
+
+    #[test]
+    fn a_recovery_update_the_snapshot_already_includes_is_skipped() {
+        let configured = |revision| CloudBackupPublishedRecovery {
+            revision,
+            recovery: CloudBackupRecovery { configured: true, confirmed_wallets: Vec::new() },
+        };
+        let off = |revision| CloudBackupPublishedRecovery {
+            revision,
+            recovery: CloudBackupRecovery::default(),
+        };
+
+        assert_eq!(configured(3).applying(off(2)), configured(3));
+        assert_eq!(configured(3).applying(off(3)), configured(3));
+        assert_eq!(configured(3).applying(off(4)), off(4));
     }
 }

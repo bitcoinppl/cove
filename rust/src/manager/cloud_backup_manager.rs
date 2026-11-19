@@ -141,6 +141,7 @@ pub(crate) use self::pending_verification::{
 };
 use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformResult, DriveAccountSwitchPlatformState};
+pub use self::recovery_coverage::CloudBackupPublishedRecovery;
 pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 use self::screen::PublishedScreen;
@@ -355,6 +356,8 @@ pub struct RustCloudBackupManager {
     pub(crate) inventory: Arc<RwLock<InventoryOwner>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
     published_screen: Arc<PublishedScreen>,
+    /// What Cloud Backup can restore, as last sent to the platform
+    published_recovery: Arc<Mutex<CloudBackupPublishedRecovery>>,
     pub(crate) pending_enable: PendingEnableCoordinator,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
@@ -444,6 +447,11 @@ impl Drop for CloudBackupResetPermit {
 }
 
 impl RustCloudBackupManager {
+    /// Whether a backup is configured on this device, from its persisted record
+    pub(crate) fn is_cloud_backup_enabled(&self) -> bool {
+        Self::load_persisted_state().is_configured()
+    }
+
     /// The reducer's presentation state, which the screen is projected from
     pub(crate) fn model_state(&self) -> CloudBackupState {
         self.state.read().public_state()
@@ -702,6 +710,7 @@ impl RustCloudBackupManager {
                 inventory: Arc::new(RwLock::new(InventoryOwner::default())),
                 reconciler: ReconcileChannel::new(1000),
                 published_screen: Arc::new(PublishedScreen::default()),
+                published_recovery: Arc::default(),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
                 // the bootstrap phase hands its writer to the supervisor, the lifecycle owner
@@ -1221,6 +1230,16 @@ impl RustCloudBackupManager {
         self.published_snapshot()
     }
 
+    /// What Cloud Backup can restore, with its revision
+    ///
+    /// Read it before `listen_for_updates`, then advance it only with
+    /// [`CloudBackupPublishedRecovery::applying`]. Each wallet's answer comes from the recovery's
+    /// `wallet`, never from whether the screen shows a configured backup, which starts as
+    /// Disabled until the first publish of a launch
+    pub fn recovery(&self) -> CloudBackupPublishedRecovery {
+        self.recovery_snapshot()
+    }
+
     /// Number of wallets in the cloud backup
     pub fn backup_wallet_count(&self) -> Option<u32> {
         let db = Database::global();
@@ -1284,11 +1303,6 @@ impl RustCloudBackupManager {
         result: DriveAccountSwitchPlatformResult,
     ) {
         send!(self.supervisor.drive_account_switch_platform_result(result));
-    }
-
-    /// Check if cloud backup is enabled, used as nav guard
-    pub fn is_cloud_backup_enabled(&self) -> bool {
-        Self::load_persisted_state().is_configured()
     }
 
     /// Reports whether onboarding may recover a lost enable-completion event from durable state

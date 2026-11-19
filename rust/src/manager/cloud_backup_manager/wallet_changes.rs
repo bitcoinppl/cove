@@ -56,6 +56,10 @@ impl RustCloudBackupManager {
             return;
         }
 
+        // a confirmed copy no longer matches the wallet, so its recovery is withdrawn until the
+        // edit's upload confirms, and nothing else publishes after this write
+        self.request_screen_publish();
+
         if self.is_known_offline() {
             return;
         }

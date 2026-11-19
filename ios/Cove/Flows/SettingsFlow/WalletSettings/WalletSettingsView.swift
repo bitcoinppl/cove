@@ -23,8 +23,14 @@ struct WalletSettingsView: View {
         manager.deletionWarningMessage()
     }
 
+    /// Only a confirmed cloud copy can bring the wallet back; Cloud Backup being on is not enough,
+    /// since a first upload that never confirmed leaves nothing to recover
+    private var isBackedUpByCloudBackup: Bool {
+        cloudBackupManager.recovery.wallet(walletId: metadata.id) == .confirmed
+    }
+
     private var finalDeleteConfirmationMessage: String {
-        if cloudBackupManager.screen.configured != nil {
+        if isBackedUpByCloudBackup {
             return "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen, or permanently delete it from there."
         }
 
@@ -32,7 +38,7 @@ struct WalletSettingsView: View {
     }
 
     private var finalDeleteButtonTitle: String {
-        cloudBackupManager.screen.configured != nil ? "Delete" : "Delete Forever"
+        isBackedUpByCloudBackup ? "Delete" : "Delete Forever"
     }
 
     private var showLabels: Binding<Bool> {

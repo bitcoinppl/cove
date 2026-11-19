@@ -63,6 +63,7 @@ use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
 use super::admission::{AdmissionBody, AdmissionSnapshot};
 use super::inventory::InventoryFacts;
+use super::recovery_coverage::CloudBackupRecovery;
 use super::{CloudBackupReconcileMessage, LifecycleWriter, RustCloudBackupManager};
 
 /// The screen last sent to the platform, which the next projection is diffed against
@@ -92,6 +93,9 @@ pub(crate) struct ScreenInputs {
     pub(crate) provider_hint: Option<PasskeyProviderHint>,
     /// Whether the app shows the main or the decoy wallets; root prompts show in main mode only
     pub(crate) wallet_mode: WalletMode,
+    /// What Cloud Backup can restore, sent beside the screen rather than drawn on it, and read
+    /// from the same record as the notices
+    pub(crate) recovery: CloudBackupRecovery,
 }
 
 /// What the platform was last sent: the screen, and whether the owner rested off
@@ -255,6 +259,8 @@ impl RustCloudBackupManager {
         if settled_off {
             self.send(CloudBackupReconcileMessage::SettledOff);
         }
+
+        self.publish_recovery(inputs.recovery);
     }
 
     /// The screen for `runtime` and `inputs` with the reducer as it stands now

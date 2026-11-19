@@ -62,8 +62,16 @@ pub(crate) fn project(
     presentation: &CloudBackupStateReducer,
     inputs: &ScreenInputs,
 ) -> CloudBackupScreen {
-    let ScreenInputs { configuration, admission, inventory, notices, provider_hint, wallet_mode } =
-        inputs;
+    // recovery goes to the platform beside the screen, so nothing here draws it
+    let ScreenInputs {
+        configuration,
+        admission,
+        inventory,
+        notices,
+        provider_hint,
+        wallet_mode,
+        recovery: _,
+    } = inputs;
 
     let (configuration, wallet_mode) = (*configuration, *wallet_mode);
     let provider_hint = provider_hint.as_ref();

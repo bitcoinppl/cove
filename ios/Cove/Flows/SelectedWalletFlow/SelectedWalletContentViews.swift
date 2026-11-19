@@ -86,7 +86,8 @@ struct SelectedWalletTitleContent: View {
 struct SelectedWalletMainContent: View {
     let manager: WalletManager
     let screenHeight: CGFloat
-    let cloudBackupIsConfigured: Bool
+    /// Whether Cloud Backup has a confirmed copy of this wallet, which makes its words reminder moot
+    let isBackedUpByCloudBackup: Bool
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
     let headerBottomChanged: (CGFloat) -> Void
@@ -107,7 +108,7 @@ struct SelectedWalletMainContent: View {
                 headerBottomChanged(headerBottom)
             }
 
-            if !cloudBackupIsConfigured {
+            if !isBackedUpByCloudBackup {
                 VerifyReminder(
                     walletId: manager.walletMetadata.id,
                     isVerified: manager.walletMetadata.verified

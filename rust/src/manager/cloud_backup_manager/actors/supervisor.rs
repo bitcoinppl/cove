@@ -43,6 +43,7 @@ use crate::manager::cloud_backup_manager::model::{
 use crate::manager::cloud_backup_manager::owner::delete_authorization::RowDeleteAuthority;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::manager::cloud_backup_manager::recovery_coverage::CloudBackupRecovery;
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupScreenAction, LastOutcome, Notices, ScreenInputs,
 };
@@ -580,8 +581,9 @@ impl CloudBackupSupervisor {
     pub(crate) fn screen_inputs(&self, manager: &RustCloudBackupManager) -> ScreenInputs {
         let inventory = manager.inventory_facts();
         let admission = self.admission_snapshot(manager, &inventory);
-        let notices =
-            Notices::new(&RustCloudBackupManager::load_persisted_state(), &self.screen_outcome);
+        let persisted = RustCloudBackupManager::load_persisted_state();
+        let notices = Notices::new(&persisted, &self.screen_outcome);
+        let recovery = CloudBackupRecovery::from_persisted(&persisted);
 
         // only a missing passkey's card and a verification that didn't finish draw where the
         // passkey was created, so the keychain is read only while one is shown, not on every
@@ -597,6 +599,7 @@ impl CloudBackupSupervisor {
             notices,
             provider_hint,
             wallet_mode: Database::global().global_config.wallet_mode(),
+            recovery,
         }
     }
 
@@ -1933,6 +1936,15 @@ pub(crate) mod test_support {
         pub(crate) fresh: CloudBackupScreen,
         /// Every screen delta sent since the last view, oldest first
         pub(crate) sent: Vec<CloudBackupScreenDelta>,
+        /// What `recovery()` gave at the start of this view, before its publish and drain
+        pub(crate) recovery_snapshot:
+            crate::manager::cloud_backup_manager::CloudBackupPublishedRecovery,
+        /// Every recovery update sent since the last view, oldest first
+        pub(crate) recovery_sent:
+            Vec<crate::manager::cloud_backup_manager::CloudBackupPublishedRecovery>,
+        /// What a read of the persisted record gives now
+        pub(crate) recovery_fresh:
+            crate::manager::cloud_backup_manager::recovery_coverage::CloudBackupRecovery,
         /// The inventory rows the screen was drawn from, with the coverage the screen leaves out
         pub(crate) inventory:
             Option<crate::manager::cloud_backup_manager::inventory::InventoryRows>,
@@ -2018,26 +2030,27 @@ pub(crate) mod test_support {
         /// shows up as a published screen behind the projection
         fn harness_screen_view(&self, manager: &RustCloudBackupManager) -> ScreenView {
             let snapshot = manager.state();
+            let recovery_snapshot = manager.recovery();
             if manager.screen_publish_requested() {
                 manager.publish_screen(&self.runtime, || self.screen_inputs(manager));
             }
 
-            let (screens, others): (Vec<_>, Vec<_>) = manager
-                .reconciler
-                .receiver()
-                .try_iter()
-                .flat_map(|field| match field {
-                    SingleOrMany::Single(message) => vec![message],
-                    SingleOrMany::Many(messages) => messages,
-                })
-                .partition(|message| matches!(message, CloudBackupReconcileMessage::Screen(_)));
-            let sent = screens
-                .into_iter()
-                .filter_map(|message| match message {
-                    CloudBackupReconcileMessage::Screen(delta) => Some(*delta),
-                    _ => None,
-                })
-                .collect();
+            let mut sent = Vec::new();
+            let mut recovery_sent = Vec::new();
+            let mut others = Vec::new();
+            let receiver = manager.reconciler.receiver();
+            let messages = receiver.try_iter().flat_map(|field| match field {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(messages) => messages,
+            });
+
+            for message in messages {
+                match message {
+                    CloudBackupReconcileMessage::Screen(delta) => sent.push(*delta),
+                    CloudBackupReconcileMessage::Recovery(update) => recovery_sent.push(update),
+                    other => others.push(other),
+                }
+            }
 
             // a test playing the platform reads the requests this read passed over
             crate::manager::cloud_backup_manager::set_aside_reconcile_messages(others);
@@ -2057,6 +2070,10 @@ pub(crate) mod test_support {
                 revision,
                 fresh,
                 sent,
+                recovery_snapshot,
+                recovery_sent,
+                recovery_fresh:
+                    crate::manager::cloud_backup_manager::recovery_coverage::CloudBackupRecovery::load(),
                 inventory: manager.inventory_facts().view().rows,
                 offered_deletes,
             }

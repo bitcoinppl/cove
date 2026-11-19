@@ -19,8 +19,10 @@ import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
+import org.bitcoinppl.cove_core.CloudBackupPublishedRecovery
 import org.bitcoinppl.cove_core.CloudBackupPublishedScreen
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
+import org.bitcoinppl.cove_core.CloudBackupRecovery
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
 import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformResult
@@ -31,6 +33,7 @@ import org.bitcoinppl.cove_core.RustCloudBackupManager
 class CloudBackupManager private constructor(
     private val rust: RustCloudBackupManager?,
     initialPublished: CloudBackupPublishedScreen,
+    initialRecovery: CloudBackupPublishedRecovery,
     startLiveUpdates: Boolean,
 ) : CloudBackupManagerReconciler, Closeable {
     private val mainScope =
@@ -63,15 +66,24 @@ class CloudBackupManager private constructor(
     val screen: CloudBackupScreen
         get() = published.screen
 
-    var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
+    /**
+     * What Cloud Backup can restore, with its revision, read from the persisted record so it is
+     * already right at launch, before the first screen publish
+     */
+    internal var publishedRecovery by mutableStateOf(initialRecovery)
         private set
+
+    /**
+     * Whether Cloud Backup can restore each wallet, and whether a backup is configured at all;
+     * views ask this, never whether the screen shows a configured backup
+     */
+    val recovery: CloudBackupRecovery
+        get() = publishedRecovery.recovery
 
     var enableCompletion by mutableStateOf<TaggedItem<CloudBackupEnableContext>?>(null)
         private set
 
     init {
-        refreshPersistedEnabledState()
-
         if (startLiveUpdates && rust != null) {
             rust.listenForUpdates(this)
 
@@ -90,7 +102,8 @@ class CloudBackupManager private constructor(
     ): T =
         withRust(block) ?: defaultValue
 
-    internal constructor(initialPublished: CloudBackupPublishedScreen) : this(null, initialPublished, false)
+    internal constructor(initialPublished: CloudBackupPublishedScreen) :
+        this(null, initialPublished, CloudBackupPublishedRecovery(0UL, CloudBackupRecovery(false, emptyList())), false)
 
     internal constructor(initialScreen: CloudBackupScreen) : this(CloudBackupPublishedScreen(0UL, initialScreen))
 
@@ -128,12 +141,6 @@ class CloudBackupManager private constructor(
                     startBackgroundInventoryDiscovery()
                 }
             }
-                .onSuccess { didSync ->
-                    if (didSync == null) return@onSuccess
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.e(TAG, "syncPersistedState failed", error)
                 }
@@ -147,12 +154,6 @@ class CloudBackupManager private constructor(
                     resumePendingCloudUploadVerification()
                 }
             }
-                .onSuccess { didResume ->
-                    if (didResume == null) return@onSuccess
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.e(TAG, "resumePendingCloudUploadVerification failed", error)
                 }
@@ -166,12 +167,6 @@ class CloudBackupManager private constructor(
                     cloudStorageDidChange()
                 }
             }
-                .onSuccess { didRefresh ->
-                    if (didRefresh == null) return@onSuccess
-                    mainScope.launch {
-                        refreshPersistedEnabledState()
-                    }
-                }
                 .onFailure { error ->
                     Log.w(TAG, "cloud storage refresh failed", error)
                 }
@@ -199,6 +194,7 @@ class CloudBackupManager private constructor(
 
             is CloudBackupReconcileMessage.EnableCompleted ->
                 enableCompletion = TaggedItem(message.v1)
+            is CloudBackupReconcileMessage.Recovery -> publishedRecovery = publishedRecovery.applying(message.v1)
             // Rust sends this only once nothing on this device belongs to a backup; a Disabled
             // screen alone may be a reset that still resumes the backup it found
             CloudBackupReconcileMessage.SettledOff -> notifyCloudBackupSettledOff()
@@ -222,8 +218,6 @@ class CloudBackupManager private constructor(
                 rustScope.launch { finalizeDriveAccountSwitch(transitionId) }
             }
         }.let {}
-
-        refreshPersistedEnabledState()
     }
 
     /*
@@ -319,15 +313,6 @@ class CloudBackupManager private constructor(
             .onFailure { error -> Log.e(TAG, "failed to report drive account switch $result", error) }
     }
 
-    private fun refreshPersistedEnabledState() {
-        isCloudBackupEnabled = runCatching {
-            withRustOr(isCloudBackupEnabled) {
-                isCloudBackupEnabled()
-            }
-        }
-            .getOrDefault(isCloudBackupEnabled)
-    }
-
     private fun notifyCloudBackupSettledOff() {
         val callback = onCloudBackupSettledOff
         if (callback == null) {
@@ -397,9 +382,9 @@ class CloudBackupManager private constructor(
         private fun liveManager(): CloudBackupManager {
             val rust = RustCloudBackupManager()
 
-            // the snapshot is read before init listens, so the deltas still queued from before it
-            // are at or before its revision, and applying skips them instead of replaying them
-            return CloudBackupManager(rust, rust.state(), true)
+            // the snapshots are read before init listens, so the updates still queued from before
+            // them are at or before their revisions, and applying skips them instead of replaying them
+            return CloudBackupManager(rust, rust.state(), rust.recovery(), true)
         }
 
         fun getInstance(): CloudBackupManager =

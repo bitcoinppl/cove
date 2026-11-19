@@ -73,6 +73,7 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
+import org.bitcoinppl.cove_core.CloudBackupWalletRecovery
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -135,7 +136,9 @@ fun SelectedWalletScreen(
     isDarkList: Boolean,
     manager: WalletManager,
     app: AppManager,
-    isCloudBackupEnabled: Boolean = app.cloudBackupManager.isCloudBackupEnabled,
+    // only a confirmed cloud copy makes the words reminder moot; Cloud Backup being on is not enough
+    isBackedUpByCloudBackup: Boolean =
+        manager.walletMetadata?.id?.let(app.cloudBackupManager.recovery::wallet) == CloudBackupWalletRecovery.CONFIRMED,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
@@ -375,7 +378,7 @@ fun SelectedWalletScreen(
 
                 val isVerified = manager.isVerified
                 val walletId = manager.walletMetadata?.id
-                val shouldShowVerifyReminder = !isVerified && !isCloudBackupEnabled
+                val shouldShowVerifyReminder = !isVerified && !isBackedUpByCloudBackup
                 val showLabels = manager.walletMetadata?.showLabels ?: false
                 val loadState = manager.loadState
                 val isScanStatusActive =

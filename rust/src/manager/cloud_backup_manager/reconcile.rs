@@ -9,9 +9,10 @@ use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect, VerificationDetail,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupScreenDelta, CloudBackupStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, PendingUploadVerificationState, RustCloudBackupManager,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupPublishedRecovery,
+    CloudBackupScreenDelta, CloudBackupStatus, CloudBackupVerificationMetadata,
+    CloudBackupVerificationPresentation, CloudBackupVerificationSource,
+    PendingUploadVerificationState, RustCloudBackupManager,
 };
 
 /// Durable Google Drive account-switch state owned by the platform
@@ -61,6 +62,9 @@ pub enum CloudBackupReconcileMessage {
     /// `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
     Screen(Box<CloudBackupScreenDelta>),
     EnableCompleted(CloudBackupEnableContext),
+    /// What Cloud Backup can restore changed; the platform applies it with
+    /// `CloudBackupPublishedRecovery::applying`, which skips one its snapshot already includes
+    Recovery(CloudBackupPublishedRecovery),
     /// Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
     /// and no local reset runs
     ///

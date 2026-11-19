@@ -8600,14 +8600,19 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     func hasPendingCloudUploadVerification()  -> Bool
 
     /**
-     * Check if cloud backup is enabled, used as nav guard
-     */
-    func isCloudBackupEnabled()  -> Bool
-
-    /**
      * Reports whether onboarding may recover a lost enable-completion event from durable state
      */
     func onboardingEnableCompletionReadiness()  -> CloudBackupOnboardingCompletionReadiness
+
+    /**
+     * What Cloud Backup can restore, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedRecovery::applying`]. Each wallet's answer comes from the recovery's
+     * `wallet`, never from whether the screen shows a configured backup, which starts as
+     * Disabled until the first publish of a launch
+     */
+    func recovery()  -> CloudBackupPublishedRecovery
 
     /**
      * Hands Rust's switch owner what Android's half of a Google Drive account switch did
@@ -8765,24 +8770,29 @@ open func hasPendingCloudUploadVerification() -> Bool  {
 }
 
     /**
-     * Check if cloud backup is enabled, used as nav guard
-     */
-open func isCloudBackupEnabled() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
-    /**
      * Reports whether onboarding may recover a lost enable-completion event from durable state
      */
 open func onboardingEnableCompletionReadiness() -> CloudBackupOnboardingCompletionReadiness  {
     return try!  FfiConverterTypeCloudBackupOnboardingCompletionReadiness_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * What Cloud Backup can restore, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedRecovery::applying`]. Each wallet's answer comes from the recovery's
+     * `wallet`, never from whether the screen shows a configured backup, which starts as
+     * Disabled until the first publish of a launch
+     */
+open func recovery() -> CloudBackupPublishedRecovery  {
+    return try!  FfiConverterTypeCloudBackupPublishedRecovery_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcloudbackupmanager_recovery(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -17571,6 +17581,86 @@ public func FfiConverterTypeCloudBackupProgress_lower(_ value: CloudBackupProgre
 
 
 /**
+ * [`CloudBackupRecovery`] as the manager last sent it, with its revision
+ *
+ * The manager is a process singleton and can send updates before the platform listens, so the
+ * platform starts from `RustCloudBackupManager::recovery()` and applies each later update with
+ * [`CloudBackupPublishedRecovery::applying`], which skips the ones its snapshot already includes
+ */
+public struct CloudBackupPublishedRecovery: Equatable, Hashable {
+    /**
+     * How many updates the manager had sent when this recovery was current
+     */
+    public var revision: UInt64
+    public var recovery: CloudBackupRecovery
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * How many updates the manager had sent when this recovery was current
+         */revision: UInt64, recovery: CloudBackupRecovery) {
+        self.revision = revision
+        self.recovery = recovery
+    }
+
+
+    /**
+     * `update` when it is newer than this, or this as it is
+     */
+public func applying(update: CloudBackupPublishedRecovery) -> CloudBackupPublishedRecovery  {
+    return try!  FfiConverterTypeCloudBackupPublishedRecovery_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackuppublishedrecovery_applying(
+            FfiConverterTypeCloudBackupPublishedRecovery_lower(self),
+        FfiConverterTypeCloudBackupPublishedRecovery_lower(update),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupPublishedRecovery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupPublishedRecovery: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPublishedRecovery {
+        return
+            try CloudBackupPublishedRecovery(
+                revision: FfiConverterUInt64.read(from: &buf),
+                recovery: FfiConverterTypeCloudBackupRecovery.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupPublishedRecovery, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.revision, into: &buf)
+        FfiConverterTypeCloudBackupRecovery.write(value.recovery, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPublishedRecovery_lift(_ buf: RustBuffer) throws -> CloudBackupPublishedRecovery {
+    return try FfiConverterTypeCloudBackupPublishedRecovery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPublishedRecovery_lower(_ value: CloudBackupPublishedRecovery) -> RustBuffer {
+    return FfiConverterTypeCloudBackupPublishedRecovery.lower(value)
+}
+
+
+/**
  * A screen as it was published, with the revision that orders it against every delta
  *
  * The platform starts from the one `state()` returns and advances it only with
@@ -17657,6 +17747,91 @@ public func FfiConverterTypeCloudBackupPublishedScreen_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeCloudBackupPublishedScreen_lower(_ value: CloudBackupPublishedScreen) -> RustBuffer {
     return FfiConverterTypeCloudBackupPublishedScreen.lower(value)
+}
+
+
+/**
+ * What Cloud Backup can restore on this device
+ *
+ * Read from persisted state only, by the same rule as the Wipe Data PIN's coverage, so it is
+ * already right at launch and offline, before the backup's live state loads
+ */
+public struct CloudBackupRecovery: Equatable, Hashable {
+    /**
+     * Whether a backup is configured on this device, whatever its wallets' state
+     */
+    public var configured: Bool
+    /**
+     * The wallets with a confirmed copy, sorted so the same coverage always compares equal
+     */
+    public var confirmedWallets: [WalletId]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether a backup is configured on this device, whatever its wallets' state
+         */configured: Bool,
+        /**
+         * The wallets with a confirmed copy, sorted so the same coverage always compares equal
+         */confirmedWallets: [WalletId]) {
+        self.configured = configured
+        self.confirmedWallets = confirmedWallets
+    }
+
+
+    /**
+     * Whether Cloud Backup can restore the wallet with `wallet_id`
+     */
+public func wallet(walletId: WalletId) -> CloudBackupWalletRecovery  {
+    return try!  FfiConverterTypeCloudBackupWalletRecovery_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackuprecovery_wallet(
+            FfiConverterTypeCloudBackupRecovery_lower(self),
+        FfiConverterTypeWalletId_lower(walletId),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupRecovery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupRecovery: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRecovery {
+        return
+            try CloudBackupRecovery(
+                configured: FfiConverterBool.read(from: &buf),
+                confirmedWallets: FfiConverterSequenceTypeWalletId.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupRecovery, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.configured, into: &buf)
+        FfiConverterSequenceTypeWalletId.write(value.confirmedWallets, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRecovery_lift(_ buf: RustBuffer) throws -> CloudBackupRecovery {
+    return try FfiConverterTypeCloudBackupRecovery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupRecovery_lower(_ value: CloudBackupRecovery) -> RustBuffer {
+    return FfiConverterTypeCloudBackupRecovery.lower(value)
 }
 
 
@@ -28970,6 +29145,12 @@ public enum CloudBackupReconcileMessage: Equatable, Hashable {
     case enableCompleted(CloudBackupEnableContext
     )
     /**
+     * What Cloud Backup can restore changed; the platform applies it with
+     * `CloudBackupPublishedRecovery::applying`, which skips one its snapshot already includes
+     */
+    case recovery(CloudBackupPublishedRecovery
+    )
+    /**
      * Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
      * and no local reset runs
      *
@@ -29031,20 +29212,23 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case 2: return .enableCompleted(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 3: return .settledOff
-
-        case 4: return .driveAccountSwitchSelectionRequired(try FfiConverterUInt64.read(from: &buf)
+        case 3: return .recovery(try FfiConverterTypeCloudBackupPublishedRecovery.read(from: &buf)
         )
 
-        case 5: return .driveAccountSwitchStateRequired
+        case 4: return .settledOff
 
-        case 6: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
+        case 5: return .driveAccountSwitchSelectionRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 7: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        case 6: return .driveAccountSwitchStateRequired
+
+        case 7: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 8: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
+        case 8: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 9: return .driveAccountSwitchFinalizeRequired(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29065,31 +29249,36 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
-        case .settledOff:
+        case let .recovery(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeCloudBackupPublishedRecovery.write(v1, into: &buf)
+
+
+        case .settledOff:
+            writeInt(&buf, Int32(4))
 
 
         case let .driveAccountSwitchSelectionRequired(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case .driveAccountSwitchStateRequired:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
 
 
         case let .driveAccountSwitchCommitRequired(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterUInt64.write(v1, into: &buf)
-
-
-        case let .driveAccountSwitchRollbackRequired(v1):
             writeInt(&buf, Int32(7))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
-        case let .driveAccountSwitchFinalizeRequired(v1):
+        case let .driveAccountSwitchRollbackRequired(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .driveAccountSwitchFinalizeRequired(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }
@@ -32315,6 +32504,92 @@ public func FfiConverterTypeCloudBackupVerificationState_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeCloudBackupVerificationState_lower(_ value: CloudBackupVerificationState) -> RustBuffer {
     return FfiConverterTypeCloudBackupVerificationState.lower(value)
+}
+
+
+
+/**
+ * Whether Cloud Backup can restore one wallet, as this device's persisted record says
+ */
+
+public enum CloudBackupWalletRecovery: Equatable, Hashable {
+
+    /**
+     * Cloud Backup is off on this device
+     */
+    case off
+    /**
+     * Cloud Backup is on but has no confirmed copy of the wallet as it is now, such as while its
+     * first upload fails or an edit still uploads
+     */
+    case unconfirmed
+    /**
+     * Cloud Backup has a confirmed copy of the wallet as it is now
+     */
+    case confirmed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupWalletRecovery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupWalletRecovery: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupWalletRecovery
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupWalletRecovery {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .off
+
+        case 2: return .unconfirmed
+
+        case 3: return .confirmed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupWalletRecovery, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .off:
+            writeInt(&buf, Int32(1))
+
+
+        case .unconfirmed:
+            writeInt(&buf, Int32(2))
+
+
+        case .confirmed:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupWalletRecovery_lift(_ buf: RustBuffer) throws -> CloudBackupWalletRecovery {
+    return try FfiConverterTypeCloudBackupWalletRecovery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupWalletRecovery_lower(_ value: CloudBackupWalletRecovery) -> RustBuffer {
+    return FfiConverterTypeCloudBackupWalletRecovery.lower(value)
 }
 
 
@@ -54964,10 +55239,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_is_cloud_backup_enabled() != 34679) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_recovery() != 6214) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result() != 37200) {

@@ -71,6 +71,7 @@ pub(crate) fn manager_without_actors() -> Arc<RustCloudBackupManager> {
         inventory: Arc::new(RwLock::new(InventoryOwner::default())),
         reconciler: ReconcileChannel::new(1000),
         published_screen: Arc::new(PublishedScreen::default()),
+        published_recovery: Arc::default(),
         pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
         cloud_writes: Addr::detached(),
         supervisor: Addr::detached(),
