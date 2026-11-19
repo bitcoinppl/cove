@@ -359,22 +359,32 @@ class PrivateKeyExportFullLaunchTest {
         assertTrue(device.wait(Until.gone(By.text(REVEAL_TITLE)), 5_000L))
     }
 
+    /**
+     * Without an app lock, both export routes trust the unlocked session: Reveal shows the key and
+     * KeyTeleport starts a send, neither asking for a PIN
+     */
     @Test
-    fun exportWithoutAppPinIsRefused() {
+    fun withoutAppPinBothExportRoutesWork() {
         restorePrivateKeyWallet()
         assertFalse(AuthManager.getInstance().isAuthEnabled)
 
         openWalletSettings()
         device.clickClickableAncestor(device.scrollUntilText(EXPORT_ITEM))
         device.clickText("Continue")
-        device.clickText("Reveal")
+        device.clickText(REVEAL_ACTION)
 
-        device.waitForText("Private Key Export")
-        device.waitForText("Set up a PIN or biometric unlock before exporting a private key.")
-        device.clickText("OK")
+        device.waitForText(REVEAL_TITLE)
+        device.waitForText(FIXTURE_XPRV)
+        assertTrue("Reveal asked for a PIN without an app lock", device.findObject(By.text(LOCK_TITLE)) == null)
+        device.clickText("Done")
+        assertTrue(device.wait(Until.gone(By.text(REVEAL_TITLE)), 5_000L))
 
-        assertTrue(device.findObject(By.text(LOCK_TITLE)) == null)
-        device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
+        device.clickClickableAncestor(device.scrollUntilText(EXPORT_ITEM))
+        device.clickText("Continue")
+        device.clickText(KEY_TELEPORT_ACTION)
+
+        device.waitForText(SEND_TITLE)
+        assertTrue("KeyTeleport asked for a PIN without an app lock", device.findObject(By.text(LOCK_TITLE)) == null)
     }
 
     // receiving deletes the stored receive session afterwards, so never run over someone's pending transfer

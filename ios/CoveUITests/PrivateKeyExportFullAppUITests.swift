@@ -121,22 +121,31 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         )
     }
 
-    func testExportWithoutAppPinIsRefused() {
+    /// Without an app lock, both export routes trust the unlocked session: Reveal shows the key and
+    /// KeyTeleport starts a send, neither asking for a credential
+    func testWithoutAppPinBothExportRoutesWork() {
         restorePrivateKeyWallet()
         robot.openSettings()
         openWalletSettings()
 
         tapExportPrivateKey()
-        app.buttons["Reveal and Copy"].tap()
+        let reveal = app.buttons["Reveal and Copy"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 5))
+        reveal.tap()
 
-        let alert = app.alerts["App Lock Required"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            alert.staticTexts["Enable a PIN or biometric app lock before exporting a private key."].exists
-        )
-        alert.buttons["OK"].tap()
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10), "Reveal didn't open without an app lock")
+        XCTAssertFalse(verifyIdentity.exists, "Reveal asked for a credential without an app lock")
+        XCTAssertTrue(app.staticTexts[fixtureXprv].exists, "Reveal didn't show the wallet's private key")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForNonExistence(timeout: 5))
 
-        XCTAssertFalse(verifyIdentity.exists)
+        tapExportPrivateKey()
+        let keyTeleport = app.buttons["Continue with KeyTeleport"]
+        XCTAssertTrue(keyTeleport.waitForExistence(timeout: 5))
+        keyTeleport.tap()
+
+        XCTAssertTrue(keyTeleportSend.waitForExistence(timeout: 10), "KeyTeleport didn't start a send without an app lock")
+        XCTAssertFalse(verifyIdentity.exists, "KeyTeleport asked for a credential without an app lock")
         assertPrivateKeyHidden()
     }
 

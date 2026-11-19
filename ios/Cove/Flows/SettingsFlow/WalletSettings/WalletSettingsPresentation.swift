@@ -46,7 +46,6 @@ enum WalletSettingsPresentationState: Equatable {
     case secondDeleteConfirmation(WalletDeletionConfirmationPlan)
     case finalDeleteConfirmation
     case deletionShutdownBlocked(ShutdownAttemptId)
-    case appLockRequired
     case xprvCredentialVerification(XprvPostVerificationAction)
     case xprvReveal
 
@@ -60,8 +59,7 @@ enum WalletSettingsPresentationState: Equatable {
             .deleteConfirmationDialog
         case .secondDeleteConfirmation,
              .finalDeleteConfirmation,
-             .deletionShutdownBlocked,
-             .appLockRequired:
+             .deletionShutdownBlocked:
             .alert
         case .xprvCredentialVerification:
             .credentialVerification
@@ -95,8 +93,6 @@ struct WalletSettingsPresentationContext {
             "Final Warning"
         case .deletionShutdownBlocked:
             "Wallet Shutdown Is Blocked"
-        case .appLockRequired:
-            "App Lock Required"
         default:
             "Alert"
         }
@@ -173,8 +169,6 @@ private struct WalletSettingsAlertActions: View {
             WalletSettingsFinalDeleteActions(context: context)
         case let .deletionShutdownBlocked(attemptId):
             WalletSettingsBlockedDeleteActions(attemptId: attemptId, context: context)
-        case .appLockRequired:
-            Button("OK", role: .cancel) {}
         default:
             EmptyView()
         }
@@ -228,8 +222,6 @@ private struct WalletSettingsAlertMessage: View {
             Text(context.finalDeleteConfirmationMessage)
         case .deletionShutdownBlocked:
             Text("Cove could not stop all wallet work. Retry or cancel the deletion.")
-        case .appLockRequired:
-            Text("Enable a PIN or biometric app lock before exporting a private key.")
         default:
             EmptyView()
         }

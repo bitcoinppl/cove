@@ -36,7 +36,6 @@ struct SecretWordsScreen: View {
     @State private var showSeedQrSheet = false
     @State private var showingKeyTeleportCredentialVerification = false
     @State private var keyTeleportCredentialVerificationSucceeded = false
-    @State private var showingAppLockRequired = false
 
     let rowHeight = 30.0
     private let numberOfColumns = 2
@@ -102,11 +101,6 @@ struct SecretWordsScreen: View {
                 succeeded: $keyTeleportCredentialVerificationSucceeded
             )
         }
-        .alert("App Lock Required", isPresented: $showingAppLockRequired) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Enable a PIN or biometric app lock before sending secret words with KeyTeleport.")
-        }
         .background(SecretWordsPatternBackground())
         .background(Color.midnightBlue)
     }
@@ -126,8 +120,9 @@ struct SecretWordsScreen: View {
         case .seedQr:
             showSeedQrSheet = true
         case .keyTeleport:
+            // an unlocked session is trusted to send, so without an app lock there is nothing to verify
             guard auth.isAuthEnabled else {
-                showingAppLockRequired = true
+                app.startKeyTeleportSend(walletId: id)
                 return
             }
 
