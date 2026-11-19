@@ -14,7 +14,8 @@ use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
-    PasskeyMaterialOutcome, PasskeyRequestAuthority, PreparedWalletBackup, StagedPrfKey,
+    PasskeyMaterialOutcome, PasskeyRequestAuthority, PendingMatch, PreparedWalletBackup,
+    StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupExistingBackup,
@@ -120,7 +121,10 @@ impl RustCloudBackupManager {
                 })
             }
 
-            NamespaceMatchOutcome::NoMatch => {
+            // a backup still uploading may be the one this passkey opens, but the prompt stays
+            // and says what the readable ones showed, so the user can try again once it arrives
+            NamespaceMatchOutcome::NoMatch
+            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoMatch) => {
                 info!("Enable: passkey didn't match existing backups, asking user to confirm");
                 Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
                     context,
@@ -129,7 +133,8 @@ impl RustCloudBackupManager {
                 })
             }
 
-            NamespaceMatchOutcome::NoPasskeyOnDevice => {
+            NamespaceMatchOutcome::NoPasskeyOnDevice
+            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoPasskeyOnDevice) => {
                 info!("Enable: no passkey on this device for existing backups, asking user to confirm");
                 Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
                     context,
@@ -140,7 +145,8 @@ impl RustCloudBackupManager {
 
             // no passkey can open a backup whose master key isn't visible, so asking for one could
             // only bring this prompt back; the user waits for the files or creates a new backup
-            NamespaceMatchOutcome::NoBackupFiles | NamespaceMatchOutcome::BackupFilesPending => {
+            NamespaceMatchOutcome::NoBackupFiles
+            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable) => {
                 info!("Enable: listed backups have no visible master key, asking user to confirm");
                 Ok(CloudBackupEnablePreparation::ExistingBackupFound {
                     context,

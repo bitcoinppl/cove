@@ -40,17 +40,29 @@ pub(crate) enum NamespaceMatchOutcome {
     /// The folders may still be syncing to this device, or be left by a setup that stopped before
     /// its upload; nothing here tells the two apart
     NoBackupFiles,
-    /// No listed namespace has a master key wrapper a passkey could open yet, and at least one
-    /// has a wrapper whose upload isn't confirmed, so no passkey was asked for
+    /// Nothing matched while at least one namespace's master key upload isn't confirmed, with
+    /// what the namespaces that could be read showed
     ///
-    /// Its files are on their way, so a Restore waits for them as it waits for a cloud it couldn't
-    /// reach, while Enable says they aren't available yet
-    BackupFilesPending,
+    /// The uploading backup may be the one a passkey opens, so a Restore waits for it as it waits
+    /// for a cloud it couldn't reach, while Enable reports what it found
+    FilesPending(PendingMatch),
     /// The platform found no passkey for Cloud Backup on this device, such as one saved on another
     /// device that hasn't synced here yet, so no backup was tried
     NoPasskeyOnDevice,
     Inconclusive,
     UnsupportedVersions,
+}
+
+/// What the readable namespaces showed when nothing matched and another namespace's master key
+/// upload isn't confirmed
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingMatch {
+    /// No namespace had a master key wrapper a passkey could open yet
+    NoneReadable,
+    /// The passkey opened none of the readable namespaces
+    NoMatch,
+    /// The platform found no passkey for Cloud Backup on this device
+    NoPasskeyOnDevice,
 }
 
 pub(crate) enum NamespaceMatchSnapshotOutcome {
@@ -471,15 +483,29 @@ impl NamespacePasskeyMatchSession {
 
     pub(crate) fn finish(self) -> NamespaceMatchOutcome {
         let pending = self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PendingUpload);
-        if !self.saw_supported_candidate && only_unavailable_wrappers(&self.candidate_outcomes) {
-            return if pending {
-                NamespaceMatchOutcome::BackupFilesPending
-            } else {
-                NamespaceMatchOutcome::NoBackupFiles
-            };
+        let settled = self.settled_outcome();
+        if !pending {
+            return settled;
         }
-        if pending {
-            return NamespaceMatchOutcome::Inconclusive;
+
+        match settled {
+            NamespaceMatchOutcome::NoBackupFiles => {
+                NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable)
+            }
+            NamespaceMatchOutcome::NoMatch => {
+                NamespaceMatchOutcome::FilesPending(PendingMatch::NoMatch)
+            }
+            NamespaceMatchOutcome::NoPasskeyOnDevice => {
+                NamespaceMatchOutcome::FilesPending(PendingMatch::NoPasskeyOnDevice)
+            }
+            _ => NamespaceMatchOutcome::Inconclusive,
+        }
+    }
+
+    /// What the namespaces whose wrappers could be read showed, leaving out any still uploading
+    fn settled_outcome(&self) -> NamespaceMatchOutcome {
+        if !self.saw_supported_candidate && only_unavailable_wrappers(&self.candidate_outcomes) {
+            return NamespaceMatchOutcome::NoBackupFiles;
         }
         if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PasskeyMismatch) {
             return NamespaceMatchOutcome::NoMatch;

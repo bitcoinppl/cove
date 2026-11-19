@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::wallets::PendingMatch;
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -112,7 +113,7 @@ async fn pending_wrapper_beside_missing_one_has_no_backup_files_yet() {
     );
 
     let outcome = matcher.match_namespaces(&[missing.clone(), pending.clone()]).await.unwrap();
-    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
+    assert!(matches!(outcome, NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable)));
 
     // a wrapper still uploading gives a passkey nothing to open yet, like a missing one
     let existing = matcher.existing_backup(&[missing, pending]).await.unwrap();
@@ -291,7 +292,7 @@ async fn pending_and_missing_upload_states_skip_wrapper_downloads() {
     .await
     .unwrap();
 
-    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
+    assert!(matches!(outcome, NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable)));
     assert_eq!(globals.cloud.master_key_download_attempt_count(), 0);
 }
 
@@ -471,7 +472,7 @@ async fn passkey_match_reports_pending_upload_state_as_backup_files_pending() {
     .await
     .unwrap();
 
-    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
+    assert!(matches!(outcome, NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable)));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -582,7 +583,10 @@ async fn passkey_match_pending_supported_candidate_outweighs_stale_mismatch() {
         session.match_snapshot(&[mismatched_namespace, pending_namespace]).await.unwrap();
 
     assert!(matches!(refreshed, NamespaceMatchSnapshotOutcome::Continue));
-    assert!(matches!(session.finish(), NamespaceMatchOutcome::Inconclusive));
+
+    // the uploading backup may be the one the passkey opens, which Restore and Recover Other
+    // Backups wait for; Enable reports the mismatch the readable backup showed
+    assert!(matches!(session.finish(), NamespaceMatchOutcome::FilesPending(PendingMatch::NoMatch)));
 }
 
 #[tokio::test(flavor = "current_thread")]

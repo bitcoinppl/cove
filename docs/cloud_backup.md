@@ -628,7 +628,8 @@ Enable behavior depends on what discovery proved:
 - a Use Existing Passkey, on the existing-backup prompt or the passkey choice,
   whose passkey opens none of the readable backups brings back the
   existing-backup prompt with that failure on it, so the answer never looks like
-  it did nothing. When the platform reports no passkey on this device, such as
+  it did nothing, even while another backup's master key is still uploading.
+  When the platform reports no passkey on this device, such as
   one saved on another device that hasn't synced here yet, the prompt says the
   passkey wasn't found rather than that it opened nothing, and Restore and
   Recover Other Backups say the same. Android reports this; iOS shows its

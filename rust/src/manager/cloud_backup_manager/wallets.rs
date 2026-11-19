@@ -117,8 +117,8 @@ pub(crate) use passkey::authority_test_support;
 pub(crate) use passkey::passkey_request_may_present;
 pub(crate) use passkey::{
     NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
-    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PasskeyRequestAuthority, PermitGrant,
-    PermitIntent, PlatformAuthorizationRetrier, delay_before_new_passkey_auth,
+    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PasskeyRequestAuthority, PendingMatch,
+    PermitGrant, PermitIntent, PlatformAuthorizationRetrier, delay_before_new_passkey_auth,
     map_wrapper_repair_passkey_error,
 };
 #[cfg(test)]

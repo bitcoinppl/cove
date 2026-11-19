@@ -47,7 +47,7 @@ impl RustCloudBackupManager {
             NamespaceMatchOutcome::NoPasskeyOnDevice => {
                 return Err(CloudBackupError::from(PasskeyError::NoCredentialFound));
             }
-            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::BackupFilesPending => {
+            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::FilesPending(_) => {
                 return Err(self.offline_error_for_step(BlockingCloudStep::RecoverOtherBackups));
             }
             NamespaceMatchOutcome::UnsupportedVersions => {

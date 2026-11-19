@@ -368,6 +368,38 @@ fn passkey_choice_use_existing_that_opens_nothing_says_so() {
     });
 }
 
+/// A passkey that opens none of the readable backups says so even while another backup's master
+/// key is still uploading, instead of closing the prompt as if the cloud were unreachable
+#[test]
+fn try_existing_passkey_beside_an_uploading_backup_says_it_opened_nothing() {
+    let test = concat!(
+        module_path!(),
+        "::try_existing_passkey_beside_an_uploading_backup_says_it_opened_nothing"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        for _ in 0..2 {
+            app.passkey.inner.push_discover_result(Ok(DiscoveredPasskeyResult {
+                prf_output: vec![1; 32],
+                credential_id: vec![1, 2, 3],
+            }));
+        }
+
+        // a second backup whose master key upload this device hasn't confirmed yet
+        let uploading = MasterKey::generate();
+        let namespace = uploading.namespace_id();
+        let encrypted = encrypt_master_key(&uploading, &[7; 32], &[9; 32]).expect("encrypt");
+        app.cloud.inner.set_wallet_files(namespace.clone(), Vec::new());
+        app.cloud.inner.set_master_key_backup(
+            namespace.clone(),
+            serde_json::to_vec(&encrypted).expect("encode master key"),
+        );
+        app.cloud.inner.set_master_key_upload_pending(namespace);
+
+        assert_try_existing_passkey_says(&mut app, &CloudBackupError::PasskeyMismatch);
+    });
+}
+
 /// Try Again while the backup's master key is listed but still uploading keeps the prompt and
 /// says the files still aren't available, instead of closing it as if the cloud were unreachable
 #[test]
