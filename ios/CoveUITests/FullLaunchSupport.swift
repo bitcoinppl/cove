@@ -279,11 +279,45 @@ extension XCUIApplication {
         XCTAssertTrue(prompt.waitForNonExistence(timeout: 10), "the PIN was not accepted")
     }
 
+    /// Types a PIN on the number pad that is on screen, checking each digit lands
+    ///
+    /// On CI the simulator can take a synthesized tap as the start of a system gesture and cancel
+    /// it, so the key shows the press but no digit is entered and the PIN comes out a digit short.
+    /// Each entered digit fills a box with a dot, so a key is tapped again while the count of
+    /// filled boxes stays the same. The last digit submits the PIN, which empties the boxes or
+    /// replaces the pad, and that is a change too
     func enterPin(_ pin: String) {
-        for digit in pin {
+        let filledBoxes = staticTexts.matching(NSPredicate(format: "label == %@", "●"))
+
+        for (index, digit) in pin.enumerated() {
             let key = buttons[String(digit)]
             XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
-            key.tap()
+
+            let before = filledBoxes.count
+            let changed = NSPredicate { _, _ in filledBoxes.count != before }
+
+            // the wait is long because a busy CI runner can take seconds to draw the dot, and a
+            // tap repeated after a slow draw would enter the digit twice; the count is read again
+            // right before a retry, since reading it waits on the app's main thread, which shows
+            // a late dot. A tap delivered more than five seconds late can still land between that
+            // read and the retry and enter the digit twice; the dot checks below then fail the
+            // test, which is rare enough not to warrant more machinery
+            for attempt in 0 ..< 3 {
+                if attempt > 0, filledBoxes.count != before { break }
+
+                key.tap()
+                let landed = XCTNSPredicateExpectation(predicate: changed, object: nil)
+                if XCTWaiter.wait(for: [landed], timeout: 5) == .completed { break }
+            }
+
+            let after = filledBoxes.count
+            XCTAssertNotEqual(after, before, "PIN digit \(index + 1) never registered")
+
+            // a digit entered twice shows as an extra dot, which would otherwise submit a wrong PIN
+            // with no hint why; the last digit fills the pad and submission empties it, so a dot
+            // left after that is a repeat landing on the emptied pad
+            let expected = index < pin.count - 1 ? [before + 1] : [before + 1, 0]
+            XCTAssertTrue(expected.contains(after), "PIN digit \(index + 1) was entered more than once")
         }
     }
 

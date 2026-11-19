@@ -424,7 +424,11 @@ final class VerifyWordsFullLaunchUITests: XCTestCase {
 
     private func openVerifyWords() {
         app.tapButton(named: "I Saved These Words", until: app.button(startingWith: "Saved"))
-        app.tapButton(named: "Continue")
+
+        // Continue leads to the terms when they are still unaccepted, else straight to the first
+        // word, and a single tap the simulator cancels would leave the backup step up for good
+        let next = app.staticTexts.matching(NSPredicate(format: "label IN %@", ["Terms & Conditions", "What is word #1?"]))
+        app.tapButton(named: "Continue", until: next.firstMatch)
         app.acceptTermsIfNeeded()
 
         XCTAssertTrue(heading(1).waitForExistence(timeout: 30), "Continue never opened the verify screen")

@@ -21,7 +21,6 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
     private var signer: HardwareSignerControl!
     private var qr: QrScript!
     private var nfc: NfcNdefScript!
-    private var layout: ScreenReachability!
 
     override func setUp() {
         super.setUp()
@@ -32,7 +31,6 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
         signer = HardwareSignerControl()
         qr = QrScript()
         nfc = NfcNdefScript()
-        layout = ScreenReachability(app: app)
 
         app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
         qr.configure(app)
@@ -61,7 +59,7 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
         app.openHardwareExportScanner()
         try qr.show([first.key])
         app.finishHardwareImport()
-        enablePin()
+        app.enablePin(Self.pin)
 
         app.tapButton(named: "app.sidebar.open")
         app.tapButton(named: "Add Wallet")
@@ -122,32 +120,5 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
 
         app.activate()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "the app never came back")
-    }
-
-    private func enablePin() {
-        app.tapButton(named: "app.sidebar.open")
-        app.tapButton(named: "Settings")
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
-
-        // the row is a switch wrapping the control itself, which is what takes the tap
-        let pinToggle = layout.assertReachable(app.switches.matching(identifier: "Enable PIN"), "settings: Enable PIN", needsHit: true)
-        pinToggle.switches.firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Enter New PIN"].waitForExistence(timeout: 10))
-        enterPin()
-        XCTAssertTrue(app.staticTexts["Confirm New PIN"].waitForExistence(timeout: 5))
-        enterPin()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
-        XCTAssertEqual(pinToggle.value as? String, "1", "the PIN was not saved")
-
-        app.goBack()
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 10))
-    }
-
-    private func enterPin() {
-        for digit in Self.pin {
-            let key = app.buttons[String(digit)]
-            XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
-            key.tap()
-        }
     }
 }
