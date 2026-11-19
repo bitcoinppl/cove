@@ -153,6 +153,26 @@ impl CloudBlobSyncStateTable {
         Ok(())
     }
 
+    /// Inserts `value` only when no row holds its record, so it never replaces another writer's
+    pub fn set_if_absent(&self, value: &PersistedCloudBlobSyncState) -> Result<bool, Error> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut table = write_txn
+                .open_table(CLOUD_BLOB_SYNC_STATE_TABLE)
+                .map_err_str(Error::TableAccess)?;
+
+            if table.get(value.record_id()).map_err_str(Error::TableAccess)?.is_some() {
+                return Ok(false);
+            }
+
+            table.insert(value.record_id(), value).map_err_str(Error::TableAccess)?;
+        }
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(true)
+    }
+
     pub fn set_if_current(
         &self,
         current: &PersistedCloudBlobSyncState,

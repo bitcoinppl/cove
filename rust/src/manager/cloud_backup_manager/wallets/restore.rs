@@ -92,6 +92,11 @@ impl WalletBackupReader {
         Self { cloud: Some(cloud), namespace, critical_key }
     }
 
+    /// The namespace this reader downloads from
+    pub(crate) fn namespace(&self) -> &str {
+        &self.namespace
+    }
+
     pub(crate) async fn download(
         &self,
         record_id: &str,

@@ -1363,6 +1363,12 @@ uncovered. The rule reads no live verification, inventory or sync health
 state. Those start over on every launch and need the network, so a gate built
 on them refused the PIN after every relaunch.
 
+A wallet restored from the active backup, alone or by Restore All, uploads
+nothing, so the restore records the backup it just downloaded and decrypted as
+`Confirmed` itself. It writes that row only when the wallet has none, so it
+never replaces an upload's or a later change's row. A restore during onboarding
+marks its wallets dirty instead, and they count once those uploads confirm.
+
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.
 
