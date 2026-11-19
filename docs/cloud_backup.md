@@ -68,7 +68,9 @@ mode hides both in the published screen at once, before the unlock lets the
 root present it, and then publishes the screen again. The root hosts on both
 platforms also check the saved mode before they present a prompt, a result
 alert or the success floater, which covers a screen sent before the switch
-that the platform hasn't applied yet. A
+that the platform hasn't applied yet. A verification result also never shows
+over the lock screen, before the PIN decides which mode opens; a result
+dropped there still shows in the Cloud Backup settings. A
 configured body lists its sections in the order they are drawn, and Turn Off is
 in every one. Listed cloud rows carry their own row actions. An extra copy
 offers Delete only while the wallet it copies has its own current backup; until
