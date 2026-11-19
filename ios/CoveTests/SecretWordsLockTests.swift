@@ -44,7 +44,7 @@ final class SecretWordsLockTests: XCTestCase {
 
         addTeardownBlock { await self.deleteTestWallet(walletId) }
 
-        auth.dispatch(action: .setPin(Self.testPin))
+        try auth.setPin(Self.testPin)
         addTeardownBlock { @MainActor in
             auth.dispatch(action: .disablePin)
             auth.unlockIfAuthDisabled()
