@@ -63,9 +63,10 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
     /// reports an unchanged code once, so a scanner waiting for a second frame stays at 100%
     func testSingleFrameUrHdkeyImportsWithItsFirstAddress() throws {
         let export = try publicKeyExport(.nativeSegwit)
-        XCTAssertTrue(export.ur.hasPrefix("ur:crypto-hdkey/1-1/"), "the export must be one multi-part UR frame")
+        let ur = try XCTUnwrap(export.ur, "the signer host exports a native segwit account as a UR")
+        XCTAssertTrue(ur.hasPrefix("ur:crypto-hdkey/1-1/"), "the export must be one multi-part UR frame")
 
-        try importAndCheckFirstAddress(export, frames: [export.ur])
+        try importAndCheckFirstAddress(export, frames: [ur])
     }
 
     /// A vpub in a tag's text record imports from onboarding's NFC scan, where a new user first

@@ -29,8 +29,9 @@ struct HardwareSignerControl {
         let key: String
         /// The key as one BBQr frame
         let bbqr: String
-        /// The account as one crypto-hdkey UR frame in the multi-part `1-1` form, as Jade shows it
-        let ur: String
+        /// The account as one crypto-hdkey UR frame in the multi-part `1-1` form, as Jade shows
+        /// it; native segwit accounts only
+        let ur: String?
         let firstAddress: String
         /// The first address's path, as the Receive screen shows it
         let firstDerivationPath: String

@@ -13,8 +13,9 @@
 //!   `/join-export-frames` joins the UR or BBQr frames a test read off the
 //!   app's PSBT export back into the PSBT ([`export_frames`]).
 //!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
-//!   plain QR and as a single-part BBQr, the same account as a single-frame
-//!   crypto-hdkey UR, with the first receive address it should import as. `/simulator-pasteboard` reads an iOS simulator's
+//!   plain QR and as a single-part BBQr, a native segwit account also as a
+//!   single-frame crypto-hdkey UR, with the first receive address it should
+//!   import as. `/simulator-pasteboard` reads an iOS simulator's
 //!   pasteboard, `/simulator-appearance` switches it between light and
 //!   dark mode, and `/simulator-content-size` reads its text size and, given
 //!   one, changes it while the app runs. The `/tapsigner/...` routes start
@@ -554,8 +555,9 @@ fn watch_only_descriptor(request: WalletRequest) -> Result<Value> {
 }
 
 /// An account's bare SLIP-132 public key, as a hardware wallet shows it in a
-/// plain QR and in a single-part BBQr, the same account as a single-frame
-/// crypto-hdkey UR, and the first receive address an import of it should show
+/// plain QR and in a single-part BBQr, for a native segwit account the same
+/// account as a single-frame crypto-hdkey UR, and the first receive address an
+/// import of it should show
 ///
 /// The address comes straight from the mnemonic's key at `/0/0`, not from a
 /// descriptor, so it checks the address type the app infers from the key
@@ -570,7 +572,18 @@ fn public_key_export(request: PublicKeyRequest) -> Result<Value> {
     let account_path: DerivationPath =
         format!("m/{}'/{coin_type}'/0'", address_type.purpose()).parse()?;
     let account = Xpub::from_priv(&secp, &master.derive_priv(&secp, &account_path)?);
-    let ur = single_frame_hdkey_ur(&account, &account_path, master.fingerprint(&secp), network)?;
+
+    // the app reads a crypto-hdkey as a bare xpub, which imports as native segwit
+    // whatever its origin says, so a wrapped segwit UR wouldn't match its address
+    let ur = match address_type {
+        AddressType::NativeSegwit => Some(single_frame_hdkey_ur(
+            &account,
+            &account_path,
+            master.fingerprint(&secp),
+            network,
+        )?),
+        AddressType::WrappedSegwit => None,
+    };
 
     let mut encoded = account.encode();
     encoded[..4].copy_from_slice(&address_type.slip132_version(network.into()));

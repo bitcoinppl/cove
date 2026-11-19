@@ -104,9 +104,10 @@ class PublicKeyImportFullLaunchTest {
     @Test
     fun singleFrameUrHdkeyImportsWithItsFirstAddress() {
         val export = publicKeyExport(PublicKeyAddressType.NATIVE_SEGWIT)
-        assertTrue("the export must be one multi-part UR frame", export.ur.startsWith("ur:crypto-hdkey/1-1/"))
+        val ur = checkNotNull(export.ur) { "the signer host exports a native segwit account as a UR" }
+        assertTrue("the export must be one multi-part UR frame", ur.startsWith("ur:crypto-hdkey/1-1/"))
 
-        importAndCheckFirstAddress(export, listOf(export.ur))
+        importAndCheckFirstAddress(export, listOf(ur))
     }
 
     /**
