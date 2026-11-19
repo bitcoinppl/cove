@@ -40,14 +40,14 @@ private struct QrExportAnimatedQrView: View {
         VStack {
             // .id() forces TimelineView recreation when interval changes
             TimelineView(.periodic(from: startedAt, by: animationInterval)) { context in
-                let tick = abs(Int(context.date.distance(to: startedAt) / animationInterval))
+                // round, since the schedule's dates fall on whole ticks and truncating a quotient
+                // a hair under one would show the same frame twice and skip the next
+                let tick = max(0, Int((startedAt.distance(to: context.date) / animationInterval).rounded()))
                 QrCodeView(text: frames.frame(at: tick))
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 11)
                     .onChange(of: tick) { _, newTick in
-                        // the counter counts a pass of the plain fragments, and starts over as a
-                        // UR's mixed parts go on past them
-                        currentIndex = newTick % frames.passCount
+                        currentIndex = frames.passPosition(at: newTick)
                     }
             }
             .id(animationInterval)

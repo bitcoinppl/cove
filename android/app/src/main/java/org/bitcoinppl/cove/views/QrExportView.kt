@@ -78,6 +78,9 @@ private sealed interface QrExportFrames {
     /** The frame to show on the animation's [tick]th tick, counting from 0 */
     fun frame(tick: Int): String
 
+    /** Where in one pass the frame counter stands on the animation's [tick]th tick */
+    fun passPosition(tick: Int): Int
+
     /** A fixed set shown in a loop, as a BBQr split is */
     data class Loop(
         val frames: List<String>,
@@ -89,11 +92,13 @@ private sealed interface QrExportFrames {
         override val passCount get() = frames.size
 
         override fun frame(tick: Int) = frames[tick % frames.size]
+
+        override fun passPosition(tick: Int) = tick % frames.size
     }
 
     /**
-     * An animated UR, whose fountain-mixed parts after the plain fragments never repeat, so a
-     * scanner that misses a frame completes from a later one instead of waiting a whole loop
+     * An animated UR, which mixes fountain parts in with its plain fragments after the first
+     * pass, so a scanner that keeps missing a frame completes from a mixed part instead
      */
     class Fountain(
         private val fountain: UrFountain,
@@ -101,6 +106,8 @@ private sealed interface QrExportFrames {
         override val passCount = fountain.sequenceCount().toInt()
 
         override fun frame(tick: Int) = fountain.frame(tick.toUInt())
+
+        override fun passPosition(tick: Int) = fountain.passPosition(tick.toUInt()).toInt()
     }
 }
 
@@ -304,11 +311,9 @@ fun QrExportView(
                             onClick = { density = density.decrease() },
                         )
 
-                        // the counter counts a pass of the plain fragments, and starts over as a
-                        // UR's mixed parts go on past them
                         QrExportProgressIndicator(
                             qrCount = shownFrames.passCount,
-                            currentIndex = tick % shownFrames.passCount,
+                            currentIndex = shownFrames.passPosition(tick),
                             modifier = Modifier.weight(1f),
                         )
 

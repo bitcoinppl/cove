@@ -321,8 +321,8 @@ impl ConfirmDetails {
 
     /// Exports PSBT as an animated UR with specified density
     ///
-    /// The frames go on past the plain fragments with fountain-mixed parts, so a hardware
-    /// wallet that misses a frame completes from a later one instead of stalling
+    /// After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+    /// wallet that keeps missing a frame completes from a mixed part instead of stalling
     ///
     /// # Errors
     /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
@@ -496,14 +496,20 @@ mod tests {
         QrDensity { ur_fragment_len, ..QrDensity::default() }
     }
 
-    /// What a receiver decodes from the export's frames, shown from the first tick on and
-    /// skipping the ticks `missed` names, or `None` if three passes never complete it
+    /// What a receiver decodes from three passes of the export's frames, skipping the frames
+    /// whose 1-based sequence number `missed` names, or `None` if they never complete it
     fn decode(fountain: &UrFountain, missed: impl Fn(u32) -> bool) -> Option<Vec<u8>> {
         let mut decoder = UrDecoder::default();
-        for index in (0..3 * fountain.sequence_count()).filter(|index| !missed(*index)) {
+        for index in 0..3 * fountain.sequence_count() {
             let frame = fountain.frame(index).to_ascii_lowercase();
             let ur = UR::parse(&frame).unwrap();
             assert_eq!(ur.as_type(), "crypto-psbt");
+
+            let sequence = ur.sequence().expect("the export shows multi-part URs");
+            if missed(sequence) {
+                continue;
+            }
+
             decoder.receive(ur).unwrap();
 
             if decoder.is_complete() {
@@ -550,12 +556,11 @@ mod tests {
         let fountain = confirm_details.psbt_to_ur_with_density(&density(25)).unwrap();
         let count = fountain.sequence_count();
 
-        // the receiver misses the tick that shows fragment 2 on every pass, as the stalled scan
-        // missed one hard-to-read frame, so only a mixed part after the first pass can fill it
-        let missed_fragment = 1;
-        let shows_missed_fragment = |index: u32| index % count == missed_fragment;
+        assert!(count > 3, "got {count} parts");
 
-        let cbor = decode(&fountain, shows_missed_fragment)
+        // the receiver never reads fragment 2, as the stalled scan kept missing one hard-to-read
+        // frame, so only a mixed part that holds it can fill it
+        let cbor = decode(&fountain, |sequence| sequence == 2)
             .expect("a mixed part fills in the fragment the receiver never reads");
 
         assert_untagged_crypto_psbt(&confirm_details, &cbor);

@@ -1609,7 +1609,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 19133.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 42511.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253.toShort()) {
@@ -4373,8 +4373,8 @@ public interface ConfirmDetailsInterface {
     /**
      * Exports PSBT as an animated UR with specified density
      *
-     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
-     * wallet that misses a frame completes from a later one instead of stalling
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
@@ -4694,8 +4694,8 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     /**
      * Exports PSBT as an animated UR with specified density
      *
-     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
-     * wallet that misses a frame completes from a later one instead of stalling
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails

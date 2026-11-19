@@ -17,11 +17,21 @@ use foundation_ur::{
 
 use crate::error::{Result, UrError};
 
+/// How many plain fragments a display shows between mixed parts after its first pass
+///
+/// The plain fragments keep cycling so a receiver that starts late reads each of them within a
+/// pass and a quarter, as cheap single-fragment parts. A receiver that keeps missing one still
+/// gets a mixed part every few frames, and about one in five of those holds any given
+/// fragment. Keystone charges a mixed part about 8 bytes of its 512 KiB scan budget per
+/// fragment of the message, so a stream of nothing but mixed parts could exhaust it before a
+/// late receiver had enough of them
+const PLAIN_FRAGMENTS_PER_MIXED_PART: u64 = 4;
+
 /// The frames of an animated UR, any of which can be computed from its index
 ///
-/// Frames `0..sequence_count` carry the plain fragments in order, and every
-/// later frame a fountain-mixed part, so a display shows frame `i` on its
-/// `i`th tick without end rather than looping the plain fragments
+/// Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+/// fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+/// display shows frame `i` on its `i`th tick without end
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct UrFountain {
     ur_type: String,
@@ -31,6 +41,15 @@ pub struct UrFountain {
     fragment_length: usize,
     sequence_count: u32,
     checksum: u32,
+}
+
+/// A frame of the display, a plain fragment or a fountain-mixed part
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    /// The plain fragment at a 0-based index
+    Plain(u32),
+    /// A mixed part, shown after the plain fragment at the 0-based index `after`
+    Mixed { sequence: u32, after: u32 },
 }
 
 impl UrFountain {
@@ -74,6 +93,35 @@ impl UrFountain {
         })
     }
 
+    /// What the display shows on its `index`th tick
+    fn slot(&self, index: u32) -> Slot {
+        let count = u64::from(self.sequence_count);
+        let index = u64::from(index);
+
+        // a message in one fragment shows its one part on every tick
+        if index < count || count == 1 {
+            return Slot::Plain((index % count) as u32);
+        }
+
+        let group_len = PLAIN_FRAGMENTS_PER_MIXED_PART + 1;
+        let since_first_pass = index - count;
+        let group = since_first_pass / group_len;
+        let offset = since_first_pass % group_len;
+
+        // plain fragments shown since the first pass, counting this frame if it is one
+        let plain_shown = group * PLAIN_FRAGMENTS_PER_MIXED_PART + offset;
+        if offset < PLAIN_FRAGMENTS_PER_MIXED_PART {
+            return Slot::Plain((plain_shown % count) as u32);
+        }
+
+        // mixed parts take the sequence numbers after the plain fragments in order, and start
+        // over at the first once they reach the largest a UR carries
+        let mixed_sequences = u64::from(u32::MAX) - count;
+        let sequence = count + 1 + group % mixed_sequences;
+
+        Slot::Mixed { sequence: sequence as u32, after: ((plain_shown - 1) % count) as u32 }
+    }
+
     /// The fountain part at a 1-based sequence number
     fn part_data(&self, sequence: u32) -> Vec<u8> {
         let part = Part {
@@ -106,15 +154,30 @@ impl UrFountain {
         self.sequence_count
     }
 
+    /// Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+    ///
+    /// A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+    /// plain fragment shown before it, so the counter steps through `0..sequence_count` once
+    /// per pass of the plain fragments
+    #[must_use]
+    pub fn pass_position(&self, index: u32) -> u32 {
+        match self.slot(index) {
+            Slot::Plain(fragment) | Slot::Mixed { after: fragment, .. } => fragment,
+        }
+    }
+
     /// The UR to show on a display's `index`th tick, counting from 0
     ///
     /// The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
     /// draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
-    /// fragment shows its one `1-1` part on every tick. The sequence number wraps after
-    /// `u32::MAX` ticks, the largest a UR carries
+    /// fragment shows its one `1-1` part on every tick
     #[must_use]
     pub fn frame(&self, index: u32) -> String {
-        let sequence = if self.sequence_count == 1 { 1 } else { index % u32::MAX + 1 };
+        let sequence = match self.slot(index) {
+            Slot::Plain(fragment) => fragment + 1,
+            Slot::Mixed { sequence, .. } => sequence,
+        };
+
         let data = self.part_data(sequence);
 
         let ur = UR::MultiPartDeserialized {
@@ -134,6 +197,8 @@ impl UrFountain {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use foundation_ur::Decoder;
 
     use super::*;
@@ -142,19 +207,71 @@ mod tests {
         (0..len).map(|byte| (byte * 31 % 251) as u8).collect()
     }
 
+    /// The 1-based sequence number a frame's `seq-count` header names
+    fn sequence(frame: &str) -> u32 {
+        let header = frame.split('/').nth(1).unwrap();
+        header.split('-').next().unwrap().parse().unwrap()
+    }
+
+    /// Feeds a receiver the frames from `start` on, skipping those whose sequence number
+    /// `missed` names, and returns how many it read to complete, or `None` within `limit`
+    fn frames_to_complete(
+        fountain: &UrFountain,
+        start: u32,
+        limit: u32,
+        missed: impl Fn(u32) -> bool,
+    ) -> Option<u32> {
+        let mut decoder = Decoder::default();
+        let mut read = 0;
+
+        for index in start..start + limit {
+            let frame = fountain.frame(index);
+            if missed(sequence(&frame)) {
+                continue;
+            }
+
+            decoder.receive(UR::parse(&frame.to_ascii_lowercase()).unwrap()).unwrap();
+            read += 1;
+
+            if decoder.is_complete() {
+                return Some(read);
+            }
+        }
+
+        None
+    }
+
     #[test]
-    fn frames_match_the_foundation_encoder_past_the_plain_fragments() {
+    fn frames_match_the_foundation_encoder_part_with_their_sequence_number() {
         let message = message(1_000);
         let fountain = UrFountain::new("bytes", &message, 60).unwrap();
         assert_eq!(fountain.sequence_count(), 17);
 
+        let frames: Vec<_> =
+            (0..6 * fountain.sequence_count()).map(|i| fountain.frame(i)).collect();
+        let last = frames.iter().map(|frame| sequence(frame)).max().unwrap();
+
         let mut encoder = foundation_ur::Encoder::new();
         encoder.start("bytes", &message, 60);
 
-        for index in 0..4 * fountain.sequence_count() {
-            let expected = encoder.next_part().to_string().to_ascii_uppercase();
-            assert_eq!(fountain.frame(index), expected, "frame {index}");
+        let parts: BTreeMap<_, _> = (1..=last)
+            .map(|sequence| (sequence, encoder.next_part().to_string().to_ascii_uppercase()))
+            .collect();
+
+        for (index, frame) in frames.iter().enumerate() {
+            assert_eq!(frame, &parts[&sequence(frame)], "frame {index}");
         }
+
+        assert!(last > fountain.sequence_count(), "the frames go on to mixed parts");
+    }
+
+    #[test]
+    fn the_first_pass_shows_the_plain_fragments_in_order() {
+        let fountain = UrFountain::new("bytes", &message(1_000), 60).unwrap();
+        let count = fountain.sequence_count();
+
+        let sequences: Vec<_> = (0..count).map(|index| sequence(&fountain.frame(index))).collect();
+        assert_eq!(sequences, (1..=count).collect::<Vec<_>>());
     }
 
     #[test]
@@ -163,23 +280,76 @@ mod tests {
         let fountain = UrFountain::new("bytes", &message, 60).unwrap();
         let count = fountain.sequence_count();
 
+        let read = frames_to_complete(&fountain, 0, 3 * count, |sequence| sequence == 5);
+        assert!(read.is_some(), "a mixed part fills the fragment the receiver never sees");
+    }
+
+    #[test]
+    fn a_receiver_that_starts_after_the_first_pass_reads_every_plain_fragment_again() {
+        let fountain = UrFountain::new("bytes", &message(1_000), 60).unwrap();
+        let count = fountain.sequence_count();
+
+        // within a pass and a quarter of any later tick, every plain fragment shows again
+        for start in [count, count + 3, 5 * count + 2] {
+            let window = start..start + count + count.div_ceil(4) + 1;
+            let plain: BTreeSet<_> = window
+                .map(|index| sequence(&fountain.frame(index)))
+                .filter(|sequence| *sequence <= count)
+                .collect();
+
+            assert_eq!(plain, (1..=count).collect(), "from tick {start}");
+        }
+
+        let read = frames_to_complete(&fountain, 3 * count + 2, 2 * count, |_| false);
+        assert!(read.is_some(), "a late receiver completes");
+    }
+
+    #[test]
+    fn a_late_receiver_completes_within_keystones_scan_budget() {
+        // Keystone takes up to 256 parts and charges each new part its fragment bytes, 128, and
+        // 8 per fragment it may mix, every fragment for a mixed part, against 512 KiB a scan
+        let fountain = UrFountain::new("bytes", &message(12_800), 50).unwrap();
+        let count = fountain.sequence_count();
+        assert_eq!(count, 256);
+
         let mut decoder = Decoder::default();
-        let mut frames = 0;
+        let mut seen = BTreeSet::new();
+        let mut work = 0;
 
-        // three passes' worth of ticks, every one but the one showing fragment 5
-        for index in (0..3 * count).filter(|index| index != &4) {
-            let frame = fountain.frame(index).to_ascii_lowercase();
-            decoder.receive(UR::parse(&frame).unwrap()).unwrap();
-            frames += 1;
+        // the receiver points its camera at the screen after the first pass
+        for index in count.. {
+            let frame = fountain.frame(index);
+            let sequence = sequence(&frame);
 
+            if seen.insert(sequence) {
+                let mixed = if sequence <= count { 1 } else { count as usize };
+                work += 50 + mixed * 8 + 128;
+                assert!(work <= 512 * 1024, "budget ran out at tick {index}");
+            }
+
+            decoder.receive(UR::parse(&frame.to_ascii_lowercase()).unwrap()).unwrap();
             if decoder.is_complete() {
                 break;
             }
         }
+    }
 
-        assert!(decoder.is_complete(), "the decoder never filled the missing fragment");
-        assert!(frames > count, "a missing plain fragment takes a mixed part, took {frames}");
-        assert_eq!(decoder.message().unwrap().unwrap(), message.as_slice());
+    #[test]
+    fn the_counter_steps_through_one_pass_and_holds_on_mixed_parts() {
+        let fountain = UrFountain::new("bytes", &message(1_000), 60).unwrap();
+        let count = fountain.sequence_count();
+
+        for index in 0..6 * count {
+            let frame = fountain.frame(index);
+            let position = fountain.pass_position(index);
+            assert!(position < count, "tick {index} counts {position}");
+
+            if sequence(&frame) <= count {
+                assert_eq!(position + 1, sequence(&frame), "tick {index} counts its fragment");
+            } else {
+                assert_eq!(position, fountain.pass_position(index - 1), "tick {index} holds");
+            }
+        }
     }
 
     #[test]
@@ -208,14 +378,18 @@ mod tests {
         assert_eq!(fountain.sequence_count(), 1);
         assert!(fountain.frame(0).starts_with("UR:BYTES/1-1/"));
         assert_eq!(fountain.frame(0), fountain.frame(7));
+        assert_eq!(fountain.pass_position(7), 0);
     }
 
     #[test]
-    fn the_sequence_number_wraps_back_to_the_first_fragment() {
+    fn the_last_tick_still_shows_a_valid_part() {
         let fountain = UrFountain::new("bytes", &message(1_000), 60).unwrap();
 
-        assert_eq!(fountain.frame(u32::MAX), fountain.frame(0));
-        assert!(fountain.frame(u32::MAX - 1).starts_with(&format!("UR:BYTES/{}-17/", u32::MAX)));
+        for index in [u32::MAX - 5, u32::MAX - 1, u32::MAX] {
+            let frame = fountain.frame(index).to_ascii_lowercase();
+            assert!(UR::parse(&frame).is_ok(), "tick {index}: {frame}");
+            assert!(fountain.pass_position(index) < fountain.sequence_count());
+        }
     }
 
     #[test]

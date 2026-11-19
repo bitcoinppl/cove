@@ -16,8 +16,8 @@ extension QrExportFormat: CaseIterable {
 enum QrExportFrames {
     /// A fixed set shown in a loop, as a BBQr split is
     case loop([String])
-    /// An animated UR, whose fountain-mixed parts after the plain fragments never repeat, so a
-    /// scanner that misses a frame completes from a later one instead of waiting a whole loop
+    /// An animated UR, which mixes fountain parts in with its plain fragments after the first
+    /// pass, so a scanner that keeps missing a frame completes from a mixed part instead
     case fountain(UrFountain)
 
     /// The frames in one pass, which the frame counter shows
@@ -33,6 +33,15 @@ enum QrExportFrames {
         switch self {
         case let .loop(frames): frames[tick % frames.count]
         case let .fountain(fountain): fountain.frame(index: UInt32(truncatingIfNeeded: tick))
+        }
+    }
+
+    /// Where in one pass the frame counter stands on the animation's `tick`th tick
+    func passPosition(at tick: Int) -> Int {
+        switch self {
+        case let .loop(frames): tick % frames.count
+        case let .fountain(fountain):
+            Int(fountain.passPosition(index: UInt32(truncatingIfNeeded: tick)))
         }
     }
 }

@@ -693,6 +693,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_ur_checksum_method_urfountain_frame(
     ): Short
+    external fun uniffi_cove_ur_checksum_method_urfountain_pass_position(
+    ): Short
     external fun uniffi_cove_ur_checksum_method_urfountain_sequence_count(
     ): Short
     external fun uniffi_cove_ur_checksum_constructor_cryptohdkey_decode(
@@ -777,6 +779,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_ur_fn_method_urfountain_frame(`ptr`: Long,`index`: Int,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_ur_fn_method_urfountain_pass_position(`ptr`: Long,`index`: Int,uniffi_out_err: UniffiRustCallStatus,
+    ): Int
     external fun uniffi_cove_ur_fn_method_urfountain_sequence_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun uniffi_cove_ur_fn_method_urerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -927,7 +931,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_method_urfountain_frame() != 34857.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_method_urfountain_frame() != 40406.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_ur_checksum_method_urfountain_pass_position() != 5901.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_ur_checksum_method_urfountain_sequence_count() != 38497.toShort()) {
@@ -2424,9 +2431,9 @@ public object FfiConverterTypeCryptoSeed: FfiConverter<CryptoSeed, Long> {
 /**
  * The frames of an animated UR, any of which can be computed from its index
  *
- * Frames `0..sequence_count` carry the plain fragments in order, and every
- * later frame a fountain-mixed part, so a display shows frame `i` on its
- * `i`th tick without end rather than looping the plain fragments
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
  */
 public interface UrFountainInterface {
 
@@ -2435,10 +2442,18 @@ public interface UrFountainInterface {
      *
      * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
      * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
-     * fragment shows its one `1-1` part on every tick. The sequence number wraps after
-     * `u32::MAX` ticks, the largest a UR carries
+     * fragment shows its one `1-1` part on every tick
      */
     fun `frame`(`index`: kotlin.UInt): kotlin.String
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */
+    fun `passPosition`(`index`: kotlin.UInt): kotlin.UInt
 
     /**
      * How many plain fragments the message splits into, the frames one pass of a display needs
@@ -2451,9 +2466,9 @@ public interface UrFountainInterface {
 /**
  * The frames of an animated UR, any of which can be computed from its index
  *
- * Frames `0..sequence_count` carry the plain fragments in order, and every
- * later frame a fountain-mixed part, so a display shows frame `i` on its
- * `i`th tick without end rather than looping the plain fragments
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
  */
 open class UrFountain: Disposable, AutoCloseable, UrFountainInterface
 {
@@ -2562,13 +2577,33 @@ open class UrFountain: Disposable, AutoCloseable, UrFountainInterface
      *
      * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
      * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
-     * fragment shows its one `1-1` part on every tick. The sequence number wraps after
-     * `u32::MAX` ticks, the largest a UR carries
+     * fragment shows its one `1-1` part on every tick
      */override fun `frame`(`index`: kotlin.UInt): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_ur_fn_method_urfountain_frame(
+        it,
+
+        FfiConverterUInt.lower(`index`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */override fun `passPosition`(`index`: kotlin.UInt): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_ur_fn_method_urfountain_pass_position(
         it,
 
         FfiConverterUInt.lower(`index`),_status)

@@ -1762,8 +1762,8 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     /**
      * Exports PSBT as an animated UR with specified density
      *
-     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
-     * wallet that misses a frame completes from a later one instead of stalling
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
@@ -1973,8 +1973,8 @@ open func psbtToHex() -> String  {
     /**
      * Exports PSBT as an animated UR with specified density
      *
-     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
-     * wallet that misses a frame completes from a later one instead of stalling
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
@@ -6623,7 +6623,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 19133) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 42511) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {

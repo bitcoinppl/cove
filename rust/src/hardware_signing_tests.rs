@@ -93,13 +93,20 @@ fn read_cove_ur_export(fountain: &UrFountain) -> BdkPsbt {
     let count = fountain.sequence_count();
     assert!(count > 2, "export animates over several frames, got {count}");
 
+    // the signer never reads fragment 2, so a fountain-mixed part has to fill it in
+    let missed = format!("UR:CRYPTO-PSBT/2-{count}/");
+
     let mut decoder = UrDecoder::default();
-    for index in (0..3 * count).filter(|index| *index != 1) {
+    for index in 0..3 * count {
         let frame = fountain.frame(index);
         assert!(
             frame.starts_with("UR:CRYPTO-PSBT/"),
             "frame is an uppercase crypto-psbt UR: {frame}"
         );
+
+        if frame.starts_with(&missed) {
+            continue;
+        }
 
         // a UR is case-insensitive, and foundation-ur parses the lowercase form
         let frame = frame.to_ascii_lowercase();

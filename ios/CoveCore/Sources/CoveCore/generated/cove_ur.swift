@@ -1192,9 +1192,9 @@ public func FfiConverterTypeCryptoSeed_lower(_ value: CryptoSeed) -> UInt64 {
 /**
  * The frames of an animated UR, any of which can be computed from its index
  *
- * Frames `0..sequence_count` carry the plain fragments in order, and every
- * later frame a fountain-mixed part, so a display shows frame `i` on its
- * `i`th tick without end rather than looping the plain fragments
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
  */
 public protocol UrFountainProtocol: AnyObject, Sendable {
 
@@ -1203,10 +1203,18 @@ public protocol UrFountainProtocol: AnyObject, Sendable {
      *
      * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
      * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
-     * fragment shows its one `1-1` part on every tick. The sequence number wraps after
-     * `u32::MAX` ticks, the largest a UR carries
+     * fragment shows its one `1-1` part on every tick
      */
     func frame(index: UInt32)  -> String
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */
+    func passPosition(index: UInt32)  -> UInt32
 
     /**
      * How many plain fragments the message splits into, the frames one pass of a display needs
@@ -1217,9 +1225,9 @@ public protocol UrFountainProtocol: AnyObject, Sendable {
 /**
  * The frames of an animated UR, any of which can be computed from its index
  *
- * Frames `0..sequence_count` carry the plain fragments in order, and every
- * later frame a fountain-mixed part, so a display shows frame `i` on its
- * `i`th tick without end rather than looping the plain fragments
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
  */
 open class UrFountain: UrFountainProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1279,13 +1287,29 @@ open class UrFountain: UrFountainProtocol, @unchecked Sendable {
      *
      * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
      * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
-     * fragment shows its one `1-1` part on every tick. The sequence number wraps after
-     * `u32::MAX` ticks, the largest a UR carries
+     * fragment shows its one `1-1` part on every tick
      */
 open func frame(index: UInt32) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_ur_fn_method_urfountain_frame(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(index),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */
+open func passPosition(index: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_ur_fn_method_urfountain_pass_position(
             self.uniffiCloneHandle(),
         FfiConverterUInt32.lower(index),uniffiCallStatus
     )
@@ -1637,7 +1661,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_method_urfountain_frame() != 34857) {
+    if (uniffi_cove_ur_checksum_method_urfountain_frame() != 40406) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_ur_checksum_method_urfountain_pass_position() != 5901) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_ur_checksum_method_urfountain_sequence_count() != 38497) {
