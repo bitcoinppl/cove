@@ -91,6 +91,7 @@ internal sealed class CloudBackupRootPresentation {
 data class CloudBackupPresentationContext(
     val isActivityResumed: Boolean = false,
     val isUnlocked: Boolean = false,
+    val isInDecoyMode: Boolean = false,
     val isCoverPresented: Boolean = true,
     val appHasAlert: Boolean = false,
     val appHasSheet: Boolean = false,
@@ -155,6 +156,7 @@ internal fun isCloudBackupPresentationPresentable(
 ): Boolean {
     if (!context.isActivityResumed) return false
     if (context.presentationPolicy.requiresUnlockedAuth && !context.isUnlocked) return false
+    if (context.isInDecoyMode) return false
     if (context.isCoverPresented) return false
     if (context.appHasAlert) return false
     if (context.appHasSheet) return false
@@ -401,6 +403,7 @@ fun CloudBackupPresentationHost(
         CloudBackupPresentationContext(
             isActivityResumed = isActivityResumed,
             isUnlocked = !auth.isLocked,
+            isInDecoyMode = auth.isInDecoyMode(),
             isCoverPresented = isCoverPresented,
             appHasAlert = app.alertState != null,
             appHasSheet = app.sheetState != null,
@@ -444,6 +447,11 @@ fun CloudBackupPresentationHost(
         if (presentation == observedVerificationPresentation) return@LaunchedEffect
 
         observedVerificationPresentation = presentation
+
+        // rust hides these in decoy mode, but one projected before the switch can still arrive,
+        // and it must not tell the decoy session about the main wallets' backup
+        if (auth.isInDecoyMode()) return@LaunchedEffect
+
         when (val feedback = cloudBackupVerificationFeedback(presentation)) {
             is CloudBackupVerificationFeedback.SuccessFloater -> {
                 successFloaterText = feedback.text
@@ -474,7 +482,7 @@ fun CloudBackupPresentationHost(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             content()
-            successFloaterText?.let { text ->
+            successFloaterText?.takeUnless { context.isInDecoyMode }?.let { text ->
                 CloudBackupSuccessFloater(
                     text = text,
                     modifier =

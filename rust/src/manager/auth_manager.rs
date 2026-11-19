@@ -266,31 +266,22 @@ impl RustAuthManager {
     pub fn set_pin(&self, pin: String) -> Result<()> {
         self.validate_new_pin(&pin)?;
 
-        // a lock type that can't be read or saved fails the call, so the PIN screen never closes
-        // as if the lock were on while the app still opens without one; it is read before the
-        // PIN changes, so a failed read leaves the old PIN in place
+        // a lock type that can't be read fails the call before the PIN changes, so the PIN
+        // screen never closes as if the lock were on while the app still opens without one
         let config = &Database::global().global_config;
         let lock_type = match config.auth_type()? {
-            AuthType::None => Some(AuthType::Pin),
-            AuthType::Biometric => Some(AuthType::Both),
-            AuthType::Pin | AuthType::Both => None,
+            AuthType::None => AuthType::Pin,
+            AuthType::Biometric => AuthType::Both,
+            AuthType::Pin | AuthType::Both => {
+                return AuthPin::new().set(pin).map_err(AuthManagerError::PinSave);
+            }
         };
 
-        AuthPin::new().set(pin).map_err(AuthManagerError::PinSave)?;
-
-        // the lock had no PIN before, so a failed switch removes the new one rather than leave a
-        // PIN the export prompt would accept with the lock still off
-        if let Some(lock_type) = lock_type {
-            if let Err(error) = config.set_auth_type(lock_type) {
-                if let Err(delete_error) = AuthPin::new().delete() {
-                    error!("unable to remove the PIN after the lock type failed: {delete_error:?}");
-                }
-
-                return Err(error.into());
-            }
-
-            self.send(Message::AuthTypeChanged(lock_type));
-        }
+        // the PIN and the lock that turns it on commit together, so a failed write never leaves
+        // a PIN the export prompt would accept while the lock is still off
+        let hashed = AuthPin::new().hash(pin).map_err(AuthManagerError::PinSave)?;
+        config.set_hashed_pin_code_and_auth_type(hashed, lock_type)?;
+        self.send(Message::AuthTypeChanged(lock_type));
 
         Ok(())
     }

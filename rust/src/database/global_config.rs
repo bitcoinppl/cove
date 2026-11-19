@@ -140,6 +140,44 @@ impl GlobalConfigTable {
 }
 
 impl GlobalConfigTable {
+    /// Save a PIN hash together with the lock type that turns it on, in one commit
+    ///
+    /// A PIN saved without the lock type it needs would be accepted by the export prompt while
+    /// the app still opens without one
+    pub(crate) fn set_hashed_pin_code_and_auth_type(
+        &self,
+        hashed_pin_code: String,
+        auth_type: AuthType,
+    ) -> Result<()> {
+        Self::ensure_hashed(&hashed_pin_code)?;
+
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+            let pin_key: &str = GlobalConfigKey::HashedPinCode.into();
+            let auth_key: &str = GlobalConfigKey::AuthType.into();
+            table.insert(pin_key, hashed_pin_code).map_err_str(GlobalConfigTableError::Save)?;
+            table
+                .insert(auth_key, auth_type.to_string())
+                .map_err_str(GlobalConfigTableError::Save)?;
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        Updater::send_update(Update::DatabaseUpdated);
+
+        Ok(())
+    }
+
+    fn ensure_hashed(hashed_pin_code: &str) -> Result<()> {
+        // a raw PIN is at most six digits, so anything that short was never hashed
+        if hashed_pin_code.len() <= 6 {
+            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
+        }
+
+        Ok(())
+    }
+
     /// Switch to decoy mode and restore its selected wallet atomically
     pub fn set_decoy_mode(&self) -> Result<()> {
         self.set_wallet_mode(WalletMode::Decoy)
@@ -474,14 +512,7 @@ impl GlobalConfigTable {
     }
 
     pub fn set_hashed_pin_code(&self, hashed_pin_code: String) -> Result<()> {
-        if hashed_pin_code.is_empty() {
-            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
-        }
-
-        if hashed_pin_code.len() <= 6 {
-            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
-        }
-
+        Self::ensure_hashed(&hashed_pin_code)?;
         self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 

@@ -65,7 +65,10 @@ main mode only: in decoy mode the screen carries no root prompt, and the result
 of a verification the root prompt started stays hidden until main mode, so the
 decoy PIN never shows anything about the main wallets' backup. Entering decoy
 mode hides both in the published screen at once, before the unlock lets the
-root present it, and then publishes the screen again. A
+root present it, and then publishes the screen again. The root hosts on both
+platforms also check the saved mode before they present a prompt, a result
+alert or the success floater, which covers a screen sent before the switch
+that the platform hasn't applied yet. A
 configured body lists its sections in the order they are drawn, and Turn Off is
 in every one. Listed cloud rows carry their own row actions. An extra copy
 offers Delete only while the wallet it copies has its own current backup; until

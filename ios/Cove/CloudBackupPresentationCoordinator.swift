@@ -31,6 +31,7 @@ enum CloudBackupRootPresentation: Equatable {
 struct CloudBackupPresentationContext: Equatable {
     var scenePhase: ScenePhase = .background
     var isUnlocked = false
+    var isInDecoyMode = false
     var isCoverPresented = true
     var appHasAlert = false
     var appHasSheet = false
@@ -66,6 +67,9 @@ func isCloudBackupPresentationPresentable(
     guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
         return false
     }
+    // rust publishes no root prompt in decoy mode, and this covers one sent before the switch
+    // that the app hasn't received the update for yet
+    guard !context.isInDecoyMode else { return false }
     guard !context.isCoverPresented else { return false }
     guard !context.appHasAlert else { return false }
     guard !context.appHasSheet else { return false }
@@ -398,6 +402,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
         CloudBackupPresentationContext(
             scenePhase: scenePhase,
             isUnlocked: auth.lockState == .unlocked,
+            isInDecoyMode: auth.isInDecoyMode(),
             isCoverPresented: isCoverPresented,
             appHasAlert: app.alertState != nil,
             appHasSheet: app.sheetState != nil,
@@ -485,6 +490,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func handleVerificationPresentation(_ presentation: CloudBackupVerificationPresentation) {
+        // rust hides these in decoy mode, but one projected before the switch can still arrive,
+        // and it must not tell the decoy session about the main wallets' backup
+        guard !auth.isInDecoyMode() else { return }
         guard let feedback = cloudBackupVerificationFeedback(for: presentation) else { return }
 
         switch feedback {
@@ -499,7 +507,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
         content
             .overlay(alignment: .top) {
                 CloudBackupSuccessFloaterOverlay(
-                    floater: successFloater,
+                    floater: presentationContext.isInDecoyMode ? nil : successFloater,
                     reduceMotion: reduceMotion,
                     dismiss: dismissSuccessFloater
                 )

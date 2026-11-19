@@ -310,8 +310,9 @@ private fun LockScreenContent(
     }
 }
 
+/** Asks for biometric permissions where a biometric-only lock has no PIN to fall back to */
 @Composable
-private fun PermissionsNeeded() {
+internal fun PermissionsNeeded() {
     val context = LocalContext.current
 
     Column(

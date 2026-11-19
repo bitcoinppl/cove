@@ -131,15 +131,8 @@ fun MainCredentialVerificationDialog(
                     .semantics { testTagsAsResourceId = true },
             contentAlignment = Alignment.Center,
         ) {
-            when (screen) {
-                CredentialScreen.BIOMETRIC -> {
-                    BiometricView(
-                        showBoth = lockType == AuthType.BOTH,
-                        onBiometricTap = ::promptBiometric,
-                        onEnterPinTap = { screen = CredentialScreen.PIN },
-                        onResetBiometricFlag = { isPrompting = false },
-                    )
-
+            val cancel =
+                @Composable {
                     Text(
                         text = "Cancel",
                         color = Color.White,
@@ -152,8 +145,25 @@ fun MainCredentialVerificationDialog(
                     )
                 }
 
+            when {
+                // a biometric-only lock has no PIN to fall back to, as on the lock screen and iOS
+                lockType == AuthType.BIOMETRIC && !usesBiometric -> {
+                    PermissionsNeeded()
+                    cancel()
+                }
+
+                screen == CredentialScreen.BIOMETRIC -> {
+                    BiometricView(
+                        showBoth = lockType == AuthType.BOTH,
+                        onBiometricTap = ::promptBiometric,
+                        onEnterPinTap = { screen = CredentialScreen.PIN },
+                        onResetBiometricFlag = { isPrompting = false },
+                    )
+                    cancel()
+                }
+
                 // only the app PIN opens this, never a trick PIN
-                CredentialScreen.PIN ->
+                else ->
                     NumberPadPinView(
                         title = "Enter Cove PIN",
                         isPinCorrect = { pin -> auth.checkPin(pin) },

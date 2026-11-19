@@ -280,6 +280,44 @@ class CloudBackupRegressionHelpersTest {
         assertEquals(CloudBackupVerificationSource.SETTINGS, context.verificationSource)
     }
 
+    @Test
+    fun decoyModeBlocksAllCloudBackupRootPresentations() {
+        val context =
+            CloudBackupPresentationContext(
+                isActivityResumed = true,
+                isUnlocked = true,
+                isInDecoyMode = true,
+                isCoverPresented = false,
+            )
+
+        val presentations =
+            listOf(
+                CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext(), null),
+                CloudBackupRootPresentation.PasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null),
+                ),
+                CloudBackupRootPresentation.MissingPasskeyReminder,
+                CloudBackupRootPresentation.VerificationPrompt,
+            )
+
+        presentations.forEach { presentation ->
+            assertFalse(
+                isCloudBackupPresentationPresentable(
+                    presentation = presentation,
+                    context = context,
+                    hasBlockers = false,
+                ),
+            )
+        }
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext(), null),
+                context = context.copy(isInDecoyMode = false),
+                hasBlockers = false,
+            ),
+        )
+    }
+
     private fun presentableContext(
         presentationPolicy: CloudBackupPresentationPolicy,
     ): CloudBackupPresentationContext =

@@ -47,6 +47,39 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         )
     }
 
+    func testDecoyModeBlocksAllCloudBackupRootPresentations() {
+        var context = presentableContext(presentationPolicy: .requiresUnlockedAuth)
+        context.isInDecoyMode = true
+
+        let presentations: [CloudBackupRootPresentation] = [
+            .existingBackupFound(cloudBackupEnableContext(), nil),
+            .backupFilesUnavailable(cloudBackupEnableContext()),
+            .passkeyChoice(.enable(cloudBackupEnableContext(), nil)),
+            .missingPasskeyReminder,
+            .verificationPrompt,
+        ]
+
+        for presentation in presentations {
+            XCTAssertFalse(
+                isCloudBackupPresentationPresentable(
+                    presentation: presentation,
+                    context: context,
+                    hasBlockers: false
+                ),
+                "decoy mode presented \(presentation)"
+            )
+        }
+
+        context.isInDecoyMode = false
+        XCTAssertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation: .existingBackupFound(cloudBackupEnableContext(), nil),
+                context: context,
+                hasBlockers: false
+            )
+        )
+    }
+
     func testNormalEnableOffersStartNewBackup() {
         let presentation = CloudBackupPasskeyChoicePresentation(
             intent: .enable(cloudBackupEnableContext(), nil)
