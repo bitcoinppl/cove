@@ -184,20 +184,34 @@ impl RustCloudBackupManager {
     /// so the snapshot always carries the revision of what it holds. An update sent later carries
     /// a higher revision and replaces it
     pub(crate) fn recovery_snapshot(&self) -> CloudBackupPublishedRecovery {
-        // a read that differs from the last publish is published first, so the next publish
-        // compares against what the platform now holds; otherwise a snapshot read that failed
-        // would stay on the platform while every later publish matched the older value
-        self.publish_recovery(CloudBackupRecovery::load());
-        self.published_recovery.lock().clone()
+        // read under the lock, so a publish of a newer read can't land between this read and its
+        // send and leave the older read at the higher revision. A publish computed before this
+        // read and sent after it is followed by another, since the change this read saw asked
+        // for one after that publish began
+        let mut published = self.published_recovery.lock();
+
+        // a read that differs from the last update is sent as the next one, so a later publish
+        // compares against what the platform holds; otherwise a snapshot read that failed would
+        // stay on the platform while every later publish matched the older update
+        self.send_recovery_if_changed(&mut published, CloudBackupRecovery::load());
+        published.clone()
     }
 
     /// Sends what Cloud Backup can restore when it changed since the last update
     ///
     /// The screen publish calls this, since every persisted change that grants or withdraws
-    /// coverage publishes the screen. The update is sent under the lock so updates reach the
-    /// platform in revision order
+    /// coverage publishes the screen
     pub(crate) fn publish_recovery(&self, recovery: CloudBackupRecovery) {
         let mut published = self.published_recovery.lock();
+        self.send_recovery_if_changed(&mut published, recovery);
+    }
+
+    /// Sent while the caller holds the lock, so updates reach the platform in revision order
+    fn send_recovery_if_changed(
+        &self,
+        published: &mut CloudBackupPublishedRecovery,
+        recovery: CloudBackupRecovery,
+    ) {
         if published.recovery == recovery {
             return;
         }
