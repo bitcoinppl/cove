@@ -1936,9 +1936,6 @@ pub(crate) mod test_support {
         pub(crate) fresh: CloudBackupScreen,
         /// Every screen delta sent since the last view, oldest first
         pub(crate) sent: Vec<CloudBackupScreenDelta>,
-        /// What `recovery()` gave at the start of this view, before its publish and drain
-        pub(crate) recovery_snapshot:
-            crate::manager::cloud_backup_manager::CloudBackupPublishedRecovery,
         /// Every recovery update sent since the last view, oldest first
         pub(crate) recovery_sent:
             Vec<crate::manager::cloud_backup_manager::CloudBackupPublishedRecovery>,
@@ -2030,7 +2027,6 @@ pub(crate) mod test_support {
         /// shows up as a published screen behind the projection
         fn harness_screen_view(&self, manager: &RustCloudBackupManager) -> ScreenView {
             let snapshot = manager.state();
-            let recovery_snapshot = manager.recovery();
             if manager.screen_publish_requested() {
                 manager.publish_screen(&self.runtime, || self.screen_inputs(manager));
             }
@@ -2070,7 +2066,6 @@ pub(crate) mod test_support {
                 revision,
                 fresh,
                 sent,
-                recovery_snapshot,
                 recovery_sent,
                 recovery_fresh:
                     crate::manager::cloud_backup_manager::recovery_coverage::CloudBackupRecovery::load(),

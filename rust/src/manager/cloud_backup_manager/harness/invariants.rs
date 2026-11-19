@@ -159,6 +159,12 @@ impl Invariants {
 
     /// Checks every invariant turned on against the app settled at `boundary`
     pub(crate) fn check(&mut self, app: &TestApp, boundary: &Boundary) -> Result<(), Violation> {
+        // the platform reads its recovery snapshot once, at launch; a read at every boundary
+        // would send any update a write left out and hide the missing publish
+        if self.platform_recovery.is_none() {
+            self.platform_recovery = Some(app.manager().recovery());
+        }
+
         // the lane is read first: while a call is held, settling returns with other work still
         // running, and the owner publishes a policy before the lane applies it, so a lane read
         // before the owner never sees a policy the owner's view doesn't have yet
@@ -269,14 +275,16 @@ impl Invariants {
         Ok(())
     }
 
-    /// 10: a platform that starts from a `recovery()` snapshot and applies every update sent so
-    /// far knows what the persisted record says Cloud Backup can restore now
+    /// 10: a platform that starts from one `recovery()` snapshot, read at the first boundary
+    /// after launch, and applies every update sent since knows what the persisted record says
+    /// Cloud Backup can restore now
     ///
     /// A write that grants or withdraws a wallet's recovery without a publish after it leaves the
     /// copy behind, so the platform would keep offering, or keep hiding, a recovery that changed
     fn check_recovery_updates(&mut self, screen: &ScreenView) -> Result<(), Violation> {
-        let mut copy =
-            self.platform_recovery.take().unwrap_or_else(|| screen.recovery_snapshot.clone());
+        let Some(mut copy) = self.platform_recovery.take() else {
+            return Ok(());
+        };
 
         for update in &screen.recovery_sent {
             copy = copy.applying(update.clone());
