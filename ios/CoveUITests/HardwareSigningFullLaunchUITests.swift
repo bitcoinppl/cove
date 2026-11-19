@@ -519,7 +519,8 @@ extension HardwareSigningFullLaunchUITests {
 
     private struct DrawnExport {
         let psbt: String
-        let frames: Int
+        /// Every distinct frame decoded, in the order they were read
+        let frames: [String]
         let captures: Int
         let duration: TimeInterval
     }
@@ -549,8 +550,10 @@ extension HardwareSigningFullLaunchUITests {
         let drawn = try readDrawnExport(format)
         closeExportSheet()
 
-        print("drawn \(format.rawValue) export: \(drawn.frames) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s, after dropping \(stale) stale frames")
-        XCTAssertEqual(drawn.frames, shownParts, "the frame counter and the drawn frames disagree on the part count")
+        print("drawn \(format.rawValue) export: \(drawn.frames.count) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s, after dropping \(stale) stale frames")
+        // a UR's mixed parts can stand in for a plain fragment the screenshots missed, so its join
+        // can take more distinct frames than the counter shows, but each must name that count
+        XCTAssertEqual(Set(drawn.frames.map(Self.partCount)), [shownParts], "the frame counter and the drawn frames disagree on the part count")
         XCTAssertEqual(drawn.psbt, copied.lowercased(), "the drawn frames carry a different PSBT than Copy")
 
         let signed = try signer.sign(drawn.psbt, minParts: Self.animatedParts)
@@ -668,7 +671,7 @@ extension HardwareSigningFullLaunchUITests {
 
                 let joined = try signer.joinExportFrames(frames)
                 if let psbt = joined.psbt {
-                    return DrawnExport(psbt: psbt, frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+                    return DrawnExport(psbt: psbt, frames: frames, captures: captures, duration: Date().timeIntervalSince(started))
                 }
 
                 partsLeft = joined.partsLeft
@@ -679,6 +682,6 @@ extension HardwareSigningFullLaunchUITests {
         }
 
         XCTFail("decoded \(frames.count) distinct \(format.rawValue) frames in \(captures) captures, and \(partsLeft.map(String.init) ?? "some") parts never showed")
-        return DrawnExport(psbt: "", frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+        return DrawnExport(psbt: "", frames: frames, captures: captures, duration: Date().timeIntervalSince(started))
     }
 }

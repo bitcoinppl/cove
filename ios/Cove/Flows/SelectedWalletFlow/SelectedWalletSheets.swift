@@ -43,7 +43,7 @@ private struct LabelQrExportSheet: View {
             generateBbqrStrings: { density in
                 try await manager.exportLabelsForQr(density: density)
             },
-            generateUrStrings: nil,
+            generateUr: nil,
             copyData: { try await manager.exportLabelsForShare().content }
         )
         .presentationDetents([.height(500), .height(600), .large])
@@ -62,7 +62,7 @@ private struct XpubQrExportSheet: View {
             generateBbqrStrings: { density in
                 try await manager.exportXpubForQr(density: density)
             },
-            generateUrStrings: nil,
+            generateUr: nil,
             copyData: { try await manager.exportXpubForShare().content }
         )
         .presentationDetents([.height(500), .height(600), .large])

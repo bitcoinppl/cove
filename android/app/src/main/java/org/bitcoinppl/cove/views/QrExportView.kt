@@ -66,19 +66,54 @@ import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.QrExportFormat
+import org.bitcoinppl.cove_core.ur.UrFountain
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.displayMessage
 
+/** The frames an export animates through */
+private sealed interface QrExportFrames {
+    /** The frames in one pass, which the frame counter shows */
+    val passCount: Int
+
+    /** The frame to show on the animation's [tick]th tick, counting from 0 */
+    fun frame(tick: Int): String
+
+    /** A fixed set shown in a loop, as a BBQr split is */
+    data class Loop(
+        val frames: List<String>,
+    ) : QrExportFrames {
+        init {
+            require(frames.isNotEmpty()) { "an animated export needs at least one frame" }
+        }
+
+        override val passCount get() = frames.size
+
+        override fun frame(tick: Int) = frames[tick % frames.size]
+    }
+
+    /**
+     * An animated UR, whose fountain-mixed parts after the plain fragments never repeat, so a
+     * scanner that misses a frame completes from a later one instead of waiting a whole loop
+     */
+    class Fountain(
+        private val fountain: UrFountain,
+    ) : QrExportFrames {
+        override val passCount = fountain.sequenceCount().toInt()
+
+        override fun frame(tick: Int) = fountain.frame(tick.toUInt())
+    }
+}
+
 /**
  * Generic QR export view that can display animated BBQr or UR QR codes.
- * If `generateUrStrings` is null, the format picker is hidden and only BBQr is used.
+ * If `generateUr` is null, the format picker is hidden and only BBQr is used.
  */
 @Composable
 fun QrExportView(
     title: String,
     subtitle: String,
     generateBbqrStrings: suspend (QrDensity) -> List<String>,
-    generateUrStrings: (suspend (QrDensity) -> List<String>)? = null,
+    generateUr: (suspend (QrDensity) -> UrFountain)? = null,
     onCopy: (suspend () -> String)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -86,26 +121,30 @@ fun QrExportView(
     val scope = rememberCoroutineScope()
     var selectedFormat by remember { mutableStateOf(QrExportFormat.BBQR) }
     var density by remember { mutableStateOf(QrDensity()) }
-    var qrStrings by remember { mutableStateOf<List<String>>(emptyList()) }
-    var currentIndex by remember { mutableIntStateOf(0) }
+    var frames by remember { mutableStateOf<QrExportFrames?>(null) }
+    var tick by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
 
     // whether to show the format picker (only if UR is available)
-    val showFormatPicker = generateUrStrings != null
+    val showFormatPicker = generateUr != null
 
     // generate QR codes on initial load and when format/density changes
     LaunchedEffect(selectedFormat, density) {
         try {
-            qrStrings =
+            frames =
                 when (selectedFormat) {
-                    QrExportFormat.BBQR -> generateBbqrStrings(density)
-                    QrExportFormat.UR -> generateUrStrings?.invoke(density) ?: generateBbqrStrings(density)
+                    QrExportFormat.BBQR -> QrExportFrames.Loop(generateBbqrStrings(density))
+                    QrExportFormat.UR ->
+                        generateUr?.let { QrExportFrames.Fountain(it(density)) }
+                            ?: QrExportFrames.Loop(generateBbqrStrings(density))
                 }
             error = null
-            currentIndex = 0
+
+            // restart the animation, so a UR shows its plain fragments in order before any mixed part
+            tick = 0
         } catch (e: Exception) {
             error = e.displayMessage("Unknown error")
-            qrStrings = emptyList()
+            frames = null
         }
     }
 
@@ -117,11 +156,11 @@ fun QrExportView(
         }
 
     // animate QR code cycling
-    LaunchedEffect(qrStrings, animationDelayMs) {
-        if (qrStrings.size > 1) {
+    LaunchedEffect(frames, animationDelayMs) {
+        if ((frames?.passCount ?: 1) > 1) {
             while (true) {
                 delay(animationDelayMs)
-                currentIndex = (currentIndex + 1) % qrStrings.size
+                tick++
             }
         }
     }
@@ -200,6 +239,7 @@ fun QrExportView(
         }
 
         // QR content
+        val shownFrames = frames
         if (error != null) {
             Text(
                 text = error!!,
@@ -207,7 +247,7 @@ fun QrExportView(
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp),
             )
-        } else if (qrStrings.isEmpty()) {
+        } else if (shownFrames == null) {
             Box(
                 modifier =
                     Modifier
@@ -228,8 +268,7 @@ fun QrExportView(
                     contentAlignment = Alignment.Center,
                 ) {
                     val qrSize = maxWidth
-                    val safeIndex = currentIndex.coerceIn(0, qrStrings.lastIndex.coerceAtLeast(0))
-                    val qrString = qrStrings.getOrNull(safeIndex) ?: qrStrings.firstOrNull() ?: ""
+                    val qrString = remember(shownFrames, tick) { shownFrames.frame(tick) }
                     val bitmap =
                         remember(qrString) {
                             QrCodeGenerator.generate(qrString, size = 512)
@@ -254,7 +293,7 @@ fun QrExportView(
                 }
 
                 // density buttons and progress indicator
-                if (qrStrings.size > 1) {
+                if (shownFrames.passCount > 1) {
                     Row(
                         modifier = Modifier.padding(horizontal = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -265,14 +304,16 @@ fun QrExportView(
                             onClick = { density = density.decrease() },
                         )
 
+                        // the counter counts a pass of the plain fragments, and starts over as a
+                        // UR's mixed parts go on past them
                         QrExportProgressIndicator(
-                            qrCount = qrStrings.size,
-                            currentIndex = currentIndex,
+                            qrCount = shownFrames.passCount,
+                            currentIndex = tick % shownFrames.passCount,
                             modifier = Modifier.weight(1f),
                         )
 
                         PlusButton(
-                            enabled = density.canIncrease() && qrStrings.size > 1,
+                            enabled = density.canIncrease() && shownFrames.passCount > 1,
                             onClick = { density = density.increase() },
                         )
                     }
@@ -455,7 +496,7 @@ fun QrExportView(
         title = "Scan this QR",
         subtitle = "Scan with your hardware wallet\nto sign your transaction",
         generateBbqrStrings = { density -> details.psbtToBbqrWithDensity(density) },
-        generateUrStrings = { density -> details.psbtToUrWithDensity(density) },
+        generateUr = { density -> details.psbtToUrWithDensity(density) },
         onCopy = { details.psbtToHex() },
         modifier = modifier,
     )

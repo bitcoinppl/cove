@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ahash::AHashMap as HashMap;
 use bitcoin::params::Params;
 use bitcoin::{FeeRate as BdkFeeRate, TxOut};
+use cove_ur::{CryptoPsbt, UrFountain};
 use serde::{Deserialize, Serialize};
 use tap::TapFallible;
 use thiserror::Error;
@@ -318,41 +319,29 @@ impl ConfirmDetails {
         Ok(split.parts)
     }
 
-    /// Exports PSBT as UR with specified density
+    /// Exports PSBT as an animated UR with specified density
+    ///
+    /// The frames go on past the plain fragments with fountain-mixed parts, so a hardware
+    /// wallet that misses a frame completes from a later one instead of stalling
     ///
     /// # Errors
     /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-    pub fn psbt_to_ur_with_density(&self, density: &QrDensity) -> Result<Vec<String>> {
-        self.psbt_to_ur(density.ur_fragment_len())
+    pub fn psbt_to_ur_with_density(&self, density: &QrDensity) -> Result<Arc<UrFountain>> {
+        self.psbt_to_ur(density.ur_fragment_len()).map(Arc::new)
     }
+}
 
-    /// Exports PSBT as UR-encoded QR strings for animated display
-    ///
-    /// # Errors
-    /// Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-    pub fn psbt_to_ur(&self, max_fragment_len: u32) -> Result<Vec<String>> {
-        use cove_ur::CryptoPsbt;
-        use foundation_ur::Encoder as UrEncoder;
-
+impl ConfirmDetails {
+    fn psbt_to_ur(&self, max_fragment_len: u32) -> Result<UrFountain> {
         let crypto_psbt = CryptoPsbt::new(self.psbt.0.clone());
 
         // encode untagged crypto-psbt CBOR for hardware-wallet interop
-        let cbor_psbt = crypto_psbt.encode().map_err(|e| {
-            ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {e}"))
-        })?;
+        let cbor_psbt = crypto_psbt
+            .encode()
+            .map_err_prefix("CBOR encoding failed", ConfirmDetailsError::QrCodeCreation)?;
 
-        let mut encoder = UrEncoder::new();
-        encoder.start("crypto-psbt", &cbor_psbt, max_fragment_len as usize);
-
-        let sequence_count = encoder.sequence_count() as usize;
-        let mut parts = Vec::with_capacity(sequence_count);
-
-        for _ in 0..sequence_count {
-            let part = encoder.next_part();
-            parts.push(part.to_string());
-        }
-
-        Ok(parts)
+        UrFountain::new("crypto-psbt", &cbor_psbt, max_fragment_len as usize)
+            .map_err_str(ConfirmDetailsError::QrCodeCreation)
     }
 }
 
@@ -499,51 +488,76 @@ pub fn confirm_details_preview_new() -> ConfirmDetails {
 
 #[cfg(test)]
 mod tests {
-    use cove_ur::CryptoPsbt;
     use foundation_ur::{Decoder as UrDecoder, UR};
 
     use super::*;
+
+    fn density(ur_fragment_len: u32) -> QrDensity {
+        QrDensity { ur_fragment_len, ..QrDensity::default() }
+    }
+
+    /// What a receiver decodes from the export's frames, shown from the first tick on and
+    /// skipping the ticks `missed` names, or `None` if three passes never complete it
+    fn decode(fountain: &UrFountain, missed: impl Fn(u32) -> bool) -> Option<Vec<u8>> {
+        let mut decoder = UrDecoder::default();
+        for index in (0..3 * fountain.sequence_count()).filter(|index| !missed(*index)) {
+            let frame = fountain.frame(index).to_ascii_lowercase();
+            let ur = UR::parse(&frame).unwrap();
+            assert_eq!(ur.as_type(), "crypto-psbt");
+            decoder.receive(ur).unwrap();
+
+            if decoder.is_complete() {
+                return Some(decoder.message().unwrap().unwrap().to_vec());
+            }
+        }
+
+        None
+    }
+
+    fn assert_untagged_crypto_psbt(confirm_details: &ConfirmDetails, cbor: &[u8]) {
+        // cbor major type 2 is byte string
+        assert_eq!(cbor[0] >> 5, 2);
+
+        let crypto_psbt = CryptoPsbt::decode(cbor.to_vec()).unwrap();
+        assert_eq!(crypto_psbt.to_psbt_bytes(), confirm_details.psbt.0.serialize());
+    }
 
     #[test]
     fn psbt_to_ur_exports_untagged_crypto_psbt() {
         let confirm_details = confirm_details_preview_new();
 
-        let parts = confirm_details.psbt_to_ur(10_000).unwrap();
+        let fountain = confirm_details.psbt_to_ur_with_density(&density(10_000)).unwrap();
+        assert_eq!(fountain.sequence_count(), 1);
 
-        assert_eq!(parts.len(), 1);
-        assert_ur_parts_export_untagged_crypto_psbt(&confirm_details, &parts);
+        let cbor = decode(&fountain, |_| false).expect("the one frame completes the message");
+        assert_untagged_crypto_psbt(&confirm_details, &cbor);
     }
 
     #[test]
     fn psbt_to_ur_exports_multi_part_untagged_crypto_psbt() {
         let confirm_details = confirm_details_preview_new();
 
-        let parts = confirm_details.psbt_to_ur(50).unwrap();
+        let fountain = confirm_details.psbt_to_ur_with_density(&density(25)).unwrap();
+        assert!(fountain.sequence_count() > 3, "got {} parts", fountain.sequence_count());
 
-        assert!(parts.len() > 1, "expected multiple UR parts, got {}", parts.len());
-        assert_ur_parts_export_untagged_crypto_psbt(&confirm_details, &parts);
+        let cbor = decode(&fountain, |_| false).expect("the plain fragments complete the message");
+        assert_untagged_crypto_psbt(&confirm_details, &cbor);
     }
 
-    fn assert_ur_parts_export_untagged_crypto_psbt(
-        confirm_details: &ConfirmDetails,
-        parts: &[String],
-    ) {
-        let mut decoder = UrDecoder::default();
-        for part in parts {
-            let ur = UR::parse(part).unwrap();
-            assert_eq!(ur.as_type(), "crypto-psbt");
-            decoder.receive(ur).unwrap();
-        }
+    #[test]
+    fn psbt_to_ur_completes_for_a_receiver_that_never_reads_one_fragment() {
+        let confirm_details = confirm_details_preview_new();
+        let fountain = confirm_details.psbt_to_ur_with_density(&density(25)).unwrap();
+        let count = fountain.sequence_count();
 
-        assert!(decoder.is_complete());
-        assert_eq!(decoder.ur_type(), Some("crypto-psbt"));
+        // the receiver misses the tick that shows fragment 2 on every pass, as the stalled scan
+        // missed one hard-to-read frame, so only a mixed part after the first pass can fill it
+        let missed_fragment = 1;
+        let shows_missed_fragment = |index: u32| index % count == missed_fragment;
 
-        let cbor = decoder.message().unwrap().unwrap();
-        assert!(!cbor.is_empty());
-        // cbor major type 2 is byte string
-        assert_eq!(cbor[0] >> 5, 2);
+        let cbor = decode(&fountain, shows_missed_fragment)
+            .expect("a mixed part fills in the fragment the receiver never reads");
 
-        let crypto_psbt = CryptoPsbt::decode(cbor.to_vec()).unwrap();
-        assert_eq!(crypto_psbt.to_psbt_bytes(), confirm_details.psbt.0.serialize());
+        assert_untagged_crypto_psbt(&confirm_details, &cbor);
     }
 }

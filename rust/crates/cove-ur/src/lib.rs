@@ -6,6 +6,7 @@ pub mod crypto_output;
 pub mod crypto_psbt;
 pub mod crypto_seed;
 pub mod error;
+pub mod fountain;
 pub mod keypath;
 pub mod registry;
 pub mod ur;
@@ -17,6 +18,7 @@ pub use crypto_output::CryptoOutput;
 pub use crypto_psbt::CryptoPsbt;
 pub use crypto_seed::CryptoSeed;
 pub use error::{Result, UrError};
+pub use fountain::UrFountain;
 pub use keypath::CryptoKeypath;
 pub use ur::Ur;
 

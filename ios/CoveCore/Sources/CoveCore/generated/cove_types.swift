@@ -1760,20 +1760,15 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     func psbtToHex()  -> String
 
     /**
-     * Exports PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as an animated UR with specified density
+     *
+     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
+     * wallet that misses a frame completes from a later one instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
-    func psbtToUr(maxFragmentLen: UInt32) throws  -> [String]
-
-    /**
-     * Exports PSBT as UR with specified density
-     *
-     * # Errors
-     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-     */
-    func psbtToUrWithDensity(density: QrDensity) throws  -> [String]
+    func psbtToUrWithDensity(density: QrDensity) throws  -> UrFountain
 
     func sendingAmount()  -> Amount
 
@@ -1976,29 +1971,16 @@ open func psbtToHex() -> String  {
 }
 
     /**
-     * Exports PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as an animated UR with specified density
+     *
+     * The frames go on past the plain fragments with fountain-mixed parts, so a hardware
+     * wallet that misses a frame completes from a later one instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
-open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(
-            self.uniffiCloneHandle(),
-        FfiConverterUInt32.lower(maxFragmentLen),uniffiCallStatus
-    )
-})
-}
-
-    /**
-     * Exports PSBT as UR with specified density
-     *
-     * # Errors
-     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-     */
-open func psbtToUrWithDensity(density: QrDensity)throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+open func psbtToUrWithDensity(density: QrDensity)throws  -> UrFountain  {
+    return try  FfiConverterTypeUrFountain_lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
         uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(
             self.uniffiCloneHandle(),
@@ -6641,10 +6623,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 52634) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 31866) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 19133) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
@@ -6876,6 +6855,7 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiEnsureCoveUrInitialized()
     return InitializationResult.ok
 }()
 

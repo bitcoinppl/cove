@@ -560,11 +560,17 @@ class HardwareSigningFullLaunchTest {
 
         Log.i(
             TAG,
-            "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over " +
+            "drawn $formatLabel export: ${drawn.frames.size} of $shownParts frames in ${drawn.captures} captures over " +
                 "${drawn.durationMs} ms, after dropping $stale stale frames",
         )
 
-        assertEquals("the frame counter and the drawn frames disagree on the part count", shownParts, drawn.frames)
+        // a UR's mixed parts can stand in for a plain fragment the screenshots missed, so its join
+        // can take more distinct frames than the counter shows, but each must name that count
+        assertEquals(
+            "the frame counter and the drawn frames disagree on the part count",
+            setOf(shownParts),
+            drawn.frames.map(::partCount).toSet(),
+        )
         assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
 
         val signed = signer.sign(drawn.psbt, ANIMATED_PARTS)
@@ -581,7 +587,8 @@ class HardwareSigningFullLaunchTest {
 
     private data class DrawnExport(
         val psbt: String,
-        val frames: Int,
+        /** Every distinct frame decoded, in the order they were read */
+        val frames: List<String>,
         val captures: Int,
         val durationMs: Long,
     )
@@ -674,7 +681,7 @@ class HardwareSigningFullLaunchTest {
                 frames += code
 
                 val joined = signer.joinExportFrames(frames)
-                joined.psbt?.let { return DrawnExport(it, frames.size, captures, System.currentTimeMillis() - started) }
+                joined.psbt?.let { return DrawnExport(it, frames.toList(), captures, System.currentTimeMillis() - started) }
                 partsLeft = joined.partsLeft
             }
 
