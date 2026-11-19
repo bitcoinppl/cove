@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,11 +63,13 @@ fun NumberPadPinView(
     onWrongPin: (String) -> Unit = {},
 ) {
     var pin by remember { mutableStateOf("") }
-    var animateField by remember { mutableStateOf(false) }
+    // counts wrong PINs, so each one, not just every other, shakes the boxes
+    var wrongPinCount by remember { mutableIntStateOf(0) }
     var isSubmitting by remember { mutableStateOf(false) }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
+    val pinBoxes = remember { BringIntoViewRequester() }
 
     fun enterDigit(digit: String) {
         if (isSubmitting || pin.length >= pinLength) return
@@ -84,7 +89,7 @@ fun NumberPadPinView(
                         pin = ""
                         onUnlock(submittedPin)
                     } else {
-                        animateField = !animateField
+                        wrongPinCount += 1
                         delay(490)
                         pin = ""
                     }
@@ -96,9 +101,13 @@ fun NumberPadPinView(
     }
 
     // shake animation on wrong PIN
-    LaunchedEffect(animateField) {
-        if (animateField) {
+    LaunchedEffect(wrongPinCount) {
+        if (wrongPinCount > 0) {
             val pin = pin
+
+            // when the pad is taller than the screen, reaching its bottom row scrolls the boxes
+            // away, so they come back into view to show the shake and the cleared PIN
+            launch { pinBoxes.bringIntoView() }
 
             // perform shake animation
             offsetX.animateTo(30f, animationSpec = tween(70, easing = LinearEasing))
@@ -167,6 +176,7 @@ fun NumberPadPinView(
                 Modifier
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                     .padding(top = 15.dp)
+                    .bringIntoViewRequester(pinBoxes)
                     .testTag("numberPadPin.pinBoxes"),
         ) {
             repeat(pinLength) { index ->
