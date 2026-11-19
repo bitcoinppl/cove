@@ -52,6 +52,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         isScanning = true
         scannedMessage = nil
+        retries = 0
 
         #if DEBUG
             if let bridge = UITestTapSignerBridge.configured {
@@ -238,22 +239,24 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         retries = 0
         readBytes.append(contentsOf: dataChunk)
 
-        // has read enough data to get the message
-        if let messageInfo,
-           readBytes.count >= messageInfo.fullMessageLength,
-           case .error = parseAndHandleResult(session: session)
-        {
-            return
-        }
-
-        if messageInfo == nil,
-           case .error = parseAndHandleResult(session: session)
-        {
-            Log.warn(
-                "Trying to read TAG in unsupported format, falling back to built in NDEF reader"
-            )
-            readNDEF(from: tag, session: session)
-            return
+        // has read enough data to get the message; a complete read has already closed the
+        // session, whether or not it found a message, so nothing more is read from it
+        if let messageInfo, readBytes.count >= messageInfo.fullMessageLength {
+            switch parseAndHandleResult(session: session) {
+            case .complete, .error: return
+            case .incomplete: break
+            }
+        } else if messageInfo == nil {
+            switch parseAndHandleResult(session: session) {
+            case .complete: return
+            case .error:
+                Log.warn(
+                    "Trying to read TAG in unsupported format, falling back to built in NDEF reader"
+                )
+                readNDEF(from: tag, session: session)
+                return
+            case .incomplete: break
+            }
         }
 
         readNextBlock(tag: tag, session: session)
