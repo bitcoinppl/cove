@@ -185,6 +185,9 @@ struct VerifyWordsScreen: View {
     @State private var possibleWords: [String]
     @State private var incorrectGuesses = 0
 
+    /// The picks, cancels and landed checks the state machine took on this screen
+    @State private var takenTaps = TakenTaps()
+
     @Namespace private var namespace
 
     /// alerts
@@ -246,6 +249,7 @@ struct VerifyWordsScreen: View {
     @MainActor
     func selectWord(_ word: String) {
         guard let transition = stateMachine.selectWord(word: word) else { return }
+        takenTaps.picks += 1
 
         withAnimation(.spring().speed(2.0)) {
             checkState = transition.newState
@@ -257,6 +261,7 @@ struct VerifyWordsScreen: View {
     @MainActor
     private func finishFlight(_ id: WordCheckId) {
         guard let transition = stateMachine.animationComplete(id: id) else { return }
+        takenTaps.checks += 1
 
         if case .incorrect = transition.newState {
             incorrectGuesses += 1
@@ -297,12 +302,27 @@ struct VerifyWordsScreen: View {
         }
     }
 
-    /// Flies the chip back to its place after a wrong pick or a cancel
+    /// Flies the chip back to its place after a wrong pick or a cancel, and frees the word chips
+    /// only once it is home
+    ///
+    /// The return is timed by the duration Rust gives it rather than the animation's completion,
+    /// which after a cancel fired within a few frames, while the chip was still at the answer
+    /// slot. The chips were enabled by then, so a second tap on the chip picked the cancelled
+    /// word again. The curve is a timed one rather than a spring, whose settling outlasts its
+    /// duration, and it ends a few frames before the chips are freed, so the chip is at rest
+    /// then even when the motion starts late
     @MainActor
-    private func returnChip(_ transition: StateTransition, animation: Animation = .spring().speed(3)) {
-        withAnimation(animation, completionCriteria: .logicallyComplete) {
+    private func returnChip(_ transition: StateTransition) {
+        let durationMs = transition.animationDurationMs ?? stateMachine.config().moveDurationMsIncorrect
+        let duration = Duration.milliseconds(durationMs)
+        let returnSlackMs: UInt32 = 50
+
+        withAnimation(.easeOut(duration: Double(durationMs - min(durationMs, returnSlackMs)) / 1000)) {
             checkState = transition.newState
-        } completion: {
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: duration)
             guard let returned = stateMachine.returnComplete(id: transition.checkId) else { return }
             checkState = returned.newState
         }
@@ -312,7 +332,8 @@ struct VerifyWordsScreen: View {
     @MainActor
     private func cancelCheck() {
         guard let transition = stateMachine.cancelCheck() else { return }
-        returnChip(transition, animation: .spring())
+        takenTaps.cancels += 1
+        returnChip(transition)
     }
 
     func matchedGeoId(for word: String) -> String {
@@ -361,6 +382,7 @@ struct VerifyWordsScreen: View {
         VerifyWordsLayout(
             sizeCategory: sizeCategory,
             wordNumber: wordNumber,
+            takenTaps: takenTaps,
             currentWord: currentWord,
             possibleWords: possibleWords,
             columns: columns,
@@ -404,6 +426,19 @@ struct VerifyWordsScreen: View {
     }
 }
 
+/// How many picks and cancels the state machine took on the screen, and how many checks landed
+/// in the answer slot, named in the heading's accessibility identifier so UI tests can tell a
+/// dropped tap from a taken one and see a check land, which the chip's motion alone can't show
+private struct TakenTaps {
+    var picks = 0
+    var cancels = 0
+    var checks = 0
+
+    var accessibilityIdentifier: String {
+        "verifyWords.taken.picks.\(picks).cancels.\(cancels).checks.\(checks)"
+    }
+}
+
 private extension WordCheckState {
     /// What the picked chip is doing, which the screen otherwise shows only by color and motion
     var accessibilityValue: String {
@@ -420,6 +455,7 @@ private extension WordCheckState {
 private struct VerifyWordsLayout: View {
     let sizeCategory: ContentSizeCategory
     let wordNumber: Int
+    let takenTaps: TakenTaps
     let currentWord: String?
     let possibleWords: [String]
     let columns: [GridItem]
@@ -448,6 +484,7 @@ private struct VerifyWordsLayout: View {
                         ScrollView {
                             VerifyWordsMainContent(
                                 wordNumber: wordNumber,
+                                takenTaps: takenTaps,
                                 currentWord: currentWord,
                                 possibleWords: possibleWords,
                                 columns: columns,
@@ -478,6 +515,7 @@ private struct VerifyWordsLayout: View {
                 } else {
                     VerifyWordsMainContent(
                         wordNumber: wordNumber,
+                        takenTaps: takenTaps,
                         currentWord: currentWord,
                         possibleWords: possibleWords,
                         columns: columns,
@@ -504,6 +542,7 @@ private struct VerifyWordsLayout: View {
 
 private struct VerifyWordsMainContent: View {
     let wordNumber: Int
+    let takenTaps: TakenTaps
     let currentWord: String?
     let possibleWords: [String]
     let columns: [GridItem]
@@ -525,6 +564,7 @@ private struct VerifyWordsMainContent: View {
         VStack(spacing: 24) {
             VerifyWordsSelection(
                 wordNumber: wordNumber,
+                takenTaps: takenTaps,
                 currentWord: currentWord,
                 possibleWords: possibleWords,
                 columns: columns,
@@ -566,6 +606,7 @@ private struct VerifyWordsMainContent: View {
 
 private struct VerifyWordsSelection: View {
     let wordNumber: Int
+    let takenTaps: TakenTaps
     let currentWord: String?
     let possibleWords: [String]
     let columns: [GridItem]
@@ -585,6 +626,7 @@ private struct VerifyWordsSelection: View {
                 .foregroundStyle(.white)
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityIdentifier(takenTaps.accessibilityIdentifier)
 
             VStack(spacing: 10) {
                 if let checkingWord = currentWord {
