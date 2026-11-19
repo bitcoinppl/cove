@@ -340,6 +340,11 @@ qa-coverage:
 qa-check:
     just xtask qa check
 
+# [quick] Fail when an #[error] message uses Rust Debug formatting ({:?}), which the apps would show
+[group('lint')]
+error-text-check:
+    just xtask check-error-text
+
 # [bounded] Run all tests
 [group('test')]
 [working-directory('rust')]

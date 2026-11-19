@@ -76,7 +76,7 @@ impl Repo {
             .env("GIT_CONFIG_GLOBAL", self.dir.path().join("gitconfig"))
             .env("GIT_CONFIG_NOSYSTEM", "1")
             // the fixture has no justfile or xtask, so only the checks that need neither run
-            .env("COVE_PRE_PUSH_SKIP", "qa,bindings")
+            .env("COVE_PRE_PUSH_SKIP", "error-text,qa,bindings")
             .env_remove("GIT_DIR")
             .env_remove("GIT_WORK_TREE");
 
