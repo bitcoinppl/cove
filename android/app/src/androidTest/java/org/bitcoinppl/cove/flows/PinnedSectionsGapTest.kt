@@ -209,16 +209,23 @@ class PinnedSectionsGapTest(
         compose.waitForIdle()
     }
 
-    // a lazy list composes only the items near its scroll position, so each one that can scroll to
-    // an item is asked to bring the tag in before the page scrolls to it, as a swipe would
+    // a lazy list composes only the items near its scroll position, so when the tag isn't composed
+    // yet each list that can scroll to an item is asked to bring it in, as a swipe would. A tag
+    // already composed is left alone, since searching a pager would page it away from the control
+    // the screen shows first
     private fun scrollLazyListsTo(tag: String) {
+        if (isComposed(tag)) return
+
         val lazyLists = compose.onAllNodes(hasScrollToNodeAction(), useUnmergedTree = true)
 
-        repeat(lazyLists.fetchSemanticsNodes().size) { index ->
+        for (index in lazyLists.fetchSemanticsNodes().indices) {
             runCatching { lazyLists[index].performScrollToNode(hasTestTag(tag)) }
+            if (isComposed(tag)) break
         }
         compose.waitForIdle()
     }
+
+    private fun isComposed(tag: String): Boolean = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     // a section is where its content draws: a weighted slot's own bounds fill the space it was
     // given even when its content is small, and content that outgrows a fixed slot draws past them
