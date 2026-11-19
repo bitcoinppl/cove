@@ -56,6 +56,33 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         XCTAssertTrue(button("Tap to show password").firstMatch.waitForNonExistence(timeout: 10), "Done should close the response")
     }
 
+    /// Without an app lock the recovery words and their KeyTeleport send open with no credential
+    /// prompt, and the receiving phone still gets this wallet's words
+    func testSendsWordsWithoutAnAppLock() throws {
+        try signer.requireHealthy()
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.importTestMnemonic()
+
+        app.tapButton(named: "selectedWallet.more")
+        app.tapButton(named: "Wallet Settings")
+        layout.reachAndTap(button("View Secret Words"), "wallet settings: View Secret Words")
+        app.tapButton(named: "Show Me")
+        XCTAssertTrue(app.buttons["Secret words options"].waitForExistence(timeout: 10), "the recovery words never showed")
+
+        app.tapButton(named: "Secret words options")
+        app.tapButton(named: "KeyTeleport")
+        let confirm = app.buttons["Continue"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "KeyTeleport never asked to confirm")
+        confirm.tap()
+
+        XCTAssertTrue(app.staticTexts["Scan Receiver Request"].waitForExistence(timeout: 15), "the send screen never showed")
+        XCTAssertFalse(app.navigationBars["Verify Identity"].exists, "KeyTeleport asked for a credential without an app lock")
+
+        let received = try layout.receiveSend(with: peer, scanner: qr, "send")
+        XCTAssertEqual(received.kind, "mnemonic")
+        XCTAssertEqual(received.mnemonic, XCUIApplication.testMnemonic, "the receiver should get this wallet's words")
+    }
+
     // MARK: - Steps
 
     /// Opens the wallet's recovery words, entering the PIN they ask for

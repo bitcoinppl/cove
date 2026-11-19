@@ -378,7 +378,7 @@ Both app lock overlays draw over the screen beneath them, but that screen stays 
 - Keep the secret only in a typed revealed state that records the `AuthManager` `lockGeneration` at load. Treat a changed `lockGeneration` as a relock even when the lock is already open again: the quick-return grace can release a background lock before the screen sees it, and SwiftUI can skip updates in the background. Android also drops the secret when `sensitiveContentGeneration` changes on `onPause`, because the background lock only lands after the process stops
 - Check that access still holds when rendering, not only in the effect or `onChange` that drops the secret. Those run on the next UI update after access ends, which can wait until the app returns to the foreground, so a secret rendered from stored state would sit in the locked tree for at least one frame
 
-Flows that need the main credential specifically, such as private key export and KeyTeleport send, use the main-only paths instead. These are iOS's separate `MainCredentialVerificationView` and Android's `mainCredentialGeneration`.
+Flows that need the main credential specifically, such as private key export and KeyTeleport send from Secret Words, use the main-only paths instead. These are iOS's separate `MainCredentialVerificationView` and Android's `mainCredentialGeneration`. They ask for it only when an app lock is set; without one, the unlocked session is trusted and they go ahead without a prompt.
 
 ### System Picker Results and the App Lock
 

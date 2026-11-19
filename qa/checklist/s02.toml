@@ -95,6 +95,22 @@ coverage = [
 # the ui tests restore an xprv-only wallet from the scripted cloud backup instead of a two-phone KeyTeleport receive
 
 [[row]]
+id = "s02-no-pin-mnemonic-keyteleport-send-starts"
+section = "2"
+title = "No-PIN Secret Words KeyTeleport send starts without a prompt"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWordsScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift::testSendsWordsWithoutAnAppLock",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsKeyTeleportNoLockTest.kt::keyTeleportStartsASendWithoutAnAppLock",
+]
+# ios also completes the transfer to a receiving peer; android checks the send screen opens
+
+[[row]]
 id = "s02-android-keyteleport-screenshot-capture-blocked"
 section = "2"
 title = "Android KeyTeleport screenshot capture blocked"
