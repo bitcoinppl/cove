@@ -34,6 +34,8 @@ data class PublicKeyExport(
     val key: String,
     /** The key as one BBQr frame */
     val bbqr: String,
+    /** The account as one crypto-hdkey UR frame in the multi-part `1-1` form, as Jade shows it; native segwit accounts only */
+    val ur: String?,
     val firstAddress: String,
     /** The first address's path, as the Receive sheet shows it */
     val firstDerivationPath: String,
@@ -101,6 +103,8 @@ class HardwareSignerControl(
         return PublicKeyExport(
             key = json.getString("key"),
             bbqr = json.getString("bbqr"),
+            // optString reads a JSON null as the string "null"
+            ur = if (json.isNull("ur")) null else json.getString("ur"),
             firstAddress = json.getString("first_address"),
             firstDerivationPath = json.getString("first_derivation_path"),
         )

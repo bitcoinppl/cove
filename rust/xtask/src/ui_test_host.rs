@@ -13,8 +13,9 @@
 //!   `/join-export-frames` joins the UR or BBQr frames a test read off the
 //!   app's PSBT export back into the PSBT ([`export_frames`]).
 //!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
-//!   plain QR and as a single-part BBQr, with the first receive address it
-//!   should import as. `/simulator-pasteboard` reads an iOS simulator's
+//!   plain QR and as a single-part BBQr, a native segwit account also as a
+//!   single-frame crypto-hdkey UR, with the first receive address it should
+//!   import as. `/simulator-pasteboard` reads an iOS simulator's
 //!   pasteboard, `/simulator-appearance` switches it between light and
 //!   dark mode, and `/simulator-content-size` reads its text size and, given
 //!   one, changes it while the app runs. The `/tapsigner/...` routes start
@@ -40,7 +41,7 @@ use bip39::Mnemonic;
 use bitcoin::{
     absolute::LockTime,
     base58,
-    bip32::{DerivationPath, Xpriv, Xpub},
+    bip32::{DerivationPath, Fingerprint, Xpriv, Xpub},
     hashes::Hash,
     secp256k1::Secp256k1,
     transaction, Address, Amount, CompressedPublicKey, FeeRate, Network, NetworkKind, OutPoint,
@@ -554,8 +555,9 @@ fn watch_only_descriptor(request: WalletRequest) -> Result<Value> {
 }
 
 /// An account's bare SLIP-132 public key, as a hardware wallet shows it in a
-/// plain QR and in a single-part BBQr, and the first receive address an import
-/// of it should show
+/// plain QR and in a single-part BBQr, for a native segwit account the same
+/// account as a single-frame crypto-hdkey UR, and the first receive address an
+/// import of it should show
 ///
 /// The address comes straight from the mnemonic's key at `/0/0`, not from a
 /// descriptor, so it checks the address type the app infers from the key
@@ -571,6 +573,18 @@ fn public_key_export(request: PublicKeyRequest) -> Result<Value> {
         format!("m/{}'/{coin_type}'/0'", address_type.purpose()).parse()?;
     let account = Xpub::from_priv(&secp, &master.derive_priv(&secp, &account_path)?);
 
+    // the app reads a crypto-hdkey as a bare xpub, which imports as native segwit
+    // whatever its origin says, so a wrapped segwit UR wouldn't match its address
+    let ur = match address_type {
+        AddressType::NativeSegwit => Some(single_frame_hdkey_ur(
+            &account,
+            &account_path,
+            master.fingerprint(&secp),
+            network,
+        )?),
+        AddressType::WrappedSegwit => None,
+    };
+
     let mut encoded = account.encode();
     encoded[..4].copy_from_slice(&address_type.slip132_version(network.into()));
     let key = base58::encode_check(&encoded);
@@ -581,9 +595,47 @@ fn public_key_export(request: PublicKeyRequest) -> Result<Value> {
     Ok(json!({
         "key": key,
         "bbqr": single_part_bbqr(&key)?,
+        "ur": ur,
         "first_address": address_type.address(first, network).to_string(),
         "first_derivation_path": format!("{account_path}/0/0"),
     }))
+}
+
+/// An account key as one crypto-hdkey UR frame in the multi-part `1-1` form,
+/// as Jade shows its export, with the origin and coin info it includes
+///
+/// The camera reports an unchanged code once, so a scanner that waits for a
+/// second frame to finish this one never completes
+fn single_frame_hdkey_ur(
+    account: &Xpub,
+    account_path: &DerivationPath,
+    master_fingerprint: Fingerprint,
+    network: Network,
+) -> Result<String> {
+    use cove_ur::{CryptoCoinInfo, CryptoHdkey, CryptoKeypath};
+    use foundation_ur::Encoder;
+
+    let components = account_path.into_iter().map(|child| u32::from(*child)).collect();
+    let coin_network = if network == Network::Bitcoin { 0 } else { 1 };
+
+    let mut hdkey = CryptoHdkey::from_xpub(account);
+    hdkey.use_info = Some(CryptoCoinInfo::new(Some(0), Some(coin_network)));
+    hdkey.origin = Some(CryptoKeypath::new(
+        components,
+        Some(master_fingerprint.to_bytes()),
+        Some(account.depth.into()),
+    ));
+
+    let cbor = hdkey.encode().map_err(|error| eyre!("crypto-hdkey encoding failed: {error}"))?;
+
+    // a fragment longer than the payload keeps it to one part
+    let mut encoder = Encoder::new();
+    encoder.start("crypto-hdkey", &cbor, cbor.len() + 1);
+    if encoder.sequence_count() != 1 {
+        bail!("crypto-hdkey UR took {} frames, expected one", encoder.sequence_count());
+    }
+
+    Ok(encoder.next_part().to_string())
 }
 
 /// A text payload as one BBQr frame, as a hardware wallet shows a short export
