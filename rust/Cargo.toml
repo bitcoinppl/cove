@@ -65,11 +65,11 @@ ruzstd = "0.8.3"
 flate2 = "1.1.9"
 
 # bdk / bitcoin
-bitcoin = { version = "0.32.9" }
+bitcoin = { version = "0.32.102" }
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2.2", features = ["all-languages", "zeroize"] }
 bip329 = "0.6.0"
-payjoin = { version = "0.25.0", default-features = false, features = ["v2"] }
+payjoin = { version = "1.3.0", default-features = false, features = ["v2"] }
 pubport = { version = "0.6.0" }
 
 # bitcoin nodes
