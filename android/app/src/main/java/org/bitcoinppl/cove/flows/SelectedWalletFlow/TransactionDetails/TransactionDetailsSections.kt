@@ -73,6 +73,7 @@ import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionLockState
@@ -203,42 +204,50 @@ private fun TransactionDetailsColumn(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
     ) {
-        Spacer(Modifier.height(topPadding + 16.dp))
-        TransactionDetailsHeaderSection(
-            transactionDetails = transactionDetails,
-            manager = manager,
-            numberOfConfirmations = numberOfConfirmations,
-            lockState = lockState,
-            isUpdatingLockState = isUpdatingLockState,
-            secondaryColor = secondary,
-            snackbarHostState = snackbarHostState,
-            onRequestUnlockLockedUtxos = onRequestUnlockLockedUtxos,
-        )
+        Column(
+            modifier =
+                Modifier
+                    .testTag("transactionDetails.topSection")
+                    .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.height(topPadding + 16.dp))
+            TransactionDetailsHeaderSection(
+                transactionDetails = transactionDetails,
+                manager = manager,
+                numberOfConfirmations = numberOfConfirmations,
+                lockState = lockState,
+                isUpdatingLockState = isUpdatingLockState,
+                secondaryColor = secondary,
+                snackbarHostState = snackbarHostState,
+                onRequestUnlockLockedUtxos = onRequestUnlockLockedUtxos,
+            )
 
-        TransactionStatusSection(transactionDetails = transactionDetails, secondaryColor = secondary)
-        TransactionAmountsSection(transactionDetails, metadata, totalSpentFiatFmt, foreground)
-        TransactionCapsuleSection(transactionDetails)
-        TransactionConfirmationsSection(numberOfConfirmations, isExpanded)
-        TransactionExpandedDetailsSection(
-            isExpanded = isExpanded,
-            transactionDetails = transactionDetails,
-            numberOfConfirmationsFmt = numberOfConfirmationsFmt,
-            feeFiatFmt = feeFiatFmt,
-            sentSansFeeFiatFmt = sentSansFeeFiatFmt,
-            totalSpentFiatFmt = totalSpentFiatFmt,
-            historicalFiatFmt = historicalFiatFmt,
-            metadata = metadata,
-            lockState = lockState,
-            lockStateLoadFailed = lockStateLoadFailed,
-            isUpdatingLockState = isUpdatingLockState,
-            showLockStateUpdatingIndicator = showLockStateUpdatingIndicator,
-            secondaryColor = secondary,
-            onRetryTransactionLockState = onRetryTransactionLockState,
-            onToggleTransactionLockState = onToggleTransactionLockState,
-        )
+            TransactionStatusSection(transactionDetails = transactionDetails, secondaryColor = secondary)
+            TransactionAmountsSection(transactionDetails, metadata, totalSpentFiatFmt, foreground)
+            TransactionCapsuleSection(transactionDetails)
+            TransactionConfirmationsSection(numberOfConfirmations, isExpanded)
+            TransactionExpandedDetailsSection(
+                isExpanded = isExpanded,
+                transactionDetails = transactionDetails,
+                numberOfConfirmationsFmt = numberOfConfirmationsFmt,
+                feeFiatFmt = feeFiatFmt,
+                sentSansFeeFiatFmt = sentSansFeeFiatFmt,
+                totalSpentFiatFmt = totalSpentFiatFmt,
+                historicalFiatFmt = historicalFiatFmt,
+                metadata = metadata,
+                lockState = lockState,
+                lockStateLoadFailed = lockStateLoadFailed,
+                isUpdatingLockState = isUpdatingLockState,
+                showLockStateUpdatingIndicator = showLockStateUpdatingIndicator,
+                secondaryColor = secondary,
+                onRetryTransactionLockState = onRetryTransactionLockState,
+                onToggleTransactionLockState = onToggleTransactionLockState,
+            )
+        }
 
-        Spacer(Modifier.weight(1f))
         TransactionDetailsActions(isExpanded, secondary, onViewInExplorer, onToggleDetails)
     }
 }
@@ -577,6 +586,7 @@ private fun TransactionDetailsActions(
     Column(
         modifier =
             Modifier
+                .testTag("transactionDetails.bottomSection")
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

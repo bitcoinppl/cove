@@ -64,6 +64,7 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
@@ -171,39 +172,47 @@ fun CoinControlSetAmountScreen(
                             .background(MaterialTheme.colorScheme.surface)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
-                    CoinControlAmountWidget(
-                        amount = sendingAmount,
-                        denomination = sendingDenomination,
-                        dollarText = dollarEquivalentText,
-                        onAmountTap = onAmountTap,
-                        onUnitChange = { unit ->
-                            walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
-                        },
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    AddressWidget(
-                        onScanQr = onScanQr,
-                        initialAddress = initialAddress,
-                        onAddressChanged = onAddressChanged,
-                        focusRequester = addressFocusRequester,
-                        onDone = onAddressDone,
-                        onFocusChanged = { focused ->
-                            presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
-                        },
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    SpendingWidget(
-                        metadata = walletManager.walletMetadata,
-                        feeEta = feeEta,
-                        feeAmount = feeAmount,
-                        totalSpendingCrypto = totalSpendingCrypto,
-                        totalSpendingFiat = totalSpendingFiat,
-                        utxoCount = utxoCount,
-                        onChangeSpeed = onChangeSpeed,
-                        onUtxoDetailsClick = onUtxoDetailsClick,
-                    )
-                    Spacer(Modifier.weight(1f))
+                    Column(
+                        modifier =
+                            Modifier
+                                .testTag("coinControlSetAmount.topSection")
+                                .fillMaxWidth(),
+                    ) {
+                        CoinControlAmountWidget(
+                            amount = sendingAmount,
+                            denomination = sendingDenomination,
+                            dollarText = dollarEquivalentText,
+                            onAmountTap = onAmountTap,
+                            onUnitChange = { unit ->
+                                walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
+                            },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                        AddressWidget(
+                            onScanQr = onScanQr,
+                            initialAddress = initialAddress,
+                            onAddressChanged = onAddressChanged,
+                            focusRequester = addressFocusRequester,
+                            onDone = onAddressDone,
+                            onFocusChanged = { focused ->
+                                presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                            },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                        SpendingWidget(
+                            metadata = walletManager.walletMetadata,
+                            feeEta = feeEta,
+                            feeAmount = feeAmount,
+                            totalSpendingCrypto = totalSpendingCrypto,
+                            totalSpendingFiat = totalSpendingFiat,
+                            utxoCount = utxoCount,
+                            onChangeSpeed = onChangeSpeed,
+                            onUtxoDetailsClick = onUtxoDetailsClick,
+                        )
+                    }
+
                     ImageButton(
                         text = stringResource(R.string.btn_next),
                         onClick = onNext,

@@ -78,6 +78,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.Bip39WordSpecificAutocomplete
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.ImportWalletException
@@ -390,11 +391,14 @@ fun HotWalletImportScreen(
                             .heightIn(min = maxHeight)
                             .verticalScroll(rememberScrollState())
                             .padding(top = 20.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
+                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
                     // word input grid
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .testTag("hotWalletImport.topSection")
+                                .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Spacer(Modifier.height(24.dp))
@@ -450,6 +454,7 @@ fun HotWalletImportScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp),
                         modifier =
                             Modifier
+                                .testTag("hotWalletImport.bottomSection")
                                 .fillMaxWidth()
                                 .imePadding()
                                 .padding(horizontal = 20.dp),
