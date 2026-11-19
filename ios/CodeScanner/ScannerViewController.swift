@@ -22,6 +22,11 @@
             var lastTime = Date(timeIntervalSince1970: 0)
             private let showViewfinder: Bool
 
+            /// Whether the camera's codes reach the owner; off from the moment the scanner starts
+            /// to disappear, so a code the camera sees while the user swipes it closed, or one
+            /// still being captured, isn't reported as if the user had kept scanning
+            private var isReportingCodes = false
+
             #if DEBUG
                 private var uiTestQrFeed: Task<Void, Never>?
             #endif
@@ -231,7 +236,13 @@
                 override public func viewWillAppear(_ animated: Bool) {
                     super.viewWillAppear(animated)
 
+                    isReportingCodes = true
                     setupSession()
+                }
+
+                override public func viewWillDisappear(_ animated: Bool) {
+                    super.viewWillDisappear(animated)
+                    isReportingCodes = false
                 }
 
                 private func setupSession() {
@@ -568,6 +579,7 @@
             from _: AVCaptureConnection
         ) {
             guard let metadataObject = metadataObjects.first,
+                  isReportingCodes,
                   !parentView.isPaused,
                   !didFinishScanning,
                   !isCapturing,
@@ -579,7 +591,9 @@
             guard let data = scanResultData(from: readableObject) else { return }
 
             handler = { [weak self] image in
-                guard let self else { return }
+                // a photo can finish capturing after the scanner started to disappear
+                guard let self, isReportingCodes else { return }
+
                 let result = ScanResult(
                     data: data, type: readableObject.type, image: image,
                     corners: readableObject.corners

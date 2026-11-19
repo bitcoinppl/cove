@@ -165,13 +165,19 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         session.alertMessage = readingMessage
 
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
-        if reader.isStarted(), !readBytes.isEmpty {
-            prepareToResumeReading(tag: tag, session: session)
+        guard reader.isStarted(), !readBytes.isEmpty else {
+            readNextBlock(tag: tag, session: session)
+            return
         }
 
-        readNextBlock(tag: tag, session: session)
+        prepareToResumeReading(tag: tag, session: session)
     }
 
+    /// Checks whether the tag is the one a read left part way, and reads on from where that read
+    /// stopped if it is, or from the start if it isn't
+    ///
+    /// The next block read waits for this check, since a different tag read from the old offset
+    /// would start without its message header
     private func prepareToResumeReading(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
         // read the first block chunk
         tag.readMultipleBlocks(
@@ -180,11 +186,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         ) { data, error in
             if let error {
                 self.retries += 1
-                if self.retries < 10 {
-                    Log.error("Error reading block: \(error.localizedDescription)")
-                    self.readBlocks(tag: tag, session: session)
+                guard self.retries < 10 else {
+                    Log.error("resume check failed, retries exhausted: \(error.localizedDescription)")
+                    self.tagReaderSession(session, didInvalidateWithError: error)
+                    return
                 }
 
+                Log.error("Error reading block: \(error.localizedDescription)")
+                self.readBlocks(tag: tag, session: session)
                 return
             }
 
@@ -199,7 +208,12 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 // reset reader and bytes read
                 Log.warn("Trying to scan a different NFC message, resetting")
                 self.resetReader()
+
+                // resetReader marks the scan over, but this read goes on from the first block
+                self.isScanning = true
             }
+
+            self.readNextBlock(tag: tag, session: session)
         }
     }
 
