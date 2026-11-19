@@ -191,6 +191,10 @@ struct HotWalletImportScreen: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
+        // the camera can still deliver a frame while the closed sheet animates away, which would
+        // start a multi-part scan again after the close reset it
+        guard sheetState != nil else { return }
+
         switch result {
         case let .failure(error):
             handleScanFailure(error)
