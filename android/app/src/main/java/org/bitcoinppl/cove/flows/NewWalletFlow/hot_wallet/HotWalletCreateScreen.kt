@@ -72,6 +72,7 @@ import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.DotMenuViewCircle
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -218,11 +219,14 @@ fun HotWalletCreateScreen(
                             .heightIn(min = maxHeight)
                             .verticalScroll(rememberScrollState())
                             .padding(top = 20.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
+                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
                     // pager for word groups
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .testTag("hotWalletCreate.topSection")
+                                .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         HorizontalPager(
@@ -255,6 +259,7 @@ fun HotWalletCreateScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp),
                         modifier =
                             Modifier
+                                .testTag("hotWalletCreate.bottomSection")
                                 .fillMaxWidth()
                                 .navigationBarsPadding()
                                 .padding(horizontal = 20.dp),

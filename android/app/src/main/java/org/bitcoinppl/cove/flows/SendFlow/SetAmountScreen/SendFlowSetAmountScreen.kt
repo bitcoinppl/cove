@@ -81,6 +81,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AsyncText
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
@@ -265,81 +266,89 @@ fun SendFlowSetAmountScreen(
                                 .padding(bottom = keyboardToolbarPadding)
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                     ) {
-                        EnterAmountView(
-                            initialAmount = amountText,
-                            denomination = amountDenomination,
-                            dollarText = dollarEquivalentText,
-                            secondaryUnit = secondaryUnit,
-                            onAmountChanged = { newAmount ->
-                                when (metadata?.fiatOrBtc) {
-                                    FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
-                                    FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
-                                    else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
-                                }
-                            },
-                            onClearAmount = {
-                                sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
-                            },
-                            onUnitChange = { unit ->
-                                walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
-                            },
-                            onToggleFiatOrBtc = {
-                                walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
-                            },
-                            onSanitizeBtcAmount = { oldValue, newValue ->
-                                sendFlowManager.sanitizeBtcEnteringAmount(oldValue, newValue)
-                            },
-                            onSanitizeFiatAmount = { oldValue, newValue ->
-                                sendFlowManager.sanitizeFiatEnteringAmount(oldValue, newValue)
-                            },
-                            isFiatMode = isFiatMode,
-                            exceedsBalance = exceedsBalance,
-                            focusRequester = amountFocusRequester,
-                            onFocusChanged = { focused ->
-                                focusedField = if (focused) SendFocusField.Amount else SendFocusField.None
-                                presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
-                            },
-                            onDone = {
-                                presenter.focusField =
-                                    if (!sendFlowManager.validateAddress()) {
-                                        SetAmountFocusField.ADDRESS
-                                    } else {
-                                        null
+                        Column(
+                            modifier =
+                                Modifier
+                                    .testTag("sendFlowSetAmount.topSection")
+                                    .fillMaxWidth(),
+                        ) {
+                            EnterAmountView(
+                                initialAmount = amountText,
+                                denomination = amountDenomination,
+                                dollarText = dollarEquivalentText,
+                                secondaryUnit = secondaryUnit,
+                                onAmountChanged = { newAmount ->
+                                    when (metadata?.fiatOrBtc) {
+                                        FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                                        FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
+                                        else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
                                     }
-                            },
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                        EnterAddressView(
-                            onScanQr = onScanQr,
-                            initialAddress = initialAddress,
-                            onAddressChanged = { newAddress ->
-                                sendFlowManager.enteringAddress = newAddress
-                            },
-                            focusRequester = addressFocusRequester,
-                            onFocusChanged = { focused ->
-                                focusedField = if (focused) SendFocusField.Address else SendFocusField.None
-                                presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
-                            },
-                            onDone = {
-                                presenter.focusField =
-                                    if (!sendFlowManager.validateAmount()) {
-                                        SetAmountFocusField.AMOUNT
-                                    } else {
-                                        null
-                                    }
-                            },
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                        SpendingWidget(
-                            metadata = metadata,
-                            feeEta = feeEta,
-                            feeAmount = feeAmount,
-                            totalSpendingCrypto = totalSpendingCrypto,
-                            totalSpendingFiat = totalSpendingFiat,
-                            onChangeSpeed = onChangeSpeed,
-                        )
-                        Spacer(Modifier.weight(1f))
+                                },
+                                onClearAmount = {
+                                    sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
+                                },
+                                onUnitChange = { unit ->
+                                    walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
+                                },
+                                onToggleFiatOrBtc = {
+                                    walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
+                                },
+                                onSanitizeBtcAmount = { oldValue, newValue ->
+                                    sendFlowManager.sanitizeBtcEnteringAmount(oldValue, newValue)
+                                },
+                                onSanitizeFiatAmount = { oldValue, newValue ->
+                                    sendFlowManager.sanitizeFiatEnteringAmount(oldValue, newValue)
+                                },
+                                isFiatMode = isFiatMode,
+                                exceedsBalance = exceedsBalance,
+                                focusRequester = amountFocusRequester,
+                                onFocusChanged = { focused ->
+                                    focusedField = if (focused) SendFocusField.Amount else SendFocusField.None
+                                    presenter.focusField = if (focused) SetAmountFocusField.AMOUNT else null
+                                },
+                                onDone = {
+                                    presenter.focusField =
+                                        if (!sendFlowManager.validateAddress()) {
+                                            SetAmountFocusField.ADDRESS
+                                        } else {
+                                            null
+                                        }
+                                },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                            EnterAddressView(
+                                onScanQr = onScanQr,
+                                initialAddress = initialAddress,
+                                onAddressChanged = { newAddress ->
+                                    sendFlowManager.enteringAddress = newAddress
+                                },
+                                focusRequester = addressFocusRequester,
+                                onFocusChanged = { focused ->
+                                    focusedField = if (focused) SendFocusField.Address else SendFocusField.None
+                                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+                                },
+                                onDone = {
+                                    presenter.focusField =
+                                        if (!sendFlowManager.validateAmount()) {
+                                            SetAmountFocusField.AMOUNT
+                                        } else {
+                                            null
+                                        }
+                                },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                            SpendingWidget(
+                                metadata = metadata,
+                                feeEta = feeEta,
+                                feeAmount = feeAmount,
+                                totalSpendingCrypto = totalSpendingCrypto,
+                                totalSpendingFiat = totalSpendingFiat,
+                                onChangeSpeed = onChangeSpeed,
+                            )
+                        }
+
                         ImageButton(
                             text = stringResource(R.string.btn_next),
                             onClick = onNext,

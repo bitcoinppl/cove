@@ -62,6 +62,7 @@ import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
+import org.bitcoinppl.cove.views.spaceBetweenAtLeast
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.ConfirmDetails
@@ -177,9 +178,9 @@ fun SendFlowConfirmScreen(
                                 .fillMaxWidth()
                                 .heightIn(min = maxHeight)
                                 .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                     ) {
-                        Column {
+                        Column(Modifier.testTag("sendFlowConfirm.topSection")) {
                             AmountWidget(
                                 amount = sendingAmount,
                                 denomination = sendingAmountDenomination,
@@ -196,7 +197,7 @@ fun SendFlowConfirmScreen(
                             )
                         }
 
-                        Column {
+                        Column(Modifier.testTag("sendFlowConfirm.bottomSection")) {
                             SwipeToSendStub(
                                 text = stringResource(R.string.action_swipe_to_send),
                                 sendState = sendState,
