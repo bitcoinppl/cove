@@ -520,6 +520,7 @@ struct OnboardingCloudBackupSuccessView: View {
 
             Text("Cloud Backup enabled")
                 .font(OnboardingRecoveryTypography.compactTitle)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -530,6 +531,7 @@ struct OnboardingCloudBackupSuccessView: View {
 
             Text("Cove can finish confirming cloud visibility in the background.")
                 .font(OnboardingRecoveryTypography.body)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.74))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -538,7 +540,7 @@ struct OnboardingCloudBackupSuccessView: View {
             Spacer(minLength: 0)
 
             Button(action: onContinue) {
-                Text("Continue")
+                Text("Continue").uiTestTruncationProbe()
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
             .padding(.horizontal, 24)

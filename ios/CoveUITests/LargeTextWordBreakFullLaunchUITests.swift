@@ -63,7 +63,8 @@ final class LargeTextWordBreakFullLaunchUITests: XCTestCase {
     }
 
     /// Side by side with its icon, a Settings title such as "Appearance" split with a hyphen, and
-    /// the PIN pad's Cancel split in its third of the width
+    /// the PIN pad's Cancel split in its third of the width; the pad's top and bottom rows must
+    /// stay reachable below the title and PIN boxes
     func testSettingsAndPinEntryDrawWholeAtLargestTextSize() {
         launchWalletAtLargestTextSize()
 
@@ -87,7 +88,8 @@ final class LargeTextWordBreakFullLaunchUITests: XCTestCase {
         screen.assertScreenFits(
             "new PIN",
             texts: ["Enter New PIN"],
-            buttons: [app.buttons.matching(NSPredicate(format: "label == %@", "Cancel"))]
+            buttons: [app.buttons.matching(NSPredicate(format: "label == %@", "Cancel"))],
+            controls: ["1", "0"].map { app.buttons.matching(NSPredicate(format: "label == %@", $0)) }
         )
     }
 
