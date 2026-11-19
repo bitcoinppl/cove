@@ -70,20 +70,17 @@
                 openGallery()
             }
 
-            /// Asks for camera access, then reports a denial or runs `completion` on the main thread
+            /// Asks for camera access, then reports a denial on the main thread, or runs `completion`
+            /// on the queue AVFoundation answers on
             private func requestCameraAccess(completion: (() -> Void)?) {
                 AVCaptureDevice.requestAccess(for: .video) { [weak self] status in
-                    // AVFoundation answers on a queue of its own, while the prompt's answer also
-                    // brings the app back to active, and both a denial, which closes the scanner's
-                    // sheet, and the camera setup after a grant must run on the main thread
-                    DispatchQueue.main.async {
-                        guard status else {
-                            self?.didFail(reason: .permissionDenied)
-                            return
-                        }
-
-                        completion?()
+                    guard status else {
+                        // a denial closes the scanner's sheet, which only the main thread may do
+                        DispatchQueue.main.async { self?.didFail(reason: .permissionDenied) }
+                        return
                     }
+
+                    completion?()
                 }
             }
 
@@ -268,11 +265,16 @@
                         didFail(reason: .permissionDenied)
                     case .notDetermined:
                         requestCameraAccess {
-                            self.setupCaptureDevice()
-                            self.setupSession()
+                            // configuring the session can block, so it stays on AVFoundation's
+                            // queue, and only its failure and the preview go to the main thread
+                            let failure = self.setupCaptureDevice()
+                            DispatchQueue.main.async {
+                                if let failure { self.didFail(reason: failure) }
+                                self.setupSession()
+                            }
                         }
                     case .authorized:
-                        setupCaptureDevice()
+                        if let failure = setupCaptureDevice() { didFail(reason: failure) }
                         setupSession()
                     default:
                         break
@@ -292,14 +294,16 @@
                     view.backgroundColor = color
                 }
 
-                private func setupCaptureDevice() {
+                /// Configures the capture session, returning the failure for the caller to report on
+                /// the main thread, since the first grant configures it off the main thread
+                private func setupCaptureDevice() -> ScanError? {
                     captureSession = AVCaptureSession()
 
                     guard
                         let videoCaptureDevice = parentView.videoCaptureDevice
                         ?? fallbackVideoCaptureDevice
                     else {
-                        return
+                        return nil
                     }
 
                     let videoInput: AVCaptureDeviceInput
@@ -307,27 +311,20 @@
                     do {
                         videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
                     } catch {
-                        didFail(reason: .initError(error))
-                        return
+                        return .initError(error)
                     }
 
-                    if captureSession!.canAddInput(videoInput) {
-                        captureSession!.addInput(videoInput)
-                    } else {
-                        didFail(reason: .badInput)
-                        return
-                    }
+                    guard captureSession!.canAddInput(videoInput) else { return .badInput }
+
+                    captureSession!.addInput(videoInput)
                     let metadataOutput = AVCaptureMetadataOutput()
+                    guard captureSession!.canAddOutput(metadataOutput) else { return .badOutput }
 
-                    if captureSession!.canAddOutput(metadataOutput) {
-                        captureSession!.addOutput(metadataOutput)
-                        captureSession!.addOutput(photoOutput)
-                        metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-                        metadataOutput.metadataObjectTypes = parentView.codeTypes
-                    } else {
-                        didFail(reason: .badOutput)
-                        return
-                    }
+                    captureSession!.addOutput(metadataOutput)
+                    captureSession!.addOutput(photoOutput)
+                    metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+                    metadataOutput.metadataObjectTypes = parentView.codeTypes
+                    return nil
                 }
 
                 private func addViewFinder() {
