@@ -40,7 +40,7 @@ const APP_MARKERS: &[&str] =
     &["COVE_UI_TEST_QR_SCRIPT", "COVE_UI_TEST_TAPSIGNER_BRIDGE", "COVE_UI_TEST_NFC_NDEF_SCRIPT"];
 
 /// Seam variables only the iOS app has, which the Android debug control can't contain
-const IOS_APP_MARKERS: &[&str] = &["COVE_UI_TEST_TRUNCATION_PROBE"];
+const IOS_APP_MARKERS: &[&str] = &["COVE_UI_TEST_TRUNCATION_PROBE", "COVE_UI_TEST_CAMERA_PROMPT"];
 
 /// Strings only the Rust seams contain, their variables and the emulator's root key, one per
 /// line; the Xcode and Gradle release checks read the same file

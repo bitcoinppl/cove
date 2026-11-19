@@ -70,6 +70,20 @@
                 openGallery()
             }
 
+            /// Asks for camera access, then reports a denial on the main thread, or runs `completion`
+            /// on the queue AVFoundation answers on
+            private func requestCameraAccess(completion: (() -> Void)?) {
+                AVCaptureDevice.requestAccess(for: .video) { [weak self] status in
+                    guard status else {
+                        // a denial closes the scanner's sheet, which only the main thread may do
+                        DispatchQueue.main.async { self?.didFail(reason: .permissionDenied) }
+                        return
+                    }
+
+                    completion?()
+                }
+            }
+
             #if targetEnvironment(simulator)
                 override public func loadView() {
                     view = UIView()
@@ -111,6 +125,20 @@
                         stackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
                     ])
                 }
+
+                #if DEBUG
+                    override public func viewDidLoad() {
+                        super.viewDidLoad()
+
+                        // the phone's scanner asks here, and a UI test needs the prompt and its
+                        // answer to take the same path
+                        guard UITestCameraPrompt.isEnabled,
+                              AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined
+                        else { return }
+
+                        requestCameraAccess(completion: nil)
+                    }
+                #endif
 
                 override public func touchesBegan(_: Set<UITouch>, with _: UIEvent?) {
                     // Send back their simulated data, as if it was one of the types they were scanning for
@@ -236,27 +264,28 @@
                     case .denied:
                         didFail(reason: .permissionDenied)
                     case .notDetermined:
-                        requestCameraAccess {
-                            self.setupCaptureDevice()
-                            DispatchQueue.main.async {
-                                self.setupSession()
-                            }
+                        // SwiftUI can replace `parentView` before the answer comes back, so the
+                        // session is built from what it holds now
+                        let device = parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice
+                        let codeTypes = parentView.codeTypes
+
+                        requestCameraAccess { [weak self] in
+                            guard let self else { return }
+
+                            // configuring the session can block, so it stays on AVFoundation's
+                            // queue, and the scanner takes it on the main thread once it is built
+                            let session = makeCaptureSession(device: device, codeTypes: codeTypes)
+                            DispatchQueue.main.async { self.adoptCaptureSession(session) }
                         }
                     case .authorized:
-                        setupCaptureDevice()
-                        setupSession()
+                        let session = makeCaptureSession(
+                            device: parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice,
+                            codeTypes: parentView.codeTypes
+                        )
+
+                        adoptCaptureSession(session)
                     default:
                         break
-                    }
-                }
-
-                private func requestCameraAccess(completion: (() -> Void)?) {
-                    AVCaptureDevice.requestAccess(for: .video) { [weak self] status in
-                        guard status else {
-                            self?.didFail(reason: .permissionDenied)
-                            return
-                        }
-                        completion?()
                     }
                 }
 
@@ -273,41 +302,54 @@
                     view.backgroundColor = color
                 }
 
-                private func setupCaptureDevice() {
-                    captureSession = AVCaptureSession()
-
-                    guard
-                        let videoCaptureDevice = parentView.videoCaptureDevice
-                        ?? fallbackVideoCaptureDevice
-                    else {
-                        return
-                    }
+                /// Builds a capture session for `device` that reports `codeTypes`, without touching
+                /// the scanner's own state, since the first grant builds it off the main thread
+                ///
+                /// With no camera the session has no input and the preview stays black, as it
+                /// always has
+                private func makeCaptureSession(
+                    device: AVCaptureDevice?,
+                    codeTypes: [AVMetadataObject.ObjectType]
+                ) -> Result<AVCaptureSession, ScanError> {
+                    let session = AVCaptureSession()
+                    guard let device else { return .success(session) }
 
                     let videoInput: AVCaptureDeviceInput
 
                     do {
-                        videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
+                        videoInput = try AVCaptureDeviceInput(device: device)
                     } catch {
-                        didFail(reason: .initError(error))
-                        return
+                        return .failure(.initError(error))
                     }
 
-                    if captureSession!.canAddInput(videoInput) {
-                        captureSession!.addInput(videoInput)
-                    } else {
-                        didFail(reason: .badInput)
-                        return
-                    }
+                    guard session.canAddInput(videoInput) else { return .failure(.badInput) }
+
+                    session.addInput(videoInput)
                     let metadataOutput = AVCaptureMetadataOutput()
+                    guard session.canAddOutput(metadataOutput) else { return .failure(.badOutput) }
 
-                    if captureSession!.canAddOutput(metadataOutput) {
-                        captureSession!.addOutput(metadataOutput)
-                        captureSession!.addOutput(photoOutput)
-                        metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-                        metadataOutput.metadataObjectTypes = parentView.codeTypes
-                    } else {
-                        didFail(reason: .badOutput)
-                        return
+                    session.addOutput(metadataOutput)
+                    session.addOutput(photoOutput)
+                    metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+                    metadataOutput.metadataObjectTypes = codeTypes
+                    return .success(session)
+                }
+
+                /// Takes a built session and shows its preview, or reports why it could not be built,
+                /// on the main thread
+                ///
+                /// `viewWillAppear` starts whatever session the scanner holds, so it only ever holds
+                /// one that is fully built
+                private func adoptCaptureSession(_ result: Result<AVCaptureSession, ScanError>) {
+                    assert(Thread.isMainThread, "capture session adopted off the main thread")
+
+                    switch result {
+                    case let .success(session):
+                        captureSession = session
+                        setupSession()
+
+                    case let .failure(failure):
+                        didFail(reason: failure)
                     }
                 }
 
@@ -469,12 +511,19 @@
                 Date().timeIntervalSince(lastTime) <= 0.5
             }
 
+            /// Reports a scan to the scanner's owner, on the main thread
+            ///
+            /// Owners change SwiftUI state in their completion, which only the main thread may do,
+            /// so debug builds stop on a result reported anywhere else
             func found(_ result: ScanResult) {
+                assert(Thread.isMainThread, "scanner result reported off the main thread")
                 lastTime = Date()
                 parentView.completion(.success(result))
             }
 
+            /// Reports a failure to the scanner's owner, on the main thread, as `found` does
             func didFail(reason: ScanError) {
+                assert(Thread.isMainThread, "scanner failure reported off the main thread")
                 parentView.completion(.failure(reason))
             }
         }
@@ -681,16 +730,19 @@
             didFinishProcessingPhoto photo: AVCapturePhoto,
             error _: Error?
         ) {
-            isCapturing = false
-            guard let imageData = photo.fileDataRepresentation() else {
-                print("Error while generating image from photo capture data.")
-                return
+            let qrImage = photo.fileDataRepresentation().flatMap(UIImage.init(data:))
+
+            // the photo output calls its delegate on a queue of its own, and the scan the photo
+            // finishes reports its result to the owner, which must happen on the main thread
+            DispatchQueue.main.async {
+                self.isCapturing = false
+                guard let qrImage else {
+                    print("Unable to generate an image from the photo capture data.")
+                    return
+                }
+
+                self.handler?(qrImage)
             }
-            guard let qrImage = UIImage(data: imageData) else {
-                print("Unable to generate UIImage from image data.")
-                return
-            }
-            handler?(qrImage)
         }
 
         public func photoOutput(

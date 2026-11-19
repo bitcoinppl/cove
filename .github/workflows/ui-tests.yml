@@ -63,6 +63,7 @@ env:
     CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
+    CoveUITests/QrScanCameraPermissionFullLaunchUITests,
     CoveUITests/BiometricLockFullLaunchUITests,
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
