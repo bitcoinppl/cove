@@ -1,9 +1,9 @@
 import XCTest
 
 /// Imports a hardware wallet from its bare public key in the real app, scanned through the debug
-/// QR seam as a plain QR and as a single-part BBQr, or read through the debug NFC seam from a tag's
-/// text record, and checks the address type the app infers from the key by the first receive
-/// address it shows
+/// QR seam as a plain QR, as a single-part BBQr and as a single-frame crypto-hdkey UR, or read
+/// through the debug NFC seam from a tag's text record, and checks the address type the app infers
+/// from the key by the first receive address it shows
 ///
 /// The signer host derives the key and the expected address from the test mnemonic, the address
 /// straight from the key at `/0/0` rather than from a descriptor. The fake node is reset first, so
@@ -57,6 +57,15 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
         XCTAssertEqual(String(export.bbqr.prefix(8).suffix(4)), "0100", "the export must be a single BBQr part")
 
         try importAndCheckFirstAddress(export, frames: [export.bbqr])
+    }
+
+    /// A crypto-hdkey UR in one `1-1` frame, as Jade shows it, completes on that frame. The camera
+    /// reports an unchanged code once, so a scanner waiting for a second frame stays at 100%
+    func testSingleFrameUrHdkeyImportsWithItsFirstAddress() throws {
+        let export = try publicKeyExport(.nativeSegwit)
+        XCTAssertTrue(export.ur.hasPrefix("ur:crypto-hdkey/1-1/"), "the export must be one multi-part UR frame")
+
+        try importAndCheckFirstAddress(export, frames: [export.ur])
     }
 
     /// A vpub in a tag's text record imports from onboarding's NFC scan, where a new user first

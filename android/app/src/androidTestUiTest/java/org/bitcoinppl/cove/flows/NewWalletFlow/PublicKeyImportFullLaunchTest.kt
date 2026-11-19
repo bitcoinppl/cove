@@ -28,8 +28,8 @@ import org.junit.runner.RunWith
 
 /**
  * Imports a hardware wallet from its bare public key in the real app, scanned through the debug QR
- * seam as a plain QR and as a single-part BBQr, or read through the debug NFC seam from a tag's text
- * record, and checks the address type the app infers from the key by the first receive address it
+ * seam as a plain QR, as a single-part BBQr and as a single-frame crypto-hdkey UR, or read through the
+ * debug NFC seam from a tag's text record, and checks the address type the app infers from the key by the first receive address it
  * shows
  *
  * The signer host derives the key and the expected address from the test mnemonic, the address
@@ -95,6 +95,18 @@ class PublicKeyImportFullLaunchTest {
         assertEquals("the export must be a single BBQr part", "0100", export.bbqr.substring(4, 8))
 
         importAndCheckFirstAddress(export, listOf(export.bbqr))
+    }
+
+    /**
+     * A crypto-hdkey UR in one `1-1` frame, as Jade shows it, completes on that frame. The camera
+     * reports an unchanged code once, so a scanner waiting for a second frame stays at 100%
+     */
+    @Test
+    fun singleFrameUrHdkeyImportsWithItsFirstAddress() {
+        val export = publicKeyExport(PublicKeyAddressType.NATIVE_SEGWIT)
+        assertTrue("the export must be one multi-part UR frame", export.ur.startsWith("ur:crypto-hdkey/1-1/"))
+
+        importAndCheckFirstAddress(export, listOf(export.ur))
     }
 
     /**

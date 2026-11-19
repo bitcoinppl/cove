@@ -80,6 +80,49 @@ impl UrInProgress {
 
         decoder
     }
+
+    /// Completed payload once the decoder has every fragment, otherwise the
+    /// current progress with haptic feedback relative to the previous frame
+    fn scan_result(&mut self) -> Result<ScanResult, MultiQrError> {
+        use cove_ur::UrError;
+
+        if self.decoder.is_complete() {
+            let message = self
+                .decoder
+                .message()
+                .map_err_str(UrError::UrParseError)?
+                .ok_or_else(|| UrError::UrParseError("No message".into()))?;
+            let ur_type_str = self.decoder.ur_type().unwrap_or("bytes");
+            debug!("UR complete: type={ur_type_str}, len={}", message.len());
+
+            let ur_type = crate::ur::UrType::from_str(ur_type_str);
+            let multi_format = crate::multi_format::MultiFormat::try_from_ur_payload(
+                message, &ur_type,
+            )
+            .map_err(|e| {
+                warn!("Failed to parse UR payload: type={ur_type_str}, error={e:?}");
+                MultiQrError::ParseError(e.to_string())
+            })?;
+
+            return Ok(ScanResult::Complete {
+                data: multi_format,
+                haptic: HapticFeedback::Success,
+            });
+        }
+
+        let percentage = self.decoder.estimated_percent_complete();
+        let progress = ScanProgress::Ur { percentage };
+
+        // determine haptic feedback based on progress change
+        let haptic = match &self.previous_progress {
+            Some(prev) if progress.is_greater_than(prev) => HapticFeedback::Progress,
+            Some(_) => HapticFeedback::None, // duplicate part
+            None => HapticFeedback::Progress,
+        };
+
+        self.previous_progress = Some(progress.clone());
+        Ok(ScanResult::InProgress { progress, haptic })
+    }
 }
 
 impl BbqrInProgress {
@@ -270,18 +313,23 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
             use cove_ur::UrError;
 
             debug!("Multi-part UR, using decoder");
-            let mut decoder = UrInProgress::new_decoder();
-            let foundation_ur = ur.to_foundation_ur()?;
-            decoder.receive(foundation_ur).map_err_str(UrError::UrParseError)?;
+            let mut ur_in_progress =
+                UrInProgress { decoder: UrInProgress::new_decoder(), previous_progress: None };
 
-            let percentage = decoder.estimated_percent_complete();
-            let progress = ScanProgress::Ur { percentage };
-            let result = ScanResult::InProgress { progress, haptic: HapticFeedback::Progress };
+            ur_in_progress
+                .decoder
+                .receive(ur.to_foundation_ur()?)
+                .map_err_str(UrError::UrParseError)?;
 
-            let state = QrScanner::InProgress(MultiQr::Ur(Box::new(UrInProgress {
-                decoder,
-                previous_progress: Some(ScanProgress::Ur { percentage }),
-            })));
+            // a 1-of-1 multi-part UR (as Jade emits) completes on its first frame,
+            // and scanners that report each code once never deliver it again
+            let result = ur_in_progress.scan_result()?;
+            let state = match &result {
+                ScanResult::Complete { .. } => QrScanner::Complete(result.clone()),
+                ScanResult::InProgress { .. } => {
+                    QrScanner::InProgress(MultiQr::Ur(Box::new(ur_in_progress)))
+                }
+            };
 
             Ok((state, result))
         }
@@ -504,8 +552,6 @@ impl QrScanner {
 
     /// Process a UR part and return new state.
     fn scan_ur_part(ur: &mut UrInProgress, qr: &str) -> Result<ScanResult, MultiQrError> {
-        use cove_ur::UrError;
-
         let parsed_ur = Ur::parse(qr).map_err_str(MultiQrError::RecoverableFrame)?;
         let foundation_ur =
             parsed_ur.to_foundation_ur().map_err_str(MultiQrError::RecoverableFrame)?;
@@ -513,42 +559,7 @@ impl QrScanner {
             return Err(MultiQrError::RecoverableFrame(error.to_string()));
         }
 
-        if ur.decoder.is_complete() {
-            let message = ur
-                .decoder
-                .message()
-                .map_err_str(UrError::UrParseError)?
-                .ok_or_else(|| UrError::UrParseError("No message".into()))?;
-            let ur_type_str = ur.decoder.ur_type().unwrap_or("bytes");
-            debug!("UR complete: type={ur_type_str}, len={}", message.len());
-
-            let ur_type = crate::ur::UrType::from_str(ur_type_str);
-            let multi_format = crate::multi_format::MultiFormat::try_from_ur_payload(
-                message, &ur_type,
-            )
-            .map_err(|e| {
-                warn!("Failed to parse UR payload: type={ur_type_str}, error={e:?}");
-                MultiQrError::ParseError(e.to_string())
-            })?;
-
-            let result =
-                ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
-            Ok(result)
-        } else {
-            let percentage = ur.decoder.estimated_percent_complete();
-            let progress = ScanProgress::Ur { percentage };
-
-            // determine haptic feedback based on progress change
-            let haptic = match &ur.previous_progress {
-                Some(prev) if progress.is_greater_than(prev) => HapticFeedback::Progress,
-                Some(_) => HapticFeedback::None, // duplicate part
-                None => HapticFeedback::Progress,
-            };
-
-            ur.previous_progress = Some(progress.clone());
-            let result = ScanResult::InProgress { progress, haptic };
-            Ok(result)
-        }
+        ur.scan_result()
     }
 }
 
@@ -782,6 +793,27 @@ mod tests {
         }
 
         assert!(completed, "UR should complete after scanning all parts");
+    }
+
+    /// A static 1-of-1 multi-part UR (Jade's crypto-hdkey export) completes on its
+    /// only frame, since the camera reports an unchanged code once
+    #[test]
+    fn single_frame_multi_part_ur_completes_on_first_scan() {
+        let frame = "ur:crypto-hdkey/1-1/lpadadcsnycynndmmokehdnytaaddlptadwkaowkaxhdclaosgospteeaspminwkglsolfcmaaaelrbtbegsfdimvturbkfxhnldlbgwmhamplylaahdcxlpgysbqzwkingwecgezswfvogoctjkvezmmhfxwdroidgarelrwnndcprogaghoxahtaadehoeadaeaoadamtaaddyotadlscylaaeaeghcylaaeaeadcylaaeaeaeaocycybdmueeaxaxaycymovsettsasjoguiniojtihjpcxgshsidcxidinjoeteebkimguiniojtihjpcxgshsidonspemcy";
+
+        let scanner = QrScannerFFI::new();
+        match scanner.scan(StringOrData::String(frame.to_string())).unwrap() {
+            ScanResult::Complete { data, haptic } => {
+                assert!(
+                    matches!(data, crate::multi_format::MultiFormat::HardwareExport(_)),
+                    "should parse as HardwareExport: {data:?}"
+                );
+                assert_eq!(haptic, HapticFeedback::Success);
+            }
+            ScanResult::InProgress { progress, .. } => {
+                panic!("single-frame UR stuck at {}", progress.display_text())
+            }
+        }
     }
 
     /// Test error handling for malformed UR sequences
