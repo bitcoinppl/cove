@@ -65,7 +65,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             }
         #endif
 
-        session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
+        // CoreNFC calls the delegate and every tag command's completion on this queue, and they
+        // change state SwiftUI observes, which only the main thread may do
+        session = NFCTagReaderSession(
+            pollingOption: [.iso14443, .iso15693],
+            delegate: self,
+            queue: .main
+        )
+
         session?.alertMessage = "Hold your iPhone near the NFC tag."
         session?.begin()
     }
@@ -99,7 +106,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     return
                 }
 
-                processNDEFMessage(message)
+                isScanning = false
+                scannedMessage = nfcMessage(from: message)
             }
         }
     #endif
@@ -282,7 +290,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             isScanning = false
             resetReader()
 
-            let scannedMessageString = reader.stringFromRecord(record: records.first!)
+            let scannedMessageString = records.first.flatMap { reader.stringFromRecord(record: $0) }
             var scannedMessageData: Data? = nil
 
             if scannedMessageString == nil {
@@ -298,9 +306,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 scannedMessageData = reader.dataFromRecords(records: records)
             }
 
-            scannedMessage = try? NfcMessage.tryNew(string: scannedMessageString, data: scannedMessageData)
-
-            session.invalidate()
+            finishRead(nfcMessage(string: scannedMessageString, data: scannedMessageData), session: session)
             return .complete
 
         case let .failure(error):
@@ -332,18 +338,29 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 return
             }
 
-            self.processNDEFMessage(message)
-            if self.scannedMessage != nil {
-                DispatchQueue.main.async {
-                    self.isScanning = false
-                    session.alertMessage = "Tag read successfully!"
-                    session.invalidate()
-                }
-            }
+            self.finishRead(self.nfcMessage(from: message), session: session)
         }
     }
 
-    func processNDEFMessage(_ message: NFCNDEFMessage) {
+    /// Ends the scan with what the tag held, and closes the system sheet saying whether it worked
+    ///
+    /// A session left open after the read shows "Reading data" until CoreNFC times it out, so a
+    /// tag with nothing Cove can read closes it with an error instead
+    private func finishRead(_ message: NfcMessage?, session: NFCTagReaderSession) {
+        isScanning = false
+        scannedMessage = message
+
+        guard message != nil else {
+            session.invalidate(errorMessage: "This tag doesn't hold anything Cove can read.")
+            return
+        }
+
+        session.alertMessage = "Tag read successfully!"
+        session.invalidate()
+    }
+
+    /// The text and binary data an NDEF message's records hold, or nil when it holds neither
+    func nfcMessage(from message: NFCNDEFMessage) -> NfcMessage? {
         Log.debug("processing NDEF message, \(message.length) bytes")
         var textMessage: String? = nil
         var binaryData: Data? = nil
@@ -395,8 +412,16 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         }
 
         Log.debug("NDEF message text: \(textMessage?.count ?? 0) characters, binary: \(binaryData?.count ?? 0) bytes")
-        isScanning = false
-        scannedMessage = try? NfcMessage.tryNew(string: textMessage, data: binaryData)
+        return nfcMessage(string: textMessage, data: binaryData)
+    }
+
+    private func nfcMessage(string: String?, data: Data?) -> NfcMessage? {
+        do {
+            return try NfcMessage.tryNew(string: string, data: data)
+        } catch {
+            Log.warn("NFC tag held nothing Cove can read: \(error)")
+            return nil
+        }
     }
 
     func tagReaderSessionDidBecomeActive(_: NFCTagReaderSession) {
