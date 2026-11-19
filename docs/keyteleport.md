@@ -2,7 +2,7 @@
 
 ## Session authorization
 
-An unlocked Cove session is trusted. A KeyTeleport seed transfer does not require new authentication.
+An unlocked Cove session is trusted. Without an app lock, sending recovery words or a private key by KeyTeleport starts straight away. With a PIN or biometric app lock set, the send first asks for a fresh main credential, so a decoy PIN can't start one, and the send entry is hidden in decoy mode.
 
 PIN or biometric prompts on other secret views are defense-in-depth and convenience controls. These prompts are not a Rust authorization boundary.
 
