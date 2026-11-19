@@ -53,6 +53,8 @@ class SendFlowPresenter(
 
         data object CoinControlCustomAmount : SheetState()
 
+        data object TransferDestination : SheetState()
+
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other == null) return false

@@ -79,6 +79,7 @@ fun CoinControlSetAmountScreen(
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
+    onPickWallet: (() -> Unit)? = null,
     onToggleBalanceVisibility: () -> Unit = {},
     onAmountTap: () -> Unit,
     onUtxoDetailsClick: () -> Unit,
@@ -184,6 +185,7 @@ fun CoinControlSetAmountScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     AddressWidget(
                         onScanQr = onScanQr,
+                        onPickWallet = onPickWallet,
                         initialAddress = initialAddress,
                         onAddressChanged = onAddressChanged,
                         focusRequester = addressFocusRequester,
@@ -226,6 +228,17 @@ fun CoinControlSetAmountScreen(
     // Handle sheet presentation
     presenter.sheetState?.let { taggedSheet ->
         when (taggedSheet.item) {
+            is SendFlowPresenter.SheetState.TransferDestination -> {
+                TransferDestinationSheet(
+                    destinations = sendFlowManager.transferDestinations(),
+                    onSelect = { walletId ->
+                        presenter.sheetState = null
+                        presenter.focusField = null
+                        sendFlowManager.selectTransferDestination(walletId)
+                    },
+                    onDismiss = { presenter.sheetState = null },
+                )
+            }
             is SendFlowPresenter.SheetState.CoinControlCustomAmount -> {
                 CoinControlCustomAmountSheet(
                     sendFlowManager = sendFlowManager,
@@ -426,6 +439,7 @@ private fun AddressWidget(
     focusRequester: FocusRequester,
     onDone: () -> Unit = {},
     onFocusChanged: (Boolean) -> Unit = {},
+    onPickWallet: (() -> Unit)? = null,
 ) {
     var address by remember { mutableStateOf(initialAddress) }
     var isFocused by remember { mutableStateOf(false) }
@@ -470,6 +484,9 @@ private fun AddressWidget(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+            onPickWallet?.let { pickWallet ->
+                SendToMyWalletButton(onClick = pickWallet)
             }
             IconButton(
                 onClick = onScanQr,
