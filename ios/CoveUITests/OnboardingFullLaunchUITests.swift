@@ -2,6 +2,14 @@ import UIKit
 import XCTest
 
 final class OnboardingFullLaunchUITests: XCTestCase {
+    /// How long a wallet-creating tap gets to leave its screen before it is tapped again
+    ///
+    /// The create runs inside the tapped action and shows nothing until it ends, and a failed
+    /// create returns to the same screen, so a repeat queued behind a slow create that then fails
+    /// would create again and hide the failure. Waiting far longer than a create takes on a slow
+    /// CI simulator keeps repeats to taps the app never got
+    private static let walletCreateTimeout: TimeInterval = 30
+
     private var app: XCUIApplication!
     private let knownEmptyMainnetMnemonic = Array(repeating: "abandon", count: 11) + ["about"]
 
@@ -58,7 +66,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        tap(button(startingWith: "On an exchange"), until: backupWalletTitle(), timeout: 15, attempts: 1)
+        tap(button(startingWith: "On an exchange"), until: backupWalletTitle(), timeout: Self.walletCreateTimeout)
         assertBackupWallet(titlePrefix: "Back up your wallet before funding it")
 
         tap(button(startingWith: "Show Words"), until: app.staticTexts["Your Recovery Words"])
@@ -116,7 +124,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         reachStorageChoices()
         openSoftwareWalletImport()
-        tap(app.buttons["Create a new wallet instead"], until: backupWalletTitle(), timeout: 15, attempts: 1)
+        tap(app.buttons["Create a new wallet instead"], until: backupWalletTitle(), timeout: Self.walletCreateTimeout)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
         viewRecoveryWords()
@@ -247,7 +255,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func reachBackupWallet() {
         getStarted()
-        tap(button(startingWith: "No, I"), until: backupWalletTitle(), timeout: 15, attempts: 1)
+        tap(button(startingWith: "No, I"), until: backupWalletTitle(), timeout: Self.walletCreateTimeout)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
     }
@@ -307,8 +315,14 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     /// On a slow CI simulator a tap can be sent before the app handles input and do nothing, so
     /// the tap repeats while the button is still hittable and no destination has shown; a
     /// navigation that is only slow leaves the button unhittable, so it isn't tapped twice.
-    /// Buttons that create a wallet, switch wallets or finish onboarding pass `attempts: 1`:
-    /// they stay hittable while their request runs, so a repeat would send a second request
+    /// Buttons that switch wallets or finish onboarding pass `attempts: 1`: they stay hittable
+    /// while their request runs, so a repeat would send a second request.
+    ///
+    /// Buttons that create a wallet repeat too, after `walletCreateTimeout`, since a busy CI
+    /// simulator can drop a tap with no trace in the app. A repeat can't make a second wallet:
+    /// `OnboardingManager` sends actions to Rust one at a time, and a create that succeeds moves
+    /// the flow off the screen's step, so a repeat queued behind it is an invalid action the flow
+    /// ignores
     private func tap(
         _ button: XCUIElement,
         until destinations: XCUIElement...,
