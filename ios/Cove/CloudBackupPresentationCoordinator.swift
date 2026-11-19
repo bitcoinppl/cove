@@ -189,17 +189,23 @@ final class CloudBackupPresentationCoordinator {
     ///
     /// SwiftUI can report one alert's dismissal more than once, the last time after its dismissal
     /// animation ends. By then a retry may have brought the same prompt back, and the late report
-    /// would dismiss it, so a report counts only while its prompt is the one on screen
+    /// would dismiss it, so a report counts only while the presentation the binding was built for
+    /// is the one on screen
     func promptBinding(
         shows: @escaping (CloudBackupRootPresentation) -> Bool,
         dismiss: @escaping () -> Void
     ) -> Binding<Bool> {
-        Binding(
+        let presentationID = presentationTransitions.currentPresentation?.id
+
+        return Binding(
             get: { self.currentPresentation.map(shows) ?? false },
             set: { isPresented in
                 guard !isPresented else { return }
                 if self.consumeDismissEvent() { return }
-                guard let current = self.currentPresentation, shows(current) else { return }
+                guard let current = self.presentationTransitions.currentPresentation,
+                      current.id == presentationID,
+                      shows(current.item)
+                else { return }
 
                 dismiss()
             }
