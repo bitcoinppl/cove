@@ -264,18 +264,26 @@
                     case .denied:
                         didFail(reason: .permissionDenied)
                     case .notDetermined:
-                        requestCameraAccess {
+                        // SwiftUI can replace `parentView` before the answer comes back, so the
+                        // session is built from what it holds now
+                        let device = parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice
+                        let codeTypes = parentView.codeTypes
+
+                        requestCameraAccess { [weak self] in
+                            guard let self else { return }
+
                             // configuring the session can block, so it stays on AVFoundation's
-                            // queue, and only its failure and the preview go to the main thread
-                            let failure = self.setupCaptureDevice()
-                            DispatchQueue.main.async {
-                                if let failure { self.didFail(reason: failure) }
-                                self.setupSession()
-                            }
+                            // queue, and the scanner takes it on the main thread once it is built
+                            let session = makeCaptureSession(device: device, codeTypes: codeTypes)
+                            DispatchQueue.main.async { self.adoptCaptureSession(session) }
                         }
                     case .authorized:
-                        if let failure = setupCaptureDevice() { didFail(reason: failure) }
-                        setupSession()
+                        let session = makeCaptureSession(
+                            device: parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice,
+                            codeTypes: parentView.codeTypes
+                        )
+
+                        adoptCaptureSession(session)
                     default:
                         break
                     }
@@ -294,37 +302,55 @@
                     view.backgroundColor = color
                 }
 
-                /// Configures the capture session, returning the failure for the caller to report on
-                /// the main thread, since the first grant configures it off the main thread
-                private func setupCaptureDevice() -> ScanError? {
-                    captureSession = AVCaptureSession()
-
-                    guard
-                        let videoCaptureDevice = parentView.videoCaptureDevice
-                        ?? fallbackVideoCaptureDevice
-                    else {
-                        return nil
-                    }
+                /// Builds a capture session for `device` that reports `codeTypes`, without touching
+                /// the scanner's own state, since the first grant builds it off the main thread
+                ///
+                /// With no camera the session has no input and the preview stays black, as it
+                /// always has
+                private func makeCaptureSession(
+                    device: AVCaptureDevice?,
+                    codeTypes: [AVMetadataObject.ObjectType]
+                ) -> Result<AVCaptureSession, ScanError> {
+                    let session = AVCaptureSession()
+                    guard let device else { return .success(session) }
 
                     let videoInput: AVCaptureDeviceInput
 
                     do {
-                        videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
+                        videoInput = try AVCaptureDeviceInput(device: device)
                     } catch {
-                        return .initError(error)
+                        return .failure(.initError(error))
                     }
 
-                    guard captureSession!.canAddInput(videoInput) else { return .badInput }
+                    guard session.canAddInput(videoInput) else { return .failure(.badInput) }
 
-                    captureSession!.addInput(videoInput)
+                    session.addInput(videoInput)
                     let metadataOutput = AVCaptureMetadataOutput()
-                    guard captureSession!.canAddOutput(metadataOutput) else { return .badOutput }
+                    guard session.canAddOutput(metadataOutput) else { return .failure(.badOutput) }
 
-                    captureSession!.addOutput(metadataOutput)
-                    captureSession!.addOutput(photoOutput)
+                    session.addOutput(metadataOutput)
+                    session.addOutput(photoOutput)
                     metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-                    metadataOutput.metadataObjectTypes = parentView.codeTypes
-                    return nil
+                    metadataOutput.metadataObjectTypes = codeTypes
+                    return .success(session)
+                }
+
+                /// Takes a built session and shows its preview, or reports why it could not be built,
+                /// on the main thread
+                ///
+                /// `viewWillAppear` starts whatever session the scanner holds, so it only ever holds
+                /// one that is fully built
+                private func adoptCaptureSession(_ result: Result<AVCaptureSession, ScanError>) {
+                    assert(Thread.isMainThread, "capture session adopted off the main thread")
+
+                    switch result {
+                    case let .success(session):
+                        captureSession = session
+                        setupSession()
+
+                    case let .failure(failure):
+                        didFail(reason: failure)
+                    }
                 }
 
                 private func addViewFinder() {
