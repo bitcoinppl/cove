@@ -249,6 +249,7 @@
                     addViewFinder()
 
                     reset()
+                    observeRuntimeErrors(of: captureSession)
 
                     if !captureSession.isRunning {
                         DispatchQueue.global(qos: .userInteractive).async {
@@ -351,6 +352,35 @@
                     case let .failure(failure):
                         didFail(reason: failure)
                     }
+                }
+
+                /// Reports a session that fails to start or stops on an error, which otherwise leaves a
+                /// black preview no scan can follow
+                ///
+                /// Leaving the screen removes every observer, and coming back sets the session up
+                /// again, so this replaces any earlier registration rather than adding a second
+                private func observeRuntimeErrors(of session: AVCaptureSession) {
+                    NotificationCenter.default.removeObserver(
+                        self,
+                        name: AVCaptureSession.runtimeErrorNotification,
+                        object: nil
+                    )
+
+                    NotificationCenter.default.addObserver(
+                        self,
+                        selector: #selector(sessionRuntimeError),
+                        name: AVCaptureSession.runtimeErrorNotification,
+                        object: session
+                    )
+                }
+
+                @objc private func sessionRuntimeError(_ notification: Notification) {
+                    let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError
+                    let reason = ScanError.initError(error ?? AVError(.unknown))
+
+                    // AVFoundation posts this on its own queue, and a failure is reported on the main
+                    // thread
+                    DispatchQueue.main.async { [weak self] in self?.didFail(reason: reason) }
                 }
 
                 private func addViewFinder() {

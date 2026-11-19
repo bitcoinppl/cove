@@ -443,6 +443,10 @@ struct HotWalletImportScreen: View {
     ) {
         guard oldState != nil, newState == nil else { return }
 
+        // a multi-part QR left half scanned would hold the next scan back waiting for its other
+        // parts
+        scanner.reset()
+
         if enteredWords[0][0] == "" {
             focusField = ImportFieldNumber(0)
             return
