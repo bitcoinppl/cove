@@ -1,8 +1,9 @@
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::str::FromStr as _;
 
 use bdk_file_store::Store as FileStore;
-use bdk_wallet::{KeychainKind, Wallet};
+use bdk_wallet::{KeychainKind, Wallet, descriptor::ExtendedDescriptor};
 use bitcoin::Network;
 use eyre::{Context as _, ContextCompat as _, Result};
 use tracing::{info, warn};
@@ -10,7 +11,10 @@ use tracing::{info, warn};
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     database::Database,
-    wallet::metadata::{StoreType, WalletId},
+    wallet::{
+        addressing::PublishedAddressChains,
+        metadata::{StoreType, WalletId},
+    },
 };
 use cove_common::consts::ROOT_DATA_DIR;
 
@@ -61,6 +65,84 @@ impl BdkStore {
         }
 
         Ok(me)
+    }
+
+    /// Read a wallet's descriptors and last revealed indexes without changing its store
+    ///
+    /// The store is opened read-only and only the wallet and last-revealed tables are read.
+    /// Those tables are in every schema version Cove has written, so a store that has not been
+    /// migrated to the current BDK schema still reads, and no store is created, migrated, or
+    /// given new pragmas. SQLite may still create its `-wal` and `-shm` companion files, which
+    /// hold no wallet data and which wallet deletion removes. Returns `None` when the wallet has
+    /// no store, and an error when it still has only a legacy file store, which migrates on open
+    pub(crate) fn read_address_chains(
+        id: &WalletId,
+        _operation: &crate::wallet_lifecycle::WalletPersistenceOperation,
+    ) -> Result<Option<PublishedAddressChains>> {
+        use bdk_wallet::chain::{
+            DescriptorExt as _, DescriptorId, Impl, keychain_txout::ChangeSet as IndexChangeSet,
+        };
+        use bdk_wallet::rusqlite::{OpenFlags, Transaction, TransactionBehavior};
+
+        crate::bootstrap::ensure_storage_bootstrapped()
+            .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
+
+        // a path that cannot be checked is an error rather than a missing store, so the wallet is
+        // reported unchecked instead of searched from the keychain's shorter window
+        let sqlite_data_path = sqlite_data_path(id);
+        if !sqlite_data_path.try_exists().context("unable to check for the wallet store")? {
+            return no_sqlite_store(id);
+        }
+
+        let is_plaintext = crate::database::migration::is_plaintext_sqlite(&sqlite_data_path);
+        let conn = bdk_wallet::rusqlite::Connection::open_with_flags(
+            &sqlite_data_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .context("unable to open the wallet store read-only")?;
+
+        if !is_plaintext {
+            apply_encryption_key(&conn)?;
+        }
+
+        // one snapshot for both tables; the transaction only reads, and dropping it rolls back
+        let transaction = Transaction::new_unchecked(&conn, TransactionBehavior::Deferred)?;
+
+        let (external, internal): (String, String) = transaction
+            .query_row(
+                &format!(
+                    "SELECT descriptor, change_descriptor FROM {}",
+                    bdk_wallet::ChangeSet::WALLET_TABLE_NAME
+                ),
+                [],
+                |row| Ok((row.get("descriptor")?, row.get("change_descriptor")?)),
+            )
+            .context("unable to read the wallet descriptors")?;
+
+        // the parser quotes the text it rejects, and these errors reach logs
+        let external = ExtendedDescriptor::from_str(&external)
+            .map_err(|_| eyre::eyre!("stored receive descriptor is invalid"))?;
+        let internal = ExtendedDescriptor::from_str(&internal)
+            .map_err(|_| eyre::eyre!("stored change descriptor is invalid"))?;
+
+        let mut statement = transaction.prepare(&format!(
+            "SELECT descriptor_id, last_revealed FROM {}",
+            IndexChangeSet::LAST_REVEALED_TABLE_NAME
+        ))?;
+        let last_revealed = statement
+            .query_map([], |row| {
+                let Impl(descriptor_id): Impl<DescriptorId> = row.get("descriptor_id")?;
+                Ok((descriptor_id, row.get::<_, u32>("last_revealed")?))
+            })?
+            .collect::<std::result::Result<std::collections::HashMap<_, _>, _>>()
+            .context("unable to read the last revealed indexes")?;
+
+        Ok(Some(PublishedAddressChains {
+            last_revealed_external: last_revealed.get(&external.descriptor_id()).copied(),
+            last_revealed_internal: last_revealed.get(&internal.descriptor_id()).copied(),
+            external,
+            internal,
+        }))
     }
 
     /// Open an in-memory BDK wallet store for ephemeral wallet views
@@ -337,9 +419,7 @@ fn open_persistent_connection(sqlite_data_path: &Path) -> Result<bdk_wallet::rus
         .context("unable to open rusqlite connection")?;
 
     if !is_existing_plaintext {
-        let key = crate::database::encrypted_backend::encryption_key()
-            .expect("encryption key must be set");
-        conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
+        apply_encryption_key(&conn)?;
     }
 
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -353,6 +433,14 @@ fn open_persistent_connection(sqlite_data_path: &Path) -> Result<bdk_wallet::rus
     conn.pragma_update(None, "cache_size", 2000)?;
 
     Ok(conn)
+}
+
+fn apply_encryption_key(conn: &bdk_wallet::rusqlite::Connection) -> Result<()> {
+    let key =
+        crate::database::encrypted_backend::encryption_key().expect("encryption key must be set");
+    conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
+
+    Ok(())
 }
 
 fn remove_sqlite_auxiliary_files(db_path: &Path) -> std::io::Result<()> {
@@ -382,12 +470,25 @@ pub(crate) fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {
     }
 }
 
+/// The result for a wallet with no SQLite store
+///
+/// A wallet not opened since the upgrade from the file store still has its revealed addresses
+/// there, so it fails rather than being searched from the keychain's shorter window. Reading the
+/// file store would need a writable handle, and migrating it belongs to opening the wallet
+fn no_sqlite_store(id: &WalletId) -> Result<Option<PublishedAddressChains>> {
+    if file_store_data_path(id).try_exists().context("unable to check for a legacy wallet store")? {
+        eyre::bail!("wallet store has not been migrated from the file store");
+    }
+
+    Ok(None)
+}
+
 fn file_store_data_path(wallet_id: &WalletId) -> PathBuf {
     let db = format!("bdk_wallet_{}.db", wallet_id.as_str().to_lowercase());
     ROOT_DATA_DIR.join(db)
 }
 
-fn sqlite_data_path(wallet_id: &WalletId) -> PathBuf {
+pub(crate) fn sqlite_data_path(wallet_id: &WalletId) -> PathBuf {
     let db = format!("bdk_wallet_sqlite_{}.db", wallet_id.as_str().to_lowercase());
     ROOT_DATA_DIR.join(db)
 }

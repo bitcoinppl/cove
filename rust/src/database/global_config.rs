@@ -355,6 +355,17 @@ impl GlobalConfigTable {
         if self.is_in_decoy_mode() { WalletMode::Decoy } else { WalletMode::Main }
     }
 
+    /// The wallet mode, or an error when the setting cannot be read
+    ///
+    /// [`Self::wallet_mode`] reads an unreadable setting as main mode. Code that decides which
+    /// mode's wallets a caller may see uses this instead, so a read failure during a decoy
+    /// session cannot expose main-mode wallets
+    pub(crate) fn try_wallet_mode(&self) -> Result<WalletMode> {
+        let decoy = self.get(GlobalConfigKey::InDecoyMode)?.is_some_and(|value| value == "true");
+
+        Ok(if decoy { WalletMode::Decoy } else { WalletMode::Main })
+    }
+
     pub fn is_in_decoy_mode(&self) -> bool {
         read_health::observe("decoy mode", self.get(GlobalConfigKey::InDecoyMode))
             .flatten()
