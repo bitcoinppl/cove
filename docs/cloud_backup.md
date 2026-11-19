@@ -613,8 +613,10 @@ may ask, since each of those operations starts from a tap.
 Enable behavior depends on what discovery proved:
 
 - a visible existing backup uses its existing passkey and namespace
-- backup folders that are listed but hold no visible master key give a passkey
-  nothing to open. They may still be syncing to this device, or be left by a
+- backup folders that are listed but hold no visible master key, or one whose
+  upload isn't confirmed yet, give a passkey nothing to open. Restore waits for
+  an upload in progress as it waits for a cloud it can't reach. The folders may
+  still be syncing to this device, or be left by a
   setup that stopped before its upload, and nothing here tells the two apart, so
   Enable never asks for a passkey for them and never deletes them. It shows the
   Backup Files Not Available Yet prompt instead: Try Again checks the cloud
@@ -623,12 +625,15 @@ Enable behavior depends on what discovery proved:
   listed backup lacks its master key; a readable backup beside them still gets
   the existing-backup prompt. Onboarding's backup check that finds only such
   folders shows the same prompt
-- a Try Existing Passkey whose passkey opens none of the readable backups
-  brings back the existing-backup prompt with that failure on it, so the answer
-  never looks like it did nothing. When this device has no passkey to offer,
-  such as one saved on another device that hasn't synced here yet, the prompt
-  says the passkey wasn't found rather than that it opened nothing, and Restore
-  and Recover Other Backups say the same
+- a Use Existing Passkey, on the existing-backup prompt or the passkey choice,
+  whose passkey opens none of the readable backups brings back the
+  existing-backup prompt with that failure on it, so the answer never looks like
+  it did nothing. When the platform reports no passkey on this device, such as
+  one saved on another device that hasn't synced here yet, the prompt says the
+  passkey wasn't found rather than that it opened nothing, and Restore and
+  Recover Other Backups say the same. Android reports this; iOS shows its
+  passkey sheet, which also offers passkeys from nearby devices, and closing it
+  counts as declining
 - an explicit Create New Backup path stages a fresh master key, new namespace,
   and passkey material without replacing the current active material
 

@@ -141,9 +141,26 @@ impl LastOutcome {
     /// prompt with `error`; true when the shown outcome changed
     ///
     /// The answer is drawn with its outcome, so trying it again never looks like nothing happened.
-    /// An Enable started anywhere else, such as onboarding's passkey choice, shows the prompt for
-    /// the first time, whose own message says what it found, so nothing is drawn for it
+    /// An Enable started anywhere else, such as the passkey choice's Use Existing, shows the prompt
+    /// for the first time, whose own message says what it found, so nothing is drawn for it
     pub(crate) fn existing_backup_retry_failed(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        error: &CloudBackupError,
+    ) -> bool {
+        if self.existing_backup_retry.take() != Some(claim) {
+            return false;
+        }
+
+        self.use_existing_failed(claim, error)
+    }
+
+    /// The Enable `claim` that an Enable prompt's Use Existing started tried a passkey that failed
+    /// with `error`; true when the shown outcome changed
+    ///
+    /// The user tried a passkey whichever prompt offered it, so the prompt it comes back to says
+    /// why, rather than asking for the same answer again with no reason
+    pub(crate) fn use_existing_failed(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         error: &CloudBackupError,
@@ -151,9 +168,7 @@ impl LastOutcome {
         let target = CloudBackupOutcomeTarget::Action(
             CloudBackupScreenAction::AcceptEnablePromptUseExisting,
         );
-        if self.existing_backup_retry.take() != Some(claim) {
-            return false;
-        }
+        self.existing_backup_retry.take_if(|retry| *retry == claim);
 
         let retried = self
             .started_by

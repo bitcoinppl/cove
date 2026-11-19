@@ -40,6 +40,12 @@ pub(crate) enum NamespaceMatchOutcome {
     /// The folders may still be syncing to this device, or be left by a setup that stopped before
     /// its upload; nothing here tells the two apart
     NoBackupFiles,
+    /// No listed namespace has a master key wrapper a passkey could open yet, and at least one
+    /// has a wrapper whose upload isn't confirmed, so no passkey was asked for
+    ///
+    /// Its files are on their way, so a Restore waits for them as it waits for a cloud it couldn't
+    /// reach, while Enable says they aren't available yet
+    BackupFilesPending,
     /// The platform found no passkey for Cloud Backup on this device, such as one saved on another
     /// device that hasn't synced here yet, so no backup was tried
     NoPasskeyOnDevice,
@@ -464,7 +470,15 @@ impl NamespacePasskeyMatchSession {
     }
 
     pub(crate) fn finish(self) -> NamespaceMatchOutcome {
-        if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PendingUpload) {
+        let pending = self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PendingUpload);
+        if !self.saw_supported_candidate && only_unavailable_wrappers(&self.candidate_outcomes) {
+            return if pending {
+                NamespaceMatchOutcome::BackupFilesPending
+            } else {
+                NamespaceMatchOutcome::NoBackupFiles
+            };
+        }
+        if pending {
             return NamespaceMatchOutcome::Inconclusive;
         }
         if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PasskeyMismatch) {
@@ -483,10 +497,6 @@ impl NamespacePasskeyMatchSession {
         {
             return NamespaceMatchOutcome::UnsupportedVersions;
         }
-        if !self.saw_supported_candidate && only_missing_wrappers(&self.candidate_outcomes) {
-            return NamespaceMatchOutcome::NoBackupFiles;
-        }
-
         NamespaceMatchOutcome::NoMatch
     }
 }
@@ -605,10 +615,16 @@ async fn load_namespace_candidate(
     }
 }
 
-/// Whether every namespace looked at lacked a visible master key wrapper
-fn only_missing_wrappers(outcomes: &[NamespaceCandidateOutcome]) -> bool {
+/// Whether every namespace looked at lacked a master key wrapper a passkey could open yet,
+/// because it isn't visible or its upload isn't confirmed
+fn only_unavailable_wrappers(outcomes: &[NamespaceCandidateOutcome]) -> bool {
     !outcomes.is_empty()
-        && outcomes.iter().all(|outcome| *outcome == NamespaceCandidateOutcome::Missing)
+        && outcomes.iter().all(|outcome| {
+            matches!(
+                outcome,
+                NamespaceCandidateOutcome::Missing | NamespaceCandidateOutcome::PendingUpload
+            )
+        })
 }
 
 fn cancellation_requested(cancellation: &AtomicBool) -> bool {
@@ -616,12 +632,12 @@ fn cancellation_requested(cancellation: &AtomicBool) -> bool {
 }
 
 impl NamespacePasskeyCandidateSnapshot {
-    /// A readable backup unless every namespace lacked a visible master key wrapper
+    /// A readable backup unless no namespace had a master key wrapper a passkey could open yet
     ///
-    /// A pending, unsupported or unreadable wrapper still counts as a backup, so a fresh Enable
-    /// keeps asking before it creates another one beside it
+    /// An unsupported or unreadable wrapper still counts as a backup, so a fresh Enable keeps
+    /// asking before it creates another one beside it
     fn existing_backup(self) -> CloudBackupExistingBackup {
-        if !self.has_supported_candidate && only_missing_wrappers(&self.candidate_outcomes) {
+        if !self.has_supported_candidate && only_unavailable_wrappers(&self.candidate_outcomes) {
             return CloudBackupExistingBackup::FilesUnavailable;
         }
 

@@ -35,9 +35,9 @@ impl CloudBackupSupervisor {
                 passkey_hint,
                 error,
             }) => {
-                // a Try Existing Passkey that opened nothing says why, instead of showing the same
-                // prompt
-                self.screen_outcome.existing_backup_retry_failed(claim, &error);
+                // a Use Existing whose passkey opened nothing says why, instead of showing a
+                // prompt that asks for the same answer again
+                self.screen_outcome.use_existing_failed(claim, &error);
                 manager.present_existing_backup_found_prompt(
                     context,
                     CloudBackupExistingBackup::Readable { passkey_hint },

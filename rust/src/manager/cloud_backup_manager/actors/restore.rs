@@ -831,7 +831,7 @@ impl RestoreOperation {
             NamespaceMatchOutcome::NoPasskeyOnDevice => {
                 Err(CloudBackupError::from(PasskeyError::NoCredentialFound))
             }
-            NamespaceMatchOutcome::Inconclusive => {
+            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::BackupFilesPending => {
                 Err(offline_error_for_step(BlockingCloudStep::Restore))
             }
             NamespaceMatchOutcome::UnsupportedVersions => Err(CloudBackupError::Internal(

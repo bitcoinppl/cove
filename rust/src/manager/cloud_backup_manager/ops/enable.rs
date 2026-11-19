@@ -140,7 +140,7 @@ impl RustCloudBackupManager {
 
             // no passkey can open a backup whose master key isn't visible, so asking for one could
             // only bring this prompt back; the user waits for the files or creates a new backup
-            NamespaceMatchOutcome::NoBackupFiles => {
+            NamespaceMatchOutcome::NoBackupFiles | NamespaceMatchOutcome::BackupFilesPending => {
                 info!("Enable: listed backups have no visible master key, asking user to confirm");
                 Ok(CloudBackupEnablePreparation::ExistingBackupFound {
                     context,

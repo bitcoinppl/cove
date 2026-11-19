@@ -324,6 +324,105 @@ fn try_existing_passkey_that_opens_nothing_says_so() {
     });
 }
 
+/// Use Existing on Settings' passkey choice whose passkey opens none of the backups says why on
+/// the existing-backup prompt it reaches, so that prompt doesn't ask for the same answer blind
+#[test]
+fn passkey_choice_use_existing_that_opens_nothing_says_so() {
+    let test = concat!(module_path!(), "::passkey_choice_use_existing_that_opens_nothing_says_so");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        seed_readable_backup(&mut app);
+        app.passkey.inner.push_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: vec![1; 32],
+            credential_id: vec![1, 2, 3],
+        }));
+        let context = CloudBackupEnableContext::settings_manual();
+
+        app.dispatch(CloudBackupManagerAction::PromptEnablePasskeyChoice(context))
+            .then_cannot(&[N::TurnOff]);
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::ExistingBackupFound(..)),
+            "{}",
+            app.describe()
+        );
+        let outcome =
+            screen.last_outcome.expect("Use Existing should say the passkey opened nothing");
+        assert_eq!(
+            outcome.target,
+            CloudBackupOutcomeTarget::Action(
+                CloudBackupScreenAction::AcceptEnablePromptUseExisting
+            )
+        );
+        assert_eq!(
+            outcome.outcome,
+            CloudBackupOutcome::Failed {
+                message: CloudBackupError::PasskeyMismatch.reader_message(),
+            }
+        );
+    });
+}
+
+/// Try Again while the backup's master key is listed but still uploading keeps the prompt and
+/// says the files still aren't available, instead of closing it as if the cloud were unreachable
+#[test]
+fn try_again_while_the_master_key_still_uploads_keeps_the_prompt() {
+    let test =
+        concat!(module_path!(), "::try_again_while_the_master_key_still_uploads_keeps_the_prompt");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let existing = MasterKey::generate();
+        let namespace = existing.namespace_id();
+        app.cloud.inner.set_wallet_files(namespace.clone(), Vec::new());
+        let context = CloudBackupEnableContext::settings_manual();
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(context))
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(
+            app.manager().published_screen().root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context),
+            "{}",
+            app.describe()
+        );
+
+        // the master key reaches the cloud listing before its upload is confirmed
+        let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
+        app.cloud.inner.set_master_key_backup(
+            namespace,
+            serde_json::to_vec(&encrypted).expect("encode master key"),
+        );
+        app.cloud.inner.set_uploaded_master_key_pending_confirmation(true);
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert_eq!(
+            screen.root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            screen.last_outcome.map(|outcome| outcome.outcome),
+            Some(CloudBackupOutcome::Failed {
+                message: CloudBackupError::BackupFilesUnavailable.reader_message(),
+            })
+        );
+        assert_eq!(
+            app.passkey.inner.discover_count(),
+            0,
+            "asked for a passkey with nothing to open"
+        );
+    });
+}
+
 /// A device without the backup's passkey, such as one whose passkey hasn't synced from another
 /// device yet, says Try Existing Passkey found none rather than that the passkey opened nothing
 #[test]
@@ -346,16 +445,21 @@ fn try_existing_passkey_without_one_on_this_device_says_none_was_found() {
 
 /// Seeds one readable backup, enables onto its prompt, then answers Try Existing Passkey and
 /// checks the prompt comes back with `error` on it
+/// Lists one backup whose master key a passkey with PRF output `[7; 32]` opens
+fn seed_readable_backup(app: &mut TestApp) {
+    let existing = MasterKey::generate();
+    let namespace = existing.namespace_id();
+    let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
+    app.cloud.inner.set_wallet_files(namespace.clone(), vec!["wallet-1.json".into()]);
+    app.cloud.inner.set_master_key_backup(
+        namespace,
+        serde_json::to_vec(&encrypted).expect("encode master key"),
+    );
+}
+
 fn assert_try_existing_passkey_says(app: &mut TestApp, error: &CloudBackupError) {
     {
-        let existing = MasterKey::generate();
-        let namespace = existing.namespace_id();
-        let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
-        app.cloud.inner.set_wallet_files(namespace.clone(), vec!["wallet-1.json".into()]);
-        app.cloud.inner.set_master_key_backup(
-            namespace,
-            serde_json::to_vec(&encrypted).expect("encode master key"),
-        );
+        seed_readable_backup(app);
         let context = CloudBackupEnableContext::settings_manual();
 
         app.dispatch(CloudBackupManagerAction::EnableCloudBackup(context))

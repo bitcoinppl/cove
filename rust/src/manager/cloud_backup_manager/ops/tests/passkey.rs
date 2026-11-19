@@ -97,7 +97,7 @@ async fn readable_wrapper_beside_missing_one_is_an_existing_backup() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_wrapper_beside_missing_one_stays_inconclusive() {
+async fn pending_wrapper_beside_missing_one_has_no_backup_files_yet() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     globals.reset();
@@ -112,11 +112,11 @@ async fn pending_wrapper_beside_missing_one_stays_inconclusive() {
     );
 
     let outcome = matcher.match_namespaces(&[missing.clone(), pending.clone()]).await.unwrap();
-    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
+    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
 
-    // a wrapper still uploading is a backup a fresh Enable asks about
+    // a wrapper still uploading gives a passkey nothing to open yet, like a missing one
     let existing = matcher.existing_backup(&[missing, pending]).await.unwrap();
-    assert!(matches!(existing, CloudBackupExistingBackup::Readable { .. }));
+    assert_eq!(existing, CloudBackupExistingBackup::FilesUnavailable);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -291,7 +291,7 @@ async fn pending_and_missing_upload_states_skip_wrapper_downloads() {
     .await
     .unwrap();
 
-    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
+    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
     assert_eq!(globals.cloud.master_key_download_attempt_count(), 0);
 }
 
@@ -449,8 +449,10 @@ async fn passkey_match_propagates_master_wrapper_authorization_required() {
     assert_eq!(CloudStorageIssue::from(&error), CloudStorageIssue::AuthorizationRequired);
 }
 
+/// A wrapper whose upload isn't confirmed is reported apart from a cloud that couldn't be read,
+/// so Enable can say the files aren't available yet while Restore still waits for them
 #[tokio::test(flavor = "current_thread")]
-async fn passkey_match_keeps_pending_upload_state_inconclusive() {
+async fn passkey_match_reports_pending_upload_state_as_backup_files_pending() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     globals.reset();
@@ -469,7 +471,7 @@ async fn passkey_match_keeps_pending_upload_state_inconclusive() {
     .await
     .unwrap();
 
-    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
+    assert!(matches!(outcome, NamespaceMatchOutcome::BackupFilesPending));
 }
 
 #[tokio::test(flavor = "current_thread")]
