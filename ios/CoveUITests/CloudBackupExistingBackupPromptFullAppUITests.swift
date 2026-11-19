@@ -36,6 +36,11 @@ final class CloudBackupExistingBackupPromptFullAppUITests: XCTestCase {
         // onboarding sees backup metadata it can't read yet and says so instead of asking for a
         // passkey that has nothing to open
         let unavailable = tryAgainUntilFilesStillMissing()
+        control.assertNextActions(
+            "the files-unavailable prompt should offer Try Again and Create New Backup",
+            body: "enabling",
+            available: ["acceptEnablePromptUseExisting", "acceptEnablePromptCreateNew"]
+        )
         tap(createNew, in: unavailable)
         robot.finishOnboardingAfterCloudBackupEnabled()
 

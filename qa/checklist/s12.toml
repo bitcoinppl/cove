@@ -87,7 +87,8 @@ paths = [
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::existing_passkey_onboarding_recovery_completes_verification",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::existing_backup_prompt_preserves_onboarding_enable_context",
-  "rust:rust/src/manager/cloud_backup_manager/model.rs::existing_passkey_only_prompt_rejects_create_new",
+  "rust:rust/src/manager/cloud_backup_manager/harness/enable_entry_tests.rs::onboarding_with_pending_backup_metadata_offers_try_again_and_create_new",
+  "rust:rust/src/manager/cloud_backup_manager/harness/enable_entry_tests.rs::enable_without_master_key_files_offers_try_again_and_create_new",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_with_one_passkey_restores_wallets_from_all_matching_namespaces",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
@@ -260,7 +261,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_session_does_not_retry_targeted_auth_failure_after_presentation",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_stops_after_terminal_targeted_auth_failure",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_treats_user_cancel_as_user_declined",
-  "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_treats_missing_credential_as_no_match",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_reports_missing_credential_as_no_passkey_on_device",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::post_presentation_saved_passkey_failure_attempts_confirmation_once",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::does_not_retry_cancellation_or_post_presentation_failure",
   "rust:rust/src/manager/cloud_backup_manager/harness/passkey_tests.rs::a_registration_that_fails_after_presenting_is_not_retried",
