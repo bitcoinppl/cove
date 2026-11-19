@@ -103,7 +103,8 @@ class HardwareSignerControl(
         return PublicKeyExport(
             key = json.getString("key"),
             bbqr = json.getString("bbqr"),
-            ur = json.optString("ur").ifEmpty { null },
+            // optString reads a JSON null as the string "null"
+            ur = if (json.isNull("ur")) null else json.getString("ur"),
             firstAddress = json.getString("first_address"),
             firstDerivationPath = json.getString("first_derivation_path"),
         )
