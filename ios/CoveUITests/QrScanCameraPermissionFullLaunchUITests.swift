@@ -52,6 +52,10 @@ final class QrScanCameraPermissionFullLaunchUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: usable, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: 20)
         XCTAssertEqual(result, .completed, "something stayed up over Add Wallet")
+
+        // a button XCUITest calls hittable can still sit under a layer that takes the tap, so
+        // only the menu opening shows Add Wallet takes taps
+        app.tapButton(named: "More wallet import options", until: app.buttons["QR"])
     }
 
     // MARK: - Steps
