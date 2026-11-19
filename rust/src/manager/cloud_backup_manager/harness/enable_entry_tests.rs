@@ -5,6 +5,7 @@
 
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto::encrypt_master_key;
+use cove_device::passkey::{DiscoveredPasskeyResult, PasskeyError};
 
 use super::{
     CloudCall, CloudFault, Hold, NextAction as N, PasskeyMode, PhaseEnd, TestApp, run_case,
@@ -13,14 +14,17 @@ use crate::manager::cloud_backup_manager::admission::{
     Admission, EnableIntent, Rejection, UserIntent,
 };
 use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupActionAvailability, CloudBackupOutcome, CloudBackupOutcomeTarget,
     CloudBackupScreenAction, CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableFlow, CloudBackupEnablePromptChoice,
-    CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRootPrompt,
+    CloudBackupError, CloudBackupExclusiveOperation as Op, CloudBackupManagerAction,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
 };
-use crate::manager::onboarding_manager::{CloudRestoreDiscovery, RustOnboardingManager};
+use crate::manager::onboarding_manager::{
+    CloudCheckIssue, CloudRestoreDiscovery, RustOnboardingManager,
+};
 
 /// Onboarding's new-backup Enable is decided like a tap: while a restore holds the slot it is
 /// rejected as busy, and no passkey is registered for it
@@ -103,6 +107,287 @@ fn a_restore_queued_behind_a_prompt_answer_finds_its_enable_running() {
         assert_eq!(outcome.intent, UserIntent::RestoreFromCloudBackup);
         assert_eq!(outcome.admission, Admission::Rejected(Rejection::OperationRunning(Op::Enable)));
     });
+}
+
+/// Use Existing Passkey on the passkey-choice prompt, as onboarding offers it, leads to the
+/// files-unavailable prompt for the first time, so the prompt shows its own message without the
+/// failed-retry outcome its Try Again draws
+#[test]
+fn passkey_choice_use_existing_shows_files_unavailable_without_a_retry_outcome() {
+    let test = concat!(
+        module_path!(),
+        "::passkey_choice_use_existing_shows_files_unavailable_without_a_retry_outcome"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let folder = MasterKey::generate().namespace_id();
+        app.cloud.inner.set_wallet_files(folder, Vec::new());
+        let context = CloudBackupEnableContext::settings_manual();
+
+        app.dispatch(CloudBackupManagerAction::PromptEnablePasskeyChoice(context))
+            .then_cannot(&[N::TurnOff]);
+        assert!(
+            matches!(
+                app.manager().published_screen().root_prompt,
+                CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(..))
+            ),
+            "{}",
+            app.describe()
+        );
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert_eq!(
+            screen.root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(screen.last_outcome, None, "{}", app.describe());
+        assert_eq!(
+            app.passkey.inner.discover_count(),
+            0,
+            "asked for a passkey with nothing to open"
+        );
+
+        // Try Again on the prompt it reached is a retry, so its outcome is drawn there
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let outcome = app
+            .manager()
+            .published_screen()
+            .last_outcome
+            .expect("Try Again should say the files are still missing");
+        assert_eq!(
+            outcome.outcome,
+            CloudBackupOutcome::Failed {
+                message: CloudBackupError::BackupFilesUnavailable.reader_message(),
+            }
+        );
+    });
+}
+
+/// Onboarding that found backup folders without their master key files asks whether to wait
+/// for them or create a new backup, as Enable does, instead of offering only a passkey that has
+/// nothing to open
+#[test]
+fn onboarding_with_pending_backup_metadata_offers_try_again_and_create_new() {
+    let test = concat!(
+        module_path!(),
+        "::onboarding_with_pending_backup_metadata_offers_try_again_and_create_new"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let folder = MasterKey::generate().namespace_id();
+        app.cloud.inner.set_wallet_files(folder, Vec::new());
+
+        app.event("onboarding starts Cloud Backup with backup metadata pending", |_| {
+            RustOnboardingManager::begin_cloud_backup_enable(CloudRestoreDiscovery::Inconclusive(
+                CloudCheckIssue::BackupMetadataPending,
+            ));
+        })
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::BackupFilesUnavailable(_)),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            screen.actions.availability(CloudBackupScreenAction::AcceptEnablePromptCreateNew),
+            Some(CloudBackupActionAvailability::Available),
+            "the prompt should offer Create New Backup: {}",
+            app.describe()
+        );
+
+        // Try Again checks the cloud again and says on the prompt that the files are still missing
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::BackupFilesUnavailable(_)),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            screen.last_outcome.map(|outcome| outcome.outcome),
+            Some(CloudBackupOutcome::Failed {
+                message: CloudBackupError::BackupFilesUnavailable.reader_message(),
+            })
+        );
+        assert_eq!(
+            app.passkey.inner.discover_count(),
+            0,
+            "asked for a passkey with nothing to open"
+        );
+    });
+}
+
+/// A namespace whose master key isn't there gives no passkey anything to open, so Enable asks
+/// whether to wait for its files or create a new backup instead of asking for a passkey. Try
+/// Again that still finds nothing says so on the prompt rather than bringing it back unchanged,
+/// and Create New starts a new backup without deleting the folder
+#[test]
+fn enable_without_master_key_files_offers_try_again_and_create_new() {
+    let test = concat!(
+        module_path!(),
+        "::enable_without_master_key_files_offers_try_again_and_create_new"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let folder = MasterKey::generate().namespace_id();
+        app.cloud.inner.set_wallet_files(folder.clone(), Vec::new());
+        let context = CloudBackupEnableContext::settings_manual();
+        let try_again = CloudBackupOutcomeTarget::Action(
+            CloudBackupScreenAction::AcceptEnablePromptUseExisting,
+        );
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(context))
+            .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert_eq!(
+            screen.root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context),
+            "{}",
+            app.describe()
+        );
+
+        // the prompt's own message says what it found, so the Enable that opened it adds nothing
+        assert_eq!(screen.last_outcome, None, "{}", app.describe());
+        assert_eq!(
+            app.passkey.inner.discover_count(),
+            0,
+            "asked for a passkey with nothing to open"
+        );
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert_eq!(
+            screen.root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context),
+            "{}",
+            app.describe()
+        );
+        let outcome =
+            screen.last_outcome.expect("Try Again should say the files are still missing");
+        assert_eq!(outcome.target, try_again);
+        assert_eq!(
+            outcome.outcome,
+            CloudBackupOutcome::Failed {
+                message: CloudBackupError::BackupFilesUnavailable.reader_message(),
+            }
+        );
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::CreateNew,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        assert_eq!(
+            app.manager().model_snapshot().root_prompt,
+            CloudBackupRootPrompt::None,
+            "{}",
+            app.describe()
+        );
+        assert!(app.cloud.inner.has_namespace(&folder), "Create New deleted the folder");
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "{}", app.describe());
+    });
+}
+
+/// A passkey that opens none of the readable backups brings Enable back to the existing-backup
+/// prompt; Try Existing Passkey that opens nothing again says so on the prompt instead of bringing
+/// it back unchanged
+#[test]
+fn try_existing_passkey_that_opens_nothing_says_so() {
+    let test = concat!(module_path!(), "::try_existing_passkey_that_opens_nothing_says_so");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+
+        // the platform offers a passkey each time, whose PRF opens no backup here
+        for _ in 0..2 {
+            app.passkey.inner.push_discover_result(Ok(DiscoveredPasskeyResult {
+                prf_output: vec![1; 32],
+                credential_id: vec![1, 2, 3],
+            }));
+        }
+
+        assert_try_existing_passkey_says(&mut app, &CloudBackupError::PasskeyMismatch);
+    });
+}
+
+/// A device without the backup's passkey, such as one whose passkey hasn't synced from another
+/// device yet, says Try Existing Passkey found none rather than that the passkey opened nothing
+#[test]
+fn try_existing_passkey_without_one_on_this_device_says_none_was_found() {
+    let test = concat!(
+        module_path!(),
+        "::try_existing_passkey_without_one_on_this_device_says_none_was_found"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.push_discover_result(Err(PasskeyError::NoCredentialFound));
+
+        assert_try_existing_passkey_says(
+            &mut app,
+            &CloudBackupError::from(PasskeyError::NoCredentialFound),
+        );
+    });
+}
+
+/// Seeds one readable backup, enables onto its prompt, then answers Try Existing Passkey and
+/// checks the prompt comes back with `error` on it
+fn assert_try_existing_passkey_says(app: &mut TestApp, error: &CloudBackupError) {
+    {
+        let existing = MasterKey::generate();
+        let namespace = existing.namespace_id();
+        let encrypted = encrypt_master_key(&existing, &[7; 32], &[9; 32]).expect("encrypt");
+        app.cloud.inner.set_wallet_files(namespace.clone(), vec!["wallet-1.json".into()]);
+        app.cloud.inner.set_master_key_backup(
+            namespace,
+            serde_json::to_vec(&encrypted).expect("encode master key"),
+        );
+        let context = CloudBackupEnableContext::settings_manual();
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(context))
+            .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::ExistingBackupFound(..)),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(screen.last_outcome, None, "{}", app.describe());
+
+        app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+            CloudBackupEnablePromptChoice::UseExisting,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::ExistingBackupFound(..)),
+            "{}",
+            app.describe()
+        );
+        let outcome =
+            screen.last_outcome.expect("Try Existing Passkey should say it opened nothing");
+        assert_eq!(
+            outcome.target,
+            CloudBackupOutcomeTarget::Action(
+                CloudBackupScreenAction::AcceptEnablePromptUseExisting
+            )
+        );
+        assert_eq!(outcome.outcome, CloudBackupOutcome::Failed { message: error.reader_message() });
+    }
 }
 
 /// An Enable whose passkey sheet the user closed waits on the passkey-choice prompt with nothing

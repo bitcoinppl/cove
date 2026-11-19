@@ -18,8 +18,8 @@ use super::authorization_retry::{
 use super::prf_output_to_key;
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupPasskeyHint,
-    master_key_wrapper_revision_hash,
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupExistingBackup,
+    CloudBackupPasskeyHint, master_key_wrapper_revision_hash,
 };
 
 pub(crate) struct NamespaceMatch {
@@ -35,6 +35,14 @@ pub(crate) enum NamespaceMatchOutcome {
     Matched(Vec<NamespaceMatch>),
     UserDeclined,
     NoMatch,
+    /// Every listed namespace lacks a visible master key wrapper, so no passkey was asked for
+    ///
+    /// The folders may still be syncing to this device, or be left by a setup that stopped before
+    /// its upload; nothing here tells the two apart
+    NoBackupFiles,
+    /// The platform found no passkey for Cloud Backup on this device, such as one saved on another
+    /// device that hasn't synced here yet, so no backup was tried
+    NoPasskeyOnDevice,
     Inconclusive,
     UnsupportedVersions,
 }
@@ -135,6 +143,9 @@ enum NamespaceCandidateOutcome {
     Missing,
     PendingUpload,
     PasskeyMismatch,
+    /// Discovery found no passkey on this device, which says nothing about whether the backup's
+    /// passkey exists elsewhere
+    NoCredential,
     UnsupportedVersion,
     Inconclusive,
 }
@@ -252,11 +263,13 @@ impl NamespacePasskeyMatcher {
         Ok((outcome, passkey_hint))
     }
 
-    pub(crate) async fn passkey_hint_for_namespaces(
+    /// What a fresh Enable confirms before creating a new backup beside `namespaces`, read
+    /// without asking for a passkey
+    pub(crate) async fn existing_backup(
         &self,
         namespaces: &[String],
-    ) -> Option<CloudBackupPasskeyHint> {
-        self.inspect_namespaces(namespaces).await.ok()?.best_passkey_hint
+    ) -> Result<CloudBackupExistingBackup, CloudBackupError> {
+        Ok(self.inspect_namespaces(namespaces).await?.existing_backup())
     }
 }
 
@@ -401,8 +414,7 @@ impl NamespacePasskeyMatchSession {
                         Err(PasskeyError::NoCredentialFound) => {
                             self.credential_selection = CredentialSelection::NoCredentialFound;
                             self.attempted_candidates.insert(candidate.identity.clone());
-                            self.candidate_outcomes
-                                .push(NamespaceCandidateOutcome::PasskeyMismatch);
+                            self.candidate_outcomes.push(NamespaceCandidateOutcome::NoCredential);
                             continue;
                         }
                         Err(PasskeyError::PrfUnsupportedProvider) => {
@@ -458,6 +470,11 @@ impl NamespacePasskeyMatchSession {
         if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PasskeyMismatch) {
             return NamespaceMatchOutcome::NoMatch;
         }
+
+        // no passkey to try is definite whatever a download did, so it outranks a failed one
+        if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::NoCredential) {
+            return NamespaceMatchOutcome::NoPasskeyOnDevice;
+        }
         if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::Inconclusive) {
             return NamespaceMatchOutcome::Inconclusive;
         }
@@ -465,6 +482,9 @@ impl NamespacePasskeyMatchSession {
             && self.candidate_outcomes.contains(&NamespaceCandidateOutcome::UnsupportedVersion)
         {
             return NamespaceMatchOutcome::UnsupportedVersions;
+        }
+        if !self.saw_supported_candidate && only_missing_wrappers(&self.candidate_outcomes) {
+            return NamespaceMatchOutcome::NoBackupFiles;
         }
 
         NamespaceMatchOutcome::NoMatch
@@ -585,11 +605,29 @@ async fn load_namespace_candidate(
     }
 }
 
+/// Whether every namespace looked at lacked a visible master key wrapper
+fn only_missing_wrappers(outcomes: &[NamespaceCandidateOutcome]) -> bool {
+    !outcomes.is_empty()
+        && outcomes.iter().all(|outcome| *outcome == NamespaceCandidateOutcome::Missing)
+}
+
 fn cancellation_requested(cancellation: &AtomicBool) -> bool {
     cancellation.load(Ordering::Acquire)
 }
 
 impl NamespacePasskeyCandidateSnapshot {
+    /// A readable backup unless every namespace lacked a visible master key wrapper
+    ///
+    /// A pending, unsupported or unreadable wrapper still counts as a backup, so a fresh Enable
+    /// keeps asking before it creates another one beside it
+    fn existing_backup(self) -> CloudBackupExistingBackup {
+        if !self.has_supported_candidate && only_missing_wrappers(&self.candidate_outcomes) {
+            return CloudBackupExistingBackup::FilesUnavailable;
+        }
+
+        CloudBackupExistingBackup::Readable { passkey_hint: self.best_passkey_hint }
+    }
+
     fn add_load(&mut self, load: NamespaceCandidateLoad) {
         match load {
             NamespaceCandidateLoad::Uploaded { namespace_id, wrapper } => {

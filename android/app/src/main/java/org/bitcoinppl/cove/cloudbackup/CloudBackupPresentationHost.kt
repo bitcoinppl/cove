@@ -75,6 +75,10 @@ internal sealed class CloudBackupRootPresentation {
         val passkeyHint: CloudBackupPasskeyHint?,
     ) : CloudBackupRootPresentation()
 
+    data class BackupFilesUnavailable(
+        val context: CloudBackupEnableContext,
+    ) : CloudBackupRootPresentation()
+
     data class PasskeyChoice(
         val intent: CloudBackupPasskeyChoiceIntent,
     ) : CloudBackupRootPresentation()
@@ -161,6 +165,7 @@ internal fun isCloudBackupPresentationPresentable(
 
     return when (presentation) {
         is CloudBackupRootPresentation.ExistingBackupFound,
+        is CloudBackupRootPresentation.BackupFilesUnavailable,
         is CloudBackupRootPresentation.PasskeyChoice,
         -> true
         CloudBackupRootPresentation.MissingPasskeyReminder,
@@ -344,6 +349,7 @@ internal fun CloudBackupRootPrompt.toRootPresentation(): CloudBackupRootPresenta
     when (this) {
         is CloudBackupRootPrompt.None -> null
         is CloudBackupRootPrompt.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1, v2)
+        is CloudBackupRootPrompt.BackupFilesUnavailable -> CloudBackupRootPresentation.BackupFilesUnavailable(v1)
         is CloudBackupRootPrompt.PasskeyChoice -> CloudBackupRootPresentation.PasskeyChoice(v1)
         is CloudBackupRootPrompt.MissingPasskeyReminder -> CloudBackupRootPresentation.MissingPasskeyReminder
         is CloudBackupRootPrompt.Verification -> CloudBackupRootPresentation.VerificationPrompt
@@ -365,13 +371,6 @@ internal fun cloudBackupPasskeyChoicePresentation(
             CloudBackupPasskeyChoicePresentation(
                 passkeyHint = intent.v2,
                 message = "Would you like to use an existing passkey or start a new backup?",
-            )
-        is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly ->
-            CloudBackupPasskeyChoicePresentation(
-                passkeyHint = intent.v2,
-                message =
-                    "Cloud Backup may already exist. Use your existing passkey to continue, " +
-                        "or cancel and try again later.",
             )
         is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
             CloudBackupPasskeyChoicePresentation(
@@ -541,6 +540,24 @@ internal fun CloudBackupRootPromptDialog(
                         message = existingBackupMessage(presentation.passkeyHint),
                         testTag = CloudBackupTags.PROMPT_EXISTING_BACKUP_FOUND,
                         choices = existingBackupPromptChoices(),
+                        dismissIntent = CloudBackupManagerAction.DiscardPendingEnableCloudBackup,
+                    ),
+                screen = screen,
+                host = host,
+            )
+
+        is CloudBackupRootPresentation.BackupFilesUnavailable ->
+            CloudBackupPromptChoiceDialog(
+                prompt =
+                    CloudBackupChoicePrompt(
+                        title = "Backup Files Not Available Yet",
+                        // the files may still be syncing, so the prompt never calls the backup gone
+                        message =
+                            "Google Drive has a Cloud Backup folder, but its files haven't reached this device yet. " +
+                                "Wait for Google Drive to finish syncing, then try again. " +
+                                "A new Cloud Backup will not include wallets from that backup.",
+                        testTag = CloudBackupTags.PROMPT_BACKUP_FILES_UNAVAILABLE,
+                        choices = backupFilesUnavailablePromptChoices(),
                         dismissIntent = CloudBackupManagerAction.DiscardPendingEnableCloudBackup,
                     ),
                 screen = screen,

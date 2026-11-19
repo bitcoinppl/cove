@@ -5,7 +5,7 @@ use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
+    CloudBackupExistingBackup, CloudBackupPasskeyChoiceIntent, CloudBackupProgress,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
@@ -16,6 +16,8 @@ use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupR
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupAcceptedEnablePrompt {
     Enable(CloudBackupEnableContext),
+    /// Use Existing on the existing-backup prompt, an Enable that checks the same backup again
+    RetryExisting(CloudBackupEnableContext),
     ForceNew(CloudBackupEnableContext),
     NoDiscovery(CloudBackupEnableContext),
 }
@@ -131,7 +133,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     PendingEnableRecoveryCleared(CloudBackupStatus),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,
-        passkey_hint: Option<CloudBackupPasskeyHint>,
+        existing: CloudBackupExistingBackup,
     },
     /// Ends the prompt an Enable waits on, the existing-backup prompt or the passkey choice
     EnablePromptCleared,

@@ -73,14 +73,14 @@ pub(crate) use self::detail::{
 };
 pub use self::dto::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
-    CloudBackupOnboardingCompletionReadiness, CloudBackupOtherBackupsState,
-    CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
-    CloudBackupPasskeyUnlockHint, CloudBackupProgress, CloudBackupRestoreReport,
-    CloudBackupRetryAction, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationMetadata, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
-    CloudBackupWalletStatus, CloudBackupWalletVerificationIssues, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RecordId,
-    SavedPasskeyConfirmationMode,
+    CloudBackupExistingBackup, CloudBackupOnboardingCompletionReadiness,
+    CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent,
+    CloudBackupPasskeyHint, CloudBackupPasskeyUnlockHint, CloudBackupProgress,
+    CloudBackupRestoreReport, CloudBackupRetryAction, CloudBackupRootPrompt,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata, CloudBackupWalletItem,
+    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, CloudBackupWalletVerificationIssues,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RecordId, SavedPasskeyConfirmationMode,
 };
 
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
@@ -771,11 +771,11 @@ impl RustCloudBackupManager {
     pub(crate) fn present_existing_backup_found_prompt(
         &self,
         context: CloudBackupEnableContext,
-        passkey_hint: Option<CloudBackupPasskeyHint>,
+        existing: CloudBackupExistingBackup,
     ) {
         self.apply_model_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
             context,
-            passkey_hint,
+            existing,
         });
     }
 

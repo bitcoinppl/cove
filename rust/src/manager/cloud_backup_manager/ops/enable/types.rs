@@ -7,7 +7,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupError, CloudBackupPasskeyHint,
+    CloudBackupEnableContext, CloudBackupError, CloudBackupExistingBackup, CloudBackupPasskeyHint,
     PendingEnablePasskeyMetadata, PendingEnableSession, PendingVerificationUpload,
 };
 
@@ -49,7 +49,14 @@ pub(crate) enum CloudBackupEnablePreparation {
     },
     ExistingBackupFound {
         context: CloudBackupEnableContext,
+        existing: CloudBackupExistingBackup,
+    },
+    /// No passkey opened a readable backup, for the reason `error` gives: the chosen passkey
+    /// opened none of them, or this device has none to choose
+    ExistingPasskeyFailed {
+        context: CloudBackupEnableContext,
         passkey_hint: Option<CloudBackupPasskeyHint>,
+        error: CloudBackupError,
     },
     PasskeyChoice {
         context: CloudBackupEnableContext,
@@ -111,13 +118,8 @@ impl std::fmt::Debug for CloudBackupEnableRecoveryCompletion {
 }
 
 pub(crate) enum CloudBackupNoDiscoveryEnablePreparation {
-    RegisterPasskey {
-        context: CloudBackupEnableContext,
-    },
-    ExistingBackupFound {
-        context: CloudBackupEnableContext,
-        passkey_hint: Option<CloudBackupPasskeyHint>,
-    },
+    RegisterPasskey { context: CloudBackupEnableContext },
+    ExistingBackupFound { context: CloudBackupEnableContext, existing: CloudBackupExistingBackup },
 }
 
 pub(crate) struct CloudBackupReadyEnableUpload {

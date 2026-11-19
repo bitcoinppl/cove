@@ -378,7 +378,7 @@ in an identifier.
 | Inventory progress | `cloudBackup.inventory.checking`, `cloudBackup.inventory.incomplete` |
 | The support code an incomplete setup shows | `cloudBackup.recovery.supportCode` |
 | The top-bar menu (Android only) | `cloudBackup.menu` |
-| Root prompts | `cloudBackup.prompt.existingBackupFound`, `cloudBackup.prompt.passkeyChoice`, `cloudBackup.prompt.missingPasskeyReminder`, `cloudBackup.prompt.verification` |
+| Root prompts | `cloudBackup.prompt.existingBackupFound`, `cloudBackup.prompt.backupFilesUnavailable`, `cloudBackup.prompt.passkeyChoice`, `cloudBackup.prompt.missingPasskeyReminder`, `cloudBackup.prompt.verification` |
 | The repair prompt's Create New Passkey, which sends `repairPasskey` like its Use Existing Passkey | `cloudBackup.prompt.passkeyChoice.createNewPasskey` |
 
 A system alert or confirmation dialog can't carry an identifier on its container
@@ -613,8 +613,22 @@ may ask, since each of those operations starts from a tap.
 Enable behavior depends on what discovery proved:
 
 - a visible existing backup uses its existing passkey and namespace
-- visible namespace metadata whose recovery files are still loading is treated
-  as pending, and only the existing-passkey path is offered
+- backup folders that are listed but hold no visible master key give a passkey
+  nothing to open. They may still be syncing to this device, or be left by a
+  setup that stopped before its upload, and nothing here tells the two apart, so
+  Enable never asks for a passkey for them and never deletes them. It shows the
+  Backup Files Not Available Yet prompt instead: Try Again checks the cloud
+  again and, while the files are still missing, says so on the prompt; Create
+  New Backup starts a new backup beside the folders. This holds whenever every
+  listed backup lacks its master key; a readable backup beside them still gets
+  the existing-backup prompt. Onboarding's backup check that finds only such
+  folders shows the same prompt
+- a Try Existing Passkey whose passkey opens none of the readable backups
+  brings back the existing-backup prompt with that failure on it, so the answer
+  never looks like it did nothing. When this device has no passkey to offer,
+  such as one saved on another device that hasn't synced here yet, the prompt
+  says the passkey wasn't found rather than that it opened nothing, and Restore
+  and Recover Other Backups say the same
 - an explicit Create New Backup path stages a fresh master key, new namespace,
   and passkey material without replacing the current active material
 

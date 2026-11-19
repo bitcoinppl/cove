@@ -74,6 +74,8 @@ pub enum CloudBackupUiElement {
     Menu,
     /// The Enable prompt for a backup that already exists
     PromptExistingBackupFound,
+    /// The Enable prompt for backup folders whose files aren't available on this device
+    PromptBackupFilesUnavailable,
     /// The prompt that asks which passkey to use
     PromptPasskeyChoice,
     /// The repair prompt's Create New Passkey, which sends the same action as its Use Existing
@@ -161,6 +163,7 @@ impl CloudBackupUiElement {
             Self::RecoverySupportCode => "cloudBackup.recovery.supportCode",
             Self::Menu => "cloudBackup.menu",
             Self::PromptExistingBackupFound => "cloudBackup.prompt.existingBackupFound",
+            Self::PromptBackupFilesUnavailable => "cloudBackup.prompt.backupFilesUnavailable",
             Self::PromptPasskeyChoice => "cloudBackup.prompt.passkeyChoice",
             Self::PromptPasskeyChoiceCreateNewPasskey => {
                 "cloudBackup.prompt.passkeyChoice.createNewPasskey"
@@ -232,6 +235,7 @@ fn every_element(record_id: &RecordId) -> Vec<CloudBackupUiElement> {
         E::RecoverySupportCode,
         E::Menu,
         E::PromptExistingBackupFound,
+        E::PromptBackupFilesUnavailable,
         E::PromptPasskeyChoice,
         E::PromptPasskeyChoiceCreateNewPasskey,
         E::PromptMissingPasskeyReminder,

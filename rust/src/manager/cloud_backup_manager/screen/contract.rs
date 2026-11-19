@@ -213,11 +213,14 @@ fn misplaced_prompt_controls(screen: &CloudBackupScreen) -> Vec<CloudBackupDrawn
         A::AcceptEnablePromptUseExisting => matches!(
             prompt,
             Prompt::ExistingBackupFound(..)
-                | Prompt::PasskeyChoice(Choice::Enable(..) | Choice::EnableExistingPasskeyOnly(..))
+                | Prompt::BackupFilesUnavailable(..)
+                | Prompt::PasskeyChoice(Choice::Enable(..))
         ),
         A::AcceptEnablePromptCreateNew => matches!(
             prompt,
-            Prompt::ExistingBackupFound(..) | Prompt::PasskeyChoice(Choice::Enable(..))
+            Prompt::ExistingBackupFound(..)
+                | Prompt::BackupFilesUnavailable(..)
+                | Prompt::PasskeyChoice(Choice::Enable(..))
         ),
         A::RepairPasskey => *prompt == Prompt::PasskeyChoice(Choice::RepairPasskey),
         A::Verify => *prompt == Prompt::Verification,
@@ -783,10 +786,7 @@ mod tests {
         let existing = named("enabling-existing-backup-prompt");
         let both = vec![A::AcceptEnablePromptUseExisting, A::AcceptEnablePromptCreateNew];
         assert_eq!(prompt_actions(&existing), both);
-        assert_eq!(
-            prompt_actions(&named("enabling-passkey-choice-existing-only")),
-            vec![A::AcceptEnablePromptUseExisting]
-        );
+        assert_eq!(prompt_actions(&named("enabling-backup-files-unavailable-prompt")), both);
         assert_eq!(prompt_actions(&named("configured-verification-prompt")), vec![A::Verify]);
         assert_eq!(prompt_actions(&named("configured")), Vec::<A>::new());
 

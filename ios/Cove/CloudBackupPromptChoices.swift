@@ -31,6 +31,32 @@ struct CloudBackupPromptChoice {
         ),
     ]
 
+    /// The title of the prompt shown when backup folders are listed but none of their files are
+    static let backupFilesUnavailableTitle = "Backup Files Not Available Yet"
+
+    /// What the files-unavailable prompt says; the files may still be syncing, so it never calls
+    /// the backup gone
+    static let backupFilesUnavailableMessage =
+        "iCloud has a Cloud Backup folder, but its files haven't reached this device yet. Wait for iCloud to finish syncing, then try again. A new Cloud Backup will not include wallets from that backup."
+
+    /// The choices of the files-unavailable prompt, in the order they are drawn
+    ///
+    /// Try Again re-checks the existing backup through the same Use Existing answer, so a retry that
+    /// still finds nothing draws its outcome under this prompt
+    static let backupFilesUnavailable = [
+        CloudBackupPromptChoice(
+            title: "Create New Backup",
+            action: .acceptEnablePromptCreateNew,
+            intent: .acceptEnablePrompt(.createNew),
+            role: .destructive
+        ),
+        CloudBackupPromptChoice(
+            title: "Try Again",
+            action: .acceptEnablePromptUseExisting,
+            intent: .acceptEnablePrompt(.useExisting)
+        ),
+    ]
+
     /// The choices of a passkey-choice prompt, in the order they are drawn
     ///
     /// Both repair choices answer the Repair Passkey entry: they differ only in whether the passkey
@@ -56,8 +82,6 @@ struct CloudBackupPromptChoice {
                     intent: .acceptEnablePrompt(.createNew)
                 ),
             ]
-        case .enableExistingPasskeyOnly:
-            return [useExisting]
         case .repairPasskey:
             return [
                 CloudBackupPromptChoice(title: existingTitle, action: .repairPasskey, intent: .repairPasskey),

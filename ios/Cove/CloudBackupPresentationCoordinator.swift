@@ -5,6 +5,7 @@ import UIKit
 
 enum CloudBackupRootPresentation: Equatable {
     case existingBackupFound(CloudBackupEnableContext, CloudBackupPasskeyHint?)
+    case backupFilesUnavailable(CloudBackupEnableContext)
     case passkeyChoice(CloudBackupPasskeyChoiceIntent)
     case missingPasskeyReminder
     case verificationPrompt
@@ -15,6 +16,8 @@ enum CloudBackupRootPresentation: Equatable {
             return nil
         case let .existingBackupFound(context, passkeyHint):
             self = .existingBackupFound(context, passkeyHint)
+        case let .backupFilesUnavailable(context):
+            self = .backupFilesUnavailable(context)
         case let .passkeyChoice(intent):
             self = .passkeyChoice(intent)
         case .missingPasskeyReminder:
@@ -70,7 +73,7 @@ func isCloudBackupPresentationPresentable(
     guard context.isNavigationSettled else { return false }
 
     switch presentation {
-    case .existingBackupFound, .passkeyChoice:
+    case .existingBackupFound, .backupFilesUnavailable, .passkeyChoice:
         return true
     case .missingPasskeyReminder, .verificationPrompt:
         guard !context.presentationPolicy.suppressesGenericPrompts else {
@@ -97,9 +100,6 @@ struct CloudBackupPasskeyChoicePresentation {
         case let .enable(_, passkeyHint):
             self.passkeyHint = passkeyHint
             message = "Would you like to use an existing passkey or start a new backup?"
-        case let .enableExistingPasskeyOnly(_, passkeyHint):
-            self.passkeyHint = passkeyHint
-            message = "Cloud Backup may already exist. Use your existing passkey to continue, or cancel and try again later."
         case .repairPasskey:
             passkeyHint = nil
             message = "Would you like to use an existing passkey or create a new one?"
@@ -182,6 +182,28 @@ final class CloudBackupPresentationCoordinator {
         }
 
         return false
+    }
+
+    /// The alert binding of the prompt `shows` matches, which calls `dismiss` when the user
+    /// dismisses that prompt
+    ///
+    /// SwiftUI can report one alert's dismissal more than once, the last time after its dismissal
+    /// animation ends. By then a retry may have brought the same prompt back, and the late report
+    /// would dismiss it, so a report counts only while its prompt is the one on screen
+    func promptBinding(
+        shows: @escaping (CloudBackupRootPresentation) -> Bool,
+        dismiss: @escaping () -> Void
+    ) -> Binding<Bool> {
+        Binding(
+            get: { self.currentPresentation.map(shows) ?? false },
+            set: { isPresented in
+                guard !isPresented else { return }
+                if self.consumeDismissEvent() { return }
+                guard let current = self.currentPresentation, shows(current) else { return }
+
+                dismiss()
+            }
+        )
     }
 
     func reconcile() {
@@ -309,54 +331,40 @@ struct CloudBackupPresentationHost<Content: View>: View {
         self.content = content()
     }
 
+    private func promptBinding(
+        shows: @escaping (CloudBackupRootPresentation) -> Bool,
+        dismiss: CloudBackupManagerAction
+    ) -> Binding<Bool> {
+        coordinator.promptBinding(shows: shows, dismiss: { manager.dispatch(action: dismiss) })
+    }
+
     private var showingExistingBackupPrompt: Binding<Bool> {
-        Binding(
-            get: {
-                if case .existingBackupFound = coordinator.currentPresentation { return true }
-                return false
-            },
-            set: { isPresented in
-                guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
-                manager.dispatch(action: .discardPendingEnableCloudBackup)
-            }
+        promptBinding(
+            shows: { if case .existingBackupFound = $0 { true } else { false } },
+            dismiss: .discardPendingEnableCloudBackup
+        )
+    }
+
+    private var showingBackupFilesUnavailablePrompt: Binding<Bool> {
+        promptBinding(
+            shows: { if case .backupFilesUnavailable = $0 { true } else { false } },
+            dismiss: .discardPendingEnableCloudBackup
         )
     }
 
     private var showingPasskeyChoicePrompt: Binding<Bool> {
-        Binding(
-            get: {
-                if case .passkeyChoice = coordinator.currentPresentation { return true }
-                return false
-            },
-            set: { isPresented in
-                guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
-                manager.dispatch(action: .dismissPasskeyChoicePrompt)
-            }
+        promptBinding(
+            shows: { if case .passkeyChoice = $0 { true } else { false } },
+            dismiss: .dismissPasskeyChoicePrompt
         )
     }
 
     private var showingMissingPasskeyReminder: Binding<Bool> {
-        Binding(
-            get: { coordinator.currentPresentation == .missingPasskeyReminder },
-            set: { isPresented in
-                guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
-                manager.dispatch(action: .dismissMissingPasskeyReminder)
-            }
-        )
+        promptBinding(shows: { $0 == .missingPasskeyReminder }, dismiss: .dismissMissingPasskeyReminder)
     }
 
     private var showingVerificationPrompt: Binding<Bool> {
-        Binding(
-            get: { coordinator.currentPresentation == .verificationPrompt },
-            set: { isPresented in
-                guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
-                manager.dispatch(action: .dismissVerificationPrompt)
-            }
-        )
+        promptBinding(shows: { $0 == .verificationPrompt }, dismiss: .dismissVerificationPrompt)
     }
 
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
@@ -514,6 +522,15 @@ struct CloudBackupPresentationHost<Content: View>: View {
                 isPresented: showingExistingBackupPrompt,
                 message: existingBackupMessage(for: existingBackupPasskeyHint),
                 choices: CloudBackupPromptChoice.existingBackup,
+                screen: manager.screen,
+                choose: choose,
+                cancel: cancelExistingBackupPrompt
+            ))
+            .modifier(CloudBackupPromptAlertModifier(
+                title: CloudBackupPromptChoice.backupFilesUnavailableTitle,
+                isPresented: showingBackupFilesUnavailablePrompt,
+                message: CloudBackupPromptChoice.backupFilesUnavailableMessage,
+                choices: CloudBackupPromptChoice.backupFilesUnavailable,
                 screen: manager.screen,
                 choose: choose,
                 cancel: cancelExistingBackupPrompt

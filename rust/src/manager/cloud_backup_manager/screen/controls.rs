@@ -83,11 +83,9 @@ fn prompt_actions(prompt: &CloudBackupRootPrompt) -> Vec<CloudBackupScreenAction
     match prompt {
         CloudBackupRootPrompt::None | CloudBackupRootPrompt::MissingPasskeyReminder => Vec::new(),
         CloudBackupRootPrompt::ExistingBackupFound(..)
+        | CloudBackupRootPrompt::BackupFilesUnavailable(..)
         | CloudBackupRootPrompt::PasskeyChoice(Choice::Enable(..)) => {
             vec![A::AcceptEnablePromptUseExisting, A::AcceptEnablePromptCreateNew]
-        }
-        CloudBackupRootPrompt::PasskeyChoice(Choice::EnableExistingPasskeyOnly(..)) => {
-            vec![A::AcceptEnablePromptUseExisting]
         }
         // both of its choices repair the passkey; they differ only in whether the passkey
         // request may offer an existing passkey

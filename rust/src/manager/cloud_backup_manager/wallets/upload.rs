@@ -827,6 +827,7 @@ impl RustCloudBackupManager {
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound
+            | CloudBackupError::BackupFilesUnavailable
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::LocalWalletConflict(_)
             | CloudBackupError::NeedsPasskey

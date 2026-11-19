@@ -17,8 +17,136 @@ async fn enable_uses_one_wrapper_download_per_namespace() {
         .await
         .unwrap();
 
-    assert!(matches!(preparation, CloudBackupEnablePreparation::ExistingBackupFound { .. }));
+    assert!(matches!(preparation, CloudBackupEnablePreparation::ExistingPasskeyFailed { .. }));
     assert_eq!(globals.cloud.master_key_download_attempt_count(), 2);
+}
+
+/// A passkey saved on another device that hasn't synced here yet leaves discovery with nothing to
+/// offer, which says the passkey wasn't found rather than that it opened nothing
+#[tokio::test(flavor = "current_thread")]
+async fn enable_without_a_passkey_on_this_device_says_it_found_none() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
+    globals.passkey.set_discover_result(Err(PasskeyError::NoCredentialFound));
+
+    let preparation = manager
+        .prepare_enable(CloudBackupEnableContext::settings_manual(), permit(PermitIntent::Enable))
+        .await
+        .unwrap();
+
+    let CloudBackupEnablePreparation::ExistingPasskeyFailed { error, .. } = preparation else {
+        panic!("a device with no passkey should say Enable found none to open the backup");
+    };
+    assert_eq!(
+        error.reader_message(),
+        CloudBackupError::from(PasskeyError::NoCredentialFound).reader_message()
+    );
+    assert_ne!(error.reader_message(), CloudBackupError::PasskeyMismatch.reader_message());
+}
+
+/// A namespace folder whose master key wrapper isn't there, as one still syncing or a setup that
+/// stopped before its upload leaves it
+fn seed_namespace_without_master_key(globals: &TestGlobals) -> String {
+    let namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
+    globals.cloud.set_wallet_files(namespace.clone(), Vec::new());
+    namespace
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_without_master_key_files_reports_no_backup_files() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    globals.reset();
+
+    let namespaces =
+        [seed_namespace_without_master_key(globals), seed_namespace_without_master_key(globals)];
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+        &permit(PermitIntent::Enable),
+    );
+
+    let outcome = matcher.match_namespaces(&namespaces).await.unwrap();
+    assert!(matches!(outcome, NamespaceMatchOutcome::NoBackupFiles));
+    assert_eq!(globals.passkey.discover_count(), 0, "asked for a passkey with nothing to open");
+
+    let existing = matcher.existing_backup(&namespaces).await.unwrap();
+    assert_eq!(existing, CloudBackupExistingBackup::FilesUnavailable);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn readable_wrapper_beside_missing_one_is_an_existing_backup() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    globals.reset();
+
+    let missing = seed_namespace_without_master_key(globals);
+    let readable = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+        &permit(PermitIntent::Enable),
+    );
+
+    let existing = matcher.existing_backup(&[missing, readable]).await.unwrap();
+    assert!(matches!(existing, CloudBackupExistingBackup::Readable { .. }));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_wrapper_beside_missing_one_stays_inconclusive() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    globals.reset();
+
+    let missing = seed_namespace_without_master_key(globals);
+    let pending = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+        &permit(PermitIntent::Enable),
+    );
+
+    let outcome = matcher.match_namespaces(&[missing.clone(), pending.clone()]).await.unwrap();
+    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
+
+    // a wrapper still uploading is a backup a fresh Enable asks about
+    let existing = matcher.existing_backup(&[missing, pending]).await.unwrap();
+    assert!(matches!(existing, CloudBackupExistingBackup::Readable { .. }));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn enable_without_master_key_files_asks_instead_of_prompting_for_a_passkey() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    seed_namespace_without_master_key(globals);
+    let context = CloudBackupEnableContext::settings_manual();
+
+    let preparation = manager.prepare_enable(context, permit(PermitIntent::Enable)).await.unwrap();
+    assert!(matches!(
+        preparation,
+        CloudBackupEnablePreparation::ExistingBackupFound {
+            existing: CloudBackupExistingBackup::FilesUnavailable,
+            ..
+        }
+    ));
+    assert_eq!(globals.passkey.discover_count(), 0, "asked for a passkey with nothing to open");
+
+    let preparation = manager.prepare_no_discovery_enable(context).await.unwrap();
+    assert!(matches!(
+        preparation,
+        CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
+            existing: CloudBackupExistingBackup::FilesUnavailable,
+            ..
+        }
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -52,7 +180,8 @@ async fn passkey_candidate_loads_are_limited_to_four_concurrent_wrapper_reads() 
         gate.release();
     }
 
-    assert!(matches!(task.await.unwrap().unwrap(), NamespaceMatchOutcome::NoMatch));
+    // the test device has no passkey, which ends the match after the loads
+    assert!(matches!(task.await.unwrap().unwrap(), NamespaceMatchOutcome::NoPasskeyOnDevice));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -187,8 +316,10 @@ async fn non_missing_discovery_failure_never_registers_enable_passkey() {
     assert_eq!(globals.passkey.create_count(), 0);
 }
 
+/// No passkey on this device is neither a failure nor a cancel, and it isn't a passkey that
+/// opened nothing either, since the backup's passkey may still sync here
 #[tokio::test(flavor = "current_thread")]
-async fn passkey_match_treats_missing_credential_as_no_match() {
+async fn passkey_match_reports_missing_credential_as_no_passkey_on_device() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     globals.reset();
@@ -211,7 +342,7 @@ async fn passkey_match_treats_missing_credential_as_no_match() {
     .await
     .unwrap();
 
-    assert!(matches!(outcome, NamespaceMatchOutcome::NoMatch));
+    assert!(matches!(outcome, NamespaceMatchOutcome::NoPasskeyOnDevice));
 }
 
 #[tokio::test(flavor = "current_thread")]

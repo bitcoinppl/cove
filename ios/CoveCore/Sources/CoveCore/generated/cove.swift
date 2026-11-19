@@ -26294,7 +26294,7 @@ public func FfiConverterTypeCloudBackupDriveAccountSwitchStage_lower(_ value: Cl
 public enum CloudBackupEnableFlow: Equatable, Hashable {
 
     case discoveringExistingBackup
-    case awaitingForceNewConfirmation(CloudBackupEnableContext,CloudBackupPasskeyHint?
+    case awaitingForceNewConfirmation(CloudBackupEnableContext,CloudBackupExistingBackup
     )
     case awaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent
     )
@@ -26330,7 +26330,7 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
 
         case 1: return .discoveringExistingBackup
 
-        case 2: return .awaitingForceNewConfirmation(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
+        case 2: return .awaitingForceNewConfirmation(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterTypeCloudBackupExistingBackup.read(from: &buf)
         )
 
         case 3: return .awaitingPasskeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(from: &buf)
@@ -26366,7 +26366,7 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
         case let .awaitingForceNewConfirmation(v1,v2):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
-            FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
+            FfiConverterTypeCloudBackupExistingBackup.write(v2, into: &buf)
 
 
         case let .awaitingPasskeyChoice(v1):
@@ -26486,6 +26486,85 @@ public func FfiConverterTypeCloudBackupEnablePromptChoice_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeCloudBackupEnablePromptChoice_lower(_ value: CloudBackupEnablePromptChoice) -> RustBuffer {
     return FfiConverterTypeCloudBackupEnablePromptChoice.lower(value)
+}
+
+
+
+/**
+ * What an Enable found in cloud storage, which it confirms before creating a new backup
+ */
+
+public enum CloudBackupExistingBackup: Equatable, Hashable {
+
+    /**
+     * A backup whose master key this device can read, which an existing passkey may open
+     */
+    case readable(passkeyHint: CloudBackupPasskeyHint?
+    )
+    /**
+     * Backup folders whose master key this device can't see: one still syncing to this device,
+     * or a setup that stopped before its upload, which nothing here tells apart
+     */
+    case filesUnavailable
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupExistingBackup: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupExistingBackup: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupExistingBackup
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupExistingBackup {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .readable(passkeyHint: try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
+        )
+
+        case 2: return .filesUnavailable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupExistingBackup, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .readable(passkeyHint):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionTypeCloudBackupPasskeyHint.write(passkeyHint, into: &buf)
+
+
+        case .filesUnavailable:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupExistingBackup_lift(_ buf: RustBuffer) throws -> CloudBackupExistingBackup {
+    return try FfiConverterTypeCloudBackupExistingBackup.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupExistingBackup_lower(_ value: CloudBackupExistingBackup) -> RustBuffer {
+    return FfiConverterTypeCloudBackupExistingBackup.lower(value)
 }
 
 
@@ -28346,8 +28425,6 @@ public enum CloudBackupPasskeyChoiceIntent: Equatable, Hashable {
 
     case enable(CloudBackupEnableContext,CloudBackupPasskeyHint?
     )
-    case enableExistingPasskeyOnly(CloudBackupEnableContext,CloudBackupPasskeyHint?
-    )
     case repairPasskey
 
 
@@ -28373,10 +28450,7 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceIntent: FfiConverterRustBu
         case 1: return .enable(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
         )
 
-        case 2: return .enableExistingPasskeyOnly(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
-        )
-
-        case 3: return .repairPasskey
+        case 2: return .repairPasskey
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -28392,14 +28466,8 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceIntent: FfiConverterRustBu
             FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
 
 
-        case let .enableExistingPasskeyOnly(v1,v2):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
-            FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
-
-
         case .repairPasskey:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
 
         }
     }
@@ -29591,6 +29659,12 @@ public enum CloudBackupRootPrompt: Equatable, Hashable {
     case none
     case existingBackupFound(CloudBackupEnableContext,CloudBackupPasskeyHint?
     )
+    /**
+     * Backup folders are listed but their files aren't available on this device, so no passkey
+     * can open them yet; the user tries again later or creates a new backup
+     */
+    case backupFilesUnavailable(CloudBackupEnableContext
+    )
     case passkeyChoice(CloudBackupPasskeyChoiceIntent
     )
     case missingPasskeyReminder
@@ -29621,12 +29695,15 @@ public struct FfiConverterTypeCloudBackupRootPrompt: FfiConverterRustBuffer {
         case 2: return .existingBackupFound(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
         )
 
-        case 3: return .passkeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(from: &buf)
+        case 3: return .backupFilesUnavailable(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 4: return .missingPasskeyReminder
+        case 4: return .passkeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(from: &buf)
+        )
 
-        case 5: return .verification
+        case 5: return .missingPasskeyReminder
+
+        case 6: return .verification
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29646,17 +29723,22 @@ public struct FfiConverterTypeCloudBackupRootPrompt: FfiConverterRustBuffer {
             FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
 
 
-        case let .passkeyChoice(v1):
+        case let .backupFilesUnavailable(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+
+
+        case let .passkeyChoice(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(v1, into: &buf)
 
 
         case .missingPasskeyReminder:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
 
 
         case .verification:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
 
         }
     }
@@ -31201,6 +31283,10 @@ public enum CloudBackupUiElement: Equatable, Hashable {
      */
     case promptExistingBackupFound
     /**
+     * The Enable prompt for backup folders whose files aren't available on this device
+     */
+    case promptBackupFilesUnavailable
+    /**
      * The prompt that asks which passkey to use
      */
     case promptPasskeyChoice
@@ -31306,13 +31392,15 @@ public struct FfiConverterTypeCloudBackupUiElement: FfiConverterRustBuffer {
 
         case 28: return .promptExistingBackupFound
 
-        case 29: return .promptPasskeyChoice
+        case 29: return .promptBackupFilesUnavailable
 
-        case 30: return .promptPasskeyChoiceCreateNewPasskey
+        case 30: return .promptPasskeyChoice
 
-        case 31: return .promptMissingPasskeyReminder
+        case 31: return .promptPasskeyChoiceCreateNewPasskey
 
-        case 32: return .promptVerification
+        case 32: return .promptMissingPasskeyReminder
+
+        case 33: return .promptVerification
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -31440,20 +31528,24 @@ public struct FfiConverterTypeCloudBackupUiElement: FfiConverterRustBuffer {
             writeInt(&buf, Int32(28))
 
 
-        case .promptPasskeyChoice:
+        case .promptBackupFilesUnavailable:
             writeInt(&buf, Int32(29))
 
 
-        case .promptPasskeyChoiceCreateNewPasskey:
+        case .promptPasskeyChoice:
             writeInt(&buf, Int32(30))
 
 
-        case .promptMissingPasskeyReminder:
+        case .promptPasskeyChoiceCreateNewPasskey:
             writeInt(&buf, Int32(31))
 
 
-        case .promptVerification:
+        case .promptMissingPasskeyReminder:
             writeInt(&buf, Int32(32))
+
+
+        case .promptVerification:
+            writeInt(&buf, Int32(33))
 
         }
     }

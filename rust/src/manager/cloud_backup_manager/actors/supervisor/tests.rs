@@ -4,6 +4,7 @@ use crate::manager::cloud_backup_manager::owner::inventory::test_support::{
     CloudOnlyStateTestExt as _, listed_rows, row_wallet,
 };
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
+use crate::manager::cloud_backup_manager::CloudBackupExistingBackup;
 use crate::manager::cloud_backup_manager::{CloudOnlyFetch, CloudOnlyRow, InventoryReadAt};
 use cove_tokio::task::spawn_actor;
 use crate::manager::cloud_backup_manager::owner::operation::test_support::operation_id;
@@ -1615,7 +1616,7 @@ async fn supervisor_ignores_stale_enable_preparation_completion() {
                     claim,
                     Ok(CloudBackupEnablePreparation::ExistingBackupFound {
                         context: CloudBackupEnableContext::settings_manual(),
-                        passkey_hint: None,
+                        existing: CloudBackupExistingBackup::Readable { passkey_hint: None },
                     }),
                 )
                 .await
@@ -1684,7 +1685,7 @@ async fn supervisor_ignores_stale_no_discovery_enable_preparation_completion() {
                     claim,
                     Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                         context: CloudBackupEnableContext::settings_manual(),
-                        passkey_hint: None,
+                        existing: CloudBackupExistingBackup::Readable { passkey_hint: None },
                     }),
                 )
                 .await

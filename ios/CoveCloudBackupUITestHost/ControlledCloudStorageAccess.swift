@@ -194,6 +194,12 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
             guard script.cloud == .freshEnable, isVisible else { return [] }
 
             return store.namespaces()
+        case .staleNamespace:
+            guard script.cloud == .freshEnable else {
+                fatalError("the stale namespace sits beside a fresh enable; script .freshEnable")
+            }
+
+            return [CloudBackupUITestControl.staleNamespace] + (isVisible ? store.namespaces() : [])
         case .backupFound:
             guard script.cloud == .fixture else {
                 fatalError("a fresh-enable cloud has no fixture backup to find; script .empty instead")
@@ -234,6 +240,9 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     ) async throws -> CloudBackupUploadStatus {
         try throwIfOffline()
         controller.record(.uploadStatus(recordId: recordId))
+
+        // the stale namespace never held anything, whatever the visibility gate says
+        if namespace == CloudBackupUITestControl.staleNamespace { return .notFound }
 
         switch controller.script().cloud {
         case .freshEnable:

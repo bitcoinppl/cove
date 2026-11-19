@@ -286,6 +286,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound
+            | CloudBackupError::BackupFilesUnavailable
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::LocalWalletConflict(_)
             | CloudBackupError::NeedsPasskey
@@ -440,6 +441,11 @@ pub(crate) enum CloudBackupError {
     #[error("no cloud backups found")]
     NoBackupFound,
 
+    #[error(
+        "The backup's files still aren't available on this device. Wait for cloud storage to finish syncing, then try again."
+    )]
+    BackupFilesUnavailable,
+
     #[error("user cancelled passkey discovery")]
     PasskeyDiscoveryCancelled,
 
@@ -544,6 +550,18 @@ impl CloudBackupError {
         }
     }
 
+    /// Passkey matching found nothing to restore: the passkey opened no listed backup, none was
+    /// listed, or this device has no passkey to offer. The local master key may still open one
+    pub(crate) fn is_no_passkey_restore(&self) -> bool {
+        match self {
+            Self::PasskeyMismatch | Self::NoBackupFound => true,
+            Self::Passkey(error) => {
+                matches!(error.passkey_error(), Some(PasskeyError::NoCredentialFound))
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn is_cloud_error(&self) -> bool {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
@@ -594,7 +612,10 @@ impl CloudBackupError {
             Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
             Self::NeedsPasskey => NEEDS_PASSKEY_MESSAGE.into(),
             Self::PasskeyBusy => PASSKEY_BUSY_MESSAGE.into(),
-            Self::PasskeyMismatch | Self::NoBackupFound | Self::Cancelled => self.to_string(),
+            Self::PasskeyMismatch
+            | Self::NoBackupFound
+            | Self::BackupFilesUnavailable
+            | Self::Cancelled => self.to_string(),
         }
     }
 
@@ -640,7 +661,8 @@ impl CloudBackupError {
             | Self::WritesPaused(_)
             | Self::NotAdmitted(_)
             | Self::PasskeyMismatch
-            | Self::NoBackupFound => warn!("{operation}: {self}"),
+            | Self::NoBackupFound
+            | Self::BackupFilesUnavailable => warn!("{operation}: {self}"),
         }
 
         self.reader_message()

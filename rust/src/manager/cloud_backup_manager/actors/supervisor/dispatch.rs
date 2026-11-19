@@ -626,8 +626,16 @@ impl CloudBackupSupervisor {
             // under this admission's ticket, and nothing queued behind the answer can take it first
             I::AcceptEnablePrompt(choice) => {
                 if let Some(accepted) = manager.accept_enable_prompt(choice) {
+                    let retries_existing =
+                        matches!(accepted, CloudBackupAcceptedEnablePrompt::RetryExisting(_));
                     let (kind, context) = enable_of(accepted);
                     self.start_enable(kind, context, ticket);
+
+                    // only a retry from the existing-backup prompt draws what it found again on it;
+                    // reaching that prompt from elsewhere shows it for the first time
+                    if retries_existing && let Some(claim) = self.runtime.claim() {
+                        self.screen_outcome.retrying_existing_backup(claim);
+                    }
                 }
             }
             I::SwitchDriveAccount => self.start_drive_account_switch(&manager, ticket),
@@ -709,7 +717,10 @@ fn enable_of(
     accepted: CloudBackupAcceptedEnablePrompt,
 ) -> (EnableIntent, CloudBackupEnableContext) {
     match accepted {
-        CloudBackupAcceptedEnablePrompt::Enable(context) => (EnableIntent::Standard, context),
+        CloudBackupAcceptedEnablePrompt::Enable(context)
+        | CloudBackupAcceptedEnablePrompt::RetryExisting(context) => {
+            (EnableIntent::Standard, context)
+        }
         CloudBackupAcceptedEnablePrompt::ForceNew(context) => (EnableIntent::ForceNew, context),
         CloudBackupAcceptedEnablePrompt::NoDiscovery(context) => {
             (EnableIntent::NoDiscovery, context)

@@ -47,15 +47,6 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         )
     }
 
-    func testExistingOnlyPasskeyChoiceDoesNotOfferNewBackup() {
-        let presentation = CloudBackupPasskeyChoicePresentation(
-            intent: .enableExistingPasskeyOnly(cloudBackupEnableContext(), nil)
-        )
-
-        XCTAssertEqual(presentation.choices.map(\.action), [.acceptEnablePromptUseExisting])
-        XCTAssertTrue(presentation.message.contains("existing passkey"))
-    }
-
     func testNormalEnableOffersStartNewBackup() {
         let presentation = CloudBackupPasskeyChoicePresentation(
             intent: .enable(cloudBackupEnableContext(), nil)

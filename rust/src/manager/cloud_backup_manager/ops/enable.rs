@@ -5,7 +5,7 @@ use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use cove_device::passkey::PasskeyAccess;
+use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use tracing::info;
 use zeroize::Zeroizing;
 
@@ -17,9 +17,9 @@ use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialOutcome, PasskeyRequestAuthority, PreparedWalletBackup, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupProgress,
-    CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore, PendingEnableSession,
-    PendingVerificationUpload, master_key_wrapper_revision_hash,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupExistingBackup,
+    CloudBackupProgress, CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore,
+    PendingEnableSession, PendingVerificationUpload, master_key_wrapper_revision_hash,
 };
 
 use types::EnablePasskeyAcquisition;
@@ -105,7 +105,7 @@ impl RustCloudBackupManager {
                 if matches.is_empty() {
                     return Ok(CloudBackupEnablePreparation::ExistingBackupFound {
                         context,
-                        passkey_hint,
+                        existing: CloudBackupExistingBackup::Readable { passkey_hint },
                     });
                 }
 
@@ -122,9 +122,29 @@ impl RustCloudBackupManager {
 
             NamespaceMatchOutcome::NoMatch => {
                 info!("Enable: passkey didn't match existing backups, asking user to confirm");
-                Ok(CloudBackupEnablePreparation::ExistingBackupFound {
+                Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
                     context,
                     passkey_hint,
+                    error: CloudBackupError::PasskeyMismatch,
+                })
+            }
+
+            NamespaceMatchOutcome::NoPasskeyOnDevice => {
+                info!("Enable: no passkey on this device for existing backups, asking user to confirm");
+                Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
+                    context,
+                    passkey_hint,
+                    error: CloudBackupError::from(PasskeyError::NoCredentialFound),
+                })
+            }
+
+            // no passkey can open a backup whose master key isn't visible, so asking for one could
+            // only bring this prompt back; the user waits for the files or creates a new backup
+            NamespaceMatchOutcome::NoBackupFiles => {
+                info!("Enable: listed backups have no visible master key, asking user to confirm");
+                Ok(CloudBackupEnablePreparation::ExistingBackupFound {
+                    context,
+                    existing: CloudBackupExistingBackup::FilesUnavailable,
                 })
             }
 
@@ -212,16 +232,16 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            // reading the hint presents nothing, so it needs no permit
+            // reading what the namespaces hold presents nothing, so it needs no permit
             let matcher = NamespacePasskeyMatcher::new(
                 &cloud,
                 PasskeyAccess::global(),
                 &PasskeyRequestAuthority::Silent,
             );
-            let passkey_hint = matcher.passkey_hint_for_namespaces(&existing_namespaces).await;
+            let existing = matcher.existing_backup(&existing_namespaces).await?;
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
-                passkey_hint,
+                existing,
             });
         }
 

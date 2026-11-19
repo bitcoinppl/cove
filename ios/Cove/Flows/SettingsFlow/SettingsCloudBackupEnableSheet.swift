@@ -20,8 +20,10 @@ func cloudBackupPendingEnableSupportEmailURL(
 }
 
 struct SettingsCloudBackupEnableSheet: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var manager = CloudBackupManager.shared
-    @State private var ignoreNextPromptDismiss = false
+    @State private var prompts = CloudBackupPresentationCoordinator()
 
     let onComplete: () -> Void
     let onDismiss: () -> Void
@@ -38,31 +40,40 @@ struct SettingsCloudBackupEnableSheet: View {
         return screen.enableSheetOutcome?.message
     }
 
+    /// The sheet shows only Enable prompts, and the onboarding policy keeps the reminders that
+    /// the root host shows out of its coordinator
+    private var promptContext: CloudBackupPresentationContext {
+        CloudBackupPresentationContext(
+            scenePhase: scenePhase,
+            isUnlocked: true,
+            isCoverPresented: false,
+            presentationPolicy: .onboarding
+        )
+    }
+
     private var showingPasskeyChoice: Binding<Bool> {
-        Binding(
-            get: { isEnablePasskeyChoice(screen.rootPrompt) },
-            set: { isPresented in
-                guard !isPresented else { return }
-                handlePromptDismiss()
-            }
+        prompts.promptBinding(
+            shows: { if case let .passkeyChoice(intent) = $0 { isEnablePasskeyChoice(intent) } else { false } },
+            dismiss: { manager.dispatch(action: .dismissPasskeyChoicePrompt) }
         )
     }
 
     private var showingExistingBackupPrompt: Binding<Bool> {
-        Binding(
-            get: {
-                if case .existingBackupFound = screen.rootPrompt { return true }
-                return false
-            },
-            set: { isPresented in
-                guard !isPresented else { return }
-                handlePromptDismiss()
-            }
+        prompts.promptBinding(
+            shows: { if case .existingBackupFound = $0 { true } else { false } },
+            dismiss: { manager.dispatch(action: .discardPendingEnableCloudBackup) }
+        )
+    }
+
+    private var showingBackupFilesUnavailablePrompt: Binding<Bool> {
+        prompts.promptBinding(
+            shows: { if case .backupFilesUnavailable = $0 { true } else { false } },
+            dismiss: { manager.dispatch(action: .discardPendingEnableCloudBackup) }
         )
     }
 
     private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
-        guard case let .passkeyChoice(intent) = screen.rootPrompt else { return nil }
+        guard case let .passkeyChoice(intent) = prompts.currentPresentation else { return nil }
 
         return intent
     }
@@ -74,27 +85,20 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
-        guard case let .existingBackupFound(_, passkeyHint) = screen.rootPrompt else {
+        guard case let .existingBackupFound(_, passkeyHint) = prompts.currentPresentation else {
             return nil
         }
 
         return passkeyHint
     }
 
-    private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
-        guard case let .passkeyChoice(intent) = rootPrompt else { return false }
-
+    private func isEnablePasskeyChoice(_ intent: CloudBackupPasskeyChoiceIntent) -> Bool {
         switch intent {
-        case .enable, .enableExistingPasskeyOnly:
-            return true
+        case .enable:
+            true
         case .repairPasskey:
-            return false
+            false
         }
-    }
-
-    private func isAwaitingEnablePrompt(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
-        if case .existingBackupFound = rootPrompt { return true }
-        return isEnablePasskeyChoice(rootPrompt)
     }
 
     private func beginEnableChoice() {
@@ -104,25 +108,12 @@ struct SettingsCloudBackupEnableSheet: View {
         )))
     }
 
+    /// An alert closes on any tap, so the prompt goes down here; when Rust rejects the choice or
+    /// a retry finds the same thing, it still projects the prompt, which comes back with the
+    /// outcome in it once this alert has finished closing
     private func dispatchPromptAction(_ action: CloudBackupManagerAction) {
-        ignoreNextPromptDismiss = true
+        prompts.dismissCurrentPresentation()
         manager.dispatch(action: action)
-    }
-
-    private func handlePromptDismiss() {
-        if ignoreNextPromptDismiss {
-            ignoreNextPromptDismiss = false
-            return
-        }
-
-        switch screen.rootPrompt {
-        case .existingBackupFound:
-            manager.dispatch(action: .discardPendingEnableCloudBackup)
-        case .passkeyChoice(.enable), .passkeyChoice(.enableExistingPasskeyOnly):
-            manager.dispatch(action: .dismissPasskeyChoicePrompt)
-        case .none, .missingPasskeyReminder, .passkeyChoice(.repairPasskey), .verification:
-            break
-        }
     }
 
     private func completeIfReady(_ completion: TaggedItem<CloudBackupEnableContext>?) {
@@ -140,8 +131,6 @@ struct SettingsCloudBackupEnableSheet: View {
         return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(existingBackupPasskeyHint.nameSuffix)), use that passkey instead."
     }
 
-    /// The prompts' alerts are bound to the screen's root prompt, so a choice Rust rejects leaves
-    /// the prompt it still projects, and the alert comes back with the rejection in it
     var body: some View {
         CloudBackupEnableRootContent(
             screen: screen,
@@ -162,6 +151,15 @@ struct SettingsCloudBackupEnableSheet: View {
             cancel: discardPendingEnable
         ))
         .modifier(CloudBackupPromptAlertModifier(
+            title: CloudBackupPromptChoice.backupFilesUnavailableTitle,
+            isPresented: showingBackupFilesUnavailablePrompt,
+            message: CloudBackupPromptChoice.backupFilesUnavailableMessage,
+            choices: CloudBackupPromptChoice.backupFilesUnavailable,
+            screen: screen,
+            choose: choose,
+            cancel: discardPendingEnable
+        ))
+        .modifier(CloudBackupPromptAlertModifier(
             title: "Passkey Options",
             isPresented: showingPasskeyChoice,
             message: passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.",
@@ -173,10 +171,20 @@ struct SettingsCloudBackupEnableSheet: View {
         .onChange(of: manager.enableCompletion, initial: true) { _, completion in
             completeIfReady(completion)
         }
-        .onChange(of: screen.rootPrompt, initial: true) { _, rootPrompt in
-            if !isAwaitingEnablePrompt(rootPrompt) {
-                ignoreNextPromptDismiss = false
-            }
+        .presentationTransitionHost(
+            state: prompts.presentationTransitions.hostState,
+            presenterDidBecomeReady: prompts.presenterDidBecomeReady,
+            hostDidDisappear: prompts.hostDidDisappear
+        )
+        .onChange(of: promptContext, initial: true) { _, context in
+            prompts.update(context: context)
+        }
+        .onChange(of: screen.rootPrompt) { _, _ in
+            prompts.reconcile()
+        }
+        // a choice that brings back the prompt it answered changes only the outcome
+        .onChange(of: screen.lastOutcome) { _, outcome in
+            if outcome != nil { prompts.reconcile() }
         }
     }
 

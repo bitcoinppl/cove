@@ -39,6 +39,10 @@ enum CloudBackupUITestControl {
     /// master key is wrapped with
     static let passkeyCredentialId = "cove-cloud-backup-ui-test"
 
+    /// A namespace whose folder holds no master key, as a setup that stopped before its upload
+    /// leaves it, listed by the `.staleNamespace` result
+    static let staleNamespace = "5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e"
+
     static func releaseFileName(_ id: String) -> String {
         "release-\(id)"
     }
@@ -63,6 +67,8 @@ struct CloudBackupUITestScript: Codable, Equatable {
 
     enum NamespaceResult: String, Codable {
         case empty
+        /// `CloudBackupUITestControl.staleNamespace`, beside what a fresh enable made visible
+        case staleNamespace
         case backupFound
         case offline
         case unavailable

@@ -52,6 +52,9 @@ pub(crate) struct LastOutcome {
     outcome: Option<CloudBackupLastOutcome>,
     /// The control that started the running operation, for its failure
     started_by: Option<(CloudBackupExclusiveOperationClaim, CloudBackupOutcomeTarget)>,
+    /// The Enable that Use Existing on the existing-backup prompt started, which checks the same
+    /// backup again
+    existing_backup_retry: Option<CloudBackupExclusiveOperationClaim>,
 }
 
 impl LastOutcome {
@@ -126,6 +129,40 @@ impl LastOutcome {
         let Some(target) = target else { return false };
 
         self.replace(Some(CloudBackupLastOutcome { target, outcome }))
+    }
+
+    /// The Enable `claim` was started by Use Existing on the existing-backup prompt, so it checks
+    /// the backup that prompt showed again
+    pub(crate) fn retrying_existing_backup(&mut self, claim: CloudBackupExclusiveOperationClaim) {
+        self.existing_backup_retry = Some(claim);
+    }
+
+    /// The Enable `claim` that the existing-backup prompt's Use Existing started came back to a
+    /// prompt with `error`; true when the shown outcome changed
+    ///
+    /// The answer is drawn with its outcome, so trying it again never looks like nothing happened.
+    /// An Enable started anywhere else, such as onboarding's passkey choice, shows the prompt for
+    /// the first time, whose own message says what it found, so nothing is drawn for it
+    pub(crate) fn existing_backup_retry_failed(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        error: &CloudBackupError,
+    ) -> bool {
+        let target = CloudBackupOutcomeTarget::Action(
+            CloudBackupScreenAction::AcceptEnablePromptUseExisting,
+        );
+        if self.existing_backup_retry.take() != Some(claim) {
+            return false;
+        }
+
+        let retried = self
+            .started_by
+            .take_if(|(started, started_target)| *started == claim && *started_target == target);
+        if retried.is_none() {
+            return false;
+        }
+
+        self.replace(Some(CloudBackupLastOutcome { target, outcome: failure(error) }))
     }
 
     /// Work `action` did in the supervisor's turn, with no operation, ended with `error`; true
