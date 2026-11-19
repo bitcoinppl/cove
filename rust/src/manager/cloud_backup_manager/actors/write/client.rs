@@ -100,7 +100,7 @@ impl CloudBackupWriteClient {
         let context_id = context.id();
         if context.origin() != self.origin() {
             return Err(CloudBackupError::Internal(format!(
-                "cloud backup write supervisor returned mismatched operation origin for command {context_id:?}",
+                "cloud backup write supervisor returned mismatched operation origin for command {context_id}",
             )
             .into()));
         }

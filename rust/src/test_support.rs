@@ -18,6 +18,32 @@ pub(crate) mod wallet_target;
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 
+/// Fails when user-facing text holds a Rust Debug dump, such as `Reqwest(..)`,
+/// `reqwest::Error { kind: .. }` or `NodeConnectionFailed("..")`
+///
+/// It looks for a capitalized identifier directly followed by `(` or ` {`, and for a `::` path
+pub(crate) fn assert_no_debug_dump(text: &str) {
+    assert!(!text.contains("::"), "text holds a Rust path: {text}");
+
+    let chars: Vec<char> = text.chars().collect();
+    for (start, char) in chars.iter().enumerate() {
+        let starts_word = start == 0 || !chars[start - 1].is_alphanumeric();
+        if !char.is_ascii_uppercase() || !starts_word {
+            continue;
+        }
+
+        let end =
+            (start..chars.len()).find(|&i| !chars[i].is_alphanumeric()).unwrap_or(chars.len());
+        let rest: String = chars[end..].iter().take(2).collect();
+        let word: String = chars[start..end].iter().collect();
+
+        assert!(
+            !rest.starts_with('(') && rest != " {",
+            "text holds a Rust Debug dump at `{word}`: {text}"
+        );
+    }
+}
+
 /// The shortest deadline a test gives a condition to become true
 ///
 /// CI and local machines run several heavy suites at once: simulator and emulator UI tests,

@@ -77,6 +77,26 @@ impl From<GlobalConfigKey> for &'static str {
     }
 }
 
+// the name a warning gives a setting; the PIN and decoy keys share neutral names, so the text
+// never tells decoy mode apart
+impl std::fmt::Display for GlobalConfigKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SelectedWalletId | Self::MainSelectedWalletId | Self::DecoySelectedWalletId => {
+                write!(f, "selected wallet")
+            }
+            Self::SelectedNetwork => write!(f, "network"),
+            Self::SelectedFiatCurrency => write!(f, "currency"),
+            Self::SelectedNode(network) => write!(f, "{network} node"),
+            Self::ColorScheme => write!(f, "appearance"),
+            Self::AuthType | Self::InDecoyMode => write!(f, "app lock"),
+            Self::HashedPinCode | Self::WipeDataPin | Self::DecoyPin => write!(f, "PIN"),
+            Self::OnboardingProgress => write!(f, "onboarding progress"),
+            Self::CustomBlockExplorer(network) => write!(f, "{network} block explorer"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct GlobalConfigTable {
     db: Arc<redb::Database>,

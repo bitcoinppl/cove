@@ -419,11 +419,11 @@ pub(crate) enum CloudBackupError {
     ///
     /// Pausing is not failing: a paused upload keeps its row Dirty, with no retry timer, and the
     /// lane wakes the upload scheduler once the policy lets ordinary writes run again
-    #[error("cloud backup writes are paused: {0:?}")]
+    #[error("cloud backup writes are paused: {0}")]
     WritesPaused(PauseReason),
 
     /// The lifecycle owner did not admit the request in its current state
-    #[error("cloud backup did not admit the request: {0:?}")]
+    #[error("cloud backup did not admit the request: {0}")]
     NotAdmitted(Rejection),
 
     #[error("internal error: {0}")]

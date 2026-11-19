@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 
 pub trait ResultExt<T, E> {
     /// Map an error to a string-based error variant
@@ -39,15 +39,6 @@ pub trait ResultExt<T, E> {
         E: Display,
         F: FnOnce(String) -> FinalError;
 
-    /// Map an error using Debug formatting (`{:?}`)
-    ///
-    /// # Errors
-    /// Returns the error transformed by the provided function
-    fn map_err_debug<FinalError, F>(self, f: F) -> Result<T, FinalError>
-    where
-        E: Debug,
-        F: FnOnce(String) -> FinalError;
-
     /// Map an error with a prefix string, producing `"prefix: error_message"`
     ///
     /// # Errors
@@ -84,14 +75,6 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         F: FnOnce(String) -> FinalError,
     {
         self.map_err(|e| f(format!("{e:#}")))
-    }
-
-    fn map_err_debug<FinalError, F>(self, f: F) -> Result<T, FinalError>
-    where
-        E: Debug,
-        F: FnOnce(String) -> FinalError,
-    {
-        self.map_err(|e| f(format!("{e:?}")))
     }
 
     fn map_err_prefix<FinalError, F>(self, prefix: &str, f: F) -> Result<T, FinalError>
@@ -143,13 +126,6 @@ mod tests {
         let result: Result<(), SourceError> = Err(SourceError("oops"));
         let mapped = result.map_err_display_alt(TestError::Msg);
         assert_eq!(mapped.unwrap_err(), TestError::Msg("oops: detailed".into()));
-    }
-
-    #[test]
-    fn map_err_debug_uses_debug() {
-        let result: Result<(), SourceError> = Err(SourceError("oops"));
-        let mapped = result.map_err_debug(TestError::Msg);
-        assert_eq!(mapped.unwrap_err(), TestError::Msg("SourceError(\"oops\")".into()));
     }
 
     #[test]

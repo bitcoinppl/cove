@@ -12,7 +12,7 @@ pub enum Error {
     #[error("unsupported descriptor: {0}")]
     UnsupportedDescriptor(String),
 
-    #[error("unsupported descriptor type: {0:?}")]
+    #[error("unsupported descriptor type: {}", descriptor_type_name(.0))]
     UnsupportedDescriptorType(DescriptorType),
 
     #[error("descriptors are not a matching external/internal pair")]
@@ -23,6 +23,24 @@ pub enum Error {
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// The name an error message gives a descriptor type, since miniscript's `DescriptorType` has no
+/// Display
+pub fn descriptor_type_name(descriptor_type: &DescriptorType) -> &'static str {
+    match descriptor_type {
+        DescriptorType::Bare => "bare",
+        DescriptorType::Sh => "P2SH",
+        DescriptorType::Pkh => "P2PKH",
+        DescriptorType::Wpkh => "P2WPKH",
+        DescriptorType::Wsh => "P2WSH",
+        DescriptorType::ShWsh => "P2SH-P2WSH",
+        DescriptorType::ShWpkh => "P2SH-P2WPKH",
+        DescriptorType::ShSortedMulti => "P2SH sorted multisig",
+        DescriptorType::WshSortedMulti => "P2WSH sorted multisig",
+        DescriptorType::ShWshSortedMulti => "P2SH-P2WSH sorted multisig",
+        DescriptorType::Tr => "Taproot",
+    }
+}
 
 pub trait DescriptorExt {
     /// Returns the descriptor public key from the descriptor

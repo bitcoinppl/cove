@@ -176,7 +176,7 @@ fn worker_failure_message(workers: &Workers) -> Option<String> {
                 return None;
             };
 
-            Some(format!("{:?}: {message}", worker.wallet_type))
+            Some(format!("{}: {message}", worker.wallet_type))
         })
         .collect::<Vec<_>>();
 
@@ -1031,7 +1031,7 @@ mod tests {
 
         assert_eq!(
             worker_failure_message(&workers),
-            Some("WrappedSegwit: node unavailable".into())
+            Some("Wrapped Segwit: node unavailable".into())
         );
     }
 
