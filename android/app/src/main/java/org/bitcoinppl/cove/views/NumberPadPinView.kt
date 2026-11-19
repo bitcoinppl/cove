@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.views
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -30,9 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,8 +62,6 @@ fun NumberPadPinView(
     onWrongPin: (String) -> Unit = {},
 ) {
     var pin by remember { mutableStateOf("") }
-    // counts wrong PINs, so each one, not just every other, shakes the boxes
-    var wrongPinCount by remember { mutableIntStateOf(0) }
     var isSubmitting by remember { mutableStateOf(false) }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -89,37 +86,18 @@ fun NumberPadPinView(
                         pin = ""
                         onUnlock(submittedPin)
                     } else {
-                        wrongPinCount += 1
-                        delay(490)
+                        // when the pad is taller than the screen, reaching its bottom row scrolls
+                        // the boxes away, so they come back into view before they shake, and the
+                        // PIN clears only once the shake ends, however slowly animations run
+                        pinBoxes.bringIntoView()
+                        offsetX.shake()
                         pin = ""
+                        onWrongPin(submittedPin)
                     }
                 } finally {
                     isSubmitting = false
                 }
             }
-        }
-    }
-
-    // shake animation on wrong PIN
-    LaunchedEffect(wrongPinCount) {
-        if (wrongPinCount > 0) {
-            val pin = pin
-
-            // when the pad is taller than the screen, reaching its bottom row scrolls the boxes
-            // away, so they come back into view to show the shake and the cleared PIN
-            launch { pinBoxes.bringIntoView() }
-
-            // perform shake animation
-            offsetX.animateTo(30f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(-30f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(20f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(-20f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(10f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(-10f, animationSpec = tween(70, easing = LinearEasing))
-            offsetX.animateTo(0f, animationSpec = tween(70, easing = LinearEasing))
-
-            // call onWrongPin after animation
-            onWrongPin(pin)
         }
     }
 
@@ -330,5 +308,12 @@ private fun NumberButton(
             fontSize = 28.sp,
             color = Color.White,
         )
+    }
+}
+
+/** Shakes the PIN boxes side to side and settles them back where they were */
+private suspend fun Animatable<Float, AnimationVector1D>.shake() {
+    for (offset in listOf(30f, -30f, 20f, -20f, 10f, -10f, 0f)) {
+        animateTo(offset, animationSpec = tween(70, easing = LinearEasing))
     }
 }

@@ -2,7 +2,9 @@ package org.bitcoinppl.cove.views
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -19,14 +21,19 @@ import org.junit.Test
 import java.util.Collections
 
 private const val VIEWPORT_TAG = "numberPadPinWrongPin.viewport"
+private const val PIN_BOXES_TAG = "numberPadPin.pinBoxes"
 private const val PIN_LENGTH = 6
 
+// the feedback takes about a second, so five seconds of frames means the pad never cleared the PIN
+private const val MAX_FEEDBACK_FRAMES = 300
+
 /**
- * Every wrong PIN shakes and clears the PIN boxes where the user can see them
+ * Every wrong PIN shakes and then clears the PIN boxes where the user can see them
  *
  * On a landscape phone at the largest font size the pad is taller than the screen, so reaching
  * its bottom row scrolls the PIN boxes out of view. A wrong PIN typed there must bring them back
- * into view, or the pad looks like it ignored the PIN
+ * into view before they shake, and clear them only after, or the pad looks like it ignored the
+ * PIN. The test steps the clock one frame at a time, so it sees the order whatever the speed
  */
 @LayoutRegressionTest
 class NumberPadPinWrongPinTest {
@@ -37,7 +44,7 @@ class NumberPadPinWrongPinTest {
     private val failures = mutableListOf<String>()
 
     @Test
-    fun everyWrongPinShowsThePinBoxes() {
+    fun everyWrongPinShakesAndClearsThePinBoxesInView() {
         compose.setContent {
             CoveTheme(darkTheme = true) {
                 CompactViewport(Viewport.LANDSCAPE, LARGEST_SYSTEM_FONT_SCALE, VIEWPORT_TAG) {
@@ -52,37 +59,96 @@ class NumberPadPinWrongPinTest {
             }
         }
 
-        repeat(2) { attempt ->
-            val zero = compose.onNodeWithTag("numberPadPin.digit.0")
-            zero.performScrollTo()
-
-            // the boxes must start out of view, or this test can't tell whether the pad shows them
-            assertTrue(
-                "attempt ${attempt + 1}: reaching 0 should scroll the PIN boxes out of view, so the test checks the pad brings them back",
-                !pinBoxesInView(),
-            )
-
-            repeat(PIN_LENGTH) { zero.performClick() }
-
-            try {
-                compose.waitUntil(timeoutMillis = 5_000) { wrongPins.size == attempt + 1 }
-            } catch (_: ComposeTimeoutException) {
-                failures += "attempt ${attempt + 1}: the wrong PIN should shake the PIN boxes, but the pad didn't react"
-            }
-            compose.waitForIdle()
-
-            if (!pinBoxesInView()) failures += "attempt ${attempt + 1}: the wrong PIN should show the PIN boxes, but they stayed out of view"
-        }
+        checkWrongPin(attempt = 1)
+        checkWrongPin(attempt = 2)
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 
+    private fun checkWrongPin(attempt: Int) {
+        val zero = compose.onNodeWithTag("numberPadPin.digit.0")
+        zero.performScrollTo()
+        compose.waitForIdle()
+
+        // the boxes must start out of view, or this test can't tell whether the pad shows them
+        assertTrue(
+            "attempt $attempt: reaching 0 should scroll the PIN boxes out of view, so the test checks the pad brings them back",
+            !pinBoxesInView(),
+        )
+
+        // the shake moves the boxes sideways from here
+        val restLeft = pinBoxes().left
+        val feedback = WrongPinFeedback()
+
+        compose.mainClock.autoAdvance = false
+        repeat(PIN_LENGTH) { zero.performClick() }
+
+        while (!feedback.cleared && feedback.frames < MAX_FEEDBACK_FRAMES) {
+            compose.mainClock.advanceTimeByFrame()
+            feedback.observe(shaking = pinBoxes().left != restLeft, inView = pinBoxesInView(), filled = filledPinBoxes())
+        }
+
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        feedback.failures().forEach { failures += "attempt $attempt: $it" }
+        if (wrongPins.size != attempt) failures += "attempt $attempt: the pad should report each wrong PIN, but it reported ${wrongPins.size}"
+    }
+
+    private fun pinBoxes(): Rect = compose.onNodeWithTag(PIN_BOXES_TAG).fetchSemanticsNode().ownBoundsPx()
+
     private fun pinBoxesInView(): Boolean {
         val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
-        val pinBoxes = compose.onNodeWithTag("numberPadPin.pinBoxes").fetchSemanticsNode().ownBoundsPx()
+        val pinBoxes = pinBoxes()
 
         return pinBoxes.top >= viewport.top && pinBoxes.bottom <= viewport.bottom
     }
+
+    private fun filledPinBoxes(): Int =
+        compose
+            .onAllNodes(hasText("●") and hasAnyAncestor(hasTestTag(PIN_BOXES_TAG)), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .size
+}
+
+/** What one wrong PIN's feedback showed, frame by frame, until the boxes cleared */
+private class WrongPinFeedback {
+    var frames = 0
+        private set
+    var cleared = false
+        private set
+
+    private var showedPin = false
+    private var shookInView = false
+    private var shookOutOfView = false
+    private var shookBeforeClear = false
+    private var clearedInView = false
+
+    fun observe(
+        shaking: Boolean,
+        inView: Boolean,
+        filled: Int,
+    ) {
+        frames += 1
+        if (shaking && inView) shookInView = true
+        if (shaking && !inView) shookOutOfView = true
+        if (filled == PIN_LENGTH) showedPin = true
+
+        if (showedPin && filled == 0) {
+            cleared = true
+            clearedInView = inView
+            shookBeforeClear = shookInView && !shaking
+        }
+    }
+
+    fun failures(): List<String> =
+        buildList {
+            if (!cleared) add("the wrong PIN should clear the boxes, but they still held it after $frames frames")
+            if (shookOutOfView) add("the boxes should shake only once they are in view, but they shook out of view")
+            if (!shookInView) add("the boxes should shake where the user can see them, but they never did")
+            if (cleared && !clearedInView) add("the boxes should clear in view, but they cleared out of view")
+            if (cleared && !shookBeforeClear) add("the boxes should finish shaking before they clear, but they cleared first")
+        }
 }
 
 private fun SemanticsNode.ownBoundsPx(): Rect = Rect(positionInRoot, size.toSize())
