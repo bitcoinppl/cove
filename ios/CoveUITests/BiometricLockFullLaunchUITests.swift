@@ -86,9 +86,9 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         let pinToggle = layout.assertReachable(app.switches.matching(identifier: "Enable PIN"), "settings: Enable PIN", needsHit: true)
         pinToggle.switches.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Enter New PIN"].waitForExistence(timeout: 10))
-        enterPin()
+        app.enterPin(Self.pin)
         XCTAssertTrue(app.staticTexts["Confirm New PIN"].waitForExistence(timeout: 5))
-        enterPin()
+        app.enterPin(Self.pin)
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
         XCTAssertEqual(pinToggle.value as? String, "1", "the PIN was not saved")
 
@@ -184,14 +184,6 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
             attachment.name = "\(name): \(label)"
             attachment.lifetime = .keepAlways
             add(attachment)
-        }
-    }
-
-    private func enterPin() {
-        for digit in Self.pin {
-            let key = app.buttons[String(digit)]
-            XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
-            key.tap()
         }
     }
 }

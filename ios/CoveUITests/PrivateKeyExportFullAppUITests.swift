@@ -46,7 +46,7 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         // a wrong PIN and the decoy PIN keep the prompt up without revealing
         startReveal()
         for pin in [wrongPin, decoyPin] {
-            robot.enterPin(pin)
+            app.enterPin(pin)
 
             // gives a reveal that would follow the PIN time to appear before asserting it never did
             XCTAssertFalse(
@@ -57,7 +57,7 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
             assertPrivateKeyHidden()
         }
 
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
 
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts[fixtureXprv].exists)
@@ -80,7 +80,7 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         openWalletSettings()
 
         startReveal()
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
         let shownKey = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'xprv' OR label BEGINSWITH 'tprv'")).firstMatch
         XCTAssertTrue(shownKey.exists, "Reveal showed no private key")
@@ -97,14 +97,14 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         // the PIN Reveal took doesn't carry over, and neither a wrong PIN nor the decoy PIN starts a send
         startExport("Continue with KeyTeleport")
         for pin in [wrongPin, decoyPin] {
-            robot.enterPin(pin)
+            app.enterPin(pin)
 
             // gives a send that would follow the PIN time to start before asserting it never did
             XCTAssertFalse(keyTeleportSend.waitForExistence(timeout: 3), "PIN \(pin) started a KeyTeleport send")
             XCTAssertTrue(verifyIdentity.exists, "PIN \(pin) dismissed the prompt")
         }
 
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
         XCTAssertTrue(keyTeleportSend.waitForExistence(timeout: 10), "the main PIN didn't start a KeyTeleport send")
         assertPrivateKeyHidden()
 
@@ -176,7 +176,7 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         screen.scrollDown(untilExists: export)
         screen.reachAndTap(export, "wallet settings: Export Private Key")
         app.tapButton(named: "Reveal and Copy")
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
 
         screen.assertScreenFits(
@@ -207,9 +207,9 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         pinToggle.switches.firstMatch.tap()
 
         XCTAssertTrue(app.staticTexts["Enter New PIN"].waitForExistence(timeout: 10))
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
         XCTAssertTrue(app.staticTexts["Confirm New PIN"].waitForExistence(timeout: 5))
-        robot.enterPin(mainPin)
+        app.enterPin(mainPin)
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
 
         let decoyToggle = app.switches["Enable Decoy PIN"]
@@ -224,9 +224,9 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         confirmDecoy.tap()
 
         XCTAssertTrue(app.staticTexts["Enter Decoy PIN"].waitForExistence(timeout: 10))
-        robot.enterPin(decoyPin)
+        app.enterPin(decoyPin)
         XCTAssertTrue(app.staticTexts["Confirm Decoy PIN"].waitForExistence(timeout: 5))
-        robot.enterPin(decoyPin)
+        app.enterPin(decoyPin)
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
         XCTAssertEqual(decoyToggle.value as? String, "1", "decoy PIN was not saved")
     }

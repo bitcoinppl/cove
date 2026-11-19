@@ -264,15 +264,6 @@ struct CloudBackupHostRobot {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
     }
 
-    /// Types a PIN on the number pad that is on screen
-    func enterPin(_ pin: String) {
-        for digit in pin {
-            let key = app.buttons[String(digit)]
-            XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
-            key.tap()
-        }
-    }
-
     /// The detail's Verify control: Verify Now before the backup is verified, Verify Again after
     var verifyControl: XCUIElement {
         app.buttons.matching(identifier: CloudBackupUIIdentifier.action("verify")).firstMatch
