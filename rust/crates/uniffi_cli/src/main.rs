@@ -32,10 +32,21 @@ fn main() {
     }
 }
 
-/// The `--out-dir` of a Kotlin `generate` call
+/// The `--out-dir` of a Kotlin `generate` call, in any form clap accepts
 fn kotlin_out_dir(args: &[String]) -> Option<PathBuf> {
-    let position = args.iter().position(|arg| arg == "--out-dir" || arg == "-o")?;
-    args.get(position + 1).map(PathBuf::from)
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        if arg == "--out-dir" || arg == "-o" {
+            return args.next().map(PathBuf::from);
+        }
+
+        let inline = arg.strip_prefix("--out-dir=").or_else(|| arg.strip_prefix("-o"));
+        if let Some(dir) = inline {
+            return Some(PathBuf::from(dir.strip_prefix('=').unwrap_or(dir)));
+        }
+    }
+
+    None
 }
 
 /// The output directory of a Swift call that writes Swift sources
@@ -63,4 +74,33 @@ fn swift_out_dir(args: &[String]) -> Option<PathBuf> {
     }
 
     positionals.get(1).map(PathBuf::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(line: &str) -> Vec<String> {
+        line.split(' ').map(String::from).collect()
+    }
+
+    #[test]
+    fn kotlin_out_dir_reads_every_clap_form() {
+        for line in [
+            "uniffi_cli generate lib.so --language kotlin --out-dir out",
+            "uniffi_cli generate lib.so --language kotlin --out-dir=out",
+            "uniffi_cli generate lib.so --language kotlin -o out",
+            "uniffi_cli generate lib.so --language kotlin -o=out",
+            "uniffi_cli generate lib.so --language kotlin -oout",
+        ] {
+            assert_eq!(kotlin_out_dir(&args(line)), Some(PathBuf::from("out")), "{line}");
+        }
+    }
+
+    #[test]
+    fn swift_out_dir_skips_flag_values() {
+        let line = "uniffi_cli lib.a --module-name cove_core_ffi out --swift-sources";
+        assert_eq!(swift_out_dir(&args(line)), Some(PathBuf::from("out")));
+        assert_eq!(swift_out_dir(&args("uniffi_cli lib.a out --headers")), None);
+    }
 }
