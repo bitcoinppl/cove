@@ -48,6 +48,13 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// instead of failing outright
     private static let exchangesBeforeDrop = 3
 
+    /// How long a CVC screen's Continue gets to leave the screen before it is tapped again,
+    /// longer than any screen change takes on a slow CI simulator
+    private static let retapInterval: TimeInterval = 10
+
+    /// How many more times a CVC screen's Continue is tapped while the screen ignores it
+    private static let submitRetries = 2
+
     private var app: XCUIApplication!
     private var signer: HardwareSignerControl!
 
@@ -315,9 +322,27 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         assertCvcScreenFits(on: screen, title: title, description: description, cancel: cancel)
 
         let field = app.secureTextFields.matching(identifier: "Enter CVC")
-        reachAndTap(field, "\(screen): CVC field").typeTextOnceFocused(cvc)
-        reachAndTap(button("Continue"), "\(screen): Continue")
-        XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
+        let input = reachAndTap(field, "\(screen): CVC field")
+        input.typeTextOnceFocused(cvc)
+
+        let submit = reachAndTap(button("Continue"), "\(screen): Continue")
+        let titleText = app.staticTexts[title]
+        let error = app.staticTexts["tapSigner.cvcError"]
+
+        // a busy CI simulator can drop a synthesized tap, leaving the screen as it was with the
+        // CVC field still focused; a user would tap again. A Continue that ran either shows an
+        // error, keeping the field focused, or drops the field's focus, and the screens that talk
+        // to the card also disable it until the card answers, so a repeat only lands on a
+        // Continue that took no tap
+        for _ in 0 ..< Self.submitRetries {
+            if titleText.waitForNonExistence(timeout: Self.retapInterval) { break }
+            guard !error.exists, input.hasKeyboardFocus, submit.isEnabled, submit.isHittable else { break }
+
+            XCTContext.runActivity(named: "\(screen): Continue took no tap, tapping again") { _ in submit.tap() }
+        }
+
+        XCTAssertFalse(error.exists, "the \(screen) screen rejected the CVC: \(error.label)")
+        XCTAssertTrue(titleText.waitForNonExistence(timeout: Self.retapInterval), "the \(screen) screen didn't accept the CVC")
     }
 
     /// Checks the CVC screen fits with the number pad up, before any CVC is entered

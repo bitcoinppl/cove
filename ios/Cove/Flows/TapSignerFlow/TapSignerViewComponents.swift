@@ -221,6 +221,7 @@ struct TapSignerCvcScreen<Header: View>: View {
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+                        .accessibilityIdentifier("tapSigner.cvcError")
                 }
 
                 Button(action: submitAction) {
