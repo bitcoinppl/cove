@@ -62,6 +62,14 @@ Set `GOOGLE_PLAY_JSON_KEY_PATH` to a readable Google Play service account JSON f
 
 Use `just upload-google-play` (`just ugp`) when the versionCode was already bumped and the signed bundle already exists. It skips the upload when Google Play already has that versionCode, so it is safe to retry.
 
+### iOS and Android together
+
+```bash
+just release-all    # alias: just rel
+```
+
+This checks both stores' credentials, runs the iOS release build and archive, and then uploads to TestFlight while it builds and uploads Android, so the App Store Connect upload and processing wait no longer hold up Android. An iOS build failure stops before Android's versionCode is bumped. If one platform fails after that, the other still finishes. Retry iOS with `just upload-testflight`. Retry an Android build failure with `just release-android`, which bumps again from wherever the failure left the versionCode, and an Android upload failure, which keeps the new versionCode and signed bundle, with `just ugp`. It needs the environment variables of both releases.
+
 ## Development Workflow
 
 ### Iterative Development

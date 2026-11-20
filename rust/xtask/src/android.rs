@@ -22,7 +22,7 @@ use xshell::{cmd, Shell};
 mod google_play;
 mod play_api;
 
-pub use google_play::{release_android, upload_google_play};
+pub use google_play::{release_android, upload_google_play, AndroidRelease};
 
 // Android build constants
 const ANDROID_TARGETS: &[&str] =
