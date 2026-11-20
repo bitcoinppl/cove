@@ -72,7 +72,7 @@ import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.DotMenuViewCircle
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove.views.spaceBetweenAtLeast
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import org.bitcoinppl.cove.displayMessage
@@ -220,7 +220,6 @@ fun HotWalletCreateScreen(
                             .heightIn(min = maxHeight)
                             .verticalScroll(rememberScrollState())
                             .padding(top = 20.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
                     // pager for word groups
                     Column(
@@ -254,6 +253,8 @@ fun HotWalletCreateScreen(
                             )
                         }
                     }
+
+                    FlexibleSpacer()
 
                     // bottom section
                     Column(

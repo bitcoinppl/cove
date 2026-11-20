@@ -73,7 +73,7 @@ import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
-import org.bitcoinppl.cove.views.spaceBetweenAtLeast
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionLockState
@@ -204,7 +204,6 @@ private fun TransactionDetailsColumn(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
     ) {
         Column(
             modifier =
@@ -247,6 +246,8 @@ private fun TransactionDetailsColumn(
                 onToggleTransactionLockState = onToggleTransactionLockState,
             )
         }
+
+        FlexibleSpacer()
 
         TransactionDetailsActions(isExpanded, secondary, onViewInExplorer, onToggleDetails)
     }

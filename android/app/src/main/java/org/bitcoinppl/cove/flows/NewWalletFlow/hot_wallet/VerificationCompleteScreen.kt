@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +42,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -110,14 +113,14 @@ fun VerificationCompleteScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(20.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Spacer(Modifier.weight(2f))
 
                 // checkmark icon
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("verificationComplete.icon"),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -131,12 +134,12 @@ fun VerificationCompleteScreen(
                     )
                 }
 
-                Spacer(Modifier.weight(3f))
+                FlexibleSpacer(weight = 3f)
 
                 // bottom section
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("verificationComplete.bottomSection"),
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

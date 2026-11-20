@@ -81,7 +81,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AsyncText
-import org.bitcoinppl.cove.views.spaceBetweenAtLeast
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
@@ -266,7 +266,6 @@ fun SendFlowSetAmountScreen(
                                 .padding(bottom = keyboardToolbarPadding)
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                     ) {
                         Column(
                             modifier =
@@ -348,6 +347,8 @@ fun SendFlowSetAmountScreen(
                                 onChangeSpeed = onChangeSpeed,
                             )
                         }
+
+                        FlexibleSpacer()
 
                         ImageButton(
                             text = stringResource(R.string.btn_next),

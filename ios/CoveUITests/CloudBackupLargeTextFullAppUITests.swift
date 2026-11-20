@@ -75,6 +75,24 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         scenarioState.assertNextActions("onboarding should offer Enable", body: "disabled", available: ["enable"])
     }
 
+    /// Onboarding's Cloud Backup success screen keeps its message whole and Continue reachable
+    /// below it
+    func testOnboardingEnableSuccessKeepsContinueReachable() throws {
+        let control = try CloudBackupHostControl(script: .init(cloud: .freshEnable, namespaceResults: [.empty]))
+        robot.launch(control: control, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+
+        robot.startFreshEnableFromOnboarding()
+        XCTAssertTrue(app.staticTexts["Cloud Backup enabled"].waitForExistence(timeout: 30))
+        control.assertNextActions("the enabled backup should offer Turn Off", available: ["turnOff"])
+
+        ScreenReachability(app: app).assertScreenFits(
+            "Cloud Backup enabled",
+            texts: ["Cloud Backup enabled"],
+            descriptions: ["Cove can finish confirming cloud visibility"],
+            buttons: [app.buttons.matching(NSPredicate(format: "label == %@", "Continue"))]
+        )
+    }
+
     /// The inventory's header, its on-device and cloud-only rows, Restore All, and the verified
     /// result with its actions
     func testInventoryCloudOnlyRowsAndVerificationActionsAreReachable() {

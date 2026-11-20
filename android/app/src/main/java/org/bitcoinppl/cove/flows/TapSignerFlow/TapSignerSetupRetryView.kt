@@ -49,24 +49,20 @@ fun TapSignerSetupRetryView(
     val scope = rememberCoroutineScope()
     var isSubmitting by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+    TapSignerSheetLayout(
+        testTag = "tapSignerSetupRetry",
+        modifier = modifier.padding(horizontal = 16.dp),
+        header = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                TextButton(onClick = { app.sheetState = null }) {
+                    Text("Cancel", fontWeight = FontWeight.SemiBold)
+                }
             }
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+        },
+        content = {
             Icon(
                 imageVector = Icons.Default.Refresh,
                 contentDescription = null,
@@ -88,52 +84,53 @@ fun TapSignerSetupRetryView(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
             )
-        }
+        },
+        action = {
+            Button(
+                onClick = {
+                    if (isSubmitting) return@Button
+                    isSubmitting = true
+                    scope.launch {
+                        try {
+                            val nfc = manager.getOrCreateNfc(tapSigner)
+                            manager.beginScan("Hold your phone near the TapSigner to continue setup")
 
-        Button(
-            onClick = {
-                if (isSubmitting) return@Button
-                isSubmitting = true
-                scope.launch {
-                    try {
-                        val nfc = manager.getOrCreateNfc(tapSigner)
-                        manager.beginScan("Hold your phone near the TapSigner to continue setup")
-
-                        val nextResponse =
-                            nfc.continueSetup(response, manager.operationCallbacks())
-                        when (nextResponse) {
-                            is SetupCmdResponse.Complete -> {
-                                manager.resetRoute(
-                                    TapSignerRoute.SetupSuccess(tapSigner, nextResponse.v1),
+                            val nextResponse =
+                                nfc.continueSetup(response, manager.operationCallbacks())
+                            when (nextResponse) {
+                                is SetupCmdResponse.Complete -> {
+                                    manager.resetRoute(
+                                        TapSignerRoute.SetupSuccess(tapSigner, nextResponse.v1),
+                                    )
+                                }
+                                is SetupCmdResponse.Retry -> {
+                                    manager.resetRoute(TapSignerRoute.SetupRetry(tapSigner, nextResponse))
+                                }
+                            }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (e: Exception) {
+                            // card errors can carry the card's response text, so log only the kind
+                            val kind = e.javaClass.simpleName
+                            Log.w("TapSignerSetupRetry", "TAPSIGNER setup retry failed: $kind")
+                            app.sheetState = null
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.TapSignerSetupFailed(
+                                        "TapSigner setup failed. Please try again.",
+                                    ),
                                 )
-                            }
-                            is SetupCmdResponse.Retry -> {
-                                manager.resetRoute(TapSignerRoute.SetupRetry(tapSigner, nextResponse))
-                            }
+                        } finally {
+                            manager.endScan()
+                            isSubmitting = false
                         }
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (e: Exception) {
-                        // card errors can carry the card's response text, so log only the kind
-                        val kind = e.javaClass.simpleName
-                        Log.w("TapSignerSetupRetry", "TAPSIGNER setup retry failed: $kind")
-                        app.sheetState = null
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.TapSignerSetupFailed(
-                                    "TapSigner setup failed. Please try again.",
-                                ),
-                            )
-                    } finally {
-                        manager.endScan()
-                        isSubmitting = false
                     }
-                }
-            },
-            enabled = !isSubmitting,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.continue"),
-        ) {
-            Text(if (isSubmitting) "Working…" else "Continue Setup")
-        }
-    }
+                },
+                enabled = !isSubmitting,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.continue"),
+            ) {
+                Text(if (isSubmitting) "Working…" else "Continue Setup")
+            }
+        },
+    )
 }

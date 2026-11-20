@@ -79,7 +79,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove.views.spaceBetweenAtLeast
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.WordCheckId
 import org.bitcoinppl.cove_core.WordCheckState
 import org.bitcoinppl.cove_core.WordVerifyStateMachine
@@ -313,7 +313,6 @@ fun VerifyWordsScreen(
                             .heightIn(min = maxHeight)
                             .verticalScroll(rememberScrollState())
                             .padding(top = 20.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
                     Column(
                         modifier =
@@ -438,6 +437,8 @@ fun VerifyWordsScreen(
                             }
                         }
                     }
+
+                    FlexibleSpacer()
 
                     Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp),

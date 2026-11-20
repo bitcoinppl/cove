@@ -64,7 +64,7 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
-import org.bitcoinppl.cove.views.spaceBetweenAtLeast
+import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
@@ -172,7 +172,6 @@ fun CoinControlSetAmountScreen(
                             .background(MaterialTheme.colorScheme.surface)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spaceBetweenAtLeast(24.dp),
                 ) {
                     Column(
                         modifier =
@@ -212,6 +211,8 @@ fun CoinControlSetAmountScreen(
                             onUtxoDetailsClick = onUtxoDetailsClick,
                         )
                     }
+
+                    FlexibleSpacer()
 
                     ImageButton(
                         text = stringResource(R.string.btn_next),
