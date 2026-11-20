@@ -4,6 +4,7 @@ pub mod balance;
 pub(crate) mod builder;
 pub(crate) mod deletion;
 pub mod ffi;
+pub mod finalize;
 pub mod fingerprint;
 pub mod metadata;
 pub(crate) mod secret_upgrade;

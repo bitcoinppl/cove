@@ -41075,6 +41075,118 @@ public func FfiConverterTypePendingWalletManagerReconcileMessage_lower(_ value: 
 
 
 
+/**
+ * Why a signed PSBT could not become a transaction ready to broadcast
+ *
+ * Its text is the body of the finalize alert, so each variant says what the user can do
+ */
+
+public enum PsbtFinalizeFailure: Equatable, Hashable {
+
+    case inputsNotInWallet
+    case missingSignatures
+    case signaturesDoNotMatch
+    case invalidSignatures
+    case malformedInputs
+    case finalizer(String
+    )
+    case extract(String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PsbtFinalizeFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePsbtFinalizeFailure: FfiConverterRustBuffer {
+    typealias SwiftType = PsbtFinalizeFailure
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PsbtFinalizeFailure {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .inputsNotInWallet
+
+        case 2: return .missingSignatures
+
+        case 3: return .signaturesDoNotMatch
+
+        case 4: return .invalidSignatures
+
+        case 5: return .malformedInputs
+
+        case 6: return .finalizer(try FfiConverterString.read(from: &buf)
+        )
+
+        case 7: return .extract(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PsbtFinalizeFailure, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .inputsNotInWallet:
+            writeInt(&buf, Int32(1))
+
+
+        case .missingSignatures:
+            writeInt(&buf, Int32(2))
+
+
+        case .signaturesDoNotMatch:
+            writeInt(&buf, Int32(3))
+
+
+        case .invalidSignatures:
+            writeInt(&buf, Int32(4))
+
+
+        case .malformedInputs:
+            writeInt(&buf, Int32(5))
+
+
+        case let .finalizer(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .extract(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbtFinalizeFailure_lift(_ buf: RustBuffer) throws -> PsbtFinalizeFailure {
+    return try FfiConverterTypePsbtFinalizeFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePsbtFinalizeFailure_lower(_ value: PsbtFinalizeFailure) -> RustBuffer {
+    return FfiConverterTypePsbtFinalizeFailure.lower(value)
+}
+
+
+
 
 public enum ReceiveAddressCopyPolicy: Equatable, Hashable {
 
@@ -48369,7 +48481,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case UnknownError(String
     )
-    case PsbtFinalizeError(String
+    case PsbtFinalizeError(PsbtFinalizeFailure
     )
     case GetHistoricalPricesError(String
     )
@@ -48511,7 +48623,7 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 32: return .PsbtFinalizeError(
-            try FfiConverterString.read(from: &buf)
+            try FfiConverterTypePsbtFinalizeFailure.read(from: &buf)
             )
         case 33: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
@@ -48706,7 +48818,7 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
 
         case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(32))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypePsbtFinalizeFailure.write(v1, into: &buf)
 
 
         case let .GetHistoricalPricesError(v1):

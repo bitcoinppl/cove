@@ -60273,6 +60273,164 @@ public object FfiConverterTypePendingWalletManagerReconcileMessage : FfiConverte
 
 
 
+/**
+ * Why a signed PSBT could not become a transaction ready to broadcast
+ *
+ * Its text is the body of the finalize alert, so each variant says what the user can do
+ */
+sealed class PsbtFinalizeFailure {
+
+    object InputsNotInWallet : PsbtFinalizeFailure()
+
+
+    object MissingSignatures : PsbtFinalizeFailure()
+
+
+    object SignaturesDoNotMatch : PsbtFinalizeFailure()
+
+
+    object InvalidSignatures : PsbtFinalizeFailure()
+
+
+    object MalformedInputs : PsbtFinalizeFailure()
+
+
+    data class Finalizer(
+        val v1: kotlin.String) : PsbtFinalizeFailure()
+
+    {
+
+
+        companion object
+    }
+
+    data class Extract(
+        val v1: kotlin.String) : PsbtFinalizeFailure()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePsbtFinalizeFailure : FfiConverterRustBuffer<PsbtFinalizeFailure>{
+    override fun read(buf: ByteBuffer): PsbtFinalizeFailure {
+        return when(buf.getInt()) {
+            1 -> PsbtFinalizeFailure.InputsNotInWallet
+            2 -> PsbtFinalizeFailure.MissingSignatures
+            3 -> PsbtFinalizeFailure.SignaturesDoNotMatch
+            4 -> PsbtFinalizeFailure.InvalidSignatures
+            5 -> PsbtFinalizeFailure.MalformedInputs
+            6 -> PsbtFinalizeFailure.Finalizer(
+                FfiConverterString.read(buf),
+                )
+            7 -> PsbtFinalizeFailure.Extract(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PsbtFinalizeFailure): ULong = when(value) {
+        is PsbtFinalizeFailure.InputsNotInWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PsbtFinalizeFailure.MissingSignatures -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PsbtFinalizeFailure.SignaturesDoNotMatch -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PsbtFinalizeFailure.InvalidSignatures -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PsbtFinalizeFailure.MalformedInputs -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PsbtFinalizeFailure.Finalizer -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is PsbtFinalizeFailure.Extract -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: PsbtFinalizeFailure, buf: ByteBuffer) {
+        when(value) {
+            is PsbtFinalizeFailure.InputsNotInWallet -> {
+                buf.putInt(1)
+                Unit
+            }
+            is PsbtFinalizeFailure.MissingSignatures -> {
+                buf.putInt(2)
+                Unit
+            }
+            is PsbtFinalizeFailure.SignaturesDoNotMatch -> {
+                buf.putInt(3)
+                Unit
+            }
+            is PsbtFinalizeFailure.InvalidSignatures -> {
+                buf.putInt(4)
+                Unit
+            }
+            is PsbtFinalizeFailure.MalformedInputs -> {
+                buf.putInt(5)
+                Unit
+            }
+            is PsbtFinalizeFailure.Finalizer -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is PsbtFinalizeFailure.Extract -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 enum class ReceiveAddressCopyPolicy {
 
@@ -70020,7 +70178,7 @@ sealed class WalletManagerException: kotlin.Exception() {
 
     class PsbtFinalizeException(
 
-        val v1: kotlin.String
+        val v1: PsbtFinalizeFailure
         ) : WalletManagerException() {
         override val message
             get() = "v1=${ v1 }"
@@ -70217,7 +70375,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.read(buf),
                 )
             32 -> WalletManagerException.PsbtFinalizeException(
-                FfiConverterString.read(buf),
+                FfiConverterTypePsbtFinalizeFailure.read(buf),
                 )
             33 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
@@ -70407,7 +70565,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             is WalletManagerException.PsbtFinalizeException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypePsbtFinalizeFailure.allocationSize(value.v1)
             )
             is WalletManagerException.GetHistoricalPricesException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -70616,7 +70774,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             }
             is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(32)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypePsbtFinalizeFailure.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.GetHistoricalPricesException -> {
