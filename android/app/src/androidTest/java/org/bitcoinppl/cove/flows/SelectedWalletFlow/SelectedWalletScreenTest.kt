@@ -26,8 +26,8 @@ class SelectedWalletScreenTest {
     }
 
     @Test
-    fun cloudBackupEnabledHidesUnverifiedWalletBanner() {
-        val cloudBackupEnabled = mutableStateOf(false)
+    fun aConfirmedCloudBackupCopyHidesUnverifiedWalletBanner() {
+        val backedUpByCloudBackup = mutableStateOf(false)
 
         compose.setContent {
             CoveTheme {
@@ -40,7 +40,7 @@ class SelectedWalletScreenTest {
                     isDarkList = false,
                     manager = remember { WalletManager.previewNew() },
                     app = AppManager.getInstance(),
-                    isCloudBackupEnabled = cloudBackupEnabled.value,
+                    isBackedUpByCloudBackup = backedUpByCloudBackup.value,
                 )
             }
         }
@@ -48,7 +48,7 @@ class SelectedWalletScreenTest {
         compose.onNodeWithText("Backup your wallet").assertIsDisplayed()
 
         compose.runOnUiThread {
-            cloudBackupEnabled.value = true
+            backedUpByCloudBackup.value = true
         }
 
         compose.onAllNodes(hasText("Backup your wallet")).assertCountEquals(0)
@@ -70,7 +70,7 @@ class SelectedWalletScreenTest {
                     isDarkList = false,
                     manager = manager,
                     app = AppManager.getInstance(),
-                    isCloudBackupEnabled = false,
+                    isBackedUpByCloudBackup = false,
                 )
             }
         }

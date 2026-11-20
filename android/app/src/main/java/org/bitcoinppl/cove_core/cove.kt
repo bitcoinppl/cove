@@ -1535,9 +1535,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_is_cloud_backup_enabled(
-    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_recovery(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(
     ): Short
@@ -2691,9 +2691,9 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_recovery(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_report_drive_account_switch_platform_result(`ptr`: Long,`result`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -3652,6 +3652,10 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_xpuberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackuppublishedrecovery_applying(`ptr`: RustBuffer.ByValue,`update`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackuprecovery_wallet(`ptr`: RustBuffer.ByValue,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupactions_availability(`ptr`: RustBuffer.ByValue,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4624,10 +4628,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_is_cloud_backup_enabled() != 34679.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_recovery() != 6214.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_report_drive_account_switch_platform_result() != 37200.toShort()) {
@@ -20942,14 +20946,19 @@ public interface RustCloudBackupManagerInterface {
     fun `hasPendingCloudUploadVerification`(): kotlin.Boolean
 
     /**
-     * Check if cloud backup is enabled, used as nav guard
-     */
-    fun `isCloudBackupEnabled`(): kotlin.Boolean
-
-    /**
      * Reports whether onboarding may recover a lost enable-completion event from durable state
      */
     fun `onboardingEnableCompletionReadiness`(): CloudBackupOnboardingCompletionReadiness
+
+    /**
+     * What Cloud Backup can restore, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedRecovery::applying`]. Each wallet's answer comes from the recovery's
+     * `wallet`, never from whether the screen shows a configured backup, which starts as
+     * Disabled until the first publish of a launch
+     */
+    fun `recovery`(): CloudBackupPublishedRecovery
 
     /**
      * Hands Rust's switch owner what Android's half of a Google Drive account switch did
@@ -21174,12 +21183,12 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
 
     /**
-     * Check if cloud backup is enabled, used as nav guard
-     */override fun `isCloudBackupEnabled`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
+     * Reports whether onboarding may recover a lost enable-completion event from durable state
+     */override fun `onboardingEnableCompletionReadiness`(): CloudBackupOnboardingCompletionReadiness {
+            return FfiConverterTypeCloudBackupOnboardingCompletionReadiness.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
         it,
         _status)
 }
@@ -21190,12 +21199,17 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
 
     /**
-     * Reports whether onboarding may recover a lost enable-completion event from durable state
-     */override fun `onboardingEnableCompletionReadiness`(): CloudBackupOnboardingCompletionReadiness {
-            return FfiConverterTypeCloudBackupOnboardingCompletionReadiness.lift(
+     * What Cloud Backup can restore, with its revision
+     *
+     * Read it before `listen_for_updates`, then advance it only with
+     * [`CloudBackupPublishedRecovery::applying`]. Each wallet's answer comes from the recovery's
+     * `wallet`, never from whether the screen shows a configured backup, which starts as
+     * Disabled until the first publish of a launch
+     */override fun `recovery`(): CloudBackupPublishedRecovery {
+            return FfiConverterTypeCloudBackupPublishedRecovery.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_recovery(
         it,
         _status)
 }
@@ -34084,6 +34098,68 @@ public object FfiConverterTypeCloudBackupProgress: FfiConverterRustBuffer<CloudB
 
 
 /**
+ * [`CloudBackupRecovery`] as the manager last sent it, with its revision
+ *
+ * The manager is a process singleton and can send updates before the platform listens, so the
+ * platform starts from `RustCloudBackupManager::recovery()` and applies each later update with
+ * [`CloudBackupPublishedRecovery::applying`], which skips the ones its snapshot already includes
+ */
+data class CloudBackupPublishedRecovery (
+    /**
+     * How many updates the manager had sent when this recovery was current
+     */
+    var `revision`: kotlin.ULong
+    ,
+    var `recovery`: CloudBackupRecovery
+
+){
+
+    /**
+     * `update` when it is newer than this, or this as it is
+     */ fun `applying`(`update`: CloudBackupPublishedRecovery): CloudBackupPublishedRecovery {
+            return FfiConverterTypeCloudBackupPublishedRecovery.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackuppublishedrecovery_applying(FfiConverterTypeCloudBackupPublishedRecovery.lower(this),
+
+        FfiConverterTypeCloudBackupPublishedRecovery.lower(`update`),_status)
+}
+    )
+    }
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPublishedRecovery: FfiConverterRustBuffer<CloudBackupPublishedRecovery> {
+    override fun read(buf: ByteBuffer): CloudBackupPublishedRecovery {
+        return CloudBackupPublishedRecovery(
+            FfiConverterULong.read(buf),
+            FfiConverterTypeCloudBackupRecovery.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupPublishedRecovery) = (
+            FfiConverterULong.allocationSize(value.`revision`) +
+            FfiConverterTypeCloudBackupRecovery.allocationSize(value.`recovery`)
+    )
+
+    override fun write(value: CloudBackupPublishedRecovery, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`revision`, buf)
+            FfiConverterTypeCloudBackupRecovery.write(value.`recovery`, buf)
+    }
+}
+
+
+
+/**
  * A screen as it was published, with the revision that orders it against every delta
  *
  * The platform starts from the one `state()` returns and advances it only with
@@ -34149,6 +34225,70 @@ public object FfiConverterTypeCloudBackupPublishedScreen: FfiConverterRustBuffer
     override fun write(value: CloudBackupPublishedScreen, buf: ByteBuffer) {
             FfiConverterULong.write(value.`revision`, buf)
             FfiConverterTypeCloudBackupScreen.write(value.`screen`, buf)
+    }
+}
+
+
+
+/**
+ * What Cloud Backup can restore on this device
+ *
+ * Read from persisted state only, by the same rule as the Wipe Data PIN's coverage, so it is
+ * already right at launch and offline, before the backup's live state loads
+ */
+data class CloudBackupRecovery (
+    /**
+     * Whether a backup is configured on this device, whatever its wallets' state
+     */
+    var `configured`: kotlin.Boolean
+    ,
+    /**
+     * The wallets with a confirmed copy, sorted so the same coverage always compares equal
+     */
+    var `confirmedWallets`: List<WalletId>
+
+){
+
+    /**
+     * Whether Cloud Backup can restore the wallet with `wallet_id`
+     */ fun `wallet`(`walletId`: WalletId): CloudBackupWalletRecovery {
+            return FfiConverterTypeCloudBackupWalletRecovery.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackuprecovery_wallet(FfiConverterTypeCloudBackupRecovery.lower(this),
+
+        FfiConverterTypeWalletId.lower(`walletId`),_status)
+}
+    )
+    }
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRecovery: FfiConverterRustBuffer<CloudBackupRecovery> {
+    override fun read(buf: ByteBuffer): CloudBackupRecovery {
+        return CloudBackupRecovery(
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeWalletId.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupRecovery) = (
+            FfiConverterBoolean.allocationSize(value.`configured`) +
+            FfiConverterSequenceTypeWalletId.allocationSize(value.`confirmedWallets`)
+    )
+
+    override fun write(value: CloudBackupRecovery, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`configured`, buf)
+            FfiConverterSequenceTypeWalletId.write(value.`confirmedWallets`, buf)
     }
 }
 
@@ -45691,6 +45831,19 @@ sealed class CloudBackupReconcileMessage {
     }
 
     /**
+     * What Cloud Backup can restore changed; the platform applies it with
+     * `CloudBackupPublishedRecovery::applying`, which skips one its snapshot already includes
+     */
+    data class Recovery(
+        val v1: org.bitcoinppl.cove_core.CloudBackupPublishedRecovery) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
      * Cloud Backup came to rest off on this device: no backup is configured, set up or changed,
      * and no local reset runs
      *
@@ -45779,18 +45932,21 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             2 -> CloudBackupReconcileMessage.EnableCompleted(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.SettledOff
-            4 -> CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired(
+            3 -> CloudBackupReconcileMessage.Recovery(
+                FfiConverterTypeCloudBackupPublishedRecovery.read(buf),
+                )
+            4 -> CloudBackupReconcileMessage.SettledOff
+            5 -> CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired(
                 FfiConverterULong.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.DriveAccountSwitchStateRequired
-            6 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
+            6 -> CloudBackupReconcileMessage.DriveAccountSwitchStateRequired
+            7 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
                 FfiConverterULong.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
+            8 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
                 FfiConverterULong.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
+            9 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -45810,6 +45966,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.Recovery -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupPublishedRecovery.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.SettledOff -> {
@@ -45866,31 +46029,36 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.SettledOff -> {
+            is CloudBackupReconcileMessage.Recovery -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudBackupPublishedRecovery.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.SettledOff -> {
+                buf.putInt(4)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchSelectionRequired -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchStateRequired -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 Unit
             }
             is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
-                buf.putInt(6)
-                FfiConverterULong.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 buf.putInt(7)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 buf.putInt(8)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+                buf.putInt(9)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -49598,6 +49766,54 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Whether Cloud Backup can restore one wallet, as this device's persisted record says
+ */
+
+enum class CloudBackupWalletRecovery {
+
+    /**
+     * Cloud Backup is off on this device
+     */
+    OFF,
+    /**
+     * Cloud Backup is on but has no confirmed copy of the wallet as it is now, such as while its
+     * first upload fails or an edit still uploads
+     */
+    UNCONFIRMED,
+    /**
+     * Cloud Backup has a confirmed copy of the wallet as it is now
+     */
+    CONFIRMED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupWalletRecovery: FfiConverterRustBuffer<CloudBackupWalletRecovery> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupWalletRecovery.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupWalletRecovery) = 4UL
+
+    override fun write(value: CloudBackupWalletRecovery, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 

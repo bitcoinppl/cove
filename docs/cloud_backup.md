@@ -1416,6 +1416,35 @@ nothing, so the restore records the backup it just downloaded and decrypted as
 never replaces an upload's or a later change's row. A restore during onboarding
 marks its wallets dirty instead, and they count once those uploads confirm.
 
+A detail refresh that reads each local wallet's copy from the provider also
+reconciles the rows with what it read, through the same remote evidence that
+confirms landed uploads, so it applies only to rows in the namespace it read
+and only while the configuration it started under is current. A wallet whose
+copy is at its local revision gets a `Confirmed` row when it has none, such
+as one restored before restores recorded their backup, or when its row is
+`Dirty` or `Failed`, such as after another device uploaded a copy that was gone
+again or that this device failed to upload. A
+`Confirmed` row whose copy the provider no longer holds, or holds at another
+revision than the one the row confirmed, turns `Dirty`, since another device
+deleted or replaced that copy; the wallet then counts as uncovered until its
+upload confirms, and that upload starts right away, as the write lane allows.
+A changed row, or an upload the evidence confirmed, also requests a sync health
+check, so Settings doesn't keep showing an upload as pending or failed. A copy
+the read couldn't read, or one at a version this app
+can't read, changes nothing, unless a listing the provider confirmed left it
+out: iCloud waits for a file it doesn't list until the read times out, so the
+listing is what shows a copy another device deleted.
+
+Rows are compared by when they were written, not by revision, so a restore
+that recorded a hash the wallet no longer reproduces, such as a backup written
+before #988, still reconciles. The read begins when it lists the provider,
+which for a refresh built on the screen's earlier inventory snapshot is when
+that snapshot was taken. A row written after that is left alone, since it may
+record a change the listing couldn't show. Times are whole
+seconds: a confirmation from the read's own second can still turn `Dirty`,
+which only uploads the wallet again, but a `Dirty` or `Failed` row from that
+second is not confirmed, since that could drop an edit's upload.
+
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.
 
@@ -1425,18 +1454,75 @@ live provider proof, which would refuse the PIN offline and right after launch:
 - On iOS, a wallet row can turn `Confirmed` once the file staged in the
   ubiquity container reads back, before iCloud has it, for example while
   iCloud storage is full
-- The rows are this device's record, not the provider's. If another device
-  turns Cloud Backup off and deletes the shared namespace, the `Confirmed` rows
-  here still count. A namespace with no master key wrapper row also passes,
-  since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
+- The rows are this device's record, not the provider's, until a detail
+  refresh reads the copies again. Until then, for example offline or right
+  after launch, a copy another device deleted still counts, and if another
+  device turns Cloud Backup off and deletes the shared namespace, a refresh
+  that can't list it leaves the `Confirmed` rows here counting. A namespace
+  with no master key wrapper row also passes, since only a wrapper row that
+  exists and isn't `Confirmed` withdraws coverage. The master key wrapper is
+  never read back from the provider for coverage either: a refresh confirms a
+  wallet whose copy decrypts with this device's master key even if the
+  provider no longer holds the wrapper, which a restore after a wipe needs.
+  Settings then shows "Cove couldn't confirm the key for this cloud backup"
 - A copy that the startup integrity check or a detail refresh can't decrypt is
-  noted only in memory, so its `Confirmed` row still counts, as when another
-  device replaces the copy after this one confirmed it. Saving the failure
-  would need telling a corrupt copy from a transient read failure
+  noted only in memory, and reads like a transient download failure, so it
+  neither grants nor withdraws coverage and its `Confirmed` row still counts.
+  Saving the failure, or withdrawing coverage on it, would need telling a
+  corrupt copy from a transient read failure. A decrypt failure can also mean
+  this device's master key doesn't match the namespace, and withdrawing on
+  that would mark every wallet `Dirty` and upload each again over copies
+  encrypted with another key
 - If reading the local wallets of any network fails, the check lists no
   wallets and allows the PIN, as it did for the selected network before. The
   follow-up that adds decoy-mode wallets to the check should make a failed read
   refuse the PIN instead
+
+- Two refreshes can overlap, since an exclusive operation's follow-up refresh
+  can run beside the detail workflow's. If another device deletes a copy
+  between their reads, the older refresh can apply last and record a
+  `Confirmed` row for a wallet with none, after the newer refresh found the
+  copy missing. The row counts until a later refresh reads the copy missing
+  again. Closing it needs a per-namespace record of the latest read applied
+- A refresh that finds a wallet's copy at another revision than this device
+  confirmed uploads this device's copy over it, which can replace newer labels
+  another device uploaded. The backup integrity check, Sync and deep
+  verification already upload such wallets the same way, and the write lane
+  still refuses an upload that would drop key material
+
+### Wallet recovery
+
+Screens outside Cloud Backup ask whether Cloud Backup can bring one wallet
+back: the selected wallet's Backup your wallet reminder, Wallet Settings'
+Final Warning before deleting an unverified hot wallet, and the missing-keys
+alert's Open Cloud Backup. They ask `CloudBackupRecovery`, never whether the
+screen shows a configured backup. The screen starts as Disabled until the
+first publish of a launch, and Cloud Backup being on says nothing about a
+wallet whose first upload never confirmed.
+
+`CloudBackupRecovery` holds whether a backup is configured, from the persisted
+record, and the wallets with a confirmed copy, by the Wipe Data PIN coverage
+rule above. Its `wallet` answers `Off`, `Unconfirmed` or `Confirmed`. Only a
+`Confirmed` wallet hides the reminder and gets the Final Warning that it can be
+recovered from the Cloud Backup screen; any other gets "not backed up" and
+Delete Forever. Open Cloud Backup shows whenever a backup is configured.
+
+The platform reads `recovery()` before `listen_for_updates`, so the answer is
+right from the first frame after launch. That read is fresh, and when it
+differs from the last update it is sent as the next one first, so a later
+publish compares against what the platform holds. Every screen publish recomputes it from
+the record it already reads and sends a `Recovery` message when it changed, at
+the next revision, and the platform applies it with
+`CloudBackupPublishedRecovery.applying`, which skips one its snapshot already
+includes. A write that grants or withdraws coverage without changing the
+screen still asks for a publish: marking an edited wallet dirty, a local
+reset's key clear, and a refresh's reconciliation of the rows with what the
+provider showed. The harness checks at every boundary that a platform copy
+built from the snapshot and the updates matches a fresh read of the record.
+
+The Settings row's Verification Recommended also reads persisted state: it
+ages the last verification the record holds, since the live verification
+starts over as not verified on every launch.
 
 ## Related Notes
 

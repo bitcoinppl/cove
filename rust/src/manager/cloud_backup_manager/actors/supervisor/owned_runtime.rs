@@ -447,6 +447,12 @@ impl OwnedRuntime {
         // `Closed(LocalReset)` whatever the record says, and `finish_reset` publishes the ending one
         self.lifecycle.disable_before_local_key_clear()?;
         *keys = ResetKeys::Cleared;
+
+        // the screen stays the reset's, but what Cloud Backup can restore went with the record
+        if let Some(manager) = self.manager.upgrade() {
+            manager.request_screen_publish();
+        }
+
         Ok(())
     }
 

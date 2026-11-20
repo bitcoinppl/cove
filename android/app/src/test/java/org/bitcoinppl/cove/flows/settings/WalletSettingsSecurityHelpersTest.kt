@@ -22,8 +22,6 @@ class WalletSettingsSecurityHelpersTest {
         WalletDeletionFlow.start(
             walletName = "Test Wallet",
             firstMessage = "First warning",
-            finalMessage = "Final warning",
-            finalButtonTitle = "Delete Forever",
             requiredConfirmations = requiredConfirmations,
         )
 }

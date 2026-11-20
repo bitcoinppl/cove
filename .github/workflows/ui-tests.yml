@@ -83,6 +83,7 @@ env:
     CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests,
     CoveCloudBackupUITests/CloudBackupWipeDataPinFullAppUITests,
+    CoveCloudBackupUITests/CloudBackupWalletRecoveryFullAppUITests,
     CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests,
     CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests,
     CoveCloudBackupUITests/CloudBackupDisableFullAppUITests,

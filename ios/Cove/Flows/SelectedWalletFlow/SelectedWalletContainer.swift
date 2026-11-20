@@ -145,7 +145,7 @@ private struct SelectedWalletLoadingContent: View {
         VStack(spacing: 0) {
             WalletBalanceLoadingHeaderView(metadata: metadata)
 
-            if CloudBackupManager.shared.screen.configured == nil {
+            if CloudBackupManager.shared.recovery.wallet(walletId: metadata.id) != .confirmed {
                 VerifyReminder(walletId: metadata.id, isVerified: metadata.verified)
             }
 

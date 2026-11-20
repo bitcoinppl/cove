@@ -3,10 +3,12 @@ import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
 
-/// Holds the Cloud Backup screen Rust projects and forwards user intents to Rust
+/// Holds the Cloud Backup screen Rust projects and what it can restore, and forwards user intents
+/// to Rust
 ///
-/// Views read only `screen`: which body and sections are on screen, and whether each control is
-/// enabled, are Rust's decisions. The manager derives nothing from the screen's content
+/// Views read only `screen` and `recovery`: which body and sections are on screen, whether each
+/// control is enabled, and whether a wallet is backed up, are Rust's decisions. The manager derives
+/// nothing from the screen's content
 @Observable
 final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler, @unchecked Sendable {
     static let shared = CloudBackupManager()
@@ -20,18 +22,33 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
 
     /// The screen Rust last published, with its revision; every update replaces it in one assignment
     private(set) var published: CloudBackupPublishedScreen
+
+    /// What Cloud Backup can restore, with its revision, read from the persisted record so it is
+    /// already right at launch, before the first screen publish
+    private(set) var publishedRecovery: CloudBackupPublishedRecovery
     var enableCompletion: TaggedItem<CloudBackupEnableContext>?
 
     var screen: CloudBackupScreen {
         published.screen
     }
 
+    /// Whether Cloud Backup can restore each wallet, and whether a backup is configured at all;
+    /// views ask this, never whether the screen shows a configured backup
+    var recovery: CloudBackupRecovery {
+        publishedRecovery.recovery
+    }
+
     /// A manager that shows `published` and is not listening yet; the shared one listens next
-    init(rust: RustCloudBackupManager, published: CloudBackupPublishedScreen) {
+    init(
+        rust: RustCloudBackupManager,
+        published: CloudBackupPublishedScreen,
+        recovery: CloudBackupPublishedRecovery = .init(revision: 0, recovery: .init(configured: false, confirmedWallets: []))
+    ) {
         let rustBridge = DispatchQueue(label: "cove.CloudBackupManager.rustbridge", qos: .userInitiated)
         self.rust = rust
         self.rustBridge = rustBridge
         self.published = published
+        self.publishedRecovery = recovery
         self.syncHealthObserver = ICloudDriveHelper.shared.makeSyncHealthObserver {
             rustBridge.async { rust.cloudStorageDidChange() }
         }
@@ -40,9 +57,9 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
     private convenience init() {
         let rust = RustCloudBackupManager()
 
-        // the snapshot is read before listening, so the deltas still queued from before it are
-        // at or before its revision, and applying skips them instead of replaying them over it
-        self.init(rust: rust, published: rust.state())
+        // the snapshots are read before listening, so the updates still queued from before them
+        // are at or before their revisions, and applying skips them instead of replaying them
+        self.init(rust: rust, published: rust.state(), recovery: rust.recovery())
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()
         // Keep the initial iCloud health probe off the main startup path.
@@ -82,6 +99,9 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
 
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
+
+        case let .recovery(update):
+            publishedRecovery = publishedRecovery.applying(update: update)
 
         // iCloud Drive has no account binding to release, so settling off needs nothing from iOS
         case .settledOff:

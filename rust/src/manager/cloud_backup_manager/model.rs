@@ -183,6 +183,9 @@ impl CloudBackupDetailResult {
 pub(crate) struct CloudBackupDetailInventorySnapshot {
     pub(crate) namespace: String,
     pub(crate) wallet_record_ids: Vec<String>,
+    /// When the listing was taken, in unix seconds, so the refresh that completes it later
+    /// doesn't read a copy uploaded since as missing
+    pub(crate) listed_at: u64,
     pub(crate) authority: Option<CloudBackupInventoryAuthority>,
     pub(crate) provisional_detail: Option<CloudBackupDetail>,
 }
@@ -649,14 +652,19 @@ impl CloudBackupReducerState {
             return false;
         }
 
-        let CloudBackupVerificationState::Verified { last_verified_at, .. } =
-            self.configured.verification
-        else {
-            return false;
-        };
-
-        let Some(last_verified_at) = last_verified_at else {
-            return true;
+        // the live state starts over as NotVerified on every launch, so the persisted record
+        // holds the last check, the same timestamp the public Verified state shows
+        let last_verified_at = match (
+            &self.configured.verification,
+            Self::last_verified_at(&self.verification_metadata),
+        ) {
+            (
+                CloudBackupVerificationState::Verified { .. }
+                | CloudBackupVerificationState::NotVerified,
+                Some(last_verified_at),
+            ) => last_verified_at,
+            (CloudBackupVerificationState::Verified { .. }, None) => return true,
+            _ => return false,
         };
 
         let Some(now) = cove_util::time::unix_timestamp_secs() else {
@@ -1798,6 +1806,36 @@ mod tests {
         assert_eq!(
             state.settings_row_status(),
             CloudBackupSettingsRowStatus::VerificationRecommended
+        );
+    }
+
+    #[test]
+    fn settings_row_recommends_verification_from_a_persisted_check_after_relaunch() {
+        let now = cove_util::time::unix_timestamp_secs().expect("system clock");
+        let stale = now - STALE_VERIFICATION_THRESHOLD.as_secs() - 60 * 60 * 24;
+        let recent = now - 60 * 60 * 24;
+
+        // a relaunch starts the reducer over, and only the persisted record knows the last check
+        let relaunched = |last_verified_at| {
+            let mut model = CloudBackupStateReducer::default();
+            model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
+            model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+                metadata: CloudBackupVerificationMetadata::Verified(last_verified_at),
+                should_prompt: false,
+            });
+            model.apply_event(CloudBackupStateReducerEvent::SyncHealthObserved(
+                CloudSyncHealth::AllUploaded,
+            ));
+            model
+        };
+
+        assert_eq!(
+            relaunched(stale).configured_settings_row(),
+            CloudBackupSettingsRowStatus::VerificationRecommended
+        );
+        assert_eq!(
+            relaunched(recent).configured_settings_row(),
+            CloudBackupSettingsRowStatus::Active
         );
     }
 

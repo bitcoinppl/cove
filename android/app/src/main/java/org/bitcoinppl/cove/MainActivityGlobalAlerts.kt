@@ -104,7 +104,7 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.HotWalletKeyMissing -> {
             val walletId = state.walletId
-            val cloudBackupEnabled = app.cloudBackupManager.isCloudBackupEnabled
+            val cloudBackupEnabled = app.cloudBackupManager.recovery.configured
             val choices =
                 buildList {
                     if (cloudBackupEnabled) {

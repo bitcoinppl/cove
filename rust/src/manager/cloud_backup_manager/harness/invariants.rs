@@ -41,7 +41,8 @@ use crate::manager::cloud_backup_manager::screen::{
     CloudBackupScreenBody, CloudBackupSection, mismatched_delete_consents, undrawn_actions,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupPendingEnableCleanupState, CloudBackupPublishedScreen, RecordId,
+    CloudBackupPendingEnableCleanupState, CloudBackupPublishedRecovery, CloudBackupPublishedScreen,
+    RecordId,
 };
 use crate::wallet::metadata::WalletId;
 
@@ -94,6 +95,9 @@ pub(crate) enum Invariant {
     InventoryRows = 8,
     /// Every row that offers Delete is one the delete authority would authorize now
     OfferedDeletes = 9,
+    /// The platform's recovery, started from a `recovery()` snapshot and built from every update
+    /// after it, is what the persisted record gives now
+    RecoveryUpdate = 10,
     /// A prompt answer that goes on never ends on the screen it was given on with nothing new
     PromptProgress = 11,
 }
@@ -120,6 +124,9 @@ pub(crate) struct Invariants {
     /// manager sent
     platform_screen: Option<CloudBackupPublishedScreen>,
     prompt_progress: PromptProgress,
+    /// What a platform knows Cloud Backup can restore after starting from a snapshot and applying
+    /// every update the manager sent
+    platform_recovery: Option<CloudBackupPublishedRecovery>,
 }
 
 /// One broken invariant, with what broke it
@@ -152,6 +159,12 @@ impl Invariants {
 
     /// Checks every invariant turned on against the app settled at `boundary`
     pub(crate) fn check(&mut self, app: &TestApp, boundary: &Boundary) -> Result<(), Violation> {
+        // the platform reads its recovery snapshot once, at launch; a read at every boundary
+        // would send any update a write left out and hide the missing publish
+        if self.platform_recovery.is_none() {
+            self.platform_recovery = Some(app.manager().recovery());
+        }
+
         // the lane is read first: while a call is held, settling returns with other work still
         // running, and the owner publishes a policy before the lane applies it, so a lane read
         // before the owner never sees a policy the owner's view doesn't have yet
@@ -198,6 +211,7 @@ impl Invariants {
 
         self.check_screen_deltas(&screen)?;
         self.prompt_progress.check(&screen.sent, &screen.published, live.is_live())?;
+        self.check_recovery_updates(&screen)?;
         check_exits(&screen.published, boundary, live)?;
         check_inventory_rows(&screen.published, screen.inventory.as_ref())?;
         check_offered_deletes(&screen.offered_deletes)
@@ -256,6 +270,35 @@ impl Invariants {
         let stale = screen_differences(&screen.published, &screen.fresh);
         if !stale.is_empty() {
             return violation(format!("published differs from a projection now in {stale}"));
+        }
+
+        Ok(())
+    }
+
+    /// 10: a platform that starts from one `recovery()` snapshot, read at the first boundary
+    /// after launch, and applies every update sent since knows what the persisted record says
+    /// Cloud Backup can restore now
+    ///
+    /// A write that grants or withdraws a wallet's recovery without a publish after it leaves the
+    /// copy behind, so the platform would keep offering, or keep hiding, a recovery that changed
+    fn check_recovery_updates(&mut self, screen: &ScreenView) -> Result<(), Violation> {
+        let Some(mut copy) = self.platform_recovery.take() else {
+            return Ok(());
+        };
+
+        for update in &screen.recovery_sent {
+            copy = copy.applying(update.clone());
+        }
+
+        let behind = copy.recovery != screen.recovery_fresh;
+        let detail = format!(
+            "the platform's recovery at revision {} is {:?}, the persisted record gives {:?}",
+            copy.revision, copy.recovery, screen.recovery_fresh
+        );
+        self.platform_recovery = Some(copy);
+
+        if behind {
+            return Err(Violation::new(Invariant::RecoveryUpdate, detail));
         }
 
         Ok(())
