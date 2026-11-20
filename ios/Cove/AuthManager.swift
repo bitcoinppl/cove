@@ -57,6 +57,9 @@ private enum WipeCallResult: Sendable {
     private(set) var lockState: LockState
     var isWipeDataPinEnabled: Bool
     var isDecoyPinEnabled: Bool
+    /// The trick PINs an unlock turned off for matching the app PIN, which Security Settings shows
+    /// until dismissed; Rust keeps it none in decoy mode
+    var trickPinNotice: DuplicateTrickPin?
     var wipePresentationState = WipePresentationState.idle
 
     /// Counts app lock unlocks made with a PIN, decoy PIN, or biometric credential
@@ -104,6 +107,7 @@ private enum WipeCallResult: Sendable {
         lockState = rust.isLocked() ? .locked : .unlocked
         isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
         isDecoyPinEnabled = rust.isDecoyPinEnabled()
+        trickPinNotice = rust.trickPinNotice()
 
         rust.listenForUpdates(reconciler: self)
     }
@@ -212,48 +216,49 @@ private enum WipeCallResult: Sendable {
 
     @MainActor
     public func handleAndReturnUnlockMode(_ pin: String) async -> UnlockMode {
-        if AuthPin().check(pin: pin) {
+        switch rust.resolveUnlockPin(pin: pin) {
+        case .app:
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
             unlockAuthenticated()
             return .main
-        }
 
-        // check if the entered pin a the decoy pin, if so enter decoy mode
-        if checkDecoyPin(pin) {
-            // enter decoy mode if not already in decoy mode and reset app and router
-            if Database().globalConfig().isInMainMode() {
-                rust.switchToDecoyMode()
-                unlockAuthenticated()
-
-                let app = AppManager.shared
-                app.reset()
-                app.isLoading = true
-
-                let db = Database()
-                if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    do {
-                        try app.selectWalletOrThrow(selectedWalletId)
-                    } catch {
-                        logger.error("Failed to select decoy wallet after auth fallback: \(error)")
-                        app.isLoading = false
-                        app.loadAndReset(to: RouteFactory().newWalletSelect())
-                    }
-                } else {
-                    app.loadAndReset(to: RouteFactory().newWalletSelect())
-                }
-            }
-
+        case .decoy:
+            unlockWithDecoyPin()
             return .decoy
-        }
 
-        // check if the entered pin is a wipeDataPin
-        // if so wipe the data
-        if checkWipeDataPin(pin) {
+        case .wipeData:
             wipePresentationState = .running
             return await finishWipe(call: .initial)
-        }
 
-        return .locked
+        case .wrong:
+            return .locked
+        }
+    }
+
+    /// Enters decoy mode, if not already in it, and resets the app and router
+    @MainActor
+    private func unlockWithDecoyPin() {
+        guard Database().globalConfig().isInMainMode() else { return }
+
+        rust.switchToDecoyMode()
+        unlockAuthenticated()
+
+        let app = AppManager.shared
+        app.reset()
+        app.isLoading = true
+
+        let db = Database()
+        if let selectedWalletId = db.globalConfig().selectedWallet() {
+            do {
+                try app.selectWalletOrThrow(selectedWalletId)
+            } catch {
+                logger.error("Failed to select decoy wallet after auth fallback: \(error)")
+                app.isLoading = false
+                app.loadAndReset(to: RouteFactory().newWalletSelect())
+            }
+        } else {
+            app.loadAndReset(to: RouteFactory().newWalletSelect())
+        }
     }
 
     @MainActor
@@ -283,6 +288,7 @@ private enum WipeCallResult: Sendable {
         type = settings.authType
         isWipeDataPinEnabled = settings.isWipeDataPinEnabled
         isDecoyPinEnabled = settings.isDecoyPinEnabled
+        trickPinNotice = settings.trickPinNotice
         isUsingBiometrics = false
     }
 
@@ -374,6 +380,9 @@ private enum WipeCallResult: Sendable {
 
             case let .decoyPinChanged(enabled):
                 isDecoyPinEnabled = enabled
+
+            case let .trickPinNoticeChanged(notice):
+                trickPinNotice = notice
             }
         }
     }
@@ -399,10 +408,7 @@ private enum WipeCallResult: Sendable {
     }
 
     /// What Settings shows for a security toggle, decided by Rust so both platforms agree
-    public func validateSecurityAction(
-        _ action: SecuritySettingsAction,
-        unverifiedWalletIds: [WalletId] = []
-    ) -> SecuritySettingsResult {
-        rust.validateSecurityAction(action: action, unverifiedWalletIds: unverifiedWalletIds)
+    public func validateSecurityAction(_ action: SecuritySettingsAction) -> SecuritySettingsResult {
+        rust.validateSecurityAction(action: action)
     }
 }

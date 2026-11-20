@@ -11,6 +11,7 @@ import XCTest
 final class AppAlertLockTests: XCTestCase {
     private static let mainPin = "975310"
     private static let decoyPin = "864208"
+    private static let newTrickPin = "531975"
 
     /// The lock is a SwiftUI overlay and UIKit presents an alert above it, so an alert queued behind
     /// a closing sheet could open over the PIN screen, such as a Cloud Backup failure for main wallets
@@ -66,6 +67,85 @@ final class AppAlertLockTests: XCTestCase {
         let mainUnlock = await auth.handleAndReturnUnlockMode(Self.mainPin)
         XCTAssertEqual(mainUnlock, .main)
         XCTAssertEqual(app.alertState, alert, "the main PIN dropped an alert raised in main mode")
+    }
+
+    /// Builds before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,
+    /// which then opened the main wallets; the unlock that finds it turns the decoy PIN off with no
+    /// alert at the lock, where anyone could read it, and Security Settings keeps a notice instead
+    func testAnAppPinEqualToTheDecoyPinTurnsItOffWithASettingsNotice() async throws {
+        executionTimeAllowance = 120
+        let auth = try await setUpPinLock()
+        let app = AppManager.shared
+        let duplicateHash = try hash(of: Self.decoyPin, then: Self.mainPin, auth: auth)
+
+        try auth.rust.setDecoyPin(pin: Self.decoyPin)
+        addTeardownBlock { @MainActor in
+            if auth.isInDecoyMode() { auth.switchToMainMode() }
+            auth.dispatch(action: .disableDecoyPin)
+            auth.dispatch(action: .dismissTrickPinNotice)
+        }
+        try Database().globalConfig().setHashedPinCode(hashedPinCode: duplicateHash)
+
+        auth.lock(reason: .background)
+        let unlock = await auth.handleAndReturnUnlockMode(Self.decoyPin)
+        XCTAssertEqual(unlock, .main, "the duplicate PIN should open the main wallets")
+        XCTAssertNil(app.alertState, "the unlock raised an alert anyone holding the phone could read")
+
+        XCTAssertFalse(auth.rust.isDecoyPinEnabled(), "the duplicate decoy PIN is still saved")
+        try await waitUntil("Settings still shows the duplicate decoy PIN on") { !auth.isDecoyPinEnabled }
+        try await waitUntil("Security Settings never got the notice") { auth.trickPinNotice == .decoy }
+
+        // the next unlock finds nothing new and leaves the notice up
+        auth.lock(reason: .background)
+        let again = await auth.handleAndReturnUnlockMode(Self.decoyPin)
+        XCTAssertEqual(again, .main)
+        XCTAssertNil(app.alertState)
+        try await settle()
+        XCTAssertEqual(auth.trickPinNotice, .decoy, "the notice went away before the user answered it")
+
+        // a new decoy PIN answers the notice and works again
+        try auth.rust.setDecoyPin(pin: Self.newTrickPin)
+        try await waitUntil("the notice still asks for a new decoy PIN") { auth.trickPinNotice == nil }
+        auth.lock(reason: .background)
+        let decoy = await auth.handleAndReturnUnlockMode(Self.newTrickPin)
+        XCTAssertEqual(decoy, .decoy, "the new decoy PIN didn't open decoy mode")
+    }
+
+    /// The same for the wipe data PIN, which never wiped while it equaled the app PIN; the notice
+    /// stays until the user dismisses it
+    func testAnAppPinEqualToTheWipeDataPinTurnsItOffUntilDismissed() async throws {
+        executionTimeAllowance = 120
+        let auth = try await setUpPinLock()
+        let app = AppManager.shared
+        let duplicateHash = try hash(of: Self.decoyPin, then: Self.mainPin, auth: auth)
+
+        try auth.rust.setWipeDataPin(pin: Self.decoyPin)
+        addTeardownBlock { @MainActor in
+            auth.dispatch(action: .disableWipeDataPin)
+            auth.dispatch(action: .dismissTrickPinNotice)
+        }
+        try Database().globalConfig().setHashedPinCode(hashedPinCode: duplicateHash)
+
+        auth.lock(reason: .background)
+        let unlock = await auth.handleAndReturnUnlockMode(Self.decoyPin)
+        XCTAssertEqual(unlock, .main, "the duplicate PIN should open the main wallets")
+        XCTAssertNil(app.alertState, "the unlock raised an alert anyone holding the phone could read")
+
+        XCTAssertFalse(auth.rust.isWipeDataPinEnabled(), "the duplicate wipe data PIN is still saved")
+        try await waitUntil("Settings still shows the duplicate wipe data PIN on") { !auth.isWipeDataPinEnabled }
+        try await waitUntil("Security Settings never got the notice") { auth.trickPinNotice == .wipeData }
+
+        auth.dispatch(action: .dismissTrickPinNotice)
+        try await waitUntil("dismissing kept the notice") { auth.trickPinNotice == nil }
+        XCTAssertNil(auth.rust.trickPinNotice(), "dismissing kept the saved notice")
+    }
+
+    /// The app PIN hash for `pin`, saved through Change PIN's own path, leaving `current` as the PIN
+    private func hash(of pin: String, then current: String, auth: AuthManager) throws -> String {
+        try auth.setPin(pin)
+        let hash = try Database().globalConfig().hashedPinCode()
+        try auth.setPin(current)
+        return hash
     }
 
     /// Sets a PIN on an app with no lock and removes it after the test

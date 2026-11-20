@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -104,10 +105,10 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.HotWalletKeyMissing -> {
             val walletId = state.walletId
-            val cloudBackupEnabled = app.cloudBackupManager.recovery.configured
+            val offersCloudBackup = remember(alert) { app.cloudBackupManager.missingKeyAlertOffersCloudBackup() }
             val choices =
                 buildList {
-                    if (cloudBackupEnabled) {
+                    if (offersCloudBackup) {
                         add(
                             DialogChoice("Open Cloud Backup") {
                                 onDismiss()

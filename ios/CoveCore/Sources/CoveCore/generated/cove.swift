@@ -3715,17 +3715,6 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
 
     func state()  -> AppState
 
-    /**
-     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
-     *
-     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
-     * waiting for its first confirmed upload does, since wiping it would lose its only keys
-     *
-     * Every network counts, since the wipe deletes them all. The selected network's wallets come
-     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
-     */
-    func unverifiedWalletIds()  -> [WalletId]
-
     func version()  -> String
 
 }
@@ -4149,24 +4138,6 @@ open func state() -> AppState  {
     return try!  FfiConverterTypeAppState_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_ffiapp_state(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
-    /**
-     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
-     *
-     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
-     * waiting for its first confirmed upload does, since wiping it would lose its only keys
-     *
-     * Every network counts, since the wipe deletes them all. The selected network's wallets come
-     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
-     */
-open func unverifiedWalletIds() -> [WalletId]  {
-    return try!  FfiConverterSequenceTypeWalletId.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -4867,6 +4838,17 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func setSelectedNode(node: Node) throws
 
+    /**
+     * Saves the trick PIN notice, or removes it when `notice` is none
+     */
+    func setTrickPinNotice(notice: DuplicateTrickPin?) throws
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, until the user dismisses
+     * the notice
+     */
+    func trickPinNotice()  -> DuplicateTrickPin?
+
     func walletMode()  -> WalletMode
 
 }
@@ -5158,6 +5140,31 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * Saves the trick PIN notice, or removes it when `notice` is none
+     */
+open func setTrickPinNotice(notice: DuplicateTrickPin?)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_trick_pin_notice(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionTypeDuplicateTrickPin.lower(notice),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, until the user dismisses
+     * the notice
+     */
+open func trickPinNotice() -> DuplicateTrickPin?  {
+    return try!  FfiConverterOptionTypeDuplicateTrickPin.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_trick_pin_notice(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 open func walletMode() -> WalletMode  {
@@ -8087,6 +8094,17 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     func releaseSendConfirmationLock(lock: SendConfirmationLock)  -> Bool
 
     /**
+     * Decides what a PIN typed at the lock screen opens, checking the app PIN first
+     *
+     * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
+     * could never act, and keeps a notice for Security Settings instead of saying so at the
+     * lock, where whoever holds the phone would read it. The decoy wallets stay saved and open
+     * again with a new decoy PIN. The trick PINs are saved as plain text, so checking them costs
+     * this unlock no extra hash
+     */
+    func resolveUnlockPin(pin: String)  -> UnlockPin
+
+    /**
      * What a secret export must ask for before it shows or sends the secret
      *
      * Fails closed: when the auth type can't be read, the export still asks for the app PIN
@@ -8125,6 +8143,14 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     func switchToMainMode()
 
     /**
+     * The trick PINs an unlock turned off for matching the app PIN, for Security Settings to show
+     * until the user dismisses it
+     *
+     * Always none in decoy mode, which must never hint at the main wallets' settings
+     */
+    func trickPinNotice()  -> DuplicateTrickPin?
+
+    /**
      * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
      */
     func unlockAuthenticated()
@@ -8142,7 +8168,7 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     /**
      * Validate a security settings action and return what UI to show
      */
-    func validateSecurityAction(action: SecuritySettingsAction, unverifiedWalletIds: [WalletId])  -> SecuritySettingsResult
+    func validateSecurityAction(action: SecuritySettingsAction)  -> SecuritySettingsResult
 
 }
 open class RustAuthManager: RustAuthManagerProtocol, @unchecked Sendable {
@@ -8391,6 +8417,25 @@ open func releaseSendConfirmationLock(lock: SendConfirmationLock) -> Bool  {
 }
 
     /**
+     * Decides what a PIN typed at the lock screen opens, checking the app PIN first
+     *
+     * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
+     * could never act, and keeps a notice for Security Settings instead of saying so at the
+     * lock, where whoever holds the phone would read it. The decoy wallets stay saved and open
+     * again with a new decoy PIN. The trick PINs are saved as plain text, so checking them costs
+     * this unlock no extra hash
+     */
+open func resolveUnlockPin(pin: String) -> UnlockPin  {
+    return try!  FfiConverterTypeUnlockPin_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_resolve_unlock_pin(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(pin),uniffiCallStatus
+    )
+})
+}
+
+    /**
      * What a secret export must ask for before it shows or sends the secret
      *
      * Fails closed: when the auth type can't be read, the export still asks for the app PIN
@@ -8483,6 +8528,21 @@ open func switchToMainMode()  {try! rustCall() {
 }
 
     /**
+     * The trick PINs an unlock turned off for matching the app PIN, for Security Settings to show
+     * until the user dismisses it
+     *
+     * Always none in decoy mode, which must never hint at the main wallets' settings
+     */
+open func trickPinNotice() -> DuplicateTrickPin?  {
+    return try!  FfiConverterOptionTypeDuplicateTrickPin.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_trick_pin_notice(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
      * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
      */
 open func unlockAuthenticated()  {try! rustCall() {
@@ -8520,13 +8580,12 @@ open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiCon
     /**
      * Validate a security settings action and return what UI to show
      */
-open func validateSecurityAction(action: SecuritySettingsAction, unverifiedWalletIds: [WalletId]) -> SecuritySettingsResult  {
+open func validateSecurityAction(action: SecuritySettingsAction) -> SecuritySettingsResult  {
     return try!  FfiConverterTypeSecuritySettingsResult_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustauthmanager_validate_security_action(
             self.uniffiCloneHandle(),
-        FfiConverterTypeSecuritySettingsAction_lower(action),
-        FfiConverterSequenceTypeWalletId.lower(unverifiedWalletIds),uniffiCallStatus
+        FfiConverterTypeSecuritySettingsAction_lower(action),uniffiCallStatus
     )
 })
 }
@@ -8598,6 +8657,14 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     func cloudStorageDidChange()
 
     func hasPendingCloudUploadVerification()  -> Bool
+
+    /**
+     * Whether the missing-key alert offers Open Cloud Backup
+     *
+     * Only in main mode with Cloud Backup on: decoy mode hides Cloud Backup, so the button would
+     * lead out of the decoy
+     */
+    func missingKeyAlertOffersCloudBackup()  -> Bool
 
     /**
      * Reports whether onboarding may recover a lost enable-completion event from durable state
@@ -8764,6 +8831,21 @@ open func hasPendingCloudUploadVerification() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Whether the missing-key alert offers Open Cloud Backup
+     *
+     * Only in main mode with Cloud Backup on: decoy mode hides Cloud Backup, so the button would
+     * lead out of the decoy
+     */
+open func missingKeyAlertOffersCloudBackup() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -15400,6 +15482,11 @@ public struct AuthSettings: Equatable, Hashable {
      * Whether a decoy PIN is set
      */
     public var isDecoyPinEnabled: Bool
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, which Security Settings
+     * shows until the user dismisses it; always none in decoy mode
+     */
+    public var trickPinNotice: DuplicateTrickPin?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -15412,10 +15499,15 @@ public struct AuthSettings: Equatable, Hashable {
          */isWipeDataPinEnabled: Bool,
         /**
          * Whether a decoy PIN is set
-         */isDecoyPinEnabled: Bool) {
+         */isDecoyPinEnabled: Bool,
+        /**
+         * The trick PINs an unlock turned off for matching the app PIN, which Security Settings
+         * shows until the user dismisses it; always none in decoy mode
+         */trickPinNotice: DuplicateTrickPin?) {
         self.authType = authType
         self.isWipeDataPinEnabled = isWipeDataPinEnabled
         self.isDecoyPinEnabled = isDecoyPinEnabled
+        self.trickPinNotice = trickPinNotice
     }
 
 
@@ -15436,7 +15528,8 @@ public struct FfiConverterTypeAuthSettings: FfiConverterRustBuffer {
             try AuthSettings(
                 authType: FfiConverterTypeAuthType.read(from: &buf),
                 isWipeDataPinEnabled: FfiConverterBool.read(from: &buf),
-                isDecoyPinEnabled: FfiConverterBool.read(from: &buf)
+                isDecoyPinEnabled: FfiConverterBool.read(from: &buf),
+                trickPinNotice: FfiConverterOptionTypeDuplicateTrickPin.read(from: &buf)
         )
     }
 
@@ -15444,6 +15537,7 @@ public struct FfiConverterTypeAuthSettings: FfiConverterRustBuffer {
         FfiConverterTypeAuthType.write(value.authType, into: &buf)
         FfiConverterBool.write(value.isWipeDataPinEnabled, into: &buf)
         FfiConverterBool.write(value.isDecoyPinEnabled, into: &buf)
+        FfiConverterOptionTypeDuplicateTrickPin.write(value.trickPinNotice, into: &buf)
     }
 }
 
@@ -24073,6 +24167,10 @@ public enum AuthManagerAction: Equatable, Hashable {
     case disablePin
     case disableWipeDataPin
     case disableDecoyPin
+    /**
+     * The user read the notice that trick PINs were turned off
+     */
+    case dismissTrickPinNotice
 
 
 
@@ -24107,6 +24205,8 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
 
         case 6: return .disableDecoyPin
 
+        case 7: return .dismissTrickPinNotice
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -24139,6 +24239,10 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         case .disableDecoyPin:
             writeInt(&buf, Int32(6))
 
+
+        case .dismissTrickPinNotice:
+            writeInt(&buf, Int32(7))
+
         }
     }
 }
@@ -24166,6 +24270,11 @@ enum AuthManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
 
 
     case WipeDataSet(TrickPinError
+    )
+    /**
+     * A wallet the wipe would delete has no backup; the alert says which, as the toggle's does
+     */
+    case WipeDataRefused(SecurityAlertState
     )
     case DecoySet(TrickPinError
     )
@@ -24218,16 +24327,19 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
         case 1: return .WipeDataSet(
             try FfiConverterTypeTrickPinError.read(from: &buf)
             )
-        case 2: return .DecoySet(
+        case 2: return .WipeDataRefused(
+            try FfiConverterTypeSecurityAlertState.read(from: &buf)
+            )
+        case 3: return .DecoySet(
             try FfiConverterTypeTrickPinError.read(from: &buf)
             )
-        case 3: return .PinSet(
+        case 4: return .PinSet(
             try FfiConverterTypeNewPinError.read(from: &buf)
             )
-        case 4: return .PinSave(
+        case 5: return .PinSave(
             try FfiConverterTypeAuthError.read(from: &buf)
             )
-        case 5: return .Database(
+        case 6: return .Database(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
 
@@ -24247,23 +24359,28 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
             FfiConverterTypeTrickPinError.write(v1, into: &buf)
 
 
-        case let .DecoySet(v1):
+        case let .WipeDataRefused(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeSecurityAlertState.write(v1, into: &buf)
+
+
+        case let .DecoySet(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeTrickPinError.write(v1, into: &buf)
 
 
         case let .PinSet(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNewPinError.write(v1, into: &buf)
 
 
         case let .PinSave(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeAuthError.write(v1, into: &buf)
 
 
         case let .Database(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
 
         }
@@ -24301,6 +24418,11 @@ public enum AuthManagerReconcileMessage: Equatable, Hashable {
      */
     case decoyPinChanged(Bool
     )
+    /**
+     * The trick PINs Security Settings now says were turned off, none in decoy mode
+     */
+    case trickPinNoticeChanged(DuplicateTrickPin?
+    )
 
 
 
@@ -24331,6 +24453,9 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         case 3: return .decoyPinChanged(try FfiConverterBool.read(from: &buf)
         )
 
+        case 4: return .trickPinNoticeChanged(try FfiConverterOptionTypeDuplicateTrickPin.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -24352,6 +24477,11 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         case let .decoyPinChanged(v1):
             writeInt(&buf, Int32(3))
             FfiConverterBool.write(v1, into: &buf)
+
+
+        case let .trickPinNoticeChanged(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterOptionTypeDuplicateTrickPin.write(v1, into: &buf)
 
         }
     }
@@ -34983,6 +35113,99 @@ public func FfiConverterTypeDriveAccountSwitchPlatformState_lower(_ value: Drive
 
 
 
+/**
+ * Trick PINs saved equal to the app PIN, which builds before Change PIN refused them allowed
+ *
+ * Unlocking checks the app PIN first, so such a decoy PIN opened the main wallets and such a wipe
+ * data PIN never wiped anything. The unlock that finds one turns it off and keeps this as a
+ * notice, which Security Settings shows in main mode until the user dismisses it
+ */
+
+public enum DuplicateTrickPin: Equatable, Hashable {
+
+    case decoy
+    case wipeData
+    case decoyAndWipeData
+
+
+
+    /**
+     * What Security Settings tells the user; it names no PIN, so it reads the same to whoever
+     * holds the phone
+     */
+public func notice() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_duplicatetrickpin_notice(
+            FfiConverterTypeDuplicateTrickPin_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension DuplicateTrickPin: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDuplicateTrickPin: FfiConverterRustBuffer {
+    typealias SwiftType = DuplicateTrickPin
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DuplicateTrickPin {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .decoy
+
+        case 2: return .wipeData
+
+        case 3: return .decoyAndWipeData
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DuplicateTrickPin, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .decoy:
+            writeInt(&buf, Int32(1))
+
+
+        case .wipeData:
+            writeInt(&buf, Int32(2))
+
+
+        case .decoyAndWipeData:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateTrickPin_lift(_ buf: RustBuffer) throws -> DuplicateTrickPin {
+    return try FfiConverterTypeDuplicateTrickPin.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateTrickPin_lower(_ value: DuplicateTrickPin) -> RustBuffer {
+    return FfiConverterTypeDuplicateTrickPin.lower(value)
+}
+
+
+
 public
 enum FiatAmountError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -35568,6 +35791,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case onboardingProgress
     case customBlockExplorer(Network
     )
+    case trickPinNotice
 
 
 
@@ -35618,6 +35842,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 14: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
         )
+
+        case 15: return .trickPinNotice
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -35683,6 +35909,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case let .customBlockExplorer(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeNetwork.write(v1, into: &buf)
+
+
+        case .trickPinNotice:
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -41725,8 +41955,29 @@ public func FfiConverterTypeSecretExportAccess_lower(_ value: SecretExportAccess
 
 public enum SecurityAlertState: Equatable, Hashable {
 
+    /**
+     * A wallet the current mode lists has no backup; Go To Wallet opens it
+     */
     case unverifiedWallets(walletId: WalletId
     )
+    /**
+     * A decoy wallet has no backup, which main mode can't open
+     */
+    case unverifiedDecoyWallets
+    /**
+     * A wallet list couldn't be read, so the Wipe Data PIN stays off
+     */
+    case unreadableWallets
+    /**
+     * A wallet relies on Cloud Backup, whose master key the provider doesn't have; Verify in
+     * Cloud Backup rebuilds it
+     */
+    case cloudBackupKeyMissing
+    /**
+     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading, or
+     * couldn't upload
+     */
+    case cloudBackupKeyUploading
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenTrickPins
@@ -41767,23 +42018,31 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
         case 1: return .unverifiedWallets(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 2: return .confirmEnableWipeMePin
+        case 2: return .unverifiedDecoyWallets
 
-        case 3: return .confirmDecoyPin
+        case 3: return .unreadableWallets
 
-        case 4: return .noteNoFaceIdWhenTrickPins
+        case 4: return .cloudBackupKeyMissing
 
-        case 5: return .noteNoFaceIdWhenWipeMePin
+        case 5: return .cloudBackupKeyUploading
 
-        case 6: return .noteNoFaceIdWhenDecoyPin
+        case 6: return .confirmEnableWipeMePin
 
-        case 7: return .notePinRequired
+        case 7: return .confirmDecoyPin
 
-        case 8: return .noteFaceIdDisablingForWipeMePin
+        case 8: return .noteNoFaceIdWhenTrickPins
 
-        case 9: return .noteFaceIdDisablingForDecoyPin
+        case 9: return .noteNoFaceIdWhenWipeMePin
 
-        case 10: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
+        case 10: return .noteNoFaceIdWhenDecoyPin
+
+        case 11: return .notePinRequired
+
+        case 12: return .noteFaceIdDisablingForWipeMePin
+
+        case 13: return .noteFaceIdDisablingForDecoyPin
+
+        case 14: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -41799,40 +42058,56 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(walletId, into: &buf)
 
 
-        case .confirmEnableWipeMePin:
+        case .unverifiedDecoyWallets:
             writeInt(&buf, Int32(2))
 
 
-        case .confirmDecoyPin:
+        case .unreadableWallets:
             writeInt(&buf, Int32(3))
 
 
-        case .noteNoFaceIdWhenTrickPins:
+        case .cloudBackupKeyMissing:
             writeInt(&buf, Int32(4))
 
 
-        case .noteNoFaceIdWhenWipeMePin:
+        case .cloudBackupKeyUploading:
             writeInt(&buf, Int32(5))
 
 
-        case .noteNoFaceIdWhenDecoyPin:
+        case .confirmEnableWipeMePin:
             writeInt(&buf, Int32(6))
 
 
-        case .notePinRequired:
+        case .confirmDecoyPin:
             writeInt(&buf, Int32(7))
 
 
-        case .noteFaceIdDisablingForWipeMePin:
+        case .noteNoFaceIdWhenTrickPins:
             writeInt(&buf, Int32(8))
 
 
-        case .noteFaceIdDisablingForDecoyPin:
+        case .noteNoFaceIdWhenWipeMePin:
             writeInt(&buf, Int32(9))
 
 
-        case let .extraSetPinError(message):
+        case .noteNoFaceIdWhenDecoyPin:
             writeInt(&buf, Int32(10))
+
+
+        case .notePinRequired:
+            writeInt(&buf, Int32(11))
+
+
+        case .noteFaceIdDisablingForWipeMePin:
+            writeInt(&buf, Int32(12))
+
+
+        case .noteFaceIdDisablingForDecoyPin:
+            writeInt(&buf, Int32(13))
+
+
+        case let .extraSetPinError(message):
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(message, into: &buf)
 
         }
@@ -46015,6 +46290,101 @@ public func FfiConverterTypeTrickPinError_lift(_ buf: RustBuffer) throws -> Tric
 public func FfiConverterTypeTrickPinError_lower(_ value: TrickPinError) -> RustBuffer {
     return FfiConverterTypeTrickPinError.lower(value)
 }
+
+
+/**
+ * What a PIN typed at the lock screen opens
+ */
+
+public enum UnlockPin: Equatable, Hashable {
+
+    /**
+     * The app PIN, which opens the main wallets
+     */
+    case app
+    /**
+     * The decoy PIN, which opens the decoy wallets
+     */
+    case decoy
+    /**
+     * The wipe data PIN, which wipes every wallet
+     */
+    case wipeData
+    /**
+     * No PIN this app has saved
+     */
+    case wrong
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UnlockPin: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnlockPin: FfiConverterRustBuffer {
+    typealias SwiftType = UnlockPin
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnlockPin {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .app
+
+        case 2: return .decoy
+
+        case 3: return .wipeData
+
+        case 4: return .wrong
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UnlockPin, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .app:
+            writeInt(&buf, Int32(1))
+
+
+        case .decoy:
+            writeInt(&buf, Int32(2))
+
+
+        case .wipeData:
+            writeInt(&buf, Int32(3))
+
+
+        case .wrong:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnlockPin_lift(_ buf: RustBuffer) throws -> UnlockPin {
+    return try FfiConverterTypeUnlockPin.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnlockPin_lower(_ value: UnlockPin) -> RustBuffer {
+    return FfiConverterTypeUnlockPin.lower(value)
+}
+
 
 
 public
@@ -52201,6 +52571,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupVerificationSource: FfiConve
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeDuplicateTrickPin: FfiConverterRustBuffer {
+    typealias SwiftType = DuplicateTrickPin?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDuplicateTrickPin.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDuplicateTrickPin.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHardwareWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = HardwareWalletMetadata?
 
@@ -54840,9 +55234,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 56708) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_ffiapp_version() != 27942) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -55023,6 +55414,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_trick_pin_notice() != 40570) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_trick_pin_notice() != 14611) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -55191,6 +55588,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_resolve_unlock_pin() != 46218) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_secret_export_access() != 37851) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -55215,6 +55615,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_trick_pin_notice() != 51919) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated() != 37105) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -55224,7 +55627,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336) {
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 56071) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 30339) {
@@ -55237,6 +55640,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup() != 10345) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328) {

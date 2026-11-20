@@ -126,6 +126,11 @@ class AuthManager internal constructor(
     var isDecoyPinEnabled by mutableStateOf<Boolean>(rust.isDecoyPinEnabled())
         private set
 
+    // the trick PINs an unlock turned off for matching the app PIN, which Security Settings shows
+    // until dismissed; rust keeps it null in decoy mode
+    var trickPinNotice by mutableStateOf<DuplicateTrickPin?>(rust.trickPinNotice())
+        private set
+
     var wipePresentationState by mutableStateOf<WipePresentationState>(WipePresentationState.Idle)
         private set
 
@@ -318,13 +323,11 @@ class AuthManager internal constructor(
      * this is the main entry point for authentication
      */
     suspend fun handleAndReturnUnlockMode(pin: String): UnlockMode =
-        when {
-            checkPin(pin) -> unlockWithMainPin()
-            checkDecoyPin(pin) -> unlockWithDecoyPin()
-            checkWipeDataPin(pin) -> {
-                startWipe(null).await()
-            }
-            else -> UnlockMode.LOCKED
+        when (withRustOr<UnlockPin>(UnlockPin.WRONG) { resolveUnlockPin(pin) }) {
+            UnlockPin.APP -> unlockWithMainPin()
+            UnlockPin.DECOY -> unlockWithDecoyPin()
+            UnlockPin.WIPE_DATA -> startWipe(null).await()
+            UnlockPin.WRONG -> UnlockMode.LOCKED
         }
 
     private fun unlockWithMainPin(): UnlockMode {
@@ -413,6 +416,7 @@ class AuthManager internal constructor(
         type = settings.authType
         isWipeDataPinEnabled = settings.isWipeDataPinEnabled
         isDecoyPinEnabled = settings.isDecoyPinEnabled
+        trickPinNotice = settings.trickPinNotice
         isUsingBiometrics = false
     }
 
@@ -449,6 +453,10 @@ class AuthManager internal constructor(
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
                     isDecoyPinEnabled = message.v1
                 }
+
+                is AuthManagerReconcileMessage.TrickPinNoticeChanged -> {
+                    trickPinNotice = message.v1
+                }
             }
         }
     }
@@ -460,12 +468,9 @@ class AuthManager internal constructor(
         }
     }
 
-    fun validateSecurityAction(
-        action: SecuritySettingsAction,
-        unverifiedWalletIds: List<WalletId>,
-    ): SecuritySettingsResult =
+    fun validateSecurityAction(action: SecuritySettingsAction): SecuritySettingsResult =
         withRust {
-            validateSecurityAction(action, unverifiedWalletIds)
+            validateSecurityAction(action)
         }
 
     /**

@@ -7,6 +7,7 @@ use cove_util::{GenerationToken, GenerationTracker};
 use tracing::{info, warn};
 
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
+use crate::manager::cloud_backup_manager::SyncHealthCheck;
 use crate::manager::cloud_backup_manager::pending::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
 
 #[derive(Debug)]
@@ -86,12 +87,8 @@ impl CloudBackupSyncHealthWorker {
         let master_key_upload_grace_namespace =
             self.master_key_upload_grace.as_ref().map(|grace| grace.namespace_id.clone());
         self.addr.send_fut_with(move |addr| async move {
-            let sync_health = match master_key_upload_grace_namespace.as_deref() {
-                Some(namespace) => {
-                    manager.compute_sync_health_with_master_key_grace(Some(namespace)).await
-                }
-                None => manager.compute_sync_health().await,
-            };
+            let sync_health =
+                manager.check_sync_health(master_key_upload_grace_namespace.as_deref()).await;
             send!(addr.complete_sync_health_refresh(refresh, sync_health));
         });
     }
@@ -146,7 +143,7 @@ impl CloudBackupSyncHealthWorker {
     async fn complete_sync_health_refresh(
         &mut self,
         refresh: RefreshId,
-        sync_health: CloudSyncHealth,
+        sync_health: SyncHealthCheck,
     ) -> ActorResult<()> {
         // only the refresh the worker runs may change its state
         let on_finish = match self.sync_health_refresh_state {
@@ -162,7 +159,7 @@ impl CloudBackupSyncHealthWorker {
             OnRefreshFinish::Observe => {
                 self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
                 if let Some(manager) = self.manager() {
-                    self.log_sync_health_change(&sync_health);
+                    self.log_sync_health_change(sync_health.health());
                     manager.observe_sync_health(sync_health);
                 }
             }
@@ -271,19 +268,19 @@ mod tests {
         assert_eq!(running_refresh(&actor), (first, OnRefreshFinish::Rerun));
 
         let stale = CloudSyncHealth::Failed("read before the clear".into());
-        actor.complete_sync_health_refresh(first, stale.clone()).await.expect("land first");
+        actor.complete_sync_health_refresh(first, stale.clone().into()).await.expect("land first");
 
         let (second, on_finish) = running_refresh(&actor);
         assert_ne!(second, first);
         assert_eq!(on_finish, OnRefreshFinish::Observe);
 
         // a completion of a refresh the worker no longer runs leaves the running one alone
-        actor.complete_sync_health_refresh(first, stale).await.expect("land first again");
+        actor.complete_sync_health_refresh(first, stale.into()).await.expect("land first again");
         assert_eq!(running_refresh(&actor), (second, OnRefreshFinish::Observe));
 
         actor.clear_upload_runtime_state().await.expect("clear before the second lands");
         actor
-            .complete_sync_health_refresh(second, CloudSyncHealth::Unknown)
+            .complete_sync_health_refresh(second, CloudSyncHealth::Unknown.into())
             .await
             .expect("land second");
         assert_eq!(actor.sync_health_refresh_state, SyncHealthRefreshState::Idle);

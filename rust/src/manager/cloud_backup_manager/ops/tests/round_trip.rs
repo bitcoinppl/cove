@@ -7,12 +7,15 @@ use super::*;
 use crate::database::cloud_backup::{
     CloudBlobConfirmedState, CloudBlobUploadedPendingConfirmationState,
 };
+use crate::manager::auth_manager::{
+    AUTH_MANAGER, SecurityAlertState, SecuritySettingsAction, SecuritySettingsResult,
+};
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
 };
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, UnconfirmedMasterKey,
 };
 use crate::wallet_secret::WalletSecretExt as _;
 
@@ -622,4 +625,369 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
         "the confirmed wallet must not keep the failed upload's error in Settings"
     );
     clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+// the wipe deletes the wallets, so a cloud copy counts as their backup only while the provider
+// still confirms the master key that decrypts it, which Settings reports as "Cove couldn't confirm
+// the key for this cloud backup"
+#[tokio::test(flavor = "current_thread")]
+async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_its_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    // the provider holds the master key wrapper, so Settings doesn't report the key
+    let namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check.clone().into_parts().1, MasterKeyFinding::Confirmed, "{check:?}");
+    manager.observe_sync_health(check);
+    assert!(
+        !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "the confirmed cloud copy should count as the wallet's backup"
+    );
+
+    globals.cloud.set_master_key_upload_pending(namespace.clone());
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(
+        check,
+        SyncHealthCheck::master_key_unconfirmed(namespace.clone(), MasterKeyIssue::Uploading)
+    );
+    manager.observe_sync_health(check);
+
+    assert!(
+        CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "a cloud copy whose key the provider can't confirm still counted as the wallet's backup"
+    );
+
+    // the Wipe Data PIN toggle names the key as the reason, with the fix that matches
+    let toggle = || {
+        AUTH_MANAGER
+            .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true })
+    };
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUploading)
+    );
+
+    globals.cloud.remove_master_key_backup(&namespace);
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(
+        check,
+        SyncHealthCheck::master_key_unconfirmed(namespace.clone(), MasterKeyIssue::Missing)
+    );
+    manager.observe_sync_health(check);
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing)
+    );
+
+    // a later check that can't reach the provider learns nothing about the key, so the refusal
+    // holds until one confirms the key again
+    let key_record = cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string();
+    globals.cloud.fail_backup_upload_state(
+        namespace.clone(),
+        key_record.clone(),
+        CloudStorageError::Offline("offline".into()),
+    );
+    manager.observe_sync_health(manager.check_sync_health(None).await);
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing),
+        "an offline check made Cove forget the provider doesn't have the key"
+    );
+
+    globals.cloud.restore_backup_upload_state(namespace.clone(), key_record);
+    globals.cloud.finish_master_key_upload(&namespace);
+    globals.cloud.set_master_key_backup(namespace, b"wrapper".to_vec());
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check.clone().into_parts().1, MasterKeyFinding::Confirmed, "{check:?}");
+    manager.observe_sync_health(check);
+    assert!(
+        !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "a check that confirmed the key again should count the cloud copy"
+    );
+}
+
+// the key alert asks the user to fix Cloud Backup, which doesn't help a wallet that never had a
+// cloud copy, so that wallet is named instead, with Go To Wallet
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_with_no_cloud_copy_is_named_before_the_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let backed_up = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&backed_up)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+    let never_uploaded = save_used_hot_wallet();
+
+    let namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.remove_master_key_backup(&namespace);
+    manager.observe_sync_health(manager.check_sync_health(None).await);
+
+    let toggle = AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true });
+    assert_eq!(
+        toggle,
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::UnverifiedWallets {
+            wallet_id: never_uploaded.id
+        }),
+        "the key alert hid a wallet that never had a cloud copy"
+    );
+}
+
+// once the provider has gone a minute without confirming the master key wrapper, the queue saves
+// the wrapper row as failed and Settings shows the generic error instead of the key message, so
+// the reason the Wipe Data PIN gives must come from that row and not from the Settings text
+#[tokio::test(flavor = "current_thread")]
+async fn a_wrapper_the_queue_gave_up_on_names_the_key_as_the_reason() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    // the row the queue saves when the confirmation window runs out
+    let namespace = manager.current_namespace_id().unwrap();
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: Some("revision".into()),
+                retryable: false,
+                error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                issue: None,
+                failed_at: 20,
+            }),
+        ))
+        .unwrap();
+
+    let sync_health = manager.compute_sync_health().await;
+    assert_eq!(sync_health, CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()));
+    manager.observe_sync_health(sync_health);
+
+    let toggle = AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true });
+    assert_eq!(
+        toggle,
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing),
+        "a wrapper the queue gave up on should name the key, not the wallet"
+    );
+}
+
+/// Saves the wrapper row the queue writes when the confirmation window runs out
+fn save_wrapper_row_the_queue_gave_up_on(namespace: String) {
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: Some("revision".into()),
+                retryable: false,
+                error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                issue: None,
+                failed_at: 20,
+            }),
+        ))
+        .unwrap();
+}
+
+/// Runs Verify as the Cloud Backup screen does and returns its report once it passes
+async fn verify_from_cloud_backup(manager: &RustCloudBackupManager) -> DeepVerificationReport {
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
+
+    wait_for_test_condition(Duration::from_secs(8), "Verify finishes", || {
+        manager.projected_exclusive_operation().is_none()
+            && matches!(
+                manager.model_snapshot().verification,
+                VerificationState::Verified(_) | VerificationState::Failed(_)
+            )
+    })
+    .await;
+
+    match manager.model_snapshot().verification {
+        VerificationState::Verified(report) => report,
+        other => panic!("Verify should pass, got {other:?}"),
+    }
+}
+
+fn wipe_data_pin_toggle() -> SecuritySettingsResult {
+    AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true })
+}
+
+/// A wallet covered by a confirmed backup whose wrapper the provider holds, with the queue then
+/// giving up on that wrapper, so the Wipe Data PIN refusal tells the user to run Verify
+async fn backup_whose_wrapper_the_queue_gave_up_on(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+) -> String {
+    configure_enabled_cloud_backup(manager, globals, 0);
+    seed_verifiable_cloud_master_key(globals);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(manager).await;
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "the confirmed backup should cover the wallet before the queue gives up on the wrapper"
+    );
+
+    let namespace = manager.current_namespace_id().unwrap();
+    save_wrapper_row_the_queue_gave_up_on(namespace.clone());
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing)
+    );
+
+    namespace
+}
+
+// iCloud can finish uploading the wrapper after the queue gave up on it, so Verify finds the
+// wrapper and has nothing to repair; the refusal sends the user to Verify, so passing it must end
+// the refusal or the user is stuck with advice that doesn't work
+#[tokio::test(flavor = "current_thread")]
+async fn a_passing_verify_ends_the_refusal_when_the_provider_has_the_wrapper() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    backup_whose_wrapper_the_queue_gave_up_on(&manager, globals).await;
+
+    let report = verify_from_cloud_backup(&manager).await;
+    assert!(!report.master_key_wrapper_repaired, "the provider still had the wrapper");
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    let wrapper_row =
+        Database::global().cloud_blob_sync_states.get(&cspp_master_key_record_id()).unwrap();
+    assert!(
+        matches!(
+            wrapper_row,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+        ),
+        "the queue should confirm the wrapper Verify read, got {wrapper_row:?}"
+    );
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "a Verify that passed left the Wipe Data PIN refused, telling the user to run Verify"
+    );
+}
+
+// the wrapper is gone from the provider, so Verify rebuilds it and the upload confirms
+#[tokio::test(flavor = "current_thread")]
+async fn a_passing_verify_ends_the_refusal_when_it_rebuilds_the_wrapper() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let namespace = backup_whose_wrapper_the_queue_gave_up_on(&manager, globals).await;
+    globals.cloud.remove_master_key_backup(&namespace);
+
+    let report = verify_from_cloud_backup(&manager).await;
+    assert!(report.master_key_wrapper_repaired, "Verify should rebuild the missing wrapper");
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "a Verify that rebuilt the wrapper left the Wipe Data PIN refused"
+    );
+}
+
+// the wrapper row is Failed while iCloud still uploads the file, so Verify can't help and the
+// refusal has to say so instead of sending the user back to Verify
+#[tokio::test(flavor = "current_thread")]
+async fn a_wrapper_row_the_queue_gave_up_on_still_asks_the_provider_why() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+    // the verifier pass queued a refresh, which would otherwise land after this test's check
+    wait_for_background_refreshes(&manager).await;
+
+    let namespace = manager.current_namespace_id().unwrap();
+    save_wrapper_row_the_queue_gave_up_on(namespace.clone());
+    globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
+    globals.cloud.set_master_key_upload_pending(namespace.clone());
+
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(
+        check.clone().into_parts().1,
+        MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey {
+            namespace,
+            issue: MasterKeyIssue::Uploading,
+        }),
+        "the failed wrapper row stopped the check asking the provider why: {check:?}"
+    );
+    manager.observe_sync_health(check);
+
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUploading),
+        "a wrapper iCloud is still uploading sent the user to Verify, which can't finish it"
+    );
+}
+
+// another row's failure must not stop the check asking the provider for the key, or a wrapper
+// the provider lost goes unnoticed while that row stays failed
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_wallet_upload_doesnt_hide_a_missing_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    let namespace = manager.current_namespace_id().unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::wallet(
+            namespace.clone(),
+            wallet.id.clone(),
+            record_id,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: true,
+                error: "upload failed".into(),
+                issue: None,
+                failed_at: 30,
+            }),
+        ))
+        .unwrap();
+    globals.cloud.remove_master_key_backup(&namespace);
+
+    let (_, master_key) = manager.check_sync_health(None).await.into_parts();
+    assert_eq!(
+        master_key,
+        MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey {
+            namespace,
+            issue: MasterKeyIssue::Missing,
+        }),
+        "a failed wallet upload stopped the check asking the provider for the key"
+    );
 }

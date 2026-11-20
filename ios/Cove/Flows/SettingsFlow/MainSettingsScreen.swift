@@ -59,12 +59,7 @@ struct MainSettingsScreen: View {
                 if auth.isInDecoyMode() { return isWipeDataPinEnabled }
                 return auth.isWipeDataPinEnabled
             },
-            set: { enable in
-                // rust reads unverified wallets only when enabling, so the other toggles skip
-                // the keychain and database reads behind them
-                let unverifiedWalletIds = enable ? app.rust.unverifiedWalletIds() : []
-                handleSecurityAction(.toggleWipeDataPin(enable: enable), unverifiedWalletIds: unverifiedWalletIds)
-            }
+            set: { enable in handleSecurityAction(.toggleWipeDataPin(enable: enable)) }
         )
     }
 
@@ -80,11 +75,8 @@ struct MainSettingsScreen: View {
 
     /// Shows what Rust decides a security setting change needs, so iOS and Android follow the
     /// same rules, including what the decoy PIN's Settings do
-    private func handleSecurityAction(
-        _ action: SecuritySettingsAction,
-        unverifiedWalletIds: [WalletId] = []
-    ) {
-        switch auth.validateSecurityAction(action, unverifiedWalletIds: unverifiedWalletIds) {
+    private func handleSecurityAction(_ action: SecuritySettingsAction) {
+        switch auth.validateSecurityAction(action) {
         case let .proceedToSheet(sheet):
             sheetState = MainSettingsSheetState(sheet).map { .init($0) }
         case let .showAlert(alert):
@@ -176,12 +168,14 @@ struct MainSettingsScreen: View {
             togglePin: togglePin,
             toggleWipeMePin: toggleWipeMePin,
             toggleDecoyPin: toggleDecoyPin,
+            trickPinNotice: auth.trickPinNotice,
             shouldShowBackupSection: shouldShowBackupSection,
             shouldShowCloudBackupSection: !auth.isInDecoyMode(),
             shouldShowBetaToggleSection: shouldShowBetaToggleSection,
             betaToggle: betaToggle,
             betaImportExportToggle: betaImportExportToggle,
             changePin: { handleSecurityAction(.changePin) },
+            dismissTrickPinNotice: { auth.dispatch(action: .dismissTrickPinNotice) },
             exportAllBackups: exportAllBackups,
             importAllBackups: { sheetState = .init(.backupImport) },
             verifyBackup: { sheetState = .init(.backupVerify) },
@@ -232,7 +226,10 @@ struct MainSettingsScreen: View {
             return
         }
 
-        do { try auth.rust.setWipeDataPin(pin: pin) } catch {
+        do { try auth.rust.setWipeDataPin(pin: pin) } catch let AuthManagerError.WipeDataRefused(reason) {
+            // a backup failed while the PIN sheet was open, so say why as the toggle does
+            alertState = .init(MainSettingsAlertState(reason))
+        } catch {
             alertState = .init(.extraSetPinError(error.localizedDescription))
         }
     }
@@ -256,12 +253,14 @@ private struct MainSettingsForm: View {
     @Binding var togglePin: Bool
     @Binding var toggleWipeMePin: Bool
     @Binding var toggleDecoyPin: Bool
+    let trickPinNotice: DuplicateTrickPin?
     let shouldShowBackupSection: Bool
     let shouldShowCloudBackupSection: Bool
     let shouldShowBetaToggleSection: Bool
     @Binding var betaToggle: Bool
     @Binding var betaImportExportToggle: Bool
     let changePin: () -> Void
+    let dismissTrickPinNotice: () -> Void
     let exportAllBackups: () -> Void
     let importAllBackups: () -> Void
     let verifyBackup: () -> Void
@@ -278,7 +277,9 @@ private struct MainSettingsForm: View {
                 togglePin: $togglePin,
                 toggleWipeMePin: $toggleWipeMePin,
                 toggleDecoyPin: $toggleDecoyPin,
-                onChangePin: changePin
+                trickPinNotice: trickPinNotice,
+                onChangePin: changePin,
+                onDismissTrickPinNotice: dismissTrickPinNotice
             )
             MainSettingsBackupSection(
                 isVisible: shouldShowBackupSection,

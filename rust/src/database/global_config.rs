@@ -12,6 +12,7 @@ use crate::{
         effective_transaction_url,
     },
     fiat::FiatCurrency,
+    manager::auth_manager::DuplicateTrickPin,
     network::Network,
     node::Node,
     wallet::metadata::{WalletId, WalletMode},
@@ -25,6 +26,11 @@ use cove_util::result_ext::ResultExt as _;
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");
 
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+// the saved trick PIN notice values, spelled out so renaming the Rust type never changes them
+const TRICK_PIN_NOTICE_DECOY: &str = "decoy";
+const TRICK_PIN_NOTICE_WIPE_DATA: &str = "wipe_data";
+const TRICK_PIN_NOTICE_BOTH: &str = "decoy_and_wipe_data";
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
 pub enum GlobalConfigKey {
@@ -42,6 +48,7 @@ pub enum GlobalConfigKey {
     DecoySelectedWalletId,
     OnboardingProgress,
     CustomBlockExplorer(Network),
+    TrickPinNotice,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -73,6 +80,7 @@ impl From<GlobalConfigKey> for &'static str {
                 "custom_block_explorer_testnet4"
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
+            GlobalConfigKey::TrickPinNotice => "trick_pin_notice",
         }
     }
 }
@@ -90,7 +98,9 @@ impl std::fmt::Display for GlobalConfigKey {
             Self::SelectedNode(network) => write!(f, "{network} node"),
             Self::ColorScheme => write!(f, "appearance"),
             Self::AuthType | Self::InDecoyMode => write!(f, "app lock"),
-            Self::HashedPinCode | Self::WipeDataPin | Self::DecoyPin => write!(f, "PIN"),
+            Self::HashedPinCode | Self::WipeDataPin | Self::DecoyPin | Self::TrickPinNotice => {
+                write!(f, "PIN")
+            }
             Self::OnboardingProgress => write!(f, "onboarding progress"),
             Self::CustomBlockExplorer(network) => write!(f, "{network} block explorer"),
         }
@@ -417,6 +427,38 @@ impl GlobalConfigTable {
         read_health::observe("decoy mode", self.get(GlobalConfigKey::InDecoyMode))
             .flatten()
             .is_some_and(|value| value == "true")
+    }
+
+    /// The trick PINs an unlock turned off for matching the app PIN, until the user dismisses
+    /// the notice
+    pub fn trick_pin_notice(&self) -> Option<DuplicateTrickPin> {
+        let value =
+            read_health::observe("PIN", self.get(GlobalConfigKey::TrickPinNotice)).flatten()?;
+
+        let notice = match value.as_str() {
+            TRICK_PIN_NOTICE_DECOY => DuplicateTrickPin::Decoy,
+            TRICK_PIN_NOTICE_WIPE_DATA => DuplicateTrickPin::WipeData,
+            TRICK_PIN_NOTICE_BOTH => DuplicateTrickPin::DecoyAndWipeData,
+            unknown => {
+                warn!("ignoring unknown trick PIN notice {unknown}");
+                return None;
+            }
+        };
+
+        Some(notice)
+    }
+
+    /// Saves the trick PIN notice, or removes it when `notice` is none
+    pub fn set_trick_pin_notice(&self, notice: Option<DuplicateTrickPin>) -> Result<()> {
+        let Some(notice) = notice else { return self.delete(GlobalConfigKey::TrickPinNotice) };
+
+        let value = match notice {
+            DuplicateTrickPin::Decoy => TRICK_PIN_NOTICE_DECOY,
+            DuplicateTrickPin::WipeData => TRICK_PIN_NOTICE_WIPE_DATA,
+            DuplicateTrickPin::DecoyAndWipeData => TRICK_PIN_NOTICE_BOTH,
+        };
+
+        self.set(GlobalConfigKey::TrickPinNotice, value.to_string())
     }
 
     pub fn selected_node(&self) -> Node {

@@ -70,8 +70,11 @@ platforms also check the saved mode before they present a prompt, a result
 alert or the success floater, which covers a screen sent before the switch
 that the platform hasn't applied yet. A verification result also never shows
 over the lock screen, before the PIN decides which mode opens; a result
-dropped there still shows in the Cloud Backup settings. A
-configured body lists its sections in the order they are drawn, and Turn Off is
+dropped there still shows in the Cloud Backup settings. The missing-key
+alert, raised when a hot wallet's key is gone from the keychain, offers Open
+Cloud Backup only when `missing_key_alert_offers_cloud_backup` says so: Cloud
+Backup is configured and the app is in main mode. In decoy mode its message
+names only the seed words, not Cloud Backup. A configured body lists its sections in the order they are drawn, and Turn Off is
 in every one. Listed cloud rows carry their own row actions. An extra copy
 offers Delete only while the wallet it copies has its own current backup; until
 then it offers Back up first and Check Again.
@@ -1340,7 +1343,9 @@ state, so the app can resume after the platform cloud authorization is restored.
 The verifier reads each blob in the namespace its sync row names, and the upload
 owns that namespace: an upload, or the finalization of an Enable or
 reinitialize, writes the namespace it uploaded to into the row it starts or
-marks pending. A reinitialize or a Google Drive account switch moves the backup
+marks pending. A Verify that decrypts the provider's wrapper marks a `Failed`
+wrapper row pending in the namespace it read, through the same write-lane
+completion. A reinitialize or a Google Drive account switch moves the backup
 to a new namespace under a new master key. If a wallet's row still named the
 replaced namespace, the verifier would read the replaced backup with the new
 key and record a permanent decryption failure for an upload that landed.
@@ -1398,11 +1403,19 @@ verifying may need a passkey request that only the user's tap may start.
 
 ### Wipe Data PIN coverage
 
-The Wipe Data PIN erases every wallet on every network, so it can't be turned
-on while a hot wallet with unverified words has no other copy of its keys.
-`CloudBackupRecoveryCoverage` decides which of those wallets Cloud Backup
-covers, and `unverified_wallet_ids` lists the rest across every network of the
-current wallet mode. A wallet counts as covered only when, in persisted state,
+The Wipe Data PIN erases every wallet on every network in both wallet modes, so
+it can't be turned on while a hot wallet with unverified words has no other
+copy of its keys. `CloudBackupRecoveryCoverage` decides which of those wallets
+Cloud Backup covers, and `WipeDataPinBlocker` (`rust/src/manager/auth_manager/wipe_data_pin.rs`),
+which `validate_security_action` asks at the toggle and `set_wipe_data_pin`
+asks again when the PIN is saved, finds the first of the rest. A backup can
+fail while the PIN sheet is open, so the save refuses with
+`AuthManagerError::WipeDataRefused`, which carries the same alert. In main
+mode it checks the main wallets of every network, then the decoy wallets, whose
+alert has no Go To Wallet because main mode can't open them. Decoy mode checks
+only its own wallets, so it never reveals the main ones. If any of those wallet
+lists can't be read, the PIN stays off with an alert saying the wallets couldn't
+be checked. A wallet counts as covered only when, in persisted state,
 Cloud Backup is configured with its passkey available, no verification failure
 is outstanding, no sync row is unreadable, the master key wrapper's row in the
 current namespace isn't unconfirmed, and the wallet's own row there is
@@ -1411,9 +1424,52 @@ integrity issue or an unrecorded cause, withdraws all coverage until a check
 passes, since its issue counts don't name the wallets. One required only because
 the wallet set changed or the backup was reset keeps it. A first upload that
 never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
-uncovered. The rule reads no live verification, inventory or sync health
-state. Those start over on every launch and need the network, so a gate built
-on them refused the PIN after every relaunch.
+uncovered. The rule reads no live verification or inventory state, and live
+sync health only takes coverage away. Those start over on every launch and
+need the network, so a gate that waited on them refused the PIN after every
+relaunch. A sync health check that found the provider can't confirm the master
+key wrapper withdraws all coverage, since no wallet copy can be decrypted
+without that key. The check reports why as a typed `MasterKeyIssue` in its
+`SyncHealthCheck`, taken from the `is_backup_uploaded` status, so coverage
+never matches the text Settings shows:
+
+- `Missing` (not found): Settings says to open Cloud Backup and run Verify,
+  which rebuilds the wrapper from the local master key. Sync Now uploads only
+  wallets, so it can't fix this
+- `Uploading` (pending, which only iCloud Drive reports): Settings says iCloud
+  hasn't finished uploading the key and to check that the device is online,
+  iCloud Drive is on for Cove and iCloud storage isn't full. iCloud gives an
+  error for an upload it couldn't finish, such as with full storage, but the iOS
+  adapter (`ICloudDriveHelper.isBackupUploaded`) reports that as pending too, so
+  the message names that fix as well. Verify can't help here, since it reads the
+  local copy back and finds nothing to repair
+
+The reducer keeps that answer, with the namespace it was found for, until a
+later check asks the provider again and confirms the key. A check that stops
+before asking, for example offline or with the provider unavailable, learned
+nothing, so it leaves the answer in place. A different namespace ignores it.
+A failed row, the wrapper's own included, doesn't stop the check asking: Settings
+keeps the failed row's message, which may ask the user to reconnect, and the
+check still carries the provider's answer on the key. Only a wrapper upload
+that is still running skips the question.
+
+A wrapper row the queue saved as `Failed` after its confirmation window ran out
+also withdraws all coverage, though Settings then shows the generic error. The
+row doesn't record why, so the provider's answer decides the fix: `Uploading`
+when iCloud still reports the file uploading, and otherwise `Missing`, whose
+fix is Verify. A Verify
+that decrypts the provider's wrapper hands that row back to the queue as
+`UploadedPendingConfirmation` with the revision it downloaded, so the queue
+confirms it against the provider as it would after an upload; a Verify that
+finds no wrapper rebuilds and uploads it. Either way the refusal ends once the
+row leaves `Failed`. In each case `CloudBackupRecoveryCoverage` carries the `MasterKeyIssue`.
+In main mode the alert names the key and the matching fix
+(`SecurityAlertState::CloudBackupKeyMissing` or `CloudBackupKeyUploading`). The
+one exception is a wallet that has no confirmed cloud copy at all: fixing the
+key wouldn't cover it, so the alert names that wallet with Go To Wallet. A
+wrapper upload that is still running only leaves the wallets uncovered. The
+answer lives in memory, so until a check runs after launch only the local
+wrapper row counts.
 
 A wallet restored from the active backup, alone or by Restore All, uploads
 nothing, so the restore records the backup it just downloaded and decrypted as
@@ -1478,10 +1534,6 @@ live provider proof, which would refuse the PIN offline and right after launch:
   this device's master key doesn't match the namespace, and withdrawing on
   that would mark every wallet `Dirty` and upload each again over copies
   encrypted with another key
-- If reading the local wallets of any network fails, the check lists no
-  wallets and allows the PIN, as it did for the selected network before. The
-  follow-up that adds decoy-mode wallets to the check should make a failed read
-  refuse the PIN instead
 
 - Two refreshes can overlap, since an exclusive operation's follow-up refresh
   can run beside the detail workflow's. If another device deletes a copy
@@ -1498,19 +1550,23 @@ live provider proof, which would refuse the PIN offline and right after launch:
 ### Wallet recovery
 
 Screens outside Cloud Backup ask whether Cloud Backup can bring one wallet
-back: the selected wallet's Backup your wallet reminder, Wallet Settings'
-Final Warning before deleting an unverified hot wallet, and the missing-keys
-alert's Open Cloud Backup. They ask `CloudBackupRecovery`, never whether the
-screen shows a configured backup. The screen starts as Disabled until the
+back: the selected wallet's Backup your wallet reminder and Wallet Settings'
+Final Warning before deleting an unverified hot wallet. They ask
+`CloudBackupRecovery`, never whether the screen shows a configured backup.
+The missing-keys alert's Open Cloud Backup asks
+`missing_key_alert_offers_cloud_backup()`, which reads the same persisted record
+and is false in decoy mode, where Cloud Backup is hidden. The screen starts as Disabled until the
 first publish of a launch, and Cloud Backup being on says nothing about a
 wallet whose first upload never confirmed.
 
 `CloudBackupRecovery` holds whether a backup is configured, from the persisted
 record, and the wallets with a confirmed copy, by the Wipe Data PIN coverage
-rule above. Its `wallet` answers `Off`, `Unconfirmed` or `Confirmed`. Only a
+rule above. It reads the rows alone, so a wrapper row saved as `Failed` leaves
+no wallet confirmed. The provider's last answer on the master key lives in memory
+and changes without a publish, so only the Wipe Data PIN check reads it. Its `wallet` answers `Off`, `Unconfirmed` or `Confirmed`. Only a
 `Confirmed` wallet hides the reminder and gets the Final Warning that it can be
 recovered from the Cloud Backup screen; any other gets "not backed up" and
-Delete Forever. Open Cloud Backup shows whenever a backup is configured.
+Delete Forever.
 
 The platform reads `recovery()` before `listen_for_updates`, so the answer is
 right from the first frame after launch. That read is fresh, and when it

@@ -10,8 +10,9 @@ use super::{
     CloudBackupInventoryAuthority, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
     CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationReason, CloudBackupWalletStatus,
-    DeepVerificationReport, PendingUploadVerificationState, RecoveryAction, RecoveryState,
-    SyncState, VerificationState, is_connectivity_related_issue,
+    DeepVerificationReport, MasterKeyFinding, MasterKeyIssue, PendingUploadVerificationState,
+    RecoveryAction, RecoveryState, SyncState, UnconfirmedMasterKey, VerificationState,
+    is_connectivity_related_issue,
 };
 
 use super::cloud_inventory::LocalUploadStatus;
@@ -228,6 +229,9 @@ struct CloudBackupReducerState {
     active_enable_context: Option<CloudBackupEnableContext>,
     restore_all: CloudBackupRestoreAllRuntimeState,
     sync_health: CloudSyncHealth,
+    /// The last provider answer that couldn't confirm the master key, kept until a check asks
+    /// the provider again, since one that stops early, such as offline, learned nothing
+    unconfirmed_master_key: Option<UnconfirmedMasterKey>,
     missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
     verification_metadata: CloudBackupVerificationMetadata,
@@ -272,6 +276,7 @@ impl Default for CloudBackupReducerState {
             active_enable_context: None,
             restore_all: CloudBackupRestoreAllRuntimeState::Idle,
             sync_health: CloudSyncHealth::Unknown,
+            unconfirmed_master_key: None,
             missing_passkey_dismissed: false,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
@@ -1207,6 +1212,16 @@ impl CloudBackupStateReducer {
         self.state.status()
     }
 
+    /// Why the provider last couldn't confirm the master key wrapper of the backup in
+    /// `namespace`, if no check has confirmed it since
+    pub(crate) fn master_key_issue_at_provider(&self, namespace: &str) -> Option<MasterKeyIssue> {
+        self.state
+            .unconfirmed_master_key
+            .as_ref()
+            .filter(|unconfirmed| unconfirmed.namespace == namespace)
+            .map(|unconfirmed| unconfirmed.issue)
+    }
+
     /// Whether the lifecycle shows recovery for an incomplete enable
     pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
         self.projected_pending_enable_recovery().is_some()
@@ -1423,8 +1438,17 @@ impl CloudBackupStateReducer {
                     self.state.restore_all = CloudBackupRestoreAllRuntimeState::Idle;
                 }
             }
-            CloudBackupStateReducerEvent::SyncHealthObserved(sync_health) => {
-                self.state.sync_health = sync_health;
+            CloudBackupStateReducerEvent::SyncHealthObserved(check) => {
+                let (health, master_key) = check.into_parts();
+                self.state.sync_health = health;
+
+                match master_key {
+                    MasterKeyFinding::NotAsked => {}
+                    MasterKeyFinding::Confirmed => self.state.unconfirmed_master_key = None,
+                    MasterKeyFinding::Unconfirmed(unconfirmed) => {
+                        self.state.unconfirmed_master_key = Some(unconfirmed);
+                    }
+                }
             }
             CloudBackupStateReducerEvent::EnableFlowAdvanced(enable_state) => {
                 self.state.apply_enable_flow(enable_state);
@@ -1824,7 +1848,7 @@ mod tests {
                 should_prompt: false,
             });
             model.apply_event(CloudBackupStateReducerEvent::SyncHealthObserved(
-                CloudSyncHealth::AllUploaded,
+                CloudSyncHealth::AllUploaded.into(),
             ));
             model
         };

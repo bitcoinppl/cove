@@ -65,30 +65,27 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     }
 
     // toggle handlers using Rust validation
-    // rust only reads unverified wallet ids when enabling the wipe data PIN, so the other
-    // toggles skip the database reads behind unverifiedWalletIds()
     fun onBiometricToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleBiometric(enable)
-        val result = auth.validateSecurityAction(action, emptyList())
+        val result = auth.validateSecurityAction(action)
         handleSecurityResult(result)
     }
 
     fun onPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.TogglePin(enable)
-        val result = auth.validateSecurityAction(action, emptyList())
+        val result = auth.validateSecurityAction(action)
         handleSecurityResult(result)
     }
 
     fun onWipeDataPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleWipeDataPin(enable)
-        val unverifiedWalletIds = if (enable) app.unverifiedWalletIds() else emptyList()
-        val result = auth.validateSecurityAction(action, unverifiedWalletIds)
+        val result = auth.validateSecurityAction(action)
         handleSecurityResult(result)
     }
 
     fun onDecoyPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleDecoyPin(enable)
-        val result = auth.validateSecurityAction(action, emptyList())
+        val result = auth.validateSecurityAction(action)
         handleSecurityResult(result)
     }
 
@@ -116,6 +113,9 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
         try {
             auth.setWipeDataPin(pin)
+        } catch (e: AuthManagerException.WipeDataRefused) {
+            // a backup failed while the PIN sheet was open, so say why as the toggle does
+            alertState = e.v1
         } catch (e: AuthManagerException) {
             alertState = SecurityAlertState.ExtraSetPinError(e.displayMessage("Unknown error"))
         }
@@ -226,6 +226,11 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         Column {
             var itemCount = 0
 
+            auth.trickPinNotice?.let { notice ->
+                TrickPinNotice(notice) { auth.dispatch(AuthManagerAction.DismissTrickPinNotice) }
+                MaterialDivider()
+            }
+
             // biometric toggle
             if (isBiometricAvailable) {
                 MaterialSettingsItem(
@@ -257,7 +262,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                     title = "Change PIN",
                     icon = Icons.Default.LockOpen,
                     onClick = {
-                        handleSecurityResult(auth.validateSecurityAction(SecuritySettingsAction.ChangePin, emptyList()))
+                        handleSecurityResult(auth.validateSecurityAction(SecuritySettingsAction.ChangePin))
                     },
                 )
                 itemCount++

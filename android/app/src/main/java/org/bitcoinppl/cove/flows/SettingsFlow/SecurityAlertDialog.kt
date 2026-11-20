@@ -20,8 +20,19 @@ internal fun SecurityAlertDialog(
     auth: AuthManager,
     app: AppManager,
 ) {
+    val refusal = WipeDataPinRefusal.of(state)
+    if (refusal != null) {
+        WipeDataPinRefusedAlert(refusal, callbacks)
+        return
+    }
+
     when (state) {
         is SecurityAlertState.UnverifiedWallets -> UnverifiedWalletsAlert(state, callbacks, app)
+        SecurityAlertState.UnverifiedDecoyWallets,
+        SecurityAlertState.UnreadableWallets,
+        SecurityAlertState.CloudBackupKeyMissing,
+        SecurityAlertState.CloudBackupKeyUploading,
+        -> Unit
         SecurityAlertState.ConfirmEnableWipeMePin -> ConfirmEnableWipeDataPinAlert(callbacks)
         SecurityAlertState.ConfirmDecoyPin -> ConfirmDecoyPinAlert(callbacks)
         SecurityAlertState.NotePinRequired -> NotePinRequiredAlert(callbacks)
