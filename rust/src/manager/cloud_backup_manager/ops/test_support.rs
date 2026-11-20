@@ -2295,8 +2295,28 @@ pub(crate) async fn wait_for_background_refreshes(manager: &RustCloudBackupManag
 
 /// Lifecycle results reach the supervisor as messages; its mailbox barrier proves every message
 /// sent before it was handled
+///
+/// A message handled before the barrier can ask for a screen publish that queues behind it, so
+/// the barrier repeats until the published screen shows everything handled
+///
+/// A publish clears its request when it starts, so a clear flag can still mean one is running;
+/// it was queued before the next barrier, which waits for it
 pub(crate) async fn supervisor_checkpoint(manager: &RustCloudBackupManager) {
-    call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+    const MAX_ROUNDS: usize = 16;
+
+    for _ in 0..MAX_ROUNDS {
+        call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+        if manager.screen_publish_requested() {
+            continue;
+        }
+
+        call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
+        if !manager.screen_publish_requested() {
+            return;
+        }
+    }
+
+    panic!("screen publishes kept queueing after {MAX_ROUNDS} supervisor checkpoint rounds");
 }
 
 /// Runs the pending upload confirmation the way the verifier does, waiting for the settle
