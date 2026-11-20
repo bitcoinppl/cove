@@ -31,6 +31,9 @@ import java.nio.charset.CodingErrorAction
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import org.bitcoinppl.cove_core.ur.FfiConverterTypeUrFountain
+import org.bitcoinppl.cove_core.ur.UrFountain
+import org.bitcoinppl.cove_core.ur.RustBuffer as RustBufferUrFountain
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -775,8 +778,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex(
     ): Short
-    external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur(
-    ): Short
     external fun uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density(
     ): Short
     external fun uniffi_cove_types_checksum_method_confirmdetails_sending_amount(
@@ -947,6 +948,7 @@ internal object UniffiLib {
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_types"))
+        org.bitcoinppl.cove_core.ur.uniffiEnsureInitialized()
 
     }
     external fun uniffi_cove_types_fn_clone_address(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1073,10 +1075,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(`ptr`: Long,`maxFragmentLen`: Int,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(`ptr`: Long,`density`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
+    ): Long
     external fun uniffi_cove_types_fn_method_confirmdetails_sending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_types_fn_method_confirmdetails_sending_to(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1609,10 +1609,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 52634.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 31866.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 42511.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253.toShort()) {
@@ -4374,20 +4371,15 @@ public interface ConfirmDetailsInterface {
     fun `psbtToHex`(): kotlin.String
 
     /**
-     * Exports PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as an animated UR with specified density
+     *
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
-    fun `psbtToUr`(`maxFragmentLen`: kotlin.UInt): List<kotlin.String>
-
-    /**
-     * Exports PSBT as UR with specified density
-     *
-     * # Errors
-     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-     */
-    fun `psbtToUrWithDensity`(`density`: QrDensity): List<kotlin.String>
+    fun `psbtToUrWithDensity`(`density`: QrDensity): UrFountain
 
     fun `sendingAmount`(): Amount
 
@@ -4700,34 +4692,16 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
 
 
     /**
-     * Exports PSBT as UR-encoded QR strings for animated display
+     * Exports PSBT as an animated UR with specified density
+     *
+     * After a first pass of the plain fragments the frames mix in fountain parts, so a hardware
+     * wallet that keeps missing a frame completes from a mixed part instead of stalling
      *
      * # Errors
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
-    @Throws(ConfirmDetailsException::class)override fun `psbtToUr`(`maxFragmentLen`: kotlin.UInt): List<kotlin.String> {
-            return FfiConverterSequenceString.lift(
-    callWithHandle {
-    uniffiRustCallWithError(ConfirmDetailsException) { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(
-        it,
-
-        FfiConverterUInt.lower(`maxFragmentLen`),_status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Exports PSBT as UR with specified density
-     *
-     * # Errors
-     * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
-     */
-    @Throws(ConfirmDetailsException::class)override fun `psbtToUrWithDensity`(`density`: QrDensity): List<kotlin.String> {
-            return FfiConverterSequenceString.lift(
+    @Throws(ConfirmDetailsException::class)override fun `psbtToUrWithDensity`(`density`: QrDensity): UrFountain {
+            return FfiConverterTypeUrFountain.lift(
     callWithHandle {
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
     UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(
@@ -11092,6 +11066,8 @@ public typealias FfiConverterTypeFfiOpacity = FfiConverterUByte
 
 public typealias WalletId = kotlin.String
 public typealias FfiConverterTypeWalletId = FfiConverterString
+
+
     @Throws(AddressException::class) fun `addressIsValid`(`address`: kotlin.String, `network`: Network)
         =
     uniffiRustCallWithError(AddressException) { _status ->

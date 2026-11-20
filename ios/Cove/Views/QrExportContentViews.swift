@@ -2,7 +2,7 @@ import SwiftUI
 
 struct QrExportContent: View {
     let error: String?
-    let qrs: [QrCodeView]
+    let frames: QrExportFrames?
     @Binding var currentIndex: Int
     @Binding var density: QrDensity
     let startedAt: Date
@@ -14,23 +14,23 @@ struct QrExportContent: View {
                 .font(.footnote)
                 .foregroundStyle(.red)
                 .padding(.top, 8)
-        } else if qrs.isEmpty {
-            ProgressView()
-                .padding(.top, 20)
-        } else {
+        } else if let frames, frames.passCount > 0 {
             QrExportAnimatedQrView(
-                qrs: qrs,
+                frames: frames,
                 currentIndex: $currentIndex,
                 density: $density,
                 startedAt: startedAt,
                 animationInterval: animationInterval
             )
+        } else {
+            ProgressView()
+                .padding(.top, 20)
         }
     }
 }
 
 private struct QrExportAnimatedQrView: View {
-    let qrs: [QrCodeView]
+    let frames: QrExportFrames
     @Binding var currentIndex: Int
     @Binding var density: QrDensity
     let startedAt: Date
@@ -40,17 +40,19 @@ private struct QrExportAnimatedQrView: View {
         VStack {
             // .id() forces TimelineView recreation when interval changes
             TimelineView(.periodic(from: startedAt, by: animationInterval)) { context in
-                let index = abs(Int(context.date.distance(to: startedAt) / animationInterval) % qrs.count)
-                qrs[index]
+                // round, since the schedule's dates fall on whole ticks and truncating a quotient
+                // a hair under one would show the same frame twice and skip the next
+                let tick = max(0, Int((startedAt.distance(to: context.date) / animationInterval).rounded()))
+                QrCodeView(text: frames.frame(at: tick))
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 11)
-                    .onChange(of: index) { _, newIndex in
-                        currentIndex = newIndex
+                    .onChange(of: tick) { _, newTick in
+                        currentIndex = frames.passPosition(at: newTick)
                     }
             }
             .id(animationInterval)
 
-            if qrs.count > 1 {
+            if frames.passCount > 1 {
                 HStack(alignment: .center, spacing: 8) {
                     QrExportDensityButton(
                         systemImage: "minus",
@@ -60,7 +62,7 @@ private struct QrExportAnimatedQrView: View {
                         action: decreaseDensity
                     )
 
-                    QrExportProgressIndicator(qrCount: qrs.count, currentIndex: currentIndex)
+                    QrExportProgressIndicator(qrCount: frames.passCount, currentIndex: currentIndex)
 
                     QrExportDensityButton(
                         systemImage: "plus",
@@ -88,7 +90,7 @@ private struct QrExportAnimatedQrView: View {
     }
 
     private var canIncreaseDensity: Bool {
-        density.canIncrease() && qrs.count > 1
+        density.canIncrease() && frames.passCount > 1
     }
 
     private func decreaseDensity() {

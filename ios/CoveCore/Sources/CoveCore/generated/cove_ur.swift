@@ -465,6 +465,22 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
+    typealias FfiType = UInt32
+    typealias SwiftType = UInt32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -1171,6 +1187,195 @@ public func FfiConverterTypeCryptoSeed_lower(_ value: CryptoSeed) -> UInt64 {
 
 
 
+
+
+/**
+ * The frames of an animated UR, any of which can be computed from its index
+ *
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
+ */
+public protocol UrFountainProtocol: AnyObject, Sendable {
+
+    /**
+     * The UR to show on a display's `index`th tick, counting from 0
+     *
+     * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
+     * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
+     * fragment shows its one `1-1` part on every tick
+     */
+    func frame(index: UInt32)  -> String
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */
+    func passPosition(index: UInt32)  -> UInt32
+
+    /**
+     * How many plain fragments the message splits into, the frames one pass of a display needs
+     */
+    func sequenceCount()  -> UInt32
+
+}
+/**
+ * The frames of an animated UR, any of which can be computed from its index
+ *
+ * Frames `0..sequence_count` carry the plain fragments in order. After that first pass, every
+ * fifth frame is a fountain-mixed part and the rest go on cycling the plain fragments, so a
+ * display shows frame `i` on its `i`th tick without end
+ */
+open class UrFountain: UrFountainProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_ur_fn_clone_urfountain(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_ur_fn_free_urfountain(handle, $0) }
+    }
+
+
+
+
+    /**
+     * The UR to show on a display's `index`th tick, counting from 0
+     *
+     * The frame is uppercase, as BCR-2020-005 recommends for QR transport, so a QR encoder can
+     * draw it in the denser alphanumeric mode instead of byte mode. A message that fits one
+     * fragment shows its one `1-1` part on every tick
+     */
+open func frame(index: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_ur_fn_method_urfountain_frame(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(index),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Which plain fragment a counter of one pass shows on a display's `index`th tick, from 0
+     *
+     * A plain fragment's frame shows its own index, and a mixed part holds the counter on the
+     * plain fragment shown before it, so the counter steps through `0..sequence_count` once
+     * per pass of the plain fragments
+     */
+open func passPosition(index: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_ur_fn_method_urfountain_pass_position(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(index),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * How many plain fragments the message splits into, the frames one pass of a display needs
+     */
+open func sequenceCount() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_ur_fn_method_urfountain_sequence_count(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUrFountain: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = UrFountain
+
+    public static func lift(_ handle: UInt64) throws -> UrFountain {
+        return UrFountain(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: UrFountain) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UrFountain {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: UrFountain, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrFountain_lift(_ handle: UInt64) throws -> UrFountain {
+    return try FfiConverterTypeUrFountain.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUrFountain_lower(_ value: UrFountain) -> UInt64 {
+    return FfiConverterTypeUrFountain.lower(value)
+}
+
+
+
+
 public
 enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -1454,6 +1659,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_ur_checksum_method_urfountain_frame() != 40406) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_ur_checksum_method_urfountain_pass_position() != 5901) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_ur_checksum_method_urfountain_sequence_count() != 38497) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 11408) {

@@ -12,25 +12,59 @@ extension QrExportFormat: CaseIterable {
     }
 }
 
+/// The frames an export animates through
+enum QrExportFrames {
+    /// A fixed set shown in a loop, as a BBQr split is
+    case loop([String])
+    /// An animated UR, which mixes fountain parts in with its plain fragments after the first
+    /// pass, so a scanner that keeps missing a frame completes from a mixed part instead
+    case fountain(UrFountain)
+
+    /// The frames in one pass, which the frame counter shows
+    var passCount: Int {
+        switch self {
+        case let .loop(frames): frames.count
+        case let .fountain(fountain): Int(fountain.sequenceCount())
+        }
+    }
+
+    /// The frame to show on the animation's `tick`th tick, counting from 0
+    func frame(at tick: Int) -> String {
+        switch self {
+        case let .loop(frames): frames[tick % frames.count]
+        case let .fountain(fountain): fountain.frame(index: UInt32(truncatingIfNeeded: tick))
+        }
+    }
+
+    /// Where in one pass the frame counter stands on the animation's `tick`th tick
+    func passPosition(at tick: Int) -> Int {
+        switch self {
+        case let .loop(frames): tick % frames.count
+        case let .fountain(fountain):
+            Int(fountain.passPosition(index: UInt32(truncatingIfNeeded: tick)))
+        }
+    }
+}
+
 /// Generic QR export view that can display animated BBQr or UR QR codes
-/// If `generateUrStrings` is nil, the format picker is hidden and only BBQr is used
+/// If `generateUr` is nil, the format picker is hidden and only BBQr is used
 struct QrExportView: View {
     let title: String
     let subtitle: String
     let generateBbqrStrings: (QrDensity) async throws -> [String]
-    let generateUrStrings: ((QrDensity) async throws -> [String])?
+    let generateUr: ((QrDensity) async throws -> UrFountain)?
     let copyData: (() async throws -> String)?
 
     @State private var selectedFormat: QrExportFormat = .bbqr
     @State private var density: QrDensity = .init()
-    @State private var qrs: [QrCodeView] = []
+    @State private var frames: QrExportFrames? = nil
     @State private var error: String? = nil
     @State private var currentIndex = 0
     @State private var startedAt = Date()
 
     /// Whether to show the format picker (only if UR is available)
     var showFormatPicker: Bool {
-        generateUrStrings != nil
+        generateUr != nil
     }
 
     /// Animation interval: dynamic based on density for both formats
@@ -61,7 +95,7 @@ struct QrExportView: View {
 
             QrExportContent(
                 error: error,
-                qrs: qrs,
+                frames: frames,
                 currentIndex: $currentIndex,
                 density: $density,
                 startedAt: startedAt,
@@ -81,23 +115,26 @@ struct QrExportView: View {
 
     func generateQrCodes() async {
         do {
-            let strings: [String] = switch selectedFormat {
+            let frames: QrExportFrames = switch selectedFormat {
             case .bbqr:
-                try await generateBbqrStrings(density)
+                try await .loop(generateBbqrStrings(density))
             case .ur:
-                if let generateUrStrings {
-                    try await generateUrStrings(density)
+                if let generateUr {
+                    try await .fountain(generateUr(density))
                 } else {
                     // fallback to BBQr if UR not available
-                    try await generateBbqrStrings(density)
+                    try await .loop(generateBbqrStrings(density))
                 }
             }
-            qrs = strings.map { QrCodeView(text: $0) }
+
+            // restart the animation, so a UR shows its plain fragments in order before any mixed part
+            self.frames = frames
             currentIndex = 0
+            startedAt = Date()
             error = nil
         } catch let err {
             error = err.localizedDescription
-            qrs = []
+            frames = nil
         }
     }
 
@@ -182,7 +219,7 @@ extension QrExportView {
             title: "Scan this QR",
             subtitle: "Scan with your hardware wallet\nto sign your transaction",
             generateBbqrStrings: { density in try details.psbtToBbqrWithDensity(density: density) },
-            generateUrStrings: { density in try details.psbtToUrWithDensity(density: density) },
+            generateUr: { density in try details.psbtToUrWithDensity(density: density) },
             copyData: { details.psbtToHex() }
         )
     }

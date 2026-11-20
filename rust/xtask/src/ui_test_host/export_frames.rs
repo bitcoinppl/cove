@@ -116,7 +116,8 @@ fn join_ur(frames: &[String]) -> Result<Value> {
 
     let Some(cbor) = decoder.message().map_err(|error| eyre!("UR decoding failed: {error}"))?
     else {
-        // the export shows only the plain fragments 1 to N, so each one missing is a part left
+        // each plain fragment 1 to N not yet seen is a part left, though the export's mixed parts
+        // after N may make up for some of them before they come round again
         let parts_left =
             (1..=message.sequence_count).filter(|sequence| !parts.contains_key(sequence)).count();
         return Ok(json!({ "complete": false, "parts_left": parts_left.max(1) }));

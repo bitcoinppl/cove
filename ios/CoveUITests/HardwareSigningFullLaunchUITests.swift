@@ -513,13 +513,17 @@ extension HardwareSigningFullLaunchUITests {
 
     /// Bounds the screenshots taken to see every part; a part that never shows fails within it
     private static let drawnExportTimeout: TimeInterval = 90
+    /// The plain UR fragment the drawn export test never reads, as a camera that keeps missing a
+    /// hard-to-read frame would, so only a drawn fountain-mixed part can complete the join
+    private static let unreadUrFragment = 2
 
     /// Bounds the wait for the first frame of the split the frame counter shows
     private static let drawnExportSettleTimeout: TimeInterval = 5
 
     private struct DrawnExport {
         let psbt: String
-        let frames: Int
+        /// Every distinct frame decoded, in the order they were read
+        let frames: [String]
         let captures: Int
         let duration: TimeInterval
     }
@@ -549,8 +553,17 @@ extension HardwareSigningFullLaunchUITests {
         let drawn = try readDrawnExport(format)
         closeExportSheet()
 
-        print("drawn \(format.rawValue) export: \(drawn.frames) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s, after dropping \(stale) stale frames")
-        XCTAssertEqual(drawn.frames, shownParts, "the frame counter and the drawn frames disagree on the part count")
+        print("drawn \(format.rawValue) export: \(drawn.frames.count) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s, after dropping \(stale) stale frames")
+        // a UR's mixed parts stand in for the plain fragment the test never reads, so its join takes
+        // more distinct frames than the counter shows, but each must name that count
+        XCTAssertEqual(Set(drawn.frames.map(Self.partCount)), [shownParts], "the frame counter and the drawn frames disagree on the part count")
+        if format == .ur {
+            XCTAssertTrue(
+                drawn.frames.contains { (Self.partSequence($0) ?? 0) > shownParts },
+                "the UR join completed without a fountain-mixed part"
+            )
+        }
+
         XCTAssertEqual(drawn.psbt, copied.lowercased(), "the drawn frames carry a different PSBT than Copy")
 
         let signed = try signer.sign(drawn.psbt, minParts: Self.animatedParts)
@@ -652,7 +665,15 @@ extension HardwareSigningFullLaunchUITests {
         return Int(total)
     }
 
-    /// Screenshots the sheet and decodes its QR until the host can join every distinct frame seen
+    /// The i of a multi-part UR's `i-N`, its 1-based sequence number
+    private static func partSequence(_ frame: String) -> Int? {
+        let path = frame.split(separator: "/")
+        guard path.count == 3, let sequence = path[1].split(separator: "-").first else { return nil }
+        return Int(sequence)
+    }
+
+    /// Screenshots the sheet and decodes its QR until the host can join every distinct frame seen,
+    /// leaving out a UR's `unreadUrFragment`
     private func readDrawnExport(_ format: QrFormat) throws -> DrawnExport {
         let prefix = Self.framePrefix(format)
 
@@ -664,11 +685,12 @@ extension HardwareSigningFullLaunchUITests {
         while Date().timeIntervalSince(started) < Self.drawnExportTimeout {
             captures += 1
             for code in app.visibleQrCodes where code.lowercased().hasPrefix(prefix.lowercased()) && !frames.contains(code) {
+                if format == .ur, Self.partSequence(code) == Self.unreadUrFragment { continue }
                 frames.append(code)
 
                 let joined = try signer.joinExportFrames(frames)
                 if let psbt = joined.psbt {
-                    return DrawnExport(psbt: psbt, frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+                    return DrawnExport(psbt: psbt, frames: frames, captures: captures, duration: Date().timeIntervalSince(started))
                 }
 
                 partsLeft = joined.partsLeft
@@ -679,6 +701,6 @@ extension HardwareSigningFullLaunchUITests {
         }
 
         XCTFail("decoded \(frames.count) distinct \(format.rawValue) frames in \(captures) captures, and \(partsLeft.map(String.init) ?? "some") parts never showed")
-        return DrawnExport(psbt: "", frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+        return DrawnExport(psbt: "", frames: frames, captures: captures, duration: Date().timeIntervalSince(started))
     }
 }

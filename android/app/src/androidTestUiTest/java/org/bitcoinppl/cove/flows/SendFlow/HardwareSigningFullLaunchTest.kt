@@ -83,12 +83,16 @@ class HardwareSigningFullLaunchTest {
         // bounds the screenshots taken to see every part; a part that never shows fails within it
         const val DRAWN_EXPORT_TIMEOUT_MS = 90_000L
 
+        // the plain UR fragment the drawn export test never reads, as a camera that keeps missing
+        // a hard-to-read frame would, so only a drawn fountain-mixed part can complete the join
+        const val UNREAD_UR_FRAGMENT = 2
+
         // bounds the wait for the first frame of the split the frame counter shows
         const val DRAWN_EXPORT_SETTLE_MS = 5_000L
         const val TAG = "HardwareSigningTest"
 
-        // a multi-part UR's `ur:type/i-N/` path, whose N is the part count
-        val UR_SEQUENCE = Regex("^ur:[^/]+/\\d+-(\\d+)/", RegexOption.IGNORE_CASE)
+        // a multi-part UR's `ur:type/i-N/` path, whose i is the sequence number and N the part count
+        val UR_SEQUENCE = Regex("^ur:[^/]+/(\\d+)-(\\d+)/", RegexOption.IGNORE_CASE)
     }
 
     @get:Rule
@@ -560,11 +564,24 @@ class HardwareSigningFullLaunchTest {
 
         Log.i(
             TAG,
-            "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over " +
+            "drawn $formatLabel export: ${drawn.frames.size} of $shownParts frames in ${drawn.captures} captures over " +
                 "${drawn.durationMs} ms, after dropping $stale stale frames",
         )
 
-        assertEquals("the frame counter and the drawn frames disagree on the part count", shownParts, drawn.frames)
+        // a UR's mixed parts stand in for the plain fragment the test never reads, so its join takes
+        // more distinct frames than the counter shows, but each must name that count
+        assertEquals(
+            "the frame counter and the drawn frames disagree on the part count",
+            setOf(shownParts),
+            drawn.frames.map(::partCount).toSet(),
+        )
+
+        if (framePrefix.startsWith("ur", ignoreCase = true)) {
+            assertTrue(
+                "the UR join completed without a fountain-mixed part",
+                drawn.frames.any { (partSequence(it) ?: 0) > shownParts },
+            )
+        }
         assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
 
         val signed = signer.sign(drawn.psbt, ANIMATED_PARTS)
@@ -581,7 +598,8 @@ class HardwareSigningFullLaunchTest {
 
     private data class DrawnExport(
         val psbt: String,
-        val frames: Int,
+        /** Every distinct frame decoded, in the order they were read */
+        val frames: List<String>,
         val captures: Int,
         val durationMs: Long,
     )
@@ -657,10 +675,16 @@ class HardwareSigningFullLaunchTest {
         }
 
         val match = UR_SEQUENCE.find(frame) ?: return null
-        return match.groupValues[1].toIntOrNull()
+        return match.groupValues[2].toIntOrNull()
     }
 
-    /** Screenshots the sheet and decodes its QR until the host can join every distinct frame seen */
+    /** The i of a multi-part UR's `i-N`, its 1-based sequence number */
+    private fun partSequence(frame: String): Int? = UR_SEQUENCE.find(frame)?.groupValues?.get(1)?.toIntOrNull()
+
+    /**
+     * Screenshots the sheet and decodes its QR until the host can join every distinct frame seen,
+     * leaving out a UR's [UNREAD_UR_FRAGMENT]
+     */
     private fun readDrawnExport(framePrefix: String): DrawnExport {
         val started = System.currentTimeMillis()
         val frames = mutableListOf<String>()
@@ -670,11 +694,12 @@ class HardwareSigningFullLaunchTest {
         while (System.currentTimeMillis() - started < DRAWN_EXPORT_TIMEOUT_MS) {
             captures++
             val code = visibleQrCode()
-            if (code != null && code.startsWith(framePrefix, ignoreCase = true) && code !in frames) {
+            val unread = code != null && partSequence(code) == UNREAD_UR_FRAGMENT
+            if (code != null && code.startsWith(framePrefix, ignoreCase = true) && code !in frames && !unread) {
                 frames += code
 
                 val joined = signer.joinExportFrames(frames)
-                joined.psbt?.let { return DrawnExport(it, frames.size, captures, System.currentTimeMillis() - started) }
+                joined.psbt?.let { return DrawnExport(it, frames.toList(), captures, System.currentTimeMillis() - started) }
                 partsLeft = joined.partsLeft
             }
 

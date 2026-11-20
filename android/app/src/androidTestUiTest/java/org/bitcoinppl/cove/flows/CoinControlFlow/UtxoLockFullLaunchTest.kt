@@ -78,6 +78,7 @@ class UtxoLockFullLaunchTest {
         const val MARKER_MAX_AGE_MS = 30 * 60 * 1_000L
         const val LOCKED_SELECTION_MESSAGE = "Unlock this UTXO before selecting it."
         const val LOCK_TOGGLE_TAG = "transactionDetails.lockToggle"
+        const val SHOW_DETAILS_TAG = "transactionDetails.showDetails"
     }
 
     private data class Coins(
@@ -380,15 +381,19 @@ class UtxoLockFullLaunchTest {
             device.waitForIdle()
             if (device.hasObject(By.res(LOCK_TOGGLE_TAG))) return
 
-            // the toggle sits at the bottom of the details and the expanded rows push it below the fold
-            val toggle = device.findObject(By.res("transactionDetails.showDetails"))
             try {
-                when {
-                    toggle == null -> device.swipe(device.displayWidth / 2, device.displayHeight * 2 / 3, device.displayWidth / 2, device.displayHeight / 3, 20)
+                // the toggle sits at the bottom of the details, which run past the fold on a phone the
+                // size of the CI emulator's since the sections keep at least 24 dp apart, and a toggle
+                // that only peeks above the fold has no label to read, so scroll it clear first
+                val toggle = device.scrollTo(By.res(SHOW_DETAILS_TAG), timeoutMs = deadline - System.currentTimeMillis())
 
-                    toggle.anyText() == "Show Details" -> {
+                when (toggle.anyText()) {
+                    // the lock toggle is in the expanded rows above, which toggleTransactionLock scrolls to
+                    "Hide Details" -> return
+
+                    "Show Details" -> {
                         toggle.click()
-                        device.wait(Until.hasObject(By.res(LOCK_TOGGLE_TAG)), 5_000L)
+                        device.wait(Until.hasObject(By.text("Hide Details")), 5_000L)
                     }
 
                     else -> Thread.sleep(250)

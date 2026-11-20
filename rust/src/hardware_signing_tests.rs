@@ -16,6 +16,7 @@ use bbqr::{
 };
 use bdk_wallet::bitcoin::{self, Psbt as BdkPsbt};
 use cove_tokio::FutureTimeoutExt as _;
+use cove_ur::UrFountain;
 use foundation_ur::{Decoder as UrDecoder, Encoder as UrEncoder, UR};
 
 use crate::{
@@ -85,16 +86,38 @@ fn low_density() -> QrDensity {
 }
 
 /// What a signer reads from Cove's animated UR export, decoded without Cove's UR code
-fn read_cove_ur_export(frames: &[String]) -> BdkPsbt {
-    assert!(frames.len() > 2, "export animates over several frames, got {}", frames.len());
+///
+/// The signer misses the export's second frame, so the fountain parts after the first pass
+/// must make up for it, as they do for a camera that can't read one frame
+fn read_cove_ur_export(fountain: &UrFountain) -> BdkPsbt {
+    let count = fountain.sequence_count();
+    assert!(count > 2, "export animates over several frames, got {count}");
+
+    // the signer never reads fragment 2, so a fountain-mixed part has to fill it in
+    let missed = format!("UR:CRYPTO-PSBT/2-{count}/");
 
     let mut decoder = UrDecoder::default();
-    for frame in frames {
-        assert!(frame.starts_with("ur:crypto-psbt/"), "frame is a crypto-psbt UR: {frame}");
-        decoder.receive(UR::parse(frame).expect("frame parses")).expect("frame decodes");
+    for index in 0..3 * count {
+        let frame = fountain.frame(index);
+        assert!(
+            frame.starts_with("UR:CRYPTO-PSBT/"),
+            "frame is an uppercase crypto-psbt UR: {frame}"
+        );
+
+        if frame.starts_with(&missed) {
+            continue;
+        }
+
+        // a UR is case-insensitive, and foundation-ur parses the lowercase form
+        let frame = frame.to_ascii_lowercase();
+        decoder.receive(UR::parse(&frame).expect("frame parses")).expect("frame decodes");
+
+        if decoder.is_complete() {
+            break;
+        }
     }
 
-    assert!(decoder.is_complete(), "every exported frame together completes the message");
+    assert!(decoder.is_complete(), "fountain parts make up for the missed frame");
     let cbor = decoder.message().expect("message decodes").expect("message is complete");
 
     // crypto-psbt is an untagged CBOR byte string holding the PSBT

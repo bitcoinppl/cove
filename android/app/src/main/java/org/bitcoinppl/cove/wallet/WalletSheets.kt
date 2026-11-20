@@ -184,7 +184,7 @@ internal fun WalletSheetsHost(
                     title = "Export Labels",
                     subtitle = "Scan to import labels\ninto another wallet",
                     generateBbqrStrings = { density -> manager.exportLabelsForQr(density) },
-                    generateUrStrings = null,
+                    generateUr = null,
                     onCopy = { manager.exportLabelsForShare().content },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
@@ -399,7 +399,7 @@ internal fun ExportXpubQrView(manager: WalletManager) {
         title = "Export Xpub",
         subtitle = "Public descriptor for\nwatch-only wallet",
         generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
-        generateUrStrings = null,
+        generateUr = null,
         onCopy = { manager.exportXpubForShare().content },
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
     )
