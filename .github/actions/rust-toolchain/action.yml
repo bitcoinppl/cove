@@ -1,0 +1,35 @@
+name: rust-toolchain
+description: Install the Rust version pinned in rust-toolchain.toml
+inputs:
+  components:
+    description: Extra rustup components (comma-separated), beyond those in rust-toolchain.toml
+    required: false
+    default: ""
+  targets:
+    description: Extra target triples (comma-separated)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+        file="${GITHUB_WORKSPACE}/rust-toolchain.toml"
+        if [[ ! -f "$file" ]]; then
+          echo "missing rust-toolchain.toml at repo root" >&2
+          exit 1
+        fi
+        channel=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$file" | head -n1)
+        if [[ -z "$channel" ]]; then
+          echo "could not parse channel from rust-toolchain.toml" >&2
+          exit 1
+        fi
+        echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.pin.outputs.channel }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}

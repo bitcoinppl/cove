@@ -173,8 +173,7 @@ jobs:
 
       - name: Install Rust toolchain
         if: steps.plan.outputs.run == 'true'
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         if: steps.plan.outputs.run == 'true'
         uses: Swatinem/rust-cache@v2
@@ -337,8 +336,7 @@ jobs:
 
       - name: Install Rust toolchain
         if: steps.plan.outputs.run == 'true'
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         if: steps.plan.outputs.run == 'true'
         uses: Swatinem/rust-cache@v2

@@ -61,8 +61,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       # restores compile-ios's dependency cache, which it alone saves
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2

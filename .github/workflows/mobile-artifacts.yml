@@ -46,8 +46,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
@@ -143,8 +142,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:

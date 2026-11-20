@@ -21,8 +21,7 @@ jobs:
           fetch-depth: 1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
@@ -86,8 +85,7 @@ jobs:
         run: git pull --rebase origin ${{ github.ref_name }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:

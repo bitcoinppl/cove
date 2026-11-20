@@ -37,9 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+      - name: Install pinned Rust toolchain
+        uses: ./.github/actions/rust-toolchain
       # the test jobs' cache, so the nightly run reuses their build
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2

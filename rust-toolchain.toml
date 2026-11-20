@@ -1,0 +1,6 @@
+# Pin the compiler so CI and local checks use the same version.
+# Bump this in its own PR and fix any new clippy/rustc findings in that same change.
+# See https://github.com/bitcoinppl/cove/issues/1164
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]

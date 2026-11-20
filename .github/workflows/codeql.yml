@@ -64,8 +64,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
+        uses: ./.github/actions/rust-toolchain
       # compile-ios's key, so this reuses the dependencies master's CI cached
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
