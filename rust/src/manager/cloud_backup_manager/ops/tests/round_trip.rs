@@ -4,6 +4,7 @@ use bdk_wallet::KeychainKind;
 use cove_types::{AddressIndex, BlockSizeLast};
 
 use super::*;
+use crate::manager::cloud_backup_manager::CloudBackupRecoveryCoverage;
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::wallet_secret::WalletSecretExt as _;
 
@@ -180,4 +181,46 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
 
     let exported = LabelManager::try_new(wallet.id.clone()).unwrap().export().await.unwrap();
     assert_labels_and_lock_survive(&exported);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_restored_from_cloud_backup_counts_as_backed_up() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    let record_id = wallet_record_id(wallet.id.as_ref());
+
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+
+    // a device that never uploaded the wallet, such as a new phone, holds no row for it
+    delete_local_wallet(&wallet);
+    Database::global().cloud_blob_sync_states.delete(&record_id).unwrap();
+    manager.handle_local_wallets_changed();
+
+    let outcome = manager
+        .do_restore_cloud_wallet(
+            &unowned_writes(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet),
+            &record_id,
+            permit(PermitIntent::RestoreCloudWallet),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }));
+
+    let restored = Database::global()
+        .wallets()
+        .get(&wallet.id, wallet.network, wallet.wallet_mode)
+        .unwrap()
+        .expect("restored wallet should be saved");
+
+    assert_eq!(restored.wallet_type, WalletType::Hot);
+    assert!(!restored.verified);
+    assert!(
+        !CloudBackupRecoveryCoverage::load().needs_backup(&restored),
+        "a wallet restored from the active backup must not block the Wipe Data PIN"
+    );
 }

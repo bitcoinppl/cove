@@ -12,6 +12,9 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
+use crate::database::cloud_backup::{
+    CloudBlobConfirmedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+};
 use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, RowDeleteReport};
 use crate::manager::cloud_backup_manager::delete_consent::CloudBackupDeleteCategory;
 use crate::manager::cloud_backup_manager::owner::delete_authorization::{
@@ -61,7 +64,36 @@ impl CloudBackupPreparedWalletRestore {
                 CloudBackupError::internal_context("collect wallet identities", source)
             })?;
 
-        wallet.restore_cloud_only(&local_wallets)
+        let outcome = wallet.restore_cloud_only(&local_wallets)?;
+        if matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }) {
+            self.record_restored_backup(&wallet);
+        }
+
+        Ok(outcome)
+    }
+
+    /// Records the backup this restore just read and decrypted as confirmed
+    ///
+    /// A restored wallet is already in the cloud, so it uploads nothing and would otherwise have
+    /// no row, which leaves it counted as unbacked, for example by the Wipe Data PIN check. A
+    /// row another writer holds is left alone
+    fn record_restored_backup(&self, wallet: &DownloadedWalletBackup) {
+        let wallet_id = wallet.metadata.id.clone();
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+        let confirmed = PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: wallet.entry.content_revision_hash.clone(),
+            confirmed_at: cove_util::time::unix_timestamp_secs_or_zero(),
+        });
+        let row = PersistedCloudBlobSyncState::wallet(
+            self.reader.namespace().to_string(),
+            wallet_id,
+            record_id,
+            confirmed,
+        );
+
+        if let Err(error) = Database::global().cloud_blob_sync_states.set_if_absent(&row) {
+            warn!("Failed to record the restored wallet's backup as confirmed: {error}");
+        }
     }
 }
 

@@ -1344,6 +1344,53 @@ verification failed with its retry action, and nothing verifies again by
 itself on reconnect, on foreground or on opening the detail screen, since
 verifying may need a passkey request that only the user's tap may start.
 
+### Wipe Data PIN coverage
+
+The Wipe Data PIN erases every wallet on every network, so it can't be turned
+on while a hot wallet with unverified words has no other copy of its keys.
+`CloudBackupRecoveryCoverage` decides which of those wallets Cloud Backup
+covers, and `unverified_wallet_ids` lists the rest across every network of the
+current wallet mode. A wallet counts as covered only when, in persisted state,
+Cloud Backup is configured with its passkey available, no verification failure
+is outstanding, no sync row is unreadable, the master key wrapper's row in the
+current namespace isn't unconfirmed, and the wallet's own row there is
+`Confirmed`. A verification that needs attention, or one required for an
+integrity issue or an unrecorded cause, withdraws all coverage until a check
+passes, since its issue counts don't name the wallets. One required only because
+the wallet set changed or the backup was reset keeps it. A first upload that
+never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
+uncovered. The rule reads no live verification, inventory or sync health
+state. Those start over on every launch and need the network, so a gate built
+on them refused the PIN after every relaunch.
+
+A wallet restored from the active backup, alone or by Restore All, uploads
+nothing, so the restore records the backup it just downloaded and decrypted as
+`Confirmed` itself. It writes that row only when the wallet has none, so it
+never replaces an upload's or a later change's row. A restore during onboarding
+marks its wallets dirty instead, and they count once those uploads confirm.
+
+The alert's Go To Wallet switches the selected network when the wallet it names
+is on another one, since a wallet loads only on its own network.
+
+These gaps are known and accepted as rare. Closing the first two would need
+live provider proof, which would refuse the PIN offline and right after launch:
+
+- On iOS, a wallet row can turn `Confirmed` once the file staged in the
+  ubiquity container reads back, before iCloud has it, for example while
+  iCloud storage is full
+- The rows are this device's record, not the provider's. If another device
+  turns Cloud Backup off and deletes the shared namespace, the `Confirmed` rows
+  here still count. A namespace with no master key wrapper row also passes,
+  since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
+- A copy that the startup integrity check or a detail refresh can't decrypt is
+  noted only in memory, so its `Confirmed` row still counts, as when another
+  device replaces the copy after this one confirmed it. Saving the failure
+  would need telling a corrupt copy from a transient read failure
+- If reading the local wallets of any network fails, the check lists no
+  wallets and allows the PIN, as it did for the selected network before. The
+  follow-up that adds decoy-mode wallets to the check should make a failed read
+  refuse the PIN instead
+
 ## Related Notes
 
 - Read `docs/passkeys.md` before changing passkey registration, targeted auth,

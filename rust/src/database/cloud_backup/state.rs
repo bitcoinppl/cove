@@ -640,6 +640,22 @@ pub enum PersistedBackupVerificationState {
 }
 
 impl PersistedBackupVerificationState {
+    /// Whether the last check left a failure that no later check has cleared
+    ///
+    /// A requirement from a version that recorded no cause may be one too. A changed wallet set
+    /// or a reset backup is not, since neither says the stored copy is unreadable
+    pub(crate) fn reports_integrity_failure(&self) -> bool {
+        match self {
+            Self::NeedsAttention { .. } => true,
+            Self::Required { reason, .. } => matches!(
+                reason,
+                PersistedVerificationRequirement::IntegrityIssue
+                    | PersistedVerificationRequirement::Unknown
+            ),
+            Self::NotVerified { .. } | Self::Verified { .. } => false,
+        }
+    }
+
     /// Requires verification for `reason`, keeping when it last passed and was dismissed
     fn required(
         &self,

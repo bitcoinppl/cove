@@ -124,6 +124,10 @@ paths = ["ios/CoveUITests/CloudBackupLocalDeleteFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/CloudBackupWipeDataPinFullAppUITests.swift"]
+suites = ["CoveCloudBackupUITests/CloudBackupWipeDataPinFullAppUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift"]
 suites = ["CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests"]
 
@@ -225,6 +229,7 @@ suites = [
     "CoveCloudBackupUITests/CloudBackupDeleteFromCloudFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests",
+    "CoveCloudBackupUITests/CloudBackupWipeDataPinFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests",
     "CoveCloudBackupUITests/CloudBackupDisableFullAppUITests",

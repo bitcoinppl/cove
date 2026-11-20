@@ -286,6 +286,41 @@ impl WalletsTable {
 }
 
 impl WalletsTable {
+    /// Every wallet in `mode` across all networks, with `first`'s wallets ahead of the rest
+    pub(crate) fn all_networks(
+        &self,
+        mode: WalletMode,
+        first: Network,
+    ) -> Result<Vec<WalletMetadata>, Error> {
+        use strum::IntoEnumIterator as _;
+
+        let networks = std::iter::once(first).chain(Network::iter().filter(|n| *n != first));
+        let mut wallets = Vec::new();
+
+        for network in networks {
+            wallets.extend(self.get_all(network, mode)?);
+        }
+
+        Ok(wallets)
+    }
+
+    /// The network holding the wallet with `id` in `mode`, if any does
+    pub(crate) fn network_of(
+        &self,
+        id: &WalletId,
+        mode: WalletMode,
+    ) -> Result<Option<Network>, Error> {
+        use strum::IntoEnumIterator as _;
+
+        for network in Network::iter() {
+            if self.get(id, network, mode)?.is_some() {
+                return Ok(Some(network));
+            }
+        }
+
+        Ok(None)
+    }
+
     /// The main database handle backing this table, for read-only diagnostics
     pub(crate) fn redb(&self) -> &redb::Database {
         &self.db
@@ -794,6 +829,29 @@ mod tests {
         write_txn.commit().unwrap();
 
         (tmp, table)
+    }
+
+    #[test]
+    fn all_networks_lists_the_first_network_ahead_and_skips_the_other_mode() {
+        let (_tmp, table) = wallet_table();
+        let on_bitcoin = wallet("on-bitcoin");
+        let on_signet = wallet("on-signet");
+        let on_testnet = wallet("on-testnet");
+        let decoy = wallet("decoy");
+
+        table.save_all_wallets(Network::Bitcoin, WalletMode::Main, vec![on_bitcoin]).unwrap();
+        table.save_all_wallets(Network::Signet, WalletMode::Main, vec![on_signet.clone()]).unwrap();
+        table.save_all_wallets(Network::Testnet, WalletMode::Main, vec![on_testnet]).unwrap();
+        table.save_all_wallets(Network::Signet, WalletMode::Decoy, vec![decoy.clone()]).unwrap();
+
+        let wallets = table.all_networks(WalletMode::Main, Network::Signet).unwrap();
+
+        assert_eq!(names(&wallets), ["on-signet", "on-bitcoin", "on-testnet"]);
+        assert_eq!(
+            table.network_of(&on_signet.id, WalletMode::Main).unwrap(),
+            Some(Network::Signet)
+        );
+        assert_eq!(table.network_of(&decoy.id, WalletMode::Main).unwrap(), None);
     }
 
     #[test]

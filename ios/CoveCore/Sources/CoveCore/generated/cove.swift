@@ -3716,7 +3716,13 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     func state()  -> AppState
 
     /**
-     * Get wallets that have not been backed up and verified
+     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
+     *
+     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
+     * waiting for its first confirmed upload does, since wiping it would lose its only keys
+     *
+     * Every network counts, since the wipe deletes them all. The selected network's wallets come
+     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
      */
     func unverifiedWalletIds()  -> [WalletId]
 
@@ -4149,7 +4155,13 @@ open func state() -> AppState  {
 }
 
     /**
-     * Get wallets that have not been backed up and verified
+     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
+     *
+     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
+     * waiting for its first confirmed upload does, since wiping it would lose its only keys
+     *
+     * Every network counts, since the wipe deletes them all. The selected network's wallets come
+     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
      */
 open func unverifiedWalletIds() -> [WalletId]  {
     return try!  FfiConverterSequenceTypeWalletId.lift(try! rustCall() {
@@ -54247,7 +54259,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_state() != 49253) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 44634) {
+    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 56708) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_version() != 27942) {
