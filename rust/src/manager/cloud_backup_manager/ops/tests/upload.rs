@@ -164,6 +164,10 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
 
+    // the Configured policy resumes uploads of every Dirty row at once, and this wallet isn't
+    // saved locally, so an upload that saw its row would delete it as an orphan
+    wait_for_write_policy_to_settle(&manager).await;
+
     let metadata = xpub_only_wallet_metadata();
     let record_id = wallet_record_id(metadata.id.as_ref());
     manager.reconcile_runtime_status(CloudBackupStatus::Error("offline".into()));
