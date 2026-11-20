@@ -215,8 +215,11 @@ async fn other_backups_fail_without_waiting_for_folders_still_being_read() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let failed_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
-    let slow_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
+    // the held folder is listed first, so a reader that reads one folder at a time blocks on it
+    let mut namespaces =
+        [(); 2].map(|()| cove_cspp::master_key::MasterKey::generate().namespace_id());
+    namespaces.sort();
+    let [slow_namespace, failed_namespace] = namespaces;
     globals.cloud.set_wallet_files(failed_namespace.clone(), Vec::new());
     globals.cloud.set_wallet_files(slow_namespace.clone(), Vec::new());
     globals
