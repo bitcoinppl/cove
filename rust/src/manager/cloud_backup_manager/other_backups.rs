@@ -122,19 +122,11 @@ impl RustCloudBackupManager {
         namespaces.retain(|namespace| namespace != current_namespace);
         namespaces.sort();
 
-        let folders =
-            CloudFolders::read(cloud, &namespaces, WrapperRead::Visible, &AtomicBool::default())
-                .await
-                .map_err(|error| blocking_cloud_error(step, error))?;
-
         // a folder the provider failed to read may hold a backup, so the list fails rather than
         // leaving it out of the count or out of Delete Other Backups
-        folders.wrapped().map_err(|error| {
-            blocking_cloud_error(
-                step,
-                CloudBackupError::cloud_storage_context("inspect cloud backup namespace", error),
-            )
-        })
+        CloudFolders::read_wrapped(cloud, &namespaces, WrapperRead::Visible, &AtomicBool::default())
+            .await
+            .map_err(|error| blocking_cloud_error(step, error))
     }
 
     pub(crate) fn apply_other_backups_outcome(&self, outcome: CloudBackupOtherBackupsOutcome) {

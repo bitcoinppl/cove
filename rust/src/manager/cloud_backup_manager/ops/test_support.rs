@@ -221,6 +221,7 @@ struct MockCloudState {
     master_key_download_active: usize,
     master_key_download_max_active: usize,
     master_key_download_gate: Option<Arc<MockCloudDownloadGate>>,
+    master_key_download_namespace_gates: HashMap<String, Arc<MockCloudDownloadGate>>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
@@ -750,6 +751,16 @@ impl MockCloudStorage {
         gate
     }
 
+    /// Holds the master key downloads of `namespace` only, until the gate is released
+    pub(crate) fn gate_master_key_download_for_namespace(
+        &self,
+        namespace: String,
+    ) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().master_key_download_namespace_gates.insert(namespace, gate.clone());
+        gate
+    }
+
     pub(crate) fn clear_master_key_download_gate(&self) {
         self.state.lock().master_key_download_gate = None;
     }
@@ -901,7 +912,11 @@ impl CloudStorageAccess for MockCloudStorage {
             state.master_key_download_active += 1;
             state.master_key_download_max_active =
                 state.master_key_download_max_active.max(state.master_key_download_active);
-            state.master_key_download_gate.clone()
+            state
+                .master_key_download_namespace_gates
+                .get(&namespace)
+                .cloned()
+                .or_else(|| state.master_key_download_gate.clone())
         };
 
         if let Some(gate) = gate {
