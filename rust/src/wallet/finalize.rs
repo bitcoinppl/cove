@@ -16,6 +16,7 @@ use bdk_wallet::{
     miniscript::psbt::interpreter_check,
     psbt::PsbtUtils as _,
 };
+use cove_util::ResultExt as _;
 use tracing::warn;
 
 use super::Wallet;
@@ -88,7 +89,7 @@ impl Wallet {
         let finalized = self
             .bdk
             .finalize_psbt(&mut psbt, SignOptions::default())
-            .map_err(|error| PsbtFinalizeFailure::Finalizer(error.to_string()))?;
+            .map_err_str(PsbtFinalizeFailure::Finalizer)?;
 
         if !finalized {
             return Err(self.diagnose_unfinalized(&psbt));
@@ -100,7 +101,7 @@ impl Wallet {
         }
 
         // use Display, since the Debug form embeds the whole PSBT or transaction
-        psbt.extract_tx().map_err(|error| PsbtFinalizeFailure::Extract(error.to_string()))
+        psbt.extract_tx().map_err_str(PsbtFinalizeFailure::Extract)
     }
 
     /// Whether every previous output the PSBT carries is the one its input spends

@@ -14,7 +14,11 @@ use bbqr::{
     qr::Version,
     split::{Split, SplitOptions},
 };
-use bdk_wallet::bitcoin::{self, Psbt as BdkPsbt};
+use bdk_wallet::{
+    bitcoin::{self, Psbt as BdkPsbt},
+    miniscript::interpreter::Interpreter,
+    psbt::PsbtUtils as _,
+};
 use cove_tokio::FutureTimeoutExt as _;
 use cove_ur::UrFountain;
 use foundation_ur::{Decoder as UrDecoder, Encoder as UrEncoder, UR};
@@ -28,7 +32,7 @@ use crate::{
     multi_format::{MultiFormat, StringOrData},
     qr_scanner::{QrScannerFFI, ScanProgress, ScanResult},
     test_support::hardware_signing::{
-        FEE_RATE_SAT_PER_VB, FUNDING_SATS, SEND_SATS, SIGNER_MNEMONIC, TestSigner,
+        FEE_RATE_SAT_PER_VB, FUNDING_SATS, SEND_SATS, SIGNER_MNEMONIC, SignerScript, TestSigner,
         UNRELATED_SIGNER_MNEMONIC, assert_matches_draft, external_address, external_recipient,
         fund_offline, init_signet_globals, save_hardware_draft,
     },
@@ -60,8 +64,13 @@ struct Fixture {
 /// A funded Signet watch-only wallet imported from the signer's public descriptor, with one
 /// saved hardware draft
 async fn hardware_wallet_with_draft() -> Fixture {
+    hardware_wallet_with_draft_for(SignerScript::NativeSegwit).await
+}
+
+/// [`hardware_wallet_with_draft`] for a signer that exports the given script type
+async fn hardware_wallet_with_draft_for(script: SignerScript) -> Fixture {
     let restore = init_signet_globals();
-    let signer = TestSigner::new(SIGNER_MNEMONIC, bitcoin::Network::Signet);
+    let signer = TestSigner::with_script(SIGNER_MNEMONIC, bitcoin::Network::Signet, script);
     let id = {
         let wallet = Wallet::try_new_persisted_from_xpub(signer.public_descriptor().to_string())
             .expect("watch-only wallet imports");
@@ -349,6 +358,62 @@ async fn a_signed_psbt_trimmed_to_its_signatures_finalizes_the_saved_draft() {
     });
 }
 
+/// Every input of a finalized transaction satisfies the script of the output it spends, checked
+/// by the miniscript interpreter so legacy, wrapped and native segwit spends verify alike
+fn assert_inputs_verify(transaction: &bitcoin::Transaction, prevouts: &[bitcoin::TxOut]) {
+    let secp = bitcoin::secp256k1::Secp256k1::verification_only();
+    let all_prevouts = bitcoin::sighash::Prevouts::All(prevouts);
+
+    for (index, (input, prevout)) in transaction.input.iter().zip(prevouts).enumerate() {
+        let interpreter = Interpreter::from_txdata(
+            &prevout.script_pubkey,
+            &input.script_sig,
+            &input.witness,
+            input.sequence,
+            transaction.lock_time,
+        )
+        .unwrap_or_else(|error| panic!("input {index} parses: {error}"));
+
+        let errors: Vec<_> = interpreter
+            .iter(&secp, transaction, index, &all_prevouts)
+            .filter_map(Result::err)
+            .collect();
+
+        assert!(errors.is_empty(), "input {index} verifies: {errors:?}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn trimmed_signed_psbts_finalize_for_every_address_type() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+    for script in SignerScript::ALL {
+        let fixture = hardware_wallet_with_draft_for(script).await;
+        let draft = &fixture.details.psbt.0;
+
+        let trimmed = trimmed_like_seedsigner(&fixture.signer.sign(draft));
+        let (pure, _) = signed_ur_frames(&trimmed, 0);
+        let scanned = scanned_psbt(scan_frames(&QrScannerFFI::new(), &pure));
+
+        let transaction = import_and_finalize(&fixture, scanned).await;
+
+        // a legacy signature changes the txid, so compare what the transaction spends and pays
+        let spent: Vec<_> = transaction.input.iter().map(|input| input.previous_output).collect();
+        let drafted: Vec<_> =
+            draft.unsigned_tx.input.iter().map(|input| input.previous_output).collect();
+        assert_eq!(spent, drafted, "{script:?}: spends the drafted inputs");
+        assert_eq!(
+            transaction.output, draft.unsigned_tx.output,
+            "{script:?}: pays the drafted outputs"
+        );
+
+        let prevouts: Vec<_> = (0..draft.inputs.len())
+            .map(|index| draft.get_utxo_for(index).expect("draft carries previous outputs"))
+            .collect();
+        assert_inputs_verify(&transaction, &prevouts);
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn signed_psbts_that_cannot_finalize_say_why() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
@@ -393,7 +458,7 @@ async fn signed_psbts_that_cannot_finalize_say_why() {
     // a segwit input whose output claims another amount, which a signature can commit to
     let mut wrong_amount = trimmed_like_seedsigner(&signed);
     let mut claimed = draft.inputs[0].witness_utxo.clone().expect("draft carries witness UTXOs");
-    claimed.value = claimed.value - bitcoin::Amount::from_sat(1_000);
+    claimed.value -= bitcoin::Amount::from_sat(1_000);
     wrong_amount.inputs[0].witness_utxo = Some(claimed);
 
     let cases = [
