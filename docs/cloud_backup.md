@@ -63,7 +63,7 @@ or `Corrupted`), the Settings row, the persisted heal notice, the last outcome,
 the root prompt and the global actions. What the app's root raises shows in
 main mode only: in decoy mode the screen carries no root prompt, and the result
 of a verification the root prompt started stays hidden until main mode, so the
-decoy PIN never shows anything about the main wallets' backup. Entering decoy
+root never shows the decoy PIN anything about the main wallets' backup. Entering decoy
 mode hides both in the published screen at once, before the unlock lets the
 root present it, and then publishes the screen again. The root hosts on both
 platforms also check the saved mode before they present a prompt, a result

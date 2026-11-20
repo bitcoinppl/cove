@@ -164,6 +164,28 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["No transactions"].waitForExistence(timeout: 1))
     }
 
+    /// Onboarding shows no lock, so an import error must reach the user even before Cove's lock
+    /// first opens
+    func testSoftwareWalletImportShowsInvalidWordsAlert() {
+        launchApp()
+
+        reachStorageChoices()
+        openSoftwareWalletImport()
+
+        tap(button(startingWith: "Enter recovery words"), until: app.staticTexts["How many words do you have?"])
+        tap(button(startingWith: "12 words"), until: app.navigationBars["Import Wallet"])
+
+        // the Import button is always enabled, and blank words never parse as a recovery phrase
+        let importButton = app.buttons["hotWalletImport.import"]
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10))
+        importButton.tap()
+
+        XCTAssertTrue(
+            app.alerts["Words not valid"].waitForExistence(timeout: 10),
+            "onboarding showed no alert for invalid recovery words"
+        )
+    }
+
     func testSoftwareWalletUserCanImportKnownLegacyWalletWithHistory() {
         launchApp()
 
