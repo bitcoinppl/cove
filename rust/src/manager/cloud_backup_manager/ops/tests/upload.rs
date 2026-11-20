@@ -186,7 +186,10 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
     ));
 
+    // an upload task in flight holds the manager, so releasing it waits for that upload too;
+    // otherwise it could reach its offline check after the next test reconnects
     clear_wallet_upload_runtime_for_test_async(&manager).await;
+    shut_down_manager_for_restart(manager).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
