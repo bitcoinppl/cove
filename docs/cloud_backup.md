@@ -1437,9 +1437,11 @@ never matches the text Settings shows:
   which rebuilds the wrapper from the local master key. Sync Now uploads only
   wallets, so it can't fix this
 - `Uploading` (pending, which only iCloud Drive reports): Settings says iCloud
-  hasn't finished uploading the key and to check that the device is online and
-  iCloud Drive is on for Cove. Verify can't help here, since it reads the local
-  copy back and finds nothing to repair
+  hasn't finished uploading the key and to check that the device is online,
+  iCloud Drive is on for Cove and iCloud storage isn't full. iCloud reports an
+  upload it couldn't finish, such as with full storage, as pending too, so the
+  message names that fix as well. Verify can't help here, since it reads the
+  local copy back and finds nothing to repair
 
 The reducer keeps that answer, with the namespace it was found for, until a
 later check asks the provider again and confirms the key. A check that stops

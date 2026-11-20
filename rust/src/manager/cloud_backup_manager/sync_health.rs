@@ -21,8 +21,9 @@ use crate::database::cloud_backup::{
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str = "Cove couldn't confirm the key for this cloud backup. Open Cloud Backup and run Verify to fix it.";
 
 // only iCloud Drive reports an upload as pending; the system's iCloud process runs it, so Cove
-// needn't stay open, and Verify reads the local copy back and has nothing to repair
-const SYNC_HEALTH_UPLOADING_MASTER_KEY_MESSAGE: &str = "iCloud hasn't finished uploading the key for this cloud backup. Check that you're online and iCloud Drive is on for Cove, then try again.";
+// needn't stay open, and Verify reads the local copy back and has nothing to repair. iCloud also
+// reports an upload it couldn't finish, such as with full storage, as pending
+const SYNC_HEALTH_UPLOADING_MASTER_KEY_MESSAGE: &str = "iCloud hasn't finished uploading the key for this cloud backup. Check that you're online, iCloud Drive is on for Cove and your iCloud storage isn't full, then try again.";
 
 /// Why the provider can't confirm Cloud Backup's master key wrapper, which decides the fix
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

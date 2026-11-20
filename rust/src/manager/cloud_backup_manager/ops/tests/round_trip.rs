@@ -923,6 +923,8 @@ async fn a_wrapper_row_the_queue_gave_up_on_still_asks_the_provider_why() {
     let wallet = save_used_hot_wallet();
     backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
     verify_pending_uploads_once_for_test_async(&manager).await;
+    // the verifier pass queued a refresh, which would otherwise land after this test's check
+    wait_for_background_refreshes(&manager).await;
 
     let namespace = manager.current_namespace_id().unwrap();
     save_wrapper_row_the_queue_gave_up_on(namespace.clone());

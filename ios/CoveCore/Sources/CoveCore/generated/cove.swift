@@ -41974,7 +41974,8 @@ public enum SecurityAlertState: Equatable, Hashable {
      */
     case cloudBackupKeyMissing
     /**
-     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading, or
+     * couldn't upload
      */
     case cloudBackupKeyUploading
     case confirmEnableWipeMePin

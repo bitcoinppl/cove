@@ -84,7 +84,7 @@ private let cloudBackupKeyMissingMessage =
     "Cove couldn't confirm the key for your cloud backup, so it can't restore your wallets after a wipe. Open Cloud Backup and run Verify to fix it, then you can set the Wipe Data PIN. Or back up each wallet's recovery words first."
 
 private let cloudBackupKeyUploadingMessage =
-    "iCloud hasn't finished uploading the key for your cloud backup, so it can't restore your wallets after a wipe yet. Check that you're online and iCloud Drive is on for Cove, then try again. Or back up each wallet's recovery words first."
+    "iCloud hasn't finished uploading the key for your cloud backup, so it can't restore your wallets after a wipe yet. Check that you're online, iCloud Drive is on for Cove and your iCloud storage isn't full, then try again. Or back up each wallet's recovery words first."
 
 private func cloudBackupKeyAlert(
     message: String,

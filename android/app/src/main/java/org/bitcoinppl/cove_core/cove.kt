@@ -61307,7 +61307,8 @@ sealed class SecurityAlertState {
 
 
     /**
-     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading, or
+     * couldn't upload
      */
     object CloudBackupKeyUploading : SecurityAlertState()
 

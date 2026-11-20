@@ -32,8 +32,9 @@ internal enum class WipeDataPinRefusal(
     // so every state Rust can send has an alert
     CloudBackupKeyUploading(
         "iCloud hasn't finished uploading the key for your cloud backup, so it can't restore " +
-            "your wallets after a wipe yet. Check that you're online and iCloud Drive is on for " +
-            "Cove, then try again. Or back up each wallet's recovery words first.",
+            "your wallets after a wipe yet. Check that you're online, iCloud Drive is on for Cove " +
+            "and your iCloud storage isn't full, then try again. Or back up each wallet's " +
+            "recovery words first.",
     ),
     ;
 

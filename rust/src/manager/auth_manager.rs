@@ -110,7 +110,8 @@ pub enum SecurityAlertState {
     /// A wallet relies on Cloud Backup, whose master key the provider doesn't have; Verify in
     /// Cloud Backup rebuilds it
     CloudBackupKeyMissing,
-    /// A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+    /// A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading, or
+    /// couldn't upload
     CloudBackupKeyUploading,
     ConfirmEnableWipeMePin,
     ConfirmDecoyPin,

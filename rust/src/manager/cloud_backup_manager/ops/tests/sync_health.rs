@@ -249,8 +249,10 @@ async fn the_missing_key_message_says_how_to_fix_each_case() {
     globals.cloud.set_master_key_upload_pending(namespace);
     let uploading = message(manager.compute_sync_health().await);
     assert!(
-        uploading.contains("hasn't finished uploading") && !uploading.contains("Verify"),
-        "a key iCloud is still uploading should say so, not point to Verify: {uploading}"
+        uploading.contains("hasn't finished uploading")
+            && uploading.contains("storage isn't full")
+            && !uploading.contains("Verify"),
+        "a key iCloud is still uploading, or couldn't upload, should say so, not point to Verify: {uploading}"
     );
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
