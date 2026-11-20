@@ -5,11 +5,14 @@ use cove_types::{AddressIndex, BlockSizeLast};
 
 use super::*;
 use crate::database::cloud_backup::CloudBlobConfirmedState;
-use crate::manager::cloud_backup_manager::CloudBackupRecoveryCoverage;
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
 };
+use crate::manager::cloud_backup_manager::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
+use crate::manager::cloud_backup_manager::{
+    CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+};
 use crate::wallet_secret::WalletSecretExt as _;
 
 const ABANDON_MNEMONIC: &str =
@@ -264,6 +267,23 @@ async fn confirmed_backup(
     (wallet, namespace, record_id)
 }
 
+/// Waits briefly for the sync health the manager shows to satisfy `accept`, and returns the last
+/// one it showed
+async fn shown_sync_health(
+    manager: &RustCloudBackupManager,
+    accept: impl Fn(&CloudSyncHealth) -> bool,
+) -> CloudSyncHealth {
+    let deadline = LoadedHostDeadline::after(Duration::from_millis(500));
+    loop {
+        let shown = manager.model_snapshot().sync_health;
+        if accept(&shown) || deadline.has_passed() {
+            return shown;
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
 /// Replaces the state of `record_id`'s row, which must exist
 fn rewrite_row_state(
     record_id: &str,
@@ -438,6 +458,11 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
     });
     assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Unconfirmed);
 
+    let upload_failed = CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into());
+    manager.refresh_sync_health();
+    let failing = shown_sync_health(&manager, |health| *health == upload_failed).await;
+    assert_eq!(failing, upload_failed, "Settings should show the failed upload");
+
     refresh_detail_from_provider(&manager).await;
 
     assert_eq!(
@@ -446,5 +471,13 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
         "the provider holds this exact backup, so the wallet can be recovered from it"
     );
     assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+
+    // the mock holds no master key, so once the failed upload is gone that is what Settings shows
+    let missing_key = CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
+    let healed = shown_sync_health(&manager, |health| *health == missing_key).await;
+    assert_eq!(
+        healed, missing_key,
+        "the confirmed wallet must not keep the failed upload's error in Settings"
+    );
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

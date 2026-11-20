@@ -201,9 +201,11 @@ impl CloudBackupSupervisor {
             manager.refresh_pending_upload_verification_state();
         }
 
-        // a row granted or withdrawn changes what Cloud Backup can restore
+        // a row granted or withdrawn changes what Cloud Backup can restore, and a sync health
+        // check that read the rows before this changed them would keep showing their old state
         if evidence.reconcile_wallet_rows() {
             manager.request_screen_publish();
+            manager.refresh_sync_health();
         }
 
         Produces::ok(())
