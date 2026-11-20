@@ -346,14 +346,17 @@ fun WalletSettingsScreen(
                 deletionDialog = WalletDeletionDialog.Confirmation(next)
             }
         },
-        onRetry = { attemptId ->
-            deletionDialog = null
-            deleteWallet(WalletDeletionCall.Retry(attemptId))
-        },
-        onCancelBlocked = { attemptId ->
-            app.cancelWalletDeletionAttempt(attemptId)
-            deletionDialog = null
-        },
+        shutdownBlocked =
+            WalletDeletionShutdownBlockedActions(
+                onRetry = { attemptId ->
+                    deletionDialog = null
+                    deleteWallet(WalletDeletionCall.Retry(attemptId))
+                },
+                onCancel = { attemptId ->
+                    app.cancelWalletDeletionAttempt(attemptId)
+                    deletionDialog = null
+                },
+            ),
     )
 }
 

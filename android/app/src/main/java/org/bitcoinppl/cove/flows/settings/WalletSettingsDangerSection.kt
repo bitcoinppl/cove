@@ -172,14 +172,19 @@ internal sealed interface WalletDeletionDialog {
     ) : WalletDeletionDialog
 }
 
+/** What the blocked shutdown prompt does with the deletion attempt it names */
+internal data class WalletDeletionShutdownBlockedActions(
+    val onRetry: (ShutdownAttemptId) -> Unit,
+    val onCancel: (ShutdownAttemptId) -> Unit,
+)
+
 @Composable
 internal fun WalletSettingsDeleteDialog(
     dialog: WalletDeletionDialog?,
     finalWarning: WalletDeletionFinalWarning,
     onDismiss: () -> Unit,
     onConfirm: (WalletDeletionFlow) -> Unit,
-    onRetry: (ShutdownAttemptId) -> Unit,
-    onCancelBlocked: (ShutdownAttemptId) -> Unit,
+    shutdownBlocked: WalletDeletionShutdownBlockedActions,
 ) {
     when (dialog) {
         null -> Unit
@@ -200,8 +205,8 @@ internal fun WalletSettingsDeleteDialog(
 
         is WalletDeletionDialog.ShutdownBlocked ->
             WalletDeletionShutdownBlockedDialog(
-                onRetry = { onRetry(dialog.attemptId) },
-                onCancel = { onCancelBlocked(dialog.attemptId) },
+                onRetry = { shutdownBlocked.onRetry(dialog.attemptId) },
+                onCancel = { shutdownBlocked.onCancel(dialog.attemptId) },
             )
     }
 }
