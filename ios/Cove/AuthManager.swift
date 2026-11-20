@@ -57,6 +57,9 @@ private enum WipeCallResult: Sendable {
     private(set) var lockState: LockState
     var isWipeDataPinEnabled: Bool
     var isDecoyPinEnabled: Bool
+    /// The trick PINs an unlock turned off for matching the app PIN, which Security Settings shows
+    /// until dismissed; Rust keeps it none in decoy mode
+    var trickPinNotice: DuplicateTrickPin?
     var wipePresentationState = WipePresentationState.idle
 
     /// Counts app lock unlocks made with a PIN, decoy PIN, or biometric credential
@@ -104,6 +107,7 @@ private enum WipeCallResult: Sendable {
         lockState = rust.isLocked() ? .locked : .unlocked
         isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
         isDecoyPinEnabled = rust.isDecoyPinEnabled()
+        trickPinNotice = rust.trickPinNotice()
 
         rust.listenForUpdates(reconciler: self)
     }
@@ -213,15 +217,9 @@ private enum WipeCallResult: Sendable {
     @MainActor
     public func handleAndReturnUnlockMode(_ pin: String) async -> UnlockMode {
         switch rust.resolveUnlockPin(pin: pin) {
-        case let .app(turnedOff):
+        case .app:
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
             unlockAuthenticated()
-
-            // rust turned off a trick PIN equal to this one, so the user hears about it once
-            if let turnedOff {
-                AppManager.shared.alertState = .init(.trickPinTurnedOff(pins: turnedOff))
-            }
-
             return .main
 
         case .decoy:
@@ -290,6 +288,7 @@ private enum WipeCallResult: Sendable {
         type = settings.authType
         isWipeDataPinEnabled = settings.isWipeDataPinEnabled
         isDecoyPinEnabled = settings.isDecoyPinEnabled
+        trickPinNotice = settings.trickPinNotice
         isUsingBiometrics = false
     }
 
@@ -381,6 +380,9 @@ private enum WipeCallResult: Sendable {
 
             case let .decoyPinChanged(enabled):
                 isDecoyPinEnabled = enabled
+
+            case let .trickPinNoticeChanged(notice):
+                trickPinNotice = notice
             }
         }
     }

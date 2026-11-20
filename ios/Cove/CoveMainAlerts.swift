@@ -96,7 +96,6 @@ private extension AppAlertState {
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
              .general,
-             .trickPinTurnedOff,
              .invalidFormat,
              .loading:
             .dismiss

@@ -223,6 +223,11 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         Column {
             var itemCount = 0
 
+            auth.trickPinNotice?.let { notice ->
+                TrickPinNotice(notice) { auth.dispatch(AuthManagerAction.DismissTrickPinNotice) }
+                MaterialDivider()
+            }
+
             // biometric toggle
             if (isBiometricAvailable) {
                 MaterialSettingsItem(

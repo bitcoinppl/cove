@@ -168,12 +168,14 @@ struct MainSettingsScreen: View {
             togglePin: togglePin,
             toggleWipeMePin: toggleWipeMePin,
             toggleDecoyPin: toggleDecoyPin,
+            trickPinNotice: auth.trickPinNotice,
             shouldShowBackupSection: shouldShowBackupSection,
             shouldShowCloudBackupSection: !auth.isInDecoyMode(),
             shouldShowBetaToggleSection: shouldShowBetaToggleSection,
             betaToggle: betaToggle,
             betaImportExportToggle: betaImportExportToggle,
             changePin: { handleSecurityAction(.changePin) },
+            dismissTrickPinNotice: { auth.dispatch(action: .dismissTrickPinNotice) },
             exportAllBackups: exportAllBackups,
             importAllBackups: { sheetState = .init(.backupImport) },
             verifyBackup: { sheetState = .init(.backupVerify) },
@@ -248,12 +250,14 @@ private struct MainSettingsForm: View {
     @Binding var togglePin: Bool
     @Binding var toggleWipeMePin: Bool
     @Binding var toggleDecoyPin: Bool
+    let trickPinNotice: DuplicateTrickPin?
     let shouldShowBackupSection: Bool
     let shouldShowCloudBackupSection: Bool
     let shouldShowBetaToggleSection: Bool
     @Binding var betaToggle: Bool
     @Binding var betaImportExportToggle: Bool
     let changePin: () -> Void
+    let dismissTrickPinNotice: () -> Void
     let exportAllBackups: () -> Void
     let importAllBackups: () -> Void
     let verifyBackup: () -> Void
@@ -270,7 +274,9 @@ private struct MainSettingsForm: View {
                 togglePin: $togglePin,
                 toggleWipeMePin: $toggleWipeMePin,
                 toggleDecoyPin: $toggleDecoyPin,
-                onChangePin: changePin
+                trickPinNotice: trickPinNotice,
+                onChangePin: changePin,
+                onDismissTrickPinNotice: dismissTrickPinNotice
             )
             MainSettingsBackupSection(
                 isVisible: shouldShowBackupSection,

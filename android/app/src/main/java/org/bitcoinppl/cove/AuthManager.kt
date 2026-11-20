@@ -126,6 +126,11 @@ class AuthManager internal constructor(
     var isDecoyPinEnabled by mutableStateOf<Boolean>(rust.isDecoyPinEnabled())
         private set
 
+    // the trick PINs an unlock turned off for matching the app PIN, which Security Settings shows
+    // until dismissed; rust keeps it null in decoy mode
+    var trickPinNotice by mutableStateOf<DuplicateTrickPin?>(rust.trickPinNotice())
+        private set
+
     var wipePresentationState by mutableStateOf<WipePresentationState>(WipePresentationState.Idle)
         private set
 
@@ -318,25 +323,19 @@ class AuthManager internal constructor(
      * this is the main entry point for authentication
      */
     suspend fun handleAndReturnUnlockMode(pin: String): UnlockMode =
-        when (val entered = withRustOr<UnlockPin>(UnlockPin.Wrong) { resolveUnlockPin(pin) }) {
-            is UnlockPin.App -> unlockWithMainPin(entered.turnedOff)
-            UnlockPin.Decoy -> unlockWithDecoyPin()
-            UnlockPin.WipeData -> startWipe(null).await()
-            UnlockPin.Wrong -> UnlockMode.LOCKED
+        when (withRustOr<UnlockPin>(UnlockPin.WRONG) { resolveUnlockPin(pin) }) {
+            UnlockPin.APP -> unlockWithMainPin()
+            UnlockPin.DECOY -> unlockWithDecoyPin()
+            UnlockPin.WIPE_DATA -> startWipe(null).await()
+            UnlockPin.WRONG -> UnlockMode.LOCKED
         }
 
-    private fun unlockWithMainPin(turnedOff: DuplicateTrickPin?): UnlockMode {
+    private fun unlockWithMainPin(): UnlockMode {
         if (Database().globalConfig().isInDecoyMode() && !switchToMainMode()) {
             return UnlockMode.LOCKED
         }
 
         unlockAuthenticated()
-
-        // rust turned off a trick PIN equal to this one, so the user hears about it once
-        if (turnedOff != null) {
-            App.alertState = TaggedItem(AppAlertState.TrickPinTurnedOff(turnedOff))
-        }
-
         return UnlockMode.MAIN
     }
 
@@ -417,6 +416,7 @@ class AuthManager internal constructor(
         type = settings.authType
         isWipeDataPinEnabled = settings.isWipeDataPinEnabled
         isDecoyPinEnabled = settings.isDecoyPinEnabled
+        trickPinNotice = settings.trickPinNotice
         isUsingBiometrics = false
     }
 
@@ -452,6 +452,10 @@ class AuthManager internal constructor(
 
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
                     isDecoyPinEnabled = message.v1
+                }
+
+                is AuthManagerReconcileMessage.TrickPinNoticeChanged -> {
+                    trickPinNotice = message.v1
                 }
             }
         }

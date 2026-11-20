@@ -6,10 +6,16 @@ struct MainSettingsSecuritySection: View {
     let togglePin: Binding<Bool>
     let toggleWipeMePin: Binding<Bool>
     let toggleDecoyPin: Binding<Bool>
+    let trickPinNotice: DuplicateTrickPin?
     let onChangePin: () -> Void
+    let onDismissTrickPinNotice: () -> Void
 
     var body: some View {
         Section("Security") {
+            if let trickPinNotice {
+                TrickPinNoticeRow(notice: trickPinNotice, onDismiss: onDismissTrickPinNotice)
+            }
+
             if canUseBiometrics {
                 SettingsToggle(title: "Enable FaceID", symbol: "faceid", item: toggleBiometric)
             }
@@ -35,5 +41,27 @@ struct MainSettingsSecuritySection: View {
                 )
             }
         }
+    }
+}
+
+/// Says which trick PINs an unlock turned off for matching the app PIN, until the user dismisses it
+private struct TrickPinNoticeRow: View {
+    let notice: DuplicateTrickPin
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(notice.notice(), systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(.primary)
+
+            Button("Dismiss", action: onDismiss)
+                .font(.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("settings.trickPinNotice.dismiss")
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings.trickPinNotice")
     }
 }

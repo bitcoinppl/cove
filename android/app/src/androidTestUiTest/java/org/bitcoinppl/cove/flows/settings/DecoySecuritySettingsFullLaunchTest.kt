@@ -156,9 +156,10 @@ class DecoySecuritySettingsFullLaunchTest {
     }
 
     // builds before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,
-    // which then opened the main wallets; the unlock that finds it turns the decoy PIN off once
+    // which then opened the main wallets; the unlock that finds it turns the decoy PIN off with no
+    // word at the lock, where anyone could read it, and Security Settings says so instead
     @Test
-    fun anAppPinEqualToTheDecoyPinTurnsTheDecoyPinOffOnce() {
+    fun anAppPinEqualToTheDecoyPinTurnsItOffWithASettingsNotice() {
         launchPastOnboarding()
         val duplicateHash = hashOf(DECOY_PIN)
         setMainAndDecoyPins()
@@ -170,17 +171,22 @@ class DecoySecuritySettingsFullLaunchTest {
 
         onMain { Database().globalConfig().setHashedPinCode(duplicateHash) }
         assertEquals("the duplicate PIN should open the main wallets", UnlockMode.MAIN, unlock(DECOY_PIN))
-        dismissTurnedOffAlert("Decoy PIN Turned Off")
+        assertNoUnlockAlert()
         assertFalse("the duplicate decoy PIN is still saved", RustAuthManager().use { it.isDecoyPinEnabled() })
 
         openSettings()
         awaitSwitch(DECOY_TOGGLE_TITLE, checked = false, "Settings still shows the duplicate decoy PIN on")
+        awaitNotice(DECOY_NOTICE)
 
+        // the next unlock finds nothing new and leaves the notice up
         assertEquals(UnlockMode.MAIN, unlock(DECOY_PIN))
-        assertNoTurnedOffAlert("Decoy PIN Turned Off")
+        assertNoUnlockAlert()
+        openSettings()
+        awaitNotice(DECOY_NOTICE)
 
-        // the decoy wallet was kept, and a new decoy PIN opens it
+        // a new decoy PIN answers the notice and opens the decoy wallet that was kept
         onMain { AuthManager.getInstance().setDecoyPin(NEW_TRICK_PIN) }
+        awaitNoticeGone(DECOY_NOTICE)
         assertEquals("the new decoy PIN didn't open decoy mode", UnlockMode.DECOY, unlock(NEW_TRICK_PIN))
         wallet.waitUntil("the decoy wallet didn't come back with the new decoy PIN") {
             var ids = emptyList<WalletId>()
@@ -189,9 +195,10 @@ class DecoySecuritySettingsFullLaunchTest {
         }
     }
 
-    // the same for the wipe data PIN, which never wiped while it equaled the app PIN
+    // the same for the wipe data PIN, which never wiped while it equaled the app PIN; the notice
+    // stays until the user dismisses it
     @Test
-    fun anAppPinEqualToTheWipeDataPinTurnsTheWipeDataPinOffOnce() {
+    fun anAppPinEqualToTheWipeDataPinTurnsItOffUntilDismissed() {
         launchPastOnboarding()
         val duplicateHash = hashOf(DECOY_WIPE_DATA_PIN)
         val auth = AuthManager.getInstance()
@@ -203,14 +210,22 @@ class DecoySecuritySettingsFullLaunchTest {
 
         onMain { Database().globalConfig().setHashedPinCode(duplicateHash) }
         assertEquals("the duplicate PIN should open the main wallets", UnlockMode.MAIN, unlock(DECOY_WIPE_DATA_PIN))
-        dismissTurnedOffAlert("Wipe Data PIN Turned Off")
+        assertNoUnlockAlert()
         assertFalse("the duplicate wipe data PIN is still saved", RustAuthManager().use { it.isWipeDataPinEnabled() })
 
         openSettings()
         awaitSwitch(WIPE_TOGGLE_TITLE, checked = false, "Settings still shows the duplicate wipe data PIN on")
+        awaitNotice(WIPE_DATA_NOTICE)
+
+        device.clickText(DISMISS)
+        awaitNoticeGone(WIPE_DATA_NOTICE)
 
         assertEquals(UnlockMode.MAIN, unlock(DECOY_WIPE_DATA_PIN))
-        assertNoTurnedOffAlert("Wipe Data PIN Turned Off")
+        openSettings()
+        assertFalse(
+            "the notice came back after it was dismissed\n${device.hierarchy()}",
+            device.wait(Until.hasObject(By.textContains(WIPE_DATA_NOTICE)), NO_ALERT_WAIT_MS),
+        )
     }
 
     /** The app PIN hash for [pin], saved through Settings' own path and then cleared again */
@@ -237,22 +252,23 @@ class DecoySecuritySettingsFullLaunchTest {
         return mode
     }
 
-    private fun dismissTurnedOffAlert(title: String) {
-        if (!device.wait(Until.hasObject(By.text(title)), PROMPT_TIMEOUT_MS)) {
-            error("the unlock never said \"$title\"\n${device.hierarchy()}")
-        }
+    private fun assertNoUnlockAlert() {
+        var alert: Any? = null
+        onMain { alert = AppManager.getInstance().alertState }
+        assertEquals("the unlock raised an alert anyone holding the phone could read", null, alert)
+    }
 
-        device.clickText("OK")
-        if (!device.wait(Until.gone(By.text(title)), PROMPT_TIMEOUT_MS)) {
-            error("\"$title\" never closed\n${device.hierarchy()}")
+    private fun awaitNotice(text: String) {
+        device.scrollTo(By.textContains(text))
+        if (!device.wait(Until.hasObject(By.textContains(text)), PROMPT_TIMEOUT_MS)) {
+            error("Security Settings never said \"$text\"\n${device.hierarchy()}")
         }
     }
 
-    private fun assertNoTurnedOffAlert(title: String) {
-        assertFalse(
-            "the second unlock said \"$title\" again\n${device.hierarchy()}",
-            device.wait(Until.hasObject(By.text(title)), NO_ALERT_WAIT_MS),
-        )
+    private fun awaitNoticeGone(text: String) {
+        if (!device.wait(Until.gone(By.textContains(text)), PROMPT_TIMEOUT_MS)) {
+            error("Security Settings still says \"$text\"\n${device.hierarchy()}")
+        }
     }
 
     private fun turnOffWithDecoyPin(title: String) {
@@ -372,6 +388,9 @@ class DecoySecuritySettingsFullLaunchTest {
         const val CANT_ENABLE_WIPE = "Can't Enable Wipe Data PIN"
         const val DECOY_WALLET_NOT_BACKED_UP = "A decoy wallet has not been backed up"
         const val NEW_TRICK_PIN = "975310"
+        const val DECOY_NOTICE = "Your decoy PIN was turned off because it matched your app PIN"
+        const val WIPE_DATA_NOTICE = "Your wipe data PIN was turned off because it matched your app PIN"
+        const val DISMISS = "Dismiss"
         const val PROMPT_TIMEOUT_MS = 5_000L
         const val NO_ALERT_WAIT_MS = 2_000L
         const val SHOW_IME_SETTING = "show_ime_with_hard_keyboard"

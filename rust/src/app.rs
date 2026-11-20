@@ -1321,6 +1321,7 @@ mod tests {
                 auth_type: AuthType::None,
                 is_wipe_data_pin_enabled: false,
                 is_decoy_pin_enabled: false,
+                trick_pin_notice: None,
             },
             "the returned completion drops the wiped PIN and trick PINs"
         );

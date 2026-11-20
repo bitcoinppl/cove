@@ -1389,6 +1389,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_node(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_set_trick_pin_notice(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_trick_pin_notice(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_wallet_mode(
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_get(
@@ -1518,6 +1522,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_trick_pin_notice(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated(
     ): Short
@@ -2459,6 +2465,10 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_set_trick_pin_notice(`ptr`: Long,`notice`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_trick_pin_notice(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2671,6 +2681,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustauthmanager_trick_pin_notice(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_unlock_authenticated(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3534,6 +3546,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_duplicatetrickpin_notice(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_newpinerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4413,6 +4427,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_trick_pin_notice() != 40570.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_trick_pin_notice() != 14611.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4581,7 +4601,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_resolve_unlock_pin() != 39543.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_resolve_unlock_pin() != 46218.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_secret_export_access() != 37851.toShort()) {
@@ -4606,6 +4626,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_trick_pin_notice() != 51919.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated() != 37105.toShort()) {
@@ -14013,6 +14036,17 @@ public interface GlobalConfigTableInterface {
 
     fun `setSelectedNode`(`node`: Node)
 
+    /**
+     * Saves the trick PIN notice, or removes it when `notice` is none
+     */
+    fun `setTrickPinNotice`(`notice`: DuplicateTrickPin?)
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, until the user dismisses
+     * the notice
+     */
+    fun `trickPinNotice`(): DuplicateTrickPin?
+
     fun `walletMode`(): WalletMode
 
     companion object
@@ -14468,6 +14502,40 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
+
+
+
+    /**
+     * Saves the trick PIN notice, or removes it when `notice` is none
+     */
+    @Throws(DatabaseException::class)override fun `setTrickPinNotice`(`notice`: DuplicateTrickPin?)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_trick_pin_notice(
+        it,
+
+        FfiConverterOptionalTypeDuplicateTrickPin.lower(`notice`),_status)
+}
+    }
+
+
+
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, until the user dismisses
+     * the notice
+     */override fun `trickPinNotice`(): DuplicateTrickPin? {
+            return FfiConverterOptionalTypeDuplicateTrickPin.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_trick_pin_notice(
+        it,
+        _status)
+}
+    }
+    )
+    }
 
 
     override fun `walletMode`(): WalletMode {
@@ -20164,9 +20232,10 @@ public interface RustAuthManagerInterface {
      * Decides what a PIN typed at the lock screen opens, checking the app PIN first
      *
      * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
-     * could never act, and reports it in `UnlockPin::App` so the user is told once. The decoy
-     * wallets stay saved and open again with a new decoy PIN. The trick PINs are saved as plain
-     * text, so checking them costs this unlock no extra hash
+     * could never act, and keeps a notice for Security Settings instead of saying so at the
+     * lock, where whoever holds the phone would read it. The decoy wallets stay saved and open
+     * again with a new decoy PIN. The trick PINs are saved as plain text, so checking them costs
+     * this unlock no extra hash
      */
     fun `resolveUnlockPin`(`pin`: kotlin.String): UnlockPin
 
@@ -20207,6 +20276,14 @@ public interface RustAuthManagerInterface {
      * Switch from decoy mode to main mode
      */
     fun `switchToMainMode`()
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, for Security Settings to show
+     * until the user dismisses it
+     *
+     * Always none in decoy mode, which must never hint at the main wallets' settings
+     */
+    fun `trickPinNotice`(): DuplicateTrickPin?
 
     /**
      * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
@@ -20589,9 +20666,10 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
      * Decides what a PIN typed at the lock screen opens, checking the app PIN first
      *
      * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
-     * could never act, and reports it in `UnlockPin::App` so the user is told once. The decoy
-     * wallets stay saved and open again with a new decoy PIN. The trick PINs are saved as plain
-     * text, so checking them costs this unlock no extra hash
+     * could never act, and keeps a notice for Security Settings instead of saying so at the
+     * lock, where whoever holds the phone would read it. The decoy wallets stay saved and open
+     * again with a new decoy PIN. The trick PINs are saved as plain text, so checking them costs
+     * this unlock no extra hash
      */override fun `resolveUnlockPin`(`pin`: kotlin.String): UnlockPin {
             return FfiConverterTypeUnlockPin.lift(
     callWithHandle {
@@ -20731,6 +20809,25 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 }
     }
 
+
+
+
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, for Security Settings to show
+     * until the user dismisses it
+     *
+     * Always none in decoy mode, which must never hint at the main wallets' settings
+     */override fun `trickPinNotice`(): DuplicateTrickPin? {
+            return FfiConverterOptionalTypeDuplicateTrickPin.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_trick_pin_notice(
+        it,
+        _status)
+}
+    }
+    )
+    }
 
 
 
@@ -32497,6 +32594,12 @@ data class AuthSettings (
      * Whether a decoy PIN is set
      */
     var `isDecoyPinEnabled`: kotlin.Boolean
+    ,
+    /**
+     * The trick PINs an unlock turned off for matching the app PIN, which Security Settings
+     * shows until the user dismisses it; always none in decoy mode
+     */
+    var `trickPinNotice`: DuplicateTrickPin?
 
 ){
 
@@ -32516,19 +32619,22 @@ public object FfiConverterTypeAuthSettings: FfiConverterRustBuffer<AuthSettings>
             FfiConverterTypeAuthType.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalTypeDuplicateTrickPin.read(buf),
         )
     }
 
     override fun allocationSize(value: AuthSettings) = (
             FfiConverterTypeAuthType.allocationSize(value.`authType`) +
             FfiConverterBoolean.allocationSize(value.`isWipeDataPinEnabled`) +
-            FfiConverterBoolean.allocationSize(value.`isDecoyPinEnabled`)
+            FfiConverterBoolean.allocationSize(value.`isDecoyPinEnabled`) +
+            FfiConverterOptionalTypeDuplicateTrickPin.allocationSize(value.`trickPinNotice`)
     )
 
     override fun write(value: AuthSettings, buf: ByteBuffer) {
             FfiConverterTypeAuthType.write(value.`authType`, buf)
             FfiConverterBoolean.write(value.`isWipeDataPinEnabled`, buf)
             FfiConverterBoolean.write(value.`isDecoyPinEnabled`, buf)
+            FfiConverterOptionalTypeDuplicateTrickPin.write(value.`trickPinNotice`, buf)
     }
 }
 
@@ -38840,15 +38946,6 @@ sealed class AppAlertState: Disposable  {
         companion object
     }
 
-    data class TrickPinTurnedOff(
-        val `pins`: org.bitcoinppl.cove_core.DuplicateTrickPin) : AppAlertState()
-
-    {
-
-
-        companion object
-    }
-
     data class WalletDatabaseCorrupted(
         val `walletId`: org.bitcoinppl.cove_core.types.WalletId,
         val `error`: kotlin.String) : AppAlertState()
@@ -39043,13 +39140,6 @@ sealed class AppAlertState: Disposable  {
     )
 
             }
-            is AppAlertState.TrickPinTurnedOff -> {
-
-    Disposable.destroy(
-        this.`pins`
-    )
-
-            }
             is AppAlertState.WalletDatabaseCorrupted -> {
 
     Disposable.destroy(
@@ -39212,28 +39302,25 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeTapSigner.read(buf),
                 FfiConverterTypeAfterPinAction.read(buf),
                 )
-            24 -> AppAlertState.TrickPinTurnedOff(
-                FfiConverterTypeDuplicateTrickPin.read(buf),
-                )
-            25 -> AppAlertState.WalletDatabaseCorrupted(
+            24 -> AppAlertState.WalletDatabaseCorrupted(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            26 -> AppAlertState.General(
+            25 -> AppAlertState.General(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            27 -> AppAlertState.Loading
-            28 -> AppAlertState.ConfirmWatchOnly
-            29 -> AppAlertState.WatchOnlyImportHardware
-            30 -> AppAlertState.WatchOnlyImportWords
-            31 -> AppAlertState.UninitializedTapSigner(
+            26 -> AppAlertState.Loading
+            27 -> AppAlertState.ConfirmWatchOnly
+            28 -> AppAlertState.WatchOnlyImportHardware
+            29 -> AppAlertState.WatchOnlyImportWords
+            30 -> AppAlertState.UninitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            32 -> AppAlertState.TapSignerWalletFound(
+            31 -> AppAlertState.TapSignerWalletFound(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            33 -> AppAlertState.InitializedTapSigner(
+            32 -> AppAlertState.InitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -39397,13 +39484,6 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
                 + FfiConverterTypeAfterPinAction.allocationSize(value.`action`)
-            )
-        }
-        is AppAlertState.TrickPinTurnedOff -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeDuplicateTrickPin.allocationSize(value.`pins`)
             )
         }
         is AppAlertState.WalletDatabaseCorrupted -> {
@@ -39583,51 +39663,46 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeAfterPinAction.write(value.`action`, buf)
                 Unit
             }
-            is AppAlertState.TrickPinTurnedOff -> {
-                buf.putInt(24)
-                FfiConverterTypeDuplicateTrickPin.write(value.`pins`, buf)
-                Unit
-            }
             is AppAlertState.WalletDatabaseCorrupted -> {
-                buf.putInt(25)
+                buf.putInt(24)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is AppAlertState.General -> {
-                buf.putInt(26)
+                buf.putInt(25)
                 FfiConverterString.write(value.`title`, buf)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }
             is AppAlertState.Loading -> {
-                buf.putInt(27)
+                buf.putInt(26)
                 Unit
             }
             is AppAlertState.ConfirmWatchOnly -> {
-                buf.putInt(28)
+                buf.putInt(27)
                 Unit
             }
             is AppAlertState.WatchOnlyImportHardware -> {
-                buf.putInt(29)
+                buf.putInt(28)
                 Unit
             }
             is AppAlertState.WatchOnlyImportWords -> {
-                buf.putInt(30)
+                buf.putInt(29)
                 Unit
             }
             is AppAlertState.UninitializedTapSigner -> {
-                buf.putInt(31)
+                buf.putInt(30)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
             is AppAlertState.TapSignerWalletFound -> {
-                buf.putInt(32)
+                buf.putInt(31)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is AppAlertState.InitializedTapSigner -> {
-                buf.putInt(33)
+                buf.putInt(32)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
@@ -40617,6 +40692,12 @@ sealed class AuthManagerAction {
     object DisableDecoyPin : AuthManagerAction()
 
 
+    /**
+     * The user read the notice that trick PINs were turned off
+     */
+    object DismissTrickPinNotice : AuthManagerAction()
+
+
 
 
 
@@ -40641,6 +40722,7 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
             4 -> AuthManagerAction.DisablePin
             5 -> AuthManagerAction.DisableWipeDataPin
             6 -> AuthManagerAction.DisableDecoyPin
+            7 -> AuthManagerAction.DismissTrickPinNotice
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40683,6 +40765,12 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
                 4UL
             )
         }
+        is AuthManagerAction.DismissTrickPinNotice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: AuthManagerAction, buf: ByteBuffer) {
@@ -40710,6 +40798,10 @@ public object FfiConverterTypeAuthManagerAction : FfiConverterRustBuffer<AuthMan
             }
             is AuthManagerAction.DisableDecoyPin -> {
                 buf.putInt(6)
+                Unit
+            }
+            is AuthManagerAction.DismissTrickPinNotice -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -40910,6 +41002,18 @@ sealed class AuthManagerReconcileMessage {
         companion object
     }
 
+    /**
+     * The trick PINs Security Settings now says were turned off, none in decoy mode
+     */
+    data class TrickPinNoticeChanged(
+        val v1: org.bitcoinppl.cove_core.DuplicateTrickPin?) : AuthManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -40934,6 +41038,9 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
                 )
             3 -> AuthManagerReconcileMessage.DecoyPinChanged(
                 FfiConverterBoolean.read(buf),
+                )
+            4 -> AuthManagerReconcileMessage.TrickPinNoticeChanged(
+                FfiConverterOptionalTypeDuplicateTrickPin.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -40961,6 +41068,13 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
                 + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
+        is AuthManagerReconcileMessage.TrickPinNoticeChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeDuplicateTrickPin.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: AuthManagerReconcileMessage, buf: ByteBuffer) {
@@ -40978,6 +41092,11 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
             is AuthManagerReconcileMessage.DecoyPinChanged -> {
                 buf.putInt(3)
                 FfiConverterBoolean.write(value.v1, buf)
+                Unit
+            }
+            is AuthManagerReconcileMessage.TrickPinNoticeChanged -> {
+                buf.putInt(4)
+                FfiConverterOptionalTypeDuplicateTrickPin.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53102,7 +53221,8 @@ public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRust
  * Trick PINs saved equal to the app PIN, which builds before Change PIN refused them allowed
  *
  * Unlocking checks the app PIN first, so such a decoy PIN opened the main wallets and such a wipe
- * data PIN never wiped anything
+ * data PIN never wiped anything. The unlock that finds one turns it off and keeps this as a
+ * notice, which Security Settings shows in main mode until the user dismisses it
  */
 
 enum class DuplicateTrickPin {
@@ -53110,6 +53230,20 @@ enum class DuplicateTrickPin {
     DECOY,
     WIPE_DATA,
     DECOY_AND_WIPE_DATA;
+
+
+    /**
+     * What Security Settings tells the user; it names no PIN, so it reads the same to whoever
+     * holds the phone
+     */ fun `notice`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_duplicatetrickpin_notice(FfiConverterTypeDuplicateTrickPin.lower(this),
+        _status)
+}
+    )
+    }
+
 
 
 
@@ -53646,6 +53780,9 @@ sealed class GlobalConfigKey {
         companion object
     }
 
+    object TrickPinNotice : GlobalConfigKey()
+
+
 
 
 
@@ -53680,6 +53817,7 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             14 -> GlobalConfigKey.CustomBlockExplorer(
                 FfiConverterTypeNetwork.read(buf),
                 )
+            15 -> GlobalConfigKey.TrickPinNotice
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -53771,6 +53909,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 + FfiConverterTypeNetwork.allocationSize(value.v1)
             )
         }
+        is GlobalConfigKey.TrickPinNotice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -53831,6 +53975,10 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             is GlobalConfigKey.CustomBlockExplorer -> {
                 buf.putInt(14)
                 FfiConverterTypeNetwork.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigKey.TrickPinNotice -> {
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -67076,42 +67224,25 @@ public object FfiConverterTypeTrickPinError : FfiConverterRustBuffer<TrickPinExc
 /**
  * What a PIN typed at the lock screen opens
  */
-sealed class UnlockPin {
+
+enum class UnlockPin {
 
     /**
-     * The app PIN, which opens the main wallets. `turned_off` names the trick PINs this unlock
-     * found equal to it and turned off, which the app tells the user about once unlocked
+     * The app PIN, which opens the main wallets
      */
-    data class App(
-        val `turnedOff`: org.bitcoinppl.cove_core.DuplicateTrickPin?) : UnlockPin()
-
-    {
-
-
-        companion object
-    }
-
+    APP,
     /**
      * The decoy PIN, which opens the decoy wallets
      */
-    object Decoy : UnlockPin()
-
-
+    DECOY,
     /**
      * The wipe data PIN, which wipes every wallet
      */
-    object WipeData : UnlockPin()
-
-
+    WIPE_DATA,
     /**
      * No PIN this app has saved
      */
-    object Wrong : UnlockPin()
-
-
-
-
-
+    WRONG;
 
 
 
@@ -67119,70 +67250,21 @@ sealed class UnlockPin {
     companion object
 }
 
+
 /**
  * @suppress
  */
-public object FfiConverterTypeUnlockPin : FfiConverterRustBuffer<UnlockPin>{
-    override fun read(buf: ByteBuffer): UnlockPin {
-        return when(buf.getInt()) {
-            1 -> UnlockPin.App(
-                FfiConverterOptionalTypeDuplicateTrickPin.read(buf),
-                )
-            2 -> UnlockPin.Decoy
-            3 -> UnlockPin.WipeData
-            4 -> UnlockPin.Wrong
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
+public object FfiConverterTypeUnlockPin: FfiConverterRustBuffer<UnlockPin> {
+    override fun read(buf: ByteBuffer) = try {
+        UnlockPin.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
     }
 
-    override fun allocationSize(value: UnlockPin): ULong = when(value) {
-        is UnlockPin.App -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalTypeDuplicateTrickPin.allocationSize(value.`turnedOff`)
-            )
-        }
-        is UnlockPin.Decoy -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is UnlockPin.WipeData -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is UnlockPin.Wrong -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-    }
+    override fun allocationSize(value: UnlockPin) = 4UL
 
     override fun write(value: UnlockPin, buf: ByteBuffer) {
-        when(value) {
-            is UnlockPin.App -> {
-                buf.putInt(1)
-                FfiConverterOptionalTypeDuplicateTrickPin.write(value.`turnedOff`, buf)
-                Unit
-            }
-            is UnlockPin.Decoy -> {
-                buf.putInt(2)
-                Unit
-            }
-            is UnlockPin.WipeData -> {
-                buf.putInt(3)
-                Unit
-            }
-            is UnlockPin.Wrong -> {
-                buf.putInt(4)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+        buf.putInt(value.ordinal + 1)
     }
 }
 
