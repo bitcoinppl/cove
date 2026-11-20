@@ -5,12 +5,12 @@ import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.provider.Settings
 import android.view.Surface
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -33,12 +33,6 @@ class MainActivityPortraitLockTest {
     private val context = instrumentation.targetContext
     private val device = UiDevice.getInstance(instrumentation)
 
-    @After
-    fun restoreRotation() {
-        instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_FREEZE_0)
-        instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_UNFREEZE)
-    }
-
     @Test
     fun mainActivityAndItsAliasRequestPortrait() {
         for (activity in listOf(MainActivity::class.java.name, "$PACKAGE.KeyTeleportLinkActivity")) {
@@ -57,6 +51,17 @@ class MainActivityPortraitLockTest {
             context.resources.configuration.smallestScreenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP,
         )
 
+        // freezing the display turns auto-rotate off, so the test puts back the emulator's own setting
+        val autoRotate = Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+        try {
+            checkStaysPortraitOnItsSide()
+        } finally {
+            instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_FREEZE_0)
+            if (autoRotate) instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_UNFREEZE)
+        }
+    }
+
+    private fun checkStaysPortraitOnItsSide() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             // freezing the display on its side stands in for the user turning the phone with
             // auto-rotate on, and an activity without the lock follows it into landscape
