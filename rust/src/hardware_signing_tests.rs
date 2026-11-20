@@ -35,6 +35,7 @@ use crate::{
     transaction::{Amount, FeeRate},
     wallet::{
         Address, Wallet,
+        finalize::PsbtFinalizeFailure,
         metadata::{WalletId, WalletType},
     },
     wallet_lifecycle::WalletLifecycleFailure,
@@ -311,6 +312,110 @@ async fn signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_
     });
 }
 
+/// What SeedSigner exports after signing: the unsigned transaction and each input's signatures,
+/// with every UTXO, derivation and output field dropped to shrink the QR
+fn trimmed_like_seedsigner(signed: &BdkPsbt) -> BdkPsbt {
+    let mut trimmed =
+        BdkPsbt::from_unsigned_tx(signed.unsigned_tx.clone()).expect("unsigned tx has no scripts");
+
+    for (trimmed_input, input) in trimmed.inputs.iter_mut().zip(&signed.inputs) {
+        trimmed_input.partial_sigs = input.partial_sigs.clone();
+    }
+
+    trimmed
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_signed_psbt_trimmed_to_its_signatures_finalizes_the_saved_draft() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let fixture = hardware_wallet_with_draft().await;
+
+    let trimmed = trimmed_like_seedsigner(&fixture.signer.sign(&fixture.details.psbt.0));
+    assert!(
+        trimmed.inputs.iter().all(|input| input.witness_utxo.is_none()
+            && input.non_witness_utxo.is_none()
+            && input.bip32_derivation.is_empty()),
+        "the export carries no UTXO or derivation for any input"
+    );
+
+    // SeedSigner exports only animated crypto-psbt URs
+    let (pure, _) = signed_ur_frames(&trimmed, 0);
+    let scanned = scanned_psbt(scan_frames(&QrScannerFFI::new(), &pure));
+    assert_eq!(scanned.0, trimmed, "UR scan returns the trimmed PSBT unchanged");
+
+    let transaction = import_and_finalize(&fixture, scanned).await;
+    assert_matches_draft(&transaction, &fixture.details, &fixture.recipient, |script| {
+        fixture.signer.is_mine(script)
+    });
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn signed_psbts_that_cannot_finalize_say_why() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let fixture = hardware_wallet_with_draft().await;
+    let signed = fixture.signer.sign(&fixture.details.psbt.0);
+
+    // a signer that holds only some of the keys signs only some inputs
+    let mut half_signed = trimmed_like_seedsigner(&signed);
+    half_signed.inputs[1].partial_sigs.clear();
+
+    // a signature filed under a key this wallet doesn't have, as a signer with another seed or
+    // passphrase returns it
+    let mut wrong_key = trimmed_like_seedsigner(&signed);
+    let (_, signature) = wrong_key.inputs[0].partial_sigs.pop_first().expect("input 0 is signed");
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let other_key = bitcoin::secp256k1::SecretKey::from_slice(&[9; 32]).expect("valid key");
+    wrong_key.inputs[0]
+        .partial_sigs
+        .insert(bitcoin::PublicKey::new(other_key.public_key(&secp)), signature);
+
+    // a signature under the right key, but over another input, as a signer bug could return it
+    let mut misplaced = trimmed_like_seedsigner(&signed);
+    let other_signature =
+        *misplaced.inputs[1].partial_sigs.values().next().expect("input 1 is signed");
+    for signature in misplaced.inputs[0].partial_sigs.values_mut() {
+        *signature = other_signature;
+    }
+
+    // a previous transaction that isn't the one the input spends, so it lacks the spent output
+    let mut mismatched = trimmed_like_seedsigner(&signed);
+    let mut unrelated = signed.unsigned_tx.clone();
+    unrelated.output.clear();
+    mismatched.inputs[1].non_witness_utxo = Some(unrelated);
+
+    // the right previous transaction, but an output index past its end
+    let draft = &fixture.details.psbt.0;
+    let mut out_of_range = trimmed_like_seedsigner(&signed);
+    out_of_range.unsigned_tx.input[1].previous_output.vout = 99;
+    out_of_range.inputs[1].non_witness_utxo =
+        Some(draft.inputs[1].non_witness_utxo.clone().expect("draft carries previous txs"));
+
+    // a segwit input whose output claims another amount, which a signature can commit to
+    let mut wrong_amount = trimmed_like_seedsigner(&signed);
+    let mut claimed = draft.inputs[0].witness_utxo.clone().expect("draft carries witness UTXOs");
+    claimed.value = claimed.value - bitcoin::Amount::from_sat(1_000);
+    wrong_amount.inputs[0].witness_utxo = Some(claimed);
+
+    let cases = [
+        ("misplaced signature", misplaced, PsbtFinalizeFailure::InvalidSignatures),
+        ("mismatched previous transaction", mismatched, PsbtFinalizeFailure::MalformedInputs),
+        ("output index out of range", out_of_range, PsbtFinalizeFailure::MalformedInputs),
+        ("conflicting witness UTXO", wrong_amount, PsbtFinalizeFailure::MalformedInputs),
+        ("unsigned draft", fixture.details.psbt.0.clone(), PsbtFinalizeFailure::MissingSignatures),
+        ("one input unsigned", half_signed, PsbtFinalizeFailure::MissingSignatures),
+        ("signature from another key", wrong_key, PsbtFinalizeFailure::SignaturesDoNotMatch),
+    ];
+
+    for (label, psbt, expected) in cases {
+        let finalized = fixture.manager.finalize_psbt(Arc::new(Psbt::from(psbt))).await;
+        assert_eq!(
+            finalized.err(),
+            Some(WalletManagerError::PsbtFinalizeError(expected)),
+            "{label}"
+        );
+    }
+}
+
 /// The draft's change script, the one output that does not pay the recipient
 fn change_script(details: &ConfirmDetails, recipient: &Address) -> bitcoin::ScriptBuf {
     let recipient_script = recipient.script_pubkey();
@@ -555,9 +660,10 @@ async fn signed_psbts_that_match_no_saved_draft_are_rejected() {
         );
 
         let finalized = fixture.manager.finalize_psbt(Arc::new(scanned)).await;
-        assert!(
-            matches!(finalized, Err(WalletManagerError::PsbtFinalizeError(_))),
-            "{label}: this wallet must not finalize a PSBT it did not draft: {finalized:?}"
+        assert_eq!(
+            finalized.err(),
+            Some(WalletManagerError::PsbtFinalizeError(PsbtFinalizeFailure::InputsNotInWallet)),
+            "{label}: this wallet must not finalize a PSBT it did not draft"
         );
     }
 
