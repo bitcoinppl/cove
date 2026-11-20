@@ -610,6 +610,16 @@ silently, since the app resumes that verification at startup and on returning
 to the foreground. The refresh after a sync, restore, delete or passkey repair
 may ask, since each of those operations starts from a tap.
 
+Each listed backup folder is classified once, by `CloudFolders` (`cloud_folders.rs`),
+without asking for a passkey: its master key is readable, missing, still uploading,
+in a newer format, or unreadable. `ListedBackups::of` reads the folders together:
+a master key wrapper anywhere is a backup, folders that only lack one, or whose
+upload isn't confirmed, are files still unavailable, and a failed read beside them
+leaves it unknown. Onboarding's backup check, Enable with and without discovery,
+Restore and the passkey match of Recover Other Backups all read that
+classification, and the matcher tries a passkey only on the readable folders, so
+none of them reads the same cloud contents another way.
+
 Enable behavior depends on what discovery proved:
 
 - a visible existing backup uses its existing passkey and namespace

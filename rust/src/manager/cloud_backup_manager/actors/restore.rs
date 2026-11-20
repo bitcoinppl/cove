@@ -20,8 +20,8 @@ use crate::manager::cloud_backup_manager::ops::{
 };
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
-    NamespacePasskeyMatcher, PasskeyRequestAuthority, WalletBackupLookup, WalletBackupReader,
-    WalletRestoreOutcome, WalletRestoreSession,
+    NamespacePasskeyMatcher, PasskeyRequestAuthority, Unopened, UnopenedReason, WalletBackupLookup,
+    WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -409,38 +409,60 @@ impl RestoreOperation {
         cloud: &CloudStorageClient,
     ) -> Result<Vec<RestorableNamespace>, CloudBackupError> {
         let passkey = PasskeyAccess::global();
-        match self.restore_via_passkey_matching(cloud, passkey).await {
-            Ok(matches) => Ok(matches
-                .into_iter()
-                .map(|matched| RestorableNamespace {
-                    namespace_id: matched.namespace_id,
-                    master_key: matched.master_key,
-                    passkey: Some(RestorableNamespacePasskey {
-                        credential_id: matched.credential_id,
-                        prf_salt: matched.prf_salt,
-                        provider_hint: matched.provider_hint,
-                    }),
-                })
-                .collect()),
-            Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
+        let unopened = match self.restore_via_passkey_matching(cloud, passkey).await? {
+            NamespaceMatchOutcome::Matched(matches) => {
+                return Ok(matches
+                    .into_iter()
+                    .map(|matched| RestorableNamespace {
+                        namespace_id: matched.namespace_id,
+                        master_key: matched.master_key,
+                        passkey: Some(RestorableNamespacePasskey {
+                            credential_id: matched.credential_id,
+                            prf_salt: matched.prf_salt,
+                            provider_hint: matched.provider_hint,
+                        }),
+                    })
+                    .collect());
+            }
+            NamespaceMatchOutcome::UserDeclined => {
                 info!("Restore: passkey discovery cancelled");
-                Err(CloudBackupError::PasskeyDiscoveryCancelled)
+                return Err(CloudBackupError::PasskeyDiscoveryCancelled);
             }
-            Err(error) if error.is_no_passkey_restore() => {
-                info!(
-                    "Restore: passkey matching found no restore, trying local master key fallback"
-                );
-                self.ensure_current().await?;
-                let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-                let fallback = try_restore_from_local_master_key(cloud, &cspp).await;
-                self.ensure_current().await?;
-                let (master_key, namespace_id) = fallback
-                    .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?
-                    .ok_or(error)?;
-                Ok(vec![RestorableNamespace { namespace_id, master_key, passkey: None }])
+            NamespaceMatchOutcome::Unopened(unopened) => unopened,
+        };
+
+        // the local master key may open a backup no passkey did; a backup still uploading, or a
+        // cloud that couldn't be read, is waited for instead
+        let error = match unopened {
+            Unopened { uploading: true, .. }
+            | Unopened { reason: UnopenedReason::Inconclusive, .. } => {
+                return Err(offline_error_for_step(BlockingCloudStep::Restore));
             }
-            Err(error) => Err(error),
-        }
+            Unopened { reason: UnopenedReason::UnsupportedVersions, .. } => {
+                return Err(CloudBackupError::Internal(
+                    "some cloud backups use a newer format, please update the app".into(),
+                ));
+            }
+            Unopened { reason: UnopenedReason::PasskeyMismatch, .. } => {
+                CloudBackupError::PasskeyMismatch
+            }
+            Unopened { reason: UnopenedReason::NoBackupFiles, .. } => {
+                CloudBackupError::NoBackupFound
+            }
+            Unopened { reason: UnopenedReason::NoPasskeyOnDevice, .. } => {
+                CloudBackupError::from(PasskeyError::NoCredentialFound)
+            }
+        };
+
+        info!("Restore: passkey matching found no restore, trying local master key fallback");
+        self.ensure_current().await?;
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        let fallback = try_restore_from_local_master_key(cloud, &cspp).await;
+        self.ensure_current().await?;
+        let (master_key, namespace_id) = fallback
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?
+            .ok_or(error)?;
+        Ok(vec![RestorableNamespace { namespace_id, master_key, passkey: None }])
     }
 
     /// Download every listed wallet, tagging each with the index of its namespace
@@ -703,16 +725,15 @@ impl RestoreOperation {
 
     /// Restore via passkey-based namespace matching (fresh device path)
     ///
-    /// Tries the selected passkey across all downloaded namespaces. If it
-    /// doesn't match any of them, returns `PasskeyMismatch` so the caller can
-    /// try local master key fallback or prompt the user to try a different
-    /// passkey. Successful matches are non-empty, including the ones kept when the
-    /// user cancels or authentication fails after an earlier match
+    /// Tries the selected passkey across all downloaded namespaces, saying why when it opens
+    /// none of them so the caller can try the local master key. Successful matches are
+    /// non-empty, including the ones kept when the user cancels or authentication fails after an
+    /// earlier match
     async fn restore_via_passkey_matching(
         &self,
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
-    ) -> Result<Vec<NamespaceMatch>, CloudBackupError> {
+    ) -> Result<NamespaceMatchOutcome, CloudBackupError> {
         let matcher = NamespacePasskeyMatcher::new(cloud, passkey, &self.authority);
         let mut session = matcher.start_session_with_cancellation(self.cancellation.clone());
         let started_at = Instant::now();
@@ -767,14 +788,14 @@ impl RestoreOperation {
                 }
                 NamespaceMatchSnapshotOutcome::UserDeclined => {
                     if accumulated_matches.is_empty() {
-                        return Err(CloudBackupError::PasskeyDiscoveryCancelled);
+                        return Ok(NamespaceMatchOutcome::UserDeclined);
                     }
 
-                    return Ok(accumulated_matches);
+                    return Ok(NamespaceMatchOutcome::Matched(accumulated_matches));
                 }
                 NamespaceMatchSnapshotOutcome::Cancelled(matches) => {
                     merge_namespace_matches(&mut accumulated_matches, matches);
-                    return Ok(accumulated_matches);
+                    return Ok(NamespaceMatchOutcome::Matched(accumulated_matches));
                 }
                 NamespaceMatchSnapshotOutcome::OperationCancelled => {
                     return Err(CloudBackupError::Cancelled);
@@ -784,7 +805,8 @@ impl RestoreOperation {
                     return NamespaceMatchSnapshotOutcome::authentication_failure_result(
                         accumulated_matches,
                         error,
-                    );
+                    )
+                    .map(NamespaceMatchOutcome::Matched);
                 }
                 NamespaceMatchSnapshotOutcome::Continue => {}
             }
@@ -793,7 +815,7 @@ impl RestoreOperation {
                 let Some(refresh_offset) =
                     PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS.get(grace_refresh_index)
                 else {
-                    return Ok(accumulated_matches);
+                    return Ok(NamespaceMatchOutcome::Matched(accumulated_matches));
                 };
                 grace_refresh_index += 1;
 
@@ -816,28 +838,7 @@ impl RestoreOperation {
             refresh_index += 1;
         }
 
-        let saw_supported_candidate = session.saw_supported_candidate();
-        let match_outcome = session.finish();
-
-        match match_outcome {
-            NamespaceMatchOutcome::Matched(matches) => Ok(matches),
-            NamespaceMatchOutcome::UserDeclined => Err(CloudBackupError::PasskeyDiscoveryCancelled),
-            NamespaceMatchOutcome::NoMatch if saw_supported_candidate => {
-                Err(CloudBackupError::PasskeyMismatch)
-            }
-            NamespaceMatchOutcome::NoMatch | NamespaceMatchOutcome::NoBackupFiles => {
-                Err(CloudBackupError::NoBackupFound)
-            }
-            NamespaceMatchOutcome::NoPasskeyOnDevice => {
-                Err(CloudBackupError::from(PasskeyError::NoCredentialFound))
-            }
-            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::FilesPending(_) => {
-                Err(offline_error_for_step(BlockingCloudStep::Restore))
-            }
-            NamespaceMatchOutcome::UnsupportedVersions => Err(CloudBackupError::Internal(
-                "some cloud backups use a newer format, please update the app".into(),
-            )),
-        }
+        Ok(session.finish())
     }
 }
 

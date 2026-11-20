@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::CloudStorage;
 use cove_util::ResultExt as _;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -38,10 +38,7 @@ mod flow_state;
 mod progress;
 
 #[cfg(test)]
-use self::cloud_restore::{
-    CloudRestoreBackupSnapshot, CloudRestoreInspectionError, choose_restore_provider_hint,
-    record_cloud_restore_download_error, resolve_provider_hint,
-};
+use self::cloud_restore::{CloudRestoreBackupSnapshot, CloudRestoreInspectionError};
 pub(crate) use self::cloud_restore::{
     cloud_check_inconclusive_message, determine_cloud_check_outcome, inspect_cloud_restore_backup,
 };
@@ -53,8 +50,6 @@ pub(crate) use self::flow_state::{
     TransitionCommand,
 };
 pub(crate) use self::progress::{OnboardingProgress, resolve_initial_flow};
-#[cfg(test)]
-use cove_cspp::backup_data::PasskeyProviderHint;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default, uniffi::Enum)]
 pub enum OnboardingStep {
@@ -157,6 +152,16 @@ pub struct CloudRestoreProviderHint {
     pub provider_name: Option<String>,
     pub registered_at: u64,
     pub name_suffix: String,
+}
+
+impl From<CloudBackupPasskeyHint> for CloudRestoreProviderHint {
+    fn from(value: CloudBackupPasskeyHint) -> Self {
+        Self {
+            provider_name: value.provider_name,
+            registered_at: value.registered_at,
+            name_suffix: value.name_suffix,
+        }
+    }
 }
 
 impl From<CloudRestoreProviderHint> for CloudBackupPasskeyHint {
@@ -319,9 +324,9 @@ pub(crate) enum CloudCheckIssue {
     Unknown,
 }
 
-impl From<CloudStorageError> for CloudCheckIssue {
-    fn from(error: CloudStorageError) -> Self {
-        match CloudStorageIssue::from(error) {
+impl From<CloudStorageIssue> for CloudCheckIssue {
+    fn from(issue: CloudStorageIssue) -> Self {
+        match issue {
             CloudStorageIssue::AuthorizationRequired
             | CloudStorageIssue::SyncPending
             | CloudStorageIssue::Unavailable => Self::CloudUnavailable,
@@ -745,7 +750,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use bip39::Mnemonic;
-    use cove_cspp::backup_data::PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform;
+    use cove_device::cloud_storage::CloudStorageError;
     use cove_types::network::Network;
 
     use super::flow_state::CloudBackupFlow;
@@ -2415,14 +2420,20 @@ mod tests {
     fn cloud_check_timeout_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud metadata query timed out".into());
 
-        assert_eq!(CloudCheckIssue::from(error), CloudCheckIssue::CloudUnavailable);
+        assert_eq!(
+            CloudCheckIssue::from(CloudStorageIssue::from(error)),
+            CloudCheckIssue::CloudUnavailable
+        );
     }
 
     #[test]
     fn cloud_drive_unavailable_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud Drive is not available".into());
 
-        assert_eq!(CloudCheckIssue::from(error), CloudCheckIssue::CloudUnavailable);
+        assert_eq!(
+            CloudCheckIssue::from(CloudStorageIssue::from(error)),
+            CloudCheckIssue::CloudUnavailable
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2454,7 +2465,7 @@ mod tests {
 
                 async move {
                     *attempt_log.lock().unwrap() += 1;
-                    Err(CloudRestoreInspectionError::Storage(CloudStorageError::NotAvailable(
+                    Err(CloudRestoreInspectionError::from(CloudStorageError::NotAvailable(
                         "platform deadline expired".into(),
                     )))
                 }
@@ -2515,98 +2526,6 @@ mod tests {
             CloudCheckOutcome::Inconclusive(CloudCheckIssue::BackupMetadataPending)
         );
         assert_eq!(*attempts.lock().unwrap(), 7);
-    }
-
-    #[test]
-    fn cloud_restore_download_error_tracking_prefers_harder_error_over_not_found() {
-        let mut error = None;
-
-        record_cloud_restore_download_error(
-            &mut error,
-            CloudStorageError::NotFound("old-namespace".into()),
-        );
-        record_cloud_restore_download_error(
-            &mut error,
-            CloudStorageError::NotAvailable("iCloud unavailable".into()),
-        );
-
-        assert_eq!(error, Some(CloudStorageError::NotAvailable("iCloud unavailable".into())));
-    }
-
-    #[test]
-    fn cloud_restore_download_error_tracking_retains_not_found() {
-        let mut error = None;
-
-        record_cloud_restore_download_error(
-            &mut error,
-            CloudStorageError::NotFound("pending-namespace".into()),
-        );
-
-        assert_eq!(error, Some(CloudStorageError::NotFound("pending-namespace".into())));
-    }
-
-    #[test]
-    fn restore_provider_hint_uses_known_provider_name_and_date() {
-        let hint = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Android,
-            registered_at: 1_777_661_234,
-            name_suffix: "09IX".into(),
-        });
-
-        assert_eq!(
-            hint,
-            CloudRestoreProviderHint {
-                provider_name: Some("Google Password Manager".into()),
-                registered_at: 1_777_661_234,
-                name_suffix: "09IX".into(),
-            }
-        );
-    }
-
-    #[test]
-    fn restore_provider_hint_preserves_unknown_provider_date() {
-        let hint = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Android,
-            registered_at: 1_777_661_236,
-            name_suffix: "09IY".into(),
-        });
-
-        assert_eq!(
-            hint,
-            CloudRestoreProviderHint {
-                provider_name: None,
-                registered_at: 1_777_661_236,
-                name_suffix: "09IY".into(),
-            }
-        );
-    }
-
-    #[test]
-    fn restore_provider_hint_selects_latest_hint() {
-        let hint = choose_restore_provider_hint(vec![
-            CloudRestoreProviderHint {
-                provider_name: Some("Apple Passwords".into()),
-                registered_at: 1_777_661_234,
-                name_suffix: "09IX".into(),
-            },
-            CloudRestoreProviderHint {
-                provider_name: None,
-                registered_at: 1_777_661_236,
-                name_suffix: "09IY".into(),
-            },
-        ])
-        .expect("latest hint should be selected");
-
-        assert_eq!(
-            hint,
-            CloudRestoreProviderHint {
-                provider_name: None,
-                registered_at: 1_777_661_236,
-                name_suffix: "09IY".into(),
-            }
-        );
     }
 
     #[test]

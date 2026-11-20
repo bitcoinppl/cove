@@ -5,7 +5,8 @@ use tracing::info;
 use super::blocking_cloud_error;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyRequestAuthority,
+    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyRequestAuthority, Unopened,
+    UnopenedReason,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
@@ -42,18 +43,28 @@ impl RustCloudBackupManager {
             NamespaceMatchOutcome::UserDeclined => {
                 return Err(CloudBackupError::PasskeyDiscoveryCancelled);
             }
-            NamespaceMatchOutcome::NoMatch => return Err(CloudBackupError::PasskeyMismatch),
-            NamespaceMatchOutcome::NoBackupFiles => return Err(CloudBackupError::NoBackupFound),
-            NamespaceMatchOutcome::NoPasskeyOnDevice => {
-                return Err(CloudBackupError::from(PasskeyError::NoCredentialFound));
-            }
-            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::FilesPending(_) => {
-                return Err(self.offline_error_for_step(BlockingCloudStep::RecoverOtherBackups));
-            }
-            NamespaceMatchOutcome::UnsupportedVersions => {
-                return Err(CloudBackupError::Internal(
-                    "some cloud backups use a newer format, please update the app".into(),
-                ));
+            // a backup still uploading may be the one the passkey opens, so it is waited for
+            NamespaceMatchOutcome::Unopened(unopened) => {
+                return Err(match unopened {
+                    Unopened { uploading: true, .. }
+                    | Unopened { reason: UnopenedReason::Inconclusive, .. } => {
+                        self.offline_error_for_step(BlockingCloudStep::RecoverOtherBackups)
+                    }
+                    Unopened { reason: UnopenedReason::PasskeyMismatch, .. } => {
+                        CloudBackupError::PasskeyMismatch
+                    }
+                    Unopened { reason: UnopenedReason::NoBackupFiles, .. } => {
+                        CloudBackupError::NoBackupFound
+                    }
+                    Unopened { reason: UnopenedReason::NoPasskeyOnDevice, .. } => {
+                        CloudBackupError::from(PasskeyError::NoCredentialFound)
+                    }
+                    Unopened { reason: UnopenedReason::UnsupportedVersions, .. } => {
+                        CloudBackupError::Internal(
+                            "some cloud backups use a newer format, please update the app".into(),
+                        )
+                    }
+                });
             }
         };
 

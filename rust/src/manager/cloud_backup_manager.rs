@@ -2,6 +2,7 @@ pub(crate) mod actors;
 mod admission;
 mod blob_state;
 mod catastrophic_recovery;
+mod cloud_folders;
 mod cloud_inventory;
 mod cspp_exports;
 mod delete_consent;
@@ -58,6 +59,7 @@ use self::actors::{
     CloudBackupSupervisor, CloudBackupWriteClient, CloudBackupWriteSupervisor, WriteTicket,
 };
 use self::admission::Rejection;
+pub(crate) use self::cloud_folders::{CloudFolders, ListedBackups};
 pub use self::delete_consent::{CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent};
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
