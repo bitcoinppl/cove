@@ -70,7 +70,10 @@ platforms also check the saved mode before they present a prompt, a result
 alert or the success floater, which covers a screen sent before the switch
 that the platform hasn't applied yet. A verification result also never shows
 over the lock screen, before the PIN decides which mode opens; a result
-dropped there still shows in the Cloud Backup settings. A
+dropped there still shows in the Cloud Backup settings. The missing-key
+alert, raised when a hot wallet's key is gone from the keychain, offers Open
+Cloud Backup only when `missing_key_alert_offers_cloud_backup` says so: Cloud
+Backup is configured and the app is in main mode. A
 configured body lists its sections in the order they are drawn, and Turn Off is
 in every one. Listed cloud rows carry their own row actions. An extra copy
 offers Delete only while the wallet it copies has its own current backup; until
@@ -1398,11 +1401,16 @@ verifying may need a passkey request that only the user's tap may start.
 
 ### Wipe Data PIN coverage
 
-The Wipe Data PIN erases every wallet on every network, so it can't be turned
-on while a hot wallet with unverified words has no other copy of its keys.
-`CloudBackupRecoveryCoverage` decides which of those wallets Cloud Backup
-covers, and `unverified_wallet_ids` lists the rest across every network of the
-current wallet mode. A wallet counts as covered only when, in persisted state,
+The Wipe Data PIN erases every wallet on every network in both wallet modes, so
+it can't be turned on while a hot wallet with unverified words has no other
+copy of its keys. `CloudBackupRecoveryCoverage` decides which of those wallets
+Cloud Backup covers, and `WipeDataPinBlocker` (`rust/src/manager/auth_manager/wipe_data_pin.rs`),
+which `validate_security_action` asks, finds the first of the rest. In main
+mode it checks the main wallets of every network, then the decoy wallets, whose
+alert has no Go To Wallet because main mode can't open them. Decoy mode checks
+only its own wallets, so it never reveals the main ones. If any of those wallet
+lists can't be read, the PIN stays off with an alert saying the wallets couldn't
+be checked. A wallet counts as covered only when, in persisted state,
 Cloud Backup is configured with its passkey available, no verification failure
 is outstanding, no sync row is unreadable, the master key wrapper's row in the
 current namespace isn't unconfirmed, and the wallet's own row there is
@@ -1478,10 +1486,6 @@ live provider proof, which would refuse the PIN offline and right after launch:
   this device's master key doesn't match the namespace, and withdrawing on
   that would mark every wallet `Dirty` and upload each again over copies
   encrypted with another key
-- If reading the local wallets of any network fails, the check lists no
-  wallets and allows the PIN, as it did for the selected network before. The
-  follow-up that adds decoy-mode wallets to the check should make a failed read
-  refuse the PIN instead
 
 - Two refreshes can overlap, since an exclusive operation's follow-up refresh
   can run beside the detail workflow's. If another device deletes a copy

@@ -107,6 +107,10 @@ class CloudBackupManager private constructor(
 
     internal constructor(initialScreen: CloudBackupScreen) : this(CloudBackupPublishedScreen(0UL, initialScreen))
 
+    /** Whether the missing-key alert offers Open Cloud Backup, which Rust allows only in main mode */
+    fun missingKeyAlertOffersCloudBackup(): Boolean =
+        runCatching { withRustOr(false) { missingKeyAlertOffersCloudBackup() } }.getOrDefault(false)
+
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
             runCatching {

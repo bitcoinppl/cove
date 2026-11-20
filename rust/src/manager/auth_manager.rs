@@ -1,10 +1,11 @@
 mod app_lock;
+mod wipe_data_pin;
 
 use std::sync::{Arc, LazyLock};
 
 use parking_lot::Mutex;
 use tap::TapFallible as _;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use cove_types::WalletId;
 
@@ -19,6 +20,7 @@ use crate::{
 pub use app_lock::{AppLockReason, SendConfirmationLock};
 
 use app_lock::{AppLock, BootTime};
+use wipe_data_pin::WipeDataPinBlocker;
 
 type Message = AuthManagerReconcileMessage;
 
@@ -90,9 +92,14 @@ pub enum SecuritySheetState {
 /// What alert to show for validation messages
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SecurityAlertState {
+    /// A wallet the current mode lists has no backup; Go To Wallet opens it
     UnverifiedWallets {
         wallet_id: WalletId,
     },
+    /// A decoy wallet has no backup, which main mode can't open
+    UnverifiedDecoyWallets,
+    /// A wallet list couldn't be read, so the Wipe Data PIN stays off
+    UnreadableWallets,
     ConfirmEnableWipeMePin,
     ConfirmDecoyPin,
     NoteNoFaceIdWhenTrickPins,
@@ -106,6 +113,42 @@ pub enum SecurityAlertState {
     ExtraSetPinError {
         message: String,
     },
+}
+
+/// What a PIN typed at the lock screen opens
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum UnlockPin {
+    /// The app PIN, which opens the main wallets. `turned_off` names the trick PINs this unlock
+    /// found equal to it and turned off, which the app tells the user about once unlocked
+    App { turned_off: Option<DuplicateTrickPin> },
+    /// The decoy PIN, which opens the decoy wallets
+    Decoy,
+    /// The wipe data PIN, which wipes every wallet
+    WipeData,
+    /// No PIN this app has saved
+    Wrong,
+}
+
+/// Trick PINs saved equal to the app PIN, which builds before Change PIN refused them allowed
+///
+/// Unlocking checks the app PIN first, so such a decoy PIN opened the main wallets and such a wipe
+/// data PIN never wiped anything
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum DuplicateTrickPin {
+    Decoy,
+    WipeData,
+    DecoyAndWipeData,
+}
+
+impl DuplicateTrickPin {
+    fn from_flags(decoy: bool, wipe_data: bool) -> Option<Self> {
+        match (decoy, wipe_data) {
+            (true, true) => Some(Self::DecoyAndWipeData),
+            (true, false) => Some(Self::Decoy),
+            (false, true) => Some(Self::WipeData),
+            (false, false) => None,
+        }
+    }
 }
 
 /// What a secret export, such as revealing a private key or sending one with KeyTeleport, must
@@ -284,6 +327,28 @@ impl RustAuthManager {
         self.send(Message::AuthTypeChanged(lock_type));
 
         Ok(())
+    }
+
+    /// Decides what a PIN typed at the lock screen opens, checking the app PIN first
+    ///
+    /// An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
+    /// could never act, and reports it in `UnlockPin::App` so the user is told once. The decoy
+    /// wallets stay saved and open again with a new decoy PIN. The trick PINs are saved as plain
+    /// text, so checking them costs this unlock no extra hash
+    pub fn resolve_unlock_pin(&self, pin: String) -> UnlockPin {
+        if AuthPin::new().check(&pin) {
+            return UnlockPin::App { turned_off: self.turn_off_trick_pins_equal_to(&pin) };
+        }
+
+        if self.check_decoy_pin(&pin) {
+            return UnlockPin::Decoy;
+        }
+
+        if self.check_wipe_data_pin(&pin) {
+            return UnlockPin::WipeData;
+        }
+
+        UnlockPin::Wrong
     }
 
     // MARK: APP LOCK
@@ -558,7 +623,6 @@ impl RustAuthManager {
     pub fn validate_security_action(
         &self,
         action: SecuritySettingsAction,
-        unverified_wallet_ids: Vec<WalletId>,
     ) -> SecuritySettingsResult {
         use SecuritySettingsAction::{
             ChangePin, ToggleBiometric, ToggleDecoyPin, TogglePin, ToggleWipeDataPin,
@@ -614,11 +678,9 @@ impl RustAuthManager {
                     return ProceedToSheet(SecuritySheetState::RemoveWipeDataPin);
                 }
 
-                // check unverified wallets
-                if let Some(wallet_id) = unverified_wallet_ids.first() {
-                    return ShowAlert(SecurityAlertState::UnverifiedWallets {
-                        wallet_id: wallet_id.clone(),
-                    });
+                // the wipe deletes every wallet, so each one needs a backup first
+                if let Some(blocker) = WipeDataPinBlocker::find() {
+                    return ShowAlert(blocker.into());
                 }
 
                 // PIN is required (biometric only = no PIN)
@@ -675,6 +737,43 @@ impl RustAuthManager {
         }
 
         Ok(())
+    }
+
+    /// Turns off each trick PIN equal to the app PIN `pin`, returning the ones it turned off
+    ///
+    /// A delete that fails leaves that PIN for the next unlock to retry, so the alert never says
+    /// a PIN was turned off while it is still saved
+    fn turn_off_trick_pins_equal_to(&self, pin: &str) -> Option<DuplicateTrickPin> {
+        let config = &Database::global().global_config;
+        let decoy = self.check_decoy_pin(pin)
+            && self.turned_off("decoy", config.delete_decoy_pin(), Message::DecoyPinChanged(false));
+        let wipe_data = self.check_wipe_data_pin(pin)
+            && self.turned_off(
+                "wipe data",
+                config.delete_wipe_data_pin(),
+                Message::WipeDataPinChanged(false),
+            );
+
+        DuplicateTrickPin::from_flags(decoy, wipe_data)
+    }
+
+    fn turned_off(
+        &self,
+        kind: &str,
+        deleted: Result<(), database::Error>,
+        changed: AuthManagerReconcileMessage,
+    ) -> bool {
+        match deleted {
+            Ok(()) => {
+                warn!("turned off a {kind} PIN saved equal to the app PIN");
+                self.send(changed);
+                true
+            }
+            Err(error) => {
+                error!("unable to turn off a {kind} PIN saved equal to the app PIN: {error:?}");
+                false
+            }
+        }
     }
 
     /// Asks Cloud Backup to publish its screen again after the wallet mode changed, since its
@@ -942,14 +1041,14 @@ mod tests {
                 ToggleDecoyPin { enable: false },
             ] {
                 assert_eq!(
-                    manager.validate_security_action(action.clone(), vec![]),
+                    manager.validate_security_action(action.clone()),
                     SecuritySettingsResult::DecoyPinThenLocalUpdate(action)
                 );
             }
 
             // turning the PIN on asks for a new one, as main mode does
             assert_eq!(
-                manager.validate_security_action(TogglePin { enable: true }, vec![]),
+                manager.validate_security_action(TogglePin { enable: true }),
                 SecuritySettingsResult::ProceedToSheet(SecuritySheetState::NewPin)
             );
 
@@ -996,6 +1095,183 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// An unverified hot wallet on signet in `mode`, saved as that mode's only signet wallet
+    fn save_unverified_hot_wallet(mode: WalletMode) -> WalletId {
+        let mut wallet = crate::wallet::metadata::WalletMetadata::preview_new();
+        wallet.network = Network::Signet;
+        wallet.wallet_mode = mode;
+        let id = wallet.id.clone();
+
+        Database::global()
+            .wallets
+            .save_all_wallets(Network::Signet, mode, vec![wallet])
+            .expect("save the wallet");
+
+        id
+    }
+
+    /// Drops the wallets table so every wallet read fails, and puts every wallet list back when
+    /// dropped
+    struct UnreadableWallets(
+        Vec<(Network, WalletMode, Vec<crate::wallet::metadata::WalletMetadata>)>,
+    );
+
+    impl UnreadableWallets {
+        fn start() -> Self {
+            use strum::IntoEnumIterator as _;
+
+            let wallets = &Database::global().wallets;
+            let lists = Network::iter()
+                .flat_map(|network| WalletMode::iter().map(move |mode| (network, mode)))
+                .map(|(network, mode)| {
+                    (network, mode, wallets.get_all(network, mode).expect("wallets read"))
+                })
+                .collect();
+
+            let write_txn = wallets.redb().begin_write().expect("begin write");
+            write_txn.delete_table(database::wallet::TABLE).expect("drop the wallets table");
+            write_txn.commit().expect("commit");
+
+            Self(lists)
+        }
+    }
+
+    impl Drop for UnreadableWallets {
+        fn drop(&mut self) {
+            let wallets = &Database::global().wallets;
+            let write_txn = wallets.redb().begin_write().expect("begin write");
+            write_txn.open_table(database::wallet::TABLE).expect("recreate the wallets table");
+            write_txn.commit().expect("commit");
+
+            for (network, mode, list) in self.0.drain(..) {
+                let _ = wallets.save_all_wallets(network, mode, list);
+            }
+        }
+    }
+
+    // the wipe deletes the decoy wallets too, so main mode must not allow the wipe data PIN while
+    // a decoy wallet has no backup
+    #[test]
+    fn the_wipe_data_pin_check_counts_decoy_wallets() {
+        use SecuritySettingsAction::ToggleWipeDataPin;
+
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            crate::test_support::init_test_keychain();
+            let _wallets = RestoreSignetWallets::empty();
+            let check = || manager.validate_security_action(ToggleWipeDataPin { enable: true });
+
+            assert_eq!(
+                check(),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+                "no wallet needs a backup yet"
+            );
+
+            let decoy = save_unverified_hot_wallet(WalletMode::Decoy);
+            assert_eq!(
+                check(),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::UnverifiedDecoyWallets),
+                "the wipe data PIN check left out the decoy wallet that has no backup"
+            );
+
+            // a main wallet comes first, since Go To Wallet can open it
+            let main = save_unverified_hot_wallet(WalletMode::Main);
+            assert_eq!(
+                check(),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::UnverifiedWallets {
+                    wallet_id: main
+                })
+            );
+
+            // decoy mode looks like main mode and names its own wallet
+            Database::global().global_config.set_decoy_mode().expect("enter decoy mode");
+            assert_eq!(
+                check(),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::UnverifiedWallets {
+                    wallet_id: decoy
+                })
+            );
+        });
+    }
+
+    // a wallet list that can't be read could hold a wallet with no backup, so the wipe data PIN
+    // must stay off and say why
+    #[test]
+    fn a_failed_wallet_read_refuses_the_wipe_data_pin() {
+        use SecuritySettingsAction::ToggleWipeDataPin;
+
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            crate::test_support::init_test_keychain();
+            let _wallets = RestoreSignetWallets::empty();
+            let _unreadable = UnreadableWallets::start();
+
+            assert_eq!(
+                manager.validate_security_action(ToggleWipeDataPin { enable: true }),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::UnreadableWallets),
+                "the wipe data PIN was allowed although no wallet list could be read"
+            );
+        });
+    }
+
+    // a build before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,
+    // which then opened the main wallets; the unlock that finds it turns the decoy PIN off once,
+    // and the decoy wallets open again with a new decoy PIN
+    #[test]
+    fn an_app_pin_equal_to_the_decoy_pin_turns_the_decoy_pin_off_once() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            crate::test_support::init_test_keychain();
+            let _wallets = RestoreSignetWallets::empty();
+            let _pins = PinGuard::capture();
+            let config = &Database::global().global_config;
+
+            AuthPin::new().set("111111".to_string()).unwrap();
+            let decoy = save_unverified_hot_wallet(WalletMode::Decoy);
+            config.set_decoy_pin("111111".to_string()).expect("an older build saves the duplicate");
+
+            assert_eq!(
+                manager.resolve_unlock_pin("111111".to_string()),
+                UnlockPin::App { turned_off: Some(DuplicateTrickPin::Decoy) }
+            );
+            assert!(!manager.is_decoy_pin_enabled(), "the duplicate decoy PIN is still saved");
+            assert_eq!(
+                manager.resolve_unlock_pin("111111".to_string()),
+                UnlockPin::App { turned_off: None },
+                "the second unlock reported the duplicate again"
+            );
+
+            manager.set_decoy_pin("222222".to_string()).expect("a new decoy PIN saves");
+            assert_eq!(manager.resolve_unlock_pin("222222".to_string()), UnlockPin::Decoy);
+            manager.switch_to_decoy_mode();
+            assert_eq!(visible_wallet_ids(), vec![decoy], "the decoy wallets didn't come back");
+        });
+    }
+
+    // the same for the wipe data PIN, which never wiped while it equaled the app PIN
+    #[test]
+    fn an_app_pin_equal_to_the_wipe_data_pin_turns_the_wipe_data_pin_off_once() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let _pins = PinGuard::capture();
+            let config = &Database::global().global_config;
+
+            AuthPin::new().set("111111".to_string()).unwrap();
+            config.set_wipe_data_pin("111111".to_string()).expect("an older build saves it");
+
+            assert_eq!(
+                manager.resolve_unlock_pin("111111".to_string()),
+                UnlockPin::App { turned_off: Some(DuplicateTrickPin::WipeData) }
+            );
+            assert!(!manager.is_wipe_data_pin_enabled(), "the duplicate wipe PIN is still saved");
+            assert_eq!(
+                manager.resolve_unlock_pin("111111".to_string()),
+                UnlockPin::App { turned_off: None },
+                "the second unlock reported the duplicate again"
+            );
+
+            manager.set_wipe_data_pin("333333".to_string()).expect("a new wipe data PIN saves");
+            assert_eq!(manager.resolve_unlock_pin("333333".to_string()), UnlockPin::WipeData);
+            assert_eq!(manager.resolve_unlock_pin("444444".to_string()), UnlockPin::Wrong);
+        });
     }
 
     /// Pastes a watch-only export for `words` into the current mode and selects it

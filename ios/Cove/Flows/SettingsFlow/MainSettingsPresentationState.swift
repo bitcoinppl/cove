@@ -22,6 +22,8 @@ enum MainSettingsSheetState: Equatable {
 
 enum MainSettingsAlertState: Equatable {
     case unverifiedWallets(WalletId)
+    case unverifiedDecoyWallets
+    case unreadableWallets
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenTrickPins
@@ -59,6 +61,8 @@ extension MainSettingsAlertState {
     init(_ alert: SecurityAlertState) {
         switch alert {
         case let .unverifiedWallets(walletId): self = .unverifiedWallets(walletId)
+        case .unverifiedDecoyWallets: self = .unverifiedDecoyWallets
+        case .unreadableWallets: self = .unreadableWallets
         case .confirmEnableWipeMePin: self = .confirmEnableWipeMePin
         case .confirmDecoyPin: self = .confirmDecoyPin
         case .noteNoFaceIdWhenTrickPins: self = .noteNoFaceIdWhenTrickPins

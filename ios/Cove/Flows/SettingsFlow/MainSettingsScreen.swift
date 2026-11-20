@@ -59,12 +59,7 @@ struct MainSettingsScreen: View {
                 if auth.isInDecoyMode() { return isWipeDataPinEnabled }
                 return auth.isWipeDataPinEnabled
             },
-            set: { enable in
-                // rust reads unverified wallets only when enabling, so the other toggles skip
-                // the keychain and database reads behind them
-                let unverifiedWalletIds = enable ? app.rust.unverifiedWalletIds() : []
-                handleSecurityAction(.toggleWipeDataPin(enable: enable), unverifiedWalletIds: unverifiedWalletIds)
-            }
+            set: { enable in handleSecurityAction(.toggleWipeDataPin(enable: enable)) }
         )
     }
 
@@ -80,11 +75,8 @@ struct MainSettingsScreen: View {
 
     /// Shows what Rust decides a security setting change needs, so iOS and Android follow the
     /// same rules, including what the decoy PIN's Settings do
-    private func handleSecurityAction(
-        _ action: SecuritySettingsAction,
-        unverifiedWalletIds: [WalletId] = []
-    ) {
-        switch auth.validateSecurityAction(action, unverifiedWalletIds: unverifiedWalletIds) {
+    private func handleSecurityAction(_ action: SecuritySettingsAction) {
+        switch auth.validateSecurityAction(action) {
         case let .proceedToSheet(sheet):
             sheetState = MainSettingsSheetState(sheet).map { .init($0) }
         case let .showAlert(alert):

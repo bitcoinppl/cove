@@ -1269,8 +1269,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_state(
     ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
-    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_version(
     ): Short
     external fun uniffi_cove_checksum_method_authpin_check(
@@ -1503,6 +1501,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock(
     ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_resolve_unlock_pin(
+    ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_secret_export_access(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_send(
@@ -1534,6 +1534,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
     ): Short
@@ -2275,8 +2277,6 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_version(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_authpin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2653,6 +2653,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_release_send_confirmation_lock(`ptr`: Long,`lock`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_rustauthmanager_resolve_unlock_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_secret_export_access(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_send(`ptr`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2675,7 +2677,7 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustauthmanager_validate_security_action(`ptr`: Long,`action`: RustBuffer.ByValue,`unverifiedWalletIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_rustauthmanager_validate_security_action(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustcloudbackupmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -2690,6 +2692,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4229,9 +4233,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 56708.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_ffiapp_version() != 27942.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4580,6 +4581,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_resolve_unlock_pin() != 39543.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_secret_export_access() != 37851.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4613,7 +4617,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 56071.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 30339.toShort()) {
@@ -4626,6 +4630,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup() != 10345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
@@ -11936,17 +11943,6 @@ public interface FfiAppInterface {
 
     fun `state`(): AppState
 
-    /**
-     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
-     *
-     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
-     * waiting for its first confirmed upload does, since wiping it would lose its only keys
-     *
-     * Every network counts, since the wipe deletes them all. The selected network's wallets come
-     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
-     */
-    fun `unverifiedWalletIds`(): List<WalletId>
-
     fun `version`(): kotlin.String
 
     companion object
@@ -12543,28 +12539,6 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_state(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
-     *
-     * A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
-     * waiting for its first confirmed upload does, since wiping it would lose its only keys
-     *
-     * Every network counts, since the wipe deletes them all. The selected network's wallets come
-     * first, so the alert's Go To Wallet needs no network switch when one of them qualifies
-     */override fun `unverifiedWalletIds`(): List<WalletId> {
-            return FfiConverterSequenceTypeWalletId.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(
         it,
         _status)
 }
@@ -20187,6 +20161,16 @@ public interface RustAuthManagerInterface {
     fun `releaseSendConfirmationLock`(`lock`: SendConfirmationLock): kotlin.Boolean
 
     /**
+     * Decides what a PIN typed at the lock screen opens, checking the app PIN first
+     *
+     * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
+     * could never act, and reports it in `UnlockPin::App` so the user is told once. The decoy
+     * wallets stay saved and open again with a new decoy PIN. The trick PINs are saved as plain
+     * text, so checking them costs this unlock no extra hash
+     */
+    fun `resolveUnlockPin`(`pin`: kotlin.String): UnlockPin
+
+    /**
      * What a secret export must ask for before it shows or sends the secret
      *
      * Fails closed: when the auth type can't be read, the export still asks for the app PIN
@@ -20242,7 +20226,7 @@ public interface RustAuthManagerInterface {
     /**
      * Validate a security settings action and return what UI to show
      */
-    fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult
+    fun `validateSecurityAction`(`action`: SecuritySettingsAction): SecuritySettingsResult
 
     companion object
 }
@@ -20602,6 +20586,28 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
 
     /**
+     * Decides what a PIN typed at the lock screen opens, checking the app PIN first
+     *
+     * An app PIN equal to a trick PIN saved by an older build turns that trick PIN off, since it
+     * could never act, and reports it in `UnlockPin::App` so the user is told once. The decoy
+     * wallets stay saved and open again with a new decoy PIN. The trick PINs are saved as plain
+     * text, so checking them costs this unlock no extra hash
+     */override fun `resolveUnlockPin`(`pin`: kotlin.String): UnlockPin {
+            return FfiConverterTypeUnlockPin.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_resolve_unlock_pin(
+        it,
+
+        FfiConverterString.lower(`pin`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
      * What a secret export must ask for before it shows or sends the secret
      *
      * Fails closed: when the auth type can't be read, the export still asks for the app PIN
@@ -20778,15 +20784,14 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
     /**
      * Validate a security settings action and return what UI to show
-     */override fun `validateSecurityAction`(`action`: SecuritySettingsAction, `unverifiedWalletIds`: List<WalletId>): SecuritySettingsResult {
+     */override fun `validateSecurityAction`(`action`: SecuritySettingsAction): SecuritySettingsResult {
             return FfiConverterTypeSecuritySettingsResult.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_security_action(
         it,
 
-        FfiConverterTypeSecuritySettingsAction.lower(`action`),
-        FfiConverterSequenceTypeWalletId.lower(`unverifiedWalletIds`),_status)
+        FfiConverterTypeSecuritySettingsAction.lower(`action`),_status)
 }
     }
     )
@@ -20944,6 +20949,14 @@ public interface RustCloudBackupManagerInterface {
     fun `cloudStorageDidChange`()
 
     fun `hasPendingCloudUploadVerification`(): kotlin.Boolean
+
+    /**
+     * Whether the missing-key alert offers Open Cloud Backup
+     *
+     * Only in main mode with Cloud Backup on: decoy mode hides Cloud Backup, so the button would
+     * lead out of the decoy
+     */
+    fun `missingKeyAlertOffersCloudBackup`(): kotlin.Boolean
 
     /**
      * Reports whether onboarding may recover a lost enable-completion event from durable state
@@ -21173,6 +21186,25 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Whether the missing-key alert offers Open Cloud Backup
+     *
+     * Only in main mode with Cloud Backup on: decoy mode hides Cloud Backup, so the button would
+     * lead out of the decoy
+     */override fun `missingKeyAlertOffersCloudBackup`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_missing_key_alert_offers_cloud_backup(
         it,
         _status)
 }
@@ -38808,6 +38840,15 @@ sealed class AppAlertState: Disposable  {
         companion object
     }
 
+    data class TrickPinTurnedOff(
+        val `pins`: org.bitcoinppl.cove_core.DuplicateTrickPin) : AppAlertState()
+
+    {
+
+
+        companion object
+    }
+
     data class WalletDatabaseCorrupted(
         val `walletId`: org.bitcoinppl.cove_core.types.WalletId,
         val `error`: kotlin.String) : AppAlertState()
@@ -39002,6 +39043,13 @@ sealed class AppAlertState: Disposable  {
     )
 
             }
+            is AppAlertState.TrickPinTurnedOff -> {
+
+    Disposable.destroy(
+        this.`pins`
+    )
+
+            }
             is AppAlertState.WalletDatabaseCorrupted -> {
 
     Disposable.destroy(
@@ -39164,25 +39212,28 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeTapSigner.read(buf),
                 FfiConverterTypeAfterPinAction.read(buf),
                 )
-            24 -> AppAlertState.WalletDatabaseCorrupted(
+            24 -> AppAlertState.TrickPinTurnedOff(
+                FfiConverterTypeDuplicateTrickPin.read(buf),
+                )
+            25 -> AppAlertState.WalletDatabaseCorrupted(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            25 -> AppAlertState.General(
+            26 -> AppAlertState.General(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            26 -> AppAlertState.Loading
-            27 -> AppAlertState.ConfirmWatchOnly
-            28 -> AppAlertState.WatchOnlyImportHardware
-            29 -> AppAlertState.WatchOnlyImportWords
-            30 -> AppAlertState.UninitializedTapSigner(
+            27 -> AppAlertState.Loading
+            28 -> AppAlertState.ConfirmWatchOnly
+            29 -> AppAlertState.WatchOnlyImportHardware
+            30 -> AppAlertState.WatchOnlyImportWords
+            31 -> AppAlertState.UninitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
-            31 -> AppAlertState.TapSignerWalletFound(
+            32 -> AppAlertState.TapSignerWalletFound(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            32 -> AppAlertState.InitializedTapSigner(
+            33 -> AppAlertState.InitializedTapSigner(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -39346,6 +39397,13 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeTapSigner.allocationSize(value.`tapSigner`)
                 + FfiConverterTypeAfterPinAction.allocationSize(value.`action`)
+            )
+        }
+        is AppAlertState.TrickPinTurnedOff -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeDuplicateTrickPin.allocationSize(value.`pins`)
             )
         }
         is AppAlertState.WalletDatabaseCorrupted -> {
@@ -39525,46 +39583,51 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 FfiConverterTypeAfterPinAction.write(value.`action`, buf)
                 Unit
             }
-            is AppAlertState.WalletDatabaseCorrupted -> {
+            is AppAlertState.TrickPinTurnedOff -> {
                 buf.putInt(24)
+                FfiConverterTypeDuplicateTrickPin.write(value.`pins`, buf)
+                Unit
+            }
+            is AppAlertState.WalletDatabaseCorrupted -> {
+                buf.putInt(25)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is AppAlertState.General -> {
-                buf.putInt(25)
+                buf.putInt(26)
                 FfiConverterString.write(value.`title`, buf)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }
             is AppAlertState.Loading -> {
-                buf.putInt(26)
-                Unit
-            }
-            is AppAlertState.ConfirmWatchOnly -> {
                 buf.putInt(27)
                 Unit
             }
-            is AppAlertState.WatchOnlyImportHardware -> {
+            is AppAlertState.ConfirmWatchOnly -> {
                 buf.putInt(28)
                 Unit
             }
-            is AppAlertState.WatchOnlyImportWords -> {
+            is AppAlertState.WatchOnlyImportHardware -> {
                 buf.putInt(29)
                 Unit
             }
-            is AppAlertState.UninitializedTapSigner -> {
+            is AppAlertState.WatchOnlyImportWords -> {
                 buf.putInt(30)
+                Unit
+            }
+            is AppAlertState.UninitializedTapSigner -> {
+                buf.putInt(31)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
             is AppAlertState.TapSignerWalletFound -> {
-                buf.putInt(31)
+                buf.putInt(32)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is AppAlertState.InitializedTapSigner -> {
-                buf.putInt(32)
+                buf.putInt(33)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 Unit
             }
@@ -53035,6 +53098,47 @@ public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRust
 
 
 
+/**
+ * Trick PINs saved equal to the app PIN, which builds before Change PIN refused them allowed
+ *
+ * Unlocking checks the app PIN first, so such a decoy PIN opened the main wallets and such a wipe
+ * data PIN never wiped anything
+ */
+
+enum class DuplicateTrickPin {
+
+    DECOY,
+    WIPE_DATA,
+    DECOY_AND_WIPE_DATA;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDuplicateTrickPin: FfiConverterRustBuffer<DuplicateTrickPin> {
+    override fun read(buf: ByteBuffer) = try {
+        DuplicateTrickPin.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: DuplicateTrickPin) = 4UL
+
+    override fun write(value: DuplicateTrickPin, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 sealed class FiatAmountException: kotlin.Exception() {
@@ -60999,6 +61103,9 @@ public object FfiConverterTypeSecretExportAccess : FfiConverterRustBuffer<Secret
  */
 sealed class SecurityAlertState {
 
+    /**
+     * A wallet the current mode lists has no backup; Go To Wallet opens it
+     */
     data class UnverifiedWallets(
         val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : SecurityAlertState()
 
@@ -61007,6 +61114,18 @@ sealed class SecurityAlertState {
 
         companion object
     }
+
+    /**
+     * A decoy wallet has no backup, which main mode can't open
+     */
+    object UnverifiedDecoyWallets : SecurityAlertState()
+
+
+    /**
+     * A wallet list couldn't be read, so the Wipe Data PIN stays off
+     */
+    object UnreadableWallets : SecurityAlertState()
+
 
     object ConfirmEnableWipeMePin : SecurityAlertState()
 
@@ -61066,15 +61185,17 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
             1 -> SecurityAlertState.UnverifiedWallets(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            2 -> SecurityAlertState.ConfirmEnableWipeMePin
-            3 -> SecurityAlertState.ConfirmDecoyPin
-            4 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
-            5 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
-            6 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
-            7 -> SecurityAlertState.NotePinRequired
-            8 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
-            9 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
-            10 -> SecurityAlertState.ExtraSetPinError(
+            2 -> SecurityAlertState.UnverifiedDecoyWallets
+            3 -> SecurityAlertState.UnreadableWallets
+            4 -> SecurityAlertState.ConfirmEnableWipeMePin
+            5 -> SecurityAlertState.ConfirmDecoyPin
+            6 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
+            7 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
+            8 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
+            9 -> SecurityAlertState.NotePinRequired
+            10 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
+            11 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
+            12 -> SecurityAlertState.ExtraSetPinError(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -61087,6 +61208,18 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
             (
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is SecurityAlertState.UnverifiedDecoyWallets -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.UnreadableWallets -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is SecurityAlertState.ConfirmEnableWipeMePin -> {
@@ -61153,40 +61286,48 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
-            is SecurityAlertState.ConfirmEnableWipeMePin -> {
+            is SecurityAlertState.UnverifiedDecoyWallets -> {
                 buf.putInt(2)
                 Unit
             }
-            is SecurityAlertState.ConfirmDecoyPin -> {
+            is SecurityAlertState.UnreadableWallets -> {
                 buf.putInt(3)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+            is SecurityAlertState.ConfirmEnableWipeMePin -> {
                 buf.putInt(4)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+            is SecurityAlertState.ConfirmDecoyPin -> {
                 buf.putInt(5)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
                 buf.putInt(6)
                 Unit
             }
-            is SecurityAlertState.NotePinRequired -> {
+            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
                 buf.putInt(7)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
                 buf.putInt(8)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            is SecurityAlertState.NotePinRequired -> {
                 buf.putInt(9)
                 Unit
             }
-            is SecurityAlertState.ExtraSetPinError -> {
+            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
                 buf.putInt(10)
+                Unit
+            }
+            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+                buf.putInt(11)
+                Unit
+            }
+            is SecurityAlertState.ExtraSetPinError -> {
+                buf.putInt(12)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }
@@ -66929,6 +67070,123 @@ public object FfiConverterTypeTrickPinError : FfiConverterRustBuffer<TrickPinExc
     }
 
 }
+
+
+
+/**
+ * What a PIN typed at the lock screen opens
+ */
+sealed class UnlockPin {
+
+    /**
+     * The app PIN, which opens the main wallets. `turned_off` names the trick PINs this unlock
+     * found equal to it and turned off, which the app tells the user about once unlocked
+     */
+    data class App(
+        val `turnedOff`: org.bitcoinppl.cove_core.DuplicateTrickPin?) : UnlockPin()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The decoy PIN, which opens the decoy wallets
+     */
+    object Decoy : UnlockPin()
+
+
+    /**
+     * The wipe data PIN, which wipes every wallet
+     */
+    object WipeData : UnlockPin()
+
+
+    /**
+     * No PIN this app has saved
+     */
+    object Wrong : UnlockPin()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUnlockPin : FfiConverterRustBuffer<UnlockPin>{
+    override fun read(buf: ByteBuffer): UnlockPin {
+        return when(buf.getInt()) {
+            1 -> UnlockPin.App(
+                FfiConverterOptionalTypeDuplicateTrickPin.read(buf),
+                )
+            2 -> UnlockPin.Decoy
+            3 -> UnlockPin.WipeData
+            4 -> UnlockPin.Wrong
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: UnlockPin): ULong = when(value) {
+        is UnlockPin.App -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeDuplicateTrickPin.allocationSize(value.`turnedOff`)
+            )
+        }
+        is UnlockPin.Decoy -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UnlockPin.WipeData -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UnlockPin.Wrong -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: UnlockPin, buf: ByteBuffer) {
+        when(value) {
+            is UnlockPin.App -> {
+                buf.putInt(1)
+                FfiConverterOptionalTypeDuplicateTrickPin.write(value.`turnedOff`, buf)
+                Unit
+            }
+            is UnlockPin.Decoy -> {
+                buf.putInt(2)
+                Unit
+            }
+            is UnlockPin.WipeData -> {
+                buf.putInt(3)
+                Unit
+            }
+            is UnlockPin.Wrong -> {
+                buf.putInt(4)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -73989,6 +74247,38 @@ public object FfiConverterOptionalTypeCloudBackupVerificationSource: FfiConverte
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupVerificationSource.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeDuplicateTrickPin: FfiConverterRustBuffer<DuplicateTrickPin?> {
+    override fun read(buf: ByteBuffer): DuplicateTrickPin? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeDuplicateTrickPin.read(buf)
+    }
+
+    override fun allocationSize(value: DuplicateTrickPin?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeDuplicateTrickPin.allocationSize(value)
+        }
+    }
+
+    override fun write(value: DuplicateTrickPin?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeDuplicateTrickPin.write(value, buf)
         }
     }
 }

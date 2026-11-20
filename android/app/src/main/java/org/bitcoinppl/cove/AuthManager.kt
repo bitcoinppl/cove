@@ -318,21 +318,25 @@ class AuthManager internal constructor(
      * this is the main entry point for authentication
      */
     suspend fun handleAndReturnUnlockMode(pin: String): UnlockMode =
-        when {
-            checkPin(pin) -> unlockWithMainPin()
-            checkDecoyPin(pin) -> unlockWithDecoyPin()
-            checkWipeDataPin(pin) -> {
-                startWipe(null).await()
-            }
-            else -> UnlockMode.LOCKED
+        when (val entered = withRustOr<UnlockPin>(UnlockPin.Wrong) { resolveUnlockPin(pin) }) {
+            is UnlockPin.App -> unlockWithMainPin(entered.turnedOff)
+            UnlockPin.Decoy -> unlockWithDecoyPin()
+            UnlockPin.WipeData -> startWipe(null).await()
+            UnlockPin.Wrong -> UnlockMode.LOCKED
         }
 
-    private fun unlockWithMainPin(): UnlockMode {
+    private fun unlockWithMainPin(turnedOff: DuplicateTrickPin?): UnlockMode {
         if (Database().globalConfig().isInDecoyMode() && !switchToMainMode()) {
             return UnlockMode.LOCKED
         }
 
         unlockAuthenticated()
+
+        // rust turned off a trick PIN equal to this one, so the user hears about it once
+        if (turnedOff != null) {
+            App.alertState = TaggedItem(AppAlertState.TrickPinTurnedOff(turnedOff))
+        }
+
         return UnlockMode.MAIN
     }
 
@@ -460,12 +464,9 @@ class AuthManager internal constructor(
         }
     }
 
-    fun validateSecurityAction(
-        action: SecuritySettingsAction,
-        unverifiedWalletIds: List<WalletId>,
-    ): SecuritySettingsResult =
+    fun validateSecurityAction(action: SecuritySettingsAction): SecuritySettingsResult =
         withRust {
-            validateSecurityAction(action, unverifiedWalletIds)
+            validateSecurityAction(action)
         }
 
     /**

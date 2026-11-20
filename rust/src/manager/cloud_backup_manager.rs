@@ -1305,6 +1305,16 @@ impl RustCloudBackupManager {
         send!(self.supervisor.drive_account_switch_platform_result(result));
     }
 
+    /// Whether the missing-key alert offers Open Cloud Backup
+    ///
+    /// Only in main mode with Cloud Backup on: decoy mode hides Cloud Backup, so the button would
+    /// lead out of the decoy
+    pub fn missing_key_alert_offers_cloud_backup(&self) -> bool {
+        let wallet_mode = Database::global().global_config.wallet_mode();
+
+        wallet_mode == LocalWalletMode::Main && self.is_cloud_backup_enabled()
+    }
+
     /// Reports whether onboarding may recover a lost enable-completion event from durable state
     pub fn onboarding_enable_completion_readiness(
         &self,

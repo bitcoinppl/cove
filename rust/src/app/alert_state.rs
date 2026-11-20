@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cove_tap_card::TapSigner;
 use cove_types::{Network, TxId, WalletId, address::Address, amount::Amount};
 
-use crate::router::AfterPinAction;
+use crate::{manager::auth_manager::DuplicateTrickPin, router::AfterPinAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum AlertDisplayType {
@@ -41,6 +41,9 @@ pub enum AppAlertState {
     TapSignerInvalidAuth,
     TapSignerNoBackup { tap_signer: Arc<TapSigner> },
     TapSignerWrongPin { tap_signer: Arc<TapSigner>, action: AfterPinAction },
+
+    // a trick PIN saved equal to the app PIN, turned off at the unlock that found it
+    TrickPinTurnedOff { pins: DuplicateTrickPin },
 
     // database corruption
     WalletDatabaseCorrupted { wallet_id: WalletId, error: String },
@@ -95,6 +98,13 @@ impl AppAlertState {
             Self::InitializedTapSigner { .. } => "Import TAPSIGNER?",
             Self::TapSignerNoBackup { .. } => "No Backup Found",
             Self::WalletDatabaseCorrupted { .. } => "Wallet Database Error",
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::Decoy } => "Decoy PIN Turned Off",
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::WipeData } => {
+                "Wipe Data PIN Turned Off"
+            }
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::DecoyAndWipeData } => {
+                "Decoy and Wipe Data PINs Turned Off"
+            }
             Self::General { title, .. } => title,
             Self::Loading => "Working on it...",
         }
@@ -206,6 +216,19 @@ impl AppAlertState {
             }
             Self::WalletDatabaseCorrupted { error, .. } => {
                 format!("The wallet database is corrupted and cannot be opened. You can delete this wallet and re-import it to fix the issue.\n\nError: {error}")
+            }
+            // read by whoever holds the phone, so it names no PIN and says only what changed
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::Decoy } => {
+                "The decoy PIN was the same as the PIN that just opened Cove, so it opened these wallets instead of the decoy wallets. It has been turned off.\n\nTo use a decoy PIN, set a new one in Settings. The decoy wallets are kept and open with the new decoy PIN."
+                    .to_string()
+            }
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::WipeData } => {
+                "The wipe data PIN was the same as the PIN that just opened Cove, so it opened these wallets instead of wiping them. It has been turned off.\n\nTo use a wipe data PIN, set a new one in Settings."
+                    .to_string()
+            }
+            Self::TrickPinTurnedOff { pins: DuplicateTrickPin::DecoyAndWipeData } => {
+                "The decoy PIN and the wipe data PIN were the same as the PIN that just opened Cove, so neither worked. Both have been turned off.\n\nTo use them, set new ones in Settings. The decoy wallets are kept and open with the new decoy PIN."
+                    .to_string()
             }
             Self::General { message, .. } => message.clone(),
             Self::Loading => String::new(),

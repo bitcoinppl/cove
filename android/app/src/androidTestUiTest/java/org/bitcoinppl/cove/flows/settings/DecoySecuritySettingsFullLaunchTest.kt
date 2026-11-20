@@ -9,6 +9,7 @@ import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.FakeNodeControl
@@ -21,12 +22,17 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
+import org.bitcoinppl.cove_core.AppLockReason
+import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.BootstrapStep
+import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.NumberOfBip39Words
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RustAuthManager
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
+import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +42,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.regex.Pattern
 
 /**
  * Decoy mode's Settings must look like main mode's, so turning off a setting main mode guards
@@ -117,6 +124,135 @@ class DecoySecuritySettingsFullLaunchTest {
         assertEquals("decoy mode changed the saved app lock", AuthType.PIN, authType)
         assertTrue("decoy mode turned off the saved decoy PIN", hasDecoyPin)
         assertFalse("decoy mode saved a wipe data PIN", hasWipeDataPin)
+    }
+
+    // the wipe deletes the decoy wallets too, so main mode must wait for their backup
+    @Test
+    fun mainModeWipeDataPinWaitsForTheDecoyWalletBackup() {
+        launchPastOnboarding()
+        setMainAndDecoyPins()
+        enterDecoyMode()
+
+        // a new wallet's words start unverified, and Cloud Backup is off, so it has no backup
+        onMain { PendingWalletManager(NumberOfBip39Words.TWELVE).use { it.saveWallet() } }
+
+        var mode: UnlockMode? = null
+        onMain { mode = runBlocking { AuthManager.getInstance().handleAndReturnUnlockMode(MAIN_PIN) } }
+        assertEquals("the app PIN didn't unlock main mode", UnlockMode.MAIN, mode)
+
+        openSettings()
+        device.clickSwitchInRowOf(WIPE_TOGGLE_TITLE)
+
+        val anyAnswer = By.text(Pattern.compile("${Pattern.quote(CONFIRM_ENABLE_WIPE)}|${Pattern.quote(CANT_ENABLE_WIPE)}"))
+        if (!device.wait(Until.hasObject(anyAnswer), PROMPT_TIMEOUT_MS)) {
+            error("turning on the wipe data PIN showed no dialog\n${device.hierarchy()}")
+        }
+
+        assertTrue(
+            "the wipe data PIN check left out the decoy wallet that has no backup\n${device.hierarchy()}",
+            device.hasObject(By.textContains(DECOY_WALLET_NOT_BACKED_UP)),
+        )
+        device.clickText("OK")
+    }
+
+    // builds before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,
+    // which then opened the main wallets; the unlock that finds it turns the decoy PIN off once
+    @Test
+    fun anAppPinEqualToTheDecoyPinTurnsTheDecoyPinOffOnce() {
+        launchPastOnboarding()
+        val duplicateHash = hashOf(DECOY_PIN)
+        setMainAndDecoyPins()
+        enterDecoyMode()
+
+        var decoyWalletId: WalletId? = null
+        onMain { decoyWalletId = PendingWalletManager(NumberOfBip39Words.TWELVE).use { it.saveWallet() }.metadata.id }
+        assertEquals("the app PIN didn't unlock main mode", UnlockMode.MAIN, unlock(MAIN_PIN))
+
+        onMain { Database().globalConfig().setHashedPinCode(duplicateHash) }
+        assertEquals("the duplicate PIN should open the main wallets", UnlockMode.MAIN, unlock(DECOY_PIN))
+        dismissTurnedOffAlert("Decoy PIN Turned Off")
+        assertFalse("the duplicate decoy PIN is still saved", RustAuthManager().use { it.isDecoyPinEnabled() })
+
+        openSettings()
+        awaitSwitch(DECOY_TOGGLE_TITLE, checked = false, "Settings still shows the duplicate decoy PIN on")
+
+        assertEquals(UnlockMode.MAIN, unlock(DECOY_PIN))
+        assertNoTurnedOffAlert("Decoy PIN Turned Off")
+
+        // the decoy wallet was kept, and a new decoy PIN opens it
+        onMain { AuthManager.getInstance().setDecoyPin(NEW_TRICK_PIN) }
+        assertEquals("the new decoy PIN didn't open decoy mode", UnlockMode.DECOY, unlock(NEW_TRICK_PIN))
+        wallet.waitUntil("the decoy wallet didn't come back with the new decoy PIN") {
+            var ids = emptyList<WalletId>()
+            onMain { ids = AppManager.getInstance().wallets.map { it.id } }
+            ids == listOf(decoyWalletId)
+        }
+    }
+
+    // the same for the wipe data PIN, which never wiped while it equaled the app PIN
+    @Test
+    fun anAppPinEqualToTheWipeDataPinTurnsTheWipeDataPinOffOnce() {
+        launchPastOnboarding()
+        val duplicateHash = hashOf(DECOY_WIPE_DATA_PIN)
+        val auth = AuthManager.getInstance()
+        onMain {
+            auth.setPin(MAIN_PIN)
+            auth.setWipeDataPin(DECOY_WIPE_DATA_PIN)
+        }
+        pinsSet = true
+
+        onMain { Database().globalConfig().setHashedPinCode(duplicateHash) }
+        assertEquals("the duplicate PIN should open the main wallets", UnlockMode.MAIN, unlock(DECOY_WIPE_DATA_PIN))
+        dismissTurnedOffAlert("Wipe Data PIN Turned Off")
+        assertFalse("the duplicate wipe data PIN is still saved", RustAuthManager().use { it.isWipeDataPinEnabled() })
+
+        openSettings()
+        awaitSwitch(WIPE_TOGGLE_TITLE, checked = false, "Settings still shows the duplicate wipe data PIN on")
+
+        assertEquals(UnlockMode.MAIN, unlock(DECOY_WIPE_DATA_PIN))
+        assertNoTurnedOffAlert("Wipe Data PIN Turned Off")
+    }
+
+    /** The app PIN hash for [pin], saved through Settings' own path and then cleared again */
+    private fun hashOf(pin: String): String {
+        var hash = ""
+        onMain {
+            AuthManager.getInstance().setPin(pin)
+            hash = Database().globalConfig().hashedPinCode()
+            AuthManager.getInstance().dispatch(AuthManagerAction.DisablePin)
+        }
+
+        return hash
+    }
+
+    // the lock screen's PIN pad takes this path, and so does a PIN typed after leaving the app
+    private fun unlock(pin: String): UnlockMode? {
+        var mode: UnlockMode? = null
+        onMain {
+            val auth = AuthManager.getInstance()
+            auth.lock(AppLockReason.BACKGROUND)
+            mode = runBlocking { auth.handleAndReturnUnlockMode(pin) }
+        }
+
+        return mode
+    }
+
+    private fun dismissTurnedOffAlert(title: String) {
+        if (!device.wait(Until.hasObject(By.text(title)), PROMPT_TIMEOUT_MS)) {
+            error("the unlock never said \"$title\"\n${device.hierarchy()}")
+        }
+
+        device.clickText("OK")
+        if (!device.wait(Until.gone(By.text(title)), PROMPT_TIMEOUT_MS)) {
+            error("\"$title\" never closed\n${device.hierarchy()}")
+        }
+    }
+
+    private fun assertNoTurnedOffAlert(title: String) {
+        assertFalse(
+            "the second unlock said \"$title\" again\n${device.hierarchy()}",
+            device.wait(Until.hasObject(By.text(title)), NO_ALERT_WAIT_MS),
+        )
     }
 
     private fun turnOffWithDecoyPin(title: String) {
@@ -232,7 +368,12 @@ class DecoySecuritySettingsFullLaunchTest {
         const val WIPE_TOGGLE_TITLE = "Enable Wipe Data PIN"
         const val DECOY_TOGGLE_TITLE = "Enable Decoy PIN"
         const val CURRENT_PIN_TITLE = "Enter Current PIN"
+        const val CONFIRM_ENABLE_WIPE = "Yes, Enable Wipe Data PIN"
+        const val CANT_ENABLE_WIPE = "Can't Enable Wipe Data PIN"
+        const val DECOY_WALLET_NOT_BACKED_UP = "A decoy wallet has not been backed up"
+        const val NEW_TRICK_PIN = "975310"
         const val PROMPT_TIMEOUT_MS = 5_000L
+        const val NO_ALERT_WAIT_MS = 2_000L
         const val SHOW_IME_SETTING = "show_ime_with_hard_keyboard"
     }
 }

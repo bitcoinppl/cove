@@ -6,6 +6,12 @@ extension MainSettingsAlertState: TaggedAlertPresentable {
         case let .unverifiedWallets(walletId):
             unverifiedWalletsAlert(walletId: walletId, context: context)
 
+        case .unverifiedDecoyWallets:
+            unverifiedDecoyWalletsAlert(context: context)
+
+        case .unreadableWallets:
+            unreadableWalletsAlert(context: context)
+
         case .confirmEnableWipeMePin:
             confirmEnableWipeDataPinAlert(context: context)
 
@@ -52,6 +58,25 @@ private func unverifiedWalletsAlert(
             }
             Button("Cancel", role: .cancel) { context.dismissAlert() }
         }
+    ).eraseToAny()
+}
+
+private func unverifiedDecoyWalletsAlert(context: MainSettingsPresentationContext) -> AnyAlertBuilder {
+    AlertBuilder(
+        title: "Can't Enable Wipe Data PIN",
+        message: """
+        A decoy wallet has not been backed up. Unlock Cove with your decoy PIN and back up that wallet before enabling the Wipe Data PIN.\
+        If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet.
+        """,
+        actions: { Button("OK") { context.dismissAlert() } }
+    ).eraseToAny()
+}
+
+private func unreadableWalletsAlert(context: MainSettingsPresentationContext) -> AnyAlertBuilder {
+    AlertBuilder(
+        title: "Can't Enable Wipe Data PIN",
+        message: "Cove couldn't read your wallets to check that they're backed up, so the Wipe Data PIN stays off. Please try again.",
+        actions: { Button("OK") { context.dismissAlert() } }
     ).eraseToAny()
 }
 

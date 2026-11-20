@@ -96,6 +96,7 @@ private extension AppAlertState {
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
              .general,
+             .trickPinTurnedOff,
              .invalidFormat,
              .loading:
             .dismiss
@@ -145,7 +146,7 @@ private struct HotWalletKeyMissingActions: View {
     let app: AppManager
 
     var body: some View {
-        if CloudBackupManager.shared.recovery.configured {
+        if CloudBackupManager.shared.rust.missingKeyAlertOffersCloudBackup() {
             Button("Open Cloud Backup") {
                 app.alertState = .none
                 app.loadAndReset(to: .settings(.cloudBackup))

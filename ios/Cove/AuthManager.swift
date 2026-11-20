@@ -212,48 +212,55 @@ private enum WipeCallResult: Sendable {
 
     @MainActor
     public func handleAndReturnUnlockMode(_ pin: String) async -> UnlockMode {
-        if AuthPin().check(pin: pin) {
+        switch rust.resolveUnlockPin(pin: pin) {
+        case let .app(turnedOff):
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
             unlockAuthenticated()
-            return .main
-        }
 
-        // check if the entered pin a the decoy pin, if so enter decoy mode
-        if checkDecoyPin(pin) {
-            // enter decoy mode if not already in decoy mode and reset app and router
-            if Database().globalConfig().isInMainMode() {
-                rust.switchToDecoyMode()
-                unlockAuthenticated()
-
-                let app = AppManager.shared
-                app.reset()
-                app.isLoading = true
-
-                let db = Database()
-                if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    do {
-                        try app.selectWalletOrThrow(selectedWalletId)
-                    } catch {
-                        logger.error("Failed to select decoy wallet after auth fallback: \(error)")
-                        app.isLoading = false
-                        app.loadAndReset(to: RouteFactory().newWalletSelect())
-                    }
-                } else {
-                    app.loadAndReset(to: RouteFactory().newWalletSelect())
-                }
+            // rust turned off a trick PIN equal to this one, so the user hears about it once
+            if let turnedOff {
+                AppManager.shared.alertState = .init(.trickPinTurnedOff(pins: turnedOff))
             }
 
-            return .decoy
-        }
+            return .main
 
-        // check if the entered pin is a wipeDataPin
-        // if so wipe the data
-        if checkWipeDataPin(pin) {
+        case .decoy:
+            unlockWithDecoyPin()
+            return .decoy
+
+        case .wipeData:
             wipePresentationState = .running
             return await finishWipe(call: .initial)
-        }
 
-        return .locked
+        case .wrong:
+            return .locked
+        }
+    }
+
+    /// Enters decoy mode, if not already in it, and resets the app and router
+    @MainActor
+    private func unlockWithDecoyPin() {
+        guard Database().globalConfig().isInMainMode() else { return }
+
+        rust.switchToDecoyMode()
+        unlockAuthenticated()
+
+        let app = AppManager.shared
+        app.reset()
+        app.isLoading = true
+
+        let db = Database()
+        if let selectedWalletId = db.globalConfig().selectedWallet() {
+            do {
+                try app.selectWalletOrThrow(selectedWalletId)
+            } catch {
+                logger.error("Failed to select decoy wallet after auth fallback: \(error)")
+                app.isLoading = false
+                app.loadAndReset(to: RouteFactory().newWalletSelect())
+            }
+        } else {
+            app.loadAndReset(to: RouteFactory().newWalletSelect())
+        }
     }
 
     @MainActor
@@ -399,10 +406,7 @@ private enum WipeCallResult: Sendable {
     }
 
     /// What Settings shows for a security toggle, decided by Rust so both platforms agree
-    public func validateSecurityAction(
-        _ action: SecuritySettingsAction,
-        unverifiedWalletIds: [WalletId] = []
-    ) -> SecuritySettingsResult {
-        rust.validateSecurityAction(action: action, unverifiedWalletIds: unverifiedWalletIds)
+    public func validateSecurityAction(_ action: SecuritySettingsAction) -> SecuritySettingsResult {
+        rust.validateSecurityAction(action: action)
     }
 }

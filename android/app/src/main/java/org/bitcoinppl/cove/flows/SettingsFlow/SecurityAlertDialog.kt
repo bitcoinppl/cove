@@ -22,6 +22,8 @@ internal fun SecurityAlertDialog(
 ) {
     when (state) {
         is SecurityAlertState.UnverifiedWallets -> UnverifiedWalletsAlert(state, callbacks, app)
+        SecurityAlertState.UnverifiedDecoyWallets -> UnverifiedDecoyWalletsAlert(callbacks)
+        SecurityAlertState.UnreadableWallets -> UnreadableWalletsAlert(callbacks)
         SecurityAlertState.ConfirmEnableWipeMePin -> ConfirmEnableWipeDataPinAlert(callbacks)
         SecurityAlertState.ConfirmDecoyPin -> ConfirmDecoyPinAlert(callbacks)
         SecurityAlertState.NotePinRequired -> NotePinRequiredAlert(callbacks)
@@ -67,6 +69,45 @@ private fun UnverifiedWalletsAlert(
         dismissButton = {
             TextButton(onClick = callbacks.onDismiss) {
                 Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun UnverifiedDecoyWalletsAlert(callbacks: SecurityAlertDialogCallbacks) {
+    AlertDialog(
+        onDismissRequest = callbacks.onDismiss,
+        title = { Text("Can't Enable Wipe Data PIN") },
+        text = {
+            Text(
+                "A decoy wallet has not been backed up. Unlock Cove with your decoy PIN and back up " +
+                    "that wallet before enabling the Wipe Data PIN. If you wipe the data without having " +
+                    "a backup of your wallet, you will lose the bitcoin in that wallet.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = callbacks.onDismiss) {
+                Text("OK")
+            }
+        },
+    )
+}
+
+@Composable
+private fun UnreadableWalletsAlert(callbacks: SecurityAlertDialogCallbacks) {
+    AlertDialog(
+        onDismissRequest = callbacks.onDismiss,
+        title = { Text("Can't Enable Wipe Data PIN") },
+        text = {
+            Text(
+                "Cove couldn't read your wallets to check that they're backed up, so the Wipe Data " +
+                    "PIN stays off. Please try again.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = callbacks.onDismiss) {
+                Text("OK")
             }
         },
     )

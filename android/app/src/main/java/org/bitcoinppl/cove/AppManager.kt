@@ -867,11 +867,6 @@ class AppManager private constructor() : FfiReconcile {
         }
     }
 
-    fun unverifiedWalletIds(): List<WalletId> =
-        withRustOr(emptyList()) {
-            unverifiedWalletIds()
-        }
-
     internal fun dangerousWipeAllData(): FullWipeCompletion =
         withRust {
             dangerousWipeAllData()

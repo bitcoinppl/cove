@@ -21,7 +21,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupRecoveryCoverage},
+    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
@@ -465,30 +465,6 @@ impl FfiApp {
             Database::global().global_config.wallet_target();
         read_health::observe("wallet count", Database::global().wallets().len(network, mode))
             .unwrap_or(0)
-    }
-
-    /// Hot wallets whose words must be verified before the Wipe Data PIN can be turned on
-    ///
-    /// A wallet whose backup Cloud Backup has confirmed needs no verified words. One still
-    /// waiting for its first confirmed upload does, since wiping it would lose its only keys
-    ///
-    /// Every network counts, since the wipe deletes them all. The selected network's wallets come
-    /// first, so the alert's Go To Wallet needs no network switch when one of them qualifies
-    pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
-        let SelectedWalletTarget { network, mode } =
-            Database::global().global_config.wallet_target();
-        let all_wallets = read_health::observe(
-            "wallet list on every network",
-            Database::global().wallets().all_networks(mode, network),
-        )
-        .unwrap_or_default();
-        let cloud_coverage = CloudBackupRecoveryCoverage::load();
-
-        all_wallets
-            .into_iter()
-            .filter(|wallet| cloud_coverage.needs_backup(wallet))
-            .map(|wallet| wallet.id)
-            .collect::<Vec<WalletId>>()
     }
 
     /// Load and reset the default route after default delay
