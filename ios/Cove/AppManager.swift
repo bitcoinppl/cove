@@ -237,22 +237,14 @@ struct CorruptedWalletDeletionRetry: Equatable {
         managerCache.clearSendFlowManager(id: id)
     }
 
-    public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
-        rust.findTapSignerWallet(tapSigner: ts)
-    }
-
-    public func getTapSignerBackup(_ ts: TapSigner) throws -> Data? {
-        try rust.getTapSignerBackup(tapSigner: ts)
-    }
-
-    public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
-        rust.saveTapSignerBackup(tapSigner: ts, backup: backup)
-    }
-
     /// Reset the manager state
     @MainActor
     public func reset() {
         clearSession()
+
+        // a mode switch resets the app before the lock opens, so an alert raised in the other
+        // mode, such as a Cloud Backup result for the main wallets, never shows in this one
+        alertState = nil
 
         database = Database()
         needsOnboarding = rust.needsOnboarding()
@@ -837,9 +829,6 @@ extension AppManager {
     private func applyWalletPresentationMessage(_ message: AppStateReconcileMessage) {
         switch message {
         case .walletModeChanged:
-            // an alert raised in the other mode, such as a Cloud Backup result for the main
-            // wallets, must not show in this one
-            alertState = .none
             isLoading = true
             loadWallets()
 
@@ -946,5 +935,21 @@ extension AppManager {
 extension AppManager: WalletManagerDelegate {
     func showWalletAlert(_ alertState: AppAlertState) {
         self.alertState = .init(alertState)
+    }
+}
+
+// MARK: - TAPSIGNER
+
+extension AppManager {
+    public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
+        rust.findTapSignerWallet(tapSigner: ts)
+    }
+
+    public func getTapSignerBackup(_ ts: TapSigner) throws -> Data? {
+        try rust.getTapSignerBackup(tapSigner: ts)
+    }
+
+    public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
+        rust.saveTapSignerBackup(tapSigner: ts, backup: backup)
     }
 }

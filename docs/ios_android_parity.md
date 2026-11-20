@@ -456,7 +456,7 @@ On iOS, leaving the foreground dismisses every presented sheet and alert before 
 
 On Android, import these from `org.bitcoinppl.cove.views.lockaware`, not Compose, so they hide or close while the app is locked. See [Dialogs, Sheets, and Menus Behind the App Lock](#dialogs-sheets-and-menus-behind-the-app-lock).
 
-An app alert belongs to the main or decoy mode that raised it, so both `AppManager`s clear `alertState` on `WalletModeChanged`. A Cloud Backup result for the main wallets, raised while the app was locked, then never shows after the decoy PIN unlocks it.
+An app alert belongs to the unlocked session and the main or decoy mode that raised it. Both `AppManager`s clear `alertState` in `reset()`, which a mode switch runs before the lock opens, so a Cloud Backup result for the main wallets never shows after the decoy PIN unlocks the app. Android draws alerts under its lock window. iOS draws them above its lock overlay, so `presentingSheetAndAlert` holds a new alert while the app is locked and shows it after the unlock.
 
 ### Focus Management
 

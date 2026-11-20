@@ -45,7 +45,8 @@ extension View {
     /// that closes because its address failed to load and reports it through the app's alert. The
     /// sheet can be this view's own or one a screen below it presents, which this view can't see,
     /// so the alert waits until UIKit has no presentation in flight. An alert raised while a sheet
-    /// stays open shows over it
+    /// stays open shows over it. A new alert also waits while the app is locked, since UIKit would
+    /// present it over the PIN screen
     func presentingSheetAndAlert<SheetItem: TaggedSheetPresentable, AlertItem: TaggedAlertPresentable>(
         sheet: Binding<TaggedItem<SheetItem>?>,
         sheetContext: SheetItem.SheetPresentationContext,
@@ -93,6 +94,11 @@ private struct SheetAndAlertPresentation<SheetItem: TaggedSheetPresentable, Aler
     /// The alert cleared to show, once no presentation in the window was sliding in or away
     @State private var releasedAlertID: UUID?
 
+    /// Read in `body`, so locking or unlocking restarts the release
+    private var isAppLocked: Bool {
+        PresenterIdle.isAppLocked()
+    }
+
     private var alertShown: Binding<Bool> {
         Binding(
             get: { alert != nil && alert?.id == releasedAlertID },
@@ -113,7 +119,9 @@ private struct SheetAndAlertPresentation<SheetItem: TaggedSheetPresentable, Aler
                 message: { $0.item.alert(context: alertContext).message }
             )
         )
-        .task(id: alert?.id) { await releaseAlertOncePresenterIsIdle() }
+        .task(id: AlertRelease(alertID: alert?.id, isAppLocked: isAppLocked)) {
+            await releaseAlertOncePresenterIsIdle()
+        }
     }
 
     @ViewBuilder
@@ -131,13 +139,17 @@ private struct SheetAndAlertPresentation<SheetItem: TaggedSheetPresentable, Aler
     }
 
     private func releaseAlertOncePresenterIsIdle() async {
-        guard let alertID = alert?.id else { return }
+        guard let alertID = alert?.id, alertID != releasedAlertID else { return }
+
+        // the app lock is a SwiftUI overlay that UIKit presents an alert above, so an alert raised
+        // behind it, such as a Cloud Backup failure, waits for the unlock, which restarts this task.
+        // A decoy unlock resets the app first, which drops an alert the main wallets raised
+        guard !isAppLocked else { return }
 
         // a dismissal the same update started can reach UIKit just after this task starts, and
         // the presenter counts as idle only on consecutive checks, so the wait still sees it.
         // A wait that times out starts again, since releasing the alert over a presentation still
-        // in flight drops it. The app lock is a SwiftUI overlay that doesn't stop an alert from
-        // presenting, so unlike a passkey request the alert waits for an idle window even then
+        // in flight drops it. Locking cancels this task, so the wait itself ignores the lock
         while !Task.isCancelled {
             if case .ready = await PresenterIdle.waitUntilReady(isAppLocked: { false }) { break }
         }
@@ -146,4 +158,10 @@ private struct SheetAndAlertPresentation<SheetItem: TaggedSheetPresentable, Aler
 
         releasedAlertID = alertID
     }
+}
+
+/// What restarts an alert's release: a new alert, or the app locking or unlocking
+private struct AlertRelease: Equatable {
+    let alertID: UUID?
+    let isAppLocked: Bool
 }

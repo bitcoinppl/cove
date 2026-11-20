@@ -375,6 +375,10 @@ class AppManager private constructor() : FfiReconcile {
     fun reset() {
         clearSessionForReset()
 
+        // a mode switch resets the app before the lock opens, so an alert raised in the other
+        // mode, such as a Cloud Backup result for the main wallets, never shows in this one
+        alertState = null
+
         database = Database()
         needsOnboarding =
             withRustOr(needsOnboarding) {
@@ -933,9 +937,6 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {
-                    // an alert raised in the other mode, such as a Cloud Backup result for the
-                    // main wallets, must not show in this one
-                    alertState = null
                     isLoading = true
                     loadWallets()
                     launch {
