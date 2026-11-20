@@ -17,7 +17,6 @@ struct CoveMainView: View {
     @State var id = UUID()
     @State var showCover: Bool = true
     @State var scannedCode: TaggedItem<MultiFormat>? = .none
-    @State var coverClearTask: Task<Void, Never>?
 
     private var presentationContext: CoveMainPresentationContext {
         CoveMainPresentationContext(app: app, scannedCode: $scannedCode)
@@ -63,7 +62,6 @@ struct CoveMainView: View {
                 oldPhase: oldPhase,
                 newPhase: newPhase,
                 isAuthEnabled: auth.isAuthEnabled,
-                isUsingBiometrics: auth.isUsingBiometrics,
                 isNfcOperationActive: app.isNfcOperationActive
             )
         )
@@ -109,29 +107,12 @@ struct CoveMainView: View {
             Log.debug("[scene] privacy: \(privacy)")
         }
 
-        if privacy.coverRecovery != .unchanged { coverClearTask?.cancel() }
         if privacy.showsCover { showCover = true }
         if privacy.locks { auth.lock(reason: .background) }
 
         if privacy.dismissesSheets {
             dismissPresentedViewControllers()
             UIApplication.shared.endEditing()
-        }
-
-        if privacy.coverRecovery == .restarted { scheduleCoverRecovery() }
-    }
-
-    private func scheduleCoverRecovery() {
-        coverClearTask = Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled else { return }
-
-            if phase == .active { showCover = false }
-
-            try? await Task.sleep(for: .milliseconds(200))
-            guard !Task.isCancelled else { return }
-
-            if phase == .active { showCover = false }
         }
     }
 
@@ -246,9 +227,7 @@ private struct CoveLockedContent: View {
         .fullScreenCover(isPresented: $app.isLoading) {
             FullPageLoadingView().interactiveDismissDisabled(true)
         }
-        .fullScreenCover(isPresented: $showCover) {
-            CoverView().interactiveDismissDisabled(true)
-        }
+        .privacyCover(isPresented: showCover)
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
         }
@@ -262,9 +241,7 @@ private struct CoveLockedContent: View {
     }
 
     private func handleUnlock(_: String) {
-        withAnimation {
-            showCover = false
-        }
+        showCover = false
     }
 }
 

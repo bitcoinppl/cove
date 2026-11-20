@@ -55,6 +55,10 @@ paths = ["ios/CoveUITests/NfcScanPrivacyCoverFullLaunchUITests.swift"]
 suites = ["CoveUITests/NfcScanPrivacyCoverFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/PrivacyCoverFullLaunchUITests.swift"]
+suites = ["CoveUITests/PrivacyCoverFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/QrScanCameraPermissionFullLaunchUITests.swift"]
 suites = ["CoveUITests/QrScanCameraPermissionFullLaunchUITests"]
 
@@ -180,6 +184,7 @@ suites = [
     "CoveUITests/ReceiveTextSizeFullLaunchUITests",
     "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
     "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
+    "CoveUITests/PrivacyCoverFullLaunchUITests",
     "CoveUITests/HardwareSigningFullLaunchUITests",
     "CoveUITests/PublicKeyImportFullLaunchUITests",
     "CoveUITests/TapSignerLayoutFullLaunchUITests",
@@ -205,6 +210,7 @@ suites = [
     "CoveUITests/ReceiveTextSizeFullLaunchUITests",
     "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
     "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
+    "CoveUITests/PrivacyCoverFullLaunchUITests",
     "CoveUITests/HotWalletImportScanFullLaunchUITests",
     "CoveUITests/BiometricLockFullLaunchUITests",
     "CoveUITests/HardwareSigningFullLaunchUITests",

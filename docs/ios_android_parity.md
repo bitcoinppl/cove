@@ -416,6 +416,13 @@ Detekt's `ForbiddenImport` rule rejects the Compose originals. Only the lock scr
 
 On iOS, leaving the foreground dismisses every presented sheet and alert before the background lock.
 
+### Privacy Cover
+
+Both platforms put up a black cover with the app icon when the app leaves the foreground, but it covers different things.
+- On Android it is a view in the activity window that `onPause` and `onResume` show and hide, together with `FLAG_SECURE`. Compose dialogs and sheets are windows of their own above the activity window, so the cover does not hide them; only the app lock hides them (see Dialogs, Sheets, and Menus Behind the App Lock).
+- On iOS it is a window of its own above the app's windows and alerts (`privacyCover(isPresented:)` in `PrivacyCoverWindow.swift`), so it covers every sheet. A `.fullScreenCover` shares the app's presentation chain, so SwiftUI held it back while a sheet a screen presented, such as Receive, was up, and that sheet stayed visible in the app switcher when no app lock dismissed it.
+- On iOS the cover belongs to the main app (`CoveMainView`), so onboarding has none, and an active NFC operation leaves the app uncovered, since covering it would interrupt the scan (`ScenePhasePrivacy.swift`).
+
 ### Reactive Value Changes
 
 | iOS (SwiftUI) | Android (Compose) | Notes |
