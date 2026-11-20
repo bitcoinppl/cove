@@ -34,7 +34,6 @@ struct QrCodeAddressView: View {
                         codeTypes: [.qr],
                         scanMode: .oncePerCode,
                         scanInterval: 0.1,
-                        showAlert: false,
                         completion: handleScan
                     )
                     .ignoresSafeArea(.all)

@@ -22,6 +22,11 @@
             var lastTime = Date(timeIntervalSince1970: 0)
             private let showViewfinder: Bool
 
+            /// Whether the camera's codes reach the owner; off from the moment the scanner starts
+            /// to disappear, so a code the camera sees while the user swipes it closed, or one
+            /// still being captured, isn't reported as if the user had kept scanning
+            private var isReportingCodes = false
+
             #if DEBUG
                 private var uiTestQrFeed: Task<Void, Never>?
             #endif
@@ -231,7 +236,13 @@
                 override public func viewWillAppear(_ animated: Bool) {
                     super.viewWillAppear(animated)
 
+                    isReportingCodes = true
                     setupSession()
+                }
+
+                override public func viewWillDisappear(_ animated: Bool) {
+                    super.viewWillDisappear(animated)
+                    isReportingCodes = false
                 }
 
                 private func setupSession() {
@@ -249,6 +260,7 @@
                     addViewFinder()
 
                     reset()
+                    observeRuntimeErrors(of: captureSession)
 
                     if !captureSession.isRunning {
                         DispatchQueue.global(qos: .userInteractive).async {
@@ -259,9 +271,9 @@
 
                 private func handleCameraPermission() {
                     switch AVCaptureDevice.authorizationStatus(for: .video) {
-                    case .restricted:
-                        break
-                    case .denied:
+                    // Screen Time or a device profile blocking the camera never prompts, so it
+                    // closes the scanner and explains as a denial does, instead of a black preview
+                    case .denied, .restricted:
                         didFail(reason: .permissionDenied)
                     case .notDetermined:
                         // SwiftUI can replace `parentView` before the answer comes back, so the
@@ -284,8 +296,8 @@
                         )
 
                         adoptCaptureSession(session)
-                    default:
-                        break
+                    @unknown default:
+                        didFail(reason: .permissionDenied)
                     }
                 }
 
@@ -351,6 +363,35 @@
                     case let .failure(failure):
                         didFail(reason: failure)
                     }
+                }
+
+                /// Reports a session that fails to start or stops on an error, which otherwise leaves a
+                /// black preview no scan can follow
+                ///
+                /// Leaving the screen removes every observer, and coming back sets the session up
+                /// again, so this replaces any earlier registration rather than adding a second
+                private func observeRuntimeErrors(of session: AVCaptureSession) {
+                    NotificationCenter.default.removeObserver(
+                        self,
+                        name: AVCaptureSession.runtimeErrorNotification,
+                        object: nil
+                    )
+
+                    NotificationCenter.default.addObserver(
+                        self,
+                        selector: #selector(sessionRuntimeError),
+                        name: AVCaptureSession.runtimeErrorNotification,
+                        object: session
+                    )
+                }
+
+                @objc private func sessionRuntimeError(_ notification: Notification) {
+                    let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError
+                    let reason = ScanError.initError(error ?? AVError(.unknown))
+
+                    // AVFoundation posts this on its own queue, and a failure is reported on the main
+                    // thread
+                    DispatchQueue.main.async { [weak self] in self?.didFail(reason: reason) }
                 }
 
                 private func addViewFinder() {
@@ -538,6 +579,7 @@
             from _: AVCaptureConnection
         ) {
             guard let metadataObject = metadataObjects.first,
+                  isReportingCodes,
                   !parentView.isPaused,
                   !didFinishScanning,
                   !isCapturing,
@@ -549,7 +591,9 @@
             guard let data = scanResultData(from: readableObject) else { return }
 
             handler = { [weak self] image in
-                guard let self else { return }
+                // a photo can finish capturing after the scanner started to disappear
+                guard let self, isReportingCodes else { return }
+
                 let result = ScanResult(
                     data: data, type: readableObject.type, image: image,
                     corners: readableObject.corners

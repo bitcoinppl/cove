@@ -20,17 +20,21 @@ struct ScannerView: View {
     var focusIndicatorSize: CGFloat = 175
     var focusIndicatorColor: Color = .white
     @State var codeSize = 40.0
-    var showAlert = true
+
+    /// Gets every scan and every failure, a camera permission denial included, which the owner
+    /// closes the scanner for and explains
     var completion: (Result<ScanResult, ScanError>) -> Void = { _ in () }
 
     // private
     @State private var isTorchOn = false
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
     @State private var containerHeight: CGFloat = UIScreen.main.bounds.height
-    @State private var showingPermissionAlert: Bool = false
-    @State private var scanError: ScanError?
 
     @State private var viewLoaded: Bool = false
+
+    /// Set when the camera fails to start for a reason other than permission, which owners leave
+    /// to the scanner, so it says so in place of a black preview no scan can follow
+    @State private var cameraFailed = false
 
     let startingCodeSize: CGFloat = 40
     let minimumCodeSize: CGFloat = 15
@@ -51,18 +55,9 @@ struct ScannerView: View {
         }
     }
 
-    func completeScan(_ result: Result<ScanResult, ScanError>) {
-        if !showAlert {
-            return completion(result)
-        }
-
-        if case .failure(ScanError.permissionDenied) = result {
-            DispatchQueue.main.async {
-                showingPermissionAlert = true
-                scanError = ScanError.permissionDenied
-            }
-
-            return
+    private func report(_ result: Result<ScanResult, ScanError>) {
+        if case let .failure(error) = result {
+            if case .permissionDenied = error {} else { cameraFailed = true }
         }
 
         completion(result)
@@ -83,38 +78,41 @@ struct ScannerView: View {
                 zoomLevel: zoomLevel,
                 containerWidth: containerWidth,
                 containerHeight: containerHeight,
-                isActive: viewLoaded && !showingPermissionAlert && scanError == nil,
+                isActive: viewLoaded,
                 isTorchOn: $isTorchOn,
                 toggleZoom: toggleZoom,
-                completion: completeScan
+                completion: report
             )
+            .overlay {
+                if cameraFailed { ScannerCameraUnavailable() }
+            }
             .onAppear {
                 containerWidth = geo.size.width
                 containerHeight = geo.size.height
                 viewLoaded = true
             }
             .onTapGesture(perform: toggleZoom)
-            .alert(isPresented: $showingPermissionAlert) {
-                Alert(
-                    title: Text("Camera Access Required"),
-                    message: Text("Please allow camera access in Settings to use this feature."),
-                    primaryButton: Alert.Button.default(Text("Settings")) {
-                        let url = URL(string: UIApplication.openSettingsURLString)!
-                        UIApplication.shared.open(url)
-                    },
-                    secondaryButton: Alert.Button.cancel {
-                        Task {
-                            await MainActor.run {
-                                showingPermissionAlert = false
-                                if let error = scanError {
-                                    completion(.failure(error))
-                                }
-                            }
-                        }
-                    }
-                )
-            }
         }
+    }
+}
+
+private struct ScannerCameraUnavailable: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "video.slash")
+                .font(.largeTitle)
+
+            Text("Camera Unavailable")
+                .font(.headline)
+
+            Text("Cove couldn't start the camera. Close the scanner and try again.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.white)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black)
     }
 }
 

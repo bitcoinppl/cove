@@ -234,7 +234,6 @@ private struct QrCodeScannerContent: View {
                         codeTypes: [.qr],
                         scanMode: .oncePerCode,
                         scanInterval: 0.1,
-                        showAlert: false,
                         completion: handleScan
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

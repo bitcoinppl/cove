@@ -21,7 +21,8 @@
         /// Initialization failed.
         case initError(_ error: Error)
 
-        /// The camera permission is denied
+        /// The app can't use the camera: the user denied access, or Screen Time or a device
+        /// profile restricts it
         case permissionDenied
     }
 

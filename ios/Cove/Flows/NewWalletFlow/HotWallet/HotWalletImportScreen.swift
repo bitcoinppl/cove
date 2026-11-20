@@ -9,12 +9,23 @@ import SwiftUI
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
+/// Alerts the import screen raises itself
+///
+/// Onboarding shows this screen outside the app's main view, which presents the app's own alert
+/// state, so everything the screen reports goes through these
 enum HotWalletImportAlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
-    case scanError(String)
-    case invalidSeedQr
+    case scan(HotWalletImportScanAlert)
     case importError(String)
+}
+
+/// Why a QR or NFC scan couldn't fill in the words
+enum HotWalletImportScanAlert: Equatable {
+    case invalidSeedQr
+    case invalidNfcTag
+    case unsupportedWordCount(Int)
+    case noCameraPermission
 }
 
 enum HotWalletImportSheetState: Equatable {
@@ -116,10 +127,8 @@ struct HotWalletImportScreen: View {
     @State private var alertState: TaggedItem<HotWalletImportAlertState>? = .none
     @State private var sheetState: TaggedItem<HotWalletImportSheetState>? = .none
 
-    // qr code scanning
-    @Environment(\.dismiss) var dismiss
+    /// qr code scanning
     @State private var scanner = QrScanner()
-    @State private var scanError: TaggedString?
 
     // nfc scanning
     @State private var nfcReader: NFCReader = .init()
@@ -182,48 +191,83 @@ struct HotWalletImportScreen: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
-        if case let .failure(error) = result {
-            Log.error("Scan error: \(error.localizedDescription)")
-            dismiss()
+        // the scanner stops camera codes once it starts to close, but a photo from the library
+        // can hold several codes, reported together after the first one closed the sheet
+        guard sheetState != nil else { return }
+
+        switch result {
+        case let .failure(error):
+            handleScanFailure(error)
+        case let .success(scanResult):
+            handleScannedFrame(StringOrData(scanResult.data))
+        }
+    }
+
+    /// The scanner reports a failure once, when the camera can't start; it says so itself unless
+    /// access is denied, which closes its sheet and explains how to allow it
+    private func handleScanFailure(_ error: ScanError) {
+        guard case .permissionDenied = error else {
+            Log.error("camera failed to start: \(error)")
             return
         }
 
-        guard case let .success(scanResult) = result else { return }
-        let qr = StringOrData(scanResult.data)
+        Log.info("camera permission denied")
+        sheetState = .none
+        alertState = .init(.scan(.noCameraPermission))
+    }
 
+    private func handleScannedFrame(_ qr: StringOrData) {
         do {
             switch try scanner.scan(qr: qr) {
             case let .complete(multiFormat, haptic):
                 haptic.trigger()
-                // extract mnemonic words from the result
-                if case let .mnemonic(mnemonic) = multiFormat {
-                    let mnemonicString = mnemonic.words().joined(separator: " ")
-                    if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
-                        scanner.reset()
-
-                        setWords(words)
-
-                        if autoImportScannedWords {
-                            sheetState = .none
-                            importWallet(enteredWords: words)
-                        }
-                    }
-                } else {
-                    // raised on this screen, whose presenter waits for the scanner to close
-                    sheetState = .none
-                    alertState = TaggedItem(.invalidSeedQr)
-                }
                 scanner.reset()
+                handleScannedFormat(multiFormat)
 
             case let .inProgress(_, haptic):
                 // multi-part QR in progress - keep scanning
                 haptic.trigger()
             }
+        } catch let error as MultiQrError {
+            // a frame from another QR, or one the camera misread, leaves the scan going
+            if case .RecoverableFrame = error { return }
+
+            handleUnreadableSeedQr(error)
         } catch {
-            Log.error("Seed QR failed to scan: \(error.localizedDescription)")
-            sheetState = .none
-            scanner.reset()
+            handleUnreadableSeedQr(error)
         }
+    }
+
+    private func handleScannedFormat(_ multiFormat: MultiFormat) {
+        guard case let .mnemonic(mnemonic) = multiFormat else {
+            sheetState = .none
+            alertState = .init(.scan(.invalidSeedQr))
+            return
+        }
+
+        let words: [[String]]
+        do {
+            words = try groupedPlainWordsOf(
+                mnemonic: mnemonic.words().joined(separator: " "),
+                groups: UInt8(groupsOf)
+            )
+        } catch {
+            handleUnreadableSeedQr(error)
+            return
+        }
+
+        guard setWords(words) else { return }
+
+        if autoImportScannedWords {
+            importWallet(enteredWords: words)
+        }
+    }
+
+    private func handleUnreadableSeedQr(_ error: Error) {
+        Log.error("Seed QR failed to scan: \(error.localizedDescription)")
+        scanner.reset()
+        sheetState = .none
+        alertState = .init(.scan(.invalidSeedQr))
     }
 
     func importWallet(enteredWords wordsToImport: [[String]]? = nil) {
@@ -322,12 +366,16 @@ struct HotWalletImportScreen: View {
                         .font(.subheadline)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Scan NFC Tag")
+                .accessibilityIdentifier("hotWalletImport.scanNfc")
 
                 Button(action: { sheetState = .init(.qrCode) }) {
                     Image(systemName: "qrcode.viewfinder")
                         .font(.subheadline)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Scan QR Code")
+                .accessibilityIdentifier("hotWalletImport.scanQr")
             }
         }
     }
@@ -399,6 +447,10 @@ struct HotWalletImportScreen: View {
     ) {
         guard oldState != nil, newState == nil else { return }
 
+        // a multi-part QR left half scanned would hold the next scan back waiting for its other
+        // parts
+        scanner.reset()
+
         if enteredWords[0][0] == "" {
             focusField = ImportFieldNumber(0)
             return
@@ -449,7 +501,8 @@ struct HotWalletImportScreen: View {
         if let string = new?.string() {
             do {
                 let words = try groupedPlainWordsOf(mnemonic: string, groups: UInt8(groupsOf))
-                return setWords(words)
+                setWords(words)
+                return
             } catch {
                 Log.error("Error NFC word parsing: \(error)")
             }
@@ -460,32 +513,30 @@ struct HotWalletImportScreen: View {
             do {
                 let seedQR = try SeedQr.newFromData(data: data)
                 let words = seedQR.groupedPlainWords(groupsOf: UInt8(groupsOf))
-                return setWords(words)
+                setWords(words)
+                return
             } catch {
                 Log.error("Error NFC word parsing from data: \(error)")
             }
         }
 
         // both failed - show error
-        app.alertState = TaggedItem(.general(
-            title: "Invalid NFC Tag",
-            message: "Please scan a valid seed phrase NFC tag"
-        ))
+        alertState = .init(.scan(.invalidNfcTag))
     }
 
-    func setWords(_ words: [[String]]) {
-        let numberOfWords = words.compactMap(\.count).reduce(0, +)
-        switch numberOfWords {
-        case 12: self.numberOfWords = .twelve
-        case 24: self.numberOfWords = .twentyFour
+    /// Fills the screen with scanned or pasted words, or closes the scanner and says why when
+    /// there are neither 12 nor 24 of them, returning whether the words were taken
+    @discardableResult
+    func setWords(_ words: [[String]]) -> Bool {
+        let wordCount = words.map(\.count).reduce(0, +)
+        switch wordCount {
+        case 12: numberOfWords = .twelve
+        case 24: numberOfWords = .twentyFour
         default:
-            Log.warn("Invalid number of words: \(numberOfWords)")
-            scanError = TaggedString(
-                "Invalid number of words: \(numberOfWords), we only support 12 or 24 words"
-            )
-
+            Log.warn("Invalid number of words: \(wordCount)")
             sheetState = .none
-            return
+            alertState = .init(.scan(.unsupportedWordCount(wordCount)))
+            return false
         }
 
         // reset scanner and nfc reader on successful scan
@@ -496,6 +547,7 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = words.count - 1
+        return true
     }
 
     func handlePasteMnemonic(_ mnemonicString: String) {

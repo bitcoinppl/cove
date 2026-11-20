@@ -58,6 +58,10 @@ suites = ["CoveUITests/NfcScanPrivacyCoverFullLaunchUITests"]
 paths = ["ios/CoveUITests/QrScanCameraPermissionFullLaunchUITests.swift"]
 suites = ["CoveUITests/QrScanCameraPermissionFullLaunchUITests"]
 
+[[rule]]
+paths = ["ios/CoveUITests/HotWalletImportScanFullLaunchUITests.swift"]
+suites = ["CoveUITests/HotWalletImportScanFullLaunchUITests"]
+
 # also compiled into CoveCloudBackupUITests, which runs none of its tests, so its shortest suite
 # checks that target still builds
 [[rule]]
@@ -193,6 +197,7 @@ suites = [
     "CoveUITests/ReceiveTextSizeFullLaunchUITests",
     "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
     "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
+    "CoveUITests/HotWalletImportScanFullLaunchUITests",
     "CoveUITests/BiometricLockFullLaunchUITests",
     "CoveUITests/HardwareSigningFullLaunchUITests",
     "CoveUITests/PublicKeyImportFullLaunchUITests",
