@@ -73,6 +73,15 @@ internal fun WalletSettingsDangerSection(
     }
 }
 
+/**
+ * What the Final Warning says, read each time it shows, so coverage that changes while the earlier
+ * prompts are open still reaches it
+ */
+internal data class WalletDeletionFinalWarning(
+    val message: String,
+    val buttonTitle: String,
+)
+
 internal class WalletDeletionFlow private constructor(
     private val plan: Plan,
     private val stage: Stage,
@@ -85,22 +94,20 @@ internal class WalletDeletionFlow private constructor(
                 Stage.FINAL -> "Final Warning"
             }
 
-    val message: String
-        get() =
-            when (stage) {
-                Stage.FIRST -> plan.firstMessage
-                Stage.SECOND -> "Are you sure you want to delete '${plan.walletName}'?"
-                Stage.FINAL -> plan.finalMessage
-            }
+    fun message(finalWarning: WalletDeletionFinalWarning): String =
+        when (stage) {
+            Stage.FIRST -> plan.firstMessage
+            Stage.SECOND -> "Are you sure you want to delete '${plan.walletName}'?"
+            Stage.FINAL -> finalWarning.message
+        }
 
-    val buttonTitle: String
-        get() =
-            when (stage) {
-                Stage.FINAL -> plan.finalButtonTitle
-                Stage.FIRST,
-                Stage.SECOND,
-                -> "Delete"
-            }
+    fun buttonTitle(finalWarning: WalletDeletionFinalWarning): String =
+        when (stage) {
+            Stage.FINAL -> finalWarning.buttonTitle
+            Stage.FIRST,
+            Stage.SECOND,
+            -> "Delete"
+        }
 
     fun advance(): WalletDeletionFlow? =
         when (stage) {
@@ -125,8 +132,6 @@ internal class WalletDeletionFlow private constructor(
         fun start(
             walletName: String,
             firstMessage: String,
-            finalMessage: String,
-            finalButtonTitle: String,
             requiredConfirmations: UByte,
         ): WalletDeletionFlow =
             WalletDeletionFlow(
@@ -134,8 +139,6 @@ internal class WalletDeletionFlow private constructor(
                     Plan(
                         walletName = walletName,
                         firstMessage = firstMessage,
-                        finalMessage = finalMessage,
-                        finalButtonTitle = finalButtonTitle,
                         requiredConfirmations = requiredConfirmations,
                     ),
                 stage = Stage.FIRST,
@@ -145,8 +148,6 @@ internal class WalletDeletionFlow private constructor(
     private data class Plan(
         val walletName: String,
         val firstMessage: String,
-        val finalMessage: String,
-        val finalButtonTitle: String,
         val requiredConfirmations: UByte,
     )
 
@@ -174,6 +175,7 @@ internal sealed interface WalletDeletionDialog {
 @Composable
 internal fun WalletSettingsDeleteDialog(
     dialog: WalletDeletionDialog?,
+    finalWarning: WalletDeletionFinalWarning,
     onDismiss: () -> Unit,
     onConfirm: (WalletDeletionFlow) -> Unit,
     onRetry: (ShutdownAttemptId) -> Unit,
@@ -185,6 +187,7 @@ internal fun WalletSettingsDeleteDialog(
         is WalletDeletionDialog.Confirmation ->
             WalletDeletionConfirmationDialog(
                 flow = dialog.flow,
+                finalWarning = finalWarning,
                 onDismiss = onDismiss,
                 onConfirm = onConfirm,
             )
@@ -228,16 +231,17 @@ private fun WalletDeletionShutdownBlockedDialog(
 @Composable
 private fun WalletDeletionConfirmationDialog(
     flow: WalletDeletionFlow,
+    finalWarning: WalletDeletionFinalWarning,
     onDismiss: () -> Unit,
     onConfirm: (WalletDeletionFlow) -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(flow.title) },
-        text = { Text(flow.message) },
+        text = { Text(flow.message(finalWarning)) },
         confirmButton = {
             TextButton(onClick = { onConfirm(flow) }) {
-                Text(flow.buttonTitle, color = MaterialTheme.colorScheme.error)
+                Text(flow.buttonTitle(finalWarning), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {

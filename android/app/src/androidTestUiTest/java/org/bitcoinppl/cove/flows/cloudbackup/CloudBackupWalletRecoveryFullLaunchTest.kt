@@ -15,6 +15,7 @@ import org.bitcoinppl.cove.test.ManualFullLaunchTest
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.CloudBackupWalletRecovery
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
@@ -33,8 +34,8 @@ import org.junit.runner.RunWith
  *
  * The provider accepts the fresh backup but keeps it unreadable, so its upload stays unconfirmed:
  * the wallet keeps its backup reminder, and deleting it warns that its funds are lost. Once the
- * provider shows the backup and it confirms, the reminder goes away and the warning points to the
- * cloud copy
+ * provider shows the backup and it confirms, even while a delete prompt is open, the warning
+ * points to the cloud copy and the reminder goes away
  */
 @ManualFullLaunchTest
 @LargeTest
@@ -79,10 +80,14 @@ class CloudBackupWalletRecoveryFullLaunchTest {
         )
         assertFinalDeleteWarning(wallet.id, message = NOT_BACKED_UP_MESSAGE, button = DELETE_FOREVER)
 
-        ScriptedCloudStorageAccess.releaseVisibility()
-        CloudBackupManager.getInstance().resumePendingCloudUploadVerification()
-        robot.waitUntil("the backup never confirmed", timeoutMs = 60_000L) {
-            !CloudBackupManager.getInstance().hasPendingUploadVerification
+        // the backup confirms while the first delete prompt is open, and the warning it leads to
+        // must say so rather than what was true when the prompt opened
+        assertFinalDeleteWarning(wallet.id, message = CLOUD_RECOVERY_MESSAGE, button = DELETE) {
+            ScriptedCloudStorageAccess.releaseVisibility()
+            CloudBackupManager.getInstance().resumePendingCloudUploadVerification()
+            robot.waitUntil("the backup never confirmed", timeoutMs = 60_000L) {
+                CloudBackupManager.getInstance().recovery.wallet(wallet.id) == CloudBackupWalletRecovery.CONFIRMED
+            }
         }
 
         openWallet(wallet.id)
@@ -90,7 +95,6 @@ class CloudBackupWalletRecoveryFullLaunchTest {
             "a confirmed backup protects the wallet, so the reminder must go",
             device.wait(Until.gone(By.text(BACKUP_REMINDER)), 10_000L),
         )
-        assertFinalDeleteWarning(wallet.id, message = CLOUD_RECOVERY_MESSAGE, button = DELETE)
     }
 
     // the uploads are accepted but stay unreadable until the test releases them, so onboarding
@@ -136,11 +140,13 @@ class CloudBackupWalletRecoveryFullLaunchTest {
     }
 
     // a new hot wallet whose words were never verified reaches the Final Warning, the only dialog
-    // that says whether Cloud Backup can bring it back
+    // that says whether Cloud Backup can bring it back; `whileFirstPromptOpen` runs while the
+    // first prompt shows
     private fun assertFinalDeleteWarning(
         walletId: WalletId,
         message: String,
         button: String,
+        whileFirstPromptOpen: () -> Unit = {},
     ) {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             AppManager.getInstance().resetRoute(Route.Settings(SettingsRoute.Main))
@@ -161,6 +167,8 @@ class CloudBackupWalletRecoveryFullLaunchTest {
 
         for (title in listOf("Are you sure?", "Confirm Deletion")) {
             robot.waitForText(title)
+            if (title == "Are you sure?") whileFirstPromptOpen()
+
             robot.clickText(DELETE)
             assertTrue("$title should close once confirmed", device.wait(Until.gone(By.text(title)), 10_000L))
         }

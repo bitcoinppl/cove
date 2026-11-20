@@ -72,15 +72,22 @@ fun WalletSettingsScreen(
     // since a first upload that never confirmed leaves nothing to recover
     val isBackedUpByCloudBackup =
         metadata?.id?.let(app.cloudBackupManager.recovery::wallet) == CloudBackupWalletRecovery.CONFIRMED
-    val finalDeleteConfirmationMessage =
+    val finalDeleteWarning =
         if (isBackedUpByCloudBackup) {
-            "This wallet will be deleted from this device. You can recover it from " +
-                "the Cloud Backup screen, or permanently delete it from there."
+            WalletDeletionFinalWarning(
+                message =
+                    "This wallet will be deleted from this device. You can recover it from " +
+                        "the Cloud Backup screen, or permanently delete it from there.",
+                buttonTitle = "Delete",
+            )
         } else {
-            "This wallet is not backed up and contains funds. You will lose access to " +
-                "these funds forever."
+            WalletDeletionFinalWarning(
+                message =
+                    "This wallet is not backed up and contains funds. You will lose access to " +
+                        "these funds forever.",
+                buttonTitle = "Delete Forever",
+            )
         }
-    val finalDeleteButtonTitle = if (isBackedUpByCloudBackup) "Delete" else "Delete Forever"
 
     fun deleteWallet(call: WalletDeletionCall) {
         val deletion =
@@ -288,8 +295,6 @@ fun WalletSettingsScreen(
                                 WalletDeletionFlow.start(
                                     walletName = metadata.name,
                                     firstMessage = manager.deletionWarningMessage(),
-                                    finalMessage = finalDeleteConfirmationMessage,
-                                    finalButtonTitle = finalDeleteButtonTitle,
                                     requiredConfirmations = manager.requiredDeletionConfirmations(),
                                 ),
                             )
@@ -330,6 +335,7 @@ fun WalletSettingsScreen(
 
     WalletSettingsDeleteDialog(
         dialog = deletionDialog,
+        finalWarning = finalDeleteWarning,
         onDismiss = { deletionDialog = null },
         onConfirm = { flow ->
             val next = flow.advance()
