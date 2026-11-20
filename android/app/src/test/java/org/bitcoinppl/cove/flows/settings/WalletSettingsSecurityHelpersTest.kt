@@ -1,19 +1,10 @@
 package org.bitcoinppl.cove.flows.settings
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WalletSettingsSecurityHelpersTest {
-    @Test
-    fun exportRequiresCredentialSuccessAfterTheRequest() {
-        assertFalse(hasFreshMainCredential(currentGeneration = 7, generationAtRequest = 7))
-        assertFalse(hasFreshMainCredential(currentGeneration = 6, generationAtRequest = 7))
-        assertTrue(hasFreshMainCredential(currentGeneration = 8, generationAtRequest = 7))
-    }
-
     @Test
     fun deletionFlowStopsAfterTheRequiredConfirmationCount() {
         assertNull(deletionFlow(requiredConfirmations = 1u).advance())

@@ -41,8 +41,6 @@ import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
-import org.bitcoinppl.cove_core.AppLockReason
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
@@ -61,6 +59,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -150,25 +149,17 @@ class PrivateKeyExportFullLaunchTest {
         device.clickText("Done")
         assertTrue(device.wait(Until.gone(By.text(REVEAL_TITLE)), 5_000L))
 
-        // a wrong PIN keeps the prompt up and the decoy PIN drops the request, so neither starts a send
+        // the PIN Reveal took doesn't carry over, and neither a wrong PIN nor the decoy PIN starts a send
         openWalletSettings()
         requestExport(KEY_TELEPORT_ACTION)
-        device.enterPin(WRONG_PIN)
-        device.assertNoKeyTeleportSendFor(REVEAL_SETTLE_MS)
-        device.enterPin(DECOY_PIN)
-        waitUntil("decoy PIN should switch to decoy mode") { AuthManager.getInstance().isInDecoyMode() }
-        device.assertNoKeyTeleportSendFor(REVEAL_SETTLE_MS)
-
-        onMain { AuthManager.getInstance().lock(AppLockReason.REAUTHENTICATION) }
-        device.waitForLockScreen()
-        device.enterPin(MAIN_PIN)
-        waitUntil("main PIN should leave decoy mode") { !AuthManager.getInstance().isInDecoyMode() }
-        waitForAppOnWallet()
-        device.assertNoKeyTeleportSendFor(REVEAL_SETTLE_MS)
+        for (pin in listOf(WRONG_PIN, DECOY_PIN)) {
+            device.enterPin(pin)
+            device.assertNoKeyTeleportSendFor(REVEAL_SETTLE_MS)
+            assertFalse("PIN $pin switched to decoy mode", AuthManager.getInstance().isInDecoyMode())
+            assertNotNull("PIN $pin closed the prompt", device.findObject(By.text(LOCK_TITLE)))
+        }
 
         // the main PIN starts a send of this wallet, and the other phone receives the revealed key
-        openWalletSettings()
-        requestExport(KEY_TELEPORT_ACTION)
         device.enterPin(MAIN_PIN)
         device.waitForText(SEND_TITLE)
         val sender = onMainValue { AppManager.getInstance().getKeyTeleportManager() }
@@ -322,28 +313,18 @@ class PrivateKeyExportFullLaunchTest {
         restorePrivateKeyWallet()
         setPins()
 
-        // leaving the app at the prompt cancels the request, so a later unlock reveals nothing
+        // leaving the app at the prompt cancels the request, so a later unlock reveals nothing and
+        // doesn't bring the prompt back
         openWalletSettings()
         requestReveal()
         device.pressHome()
+        waitUntil("the app lock should engage in the background") { AuthManager.getInstance().isLocked }
+        Thread.sleep(GRACE_PERIOD_MS)
         launchFullApp(resetData = false)
         device.waitForLockScreen()
         device.enterPin(MAIN_PIN)
         device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
-
-        // the decoy PIN opens the decoy wallets and drops the request
-        openWalletSettings()
-        requestReveal()
-        device.enterPin(DECOY_PIN)
-        waitUntil("decoy PIN should switch to decoy mode") { AuthManager.getInstance().isInDecoyMode() }
-        device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
-
-        onMain { AuthManager.getInstance().lock(AppLockReason.REAUTHENTICATION) }
-        device.waitForLockScreen()
-        device.enterPin(MAIN_PIN)
-        waitUntil("main PIN should leave decoy mode") { !AuthManager.getInstance().isInDecoyMode() }
-        waitForAppOnWallet()
-        device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
+        assertNull("unlocking should not bring the export prompt back", device.findObject(By.text(LOCK_TITLE)))
 
         // a wrong PIN keeps the prompt up, then the main PIN entered after the request reveals
         openWalletSettings()
@@ -357,6 +338,40 @@ class PrivateKeyExportFullLaunchTest {
         device.waitForText(FIXTURE_XPRV)
         device.clickText("Done")
         assertTrue(device.wait(Until.gone(By.text(REVEAL_TITLE)), 5_000L))
+    }
+
+    /**
+     * Only the main PIN answers the export prompt, as on iOS: the decoy and wipe data PINs are just
+     * wrong PINs there, so neither switches to the decoy wallets nor wipes, and Cancel closes it
+     */
+    @Test
+    fun exportPromptRefusesTrickPinsAndCancels() {
+        restorePrivateKeyWallet()
+        setPins()
+        val auth = AuthManager.getInstance()
+        onMain { auth.setWipeDataPin(WIPE_DATA_PIN) }
+        waitUntil("the wipe data PIN should be saved") { auth.isWipeDataPinEnabled }
+
+        openWalletSettings()
+        requestReveal()
+        for (pin in listOf(DECOY_PIN, WIPE_DATA_PIN)) {
+            device.enterPin(pin)
+            device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
+            assertFalse("PIN $pin switched to decoy mode", auth.isInDecoyMode())
+            assertEquals("PIN $pin wiped the wallet", walletId, walletIdOrNull())
+            assertNotNull("PIN $pin closed the prompt", device.findObject(By.text(LOCK_TITLE)))
+        }
+
+        device.clickText("Cancel")
+        assertTrue("Cancel left the prompt up", device.wait(Until.gone(By.text(LOCK_TITLE)), 5_000L))
+        assertFalse("Cancel left the app locked", auth.isLocked)
+        device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
+
+        // the prompt still opens for the main PIN afterwards
+        requestReveal()
+        device.enterPin(MAIN_PIN)
+        device.waitForText(REVEAL_TITLE)
+        device.waitForText(FIXTURE_XPRV)
     }
 
     /**
@@ -424,7 +439,7 @@ class PrivateKeyExportFullLaunchTest {
 
     private fun setMainPin() {
         val auth = AuthManager.getInstance()
-        onMain { auth.dispatch(AuthManagerAction.SetPin(MAIN_PIN)) }
+        onMain { auth.setPin(MAIN_PIN) }
         waitUntil("the main PIN should enable the app lock") { auth.isAuthEnabled }
     }
 
@@ -761,6 +776,7 @@ class PrivateKeyExportFullLaunchTest {
         const val MAIN_PIN = "135791"
         const val DECOY_PIN = "246802"
         const val WRONG_PIN = "999999"
+        const val WIPE_DATA_PIN = "112233"
         const val EXPORT_ITEM = "Export private key"
         const val LOCK_TITLE = "Enter Cove PIN"
         const val REVEAL_TITLE = "Extended Private Key"

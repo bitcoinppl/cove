@@ -25,7 +25,6 @@ import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AppLockReason
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,7 +46,7 @@ class LockAwareActivityResultTest {
     @Before
     fun enablePin() {
         bootstrapRustRuntimeForUiTest()
-        instrumentation.runOnMainSync { Auth.dispatch(AuthManagerAction.SetPin(PIN)) }
+        instrumentation.runOnMainSync { Auth.setPin(PIN) }
         compose.waitUntil(timeoutMillis = 5_000) { Auth.isAuthEnabled }
     }
 

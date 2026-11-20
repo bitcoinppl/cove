@@ -60,11 +60,21 @@ alone.
 The screen has a body (`Disabled`, `Enabling`, `Restoring`, `Configured`,
 `FinishingDisable`, `DriveAccountSwitch`, `PendingEnableRecovery`, `LoadFailed`
 or `Corrupted`), the Settings row, the persisted heal notice, the last outcome,
-the root prompt and the global actions. A configured body lists its sections in
-the order they are drawn, and Turn Off is in every one. Listed cloud rows carry
-their own row actions. An extra copy offers Delete only while the wallet it
-copies has its own current backup; until then it offers Back up first and Check
-Again.
+the root prompt and the global actions. The Cloud Backup prompts and
+verification results the app's root raises show in main mode only: in decoy
+mode the screen carries no root prompt, and the result of a verification the
+root prompt started stays hidden until main mode. Entering decoy
+mode hides both in the published screen at once, before the unlock lets the
+root present it, and then publishes the screen again. The root hosts on both
+platforms also check the saved mode before they present a prompt, a result
+alert or the success floater, which covers a screen sent before the switch
+that the platform hasn't applied yet. A verification result also never shows
+over the lock screen, before the PIN decides which mode opens; a result
+dropped there still shows in the Cloud Backup settings. A
+configured body lists its sections in the order they are drawn, and Turn Off is
+in every one. Listed cloud rows carry their own row actions. An extra copy
+offers Delete only while the wallet it copies has its own current backup; until
+then it offers Back up first and Check Again.
 
 Every delete Rust offers carries a consent: each row's Delete carries a
 `CloudBackupRowDeleteConsent`, and the unreadable-backups control carries a

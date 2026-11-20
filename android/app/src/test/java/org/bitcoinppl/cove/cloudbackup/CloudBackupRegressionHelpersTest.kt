@@ -281,6 +281,20 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
+    fun verificationFeedbackShowsOnlyUnlockedInMainMode() {
+        val unlocked = CloudBackupPresentationContext(isUnlocked = true)
+
+        assertTrue(unlocked.showsVerificationFeedback())
+        assertFalse(unlocked.copy(isUnlocked = false).showsVerificationFeedback())
+        assertFalse(unlocked.copy(isInDecoyMode = true).showsVerificationFeedback())
+        assertTrue(
+            unlocked
+                .copy(isUnlocked = false, presentationPolicy = CloudBackupPresentationPolicy.ONBOARDING)
+                .showsVerificationFeedback(),
+        )
+    }
+
+    @Test
     fun decoyModeBlocksAllCloudBackupRootPresentations() {
         val context =
             CloudBackupPresentationContext(
@@ -293,6 +307,7 @@ class CloudBackupRegressionHelpersTest {
         val presentations =
             listOf(
                 CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext(), null),
+                CloudBackupRootPresentation.BackupFilesUnavailable(manualEnableContext()),
                 CloudBackupRootPresentation.PasskeyChoice(
                     CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null),
                 ),

@@ -39,6 +39,8 @@ private enum MainSettingsSheetFactory {
             removeAllTrickPins(context: context)
         case .changePin:
             changePin(context: context)
+        case let .confirmDecoyPin(action):
+            confirmDecoyPin(action, context: context)
         case .disableBiometric:
             disableBiometric(context: context)
         case .enableBiometric:
@@ -86,21 +88,13 @@ private enum MainSettingsSheetFactory {
     private static func removePin(context: MainSettingsPresentationContext) -> AnyView {
         let auth = context.auth
 
+        // rust sends decoy mode to confirmDecoyPin instead, so only the app PIN opens this
         return AnyView(NumberPadPinView(
             title: "Enter Current PIN",
-            isPinCorrect: { pin in
-                if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
-                return auth.checkPin(pin)
-            },
+            isPinCorrect: auth.checkPin,
             showPin: false,
             backAction: context.dismissSheet,
             onUnlock: { _ in
-                if auth.isInDecoyMode() {
-                    context.dismissSheet()
-                    context.isPinEnabled.wrappedValue = false
-                    return
-                }
-
                 auth.dispatch(action: .disablePin)
                 auth.dispatch(action: .disableWipeDataPin)
                 context.dismissSheet()
@@ -120,7 +114,6 @@ private enum MainSettingsSheetFactory {
             showPin: false,
             backAction: context.dismissSheet,
             onUnlock: { _ in
-                if auth.isInDecoyMode() { return }
                 auth.dispatch(action: .disableWipeDataPin)
                 context.setSheet(nextSheet)
             }
@@ -178,17 +171,24 @@ private enum MainSettingsSheetFactory {
                     return
                 }
 
-                context.dismissSheet()
-                if auth.checkWipeDataPin(pin) {
-                    context.presentAlert(
-                        .extraSetPinError(
-                            "Can't update PIN because its the same as your wipe data PIN"
-                        )
-                    )
-                    return
-                }
-
+                // rust refuses a PIN equal to a trick PIN, and setPin shows why
                 context.setPin(pin)
+            }
+        ))
+    }
+
+    private static func confirmDecoyPin(
+        _ action: SecuritySettingsAction,
+        context: MainSettingsPresentationContext
+    ) -> AnyView {
+        AnyView(NumberPadPinView(
+            title: "Enter Current PIN",
+            isPinCorrect: context.auth.checkDecoyPin,
+            showPin: false,
+            backAction: context.dismissSheet,
+            onUnlock: { _ in
+                context.dismissSheet()
+                context.applyDecoyModeLocalUpdate(action)
             }
         ))
     }
@@ -322,11 +322,9 @@ private struct MainSettingsEnableAuthSheet: View {
         guard !context.auth.isInDecoyMode() else { return }
 
         context.auth.dispatch(action: .enableBiometric)
-        if !pin.isEmpty {
-            context.auth.dispatch(action: .setPin(pin))
-        }
+        guard !pin.isEmpty else { return context.dismissSheet() }
 
-        context.dismissSheet()
+        context.setPin(pin)
     }
 }
 

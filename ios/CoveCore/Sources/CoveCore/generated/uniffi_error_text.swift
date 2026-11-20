@@ -110,6 +110,8 @@ extension MultiFormatError: CustomStringConvertible {}
 
 extension MultiQrError: CustomStringConvertible {}
 
+extension NewPinError: CustomStringConvertible {}
+
 extension NfcMessageError: CustomStringConvertible {}
 
 extension NfcReaderError: CustomStringConvertible {}

@@ -47,6 +47,55 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         )
     }
 
+    func testVerificationFeedbackShowsOnlyUnlockedInMainMode() {
+        let unlocked = CloudBackupPresentationContext(isUnlocked: true)
+        XCTAssertTrue(unlocked.showsVerificationFeedback)
+
+        var locked = unlocked
+        locked.isUnlocked = false
+        XCTAssertFalse(locked.showsVerificationFeedback, "feedback drew over the lock screen")
+
+        var decoy = unlocked
+        decoy.isInDecoyMode = true
+        XCTAssertFalse(decoy.showsVerificationFeedback, "feedback showed in decoy mode")
+
+        locked.presentationPolicy = .onboarding
+        XCTAssertTrue(locked.showsVerificationFeedback, "onboarding has no app lock to wait for")
+    }
+
+    func testDecoyModeBlocksAllCloudBackupRootPresentations() {
+        var context = presentableContext(presentationPolicy: .requiresUnlockedAuth)
+        context.isInDecoyMode = true
+
+        let presentations: [CloudBackupRootPresentation] = [
+            .existingBackupFound(cloudBackupEnableContext(), nil),
+            .backupFilesUnavailable(cloudBackupEnableContext()),
+            .passkeyChoice(.enable(cloudBackupEnableContext(), nil)),
+            .missingPasskeyReminder,
+            .verificationPrompt,
+        ]
+
+        for presentation in presentations {
+            XCTAssertFalse(
+                isCloudBackupPresentationPresentable(
+                    presentation: presentation,
+                    context: context,
+                    hasBlockers: false
+                ),
+                "decoy mode presented \(presentation)"
+            )
+        }
+
+        context.isInDecoyMode = false
+        XCTAssertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation: .existingBackupFound(cloudBackupEnableContext(), nil),
+                context: context,
+                hasBlockers: false
+            )
+        )
+    }
+
     func testNormalEnableOffersStartNewBackup() {
         let presentation = CloudBackupPasskeyChoicePresentation(
             intent: .enable(cloudBackupEnableContext(), nil)

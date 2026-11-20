@@ -207,6 +207,8 @@ struct LockView<Content: View>: View {
     }
 }
 
+/// Asks for the main credential before a secret export, which only the app PIN or biometrics
+/// satisfy: the decoy and wipe data PINs are wrong PINs here, and Cancel closes it
 struct MainCredentialVerificationView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -215,10 +217,25 @@ struct MainCredentialVerificationView: View {
 
     @State private var lockState = LockState.locked
 
+    /// read once, so the prompt keeps the credential it opened asking for
+    @State private var lockType: AuthType
+
+    init(auth: AuthManager, onVerified: @escaping () -> Void) {
+        self.auth = auth
+        self.onVerified = onVerified
+
+        // only reached when Rust asks for a credential, so anything else still asks for the PIN
+        let lockType: AuthType = switch auth.secretExportAccess() {
+        case let .mainCredential(lockType): lockType
+        case .trusted: .pin
+        }
+        _lockType = State(initialValue: lockType)
+    }
+
     var body: some View {
         NavigationStack {
             LockView(
-                lockType: auth.type,
+                lockType: lockType,
                 isPinCorrect: auth.checkPin,
                 lockState: $lockState,
                 bioMetricUnlockMessage: "Confirm access to your private key",

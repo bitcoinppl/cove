@@ -61,11 +61,12 @@ paths = [
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/MainCredentialVerificationDialog.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testOnlyAFreshMainPinRevealsThePrivateKey",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::onlyAFreshMainPinRevealsThePrivateKey",
-    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSecurityHelpersTest.kt::exportRequiresCredentialSuccessAfterTheRequest",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::exportPromptRefusesTrickPinsAndCancels",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests restore an xprv-only wallet from the scripted cloud backup, then cancel, enter a wrong pin and the decoy pin before the main pin
@@ -86,6 +87,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/MainCredentialVerificationDialog.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testWithoutAppPinBothExportRoutesWork",
@@ -103,6 +105,7 @@ target = "ui"
 paths = [
     "ios/Cove/Flows/SelectedWalletFlow/SecretWordsScreen.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/MainCredentialVerificationDialog.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift::testSendsWordsWithoutAnAppLock",
@@ -146,6 +149,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/MainCredentialVerificationDialog.kt",
 ]
 coverage = [
     "agent",
@@ -171,6 +175,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/MainCredentialVerificationDialog.kt",
 ]
 coverage = [
     "agent",

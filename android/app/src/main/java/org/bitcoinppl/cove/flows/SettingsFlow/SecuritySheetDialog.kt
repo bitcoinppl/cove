@@ -13,7 +13,6 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthManagerAction
-import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySheetState
 
 @Composable
@@ -70,22 +69,19 @@ internal fun SecuritySheetDialog(
     }
 }
 
+// rust sends decoy mode to DecoyPinConfirmationDialog instead, so only the app PIN opens this
 @Composable
 private fun RemovePinSheet(
     callbacks: SecuritySheetDialogCallbacks,
     auth: AuthManager,
 ) {
     CurrentPinSheet(
-        isPinCorrect = { pin -> auth.checkActivePin(pin) },
+        isPinCorrect = { pin -> auth.checkPin(pin) },
         backAction = callbacks.onDismiss,
         onUnlock = {
-            if (auth.isInDecoyMode()) {
-                callbacks.onDismiss()
-            } else {
-                auth.dispatch(AuthManagerAction.DisablePin)
-                auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                callbacks.onDismiss()
-            }
+            auth.dispatch(AuthManagerAction.DisablePin)
+            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+            callbacks.onDismiss()
         },
     )
 }
@@ -111,12 +107,8 @@ private fun RemoveWipeDataPinSheet(
         isPinCorrect = { pin -> auth.checkPin(pin) },
         backAction = callbacks.onDismiss,
         onUnlock = {
-            if (auth.isInDecoyMode()) {
-                callbacks.onDismiss()
-            } else {
-                auth.dispatch(AuthManagerAction.DisableWipeDataPin)
-                callbacks.onDismiss()
-            }
+            auth.dispatch(AuthManagerAction.DisableWipeDataPin)
+            callbacks.onDismiss()
         },
     )
 }
@@ -182,8 +174,9 @@ private fun RemoveAllTrickPinsSheet(
     )
 }
 
+/** The PIN pad that asks for the PIN in use before a security change */
 @Composable
-private fun CurrentPinSheet(
+internal fun CurrentPinSheet(
     isPinCorrect: (String) -> Boolean,
     backAction: () -> Unit,
     onUnlock: (String) -> Unit,
@@ -206,14 +199,7 @@ private fun completePinChange(
         return
     }
 
-    // use Rust validation for new PIN
-    val error = auth.validateNewPin(pin)
-    if (error != null) {
-        callbacks.onDismiss()
-        callbacks.onAlertState(SecurityAlertState.ExtraSetPinError(error))
-        return
-    }
-
+    // rust refuses a PIN equal to a trick PIN, and onSetPin shows why
     callbacks.pinCallbacks.onSetPin(pin)
 }
 

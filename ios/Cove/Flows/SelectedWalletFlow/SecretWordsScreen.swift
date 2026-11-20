@@ -120,8 +120,9 @@ struct SecretWordsScreen: View {
         case .seedQr:
             showSeedQrSheet = true
         case .keyTeleport:
-            // an unlocked session is trusted to send, so without an app lock there is nothing to verify
-            guard auth.isAuthEnabled else {
+            // an unlocked session is trusted to send, so without an app lock there is nothing to
+            // verify; rust fails closed, so an unreadable lock setting still asks
+            guard case .mainCredential = auth.secretExportAccess() else {
                 app.startKeyTeleportSend(walletId: id)
                 return
             }

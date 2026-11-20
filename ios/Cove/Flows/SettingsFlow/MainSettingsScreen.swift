@@ -39,36 +39,7 @@ struct MainSettingsScreen: View {
                 if auth.isInDecoyMode() { return isFaceIdEnabled }
                 return auth.type == AuthType.both || auth.type == AuthType.biometric
             },
-            set: { enable in
-                if auth.isInDecoyMode() {
-                    isFaceIdEnabled = enable
-                    return
-                }
-
-                // disable
-                if !enable {
-                    sheetState = .init(.disableBiometric)
-                    return
-                }
-
-                // enable
-                if auth.isDecoyPinEnabled, auth.isWipeDataPinEnabled {
-                    alertState = .init(.noteNoFaceIdWhenTrickPins)
-                    return
-                }
-
-                if auth.isWipeDataPinEnabled {
-                    alertState = .init(.noteNoFaceIdWhenWipeMePin)
-                    return
-                }
-
-                if auth.isDecoyPinEnabled {
-                    alertState = .init(.noteNoFaceIdWhenDecoyPin)
-                    return
-                }
-
-                sheetState = .init(.enableBiometric)
-            }
+            set: { enable in handleSecurityAction(.toggleBiometric(enable: enable)) }
         )
     }
 
@@ -78,9 +49,7 @@ struct MainSettingsScreen: View {
                 if auth.isInDecoyMode() { return isPinEnabled }
                 return auth.type == AuthType.both || auth.type == AuthType.pin
             },
-            set: { enable in
-                if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
-            }
+            set: { enable in handleSecurityAction(.togglePin(enable: enable)) }
         )
     }
 
@@ -91,29 +60,10 @@ struct MainSettingsScreen: View {
                 return auth.isWipeDataPinEnabled
             },
             set: { enable in
-                // enable
-                if enable {
-                    if let walletId = app.rust.unverifiedWalletIds().first {
-                        alertState = .init(.unverifiedWallets(walletId))
-
-                        return
-                    }
-
-                    if auth.type == .biometric {
-                        alertState = .init(.notePinRequired)
-                        return
-                    }
-
-                    if auth.type == .both {
-                        alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
-                        return
-                    }
-
-                    alertState = .init(.confirmEnableWipeMePin)
-                }
-
-                // disable
-                if !enable { sheetState = .init(.removeWipeDataPin()) }
+                // rust reads unverified wallets only when enabling, so the other toggles skip
+                // the keychain and database reads behind them
+                let unverifiedWalletIds = enable ? app.rust.unverifiedWalletIds() : []
+                handleSecurityAction(.toggleWipeDataPin(enable: enable), unverifiedWalletIds: unverifiedWalletIds)
             }
         )
     }
@@ -124,32 +74,35 @@ struct MainSettingsScreen: View {
                 if auth.isInDecoyMode() { return isDecoyPinEnabled }
                 return auth.isDecoyPinEnabled
             },
-            set: { enable in
-                // pretend to turn it off if you are in decoy mode
-                if !enable, auth.isInDecoyMode() {
-                    isDecoyPinEnabled = false
-                    return
-                }
-
-                // enable
-                if enable {
-                    if auth.type == .biometric {
-                        alertState = .init(.notePinRequired)
-                        return
-                    }
-
-                    if auth.type == .both {
-                        alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
-                        return
-                    }
-
-                    alertState = .init(.confirmDecoyPin)
-                }
-
-                // disable
-                if !enable { sheetState = .init(.removeDecoyPin()) }
-            }
+            set: { enable in handleSecurityAction(.toggleDecoyPin(enable: enable)) }
         )
+    }
+
+    /// Shows what Rust decides a security setting change needs, so iOS and Android follow the
+    /// same rules, including what the decoy PIN's Settings do
+    private func handleSecurityAction(
+        _ action: SecuritySettingsAction,
+        unverifiedWalletIds: [WalletId] = []
+    ) {
+        switch auth.validateSecurityAction(action, unverifiedWalletIds: unverifiedWalletIds) {
+        case let .proceedToSheet(sheet):
+            sheetState = MainSettingsSheetState(sheet).map { .init($0) }
+        case let .showAlert(alert):
+            alertState = .init(MainSettingsAlertState(alert))
+        case let .decoyPinThenLocalUpdate(action):
+            sheetState = .init(.confirmDecoyPin(action))
+        }
+    }
+
+    /// Decoy mode only pretends to change security settings, so it updates the toggles it shows
+    private func applyDecoyModeLocalUpdate(_ action: SecuritySettingsAction) {
+        switch action {
+        case let .toggleBiometric(enable): isFaceIdEnabled = enable
+        case let .togglePin(enable): isPinEnabled = enable
+        case let .toggleWipeDataPin(enable): isWipeDataPinEnabled = enable
+        case let .toggleDecoyPin(enable): isDecoyPinEnabled = enable
+        case .changePin: break
+        }
     }
 
     var betaToggle: Binding<Bool> {
@@ -207,7 +160,7 @@ struct MainSettingsScreen: View {
             auth: auth,
             sheetState: $sheetState,
             alertState: $alertState,
-            isPinEnabled: $isPinEnabled,
+            applyDecoyModeLocalUpdate: applyDecoyModeLocalUpdate,
             isBetaImportExportEnabled: $isBetaImportExportEnabled,
             canUseBiometrics: canUseBiometrics,
             setPin: setPin,
@@ -228,7 +181,7 @@ struct MainSettingsScreen: View {
             shouldShowBetaToggleSection: shouldShowBetaToggleSection,
             betaToggle: betaToggle,
             betaImportExportToggle: betaImportExportToggle,
-            changePin: { sheetState = .init(.changePin) },
+            changePin: { handleSecurityAction(.changePin) },
             exportAllBackups: exportAllBackups,
             importAllBackups: { sheetState = .init(.backupImport) },
             verifyBackup: { sheetState = .init(.backupVerify) },
@@ -261,12 +214,15 @@ struct MainSettingsScreen: View {
     // MARK: Setter functions
 
     func setPin(_ pin: String) {
+        sheetState = .none
         if auth.isInDecoyMode() {
             isPinEnabled = true
             return
         }
-        auth.dispatch(action: .setPin(pin))
-        sheetState = .none
+
+        do { try auth.setPin(pin) } catch {
+            alertState = .init(.extraSetPinError(error.localizedDescription))
+        }
     }
 
     func setWipeDataPin(_ pin: String) {
@@ -277,8 +233,7 @@ struct MainSettingsScreen: View {
         }
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
-            let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            alertState = .init(.extraSetPinError(error.localizedDescription))
         }
     }
 
@@ -290,8 +245,7 @@ struct MainSettingsScreen: View {
         }
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
-            let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            alertState = .init(.extraSetPinError(error.localizedDescription))
         }
     }
 }

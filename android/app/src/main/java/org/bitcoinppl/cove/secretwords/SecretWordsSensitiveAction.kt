@@ -24,7 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,13 +45,14 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.flows.settings.hasFreshMainCredential
 import org.bitcoinppl.cove.views.ColumnMajorGrid
+import org.bitcoinppl.cove.views.MainCredentialVerificationDialog
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.AppAlertState
-import org.bitcoinppl.cove_core.AppLockReason
+import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.SecretExportAccess
 import org.bitcoinppl.cove_core.types.WalletId
 
 internal enum class SecretWordsSensitiveAction(
@@ -87,22 +88,43 @@ internal enum class SecretWordsSensitiveAction(
 }
 
 /**
- * Build the KeyTeleport send request for this wallet's secret words.
+ * The KeyTeleport send of this wallet's secret words
  *
- * With an app lock set, the send is held until the main credential is entered again, so neither a
- * decoy session nor an unlock that happened before the request can start a transfer. Without one,
- * the unlocked session is trusted and the send starts at once
+ * With an app lock set, the send waits on the main credential, asked for by
+ * [KeyTeleportSendCredentialPrompt], so neither a decoy or wipe data PIN nor an unlock that
+ * happened before the request can start a transfer. Without one, the unlocked session is trusted
+ * and the send starts at once
  */
-@Composable
-internal fun rememberKeyTeleportSendRequest(
-    app: AppManager,
-    auth: AuthManager,
-    walletId: WalletId,
-): () -> Unit {
-    var pendingGeneration by remember(walletId) { mutableStateOf<Long?>(null) }
-    val lifecycleOwner = LocalLifecycleOwner.current
+@Stable
+internal class KeyTeleportSendRequest(
+    private val app: AppManager,
+    private val auth: AuthManager,
+    private val walletId: WalletId,
+) {
+    /** The credential the prompt asks for while a send waits on it */
+    var awaitingCredential by mutableStateOf<AuthType?>(null)
+        private set
 
-    val startSend = {
+    fun request() {
+        // rust fails closed, so an unreadable lock setting still asks
+        when (val access = auth.secretExportAccess()) {
+            SecretExportAccess.Trusted -> startSend()
+            is SecretExportAccess.MainCredential -> awaitingCredential = access.lockType
+        }
+    }
+
+    fun verified() {
+        if (awaitingCredential == null) return
+
+        awaitingCredential = null
+        startSend()
+    }
+
+    fun cancel() {
+        awaitingCredential = null
+    }
+
+    private fun startSend() {
         if (!app.startKeyTeleportSend(walletId)) {
             app.alertState =
                 TaggedItem(
@@ -113,41 +135,49 @@ internal fun rememberKeyTeleportSendRequest(
                 )
         }
     }
+}
 
-    LaunchedEffect(auth.mainCredentialGeneration) {
-        val requestedAt = pendingGeneration ?: return@LaunchedEffect
-        if (!hasFreshMainCredential(auth.mainCredentialGeneration, requestedAt)) return@LaunchedEffect
+/**
+ * Remember the KeyTeleport send request for this wallet's secret words, dropping a send that
+ * waits on the credential once the screen leaves the foreground
+ */
+@Composable
+internal fun rememberKeyTeleportSendRequest(
+    app: AppManager,
+    auth: AuthManager,
+    walletId: WalletId,
+): KeyTeleportSendRequest {
+    val request = remember(app, auth, walletId) { KeyTeleportSendRequest(app, auth, walletId) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-        pendingGeneration = null
-        startSend()
-    }
-
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, request) {
         val observer =
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                    pendingGeneration = null
+                    request.cancel()
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            pendingGeneration = null
+            request.cancel()
         }
     }
 
-    return remember(app, auth, walletId) {
-        {
-            // an unlocked session is trusted to send, so without an app lock there is nothing to verify
-            if (!auth.isAuthEnabled) {
-                startSend()
-            } else {
-                pendingGeneration = auth.mainCredentialGeneration
-                auth.lock(AppLockReason.REAUTHENTICATION)
-            }
-        }
-    }
+    return request
+}
+
+/** Asks for the main credential while [request] waits on it */
+@Composable
+internal fun KeyTeleportSendCredentialPrompt(request: KeyTeleportSendRequest) {
+    val lockType = request.awaitingCredential ?: return
+
+    MainCredentialVerificationDialog(
+        lockType = lockType,
+        onVerified = request::verified,
+        onCancel = request::cancel,
+    )
 }
 
 @Composable

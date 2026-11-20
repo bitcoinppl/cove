@@ -5,7 +5,7 @@ struct MainSettingsPresentationContext {
     let auth: AuthManager
     let sheetState: Binding<TaggedItem<MainSettingsSheetState>?>
     let alertState: Binding<TaggedItem<MainSettingsAlertState>?>
-    let isPinEnabled: Binding<Bool>
+    let applyDecoyModeLocalUpdate: (SecuritySettingsAction) -> Void
     let isBetaImportExportEnabled: Binding<Bool>
     let canUseBiometrics: () -> Bool
     let setPin: (String) -> Void

@@ -27,7 +27,6 @@ import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -71,7 +70,7 @@ class KeyTeleportTypedInputBackgroundTest {
         assumeTrue("the test wallet already exists on this device", imported != null)
         walletId = requireNotNull(imported).id
 
-        Auth.dispatch(AuthManagerAction.SetPin(TEST_PIN))
+        Auth.setPin(TEST_PIN)
         awaitOnMain("the PIN to be set") { (Auth.type == AuthType.PIN).takeIf { it } }
     }
 

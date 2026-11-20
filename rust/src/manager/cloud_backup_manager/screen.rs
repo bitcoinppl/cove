@@ -55,7 +55,9 @@ pub(crate) use self::types::{
 };
 use cove_cspp::backup_data::PasskeyProviderHint;
 
+use crate::database::Database;
 use crate::database::cloud_backup::PersistedHealNotice;
+use crate::wallet::metadata::WalletMode;
 
 use super::actors::supervisor::Runtime;
 use super::actors::write::ConfigGeneration;
@@ -88,6 +90,8 @@ pub(crate) struct ScreenInputs {
     /// Where this device's passkey was created, read from the keychain only while the screen
     /// draws something from it
     pub(crate) provider_hint: Option<PasskeyProviderHint>,
+    /// Whether the app shows the main or the decoy wallets; root prompts show in main mode only
+    pub(crate) wallet_mode: WalletMode,
 }
 
 /// What the platform was last sent: the screen, and whether the owner rested off
@@ -145,6 +149,38 @@ impl CloudBackupScreen {
             actions: CloudBackupActions::default(),
         }
     }
+
+    /// Hides what the app's root would raise from this screen: its root prompt, and the
+    /// result of a verification that prompt started
+    ///
+    /// The decoy PIN must open a Cove that gives no hint of the main wallets' Cloud Backup, so
+    /// decoy mode publishes the screen this way
+    pub(crate) fn hide_root_presentations(&mut self) {
+        use self::types::CloudBackupSection;
+        use super::CloudBackupVerificationPresentation as Presentation;
+        use super::CloudBackupVerificationSource::RootPrompt;
+
+        self.root_prompt = super::CloudBackupRootPrompt::None;
+
+        let CloudBackupScreenBody::Configured(configured) = &mut self.body else { return };
+        for section in &mut configured.sections {
+            let CloudBackupSection::Verification(verification) = section else { continue };
+            let presentation = &mut verification.view.presentation;
+            let source = match *presentation {
+                Presentation::Hidden { .. } => continue,
+                Presentation::NeedsDecision { source, .. }
+                | Presentation::ManualVerifying { source }
+                | Presentation::BackgroundConfirming(source)
+                | Presentation::BackgroundBlockedOnAuthorization(source)
+                | Presentation::Completed { source }
+                | Presentation::Failed { source, .. } => source,
+            };
+
+            if source == RootPrompt {
+                *presentation = Presentation::Hidden { source: Some(RootPrompt) };
+            }
+        }
+    }
 }
 
 impl RustCloudBackupManager {
@@ -166,6 +202,27 @@ impl RustCloudBackupManager {
         send!(self.supervisor.publish_screen());
     }
 
+    /// Republishes the screen for a switch between main and decoy mode
+    ///
+    /// Entering decoy mode hides the root presentations in the published screen at once, before
+    /// the unlock that entered it lets the app's root present the last main-mode screen; the
+    /// supervisor's projection hides the same ones, so its publish that follows agrees
+    pub(crate) fn wallet_mode_changed(&self, wallet_mode: WalletMode) {
+        if wallet_mode == WalletMode::Decoy {
+            let mut published = self.published_screen.screen.lock();
+            let mut next = published.screen.screen.clone();
+            next.hide_root_presentations();
+
+            if let Some(delta) = CloudBackupScreenDelta::between(&published.screen, &next) {
+                published.screen =
+                    CloudBackupPublishedScreen { revision: delta.revision, screen: next };
+                self.send(CloudBackupReconcileMessage::Screen(Box::new(delta)));
+            }
+        }
+
+        self.request_screen_publish();
+    }
+
     /// Projects the current state and sends what changed since the last published screen
     ///
     /// Only the supervisor calls this, with its runtime and a reader of its other inputs. The
@@ -176,9 +233,16 @@ impl RustCloudBackupManager {
         self.published_screen.requested.store(false, Ordering::Release);
 
         let inputs = inputs();
-        let next = self.project_screen(runtime, &inputs);
+        let mut next = self.project_screen(runtime, &inputs);
         let rest = Rest::of(&inputs.admission, &next);
         let mut published = self.published_screen.screen.lock();
+
+        // entering decoy mode saves the mode before it takes this lock to hide the root
+        // presentations, so a projection from main-mode inputs read before that never undoes it
+        let is_decoy = Database::global().global_config.wallet_mode() == WalletMode::Decoy;
+        if is_decoy && inputs.wallet_mode != WalletMode::Decoy {
+            next.hide_root_presentations();
+        }
 
         if let Some(delta) = CloudBackupScreenDelta::between(&published.screen, &next) {
             published.screen =
@@ -199,16 +263,7 @@ impl RustCloudBackupManager {
         runtime: &Runtime,
         inputs: &ScreenInputs,
     ) -> CloudBackupScreen {
-        let ScreenInputs { configuration, admission, inventory, notices, provider_hint } = inputs;
-        project::project(
-            runtime,
-            *configuration,
-            admission,
-            &self.state.read(),
-            inventory,
-            notices,
-            provider_hint.as_ref(),
-        )
+        project::project(runtime, &self.state.read(), inputs)
     }
 
     /// Dismisses the persisted heal notice; the commit around it publishes the screen without it

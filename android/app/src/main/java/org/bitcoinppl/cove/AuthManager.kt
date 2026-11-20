@@ -94,9 +94,6 @@ class AuthManager internal constructor(
 
     var isUsingBiometrics by mutableStateOf(false)
 
-    var mainCredentialGeneration by mutableStateOf(0L)
-        private set
-
     /**
      * Counts app lock unlocks made with a PIN, decoy PIN, or biometric credential
      *
@@ -268,7 +265,6 @@ class AuthManager internal constructor(
     internal fun completeMainBiometricAuthentication() {
         if (isInDecoyMode() && !switchToMainMode()) return
 
-        recordMainCredentialAuthentication()
         unlockAuthenticated()
     }
 
@@ -336,7 +332,6 @@ class AuthManager internal constructor(
             return UnlockMode.LOCKED
         }
 
-        recordMainCredentialAuthentication()
         unlockAuthenticated()
         return UnlockMode.MAIN
     }
@@ -421,10 +416,6 @@ class AuthManager internal constructor(
         isUsingBiometrics = false
     }
 
-    private fun recordMainCredentialAuthentication() {
-        mainCredentialGeneration += 1
-    }
-
     /**
      * switch to main mode from decoy mode
      *
@@ -463,8 +454,7 @@ class AuthManager internal constructor(
     }
 
     fun dispatch(action: AuthManagerAction) {
-        // log only the kind: SetPin carries the PIN
-        logDebug("dispatch: ${action::class.simpleName}")
+        logDebug("dispatch: $action")
         withRustOr(Unit) {
             dispatch(action)
         }
@@ -478,9 +468,27 @@ class AuthManager internal constructor(
             validateSecurityAction(action, unverifiedWalletIds)
         }
 
-    fun validateNewPin(pin: String): String? =
-        withRustOr(null) {
-            validateNewPin(pin)
+    /**
+     * Set the app PIN, turning the PIN lock on when it was off
+     *
+     * Rust refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN
+     * first, and throws [AuthManagerException] saying why
+     */
+    fun setPin(pin: String) {
+        withRust {
+            setPin(pin)
+        }
+    }
+
+    /**
+     * What a secret export must ask for before it shows or sends the secret
+     *
+     * Rust reads the saved auth type and fails closed, so an unreadable setting still asks for
+     * the PIN where the cached [type] would read as no lock
+     */
+    fun secretExportAccess(): SecretExportAccess =
+        withRustOr(SecretExportAccess.MainCredential(AuthType.PIN)) {
+            secretExportAccess()
         }
 
     fun setWipeDataPin(pin: String) {

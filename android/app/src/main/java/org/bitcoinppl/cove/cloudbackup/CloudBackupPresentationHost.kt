@@ -149,6 +149,16 @@ internal fun cloudBackupVerificationFeedback(
         else -> null
     }
 
+/**
+ * Whether the result of a verification the root prompt started may show
+ *
+ * It belongs to the main wallets, so it never shows in decoy mode, and never over the lock
+ * screen, before the PIN decides which mode opens. A result it drops still shows in the Cloud
+ * Backup settings
+ */
+internal fun CloudBackupPresentationContext.showsVerificationFeedback(): Boolean =
+    !isInDecoyMode && (isUnlocked || !presentationPolicy.requiresUnlockedAuth)
+
 internal fun isCloudBackupPresentationPresentable(
     presentation: CloudBackupRootPresentation,
     context: CloudBackupPresentationContext,
@@ -447,6 +457,12 @@ fun CloudBackupPresentationHost(
         if (presentation == observedVerificationPresentation) return@LaunchedEffect
 
         observedVerificationPresentation = presentation
+
+        // rust hides these in decoy mode, but one projected before the switch can still arrive,
+        // so the lock and the saved mode are read as they stand now
+        val current = context.copy(isUnlocked = !auth.isLocked, isInDecoyMode = auth.isInDecoyMode())
+        if (!current.showsVerificationFeedback()) return@LaunchedEffect
+
         when (val feedback = cloudBackupVerificationFeedback(presentation)) {
             is CloudBackupVerificationFeedback.SuccessFloater -> {
                 successFloaterText = feedback.text
@@ -477,7 +493,7 @@ fun CloudBackupPresentationHost(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             content()
-            successFloaterText?.let { text ->
+            successFloaterText?.takeIf { context.showsVerificationFeedback() }?.let { text ->
                 CloudBackupSuccessFloater(
                     text = text,
                     modifier =

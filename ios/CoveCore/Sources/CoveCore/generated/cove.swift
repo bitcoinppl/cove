@@ -8086,6 +8086,13 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      */
     func releaseSendConfirmationLock(lock: SendConfirmationLock)  -> Bool
 
+    /**
+     * What a secret export must ask for before it shows or sends the secret
+     *
+     * Fails closed: when the auth type can't be read, the export still asks for the app PIN
+     */
+    func secretExportAccess()  -> SecretExportAccess
+
     func send(message: AuthManagerReconcileMessage)
 
     func setAuthType(authType: AuthType)
@@ -8094,6 +8101,13 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      * Set the decoy pin
      */
     func setDecoyPin(pin: String) throws
+
+    /**
+     * Set the app PIN, turning the PIN lock on when it was off
+     *
+     * Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+     */
+    func setPin(pin: String) throws
 
     /**
      * Set the wipe data pin
@@ -8119,11 +8133,6 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      * Clear every lock when no authentication is set up, returns whether the app is locked
      */
     func unlockIfAuthDisabled()  -> Bool
-
-    /**
-     * Validate a new PIN doesn't conflict with existing PINs
-     */
-    func validateNewPin(newPin: String)  -> String?
 
     /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
@@ -8381,6 +8390,20 @@ open func releaseSendConfirmationLock(lock: SendConfirmationLock) -> Bool  {
 })
 }
 
+    /**
+     * What a secret export must ask for before it shows or sends the secret
+     *
+     * Fails closed: when the auth type can't be read, the export still asks for the app PIN
+     */
+open func secretExportAccess() -> SecretExportAccess  {
+    return try!  FfiConverterTypeSecretExportAccess_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_secret_export_access(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func send(message: AuthManagerReconcileMessage)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustauthmanager_send(
@@ -8405,6 +8428,20 @@ open func setAuthType(authType: AuthType)  {try! rustCall() {
 open func setDecoyPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(pin),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Set the app PIN, turning the PIN lock on when it was off
+     *
+     * Refuses a PIN equal to the decoy or wipe data PIN, since unlocking checks the app PIN first
+     */
+open func setPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_set_pin(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(pin),uniffiCallStatus
     )
@@ -8464,19 +8501,6 @@ open func unlockIfAuthDisabled() -> Bool  {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(
             self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
-    /**
-     * Validate a new PIN doesn't conflict with existing PINs
-     */
-open func validateNewPin(newPin: String) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(newPin),uniffiCallStatus
     )
 })
 }
@@ -23872,8 +23896,6 @@ public enum AuthManagerAction: Equatable, Hashable {
     case enableBiometric
     case disableBiometric
     case disablePin
-    case setPin(String
-    )
     case disableWipeDataPin
     case disableDecoyPin
 
@@ -23906,12 +23928,9 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
 
         case 4: return .disablePin
 
-        case 5: return .setPin(try FfiConverterString.read(from: &buf)
-        )
+        case 5: return .disableWipeDataPin
 
-        case 6: return .disableWipeDataPin
-
-        case 7: return .disableDecoyPin
+        case 6: return .disableDecoyPin
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23938,17 +23957,12 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case let .setPin(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterString.write(v1, into: &buf)
-
-
         case .disableWipeDataPin:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
 
 
         case .disableDecoyPin:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
 
         }
     }
@@ -23979,6 +23993,10 @@ enum AuthManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case WipeDataSet(TrickPinError
     )
     case DecoySet(TrickPinError
+    )
+    case PinSet(NewPinError
+    )
+    case PinSave(AuthError
     )
     case Database(DatabaseError
     )
@@ -24028,7 +24046,13 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
         case 2: return .DecoySet(
             try FfiConverterTypeTrickPinError.read(from: &buf)
             )
-        case 3: return .Database(
+        case 3: return .PinSet(
+            try FfiConverterTypeNewPinError.read(from: &buf)
+            )
+        case 4: return .PinSave(
+            try FfiConverterTypeAuthError.read(from: &buf)
+            )
+        case 5: return .Database(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
 
@@ -24053,8 +24077,18 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
             FfiConverterTypeTrickPinError.write(v1, into: &buf)
 
 
-        case let .Database(v1):
+        case let .PinSet(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeNewPinError.write(v1, into: &buf)
+
+
+        case let .PinSave(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeAuthError.write(v1, into: &buf)
+
+
+        case let .Database(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
 
         }
@@ -38755,6 +38789,102 @@ public func FfiConverterTypeMultiQrError_lower(_ value: MultiQrError) -> RustBuf
 }
 
 
+public
+enum NewPinError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    /**
+     * Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+     * wiping them
+     */
+    case SameAsWipeDataPin
+    /**
+     * Unlocking checks the app PIN first, so this PIN would open the main wallets instead of
+     * the decoy wallets
+     */
+    case SameAsDecoyPin
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_newpinerror_uniffi_trait_display(
+            FfiConverterTypeNewPinError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension NewPinError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNewPinError: FfiConverterRustBuffer {
+    typealias SwiftType = NewPinError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NewPinError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .SameAsWipeDataPin
+        case 2: return .SameAsDecoyPin
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NewPinError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .SameAsWipeDataPin:
+            writeInt(&buf, Int32(1))
+
+
+        case .SameAsDecoyPin:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewPinError_lift(_ buf: RustBuffer) throws -> NewPinError {
+    return try FfiConverterTypeNewPinError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewPinError_lower(_ value: NewPinError) -> RustBuffer {
+    return FfiConverterTypeNewPinError.lower(value)
+}
+
+
 
 public enum NewWalletRoute: Equatable, Hashable {
 
@@ -41235,6 +41365,86 @@ public func FfiConverterTypeScannerResponse_lower(_ value: ScannerResponse) -> R
 
 
 /**
+ * What a secret export, such as revealing a private key or sending one with KeyTeleport, must
+ * ask for before it shows or sends the secret
+ */
+
+public enum SecretExportAccess: Equatable, Hashable {
+
+    /**
+     * No app lock is set up, so the unlocked session is trusted to export
+     */
+    case trusted
+    /**
+     * The user must present the main credential: the app PIN, or biometrics when `lock_type`
+     * allows them. The decoy and wipe data PINs never satisfy it
+     */
+    case mainCredential(lockType: AuthType
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SecretExportAccess: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretExportAccess: FfiConverterRustBuffer {
+    typealias SwiftType = SecretExportAccess
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretExportAccess {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .trusted
+
+        case 2: return .mainCredential(lockType: try FfiConverterTypeAuthType.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SecretExportAccess, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .trusted:
+            writeInt(&buf, Int32(1))
+
+
+        case let .mainCredential(lockType):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeAuthType.write(lockType, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretExportAccess_lift(_ buf: RustBuffer) throws -> SecretExportAccess {
+    return try FfiConverterTypeSecretExportAccess.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretExportAccess_lower(_ value: SecretExportAccess) -> RustBuffer {
+    return FfiConverterTypeSecretExportAccess.lower(value)
+}
+
+
+
+/**
  * What alert to show for validation messages
  */
 
@@ -41490,9 +41700,11 @@ public enum SecuritySettingsResult: Equatable, Hashable {
     case showAlert(SecurityAlertState
     )
     /**
-     * Decoy mode - just update local UI, don't persist
+     * Decoy mode: ask for the decoy PIN, as main mode asks for its PIN, then apply the action to
+     * the decoy-local settings only, never the saved ones
      */
-    case decoyModeLocalUpdate
+    case decoyPinThenLocalUpdate(SecuritySettingsAction
+    )
 
 
 
@@ -41520,7 +41732,8 @@ public struct FfiConverterTypeSecuritySettingsResult: FfiConverterRustBuffer {
         case 2: return .showAlert(try FfiConverterTypeSecurityAlertState.read(from: &buf)
         )
 
-        case 3: return .decoyModeLocalUpdate
+        case 3: return .decoyPinThenLocalUpdate(try FfiConverterTypeSecuritySettingsAction.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -41540,8 +41753,9 @@ public struct FfiConverterTypeSecuritySettingsResult: FfiConverterRustBuffer {
             FfiConverterTypeSecurityAlertState.write(v1, into: &buf)
 
 
-        case .decoyModeLocalUpdate:
+        case let .decoyPinThenLocalUpdate(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeSecuritySettingsAction.write(v1, into: &buf)
 
         }
     }
@@ -54702,6 +54916,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_secret_export_access() != 37851) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_send() != 57691) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -54709,6 +54926,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 8681) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_set_pin() != 64456) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 47802) {
@@ -54724,9 +54944,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled() != 13357) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176) {

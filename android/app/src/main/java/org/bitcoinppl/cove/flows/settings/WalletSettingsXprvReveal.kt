@@ -17,15 +17,17 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.flows.keyteleport.SecureScreenEffect
 import org.bitcoinppl.cove.flows.keyteleport.copyText
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove_core.AuthType
 
 internal enum class XprvExportAction {
     REVEAL,
     KEY_TELEPORT,
 }
 
-internal data class PendingXprvExport(
+/** An export waiting on the main credential, asked for with [lockType] */
+internal data class XprvCredentialRequest(
     val action: XprvExportAction,
-    val credentialGeneration: Long,
+    val lockType: AuthType,
 )
 
 internal sealed interface XprvExportDialog {
@@ -37,11 +39,6 @@ internal sealed interface XprvExportDialog {
         val message: String,
     ) : XprvExportDialog
 }
-
-internal fun hasFreshMainCredential(
-    currentGeneration: Long,
-    generationAtRequest: Long,
-): Boolean = currentGeneration > generationAtRequest
 
 @Composable
 internal fun WalletSettingsXprvExportDialog(

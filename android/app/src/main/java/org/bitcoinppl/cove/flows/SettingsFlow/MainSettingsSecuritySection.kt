@@ -46,6 +46,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     // sheet and alert state (using Rust enums)
     var sheetState: SecuritySheetState by remember { mutableStateOf(SecuritySheetState.NONE) }
     var alertState: SecurityAlertState? by remember { mutableStateOf(null) }
+    var decoyPinConfirmation: SecuritySettingsAction? by remember { mutableStateOf(null) }
     val decoyModeState = remember { SecurityDecoyModeState() }
 
     // computed toggle values
@@ -55,11 +56,11 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     val isDecoyPinEnabled = decoyModeState.isDecoyPinEnabled(auth)
 
     // handle security result from Rust validation
-    fun handleSecurityResult(result: SecuritySettingsResult, action: SecuritySettingsAction) {
+    fun handleSecurityResult(result: SecuritySettingsResult) {
         when (result) {
             is SecuritySettingsResult.ProceedToSheet -> sheetState = result.v1
             is SecuritySettingsResult.ShowAlert -> alertState = result.v1
-            is SecuritySettingsResult.DecoyModeLocalUpdate -> decoyModeState.apply(action)
+            is SecuritySettingsResult.DecoyPinThenLocalUpdate -> decoyPinConfirmation = result.v1
         }
     }
 
@@ -69,37 +70,41 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     fun onBiometricToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleBiometric(enable)
         val result = auth.validateSecurityAction(action, emptyList())
-        handleSecurityResult(result, action)
+        handleSecurityResult(result)
     }
 
     fun onPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.TogglePin(enable)
         val result = auth.validateSecurityAction(action, emptyList())
-        handleSecurityResult(result, action)
+        handleSecurityResult(result)
     }
 
     fun onWipeDataPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleWipeDataPin(enable)
         val unverifiedWalletIds = if (enable) app.unverifiedWalletIds() else emptyList()
         val result = auth.validateSecurityAction(action, unverifiedWalletIds)
-        handleSecurityResult(result, action)
+        handleSecurityResult(result)
     }
 
     fun onDecoyPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleDecoyPin(enable)
         val result = auth.validateSecurityAction(action, emptyList())
-        handleSecurityResult(result, action)
+        handleSecurityResult(result)
     }
 
     // setter functions
     fun setPin(pin: String) {
+        sheetState = SecuritySheetState.NONE
         if (auth.isInDecoyMode()) {
             decoyModeState.enablePin()
-            sheetState = SecuritySheetState.NONE
             return
         }
-        auth.dispatch(AuthManagerAction.SetPin(pin))
-        sheetState = SecuritySheetState.NONE
+
+        try {
+            auth.setPin(pin)
+        } catch (e: AuthManagerException) {
+            alertState = SecurityAlertState.ExtraSetPinError(e.displayMessage("Unknown error"))
+        }
     }
 
     fun setWipeDataPin(pin: String) {
@@ -251,7 +256,9 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                 MaterialSettingsItem(
                     title = "Change PIN",
                     icon = Icons.Default.LockOpen,
-                    onClick = { sheetState = SecuritySheetState.CHANGE_PIN },
+                    onClick = {
+                        handleSecurityResult(auth.validateSecurityAction(SecuritySettingsAction.ChangePin, emptyList()))
+                    },
                 )
                 itemCount++
 
@@ -299,6 +306,18 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         )
     }
 
+    decoyPinConfirmation?.let { action ->
+        DecoyPinConfirmationDialog(
+            action = action,
+            auth = auth,
+            onConfirmed = { confirmed ->
+                decoyPinConfirmation = null
+                decoyModeState.apply(confirmed)
+            },
+            onDismiss = { decoyPinConfirmation = null },
+        )
+    }
+
     // full-screen sheet dialogs
     // exclude ENABLE_BIOMETRIC (handled by biometric prompt)
     // exclude DISABLE_BIOMETRIC when auth type is BIOMETRIC only (also handled by biometric prompt)
@@ -320,7 +339,6 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                             onSetWipeDataPin = ::setWipeDataPin,
                             onSetDecoyPin = ::setDecoyPin,
                         ),
-                    onAlertState = { alertState = it },
                 ),
             auth = auth,
         )

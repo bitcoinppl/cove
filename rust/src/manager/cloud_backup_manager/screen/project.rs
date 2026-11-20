@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 use cove_device::cloud_storage::CloudSyncHealth;
 
+use super::ScreenInputs;
 use super::controls::drawn_controls;
 use super::notices::Notices;
 use super::types::{
@@ -28,14 +29,13 @@ use super::types::{
     CloudBackupWalletsControl, CloudBackupWalletsSection,
 };
 use crate::manager::cloud_backup_manager::actors::supervisor::Runtime;
-use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, AdmissionBody, AdmissionSnapshot, CoalescibleIntent, ContinuationOwner,
     EnableIntent, Rejection, ReviewExit, SwitchAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::delete_consent::DeleteConsents;
 use crate::manager::cloud_backup_manager::inventory::{
-    InventoryFacts, InventoryProgress, InventoryRows, InventoryView, ListedRecord,
+    InventoryProgress, InventoryRows, InventoryView, ListedRecord,
 };
 use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
 use crate::manager::cloud_backup_manager::{
@@ -47,44 +47,67 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupSettingsRowStatus, CloudBackupStateReducer, CloudBackupSyncState,
     CloudBackupVerificationSource, CloudBackupVerificationState, DeepVerificationFailure,
 };
+use crate::wallet::metadata::WalletMode;
 use cove_cspp::backup_data::PasskeyProviderHint;
 
-/// The screen for the runtime, its admission snapshot, the presentation, the inventory and the
-/// notices as they stand
+/// The screen for the runtime, the presentation and the other inputs as they stand
 ///
 /// Pure: the same inputs give the same screen, so the harness can compare a fresh projection with
 /// what the platform was sent
 ///
-/// Every delete it offers carries the consent minted from `inventory` under `configuration`, so
-/// the confirmation can hand back exactly what the user saw
+/// Every delete it offers carries the consent minted from the inventory under the configuration
+/// in `inputs`, so the confirmation can hand back exactly what the user saw
 pub(crate) fn project(
     runtime: &Runtime,
-    configuration: ConfigGeneration,
-    admission: &AdmissionSnapshot,
     presentation: &CloudBackupStateReducer,
-    inventory: &InventoryFacts,
-    notices: &Notices,
-    provider_hint: Option<&PasskeyProviderHint>,
+    inputs: &ScreenInputs,
 ) -> CloudBackupScreen {
+    let ScreenInputs { configuration, admission, inventory, notices, provider_hint, wallet_mode } =
+        inputs;
+
+    let (configuration, wallet_mode) = (*configuration, *wallet_mode);
+    let provider_hint = provider_hint.as_ref();
     let inventory = inventory.view();
     let consents = inventory.delete_consents(configuration);
     let body = body(runtime, admission, presentation, &inventory, &consents, provider_hint);
     let settings_row = settings_row(&body, notices, presentation);
-    let root_prompt = match &body {
-        CloudBackupScreenBody::Enabling(_) | CloudBackupScreenBody::Configured(_) => {
-            presentation.root_prompt()
-        }
-        _ => CloudBackupRootPrompt::None,
-    };
+    let root_prompt = root_prompt(&body, presentation, wallet_mode);
     let actions = global_actions(&body, &root_prompt, notices, admission, &consents);
 
-    CloudBackupScreen {
+    let mut screen = CloudBackupScreen {
         body,
         settings_row,
         heal_notice: notices.heal,
         last_outcome: notices.last_outcome.clone(),
         root_prompt,
         actions,
+    };
+
+    if wallet_mode == WalletMode::Decoy {
+        screen.hide_root_presentations();
+    }
+
+    screen
+}
+
+/// The prompt to raise over the app, if the body has one to raise
+///
+/// The decoy PIN must open a Cove that gives no hint of the main wallets' Cloud Backup, so decoy
+/// mode never raises one. The Cloud Backup settings that could answer it are hidden there too
+fn root_prompt(
+    body: &CloudBackupScreenBody,
+    presentation: &CloudBackupStateReducer,
+    wallet_mode: WalletMode,
+) -> CloudBackupRootPrompt {
+    if wallet_mode == WalletMode::Decoy {
+        return CloudBackupRootPrompt::None;
+    }
+
+    match body {
+        CloudBackupScreenBody::Enabling(_) | CloudBackupScreenBody::Configured(_) => {
+            presentation.root_prompt()
+        }
+        _ => CloudBackupRootPrompt::None,
     }
 }
 

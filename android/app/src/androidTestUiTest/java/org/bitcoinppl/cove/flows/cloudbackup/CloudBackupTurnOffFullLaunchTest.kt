@@ -33,7 +33,6 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Result
 import org.bitcoinppl.cove_core.AppLockReason
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.CloudBackupActionAvailability
 import org.bitcoinppl.cove_core.CloudBackupDisableScreen
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -357,7 +356,7 @@ class CloudBackupTurnOffFullLaunchTest {
 
     private fun setMainPin() {
         val auth = AuthManager.getInstance()
-        InstrumentationRegistry.getInstrumentation().runOnMainSync { auth.dispatch(AuthManagerAction.SetPin(MAIN_PIN)) }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { auth.setPin(MAIN_PIN) }
         robot.waitUntil("the main PIN should enable the app lock") { auth.isAuthEnabled }
     }
 

@@ -238,8 +238,8 @@
     <ID>FunctionNaming:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview12</ID>
     <ID>FunctionNaming:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview24</ID>
     <ID>FunctionNaming:LockView.kt:@Composable fun LockView</ID>
-    <ID>FunctionNaming:LockView.kt:@Composable private fun BiometricView</ID>
-    <ID>FunctionNaming:LockView.kt:@Composable private fun PermissionsNeeded</ID>
+    <ID>FunctionNaming:LockView.kt:@Composable internal fun BiometricView</ID>
+    <ID>FunctionNaming:LockView.kt:@Composable internal fun PermissionsNeeded</ID>
     <ID>FunctionNaming:MainActivityAppShell.kt:@Composable internal fun MainActivityAppShell</ID>
     <ID>FunctionNaming:MainActivityGlobalAlerts.kt:@Composable internal fun GlobalAlertHandler</ID>
     <ID>FunctionNaming:MainActivityGlobalAlerts.kt:@Composable private fun GlobalAlertDialog</ID>
@@ -569,7 +569,7 @@
     <ID>LongMethod:HotWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun HotWalletSelectScreen</ID>
     <ID>LongMethod:ImportWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ImportWalletScreen</ID>
     <ID>LongMethod:LockView.kt:@Composable fun LockView</ID>
-    <ID>LongMethod:LockView.kt:@Composable private fun BiometricView</ID>
+    <ID>LongMethod:LockView.kt:@Composable internal fun BiometricView</ID>
     <ID>LongMethod:MainActivity.kt:MainActivity$override fun onCreate</ID>
     <ID>LongMethod:MainActivityAppShell.kt:@Composable internal fun MainActivityAppShell</ID>
     <ID>LongMethod:MainActivityGlobalAlerts.kt:@Composable private fun GlobalAlertDialog</ID>

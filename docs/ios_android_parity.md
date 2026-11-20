@@ -389,7 +389,11 @@ Both app lock overlays draw over the screen beneath them, but that screen stays 
 - Keep the secret only in a typed revealed state that records the `AuthManager` `lockGeneration` at load. Treat a changed `lockGeneration` as a relock even when the lock is already open again: the quick-return grace can release a background lock before the screen sees it, and SwiftUI can skip updates in the background. Android also drops the secret when `sensitiveContentGeneration` changes on `onPause`, because the background lock only lands after the process stops
 - Check that access still holds when rendering, not only in the effect or `onChange` that drops the secret. Those run on the next UI update after access ends, which can wait until the app returns to the foreground, so a secret rendered from stored state would sit in the locked tree for at least one frame
 
-Flows that need the main credential specifically, such as private key export and KeyTeleport send from Secret Words, use the main-only paths instead. These are iOS's separate `MainCredentialVerificationView` and Android's `mainCredentialGeneration`. They ask for it only when an app lock is set; without one, the unlocked session is trusted and they go ahead without a prompt.
+Flows that need the main credential specifically, such as private key export and KeyTeleport send from Secret Words, use the main-only prompt instead: iOS's `MainCredentialVerificationView` and Android's `MainCredentialVerificationDialog`. It never locks the app, so only the app PIN or biometrics satisfy it. The decoy and wipe data PINs are wrong PINs there, and Cancel closes it. Whether to ask comes from Rust's `secretExportAccess()`, not the cached auth type. It asks only when an app lock is set; without one, the unlocked session is trusted and the flow goes ahead without a prompt. It fails closed, so an auth type that can't be read still asks for the PIN.
+
+### Security Settings Rules
+
+Rust owns the security settings rules, and both Settings screens show what it decides. `validateSecurityAction` picks the sheet or alert for each toggle and for Change PIN. Decoy mode's Settings must look like main mode's: turning the PIN off, turning Face ID on or off, and turning the wipe data or decoy PIN off each ask for the decoy PIN, where main mode asks for its PIN. Rust returns `DecoyPinThenLocalUpdate` for those, and after the decoy PIN the screen updates only the toggles decoy mode shows, never the saved settings. Turning the PIN on, enabling a trick PIN, and Change PIN take main mode's path, and their sheets also update only decoy mode's toggles. `setPin` refuses a PIN equal to the decoy or wipe data PIN, because unlocking checks the app PIN first, and the refusal's text is the alert's message.
 
 ### System Picker Results and the App Lock
 
@@ -451,6 +455,8 @@ On iOS, leaving the foreground dismisses every presented sheet and alert before 
 | `.confirmationDialog()` | `DropdownMenu` or `AlertDialog` with options | Action sheet equivalent |
 
 On Android, import these from `org.bitcoinppl.cove.views.lockaware`, not Compose, so they hide or close while the app is locked. See [Dialogs, Sheets, and Menus Behind the App Lock](#dialogs-sheets-and-menus-behind-the-app-lock).
+
+An app alert belongs to the unlocked session and the main or decoy mode that raised it. Both `AppManager`s clear `alertState` in `reset()`, which a mode switch runs before the lock opens, so a Cloud Backup result for the main wallets never shows after the decoy PIN unlocks the app. Android draws alerts under its lock window. iOS draws them above its lock overlay, so `presentingSheetAndAlert` holds a new alert while the app is locked and shows it after the unlock. The lock starts locked, so with no auth set up both apps open it before the user can raise an alert: Android when it comes to the foreground, iOS in `CoveMainView` and in onboarding, which draws no lock screen.
 
 ### Focus Management
 

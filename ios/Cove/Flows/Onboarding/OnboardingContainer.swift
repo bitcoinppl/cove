@@ -21,5 +21,9 @@ struct OnboardingContainer: View {
                 }
         }
         .environment(manager.app)
+        // the lock starts locked and onboarding draws no lock screen, so with no auth set up open
+        // it here as the main view does, or alerts and passkey requests would wait behind a lock
+        // that never shows
+        .onAppear { auth.unlockIfAuthDisabled() }
     }
 }

@@ -31,12 +31,22 @@ enum CloudBackupRootPresentation: Equatable {
 struct CloudBackupPresentationContext: Equatable {
     var scenePhase: ScenePhase = .background
     var isUnlocked = false
+    var isInDecoyMode = false
     var isCoverPresented = true
     var appHasAlert = false
     var appHasSheet = false
     var isViewingCloudBackup = false
     var isNavigationSettled = true
     var presentationPolicy = CloudBackupPresentationPolicy.requiresUnlockedAuth
+
+    /// Whether the result of a verification the root prompt started may show
+    ///
+    /// It belongs to the main wallets, so it never shows in decoy mode, and never over the lock
+    /// screen, before the PIN decides which mode opens. A result it drops still shows in the Cloud
+    /// Backup settings
+    var showsVerificationFeedback: Bool {
+        !isInDecoyMode && (isUnlocked || !presentationPolicy.requiresUnlockedAuth)
+    }
 }
 
 enum CloudBackupPresentationBlocker: Hashable {
@@ -66,6 +76,9 @@ func isCloudBackupPresentationPresentable(
     guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
         return false
     }
+    // rust publishes no root prompt in decoy mode, and this covers one sent before the switch
+    // that the app hasn't received the update for yet
+    guard !context.isInDecoyMode else { return false }
     guard !context.isCoverPresented else { return false }
     guard !context.appHasAlert else { return false }
     guard !context.appHasSheet else { return false }
@@ -398,6 +411,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
         CloudBackupPresentationContext(
             scenePhase: scenePhase,
             isUnlocked: auth.lockState == .unlocked,
+            isInDecoyMode: auth.isInDecoyMode(),
             isCoverPresented: isCoverPresented,
             appHasAlert: app.alertState != nil,
             appHasSheet: app.sheetState != nil,
@@ -485,6 +499,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func handleVerificationPresentation(_ presentation: CloudBackupVerificationPresentation) {
+        // rust hides these in decoy mode, but one projected before the switch can still arrive,
+        // and the context reads the lock and the saved mode as they stand now
+        guard presentationContext.showsVerificationFeedback else { return }
         guard let feedback = cloudBackupVerificationFeedback(for: presentation) else { return }
 
         switch feedback {
@@ -499,7 +516,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
         content
             .overlay(alignment: .top) {
                 CloudBackupSuccessFloaterOverlay(
-                    floater: successFloater,
+                    floater: presentationContext.showsVerificationFeedback ? successFloater : nil,
                     reduceMotion: reduceMotion,
                     dismiss: dismissSuccessFloater
                 )
