@@ -4,6 +4,7 @@ use bdk_wallet::KeychainKind;
 use cove_types::{AddressIndex, BlockSizeLast};
 
 use super::*;
+use crate::database::cloud_backup::CloudBlobConfirmedState;
 use crate::manager::cloud_backup_manager::CloudBackupRecoveryCoverage;
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
@@ -243,23 +244,44 @@ fn wallet_recovery(wallet: &WalletMetadata) -> CloudBackupWalletRecovery {
     CloudBackupRecovery::load().wallet(wallet.id.clone())
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn a_backup_another_device_deleted_no_longer_covers_the_wallet() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
+/// A wallet whose backup a refresh read and confirmed, with its namespace and record id
+async fn confirmed_backup(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+) -> (WalletMetadata, String, String) {
+    configure_enabled_cloud_backup(manager, globals, 0);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
     let mut wallet = save_used_hot_wallet();
     wallet.verified = false;
     let record_id = wallet_record_id(wallet.id.as_ref());
 
-    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
-    refresh_detail_from_provider(&manager).await;
+    backup_wallets_for_test(manager, std::slice::from_ref(&wallet)).await.unwrap();
+    refresh_detail_from_provider(manager).await;
     assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Confirmed);
 
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    (wallet, namespace, record_id)
+}
+
+/// Replaces the state of `record_id`'s row, which must exist
+fn rewrite_row_state(
+    record_id: &str,
+    state: impl FnOnce(&PersistedCloudBlobState) -> PersistedCloudBlobState,
+) {
+    let table = &Database::global().cloud_blob_sync_states;
+    let row = table.get(record_id).unwrap().expect("the wallet should have a row");
+    let rewritten = row.with_state(state(&row.state));
+    assert!(table.set_if_current(&row, &rewritten).unwrap());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_backup_another_device_deleted_no_longer_covers_the_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+
     globals.cloud.remove_wallet_backup(&namespace, &record_id);
     refresh_detail_from_provider(&manager).await;
 
@@ -297,6 +319,96 @@ async fn a_wallet_restored_before_restores_recorded_their_backup_is_covered_once
         wallet_recovery(&wallet),
         CloudBackupWalletRecovery::Confirmed,
         "the provider holds this exact backup, so the wallet can be recovered from it"
+    );
+    assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_backup_icloud_stopped_listing_no_longer_covers_the_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+
+    // iCloud drops a copy another device deleted from its listing, and a read of it waits for the
+    // copy until it times out
+    globals.cloud.remove_wallet_backup(&namespace, &record_id);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(false);
+    globals.cloud.fail_wallet_backup_download(
+        namespace,
+        record_id,
+        CloudStorageError::SyncPending("iCloud metadata is still loading".into()),
+    );
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Unconfirmed,
+        "the provider no longer lists the backup, so deleting the wallet would lose its keys"
+    );
+    assert!(CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_deleted_backup_stops_covering_a_wallet_whose_confirmed_hash_it_no_longer_reproduces() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+
+    // a restore of a backup written before #988 records the hash of the key's other form
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::Confirmed(confirmed) = state else {
+            panic!("the refresh should have confirmed the backup, got {state:?}");
+        };
+
+        PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: "pre-988-revision".into(),
+            confirmed_at: confirmed.confirmed_at,
+        })
+    });
+
+    globals.cloud.remove_wallet_backup(&namespace, &record_id);
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Unconfirmed,
+        "the provider no longer holds the backup, whatever hash the restore recorded"
+    );
+    assert!(CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_deleted_backup_another_device_uploads_again_covers_the_wallet_again() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+    let backup = globals.cloud.wallet_backup_bytes(&namespace, &record_id).unwrap();
+
+    globals.cloud.remove_wallet_backup(&namespace, &record_id);
+    refresh_detail_from_provider(&manager).await;
+    assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Unconfirmed);
+
+    // a while later another device uploads the same revision again
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::Dirty(dirty) = state else {
+            panic!("the refresh should have marked the backup dirty, got {state:?}");
+        };
+
+        PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: dirty.changed_at - 60 })
+    });
+    globals.cloud.set_wallet_backup(namespace, record_id, backup);
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Confirmed,
+        "the provider holds this exact backup again, so the wallet can be recovered from it"
     );
     assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
     clear_wallet_upload_runtime_for_test_async(&manager).await;

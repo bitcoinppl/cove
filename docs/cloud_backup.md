@@ -1420,13 +1420,24 @@ A detail refresh that reads each local wallet's copy from the provider also
 reconciles the rows with what it read, through the same remote evidence that
 confirms landed uploads, so it applies only to rows in the namespace it read
 and only while the configuration it started under is current. A wallet whose
-copy is at its local revision but which has no row, such as one restored
-before restores recorded their backup, gets a `Confirmed` row. A `Confirmed`
-row whose copy the provider no longer holds, or holds at another revision,
-turns `Dirty`, since another device deleted or replaced that copy; the
-wallet then counts as uncovered until its upload confirms. A row is changed
-only if it is still the one the read compared, and a copy the read couldn't
-read, or one at a version this app can't read, changes nothing.
+copy is at its local revision gets a `Confirmed` row when it has none, such
+as one restored before restores recorded their backup, or when its row is
+`Dirty`, such as after another device uploaded a copy that was gone again. A
+`Confirmed` row whose copy the provider no longer holds, or holds at another
+revision than the one the row confirmed, turns `Dirty`, since another device
+deleted or replaced that copy; the wallet then counts as uncovered until its
+upload confirms. A copy the read couldn't read, or one at a version this app
+can't read, changes nothing, unless a listing the provider confirmed left it
+out: iCloud waits for a file it doesn't list until the read times out, so the
+listing is what shows a copy another device deleted.
+
+Rows are compared by when they were written, not by revision, so a restore
+that recorded a hash the wallet no longer reproduces, such as a backup written
+before #988, still reconciles. A row written after the read began is left
+alone, since it may record a change the read couldn't show. Times are whole
+seconds: a confirmation from the read's own second can still turn `Dirty`,
+which only uploads the wallet again, but a `Dirty` row from that second is not
+confirmed, since that could drop an edit's upload.
 
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.

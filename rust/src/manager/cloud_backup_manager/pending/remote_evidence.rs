@@ -30,6 +30,9 @@ pub(crate) struct RemoteRevisionEvidence {
     revisions: HashMap<String, String>,
     /// What the read showed of each local wallet's copy, when it compared them
     provider_copies: Vec<ProviderCopy>,
+    /// When the read began, in unix seconds: a row written since may record a change the read
+    /// could not show
+    read_started_at: u64,
 }
 
 impl RemoteRevisionEvidence {
@@ -46,12 +49,17 @@ impl RemoteRevisionEvidence {
             .map(|(record_id, summary)| (record_id.clone(), summary.revision_hash.clone()))
             .collect();
 
-        Self { namespace_id, config, revisions, provider_copies: Vec::new() }
+        Self { namespace_id, config, revisions, provider_copies: Vec::new(), read_started_at: 0 }
     }
 
-    /// This evidence with what the read showed of each local wallet's copy
-    pub(crate) fn with_provider_copies(self, provider_copies: Vec<ProviderCopy>) -> Self {
-        Self { provider_copies, ..self }
+    /// This evidence with what the read that began at `read_started_at` showed of each local
+    /// wallet's copy
+    pub(crate) fn with_provider_copies(
+        self,
+        provider_copies: Vec<ProviderCopy>,
+        read_started_at: u64,
+    ) -> Self {
+        Self { provider_copies, read_started_at, ..self }
     }
 
     /// The configuration generation the producer started under
@@ -109,14 +117,14 @@ impl RemoteRevisionEvidence {
         updated
     }
 
-    /// Reconciles each local wallet's row in this evidence's namespace with what the read showed
-    /// of its copy, and returns whether any row changed
+    /// Reconciles each local wallet's row with what the read showed of its copy in this
+    /// evidence's namespace, and returns whether any row changed
     ///
-    /// A wallet whose copy matches but which has no row, such as one restored before restores
-    /// recorded their backup, gets a confirmed row. A confirmed row whose copy the provider no
-    /// longer holds, or holds at another revision, turns dirty, since its confirmation no longer
-    /// proves a copy that restores the wallet. A row that changed since the read compared it is
-    /// left alone
+    /// A copy at the local revision confirms a wallet with no row, such as one restored before
+    /// restores recorded their backup, or a dirty one. A confirmed row turns dirty when the
+    /// provider no longer holds its copy, or holds another revision than the one it confirmed,
+    /// since the confirmation no longer proves a copy that restores the wallet. A row written
+    /// since the read began is left alone, as it may record a change the read could not show
     pub(crate) fn reconcile_wallet_rows(&self) -> bool {
         let table = &Database::global().cloud_blob_sync_states;
         let now = cove_util::time::unix_timestamp_secs_or_zero();
@@ -131,30 +139,39 @@ impl RemoteRevisionEvidence {
                 }
             };
 
-            let written = match (copy.shown, row) {
+            let confirmed = || {
+                PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+                    revision_hash: copy.local_revision_hash.clone(),
+                    confirmed_at: now,
+                })
+            };
+            let dirty = || PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: now });
+
+            let written = match (&copy.shown, row) {
                 (ProviderCopyShown::Matching, None) => {
-                    let confirmed = PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
-                        revision_hash: copy.local_revision_hash.clone(),
-                        confirmed_at: now,
-                    });
                     let row = PersistedCloudBlobSyncState::wallet(
                         self.namespace_id.clone(),
                         copy.wallet_id.clone(),
                         copy.record_id.clone(),
-                        confirmed,
+                        confirmed(),
                     );
 
                     table.set_if_absent(&row)
                 }
-                (ProviderCopyShown::MissingOrStale, Some(row))
-                    if self.confirms_compared_revision(&row, copy) =>
+                (ProviderCopyShown::Matching, Some(row)) if self.dirtied_before_read(&row) => {
+                    table.set_if_current(&row, &row.uploaded_to(&self.namespace_id, confirmed()))
+                }
+                (ProviderCopyShown::Missing, Some(row))
+                    if self.confirmation_before_read(&row).is_some() =>
                 {
-                    let dirty =
-                        row.with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState {
-                            changed_at: now,
-                        }));
-
-                    table.set_if_current(&row, &dirty)
+                    table.set_if_current(&row, &row.with_state(dirty()))
+                }
+                (ProviderCopyShown::Stale { revision_hash }, Some(row))
+                    if self
+                        .confirmation_before_read(&row)
+                        .is_some_and(|confirmed| confirmed.revision_hash != *revision_hash) =>
+                {
+                    table.set_if_current(&row, &row.with_state(dirty()))
                 }
                 _ => continue,
             };
@@ -168,17 +185,35 @@ impl RemoteRevisionEvidence {
         updated
     }
 
-    /// Whether `row` is a confirmation in this namespace of the very revision the read compared
-    /// against the provider, rather than one an upload confirmed after the read
-    fn confirms_compared_revision(
+    /// The confirmation `row` holds in this namespace, when it was written no later than the
+    /// second the read began
+    ///
+    /// Comparing times rather than revisions keeps a confirmation whose hash the local wallet no
+    /// longer reproduces, such as a restored backup written before #988, reconcilable. The
+    /// read's own second counts, since withdrawing a confirmation an upload wrote in that second
+    /// only uploads the wallet again
+    fn confirmation_before_read<'a>(
         &self,
-        row: &PersistedCloudBlobSyncState,
-        copy: &ProviderCopy,
-    ) -> bool {
+        row: &'a PersistedCloudBlobSyncState,
+    ) -> Option<&'a CloudBlobConfirmedState> {
         let PersistedCloudBlobState::Confirmed(confirmed) = &row.state else {
+            return None;
+        };
+
+        let before_read = confirmed.confirmed_at <= self.read_started_at;
+        (row.namespace_id == self.namespace_id && before_read).then_some(confirmed)
+    }
+
+    /// Whether `row` is waiting to upload a change made before the second the read began, which
+    /// the local revision the read compared already includes
+    ///
+    /// The read's own second doesn't count: confirming a change made after the read took the
+    /// local revision would drop that change's upload
+    fn dirtied_before_read(&self, row: &PersistedCloudBlobSyncState) -> bool {
+        let PersistedCloudBlobState::Dirty(dirty) = &row.state else {
             return false;
         };
 
-        row.namespace_id == self.namespace_id && confirmed.revision_hash == copy.local_revision_hash
+        dirty.changed_at < self.read_started_at
     }
 }

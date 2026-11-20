@@ -2,8 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use super::wallets::{BackupSecret, RemoteWalletBackupSummary};
 use super::{
-    CloudBackupDetail, CloudBackupError, CloudBackupListedDetail, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWalletStatus, CloudCopySecret, OwnSecretFacts,
+    CloudBackupDetail, CloudBackupError, CloudBackupInventoryAuthority, CloudBackupListedDetail,
+    CloudBackupStore, CloudBackupWalletItem, CloudBackupWalletStatus, CloudCopySecret,
+    OwnSecretFacts,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -28,12 +29,14 @@ pub(crate) struct ProviderCopy {
     pub(crate) shown: ProviderCopyShown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProviderCopyShown {
     /// The copy is at the local revision
     Matching,
-    /// The provider holds no copy, or one at another revision
-    MissingOrStale,
+    /// The provider holds no copy
+    Missing,
+    /// The provider holds a copy at another revision
+    Stale { revision_hash: String },
 }
 
 #[derive(Debug, Clone)]
@@ -179,15 +182,29 @@ impl CloudWalletInventory {
     /// read or found absent
     ///
     /// A copy it could not read, or one at a version this app can't read, says nothing about the
-    /// wallet and is left out
-    pub(crate) fn provider_copies(&self) -> Vec<ProviderCopy> {
+    /// wallet and is left out, unless a listing the provider confirmed left the copy out too.
+    /// iCloud waits for a copy it doesn't list until the read times out, so the listing is all
+    /// that shows a copy another device deleted
+    pub(crate) fn provider_copies(
+        &self,
+        authority: CloudBackupInventoryAuthority,
+    ) -> Vec<ProviderCopy> {
+        let listing_is_complete = authority == CloudBackupInventoryAuthority::ProviderConfirmed;
+
         self.local_wallets
             .iter()
             .filter_map(|wallet| {
                 let shown = match self.remote_wallet_state(wallet) {
                     RemoteWalletState::Matching(_) => ProviderCopyShown::Matching,
-                    RemoteWalletState::Missing | RemoteWalletState::Stale(_) => {
-                        ProviderCopyShown::MissingOrStale
+                    RemoteWalletState::Missing => ProviderCopyShown::Missing,
+                    RemoteWalletState::Stale(summary) => {
+                        ProviderCopyShown::Stale { revision_hash: summary.revision_hash }
+                    }
+                    RemoteWalletState::Unknown
+                        if listing_is_complete
+                            && !self.cloud_wallet_record_ids.contains(&wallet.record_id) =>
+                    {
+                        ProviderCopyShown::Missing
                     }
                     RemoteWalletState::Unknown | RemoteWalletState::Unsupported => return None,
                 };

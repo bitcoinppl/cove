@@ -269,6 +269,10 @@ impl RustCloudBackupManager {
         authority: CloudBackupInventoryAuthority,
     ) -> CloudBackupDetailResult {
         let DetailRead { namespace, config, cloud } = read;
+
+        // rows written from here on may record what this read can't show, so reconciliation
+        // leaves them alone
+        let read_started_at = cove_util::time::unix_timestamp_secs_or_zero();
         let remote_wallet_truth =
             match self.load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -292,7 +296,10 @@ impl RustCloudBackupManager {
 
         // the copies this read showed reconcile each wallet's row, so what Cloud Backup can
         // restore follows the provider, not only this device's uploads
-        self.confirm_remote_revisions(evidence.with_provider_copies(inventory.provider_copies()));
+        let provider_copies = inventory.provider_copies(authority);
+        self.confirm_remote_revisions(
+            evidence.with_provider_copies(provider_copies, read_started_at),
+        );
 
         let listed = inventory.build_detail();
         CloudBackupDetailResult::SuccessWithAuthority { listed, authority }
