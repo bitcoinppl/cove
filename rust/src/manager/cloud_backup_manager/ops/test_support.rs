@@ -616,6 +616,11 @@ impl MockCloudStorage {
         self.state.lock().backup_upload_state_errors.insert((namespace, record_id), error);
     }
 
+    /// Undoes `fail_backup_upload_state`, so the record's status reads back again
+    pub(crate) fn restore_backup_upload_state(&self, namespace: String, record_id: String) {
+        self.state.lock().backup_upload_state_errors.remove(&(namespace, record_id));
+    }
+
     pub(crate) fn fail_wallet_backup_upload(&self, message: &str) {
         self.state.lock().upload_wallet_backup_error =
             Some(CloudStorageError::UploadFailed(message.into()));
@@ -690,6 +695,11 @@ impl MockCloudStorage {
     /// Reports only `namespace`'s master key upload as unconfirmed
     pub(crate) fn set_master_key_upload_pending(&self, namespace: String) {
         self.state.lock().pending_master_key_uploads.insert(namespace);
+    }
+
+    /// Undoes `set_master_key_upload_pending`, as iCloud finishing the upload would
+    pub(crate) fn finish_master_key_upload(&self, namespace: &str) {
+        self.state.lock().pending_master_key_uploads.remove(namespace);
     }
 
     pub(crate) fn uploads(&self) -> Vec<MockCloudUpload> {

@@ -646,7 +646,7 @@ async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_
     let namespace = manager.current_namespace_id().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
     let check = manager.check_sync_health(None).await;
-    assert_eq!(check.master_key_issue(), None, "{check:?}");
+    assert_eq!(check.clone().into_parts().1, MasterKeyFinding::Confirmed, "{check:?}");
     manager.observe_sync_health(check);
     assert!(
         !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
@@ -655,7 +655,10 @@ async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_
 
     globals.cloud.set_master_key_upload_pending(namespace.clone());
     let check = manager.check_sync_health(None).await;
-    assert_eq!(check, SyncHealthCheck::master_key_unconfirmed(MasterKeyIssue::Uploading));
+    assert_eq!(
+        check,
+        SyncHealthCheck::master_key_unconfirmed(namespace.clone(), MasterKeyIssue::Uploading)
+    );
     manager.observe_sync_health(check);
 
     assert!(
@@ -675,11 +678,69 @@ async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_
 
     globals.cloud.remove_master_key_backup(&namespace);
     let check = manager.check_sync_health(None).await;
-    assert_eq!(check, SyncHealthCheck::master_key_unconfirmed(MasterKeyIssue::Missing));
+    assert_eq!(
+        check,
+        SyncHealthCheck::master_key_unconfirmed(namespace.clone(), MasterKeyIssue::Missing)
+    );
     manager.observe_sync_health(check);
     assert_eq!(
         toggle(),
         SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing)
+    );
+
+    // a later check that can't reach the provider learns nothing about the key, so the refusal
+    // holds until one confirms the key again
+    let key_record = cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string();
+    globals.cloud.fail_backup_upload_state(
+        namespace.clone(),
+        key_record.clone(),
+        CloudStorageError::Offline("offline".into()),
+    );
+    manager.observe_sync_health(manager.check_sync_health(None).await);
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing),
+        "an offline check made Cove forget the provider doesn't have the key"
+    );
+
+    globals.cloud.restore_backup_upload_state(namespace.clone(), key_record);
+    globals.cloud.finish_master_key_upload(&namespace);
+    globals.cloud.set_master_key_backup(namespace, b"wrapper".to_vec());
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check.clone().into_parts().1, MasterKeyFinding::Confirmed, "{check:?}");
+    manager.observe_sync_health(check);
+    assert!(
+        !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "a check that confirmed the key again should count the cloud copy"
+    );
+}
+
+// the key alert asks the user to fix Cloud Backup, which doesn't help a wallet that never had a
+// cloud copy, so that wallet is named instead, with Go To Wallet
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_with_no_cloud_copy_is_named_before_the_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let backed_up = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&backed_up)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+    let never_uploaded = save_used_hot_wallet();
+
+    let namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.remove_master_key_backup(&namespace);
+    manager.observe_sync_health(manager.check_sync_health(None).await);
+
+    let toggle = AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true });
+    assert_eq!(
+        toggle,
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::UnverifiedWallets {
+            wallet_id: never_uploaded.id
+        }),
+        "the key alert hid a wallet that never had a cloud copy"
     );
 }
 

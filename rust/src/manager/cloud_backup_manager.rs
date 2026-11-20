@@ -151,7 +151,8 @@ pub use self::screen::{
 };
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::{
-    MasterKeyIssue, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, SyncHealthCheck,
+    MasterKeyFinding, MasterKeyIssue, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, SyncHealthCheck,
+    UnconfirmedMasterKey,
 };
 use self::turn_off::AutomaticResume;
 pub(crate) use self::wallet_changes::{LIVE_UPLOAD_DEBOUNCE, live_upload_retry_delay_for_attempt};

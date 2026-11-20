@@ -1439,14 +1439,22 @@ never matches the text Settings shows:
   iCloud Drive is on for Cove. Verify can't help here, since it reads the local
   copy back and finds nothing to repair
 
+The reducer keeps that answer, with the namespace it was found for, until a
+later check asks the provider again and confirms the key. A check that stops
+before asking, for example offline or with the provider unavailable, learned
+nothing, so it leaves the answer in place. A different namespace ignores it.
+
 A wrapper row the queue saved as `Failed` after its confirmation window ran out
 also withdraws all coverage, though Settings then shows the generic error. The
 row doesn't record why, so it counts as `Missing`, whose fix re-uploads the
-wrapper. In each case `CloudBackupRecoveryCoverage` is `MasterKeyUnconfirmed`,
-and in main mode the alert names the key and the matching fix
-(`SecurityAlertState::CloudBackupKeyMissing` or `CloudBackupKeyUploading`). A
-wrapper upload that is still running only leaves the wallets uncovered. Until a
-check runs after launch, only the local wrapper row counts.
+wrapper. In each case `CloudBackupRecoveryCoverage` carries the `MasterKeyIssue`.
+In main mode the alert names the key and the matching fix
+(`SecurityAlertState::CloudBackupKeyMissing` or `CloudBackupKeyUploading`). The
+one exception is a wallet that has no confirmed cloud copy at all: fixing the
+key wouldn't cover it, so the alert names that wallet with Go To Wallet. A
+wrapper upload that is still running only leaves the wallets uncovered. The
+answer lives in memory, so until a check runs after launch only the local
+wrapper row counts.
 
 A wallet restored from the active backup, alone or by Restore All, uploads
 nothing, so the restore records the backup it just downloaded and decrypted as

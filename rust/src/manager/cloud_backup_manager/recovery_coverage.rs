@@ -18,34 +18,36 @@ use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 /// inventory state start over on every launch, so they can't prove a backup outlived one. The one
 /// live input takes coverage away: a sync health check that found the provider can't confirm the
 /// master key
-#[derive(Debug)]
-pub(crate) enum CloudBackupRecoveryCoverage {
-    /// The cloud copies of these wallets restore them
-    Wallets(HashSet<WalletId>),
-    /// No cloud copy restores a wallet, since every one is encrypted under a master key the
-    /// provider can't confirm it holds
-    MasterKeyUnconfirmed(MasterKeyIssue),
-}
-
-impl Default for CloudBackupRecoveryCoverage {
-    fn default() -> Self {
-        Self::Wallets(HashSet::new())
-    }
+#[derive(Debug, Default)]
+pub(crate) struct CloudBackupRecoveryCoverage {
+    /// Wallets with a confirmed cloud copy, which restores them once the master key is confirmed
+    confirmed: HashSet<WalletId>,
+    /// Why no cloud copy counts, when the provider can't confirm the master key that every copy
+    /// is encrypted under
+    master_key_issue: Option<MasterKeyIssue>,
 }
 
 impl CloudBackupRecoveryCoverage {
     /// Loads the coverage of the configured backup, or none when any read fails
     pub(crate) fn load() -> Self {
-        if let Some(issue) = Self::master_key_issue_at_provider() {
-            return Self::MasterKeyUnconfirmed(issue);
-        }
+        Self::read(
+            &RustCloudBackupManager::load_persisted_state(),
+            Self::master_key_issue_at_provider,
+        )
+    }
 
-        Self::from_persisted(&RustCloudBackupManager::load_persisted_state())
+    /// The coverage of `persisted` by its rows alone, without the provider's last word on the
+    /// master key, which lives in memory
+    fn from_persisted(persisted: &PersistedCloudBackupState) -> Self {
+        Self::read(persisted, |_| None)
     }
 
     /// The coverage of `persisted`, reading the namespace and sync rows only when it can cover
     /// anything, or none when any read fails
-    fn from_persisted(persisted: &PersistedCloudBackupState) -> Self {
+    fn read(
+        persisted: &PersistedCloudBackupState,
+        provider_issue: impl FnOnce(&str) -> Option<MasterKeyIssue>,
+    ) -> Self {
         let PersistedCloudBackupState::Configured(configured) = persisted else {
             return Self::default();
         };
@@ -60,23 +62,25 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         };
 
-        Self::from_states(persisted, &namespace, &sync_states)
+        let provider_issue = provider_issue(&namespace);
+        Self::from_states(persisted, &namespace, &sync_states, provider_issue)
     }
 
-    /// Why the running manager's last sync health check couldn't confirm the master key at the
-    /// provider, as the Cloud Backup row in Settings shows
+    /// Why the provider last couldn't confirm the master key of the backup in `namespace`, as
+    /// the Cloud Backup row in Settings shows
     ///
     /// Only a check that ran can say so, so this is none until the manager has checked since
     /// launch; the wrapper row covers the time before that
-    fn master_key_issue_at_provider() -> Option<MasterKeyIssue> {
+    fn master_key_issue_at_provider(namespace: &str) -> Option<MasterKeyIssue> {
         LazyLock::get(&CLOUD_BACKUP_MANAGER)
-            .and_then(|manager| manager.state.read().master_key_issue_at_provider())
+            .and_then(|manager| manager.state.read().master_key_issue_at_provider(namespace))
     }
 
     fn from_states(
         persisted: &PersistedCloudBackupState,
         namespace: &str,
         sync_states: &[PersistedCloudBlobSyncState],
+        provider_issue: Option<MasterKeyIssue>,
     ) -> Self {
         // a missing passkey can't decrypt the cloud copy, so it recovers nothing
         let PersistedCloudBackupState::Configured(configured) = persisted else {
@@ -99,6 +103,7 @@ impl CloudBackupRecoveryCoverage {
 
         let in_namespace = sync_states.iter().filter(|state| state.namespace_id == namespace);
         let mut confirmed = HashSet::new();
+        let mut master_key_issue = provider_issue;
 
         for sync_state in in_namespace {
             let is_confirmed = matches!(sync_state.state, PersistedCloudBlobState::Confirmed(_));
@@ -107,12 +112,11 @@ impl CloudBackupRecoveryCoverage {
             // row is one the queue gave up confirming, which is not just an upload still running,
             // and it doesn't record why, so it gets the fix that re-uploads the wrapper
             if sync_state.is_master_key_wrapper() && !is_confirmed {
-                return match sync_state.state {
-                    PersistedCloudBlobState::Failed(_) => {
-                        Self::MasterKeyUnconfirmed(MasterKeyIssue::Missing)
-                    }
-                    _ => Self::default(),
+                let PersistedCloudBlobState::Failed(_) = sync_state.state else {
+                    return Self::default();
                 };
+
+                master_key_issue = master_key_issue.or(Some(MasterKeyIssue::Missing));
             }
 
             if let (true, Some(wallet_id)) = (is_confirmed, sync_state.wallet_id()) {
@@ -120,16 +124,13 @@ impl CloudBackupRecoveryCoverage {
             }
         }
 
-        Self::Wallets(confirmed)
+        Self { confirmed, master_key_issue }
     }
 
     /// Why the cloud copies count for nothing, when it's because the provider can't confirm the
     /// master key that decrypts them
     pub(crate) fn master_key_issue(&self) -> Option<MasterKeyIssue> {
-        match self {
-            Self::Wallets(_) => None,
-            Self::MasterKeyUnconfirmed(issue) => Some(*issue),
-        }
+        self.master_key_issue
     }
 
     /// Whether a hot wallet needs its words verified before local data can be wiped
@@ -137,12 +138,18 @@ impl CloudBackupRecoveryCoverage {
     /// A wallet edited since its last confirmed upload needs verifying until that edit is
     /// confirmed too, since the row then shows only the pending edit
     pub(crate) fn needs_backup(&self, wallet: &WalletMetadata) -> bool {
-        let covered = match self {
-            Self::Wallets(wallets) => wallets.contains(&wallet.id),
-            Self::MasterKeyUnconfirmed(_) => false,
-        };
+        self.lacks_cloud_copy(wallet)
+            || (Self::relies_on_backup(wallet) && self.master_key_issue.is_some())
+    }
 
-        wallet.wallet_type == WalletType::Hot && !wallet.verified && !covered
+    /// Whether a hot wallet needs its words verified even once the master key is confirmed,
+    /// since it has no confirmed cloud copy at all
+    pub(crate) fn lacks_cloud_copy(&self, wallet: &WalletMetadata) -> bool {
+        Self::relies_on_backup(wallet) && !self.confirmed.contains(&wallet.id)
+    }
+
+    fn relies_on_backup(wallet: &WalletMetadata) -> bool {
+        wallet.wallet_type == WalletType::Hot && !wallet.verified
     }
 }
 
@@ -186,9 +193,9 @@ impl CloudBackupRecovery {
 
     fn from_coverage(configured: bool, coverage: CloudBackupRecoveryCoverage) -> Self {
         // a copy of a wallet counts only while its master key is confirmed
-        let confirmed = match coverage {
-            CloudBackupRecoveryCoverage::Wallets(wallets) => wallets,
-            CloudBackupRecoveryCoverage::MasterKeyUnconfirmed(_) => HashSet::new(),
+        let confirmed = match coverage.master_key_issue {
+            None => coverage.confirmed,
+            Some(_) => HashSet::new(),
         };
         let mut confirmed_wallets = confirmed.into_iter().collect::<Vec<_>>();
         confirmed_wallets.sort();
@@ -383,6 +390,7 @@ mod tests {
             &configured(PersistedPasskeyState::Available),
             NAMESPACE,
             &sync_states,
+            None,
         );
 
         assert!(!coverage.needs_backup(&uploaded));
@@ -407,6 +415,7 @@ mod tests {
             ),
             NAMESPACE,
             &sync_states,
+            None,
         );
 
         assert!(!coverage.needs_backup(&wallet));
@@ -469,7 +478,7 @@ mod tests {
 
         for (case, persisted, sync_states) in cases {
             let coverage =
-                CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &sync_states);
+                CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &sync_states, None);
 
             assert!(coverage.needs_backup(&wallet), "{case} should cover nothing");
         }
@@ -487,12 +496,20 @@ mod tests {
             wallet_row(NAMESPACE, &failed_upload, failed()),
         ];
         let coverage =
-            CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &sync_states);
+            CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &sync_states, None);
         let recovery = CloudBackupRecovery::from_coverage(persisted.is_configured(), coverage);
 
         assert_eq!(recovery.wallet(uploaded.id.clone()), CloudBackupWalletRecovery::Confirmed);
         assert_eq!(recovery.wallet(failed_upload.id), CloudBackupWalletRecovery::Unconfirmed);
         assert_eq!(recovery.wallet(never_uploaded.id), CloudBackupWalletRecovery::Unconfirmed);
+
+        // the queue gave up on the master key wrapper, so no copy restores its wallet
+        let mut key_failed = sync_states.clone();
+        key_failed[0] = PersistedCloudBlobSyncState::master_key_wrapper(NAMESPACE.into(), failed());
+        let coverage =
+            CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &key_failed, None);
+        let recovery = CloudBackupRecovery::from_coverage(persisted.is_configured(), coverage);
+        assert_eq!(recovery.wallet(uploaded.id.clone()), CloudBackupWalletRecovery::Unconfirmed);
         assert_eq!(
             CloudBackupRecovery::from_persisted(&PersistedCloudBackupState::Disabled)
                 .wallet(uploaded.id),

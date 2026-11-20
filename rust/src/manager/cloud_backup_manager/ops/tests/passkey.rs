@@ -1597,7 +1597,10 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
     persist_xpub_wallets(vec![metadata]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-    manager.observe_sync_health(SyncHealthCheck::master_key_unconfirmed(MasterKeyIssue::Missing));
+    manager.observe_sync_health(SyncHealthCheck::master_key_unconfirmed(
+        manager.current_namespace_id().unwrap(),
+        MasterKeyIssue::Missing,
+    ));
 
     run_repair_passkey_operation(&manager, true).await;
 

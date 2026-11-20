@@ -844,34 +844,43 @@ impl RustAuthManager {
             return;
         }
 
-        if decoy {
-            self.turned_off("decoy", config.delete_decoy_pin(), Message::DecoyPinChanged(false));
-        }
-
-        if wipe_data {
-            self.turned_off(
+        let decoy_kept = decoy
+            && !self.turned_off(
+                "decoy",
+                config.delete_decoy_pin(),
+                Message::DecoyPinChanged(false),
+            );
+        let wipe_data_kept = wipe_data
+            && !self.turned_off(
                 "wipe data",
                 config.delete_wipe_data_pin(),
                 Message::WipeDataPinChanged(false),
             );
-        }
 
-        self.send(Message::TrickPinNoticeChanged(self.trick_pin_notice()));
+        // a PIN that couldn't be deleted still works, so the notice mustn't say it was turned off;
+        // the next unlock with the app PIN tries again
+        match DuplicateTrickPin::from_flags(decoy_kept, wipe_data_kept) {
+            Some(kept) => self.drop_from_trick_pin_notice(kept),
+            None => self.send(Message::TrickPinNoticeChanged(self.trick_pin_notice())),
+        }
     }
 
+    /// Reports whether the PIN is gone
     fn turned_off(
         &self,
         kind: &str,
         deleted: Result<(), database::Error>,
         changed: AuthManagerReconcileMessage,
-    ) {
+    ) -> bool {
         match deleted {
             Ok(()) => {
                 warn!("turned off a {kind} PIN saved equal to the app PIN");
                 self.send(changed);
+                true
             }
             Err(error) => {
                 error!("unable to turn off a {kind} PIN saved equal to the app PIN: {error:?}");
+                false
             }
         }
     }

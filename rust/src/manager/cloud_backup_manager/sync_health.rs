@@ -42,6 +42,24 @@ impl MasterKeyIssue {
     }
 }
 
+/// The provider can't confirm the master key wrapper of the backup in `namespace`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnconfirmedMasterKey {
+    pub(crate) namespace: String,
+    pub(crate) issue: MasterKeyIssue,
+}
+
+/// What a sync health check learned about the master key wrapper at the provider
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum MasterKeyFinding {
+    /// The check stopped before asking the provider, for example offline, so it learned nothing
+    /// and the last answer still stands
+    NotAsked,
+    /// The provider has the wrapper uploaded
+    Confirmed,
+    Unconfirmed(UnconfirmedMasterKey),
+}
+
 /// What a sync health check found, for Settings and for the code that acts on it
 ///
 /// Settings only shows the health; the master key answer stays typed so no caller has to match
@@ -49,31 +67,35 @@ impl MasterKeyIssue {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SyncHealthCheck {
     health: CloudSyncHealth,
-    master_key_issue: Option<MasterKeyIssue>,
+    master_key: MasterKeyFinding,
 }
 
 impl SyncHealthCheck {
     /// The provider can't confirm the master key wrapper, so no cloud copy can be decrypted
-    pub(crate) fn master_key_unconfirmed(issue: MasterKeyIssue) -> Self {
+    pub(crate) fn master_key_unconfirmed(namespace: String, issue: MasterKeyIssue) -> Self {
         Self {
             health: CloudSyncHealth::Failed(issue.message().into()),
-            master_key_issue: Some(issue),
+            master_key: MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey { namespace, issue }),
         }
+    }
+
+    /// A health found after the provider confirmed the master key wrapper
+    fn key_confirmed(health: CloudSyncHealth) -> Self {
+        Self { health, master_key: MasterKeyFinding::Confirmed }
     }
 
     pub(crate) fn health(&self) -> &CloudSyncHealth {
         &self.health
     }
 
-    /// Why this check found the provider can't confirm the master key wrapper, if it did
-    pub(crate) fn master_key_issue(&self) -> Option<MasterKeyIssue> {
-        self.master_key_issue
+    pub(crate) fn into_parts(self) -> (CloudSyncHealth, MasterKeyFinding) {
+        (self.health, self.master_key)
     }
 }
 
 impl From<CloudSyncHealth> for SyncHealthCheck {
     fn from(health: CloudSyncHealth) -> Self {
-        Self { health, master_key_issue: None }
+        Self { health, master_key: MasterKeyFinding::NotAsked }
     }
 }
 
@@ -140,26 +162,36 @@ impl RustCloudBackupManager {
             Err(error) => return Self::sync_health_from_cloud_error(error).into(),
         };
 
-        if expected_wallet_record_ids.is_empty() {
-            if master_key_issue.is_none() {
-                return CloudSyncHealth::AllUploaded.into();
+        if let Some(issue) = master_key_issue {
+            if !expected_wallet_record_ids.is_empty() {
+                return SyncHealthCheck::master_key_unconfirmed(namespace, issue);
             }
 
-            return CloudSyncHealth::NoFiles.into();
+            // with no wallets Settings shows no files, but a wallet added before the next check
+            // still has no key to decrypt its copy
+            return SyncHealthCheck {
+                health: CloudSyncHealth::NoFiles,
+                master_key: MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey {
+                    namespace,
+                    issue,
+                }),
+            };
         }
 
-        if let Some(issue) = master_key_issue {
-            return SyncHealthCheck::master_key_unconfirmed(issue);
+        if expected_wallet_record_ids.is_empty() {
+            return SyncHealthCheck::key_confirmed(CloudSyncHealth::AllUploaded);
         }
 
         if Self::sync_health_has_pending_wallet_upload(&sync_states) {
-            return CloudSyncHealth::Uploading.into();
+            return SyncHealthCheck::key_confirmed(CloudSyncHealth::Uploading);
         }
 
         let remote_wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
             Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
             Err(CloudStorageError::NotFound(_)) => HashSet::new(),
-            Err(error) => return Self::sync_health_from_cloud_error(error).into(),
+            Err(error) => {
+                return SyncHealthCheck::key_confirmed(Self::sync_health_from_cloud_error(error));
+            }
         };
 
         let missing_wallet_count = expected_wallet_record_ids
@@ -167,13 +199,12 @@ impl RustCloudBackupManager {
             .filter(|record_id| !remote_wallet_record_ids.contains(*record_id))
             .count();
         if missing_wallet_count > 0 {
-            return CloudSyncHealth::Failed(sync_health_missing_wallet_message(
-                missing_wallet_count,
-            ))
-            .into();
+            return SyncHealthCheck::key_confirmed(CloudSyncHealth::Failed(
+                sync_health_missing_wallet_message(missing_wallet_count),
+            ));
         }
 
-        CloudSyncHealth::AllUploaded.into()
+        SyncHealthCheck::key_confirmed(CloudSyncHealth::AllUploaded)
     }
 
     pub(crate) async fn expected_wallet_record_ids(

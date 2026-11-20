@@ -31,22 +31,22 @@ impl WipeDataPinBlocker {
         let target = database.global_config.wallet_target();
         let coverage = CloudBackupRecoveryCoverage::load();
 
-        let blocker = Self::find_with(
-            target,
-            |mode, first| database.wallets.all_networks(mode, first),
-            |wallet| coverage.needs_backup(wallet),
-        )?;
+        let load = |mode, first| database.wallets.all_networks(mode, first);
+        let blocker = Self::find_with(target, load, |wallet| coverage.needs_backup(wallet))?;
 
         // the cloud copies count for nothing while the key is unconfirmed, so that is the reason to
         // give where Cloud Backup shows; either fixing the key or verifying the words clears it
         let key_issue = coverage.master_key_issue().filter(|_| target.mode == WalletMode::Main);
+        let (Self::UnbackedWallet(_) | Self::UnbackedDecoyWallet, Some(issue)) =
+            (&blocker, key_issue)
+        else {
+            return Some(blocker);
+        };
 
-        match (blocker, key_issue) {
-            (Self::UnbackedWallet(_) | Self::UnbackedDecoyWallet, Some(issue)) => {
-                Some(Self::CloudBackupKeyUnconfirmed(issue))
-            }
-            (blocker, _) => Some(blocker),
-        }
+        // fixing the key doesn't help a wallet that has no cloud copy at all, so that one is named
+        // first, where Go To Wallet can open it
+        Self::find_with(target, load, |wallet| coverage.lacks_cloud_copy(wallet))
+            .or(Some(Self::CloudBackupKeyUnconfirmed(issue)))
     }
 
     /// Checks the current mode's wallets first, selected network ahead, so the alert names a
