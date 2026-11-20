@@ -1372,8 +1372,8 @@ marks its wallets dirty instead, and they count once those uploads confirm.
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.
 
-Two gaps are known and accepted as rare. Closing them would need live provider
-proof, which would refuse the PIN offline and right after launch:
+These gaps are known and accepted as rare. Closing the first two would need
+live provider proof, which would refuse the PIN offline and right after launch:
 
 - On iOS, a wallet row can turn `Confirmed` once the file staged in the
   ubiquity container reads back, before iCloud has it, for example while
@@ -1382,6 +1382,14 @@ proof, which would refuse the PIN offline and right after launch:
   turns Cloud Backup off and deletes the shared namespace, the `Confirmed` rows
   here still count. A namespace with no master key wrapper row also passes,
   since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
+- A copy that the startup integrity check or a detail refresh can't decrypt is
+  noted only in memory, so its `Confirmed` row still counts, as when another
+  device replaces the copy after this one confirmed it. Saving the failure
+  would need telling a corrupt copy from a transient read failure
+- If reading the local wallets of any network fails, the check lists no
+  wallets and allows the PIN, as it did for the selected network before. The
+  follow-up that adds decoy-mode wallets to the check should make a failed read
+  refuse the PIN instead
 
 ## Related Notes
 
