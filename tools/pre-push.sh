@@ -45,6 +45,9 @@ paths=$(git -c core.quotePath=false -c log.showRoot=true log --format= --name-on
     exit 2
 }
 
+# each commit lists the files it touches, so a file several commits change would repeat
+paths=$(printf '%s\n' "$paths" | sort -u)
+
 if [ -z "$paths" ]; then
     warn "no commits to check in: $*"
     exit 0
@@ -60,8 +63,9 @@ run_bindings=false
 run_swiftformat=false
 run_ktlint=false
 run_detekt=false
-# the Kotlin files under android/ that detekt lints, comma-separated from android/; empty with
-# run_detekt set means its config changed, so it lints every file
+# the Kotlin files under android/ that detekt lints, comma-separated from android/, unless its
+# config changed, in detekt.yml, the baseline or the Gradle scripts that set it up, when it lints
+# every file
 detekt_files=""
 detekt_config_changed=false
 while IFS= read -r path; do
@@ -80,12 +84,12 @@ while IFS= read -r path; do
         *.kt | *.kts | android/.editorconfig) run_ktlint=true ;;
     esac
 
-    # a deleted file has nothing left to lint
     case $path in
-        android/detekt.yml | android/detekt-baseline.xml)
+        android/detekt.yml | android/detekt-baseline.xml | android/build.gradle.kts | android/app/build.gradle.kts)
             run_detekt=true
             detekt_config_changed=true
             ;;
+        # a deleted file has nothing left to lint
         android/*.kt | android/*.kts)
             if [ -f "$path" ]; then
                 run_detekt=true
@@ -230,9 +234,10 @@ check_rustfmt() {
     (cd rust && cargo fmt --all -- --check)
 }
 
-# over every file detekt takes about three seconds, over a push's few well under one
+# over every file detekt takes about three seconds, over a push's few well under one; Linux caps
+# one argument at 128 KiB, so a push of well over a thousand Kotlin files lints every file instead
 check_detekt() {
-    if [ "$detekt_config_changed" = true ]; then
+    if [ "$detekt_config_changed" = true ] || [ "${#detekt_files}" -gt 100000 ]; then
         just detekt-source --offline
     else
         just detekt-source --offline "-Pcove.detektOnly=${detekt_files#,}"
