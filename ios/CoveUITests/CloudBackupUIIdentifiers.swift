@@ -60,6 +60,7 @@ enum CloudBackupUIIdentifier {
     static let recoverySupportCode = "cloudBackup.recovery.supportCode"
     static let menu = "cloudBackup.menu"
     static let promptExistingBackupFound = "cloudBackup.prompt.existingBackupFound"
+    static let promptBackupFilesUnavailable = "cloudBackup.prompt.backupFilesUnavailable"
     static let promptPasskeyChoice = "cloudBackup.prompt.passkeyChoice"
     static let promptPasskeyChoiceCreateNewPasskey = "cloudBackup.prompt.passkeyChoice.createNewPasskey"
     static let promptMissingPasskeyReminder = "cloudBackup.prompt.missingPasskeyReminder"

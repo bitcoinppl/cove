@@ -48,6 +48,26 @@ internal fun existingBackupPromptChoices(): List<CloudBackupPromptChoice> =
     )
 
 /**
+ * The choices of the files-unavailable prompt, in the order they are drawn
+ *
+ * Try Again re-checks the existing backup through the same Use Existing answer, so a retry that
+ * still finds nothing draws its outcome under this prompt
+ */
+internal fun backupFilesUnavailablePromptChoices(): List<CloudBackupPromptChoice> =
+    listOf(
+        CloudBackupPromptChoice(
+            title = "Create New Backup",
+            action = CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_CREATE_NEW,
+            intent = CloudBackupManagerAction.AcceptEnablePrompt(CloudBackupEnablePromptChoice.CREATE_NEW),
+        ),
+        CloudBackupPromptChoice(
+            title = "Try Again",
+            action = CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING,
+            intent = CloudBackupManagerAction.AcceptEnablePrompt(CloudBackupEnablePromptChoice.USE_EXISTING),
+        ),
+    )
+
+/**
  * The choices of a passkey-choice prompt, in the order they are drawn
  *
  * Both repair choices answer the Repair Passkey entry: they differ only in whether the passkey
@@ -72,7 +92,6 @@ internal fun passkeyChoicePromptChoices(intent: CloudBackupPasskeyChoiceIntent):
                     intent = CloudBackupManagerAction.AcceptEnablePrompt(CloudBackupEnablePromptChoice.CREATE_NEW),
                 ),
             )
-        is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly -> listOf(useExisting)
         is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
             listOf(
                 CloudBackupPromptChoice(

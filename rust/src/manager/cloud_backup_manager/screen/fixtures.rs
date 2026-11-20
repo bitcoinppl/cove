@@ -46,8 +46,8 @@ mod debug {
     use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
     use crate::manager::cloud_backup_manager::{
         CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupEnableContext, CloudBackupEnableFlow,
-        CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
-        CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyState,
+        CloudBackupExistingBackup, CloudBackupInventoryIncompleteReason,
+        CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary, CloudBackupPasskeyState,
         CloudBackupPasskeyUnlockHint, CloudBackupPendingEnableCleanupState,
         CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
         CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupSyncState,
@@ -72,7 +72,7 @@ mod debug {
             fixture("disabled", disabled()),
             fixture("enabling", enabling()),
             fixture("enabling-existing-backup-prompt", existing_backup_prompt()),
-            fixture("enabling-passkey-choice-existing-only", passkey_choice_existing_only()),
+            fixture("enabling-backup-files-unavailable-prompt", backup_files_unavailable_prompt()),
             fixture("restoring", restoring()),
             fixture("configured", configured(CloudBackupDisableScreen::Idle, None)),
             fixture("configured-clean", clean()),
@@ -212,7 +212,8 @@ mod debug {
         let context = CloudBackupEnableContext::settings_manual();
         let mut screen = screen(
             CloudBackupScreenBody::Enabling(CloudBackupEnableFlow::AwaitingForceNewConfirmation(
-                context, None,
+                context,
+                CloudBackupExistingBackup::Readable { passkey_hint: None },
             )),
             CloudBackupSettingsRowStatus::SettingUp,
             available(&[
@@ -226,21 +227,24 @@ mod debug {
         screen
     }
 
-    /// The passkey choice for a backup that may already exist, which can only use its passkey
-    fn passkey_choice_existing_only() -> CloudBackupScreen {
-        let intent = CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(
-            CloudBackupEnableContext::settings_manual(),
-            None,
-        );
+    /// Enable found backup folders whose files aren't on this device, and asks whether to try
+    /// again or start over
+    fn backup_files_unavailable_prompt() -> CloudBackupScreen {
+        let context = CloudBackupEnableContext::settings_manual();
         let mut screen = screen(
-            CloudBackupScreenBody::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
-                intent.clone(),
+            CloudBackupScreenBody::Enabling(CloudBackupEnableFlow::AwaitingForceNewConfirmation(
+                context,
+                CloudBackupExistingBackup::FilesUnavailable,
             )),
             CloudBackupSettingsRowStatus::SettingUp,
-            available(&[A::DiscardPendingEnable, A::AcceptEnablePromptUseExisting]),
+            available(&[
+                A::DiscardPendingEnable,
+                A::AcceptEnablePromptUseExisting,
+                A::AcceptEnablePromptCreateNew,
+            ]),
         );
 
-        screen.root_prompt = CloudBackupRootPrompt::PasskeyChoice(intent);
+        screen.root_prompt = CloudBackupRootPrompt::BackupFilesUnavailable(context);
         screen
     }
 

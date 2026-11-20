@@ -190,7 +190,12 @@ pub(crate) enum CloudRestoreDiscovery {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OnboardingCloudBackupEnableStart {
     ConfirmKnownBackup(Option<CloudRestoreProviderHint>),
-    RequireExistingPasskey,
+    /// Backup folders were listed but none had its master key file, so no passkey could open one:
+    /// they may have been syncing here or be left by a setup that stopped early
+    ///
+    /// The files may have arrived since the restore check, so Enable lists the cloud again rather
+    /// than offering to create a new backup from what that check saw
+    CheckCloudAgain,
     ChooseExistingOrNew,
     CreateNewPasskey,
 }
@@ -201,7 +206,7 @@ impl OnboardingCloudBackupEnableStart {
             CloudRestoreDiscovery::Checking => None,
             CloudRestoreDiscovery::BackupFound(hint) => Some(Self::ConfirmKnownBackup(hint)),
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::BackupMetadataPending) => {
-                Some(Self::RequireExistingPasskey)
+                Some(Self::CheckCloudAgain)
             }
             CloudRestoreDiscovery::Inconclusive(_) => Some(Self::ChooseExistingOrNew),
             CloudRestoreDiscovery::NoBackupFound => Some(Self::CreateNewPasskey),

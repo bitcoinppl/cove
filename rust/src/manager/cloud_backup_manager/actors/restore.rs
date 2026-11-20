@@ -7,7 +7,7 @@ use cove_cspp::backup_data::PasskeyProviderHint;
 use cove_cspp::master_key::MasterKey;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use cove_device::passkey::PasskeyAccess;
+use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use futures::stream::{self, StreamExt as _};
 use tokio::time::Instant;
 use tracing::{info, warn};
@@ -426,7 +426,7 @@ impl RestoreOperation {
                 info!("Restore: passkey discovery cancelled");
                 Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
-            Err(error @ (CloudBackupError::PasskeyMismatch | CloudBackupError::NoBackupFound)) => {
+            Err(error) if error.is_no_passkey_restore() => {
                 info!(
                     "Restore: passkey matching found no restore, trying local master key fallback"
                 );
@@ -825,8 +825,13 @@ impl RestoreOperation {
             NamespaceMatchOutcome::NoMatch if saw_supported_candidate => {
                 Err(CloudBackupError::PasskeyMismatch)
             }
-            NamespaceMatchOutcome::NoMatch => Err(CloudBackupError::NoBackupFound),
-            NamespaceMatchOutcome::Inconclusive => {
+            NamespaceMatchOutcome::NoMatch | NamespaceMatchOutcome::NoBackupFiles => {
+                Err(CloudBackupError::NoBackupFound)
+            }
+            NamespaceMatchOutcome::NoPasskeyOnDevice => {
+                Err(CloudBackupError::from(PasskeyError::NoCredentialFound))
+            }
+            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::FilesPending(_) => {
                 Err(offline_error_for_step(BlockingCloudStep::Restore))
             }
             NamespaceMatchOutcome::UnsupportedVersions => Err(CloudBackupError::Internal(

@@ -1,5 +1,5 @@
 use cove_device::cloud_storage::CloudStorage;
-use cove_device::passkey::PasskeyAccess;
+use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use tracing::info;
 
 use super::blocking_cloud_error;
@@ -43,7 +43,11 @@ impl RustCloudBackupManager {
                 return Err(CloudBackupError::PasskeyDiscoveryCancelled);
             }
             NamespaceMatchOutcome::NoMatch => return Err(CloudBackupError::PasskeyMismatch),
-            NamespaceMatchOutcome::Inconclusive => {
+            NamespaceMatchOutcome::NoBackupFiles => return Err(CloudBackupError::NoBackupFound),
+            NamespaceMatchOutcome::NoPasskeyOnDevice => {
+                return Err(CloudBackupError::from(PasskeyError::NoCredentialFound));
+            }
+            NamespaceMatchOutcome::Inconclusive | NamespaceMatchOutcome::FilesPending(_) => {
                 return Err(self.offline_error_for_step(BlockingCloudStep::RecoverOtherBackups));
             }
             NamespaceMatchOutcome::UnsupportedVersions => {

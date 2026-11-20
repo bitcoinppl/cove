@@ -25,7 +25,8 @@ final class OnboardingBackupViewsTests: XCTestCase {
         let promptOrDiscoveryStates: [CloudBackupEnableFlow?] = [
             nil,
             .discoveringExistingBackup,
-            .awaitingForceNewConfirmation(context, nil),
+            .awaitingForceNewConfirmation(context, .readable(passkeyHint: nil)),
+            .awaitingForceNewConfirmation(context, .filesUnavailable),
             .awaitingPasskeyChoice(.enable(context, nil)),
         ]
         for state in promptOrDiscoveryStates {

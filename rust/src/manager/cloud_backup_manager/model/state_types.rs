@@ -2,7 +2,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
+    CloudBackupEnableContext, CloudBackupExistingBackup, CloudBackupPasskeyChoiceIntent,
     CloudBackupProgress, CloudBackupRootPrompt, CloudBackupVerificationPresentation,
     DeepVerificationFailure, DeepVerificationReport, SavedPasskeyConfirmationMode,
 };
@@ -155,7 +155,7 @@ impl CloudBackupConfiguredState {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupEnableFlow {
     DiscoveringExistingBackup,
-    AwaitingForceNewConfirmation(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
+    AwaitingForceNewConfirmation(CloudBackupEnableContext, CloudBackupExistingBackup),
     AwaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent),
     CreatingPasskey,
     AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),

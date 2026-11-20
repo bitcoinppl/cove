@@ -7,6 +7,7 @@ import org.bitcoinppl.cove_core.CloudBackupActions
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupExistingBackup
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupProgress
@@ -36,7 +37,14 @@ class CloudBackupRegressionHelpersTest {
         val states =
             listOf<Pair<CloudBackupEnableFlow?, String>>(
                 CloudBackupEnableFlow.DiscoveringExistingBackup to checkingExistingBackups,
-                CloudBackupEnableFlow.AwaitingForceNewConfirmation(context, null) to checkingExistingBackups,
+                CloudBackupEnableFlow.AwaitingForceNewConfirmation(
+                    context,
+                    CloudBackupExistingBackup.Readable(null),
+                ) to checkingExistingBackups,
+                CloudBackupEnableFlow.AwaitingForceNewConfirmation(
+                    context,
+                    CloudBackupExistingBackup.FilesUnavailable,
+                ) to checkingExistingBackups,
                 CloudBackupEnableFlow.AwaitingPasskeyChoice(
                     CloudBackupPasskeyChoiceIntent.Enable(context, null),
                 ) to checkingExistingBackups,
@@ -175,18 +183,6 @@ class CloudBackupRegressionHelpersTest {
                 hasBlockers = false,
             ),
         )
-    }
-
-    @Test
-    fun existingOnlyPasskeyChoiceDoesNotOfferNewBackup() {
-        val intent = CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly(manualEnableContext(), null)
-        val choices = passkeyChoicePromptChoices(intent)
-
-        assertEquals(
-            listOf(CloudBackupScreenAction.ACCEPT_ENABLE_PROMPT_USE_EXISTING),
-            choices.map { it.action },
-        )
-        assertTrue(cloudBackupPasskeyChoicePresentation(intent).message.contains("existing passkey"))
     }
 
     @Test

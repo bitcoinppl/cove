@@ -259,10 +259,21 @@ platforms and must never render as a confirmed empty backup.
 ### Enable and passkeys
 
 Both platforms project the Rust-owned existing-passkey versus Create New Backup
-decision. Pending namespace metadata is existing-passkey-only. Create New Backup
+decision. Backup folders without their master key files get Backup Files Not
+Available Yet, with Try Again and Create New Backup. Create New Backup
 stages a fresh master, isolated namespace, and passkey until accepted remote
 writes and durable local promotion are safe; it does not rewrap or overwrite the
 retained active namespace.
+
+A choice on an Enable prompt can bring back the same prompt, such as Try Again
+on Backup Files Not Available Yet. On iOS, both the root prompt host and the
+Settings Enable sheet draw their prompts through
+`CloudBackupPresentationCoordinator`, which draws a prompt again only after the
+alert it replaces has finished closing. It also counts an alert's dismissal only
+while that alert's prompt is on screen, because SwiftUI can report one
+dismissal again after its animation ends, which would discard the prompt a
+retry brought back. Android's dialogs stay up while Rust projects the prompt
+and send their dismiss intent only from the dialog's own dismiss request.
 
 Platform code must classify passkey presentation outcomes into typed results.
 Only pre-presentation platform unavailability receives bounded automatic retry.

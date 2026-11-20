@@ -1923,6 +1923,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     private func promptChoices(_ prompt: CloudBackupRootPrompt) -> [CloudBackupPromptChoice]? {
         switch prompt {
         case .existingBackupFound: CloudBackupPromptChoice.existingBackup
+        case .backupFilesUnavailable: CloudBackupPromptChoice.backupFilesUnavailable
         case let .passkeyChoice(intent): CloudBackupPasskeyChoicePresentation(intent: intent).choices
         case .none, .missingPasskeyReminder, .verification: nil
         }
@@ -1963,6 +1964,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         case .recoverySupportCode: return Id.recoverySupportCode
         case .menu: return Id.menu
         case .promptExistingBackupFound: return Id.promptExistingBackupFound
+        case .promptBackupFilesUnavailable: return Id.promptBackupFilesUnavailable
         case .promptPasskeyChoice: return Id.promptPasskeyChoice
         case .promptPasskeyChoiceCreateNewPasskey: return Id.promptPasskeyChoiceCreateNewPasskey
         case .promptMissingPasskeyReminder: return Id.promptMissingPasskeyReminder

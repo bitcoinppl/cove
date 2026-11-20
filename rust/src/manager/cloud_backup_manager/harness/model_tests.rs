@@ -350,7 +350,8 @@ fn dialog_dismissal(app: &TestApp) -> Option<Tap> {
 
     match screen.root_prompt {
         CloudBackupRootPrompt::None => None,
-        CloudBackupRootPrompt::ExistingBackupFound(..) => Some(Tap::DiscardPendingEnable),
+        CloudBackupRootPrompt::ExistingBackupFound(..)
+        | CloudBackupRootPrompt::BackupFilesUnavailable(..) => Some(Tap::DiscardPendingEnable),
         CloudBackupRootPrompt::PasskeyChoice(_) => Some(Tap::DismissPasskeyChoicePrompt),
         CloudBackupRootPrompt::MissingPasskeyReminder => Some(Tap::DismissMissingPasskeyReminder),
         CloudBackupRootPrompt::Verification => Some(Tap::DismissVerificationPrompt),

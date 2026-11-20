@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
@@ -244,6 +244,7 @@ struct MockCloudState {
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallets_pending_confirmation: bool,
     uploaded_master_key_pending_confirmation: bool,
+    pending_master_key_uploads: HashSet<String>,
     uploaded_wallet_backups: Vec<(String, String)>,
     wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
@@ -677,6 +678,11 @@ impl MockCloudStorage {
 
     pub(crate) fn set_uploaded_master_key_pending_confirmation(&self, enabled: bool) {
         self.state.lock().uploaded_master_key_pending_confirmation = enabled;
+    }
+
+    /// Reports only `namespace`'s master key upload as unconfirmed
+    pub(crate) fn set_master_key_upload_pending(&self, namespace: String) {
+        self.state.lock().pending_master_key_uploads.insert(namespace);
     }
 
     pub(crate) fn uploads(&self) -> Vec<MockCloudUpload> {
@@ -1176,9 +1182,9 @@ impl CloudStorageAccess for MockCloudStorage {
         }
 
         if record_id == MASTER_KEY_RECORD_ID {
-            if state.uploaded_master_key_pending_confirmation
-                && state.master_key_backups.contains_key(&namespace)
-            {
+            let pending = state.uploaded_master_key_pending_confirmation
+                || state.pending_master_key_uploads.contains(&namespace);
+            if pending && state.master_key_backups.contains_key(&namespace) {
                 return Ok(cove_device::cloud_storage::CloudBackupUploadStatus::Pending);
             }
 

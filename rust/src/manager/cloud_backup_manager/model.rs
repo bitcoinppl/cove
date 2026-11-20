@@ -6,12 +6,12 @@
 
 use super::{
     CloudBackupDetail, CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupInventoryAuthority,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudBackupWalletStatus, DeepVerificationReport,
-    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
-    is_connectivity_related_issue,
+    CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupExistingBackup,
+    CloudBackupInventoryAuthority, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
+    CloudBackupVerificationPresentation, CloudBackupVerificationReason, CloudBackupWalletStatus,
+    DeepVerificationReport, PendingUploadVerificationState, RecoveryAction, RecoveryState,
+    SyncState, VerificationState, is_connectivity_related_issue,
 };
 
 use super::cloud_inventory::LocalUploadStatus;
@@ -396,7 +396,6 @@ impl CloudBackupReducerState {
                 CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
                     | CloudBackupEnableFlow::AwaitingPasskeyChoice(
                         CloudBackupPasskeyChoiceIntent::Enable(_, _)
-                            | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
                     )
             )
         )
@@ -405,8 +404,15 @@ impl CloudBackupReducerState {
     fn root_prompt(&self) -> CloudBackupRootPrompt {
         match &self.phase {
             CloudBackupLifecyclePhase::Enabling(
-                CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, passkey_hint),
-            ) => CloudBackupRootPrompt::ExistingBackupFound(*context, passkey_hint.clone()),
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, existing),
+            ) => match existing {
+                CloudBackupExistingBackup::Readable { passkey_hint } => {
+                    CloudBackupRootPrompt::ExistingBackupFound(*context, passkey_hint.clone())
+                }
+                CloudBackupExistingBackup::FilesUnavailable => {
+                    CloudBackupRootPrompt::BackupFilesUnavailable(*context)
+                }
+            },
             CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
                 intent,
             )) => CloudBackupRootPrompt::PasskeyChoice(intent.clone()),
@@ -450,7 +456,7 @@ impl CloudBackupReducerState {
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
                 ),
                 CloudBackupEnablePromptChoice::UseExisting,
-            ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
+            ) => Some(CloudBackupAcceptedEnablePrompt::RetryExisting(*context)),
             (
                 CloudBackupLifecyclePhase::Enabling(
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
@@ -460,12 +466,6 @@ impl CloudBackupReducerState {
             (
                 CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
                     CloudBackupPasskeyChoiceIntent::Enable(context, _),
-                )),
-                CloudBackupEnablePromptChoice::UseExisting,
-            ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
-            (
-                CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
-                    CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, _),
                 )),
                 CloudBackupEnablePromptChoice::UseExisting,
             ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
@@ -1329,13 +1329,10 @@ impl CloudBackupStateReducer {
                     self.state.apply_status(status);
                 }
             }
-            CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
-                context,
-                passkey_hint,
-            } => {
+            CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet { context, existing } => {
                 self.state.active_enable_context = Some(context);
                 self.state.phase = CloudBackupLifecyclePhase::Enabling(
-                    CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, passkey_hint),
+                    CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, existing),
                 );
             }
             CloudBackupStateReducerEvent::EnablePromptCleared => {
@@ -1345,8 +1342,7 @@ impl CloudBackupStateReducer {
                 }
             }
             CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent) => match &intent {
-                CloudBackupPasskeyChoiceIntent::Enable(context, _)
-                | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, _) => {
+                CloudBackupPasskeyChoiceIntent::Enable(context, _) => {
                     self.state.active_enable_context = Some(*context);
                     self.state.phase = CloudBackupLifecyclePhase::Enabling(
                         CloudBackupEnableFlow::AwaitingPasskeyChoice(intent),
@@ -1364,7 +1360,6 @@ impl CloudBackupStateReducer {
                     CloudBackupLifecyclePhase::Enabling(
                         CloudBackupEnableFlow::AwaitingPasskeyChoice(
                             CloudBackupPasskeyChoiceIntent::Enable(_, _)
-                                | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
                         )
                     )
                 ) {
@@ -2331,9 +2326,10 @@ mod tests {
         };
         let mut model = CloudBackupStateReducer::default();
 
+        let readable = CloudBackupExistingBackup::Readable { passkey_hint: Some(hint.clone()) };
         model.apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
             context: CloudBackupEnableContext::settings_manual(),
-            passkey_hint: Some(hint.clone()),
+            existing: readable.clone(),
         });
 
         assert_eq!(
@@ -2347,12 +2343,34 @@ mod tests {
             model.public_state().lifecycle,
             CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::AwaitingForceNewConfirmation(
                 CloudBackupEnableContext::settings_manual(),
-                Some(CloudBackupPasskeyHint {
-                    provider_name: Some("iCloud Keychain".into()),
-                    name_suffix: "abc123".into(),
-                    registered_at: 1,
-                }),
+                readable,
             )),
+        );
+    }
+
+    #[test]
+    fn unavailable_backup_files_project_their_own_prompt() {
+        let context = CloudBackupEnableContext::settings_manual();
+        let mut model = CloudBackupStateReducer::default();
+
+        model.apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
+            context,
+            existing: CloudBackupExistingBackup::FilesUnavailable,
+        });
+
+        assert_eq!(
+            model.snapshot().root_prompt,
+            CloudBackupRootPrompt::BackupFilesUnavailable(context)
+        );
+
+        // Try Again reruns discovery, and Create New starts a new backup beside the folders
+        assert_eq!(
+            model.enable_prompt_answer(CloudBackupEnablePromptChoice::UseExisting),
+            Some(CloudBackupAcceptedEnablePrompt::RetryExisting(context))
+        );
+        assert_eq!(
+            model.enable_prompt_answer(CloudBackupEnablePromptChoice::CreateNew),
+            Some(CloudBackupAcceptedEnablePrompt::ForceNew(context))
         );
     }
 
@@ -2363,7 +2381,7 @@ mod tests {
 
         model.apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
             context,
-            passkey_hint: None,
+            existing: CloudBackupExistingBackup::Readable { passkey_hint: None },
         });
 
         let (accepted, effects) =
@@ -2381,33 +2399,6 @@ mod tests {
                 &CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup,)
             ),
         );
-    }
-
-    #[test]
-    fn existing_passkey_only_prompt_rejects_create_new() {
-        let context = CloudBackupEnableContext::settings_manual();
-        let intent = CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, None);
-        let mut model = CloudBackupStateReducer::default();
-
-        model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent.clone()));
-
-        let expected_lifecycle = CloudBackupLifecycle::Enabling(
-            CloudBackupEnableFlow::AwaitingPasskeyChoice(intent.clone()),
-        );
-        assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::PasskeyChoice(intent),);
-        assert_eq!(model.public_state().lifecycle, expected_lifecycle);
-        assert!(model.is_awaiting_enable_prompt());
-
-        let (accepted, effects) =
-            model.accept_enable_prompt(CloudBackupEnablePromptChoice::CreateNew);
-
-        assert_eq!(accepted, None);
-        assert_eq!(effects, CloudBackupStateReducerEffects::default());
-        assert_eq!(model.public_state().lifecycle, expected_lifecycle);
-
-        let (accepted, _) = model.accept_enable_prompt(CloudBackupEnablePromptChoice::UseExisting);
-
-        assert_eq!(accepted, Some(CloudBackupAcceptedEnablePrompt::Enable(context)));
     }
 
     #[test]

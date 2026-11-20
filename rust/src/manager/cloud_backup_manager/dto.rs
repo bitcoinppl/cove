@@ -71,7 +71,6 @@ impl CloudBackupEnableContext {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPasskeyChoiceIntent {
     Enable(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
-    EnableExistingPasskeyOnly(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     RepairPasskey,
 }
 
@@ -82,11 +81,24 @@ pub enum CloudBackupEnablePromptChoice {
     CreateNew,
 }
 
+/// What an Enable found in cloud storage, which it confirms before creating a new backup
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupExistingBackup {
+    /// A backup whose master key this device can read, which an existing passkey may open
+    Readable { passkey_hint: Option<CloudBackupPasskeyHint> },
+    /// Backup folders whose master key this device can't see: one still syncing to this device,
+    /// or a setup that stopped before its upload, which nothing here tells apart
+    FilesUnavailable,
+}
+
 /// Root-level prompt the UI should show for the current cloud backup state
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupRootPrompt {
     None,
     ExistingBackupFound(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
+    /// Backup folders are listed but their files aren't available on this device, so no passkey
+    /// can open them yet; the user tries again later or creates a new backup
+    BackupFilesUnavailable(CloudBackupEnableContext),
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
     MissingPasskeyReminder,
     Verification,

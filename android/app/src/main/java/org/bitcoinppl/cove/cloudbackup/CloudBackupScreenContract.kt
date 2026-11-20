@@ -82,6 +82,7 @@ internal object CloudBackupTags {
     val DRIVE_ACCOUNT_SWITCH = of(CloudBackupUiElement.DriveAccountSwitch)
     val ROWS_UNAVAILABLE = of(CloudBackupUiElement.RowsUnavailable)
     val PROMPT_EXISTING_BACKUP_FOUND = of(CloudBackupUiElement.PromptExistingBackupFound)
+    val PROMPT_BACKUP_FILES_UNAVAILABLE = of(CloudBackupUiElement.PromptBackupFilesUnavailable)
     val PROMPT_PASSKEY_CHOICE = of(CloudBackupUiElement.PromptPasskeyChoice)
     val PROMPT_PASSKEY_CHOICE_CREATE_NEW_PASSKEY = of(CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey)
     val PROMPT_MISSING_PASSKEY_REMINDER = of(CloudBackupUiElement.PromptMissingPasskeyReminder)
@@ -147,6 +148,7 @@ internal object CloudBackupTags {
             CloudBackupUiElement.RecoverySupportCode -> "cloudBackup.recovery.supportCode"
             CloudBackupUiElement.Menu -> "cloudBackup.menu"
             CloudBackupUiElement.PromptExistingBackupFound -> "cloudBackup.prompt.existingBackupFound"
+            CloudBackupUiElement.PromptBackupFilesUnavailable -> "cloudBackup.prompt.backupFilesUnavailable"
             CloudBackupUiElement.PromptPasskeyChoice -> "cloudBackup.prompt.passkeyChoice"
             CloudBackupUiElement.PromptPasskeyChoiceCreateNewPasskey ->
                 "cloudBackup.prompt.passkeyChoice.createNewPasskey"

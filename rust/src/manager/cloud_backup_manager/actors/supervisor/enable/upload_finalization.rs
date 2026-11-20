@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::CloudBackupExistingBackup;
 
 impl CloudBackupSupervisor {
     pub async fn complete_enable_preparation(
@@ -15,9 +16,34 @@ impl CloudBackupSupervisor {
                 manager.apply_enable_state(CloudBackupEnableState::CreatingPasskey);
                 self.schedule_create_new_enable_passkey(manager, claim, context);
             }
-            Ok(CloudBackupEnablePreparation::ExistingBackupFound { context, passkey_hint }) => {
-                manager.present_existing_backup_found_prompt(context, passkey_hint);
+            Ok(CloudBackupEnablePreparation::ExistingBackupFound { context, existing }) => {
+                // a Try Again that still finds no files says so, instead of showing the same prompt
+                if existing == CloudBackupExistingBackup::FilesUnavailable {
+                    self.screen_outcome.existing_backup_retry_failed(
+                        claim,
+                        &CloudBackupError::BackupFilesUnavailable,
+                    );
+                }
+
+                manager.present_existing_backup_found_prompt(context, existing);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
+                manager.request_screen_publish();
+                self.finish_enable_operation(manager, claim);
+            }
+            Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
+                context,
+                passkey_hint,
+                error,
+            }) => {
+                // a Use Existing whose passkey opened nothing says why, instead of showing a
+                // prompt that asks for the same answer again
+                self.screen_outcome.use_existing_failed(claim, &error);
+                manager.present_existing_backup_found_prompt(
+                    context,
+                    CloudBackupExistingBackup::Readable { passkey_hint },
+                );
+                manager.clear_enable_progress(CloudBackupStatus::Disabled);
+                manager.request_screen_publish();
                 self.finish_enable_operation(manager, claim);
             }
             Ok(CloudBackupEnablePreparation::PasskeyChoice { context, passkey_hint }) => {
@@ -119,9 +145,9 @@ impl CloudBackupSupervisor {
             }
             Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
-                passkey_hint,
+                existing,
             }) => {
-                manager.present_existing_backup_found_prompt(context, passkey_hint);
+                manager.present_existing_backup_found_prompt(context, existing);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
                 self.runtime.finish(claim);
                 manager.project_exclusive_operation_finished(claim);

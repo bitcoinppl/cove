@@ -11,11 +11,11 @@ use crate::{
     database::Database,
     manager::{
         cloud_backup_manager::{
-            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-            CloudBackupOnboardingCompletionReadiness, CloudBackupPasskeyChoiceIntent,
-            CloudBackupPasskeyHint, CloudBackupRestoreEvent, CloudBackupRestoreFlow,
-            CloudBackupRestoreReport, CloudBackupVerificationSource, CloudStorageIssue,
-            SavedPasskeyConfirmationMode,
+            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupExistingBackup,
+            CloudBackupManagerAction, CloudBackupOnboardingCompletionReadiness,
+            CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRestoreEvent,
+            CloudBackupRestoreFlow, CloudBackupRestoreReport, CloudBackupVerificationSource,
+            CloudStorageIssue, SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
@@ -600,14 +600,18 @@ impl RustOnboardingManager {
                 info!("Onboarding: confirming existing cloud backup before creating passkey");
                 CLOUD_BACKUP_MANAGER.present_existing_backup_found_prompt(
                     context,
-                    hint.map(CloudBackupPasskeyHint::from),
+                    CloudBackupExistingBackup::Readable {
+                        passkey_hint: hint.map(CloudBackupPasskeyHint::from),
+                    },
                 );
             }
-            OnboardingCloudBackupEnableStart::RequireExistingPasskey => {
-                info!("Onboarding: backup metadata is pending; requiring existing passkey");
-                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
-                    CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, None),
-                );
+            OnboardingCloudBackupEnableStart::CheckCloudAgain => {
+                info!("Onboarding: backup metadata was pending; checking the cloud again");
+                // listing the cloud again without a passkey offers a master key that has synced
+                // since on the existing-backup prompt, as a backup the restore check found is,
+                // and says the files aren't available yet if it still hasn't
+                CLOUD_BACKUP_MANAGER
+                    .dispatch(CloudBackupManagerAction::EnableCloudBackupNoDiscovery(context));
             }
             OnboardingCloudBackupEnableStart::ChooseExistingOrNew => {
                 info!("Onboarding: cloud backup discovery was inconclusive; asking passkey choice");
@@ -1055,12 +1059,12 @@ mod tests {
     }
 
     #[test]
-    fn pending_backup_metadata_requires_existing_backup_confirmation() {
+    fn pending_backup_metadata_says_backup_files_are_unavailable() {
         assert_eq!(
             OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::Inconclusive(
                 CloudCheckIssue::BackupMetadataPending,
             )),
-            Some(OnboardingCloudBackupEnableStart::RequireExistingPasskey),
+            Some(OnboardingCloudBackupEnableStart::CheckCloudAgain),
         );
     }
 

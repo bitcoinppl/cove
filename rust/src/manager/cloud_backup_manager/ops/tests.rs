@@ -27,6 +27,7 @@ use crate::database::cloud_backup::{
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::CloudBackupDetailState;
+use crate::manager::cloud_backup_manager::CloudBackupExistingBackup;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
