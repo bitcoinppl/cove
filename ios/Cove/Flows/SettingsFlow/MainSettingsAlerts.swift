@@ -12,6 +12,9 @@ extension MainSettingsAlertState: TaggedAlertPresentable {
         case .unreadableWallets:
             unreadableWalletsAlert(context: context)
 
+        case .cloudBackupKeyUnconfirmed:
+            cloudBackupKeyUnconfirmedAlert(context: context)
+
         case .confirmEnableWipeMePin:
             confirmEnableWipeDataPinAlert(context: context)
 
@@ -69,6 +72,14 @@ private func unverifiedDecoyWalletsAlert(context: MainSettingsPresentationContex
         If the decoy PIN is off, set a new one in Settings first. \
         If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet.
         """,
+        actions: { Button("OK") { context.dismissAlert() } }
+    ).eraseToAny()
+}
+
+private func cloudBackupKeyUnconfirmedAlert(context: MainSettingsPresentationContext) -> AnyAlertBuilder {
+    AlertBuilder(
+        title: "Can't Enable Wipe Data PIN",
+        message: "Cove couldn't confirm the key for your cloud backup, so it can't restore your wallets after a wipe. Sync Cloud Backup, or back up each wallet's recovery words, before enabling the Wipe Data PIN.",
         actions: { Button("OK") { context.dismissAlert() } }
     ).eraseToAny()
 }

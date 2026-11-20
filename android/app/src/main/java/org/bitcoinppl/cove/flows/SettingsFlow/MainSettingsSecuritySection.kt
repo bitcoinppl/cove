@@ -113,6 +113,9 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
 
         try {
             auth.setWipeDataPin(pin)
+        } catch (e: AuthManagerException.WipeDataRefused) {
+            // a backup failed while the PIN sheet was open, so say why as the toggle does
+            alertState = e.v1
         } catch (e: AuthManagerException) {
             alertState = SecurityAlertState.ExtraSetPinError(e.displayMessage("Unknown error"))
         }

@@ -1207,6 +1207,15 @@ impl CloudBackupStateReducer {
         self.state.status()
     }
 
+    /// Whether the last sync health check found the master key wrapper missing from, or
+    /// unconfirmed at, the provider, which Settings shows as "couldn't confirm the key"
+    pub(crate) fn master_key_unconfirmed_at_provider(&self) -> bool {
+        matches!(
+            &self.state.sync_health,
+            CloudSyncHealth::Failed(message) if message == super::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE
+        )
+    }
+
     /// Whether the lifecycle shows recovery for an incomplete enable
     pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
         self.projected_pending_enable_recovery().is_some()

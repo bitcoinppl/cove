@@ -226,7 +226,10 @@ struct MainSettingsScreen: View {
             return
         }
 
-        do { try auth.rust.setWipeDataPin(pin: pin) } catch {
+        do { try auth.rust.setWipeDataPin(pin: pin) } catch let AuthManagerError.WipeDataRefused(reason) {
+            // a backup failed while the PIN sheet was open, so say why as the toggle does
+            alertState = .init(MainSettingsAlertState(reason))
+        } catch {
             alertState = .init(.extraSetPinError(error.localizedDescription))
         }
     }

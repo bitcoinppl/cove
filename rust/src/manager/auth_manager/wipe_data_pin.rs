@@ -19,6 +19,9 @@ pub(crate) enum WipeDataPinBlocker {
     UnbackedDecoyWallet,
     /// A wallet list couldn't be read, so a wallet with no backup can't be ruled out
     WalletsUnreadable,
+    /// A wallet has no backup while the provider can't confirm Cloud Backup's master key, so its
+    /// cloud copy can't restore it; main mode only, since decoy mode hides Cloud Backup
+    CloudBackupKeyUnconfirmed,
 }
 
 impl WipeDataPinBlocker {
@@ -28,11 +31,23 @@ impl WipeDataPinBlocker {
         let target = database.global_config.wallet_target();
         let coverage = CloudBackupRecoveryCoverage::load();
 
-        Self::find_with(
+        let blocker = Self::find_with(
             target,
             |mode, first| database.wallets.all_networks(mode, first),
             |wallet| coverage.needs_backup(wallet),
-        )
+        )?;
+
+        // the cloud copies count for nothing while the key is unconfirmed, so that is the reason to
+        // give where Cloud Backup shows; either syncing it or verifying the words clears it
+        let key_unconfirmed = target.mode == WalletMode::Main
+            && CloudBackupRecoveryCoverage::master_key_unconfirmed_at_provider();
+
+        match blocker {
+            Self::UnbackedWallet(_) | Self::UnbackedDecoyWallet if key_unconfirmed => {
+                Some(Self::CloudBackupKeyUnconfirmed)
+            }
+            blocker => Some(blocker),
+        }
     }
 
     /// Checks the current mode's wallets first, selected network ahead, so the alert names a
@@ -75,6 +90,7 @@ impl From<WipeDataPinBlocker> for SecurityAlertState {
             WipeDataPinBlocker::UnbackedWallet(wallet_id) => Self::UnverifiedWallets { wallet_id },
             WipeDataPinBlocker::UnbackedDecoyWallet => Self::UnverifiedDecoyWallets,
             WipeDataPinBlocker::WalletsUnreadable => Self::UnreadableWallets,
+            WipeDataPinBlocker::CloudBackupKeyUnconfirmed => Self::CloudBackupKeyUnconfirmed,
         }
     }
 }

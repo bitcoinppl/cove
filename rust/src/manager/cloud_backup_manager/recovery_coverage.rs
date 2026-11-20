@@ -1,6 +1,9 @@
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
-use super::{CloudBackupKeychain, CloudBackupReconcileMessage, RustCloudBackupManager};
+use super::{
+    CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupReconcileMessage, RustCloudBackupManager,
+};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     PersistedCloudBackupState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -10,14 +13,22 @@ use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 
 /// The wallets whose backup this device has confirmed in the current Cloud Backup namespace
 ///
-/// Read only from persisted state, so it holds after a relaunch and offline. The live verification
-/// and inventory state start over on every launch, so they can't prove a backup outlived one
+/// Read from persisted state, so it holds after a relaunch and offline. The live verification and
+/// inventory state start over on every launch, so they can't prove a backup outlived one. The one
+/// live input takes coverage away: a sync health check that found the provider can't confirm the
+/// master key
 #[derive(Debug, Default)]
 pub(crate) struct CloudBackupRecoveryCoverage(HashSet<WalletId>);
 
 impl CloudBackupRecoveryCoverage {
     /// Loads the coverage of the configured backup, or none when any read fails
     pub(crate) fn load() -> Self {
+        // every wallet copy is encrypted under the master key, so none restores a wallet after a
+        // wipe while the provider can't confirm it still holds that key
+        if Self::master_key_unconfirmed_at_provider() {
+            return Self::default();
+        }
+
         Self::from_persisted(&RustCloudBackupManager::load_persisted_state())
     }
 
@@ -39,6 +50,16 @@ impl CloudBackupRecoveryCoverage {
         };
 
         Self::from_states(persisted, &namespace, &sync_states)
+    }
+
+    /// Whether the running manager's last sync health check couldn't confirm the master key at the
+    /// provider, as the Cloud Backup row in Settings shows
+    ///
+    /// Only a check that ran can say so, so this is false until the manager has checked since
+    /// launch; a wrapper row this device hasn't confirmed already counts for nothing
+    pub(crate) fn master_key_unconfirmed_at_provider() -> bool {
+        LazyLock::get(&CLOUD_BACKUP_MANAGER)
+            .is_some_and(|manager| manager.state.read().master_key_unconfirmed_at_provider())
     }
 
     fn from_states(

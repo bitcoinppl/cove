@@ -24271,6 +24271,11 @@ enum AuthManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
 
     case WipeDataSet(TrickPinError
     )
+    /**
+     * A wallet the wipe would delete has no backup; the alert says which, as the toggle's does
+     */
+    case WipeDataRefused(SecurityAlertState
+    )
     case DecoySet(TrickPinError
     )
     case PinSet(NewPinError
@@ -24322,16 +24327,19 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
         case 1: return .WipeDataSet(
             try FfiConverterTypeTrickPinError.read(from: &buf)
             )
-        case 2: return .DecoySet(
+        case 2: return .WipeDataRefused(
+            try FfiConverterTypeSecurityAlertState.read(from: &buf)
+            )
+        case 3: return .DecoySet(
             try FfiConverterTypeTrickPinError.read(from: &buf)
             )
-        case 3: return .PinSet(
+        case 4: return .PinSet(
             try FfiConverterTypeNewPinError.read(from: &buf)
             )
-        case 4: return .PinSave(
+        case 5: return .PinSave(
             try FfiConverterTypeAuthError.read(from: &buf)
             )
-        case 5: return .Database(
+        case 6: return .Database(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
 
@@ -24351,23 +24359,28 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
             FfiConverterTypeTrickPinError.write(v1, into: &buf)
 
 
-        case let .DecoySet(v1):
+        case let .WipeDataRefused(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeSecurityAlertState.write(v1, into: &buf)
+
+
+        case let .DecoySet(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeTrickPinError.write(v1, into: &buf)
 
 
         case let .PinSet(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNewPinError.write(v1, into: &buf)
 
 
         case let .PinSave(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeAuthError.write(v1, into: &buf)
 
 
         case let .Database(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
 
         }
@@ -41955,6 +41968,10 @@ public enum SecurityAlertState: Equatable, Hashable {
      * A wallet list couldn't be read, so the Wipe Data PIN stays off
      */
     case unreadableWallets
+    /**
+     * A wallet relies on Cloud Backup, whose master key the provider can't confirm
+     */
+    case cloudBackupKeyUnconfirmed
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenTrickPins
@@ -41999,23 +42016,25 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
 
         case 3: return .unreadableWallets
 
-        case 4: return .confirmEnableWipeMePin
+        case 4: return .cloudBackupKeyUnconfirmed
 
-        case 5: return .confirmDecoyPin
+        case 5: return .confirmEnableWipeMePin
 
-        case 6: return .noteNoFaceIdWhenTrickPins
+        case 6: return .confirmDecoyPin
 
-        case 7: return .noteNoFaceIdWhenWipeMePin
+        case 7: return .noteNoFaceIdWhenTrickPins
 
-        case 8: return .noteNoFaceIdWhenDecoyPin
+        case 8: return .noteNoFaceIdWhenWipeMePin
 
-        case 9: return .notePinRequired
+        case 9: return .noteNoFaceIdWhenDecoyPin
 
-        case 10: return .noteFaceIdDisablingForWipeMePin
+        case 10: return .notePinRequired
 
-        case 11: return .noteFaceIdDisablingForDecoyPin
+        case 11: return .noteFaceIdDisablingForWipeMePin
 
-        case 12: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
+        case 12: return .noteFaceIdDisablingForDecoyPin
+
+        case 13: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -42039,40 +42058,44 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
 
 
-        case .confirmEnableWipeMePin:
+        case .cloudBackupKeyUnconfirmed:
             writeInt(&buf, Int32(4))
 
 
-        case .confirmDecoyPin:
+        case .confirmEnableWipeMePin:
             writeInt(&buf, Int32(5))
 
 
-        case .noteNoFaceIdWhenTrickPins:
+        case .confirmDecoyPin:
             writeInt(&buf, Int32(6))
 
 
-        case .noteNoFaceIdWhenWipeMePin:
+        case .noteNoFaceIdWhenTrickPins:
             writeInt(&buf, Int32(7))
 
 
-        case .noteNoFaceIdWhenDecoyPin:
+        case .noteNoFaceIdWhenWipeMePin:
             writeInt(&buf, Int32(8))
 
 
-        case .notePinRequired:
+        case .noteNoFaceIdWhenDecoyPin:
             writeInt(&buf, Int32(9))
 
 
-        case .noteFaceIdDisablingForWipeMePin:
+        case .notePinRequired:
             writeInt(&buf, Int32(10))
 
 
-        case .noteFaceIdDisablingForDecoyPin:
+        case .noteFaceIdDisablingForWipeMePin:
             writeInt(&buf, Int32(11))
 
 
-        case let .extraSetPinError(message):
+        case .noteFaceIdDisablingForDecoyPin:
             writeInt(&buf, Int32(12))
+
+
+        case let .extraSetPinError(message):
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(message, into: &buf)
 
         }

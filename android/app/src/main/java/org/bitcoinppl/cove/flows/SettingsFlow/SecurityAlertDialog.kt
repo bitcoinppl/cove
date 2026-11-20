@@ -25,6 +25,8 @@ internal fun SecurityAlertDialog(
         SecurityAlertState.UnverifiedDecoyWallets ->
             WipeDataPinRefusedAlert(WipeDataPinRefusal.UnverifiedDecoyWallets, callbacks)
         SecurityAlertState.UnreadableWallets -> WipeDataPinRefusedAlert(WipeDataPinRefusal.UnreadableWallets, callbacks)
+        SecurityAlertState.CloudBackupKeyUnconfirmed ->
+            WipeDataPinRefusedAlert(WipeDataPinRefusal.CloudBackupKeyUnconfirmed, callbacks)
         SecurityAlertState.ConfirmEnableWipeMePin -> ConfirmEnableWipeDataPinAlert(callbacks)
         SecurityAlertState.ConfirmDecoyPin -> ConfirmDecoyPinAlert(callbacks)
         SecurityAlertState.NotePinRequired -> NotePinRequiredAlert(callbacks)

@@ -1405,7 +1405,10 @@ The Wipe Data PIN erases every wallet on every network in both wallet modes, so
 it can't be turned on while a hot wallet with unverified words has no other
 copy of its keys. `CloudBackupRecoveryCoverage` decides which of those wallets
 Cloud Backup covers, and `WipeDataPinBlocker` (`rust/src/manager/auth_manager/wipe_data_pin.rs`),
-which `validate_security_action` asks, finds the first of the rest. In main
+which `validate_security_action` asks at the toggle and `set_wipe_data_pin`
+asks again when the PIN is saved, finds the first of the rest. A backup can
+fail while the PIN sheet is open, so the save refuses with
+`AuthManagerError::WipeDataRefused`, which carries the same alert. In main
 mode it checks the main wallets of every network, then the decoy wallets, whose
 alert has no Go To Wallet because main mode can't open them. Decoy mode checks
 only its own wallets, so it never reveals the main ones. If any of those wallet
@@ -1419,9 +1422,15 @@ integrity issue or an unrecorded cause, withdraws all coverage until a check
 passes, since its issue counts don't name the wallets. One required only because
 the wallet set changed or the backup was reset keeps it. A first upload that
 never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
-uncovered. The rule reads no live verification, inventory or sync health
-state. Those start over on every launch and need the network, so a gate built
-on them refused the PIN after every relaunch.
+uncovered. The rule reads no live verification or inventory state, and live
+sync health only takes coverage away. Those start over on every launch and
+need the network, so a gate that waited on them refused the PIN after every
+relaunch. A sync health check that found the master key wrapper missing from,
+or unconfirmed at, the provider, which Settings shows as "Cove couldn't confirm
+the key for this cloud backup", withdraws all coverage, since no wallet copy
+can be decrypted without that key. In main mode the alert then names the key
+as the reason (`SecurityAlertState::CloudBackupKeyUnconfirmed`). Until a check
+runs after launch, only the local wrapper row counts.
 
 A wallet restored from the active backup, alone or by Restore All, uploads
 nothing, so the restore records the backup it just downloaded and decrypted as

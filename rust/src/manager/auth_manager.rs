@@ -107,6 +107,8 @@ pub enum SecurityAlertState {
     UnverifiedDecoyWallets,
     /// A wallet list couldn't be read, so the Wipe Data PIN stays off
     UnreadableWallets,
+    /// A wallet relies on Cloud Backup, whose master key the provider can't confirm
+    CloudBackupKeyUnconfirmed,
     ConfirmEnableWipeMePin,
     ConfirmDecoyPin,
     NoteNoFaceIdWhenTrickPins,
@@ -235,6 +237,12 @@ type Error = AuthManagerError;
 pub enum AuthManagerError {
     #[error("Unable to set the wipe data PIN, because {0}")]
     WipeDataSet(TrickPinError),
+
+    /// A wallet the wipe would delete has no backup; the alert says which, as the toggle's does
+    #[error(
+        "Unable to set the wipe data PIN, because not every wallet it would delete has a backup"
+    )]
+    WipeDataRefused(SecurityAlertState),
 
     #[error("Unable to set the decoy PIN, because {0}")]
     DecoySet(TrickPinError),
@@ -569,6 +577,12 @@ impl RustAuthManager {
     /// Set the wipe data pin
     pub fn set_wipe_data_pin(&self, pin: String) -> Result<()> {
         self.validate_pin_settings(&pin).map_err(AuthManagerError::WipeDataSet)?;
+
+        // the toggle checked before the PIN sheet opened, and a backup can fail while it is open,
+        // so every save checks again
+        if let Some(blocker) = WipeDataPinBlocker::find() {
+            return Err(AuthManagerError::WipeDataRefused(blocker.into()));
+        }
 
         // set the pin
         Database::global().global_config.set_wipe_data_pin(pin)?;
@@ -977,6 +991,9 @@ mod tests {
     fn with_unlocked_manager(auth_type: AuthType, test: impl FnOnce(Arc<RustAuthManager>)) {
         let _lock = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
+
+        // saving a wipe data PIN reads Cloud Backup's keychain namespace
+        crate::test_support::init_test_keychain();
         let _auth_type = AuthTypeGuard::set(auth_type);
 
         let manager = RustAuthManager::init();
@@ -1301,6 +1318,38 @@ mod tests {
                     wallet_id: decoy
                 })
             );
+        });
+    }
+
+    // the toggle checks the backups before the PIN sheet opens, so a wallet that has no backup by
+    // the time the PIN is saved must still stop the save
+    #[test]
+    fn saving_the_wipe_data_pin_checks_the_backups_again() {
+        use SecuritySettingsAction::ToggleWipeDataPin;
+
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            crate::test_support::init_test_keychain();
+            let _wallets = RestoreSignetWallets::empty();
+            let _pins = PinGuard::capture();
+            AuthPin::new().set("111111".to_string()).unwrap();
+
+            assert_eq!(
+                manager.validate_security_action(ToggleWipeDataPin { enable: true }),
+                SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+                "no wallet needs a backup when the sheet opens"
+            );
+
+            // while the sheet is open, a wallet turns up with no backup
+            let wallet = save_unverified_hot_wallet(WalletMode::Main);
+
+            assert_eq!(
+                manager.set_wipe_data_pin("222222".to_string()),
+                Err(AuthManagerError::WipeDataRefused(SecurityAlertState::UnverifiedWallets {
+                    wallet_id: wallet
+                })),
+                "the save went ahead although a wallet it would wipe has no backup"
+            );
+            assert!(!manager.is_wipe_data_pin_enabled(), "the refused wipe data PIN was saved");
         });
     }
 

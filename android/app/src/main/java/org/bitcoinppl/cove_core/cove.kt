@@ -40824,6 +40824,17 @@ sealed class AuthManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A wallet the wipe would delete has no backup; the alert says which, as the toggle's does
+     */
+    class WipeDataRefused(
+
+        val v1: SecurityAlertState
+        ) : AuthManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class DecoySet(
 
         val v1: TrickPinException
@@ -40887,16 +40898,19 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
             1 -> AuthManagerException.WipeDataSet(
                 FfiConverterTypeTrickPinError.read(buf),
                 )
-            2 -> AuthManagerException.DecoySet(
+            2 -> AuthManagerException.WipeDataRefused(
+                FfiConverterTypeSecurityAlertState.read(buf),
+                )
+            3 -> AuthManagerException.DecoySet(
                 FfiConverterTypeTrickPinError.read(buf),
                 )
-            3 -> AuthManagerException.PinSet(
+            4 -> AuthManagerException.PinSet(
                 FfiConverterTypeNewPinError.read(buf),
                 )
-            4 -> AuthManagerException.PinSave(
+            5 -> AuthManagerException.PinSave(
                 FfiConverterTypeAuthError.read(buf),
                 )
-            5 -> AuthManagerException.Database(
+            6 -> AuthManagerException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -40909,6 +40923,11 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeTrickPinError.allocationSize(value.v1)
+            )
+            is AuthManagerException.WipeDataRefused -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeSecurityAlertState.allocationSize(value.v1)
             )
             is AuthManagerException.DecoySet -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -40940,23 +40959,28 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 FfiConverterTypeTrickPinError.write(value.v1, buf)
                 Unit
             }
-            is AuthManagerException.DecoySet -> {
+            is AuthManagerException.WipeDataRefused -> {
                 buf.putInt(2)
+                FfiConverterTypeSecurityAlertState.write(value.v1, buf)
+                Unit
+            }
+            is AuthManagerException.DecoySet -> {
+                buf.putInt(3)
                 FfiConverterTypeTrickPinError.write(value.v1, buf)
                 Unit
             }
             is AuthManagerException.PinSet -> {
-                buf.putInt(3)
+                buf.putInt(4)
                 FfiConverterTypeNewPinError.write(value.v1, buf)
                 Unit
             }
             is AuthManagerException.PinSave -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterTypeAuthError.write(value.v1, buf)
                 Unit
             }
             is AuthManagerException.Database -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
             }
@@ -61275,6 +61299,12 @@ sealed class SecurityAlertState {
     object UnreadableWallets : SecurityAlertState()
 
 
+    /**
+     * A wallet relies on Cloud Backup, whose master key the provider can't confirm
+     */
+    object CloudBackupKeyUnconfirmed : SecurityAlertState()
+
+
     object ConfirmEnableWipeMePin : SecurityAlertState()
 
 
@@ -61335,15 +61365,16 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 )
             2 -> SecurityAlertState.UnverifiedDecoyWallets
             3 -> SecurityAlertState.UnreadableWallets
-            4 -> SecurityAlertState.ConfirmEnableWipeMePin
-            5 -> SecurityAlertState.ConfirmDecoyPin
-            6 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
-            7 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
-            8 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
-            9 -> SecurityAlertState.NotePinRequired
-            10 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
-            11 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
-            12 -> SecurityAlertState.ExtraSetPinError(
+            4 -> SecurityAlertState.CloudBackupKeyUnconfirmed
+            5 -> SecurityAlertState.ConfirmEnableWipeMePin
+            6 -> SecurityAlertState.ConfirmDecoyPin
+            7 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
+            8 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
+            9 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
+            10 -> SecurityAlertState.NotePinRequired
+            11 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
+            12 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
+            13 -> SecurityAlertState.ExtraSetPinError(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -61365,6 +61396,12 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
             )
         }
         is SecurityAlertState.UnreadableWallets -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.CloudBackupKeyUnconfirmed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -61442,40 +61479,44 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 buf.putInt(3)
                 Unit
             }
-            is SecurityAlertState.ConfirmEnableWipeMePin -> {
+            is SecurityAlertState.CloudBackupKeyUnconfirmed -> {
                 buf.putInt(4)
                 Unit
             }
-            is SecurityAlertState.ConfirmDecoyPin -> {
+            is SecurityAlertState.ConfirmEnableWipeMePin -> {
                 buf.putInt(5)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+            is SecurityAlertState.ConfirmDecoyPin -> {
                 buf.putInt(6)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
                 buf.putInt(7)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
                 buf.putInt(8)
                 Unit
             }
-            is SecurityAlertState.NotePinRequired -> {
+            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
                 buf.putInt(9)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+            is SecurityAlertState.NotePinRequired -> {
                 buf.putInt(10)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
                 buf.putInt(11)
                 Unit
             }
-            is SecurityAlertState.ExtraSetPinError -> {
+            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
                 buf.putInt(12)
+                Unit
+            }
+            is SecurityAlertState.ExtraSetPinError -> {
+                buf.putInt(13)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }

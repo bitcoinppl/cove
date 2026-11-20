@@ -21,6 +21,11 @@ internal enum class WipeDataPinRefusal(
         "Cove couldn't read your wallets to check that they're backed up, so the Wipe Data " +
             "PIN stays off. Please try again.",
     ),
+    CloudBackupKeyUnconfirmed(
+        "Cove couldn't confirm the key for your cloud backup, so it can't restore your wallets " +
+            "after a wipe. Sync Cloud Backup, or back up each wallet's recovery words, before " +
+            "enabling the Wipe Data PIN.",
+    ),
 }
 
 @Composable

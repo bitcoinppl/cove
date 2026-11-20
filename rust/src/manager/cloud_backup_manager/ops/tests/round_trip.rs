@@ -7,6 +7,9 @@ use super::*;
 use crate::database::cloud_backup::{
     CloudBlobConfirmedState, CloudBlobUploadedPendingConfirmationState,
 };
+use crate::manager::auth_manager::{
+    AUTH_MANAGER, SecurityAlertState, SecuritySettingsAction, SecuritySettingsResult,
+};
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
 };
@@ -622,4 +625,50 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
         "the confirmed wallet must not keep the failed upload's error in Settings"
     );
     clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+// the wipe deletes the wallets, so a cloud copy counts as their backup only while the provider
+// still confirms the master key that decrypts it, which Settings reports as "Cove couldn't confirm
+// the key for this cloud backup"
+#[tokio::test(flavor = "current_thread")]
+async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_its_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    // the provider holds the master key wrapper, so Settings doesn't report the key
+    let namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
+    let missing_key = CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
+    let sync_health = manager.compute_sync_health().await;
+    assert_ne!(sync_health, missing_key);
+    manager.observe_sync_health(sync_health);
+    assert!(
+        !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "the confirmed cloud copy should count as the wallet's backup"
+    );
+
+    globals.cloud.set_master_key_upload_pending(namespace);
+    let sync_health = manager.compute_sync_health().await;
+    assert_eq!(sync_health, missing_key);
+    manager.observe_sync_health(sync_health);
+
+    assert!(
+        CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
+        "a cloud copy whose key the provider can't confirm still counted as the wallet's backup"
+    );
+
+    // the Wipe Data PIN toggle names the key as the reason
+    let toggle = AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true });
+    assert_eq!(
+        toggle,
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUnconfirmed)
+    );
 }

@@ -155,6 +155,43 @@ class DecoySecuritySettingsFullLaunchTest {
         device.clickText("OK")
     }
 
+    // the toggle checks the backups before the PIN sheet opens, so a wallet that has none by the
+    // time the PIN is confirmed must stop the save and say why
+    @Test
+    fun savingTheWipeDataPinChecksTheBackupsAgain() {
+        launchPastOnboarding()
+        val auth = AuthManager.getInstance()
+        onMain { auth.setPin(MAIN_PIN) }
+        pinsSet = true
+        wallet.waitUntil("the PIN never enabled the app lock") {
+            var ready = false
+            onMain { ready = auth.isAuthEnabled }
+            ready
+        }
+
+        openSettings()
+        device.clickSwitchInRowOf(WIPE_TOGGLE_TITLE)
+        device.clickText(CONFIRM_ENABLE_WIPE)
+        device.waitFor(By.text("Enter Wipe Data PIN"))
+
+        // while the sheet is open, a wallet turns up whose words aren't verified, with Cloud Backup off
+        onMain { PendingWalletManager(NumberOfBip39Words.TWELVE).use { it.saveWallet() } }
+
+        device.enterPin(DECOY_WIPE_DATA_PIN)
+        device.waitFor(By.text("Confirm Wipe Data PIN"))
+        device.enterPin(DECOY_WIPE_DATA_PIN)
+
+        if (!device.wait(Until.hasObject(By.text(CANT_ENABLE_WIPE)), PROMPT_TIMEOUT_MS)) {
+            error("saving the wipe data PIN never said why it was refused\n${device.hierarchy()}")
+        }
+
+        assertFalse(
+            "the wipe data PIN was saved although a wallet it would wipe has no backup",
+            RustAuthManager().use { it.isWipeDataPinEnabled() },
+        )
+        device.clickText("OK")
+    }
+
     // builds before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,
     // which then opened the main wallets; the unlock that finds it turns the decoy PIN off with no
     // word at the lock, where anyone could read it, and Security Settings says so instead
