@@ -422,6 +422,13 @@ lint-android *flags="":
 ktlint *flags="":
     ./gradlew ktlintCheck {{ flags }}
 
+# [quick] Run detekt's rules that need no type resolution, without compiling the app
+[group('lint')]
+[working-directory('android')]
+[positional-arguments]
+detekt-source *flags:
+    ./gradlew :app:detekt -x detektDevDebug "$@"
+
 # [bounded] Lint Swift code and Cove-specific SwiftUI structure
 [group('lint')]
 lint-swift *flags="":

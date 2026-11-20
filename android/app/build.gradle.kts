@@ -224,6 +224,24 @@ tasks.named("detekt") {
     dependsOn("detektDevDebug")
 }
 
+// `just pre-push` lints only the files a push changes, which takes under a second where all of
+// them take about three: `-Pcove.detektOnly=<paths from android/, comma-separated>` keeps those of
+// the plain detekt task's own sources, so the rules see what CI's run would
+providers.gradleProperty("cove.detektOnly").orNull?.let { only ->
+    val wanted =
+        only
+            .split(',')
+            .filter { it.isNotBlank() }
+            .map { rootProject.file(it).absolutePath }
+            .toSet()
+
+    tasks.named<dev.detekt.gradle.Detekt>("detekt") {
+        // the task hands detekt its source roots, which an include spec doesn't narrow
+        val ownSources = source
+        setSource(ownSources.filter { it.absolutePath in wanted })
+    }
+}
+
 // release variants package src/main/jniLibs as they are, and a debug Rust build leaves the UI test
 // seams in them, see docs/testing.md
 val checkReleaseRustSeams by tasks.registering(Exec::class) {
