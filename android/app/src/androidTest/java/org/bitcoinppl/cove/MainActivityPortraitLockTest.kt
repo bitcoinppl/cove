@@ -13,6 +13,7 @@ import androidx.test.uiautomator.UiDevice
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -51,6 +52,11 @@ class MainActivityPortraitLockTest {
 
     @Test
     fun mainActivityStaysPortraitWhenThePhoneTurns() {
+        assumeTrue(
+            "Android may ignore the lock on a display at least ${LARGE_SCREEN_MIN_WIDTH_DP}dp wide",
+            context.resources.configuration.smallestScreenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP,
+        )
+
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             // freezing the display on its side stands in for the user turning the phone with
             // auto-rotate on, and an activity without the lock follows it into landscape
@@ -79,6 +85,8 @@ class MainActivityPortraitLockTest {
         )
 
     private companion object {
+        const val LARGE_SCREEN_MIN_WIDTH_DP = 600
+
         // the alias is declared relative to the namespace, not the flavour's application id
         const val PACKAGE = "org.bitcoinppl.cove"
     }
