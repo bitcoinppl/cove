@@ -7,8 +7,8 @@
 //! and the clock advanced until nothing is left. Production code never calls it; the actors
 //! only keep test-only logs of what they decided, which each check takes.
 //!
-//! Turned on: 1, 2, 3, 4a, 5, 6, 7 and 8; 4b runs at the end of each model case
-//! (`model_tests.rs`), since it drives the app out of the state it checks.
+//! Turned on: 1, 2, 3, 4a, 5, 6, 7, 8, 9 and 11 ([`super::prompt_progress`]); 4b runs at the
+//! end of each model case (`model_tests.rs`), since it drives the app out of the state it checks.
 //! A state that is legitimately between two actors, such as a
 //! policy the owner pushed and the lane has not applied yet, is tracked as pending, never
 //! reported as a violation, and must be acknowledged by the next boundary
@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use act_zero::call;
 
 use super::app::TestApp;
+use super::prompt_progress::PromptProgress;
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::actors::UploadFinish;
@@ -93,6 +94,8 @@ pub(crate) enum Invariant {
     InventoryRows = 8,
     /// Every row that offers Delete is one the delete authority would authorize now
     OfferedDeletes = 9,
+    /// A prompt answer that goes on never ends on the screen it was given on with nothing new
+    PromptProgress = 11,
 }
 
 /// Tracked state across boundaries for one running app
@@ -116,6 +119,7 @@ pub(crate) struct Invariants {
     /// The screen a platform has after starting from a snapshot and applying every delta the
     /// manager sent
     platform_screen: Option<CloudBackupPublishedScreen>,
+    prompt_progress: PromptProgress,
 }
 
 /// One broken invariant, with what broke it
@@ -126,7 +130,7 @@ pub(crate) struct Violation {
 }
 
 impl Violation {
-    fn new(invariant: Invariant, detail: impl Into<String>) -> Self {
+    pub(crate) fn new(invariant: Invariant, detail: impl Into<String>) -> Self {
         Self { invariant, detail: detail.into() }
     }
 }
@@ -134,6 +138,8 @@ impl Violation {
 impl Invariants {
     /// The test dispatched `intent`; the supervisor must report it with exactly one admission
     pub(crate) fn expect_dispatch(&mut self, intent: UserIntent) {
+        let shown = self.platform_screen.as_ref().map(|published| &published.screen);
+        self.prompt_progress.dispatched(&intent, shown);
         self.dispatched.push(intent);
     }
 
@@ -191,6 +197,7 @@ impl Invariants {
         };
 
         self.check_screen_deltas(&screen)?;
+        self.prompt_progress.check(&screen.sent, &screen.published, live.is_live())?;
         check_exits(&screen.published, boundary, live)?;
         check_inventory_rows(&screen.published, screen.inventory.as_ref())?;
         check_offered_deletes(&screen.offered_deletes)

@@ -21,6 +21,7 @@ mod model_tests;
 mod owner_tests;
 mod passkey_tests;
 mod process;
+mod prompt_progress;
 mod recovered_enable_tests;
 mod reset_tests;
 mod row_delete_tests;
