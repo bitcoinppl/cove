@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -121,6 +122,9 @@ fun NumberPadPinView(
                 .background(CoveColor.midnightBlue)
                 .testTag("numberPadPin.viewport")
                 .onGloballyPositioned { placement.viewport = it }
+                // a key, such as Tab, would move a keyboard user's focus off the keys the pad
+                // returns to after a wrong PIN, so keys wait until the pad is done with the PIN
+                .onPreviewKeyEvent { isSubmitting }
                 .verticalScroll(scrollState)
                 .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

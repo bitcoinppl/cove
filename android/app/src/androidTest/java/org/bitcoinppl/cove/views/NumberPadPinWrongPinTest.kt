@@ -81,6 +81,7 @@ class NumberPadPinWrongPinTest {
 
         checkWrongPin(attempt = 1, interruption = Interruption.TAB_WHILE_SCROLLING_BACK)
         checkWrongPin(attempt = 2, interruption = Interruption.TAB_WHILE_SHAKING)
+        checkWrongPin(attempt = 3, interruption = Interruption.TAB_TWICE_WHILE_SHAKING)
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
@@ -164,7 +165,7 @@ class NumberPadPinWrongPinTest {
 
     private fun interrupt(interruption: Interruption?) {
         if (interruption?.usesKeyboard == true) {
-            pressKey(KeyEvent.KEYCODE_TAB)
+            repeat(interruption.tabs) { pressKey(KeyEvent.KEYCODE_TAB) }
         } else {
             compose.onNodeWithTag("numberPadPin.viewport").performTouchInput { swipeUp() }
         }
@@ -199,11 +200,15 @@ class NumberPadPinWrongPinTest {
 private enum class Interruption(
     val usesKeyboard: Boolean,
     val whileShaking: Boolean,
+    val tabs: Int = 0,
 ) {
     SWIPE_WHILE_SCROLLING_BACK(usesKeyboard = false, whileShaking = false),
     SWIPE_WHILE_SHAKING(usesKeyboard = false, whileShaking = true),
-    TAB_WHILE_SCROLLING_BACK(usesKeyboard = true, whileShaking = false),
-    TAB_WHILE_SHAKING(usesKeyboard = true, whileShaking = true),
+    TAB_WHILE_SCROLLING_BACK(usesKeyboard = true, whileShaking = false, tabs = 1),
+    TAB_WHILE_SHAKING(usesKeyboard = true, whileShaking = true, tabs = 1),
+
+    // from 0, a second Tab wraps past Delete to the header's Cancel, off the row the pad returns to
+    TAB_TWICE_WHILE_SHAKING(usesKeyboard = true, whileShaking = true, tabs = 2),
 }
 
 /** What one wrong PIN's feedback showed, frame by frame, until the boxes settled after clearing */
