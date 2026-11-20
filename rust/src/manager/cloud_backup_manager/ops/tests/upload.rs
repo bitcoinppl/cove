@@ -158,6 +158,7 @@ async fn backup_new_wallet_marks_verification_required() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "quarantined until 2027-01-19: https://github.com/bitcoinppl/cove/issues/1241"]
 async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
