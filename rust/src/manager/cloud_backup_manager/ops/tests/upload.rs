@@ -157,29 +157,21 @@ async fn backup_new_wallet_marks_verification_required() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-// quarantined because it fails intermittently, mostly on the macOS CI runners, with the wallet's
-// sync row missing when the test checks it
 #[tokio::test(flavor = "current_thread")]
-#[ignore = "quarantined until 2027-01-19: https://github.com/bitcoinppl/cove/issues/1241"]
 async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
-    globals.reset();
+    configure_enabled_cloud_backup(&manager, globals, 3);
 
-    let namespace = "test-namespace".to_string();
-    CloudBackupKeychain::global().save_namespace_id(&namespace).unwrap();
-    Database::global().cloud_blob_sync_states.delete_all().unwrap();
-    manager
-        .persist_cloud_backup_state(
-            &persisted_enabled_cloud_backup_state(Some(3)),
-            "set cloud backup enabled for test",
-        )
-        .unwrap();
-    manager.sync_persisted_state();
-
+    // the setup's write policy and connectivity change can each start an upload of the new row.
+    // Offline, that upload defers before any cloud call, so the row stays Dirty. The wallet is
+    // saved first, as a new wallet is, so the upload doesn't drop the row as an orphan's
+    CONNECTIVITY_MANAGER.set_connection_state(false);
     let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
     let record_id = wallet_record_id(metadata.id.as_ref());
+    let (network, wallet_mode) = (metadata.network, metadata.wallet_mode);
     manager.reconcile_runtime_status(CloudBackupStatus::Error("offline".into()));
 
     manager.backup_new_wallet(metadata);
@@ -194,7 +186,15 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
     ));
 
+    // an upload task in flight holds the manager, so releasing it waits for that upload too;
+    // otherwise it could reach its offline check after the next test reconnects
     clear_wallet_upload_runtime_for_test_async(&manager).await;
+    shut_down_manager_for_restart(manager).await;
+
+    // under cargo test the next test shares this database and reconnects, so a manager that
+    // scans it then, such as the process-wide one, must find neither the wallet nor its row
+    Database::global().wallets().save_all_wallets(network, wallet_mode, Vec::new()).unwrap();
+    Database::global().cloud_blob_sync_states.delete(&record_id).unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
