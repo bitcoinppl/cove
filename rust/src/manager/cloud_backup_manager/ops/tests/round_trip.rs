@@ -462,10 +462,20 @@ async fn a_deleted_backup_another_device_uploads_again_covers_the_wallet_again()
     let manager = init_manager();
     let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
     let backup = globals.cloud.wallet_backup_bytes(&namespace, &record_id).unwrap();
+    let attempts = globals.cloud.wallet_backup_upload_attempt_count();
 
+    // this device's own upload of the deleted backup can't reach the provider yet
+    globals.cloud.fail_next_wallet_backup_upload_offline("offline");
     globals.cloud.remove_wallet_backup(&namespace, &record_id);
     refresh_detail_from_provider(&manager).await;
     assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Unconfirmed);
+
+    wait_for_test_condition(Duration::from_secs(2), "the re-upload should fail offline", || {
+        let row = Database::global().cloud_blob_sync_states.get(&record_id).unwrap();
+        globals.cloud.wallet_backup_upload_attempt_count() > attempts
+            && matches!(row.map(|row| row.state), Some(PersistedCloudBlobState::Dirty(_)))
+    })
+    .await;
 
     // a while later another device uploads the same revision again
     rewrite_row_state(&record_id, |state| {
