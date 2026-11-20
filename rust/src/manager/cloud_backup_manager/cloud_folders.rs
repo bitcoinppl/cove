@@ -53,7 +53,9 @@ pub(crate) enum WrapperRead {
     ///
     /// Onboarding's silent check reads this way: on a new iPhone, a wrapper that synced may report
     /// its upload state as unknown, which reads as pending, and on Android a confirmed upload binds
-    /// the Drive account before the user chose one
+    /// the Drive account before the user chose one. A folder the provider needs authorization
+    /// for is only unreadable, since the check never asks for it and another folder's wrapper is
+    /// still a backup to offer
     Visible,
 }
 
@@ -109,8 +111,8 @@ impl CloudFolders {
     /// Reads each of `namespaces` once, downloading the wrappers `wrappers` names, stopping with
     /// [`CloudBackupError::Cancelled`] once `cancellation` is set
     ///
-    /// A provider that needs authorization fails the whole read, so the caller can ask for it;
-    /// any other read failure classifies only its own folder
+    /// With [`WrapperRead::Uploaded`], a provider that needs authorization fails the whole read,
+    /// so the caller can ask for it; any other read failure classifies only its own folder
     pub(crate) async fn read(
         cloud: &CloudStorageClient,
         namespaces: &[String],
@@ -210,7 +212,11 @@ async fn read_folder(
             info!("Cloud folder has no master key wrapper");
             return Ok((CloudFolder::MasterKeyMissing, None));
         }
-        Err(error @ CloudStorageError::AuthorizationRequired(_)) => return Err(error.into()),
+        Err(error @ CloudStorageError::AuthorizationRequired(_))
+            if wrappers == WrapperRead::Uploaded =>
+        {
+            return Err(error.into());
+        }
         Err(error) => {
             warn!("Failed to download cloud backup master key: {error}");
             return Ok((CloudFolder::Unreadable(Some(error)), None));

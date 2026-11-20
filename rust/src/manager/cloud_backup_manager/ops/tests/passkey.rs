@@ -106,7 +106,8 @@ async fn passkey_match_without_master_key_files_reports_no_backup_files() {
 }
 
 /// Onboarding's backup check reads the listed folders through the classification Enable reads,
-/// so the two agree on whether a backup is there and whether its files are still unavailable
+/// so the two agree on whether a backup is there, except that onboarding downloads a wrapper
+/// whose upload isn't confirmed
 #[tokio::test(flavor = "current_thread")]
 async fn onboarding_and_enable_read_the_same_folders() {
     let _guard = async_test_lock().lock().await;
@@ -144,9 +145,14 @@ async fn onboarding_and_enable_read_the_same_folders() {
     let readable = seed_master_key_wrapper(globals, &[8; 32], &[9; 32], 2);
     assert!(matches!(onboarding_check().await, CloudCheckOutcome::BackupFound(_)));
     assert!(matches!(
-        existing_backup(&[missing, uploading, readable]).await,
+        existing_backup(&[missing, uploading.clone(), readable]).await,
         CloudBackupExistingBackup::Readable { .. }
     ));
+
+    // the silent check never asks for authorization, so a folder that needs it leaves the others'
+    // wrappers a backup to offer
+    globals.cloud.fail_master_key_download_authorization_required(uploading, "authorization");
+    assert!(matches!(onboarding_check().await, CloudCheckOutcome::BackupFound(_)));
 }
 
 #[tokio::test(flavor = "current_thread")]
