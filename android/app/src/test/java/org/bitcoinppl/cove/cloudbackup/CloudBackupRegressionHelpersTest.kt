@@ -307,6 +307,7 @@ class CloudBackupRegressionHelpersTest {
         val presentations =
             listOf(
                 CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext(), null),
+                CloudBackupRootPresentation.BackupFilesUnavailable(manualEnableContext()),
                 CloudBackupRootPresentation.PasskeyChoice(
                     CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null),
                 ),
