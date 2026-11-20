@@ -60,7 +60,8 @@ impl CloudBackupWalletCountRefresh {
     }
 }
 
-/// Local state mutation that runs only after the paired remote write succeeds
+/// Local state mutation that runs only after the paired remote write succeeds, or a remote read
+/// proved the bytes it names
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupWriteCompletion {
     MarkUploadedPendingConfirmation {
@@ -69,7 +70,8 @@ pub(crate) enum CloudBackupWriteCompletion {
         revision_hash: String,
         uploaded_at: u64,
     },
-    /// The upload to `namespace_id` landed, while its row is still `current_state`
+    /// The upload to `namespace_id` landed, or Verify read it back, while its row is still
+    /// `current_state`
     MarkUploadedPendingConfirmationIfCurrent {
         current_state: PersistedCloudBlobSyncState,
         namespace_id: String,

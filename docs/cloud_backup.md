@@ -1343,7 +1343,9 @@ state, so the app can resume after the platform cloud authorization is restored.
 The verifier reads each blob in the namespace its sync row names, and the upload
 owns that namespace: an upload, or the finalization of an Enable or
 reinitialize, writes the namespace it uploaded to into the row it starts or
-marks pending. A reinitialize or a Google Drive account switch moves the backup
+marks pending. A Verify that decrypts the provider's wrapper marks a `Failed`
+wrapper row pending in the namespace it read, through the same write-lane
+completion. A reinitialize or a Google Drive account switch moves the backup
 to a new namespace under a new master key. If a wallet's row still named the
 replaced namespace, the verifier would read the replaced backup with the new
 key and record a permanent decryption failure for an upload that landed.
@@ -1446,8 +1448,12 @@ nothing, so it leaves the answer in place. A different namespace ignores it.
 
 A wrapper row the queue saved as `Failed` after its confirmation window ran out
 also withdraws all coverage, though Settings then shows the generic error. The
-row doesn't record why, so it counts as `Missing`, whose fix re-uploads the
-wrapper. In each case `CloudBackupRecoveryCoverage` carries the `MasterKeyIssue`.
+row doesn't record why, so it counts as `Missing`, whose fix is Verify. A Verify
+that decrypts the provider's wrapper hands that row back to the queue as
+`UploadedPendingConfirmation` with the revision it downloaded, so the queue
+confirms it against the provider as it would after an upload; a Verify that
+finds no wrapper rebuilds and uploads it. Either way the refusal ends once the
+row leaves `Failed`. In each case `CloudBackupRecoveryCoverage` carries the `MasterKeyIssue`.
 In main mode the alert names the key and the matching fix
 (`SecurityAlertState::CloudBackupKeyMissing` or `CloudBackupKeyUploading`). The
 one exception is a wallet that has no confirmed cloud copy at all: fixing the

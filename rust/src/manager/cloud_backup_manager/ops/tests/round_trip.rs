@@ -787,3 +787,126 @@ async fn a_wrapper_the_queue_gave_up_on_names_the_key_as_the_reason() {
         "a wrapper the queue gave up on should name the key, not the wallet"
     );
 }
+
+/// Saves the wrapper row the queue writes when the confirmation window runs out
+fn save_wrapper_row_the_queue_gave_up_on(namespace: String) {
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: Some("revision".into()),
+                retryable: false,
+                error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                issue: None,
+                failed_at: 20,
+            }),
+        ))
+        .unwrap();
+}
+
+/// Runs Verify as the Cloud Backup screen does and returns its report once it passes
+async fn verify_from_cloud_backup(manager: &RustCloudBackupManager) -> DeepVerificationReport {
+    call!(manager.supervisor.start_verification_for_test(true, Some(tap(PermitIntent::Verify))))
+        .await
+        .unwrap();
+
+    wait_for_test_condition(Duration::from_secs(8), "Verify finishes", || {
+        manager.projected_exclusive_operation().is_none()
+            && matches!(
+                manager.model_snapshot().verification,
+                VerificationState::Verified(_) | VerificationState::Failed(_)
+            )
+    })
+    .await;
+
+    match manager.model_snapshot().verification {
+        VerificationState::Verified(report) => report,
+        other => panic!("Verify should pass, got {other:?}"),
+    }
+}
+
+fn wipe_data_pin_toggle() -> SecuritySettingsResult {
+    AUTH_MANAGER
+        .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true })
+}
+
+/// A wallet covered by a confirmed backup whose wrapper the provider holds, with the queue then
+/// giving up on that wrapper, so the Wipe Data PIN refusal tells the user to run Verify
+async fn backup_whose_wrapper_the_queue_gave_up_on(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+) -> String {
+    configure_enabled_cloud_backup(manager, globals, 0);
+    seed_verifiable_cloud_master_key(globals);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(manager).await;
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "the confirmed backup should cover the wallet before the queue gives up on the wrapper"
+    );
+
+    let namespace = manager.current_namespace_id().unwrap();
+    save_wrapper_row_the_queue_gave_up_on(namespace.clone());
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing)
+    );
+
+    namespace
+}
+
+// iCloud can finish uploading the wrapper after the queue gave up on it, so Verify finds the
+// wrapper and has nothing to repair; the refusal sends the user to Verify, so passing it must end
+// the refusal or the user is stuck with advice that doesn't work
+#[tokio::test(flavor = "current_thread")]
+async fn a_passing_verify_ends_the_refusal_when_the_provider_has_the_wrapper() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    backup_whose_wrapper_the_queue_gave_up_on(&manager, globals).await;
+
+    let report = verify_from_cloud_backup(&manager).await;
+    assert!(!report.master_key_wrapper_repaired, "the provider still had the wrapper");
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    let wrapper_row =
+        Database::global().cloud_blob_sync_states.get(&cspp_master_key_record_id()).unwrap();
+    assert!(
+        matches!(
+            wrapper_row,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+        ),
+        "the queue should confirm the wrapper Verify read, got {wrapper_row:?}"
+    );
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "a Verify that passed left the Wipe Data PIN refused, telling the user to run Verify"
+    );
+}
+
+// the wrapper is gone from the provider, so Verify rebuilds it and the upload confirms
+#[tokio::test(flavor = "current_thread")]
+async fn a_passing_verify_ends_the_refusal_when_it_rebuilds_the_wrapper() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let namespace = backup_whose_wrapper_the_queue_gave_up_on(&manager, globals).await;
+    globals.cloud.remove_master_key_backup(&namespace);
+
+    let report = verify_from_cloud_backup(&manager).await;
+    assert!(report.master_key_wrapper_repaired, "Verify should rebuild the missing wrapper");
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
+        "a Verify that rebuilt the wrapper left the Wipe Data PIN refused"
+    );
+}

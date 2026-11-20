@@ -9,7 +9,11 @@ use std::collections::HashSet;
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
 use cove_cspp::master_key::MasterKey;
 
-use crate::manager::cloud_backup_manager::actors::{CloudBackupWriteClient, OwnedKeychainWrite};
+use crate::database::Database;
+use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedCloudBlobState};
+use crate::manager::cloud_backup_manager::actors::{
+    CloudBackupWriteClient, CloudBackupWriteCompletion, OwnedKeychainWrite,
+};
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -37,7 +41,8 @@ use crate::manager::cloud_backup_manager::{
     actors::CloudBackupUploadedWallet,
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
-    is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
+    is_connectivity_related_issue, is_provider_wide_interruption, master_key_wrapper_revision_hash,
+    offline_error_for_step,
     wallets::{
         PasskeyRequestAuthority, RemoteWalletBackupSummary, WalletBackupLookup, WalletBackupReader,
     },
@@ -48,7 +53,11 @@ const RECREATE_WARNING: &str = "Recreating from this device will remove referenc
 const REINITIALIZE_WARNING: &str = "This will replace your entire cloud backup set. Wallets that only exist in the cloud backup will be lost";
 
 enum EncryptedMasterKeyStep {
-    Loaded(EncryptedMasterKeyBackup),
+    /// The provider's wrapper, with the revision hash of the bytes it returned
+    Loaded {
+        encrypted: EncryptedMasterKeyBackup,
+        revision_hash: String,
+    },
     Missing,
     Finished(DeepVerificationResult),
 }
@@ -440,13 +449,16 @@ impl VerificationSession {
 
     pub(crate) async fn run(mut self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         let started = std::time::Instant::now();
-        let encrypted_master = match self.load_encrypted_master_key().await? {
-            EncryptedMasterKeyStep::Loaded(encrypted_master) => Some(encrypted_master),
-            EncryptedMasterKeyStep::Missing => None,
-            EncryptedMasterKeyStep::Finished(result) => {
-                return Ok(CloudBackupDeepVerificationStep::Complete(result));
-            }
-        };
+        let (encrypted_master, wrapper_revision_hash) =
+            match self.load_encrypted_master_key().await? {
+                EncryptedMasterKeyStep::Loaded { encrypted, revision_hash } => {
+                    (Some(encrypted), Some(revision_hash))
+                }
+                EncryptedMasterKeyStep::Missing => (None, None),
+                EncryptedMasterKeyStep::Finished(result) => {
+                    return Ok(CloudBackupDeepVerificationStep::Complete(result));
+                }
+            };
         debug!(
             elapsed_ms = started.elapsed().as_millis(),
             "Verification timing: loaded master key backup"
@@ -469,6 +481,11 @@ impl VerificationSession {
             &master_key_resolution
         {
             self.apply_verified_cloud_master_key(&authenticated_master.master_key).await?;
+
+            // only a loaded wrapper can authenticate, so the revision is always here
+            if let Some(revision_hash) = wrapper_revision_hash {
+                self.recheck_failed_wrapper_row(revision_hash).await;
+            }
         }
 
         let started = std::time::Instant::now();
@@ -567,7 +584,8 @@ impl VerificationSession {
                     }
                 }
 
-                Ok(EncryptedMasterKeyStep::Loaded(encrypted))
+                let revision_hash = master_key_wrapper_revision_hash(&json);
+                Ok(EncryptedMasterKeyStep::Loaded { encrypted, revision_hash })
             }
 
             Err(CloudStorageError::NotFound(_)) => {
@@ -665,6 +683,42 @@ impl VerificationSession {
             Err(error) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(&format!(
                 "passkey did not decrypt the master key ({error}) and no local master key"
             )))),
+        }
+    }
+
+    /// Hands a wrapper row the upload queue gave up on back to it, once this pass decrypted the
+    /// provider's wrapper
+    ///
+    /// A failed wrapper row stops the Wipe Data PIN and tells the user to run Verify, so a Verify
+    /// that reads a good wrapper has to end that state. The row goes to pending confirmation, not
+    /// confirmed, so the queue still checks the provider holds these bytes, as it does after an
+    /// upload
+    async fn recheck_failed_wrapper_row(&self, revision_hash: String) {
+        let record_id = CloudBackupRecordKey::master_key_record_id();
+        let row = match Database::global().cloud_blob_sync_states.get(record_id) {
+            Ok(Some(row)) => row,
+            Ok(None) => return,
+            Err(error) => {
+                warn!("Verify: couldn't read the master key wrapper row: {error}");
+                return;
+            }
+        };
+
+        let failed_here = row.is_master_key_wrapper()
+            && row.namespace_id == self.namespace
+            && matches!(row.state, PersistedCloudBlobState::Failed(_));
+        if !failed_here {
+            return;
+        }
+
+        let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
+            row,
+            self.namespace.clone(),
+            revision_hash,
+            cove_util::time::unix_timestamp_secs_or_zero(),
+        );
+        if let Err(error) = self.writes.apply_completion(completion).await {
+            warn!("Verify: couldn't hand the failed master key wrapper row back: {error}");
         }
     }
 
