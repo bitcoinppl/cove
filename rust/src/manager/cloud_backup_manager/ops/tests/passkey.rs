@@ -1,5 +1,5 @@
 use super::*;
-use crate::manager::cloud_backup_manager::cloud_folders::CloudFolders;
+use crate::manager::cloud_backup_manager::cloud_folders::{CloudFolders, WrapperRead};
 use crate::manager::cloud_backup_manager::wallets::{Unopened, UnopenedReason};
 use crate::manager::onboarding_manager::{
     CloudCheckIssue, CloudCheckOutcome, determine_cloud_check_outcome, inspect_cloud_restore_backup,
@@ -66,10 +66,15 @@ fn unopened(outcome: NamespaceMatchOutcome) -> Option<(UnopenedReason, bool)> {
 
 /// What a fresh Enable confirms before creating a new backup beside `namespaces`
 async fn existing_backup(namespaces: &[String]) -> CloudBackupExistingBackup {
-    CloudFolders::read(&CloudStorage::global_explicit_client(), namespaces, &AtomicBool::default())
-        .await
-        .unwrap()
-        .existing_backup()
+    CloudFolders::read(
+        &CloudStorage::global_explicit_client(),
+        namespaces,
+        WrapperRead::Uploaded,
+        &AtomicBool::default(),
+    )
+    .await
+    .unwrap()
+    .existing_backup()
 }
 
 fn seed_namespace_without_master_key(globals: &TestGlobals) -> String {
@@ -103,7 +108,7 @@ async fn passkey_match_without_master_key_files_reports_no_backup_files() {
 /// Onboarding's backup check reads the listed folders through the classification Enable reads,
 /// so the two agree on whether a backup is there and whether its files are still unavailable
 #[tokio::test(flavor = "current_thread")]
-async fn onboarding_and_enable_classify_the_same_folders_alike() {
+async fn onboarding_and_enable_read_the_same_folders() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     globals.reset();
@@ -114,14 +119,22 @@ async fn onboarding_and_enable_classify_the_same_folders_alike() {
 
     assert_eq!(onboarding_check().await, CloudCheckOutcome::NoBackupConfirmed);
 
-    // a folder without its master key, beside one whose master key upload isn't confirmed
+    // a folder without its master key is files still unavailable to both
     let missing = seed_namespace_without_master_key(globals);
-    let uploading = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
-    globals.cloud.set_master_key_upload_pending(uploading.clone());
     assert_eq!(
         onboarding_check().await,
         CloudCheckOutcome::Inconclusive(CloudCheckIssue::BackupMetadataPending)
     );
+    assert_eq!(
+        existing_backup(std::slice::from_ref(&missing)).await,
+        CloudBackupExistingBackup::FilesUnavailable
+    );
+
+    // onboarding's silent check counts a wrapper it can download whatever its upload state reads,
+    // while Enable waits for the upload before offering a passkey for it
+    let uploading = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
+    globals.cloud.set_master_key_upload_pending(uploading.clone());
+    assert!(matches!(onboarding_check().await, CloudCheckOutcome::BackupFound(_)));
     assert_eq!(
         existing_backup(&[missing.clone(), uploading.clone()]).await,
         CloudBackupExistingBackup::FilesUnavailable

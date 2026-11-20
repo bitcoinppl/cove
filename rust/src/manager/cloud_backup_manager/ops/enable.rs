@@ -11,7 +11,7 @@ use zeroize::Zeroizing;
 
 use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
-use crate::manager::cloud_backup_manager::cloud_folders::CloudFolders;
+use crate::manager::cloud_backup_manager::cloud_folders::{CloudFolders, WrapperRead};
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
@@ -243,9 +243,14 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            let existing = CloudFolders::read(&cloud, &existing_namespaces, &Default::default())
-                .await?
-                .existing_backup();
+            let existing = CloudFolders::read(
+                &cloud,
+                &existing_namespaces,
+                WrapperRead::Uploaded,
+                &Default::default(),
+            )
+            .await?
+            .existing_backup();
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
                 existing,

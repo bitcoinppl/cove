@@ -13,7 +13,7 @@ use super::authorization_retry::{
 };
 use super::prf_output_to_key;
 use crate::manager::cloud_backup_manager::cloud_folders::{
-    CloudFolder, CloudFolders, ListedBackups, ReadableFolder,
+    CloudFolder, CloudFolders, ListedBackups, ReadableFolder, WrapperRead,
 };
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupPasskeyHint};
@@ -221,7 +221,13 @@ impl NamespacePasskeyMatcher {
         namespaces: &[String],
     ) -> Result<(NamespaceMatchOutcome, Option<CloudBackupPasskeyHint>), CloudBackupError> {
         let mut session = self.start_session();
-        let folders = CloudFolders::read(&self.cloud, namespaces, &AtomicBool::default()).await?;
+        let folders = CloudFolders::read(
+            &self.cloud,
+            namespaces,
+            WrapperRead::Uploaded,
+            &AtomicBool::default(),
+        )
+        .await?;
         let passkey_hint = folders.passkey_hint().cloned();
         let outcome = match session.match_inspection(namespaces.len(), folders).await? {
             NamespaceMatchSnapshotOutcome::Matched(matches) => {
@@ -263,7 +269,9 @@ impl NamespacePasskeyMatchSession {
             return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
         }
 
-        let folders = CloudFolders::read(&self.cloud, namespaces, &self.cancellation).await;
+        let folders =
+            CloudFolders::read(&self.cloud, namespaces, WrapperRead::Uploaded, &self.cancellation)
+                .await;
         if cancellation_requested(&self.cancellation) {
             return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
         }

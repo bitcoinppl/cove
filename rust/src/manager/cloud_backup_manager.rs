@@ -59,7 +59,7 @@ use self::actors::{
     CloudBackupSupervisor, CloudBackupWriteClient, CloudBackupWriteSupervisor, WriteTicket,
 };
 use self::admission::Rejection;
-pub(crate) use self::cloud_folders::{CloudFolders, ListedBackups};
+pub(crate) use self::cloud_folders::{CloudFolders, ListedBackups, WrapperRead};
 pub use self::delete_consent::{CloudBackupBatchDeleteConsent, CloudBackupRowDeleteConsent};
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,

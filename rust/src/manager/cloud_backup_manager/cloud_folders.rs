@@ -43,6 +43,20 @@ pub(crate) struct ReadableFolder {
     pub(crate) revision: String,
 }
 
+/// Which master key wrappers a read downloads
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WrapperRead {
+    /// Only a wrapper whose upload is confirmed; one whose upload isn't is
+    /// [`CloudFolder::UploadPending`]
+    Uploaded,
+    /// Any wrapper this device can download, without reading its upload state
+    ///
+    /// Onboarding's silent check reads this way: on a new iPhone, a wrapper that synced may report
+    /// its upload state as unknown, which reads as pending, and on Android a confirmed upload binds
+    /// the Drive account before the user chose one
+    Visible,
+}
+
 /// What a listing shows before any passkey is asked for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ListedBackups<'a> {
@@ -92,14 +106,15 @@ pub(crate) struct CloudFolders {
 }
 
 impl CloudFolders {
-    /// Reads each of `namespaces` once, stopping with [`CloudBackupError::Cancelled`] once
-    /// `cancellation` is set
+    /// Reads each of `namespaces` once, downloading the wrappers `wrappers` names, stopping with
+    /// [`CloudBackupError::Cancelled`] once `cancellation` is set
     ///
     /// A provider that needs authorization fails the whole read, so the caller can ask for it;
     /// any other read failure classifies only its own folder
     pub(crate) async fn read(
         cloud: &CloudStorageClient,
         namespaces: &[String],
+        wrappers: WrapperRead,
         cancellation: &AtomicBool,
     ) -> Result<Self, CloudBackupError> {
         let mut seen_namespaces = HashSet::new();
@@ -115,7 +130,7 @@ impl CloudFolders {
                 Ok(async move {
                     Ok::<_, CloudBackupError>((
                         index,
-                        read_folder(&cloud, namespace_id, cancellation).await?,
+                        read_folder(&cloud, namespace_id, wrappers, cancellation).await?,
                     ))
                 })
             }))
@@ -167,36 +182,17 @@ type ReadFolder = (CloudFolder, Option<CloudBackupPasskeyHint>);
 async fn read_folder(
     cloud: &CloudStorageClient,
     namespace_id: String,
+    wrappers: WrapperRead,
     cancellation: &AtomicBool,
 ) -> Result<ReadFolder, CloudBackupError> {
     if cancellation_requested(cancellation) {
         return Err(CloudBackupError::Cancelled);
     }
 
-    let upload_state = log_elapsed(
-        "Cloud folder upload-state read",
-        cloud.is_backup_uploaded(namespace_id.clone(), MASTER_KEY_RECORD_ID.to_string()),
-    )
-    .await;
-    if cancellation_requested(cancellation) {
-        return Err(CloudBackupError::Cancelled);
-    }
-
-    match upload_state {
-        Ok(CloudBackupUploadStatus::Uploaded) => {}
-        Ok(CloudBackupUploadStatus::Pending) => {
-            info!("Cloud folder master key upload_state=pending");
-            return Ok((CloudFolder::UploadPending, None));
-        }
-        Ok(CloudBackupUploadStatus::NotFound) => {
-            info!("Cloud folder has no master key wrapper");
-            return Ok((CloudFolder::MasterKeyMissing, None));
-        }
-        Err(error @ CloudStorageError::AuthorizationRequired(_)) => return Err(error.into()),
-        Err(error) => {
-            warn!("Failed to read cloud folder upload state: {error}");
-            return Ok((CloudFolder::Unreadable(Some(error)), None));
-        }
+    if wrappers == WrapperRead::Uploaded
+        && let Some(unconfirmed) = read_upload_state(cloud, &namespace_id, cancellation).await?
+    {
+        return Ok((unconfirmed, None));
     }
 
     let wrapper = log_elapsed(
@@ -222,6 +218,39 @@ async fn read_folder(
     };
 
     Ok(classify_wrapper(namespace_id, &master_json))
+}
+
+/// The folder a wrapper whose upload isn't confirmed leaves, or `None` once it is
+async fn read_upload_state(
+    cloud: &CloudStorageClient,
+    namespace_id: &str,
+    cancellation: &AtomicBool,
+) -> Result<Option<CloudFolder>, CloudBackupError> {
+    let upload_state = log_elapsed(
+        "Cloud folder upload-state read",
+        cloud.is_backup_uploaded(namespace_id.to_string(), MASTER_KEY_RECORD_ID.to_string()),
+    )
+    .await;
+    if cancellation_requested(cancellation) {
+        return Err(CloudBackupError::Cancelled);
+    }
+
+    match upload_state {
+        Ok(CloudBackupUploadStatus::Uploaded) => Ok(None),
+        Ok(CloudBackupUploadStatus::Pending) => {
+            info!("Cloud folder master key upload_state=pending");
+            Ok(Some(CloudFolder::UploadPending))
+        }
+        Ok(CloudBackupUploadStatus::NotFound) => {
+            info!("Cloud folder has no master key wrapper");
+            Ok(Some(CloudFolder::MasterKeyMissing))
+        }
+        Err(error @ CloudStorageError::AuthorizationRequired(_)) => Err(error.into()),
+        Err(error) => {
+            warn!("Failed to read cloud folder upload state: {error}");
+            Ok(Some(CloudFolder::Unreadable(Some(error))))
+        }
+    }
 }
 
 fn classify_wrapper(namespace_id: String, master_json: &[u8]) -> ReadFolder {

@@ -7,7 +7,7 @@ use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use tracing::{info, warn};
 
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, CloudFolders, CloudStorageIssue, ListedBackups,
+    CloudBackupError, CloudFolders, CloudStorageIssue, ListedBackups, WrapperRead,
 };
 
 use super::{CloudCheckIssue, CloudCheckOutcome, CloudRestoreProviderHint};
@@ -63,7 +63,9 @@ pub(crate) async fn inspect_cloud_restore_backup(
     let namespaces = cloud.list_namespaces().await?;
     info!("Onboarding: cloud backup namespace check found {} namespace(s)", namespaces.len());
 
-    let folders = CloudFolders::read(&cloud, &namespaces, &AtomicBool::default()).await?;
+    let folders =
+        CloudFolders::read(&cloud, &namespaces, WrapperRead::Visible, &AtomicBool::default())
+            .await?;
     match folders.listed() {
         ListedBackups::None => {
             Ok(CloudRestoreBackupSnapshot { has_backup: false, provider_hint: None })

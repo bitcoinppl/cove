@@ -618,7 +618,12 @@ upload isn't confirmed, are files still unavailable, and a failed read beside th
 leaves it unknown. Onboarding's backup check, Enable with and without discovery,
 Restore and the passkey match of Recover Other Backups all read that
 classification, and the matcher tries a passkey only on the readable folders, so
-none of them reads the same cloud contents another way.
+none of them reads the same cloud contents another way. Enable and Restore read a
+master key only once its upload is confirmed (`WrapperRead::Uploaded`).
+Onboarding's silent check downloads any master key it can see
+(`WrapperRead::Visible`): on a new iPhone a master key that synced may report its
+upload state as unknown, and on Android a confirmed upload binds the Drive account
+before the user has chosen one.
 
 Enable behavior depends on what discovery proved:
 
