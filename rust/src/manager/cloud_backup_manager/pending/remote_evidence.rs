@@ -20,6 +20,16 @@ use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
 use crate::manager::cloud_backup_manager::cloud_inventory::{
     ProviderCopy, ProviderCopyShown, RemoteWalletTruth,
 };
+use crate::wallet::metadata::WalletId;
+
+/// The rows a reconciliation changed
+#[derive(Debug, Default)]
+pub(crate) struct ReconciledWalletRows {
+    /// Whether any row was written
+    pub(crate) changed: bool,
+    /// Wallets whose confirmed copy the provider no longer holds, which must upload again
+    pub(crate) needs_upload: Vec<WalletId>,
+}
 
 /// Wallet revisions read from one namespace under one configuration
 #[derive(Debug, Clone)]
@@ -118,17 +128,17 @@ impl RemoteRevisionEvidence {
     }
 
     /// Reconciles each local wallet's row with what the read showed of its copy in this
-    /// evidence's namespace, and returns whether any row changed
+    /// evidence's namespace, and returns what it changed
     ///
     /// A copy at the local revision confirms a wallet with no row, such as one restored before
     /// restores recorded their backup, or one whose upload is dirty or failed. A confirmed row turns dirty when the
     /// provider no longer holds its copy, or holds another revision than the one it confirmed,
     /// since the confirmation no longer proves a copy that restores the wallet. A row written
     /// since the read began is left alone, as it may record a change the read could not show
-    pub(crate) fn reconcile_wallet_rows(&self) -> bool {
+    pub(crate) fn reconcile_wallet_rows(&self) -> ReconciledWalletRows {
         let table = &Database::global().cloud_blob_sync_states;
         let now = cove_util::time::unix_timestamp_secs_or_zero();
-        let mut updated = false;
+        let mut reconciled = ReconciledWalletRows::default();
 
         for copy in &self.provider_copies {
             let row = match table.get(&copy.record_id) {
@@ -147,7 +157,7 @@ impl RemoteRevisionEvidence {
             };
             let dirty = || PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: now });
 
-            let written = match (&copy.shown, row) {
+            let (written, withdrawn) = match (&copy.shown, row) {
                 (ProviderCopyShown::Matching, None) => {
                     let row = PersistedCloudBlobSyncState::wallet(
                         self.namespace_id.clone(),
@@ -156,33 +166,40 @@ impl RemoteRevisionEvidence {
                         confirmed(),
                     );
 
-                    table.set_if_absent(&row)
+                    (table.set_if_absent(&row), false)
                 }
                 (ProviderCopyShown::Matching, Some(row)) if self.unconfirmed_before_read(&row) => {
-                    table.set_if_current(&row, &row.uploaded_to(&self.namespace_id, confirmed()))
+                    let confirmed = row.uploaded_to(&self.namespace_id, confirmed());
+                    (table.set_if_current(&row, &confirmed), false)
                 }
                 (ProviderCopyShown::Missing, Some(row))
                     if self.confirmation_before_read(&row).is_some() =>
                 {
-                    table.set_if_current(&row, &row.with_state(dirty()))
+                    (table.set_if_current(&row, &row.with_state(dirty())), true)
                 }
                 (ProviderCopyShown::Stale { revision_hash }, Some(row))
                     if self
                         .confirmation_before_read(&row)
                         .is_some_and(|confirmed| confirmed.revision_hash != *revision_hash) =>
                 {
-                    table.set_if_current(&row, &row.with_state(dirty()))
+                    (table.set_if_current(&row, &row.with_state(dirty())), true)
                 }
                 _ => continue,
             };
 
             match written {
-                Ok(written) => updated |= written,
+                Ok(false) => {}
+                Ok(true) => {
+                    reconciled.changed = true;
+                    if withdrawn {
+                        reconciled.needs_upload.push(copy.wallet_id.clone());
+                    }
+                }
                 Err(error) => warn!("Reconcile wallet rows: persist sync state failed: {error}"),
             }
         }
 
-        updated
+        reconciled
     }
 
     /// The confirmation `row` holds in this namespace, when it was written no later than the

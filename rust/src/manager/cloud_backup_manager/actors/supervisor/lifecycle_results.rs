@@ -197,15 +197,27 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if evidence.confirm_pending_uploads() {
+        let confirmed_pending = evidence.confirm_pending_uploads();
+        if confirmed_pending {
             manager.refresh_pending_upload_verification_state();
         }
 
-        // a row granted or withdrawn changes what Cloud Backup can restore, and a sync health
-        // check that read the rows before this changed them would keep showing their old state
-        if evidence.reconcile_wallet_rows() {
+        // a row granted or withdrawn changes what Cloud Backup can restore
+        let reconciled = evidence.reconcile_wallet_rows();
+        if reconciled.changed {
             manager.request_screen_publish();
+        }
+
+        // a sync health check that read the rows before this changed them would keep showing an
+        // upload as pending or failed
+        if confirmed_pending || reconciled.changed {
             manager.refresh_sync_health();
+        }
+
+        // the provider lost these copies, so they upload again now rather than at the next resume,
+        // and the write lane decides when each runs
+        for wallet_id in reconciled.needs_upload {
+            self.uploads.schedule_wallet_upload(wallet_id, true);
         }
 
         Produces::ok(())

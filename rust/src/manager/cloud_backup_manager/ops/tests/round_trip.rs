@@ -4,7 +4,9 @@ use bdk_wallet::KeychainKind;
 use cove_types::{AddressIndex, BlockSizeLast};
 
 use super::*;
-use crate::database::cloud_backup::CloudBlobConfirmedState;
+use crate::database::cloud_backup::{
+    CloudBlobConfirmedState, CloudBlobUploadedPendingConfirmationState,
+};
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
 };
@@ -302,6 +304,7 @@ async fn a_backup_another_device_deleted_no_longer_covers_the_wallet() {
     let manager = init_manager();
     let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
 
+    let upload = globals.cloud.gate_next_wallet_upload();
     globals.cloud.remove_wallet_backup(&namespace, &record_id);
     refresh_detail_from_provider(&manager).await;
 
@@ -311,6 +314,56 @@ async fn a_backup_another_device_deleted_no_longer_covers_the_wallet() {
         "the provider no longer holds the backup, so deleting the wallet would lose its keys"
     );
     assert!(CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+
+    let uploading = tokio::time::timeout(Duration::from_secs(2), upload.wait_until_blocked()).await;
+    assert!(uploading.is_ok(), "the refresh should upload the deleted backup again");
+
+    upload.release();
+    wait_for_test_condition(Duration::from_secs(2), "the backup should be uploaded again", || {
+        globals.cloud.wallet_backup_bytes(&namespace, &record_id).is_some()
+    })
+    .await;
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_refresh_that_confirms_the_last_pending_upload_shows_every_wallet_uploaded() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (_, namespace, record_id) = confirmed_backup(&manager, globals).await;
+    globals.cloud.set_master_key_backup(namespace, vec![1]);
+
+    // the upload landed, but nothing has confirmed it yet
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::Confirmed(confirmed) = state else {
+            panic!("the refresh should have confirmed the backup, got {state:?}");
+        };
+
+        PersistedCloudBlobState::UploadedPendingConfirmation(
+            CloudBlobUploadedPendingConfirmationState {
+                revision_hash: confirmed.revision_hash.clone(),
+                uploaded_at: confirmed.confirmed_at,
+                attempt_count: 0,
+                last_checked_at: None,
+            },
+        )
+    });
+
+    manager.refresh_sync_health();
+    let uploading =
+        shown_sync_health(&manager, |health| *health == CloudSyncHealth::Uploading).await;
+    assert_eq!(uploading, CloudSyncHealth::Uploading, "Settings should show the pending upload");
+
+    refresh_detail_from_provider(&manager).await;
+
+    let uploaded =
+        shown_sync_health(&manager, |health| *health == CloudSyncHealth::AllUploaded).await;
+    assert_eq!(
+        uploaded,
+        CloudSyncHealth::AllUploaded,
+        "the refresh read the uploaded revision, so Settings must stop showing it syncing"
+    );
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 

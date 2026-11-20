@@ -1427,7 +1427,10 @@ again or that this device failed to upload. A
 `Confirmed` row whose copy the provider no longer holds, or holds at another
 revision than the one the row confirmed, turns `Dirty`, since another device
 deleted or replaced that copy; the wallet then counts as uncovered until its
-upload confirms. A copy the read couldn't read, or one at a version this app
+upload confirms, and that upload starts right away, as the write lane allows.
+A changed row, or an upload the evidence confirmed, also requests a sync health
+check, so Settings doesn't keep showing an upload as pending or failed. A copy
+the read couldn't read, or one at a version this app
 can't read, changes nothing, unless a listing the provider confirmed left it
 out: iCloud waits for a file it doesn't list until the read times out, so the
 listing is what shows a copy another device deleted.
