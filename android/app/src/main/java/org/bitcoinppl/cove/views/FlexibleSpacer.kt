@@ -16,7 +16,7 @@ val MinSectionSpacing: Dp = 24.dp
  * but never closes below [minHeight]
  *
  * A weighted spacer shares out only leftover space, so once a screen's content outgrows the
- * screen, at a large font size or on a small or landscape phone, its gaps fall to zero and the
+ * screen, at a large font size or on a small phone, its gaps fall to zero and the
  * sections touch, or overflow into each other when the column can't grow. Inside a column that
  * fills the screen and scrolls, such as one with `Modifier.fillMaxSize().verticalScroll(...)`,
  * these gaps spread the sections over the screen while they fit and keep [minHeight] once they

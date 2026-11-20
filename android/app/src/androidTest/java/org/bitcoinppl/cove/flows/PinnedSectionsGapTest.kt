@@ -47,7 +47,6 @@ import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.CompactViewport
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
-import org.bitcoinppl.cove.test.Viewport
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.coveAndroidComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -95,7 +94,6 @@ private const val VIEWPORT_TAG = "pinnedSections.viewport"
 @RunWith(Parameterized::class)
 class PinnedSectionsGapTest(
     private val screen: PinnedSectionsScreen,
-    private val viewport: Viewport,
     private val fontScale: Float,
 ) {
     private val compose = coveAndroidComposeRule<ComponentActivity>()
@@ -111,7 +109,8 @@ class PinnedSectionsGapTest(
     // every broken expectation of the case, so one run shows each way a screen falls apart
     private val failures = mutableListOf<String>()
 
-    // the density the viewport laid out at, which a landscape viewport lowers to fit the window
+    // the density the viewport laid out at, which is lower than the activity's on an emulator too
+    // short to fit it
     private lateinit var layoutDensity: Density
 
     @Before
@@ -132,7 +131,7 @@ class PinnedSectionsGapTest(
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.setContent {
             CoveTheme(darkTheme = true) {
-                CompactViewport(viewport, fontScale, VIEWPORT_TAG, onDensity = { layoutDensity = it }) {
+                CompactViewport(fontScale, VIEWPORT_TAG, onDensity = { layoutDensity = it }) {
                     content()
                 }
             }
@@ -143,7 +142,7 @@ class PinnedSectionsGapTest(
         checkOnScreen()
 
         assertTrue(
-            "${screen.name} in $viewport at ${fontScale}x font:\n" + failures.joinToString("\n"),
+            "${screen.name} at ${fontScale}x font:\n" + failures.joinToString("\n"),
             failures.isEmpty(),
         )
     }
@@ -240,12 +239,10 @@ class PinnedSectionsGapTest(
 
     companion object {
         @JvmStatic
-        @Parameterized.Parameters(name = "{0} in {1} at {2}x font")
+        @Parameterized.Parameters(name = "{0} at {1}x font")
         fun cases(): List<Array<Any>> =
             PinnedSectionsScreen.entries.flatMap { screen ->
-                screen.viewports.flatMap { viewport ->
-                    listOf(1f, LARGEST_SYSTEM_FONT_SCALE).map { fontScale -> arrayOf(screen, viewport, fontScale) }
-                }
+                listOf(1f, LARGEST_SYSTEM_FONT_SCALE).map { fontScale -> arrayOf(screen, fontScale) }
             }
     }
 }
@@ -269,13 +266,11 @@ private data class VerticalExtent(
 
 /**
  * A screen whose sections spread over its height, the tags that mark each section from top to
- * bottom, the primary controls the page must scroll to whole, the viewports it runs in, and how
- * to render it
+ * bottom, the primary controls the page must scroll to whole, and how to render it
  */
 enum class PinnedSectionsScreen(
     val sectionTags: List<String>,
     val onScreenTags: List<String>,
-    val viewports: List<Viewport> = Viewport.entries,
 ) {
     VERIFY_WORDS(listOf("verifyWords.topSection", "verifyWords.bottomSection"), listOf("verifyWords.skip")) {
         override fun setUp(closeables: MutableList<AutoCloseable>): @Composable () -> Unit {
@@ -357,7 +352,7 @@ enum class PinnedSectionsScreen(
         }
     },
 
-    COIN_CONTROL_SET_AMOUNT(listOf("coinControlSetAmount.topSection", "sendFlow.next"), listOf("sendFlow.next"), portraitOnly) {
+    COIN_CONTROL_SET_AMOUNT(listOf("coinControlSetAmount.topSection", "sendFlow.next"), listOf("sendFlow.next")) {
         override fun setUp(closeables: MutableList<AutoCloseable>): @Composable () -> Unit {
             val send = SendFixture.create(closeables)
 
@@ -394,7 +389,6 @@ enum class PinnedSectionsScreen(
     SEND_FLOW_CONFIRM(
         listOf("sendFlowConfirm.topSection", "sendFlowConfirm.bottomSection"),
         listOf("sendFlowConfirm.swipeToSend"),
-        portraitOnly,
     ) {
         override fun setUp(closeables: MutableList<AutoCloseable>): @Composable () -> Unit {
             val send = SendFixture.create(closeables)
@@ -601,10 +595,6 @@ private class SendFixture(
         }
     }
 }
-
-// on a landscape phone these send screens clip their bottom control by a few dp once scrolled,
-// a defect apart from the section spacing this test guards
-private val portraitOnly = listOf(Viewport.PORTRAIT)
 
 /** The header, content and action of a TapSigner sheet, tagged under [prefix] */
 private fun tapSignerSheetSections(

@@ -14,12 +14,13 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.test.CompactViewport
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.LayoutRegressionTest
-import org.bitcoinppl.cove.test.Viewport
 import org.bitcoinppl.cove.test.coveComposeRule
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.junit.Assert.assertTrue
@@ -31,6 +32,10 @@ private const val VIEWPORT_TAG = "numberPadPinWrongPin.viewport"
 private const val PIN_BOXES_TAG = "numberPadPin.pinBoxes"
 private const val PIN_LENGTH = 6
 
+// Android's smallest phone screen, per the CDD; the pad fits a 360 by 640dp phone even at the
+// largest font, but not this one, nor the short window a phone in split screen gives the app
+private val SMALL_PHONE = DpSize(320.dp, 426.dp)
+
 // the feedback takes about a second, so five seconds of frames means the pad never cleared the PIN
 private const val MAX_FEEDBACK_FRAMES = 300
 
@@ -40,7 +45,7 @@ private const val FRAMES_AFTER_CLEAR = 60
 /**
  * Every wrong PIN shakes and then clears the PIN boxes where the user can see them
  *
- * On a landscape phone at the largest font size the pad is taller than the screen, so reaching
+ * On a small phone at the largest font size the pad is taller than the screen, so reaching
  * its bottom row scrolls the PIN boxes out of view. A wrong PIN typed there must bring them back
  * into view before they shake, and clear them only after, or the pad looks like it ignored the
  * PIN. The test steps the clock one frame at a time, so it sees the order whatever the speed, and
@@ -122,7 +127,7 @@ class NumberPadPinWrongPinTest {
     private fun setContent(canCancel: Boolean = true) {
         compose.setContent {
             CoveTheme(darkTheme = true) {
-                CompactViewport(Viewport.LANDSCAPE, LARGEST_SYSTEM_FONT_SCALE, VIEWPORT_TAG) {
+                CompactViewport(LARGEST_SYSTEM_FONT_SCALE, VIEWPORT_TAG, SMALL_PHONE) {
                     NumberPadPinView(
                         title = "Enter Current PIN",
                         isPinCorrect = { false },
