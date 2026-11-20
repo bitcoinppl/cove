@@ -32,21 +32,6 @@ final class ScenePhasePrivacyTests: XCTestCase {
         }
     }
 
-    /// A brief trip to inactive with a PIN clears its cover once the app is back, and going on to
-    /// the background stops that, NFC scan or not
-    func testCoverRecoveryFollowsAPinLockThroughInactive() {
-        for context in contexts(nfc: true) + contexts(nfc: false) {
-            let expected: ScenePhasePrivacyOutcome.CoverRecovery =
-                switch (context.newPhase, context.isAuthEnabled) {
-                case (.inactive, true) where !context.isUsingBiometrics: .restarted
-                case (.background, true): .cancelled
-                default: .unchanged
-                }
-
-            XCTAssertEqual(ScenePhasePrivacyOutcome(context).coverRecovery, expected, "\(context)")
-        }
-    }
-
     func testReturningToTheForegroundLeavesTheCoverAndLockToTheActivePhase() {
         for oldPhase in Self.leavingActive {
             for flags in authAndNfcFlags() {
@@ -54,7 +39,6 @@ final class ScenePhasePrivacyTests: XCTestCase {
                     oldPhase: oldPhase,
                     newPhase: .active,
                     isAuthEnabled: flags.auth,
-                    isUsingBiometrics: flags.biometrics,
                     isNfcOperationActive: flags.nfc
                 )
 
@@ -175,7 +159,7 @@ final class ScenePhasePrivacyTests: XCTestCase {
     // MARK: - Helpers
 
     /// Every way out of the foreground: straight from active, and on from inactive to background,
-    /// with auth and biometrics on and off
+    /// with auth on and off
     private func contexts(nfc: Bool) -> [ScenePhasePrivacyContext] {
         let transitions: [(ScenePhase, ScenePhase)] = [
             (.active, .inactive),
@@ -184,23 +168,20 @@ final class ScenePhasePrivacyTests: XCTestCase {
         ]
 
         return transitions.flatMap { oldPhase, newPhase in
-            authAndNfcFlags().map { flags in
+            [false, true].map { auth in
                 ScenePhasePrivacyContext(
                     oldPhase: oldPhase,
                     newPhase: newPhase,
-                    isAuthEnabled: flags.auth,
-                    isUsingBiometrics: flags.biometrics,
+                    isAuthEnabled: auth,
                     isNfcOperationActive: nfc
                 )
             }
         }
     }
 
-    private func authAndNfcFlags() -> [(auth: Bool, biometrics: Bool, nfc: Bool)] {
+    private func authAndNfcFlags() -> [(auth: Bool, nfc: Bool)] {
         [false, true].flatMap { auth in
-            [false, true].flatMap { biometrics in
-                [false, true].map { nfc in (auth, biometrics, nfc) }
-            }
+            [false, true].map { nfc in (auth, nfc) }
         }
     }
 
