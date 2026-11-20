@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.views
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasTestTag
@@ -86,7 +87,39 @@ class NumberPadPinWrongPinTest {
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 
-    private fun setContent() {
+    @Test
+    fun aKeyboardFocusMoveAsThePinSubmitsIsInViewAfterTheFeedback() {
+        // the lock screen has no Cancel key, so Tab goes from 9 straight to 0
+        setContent(canCancel = false)
+
+        val nine = compose.onNodeWithTag("numberPadPin.digit.9")
+        val zero = compose.onNodeWithTag("numberPadPin.digit.0")
+
+        // a key press leaves touch mode, so 9 can take focus as it does for a keyboard user
+        pressKey(KeyEvent.KEYCODE_TAB)
+        nine.requestFocus()
+        nine.performScrollTo()
+        compose.waitForIdle()
+
+        // 0 must start out of view, or the test can't tell whether the pad shows it after
+        assertTrue("0 should start below the screen, under 9", !zero.fetchSemanticsNode().ownBoundsPx().inViewport())
+        repeat(PIN_LENGTH - 1) { pressKey(KeyEvent.KEYCODE_ENTER) }
+        compose.waitForIdle()
+
+        // Tab scrolls 0 into view over the next frames, and Enter submits before that ends
+        compose.mainClock.autoAdvance = false
+        pressKey(KeyEvent.KEYCODE_TAB)
+        pressKey(KeyEvent.KEYCODE_ENTER)
+        repeat(MAX_FEEDBACK_FRAMES) { compose.mainClock.advanceTimeByFrame() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        assertTrue("the pad should report the wrong PIN", wrongPins.size == 1)
+        zero.assertIsFocused()
+        assertTrue("0 has keyboard focus, so it should be in view after the feedback", focusedKeyInView())
+    }
+
+    private fun setContent(canCancel: Boolean = true) {
         compose.setContent {
             CoveTheme(darkTheme = true) {
                 CompactViewport(Viewport.LANDSCAPE, LARGEST_SYSTEM_FONT_SCALE, VIEWPORT_TAG) {
@@ -94,7 +127,7 @@ class NumberPadPinWrongPinTest {
                         title = "Enter Current PIN",
                         isPinCorrect = { false },
                         pinLength = PIN_LENGTH,
-                        backAction = {},
+                        backAction = if (canCancel) ({}) else null,
                         onWrongPin = { wrongPins += it },
                     )
                 }

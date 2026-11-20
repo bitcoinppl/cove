@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.performPinKeyPressHaptic
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -91,14 +93,17 @@ fun NumberPadPinView(
                         pin = ""
                         onUnlock(submittedPin)
                     } else {
+                        // a scroll still running, such as a keyboard focus move bringing a key
+                        // into view, ends first, so the pad returns to where that scroll settles
+                        snapshotFlow { scrollState.isScrollInProgress }.first { !it }
+                        val typingAt = scrollState.value
+
                         // when the pad is taller than the screen, reaching its bottom row scrolls
                         // the boxes away, so they come back into view before they shake, and the
                         // PIN clears only once the shake ends, however slowly animations run. The
                         // pad holds the scroll throughout, so no swipe, fling or keyboard focus
                         // move can take the boxes out of view again. Then it returns to where the
                         // user was typing, so the keys, and a keyboard user's focus, are in view
-                        val typingAt = scrollState.value
-
                         scrollState.scroll(MutatePriority.PreventUserInput) {
                             animateScrollBy(placement.distanceIntoView())
                             offsetX.shake()
