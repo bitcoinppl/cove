@@ -254,7 +254,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
                     title = "Change PIN",
                     icon = Icons.Default.LockOpen,
                     onClick = {
-                        handleSecurityResult(auth.validateSecurityAction(SecuritySettingsAction.ChangePin, emptyList()))
+                        handleSecurityResult(auth.validateSecurityAction(SecuritySettingsAction.ChangePin))
                     },
                 )
                 itemCount++
