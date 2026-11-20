@@ -94,11 +94,15 @@ fun NumberPadPinView(
                         // the boxes away, so they come back into view before they shake, and the
                         // PIN clears only once the shake ends, however slowly animations run. The
                         // pad holds the scroll throughout, so no swipe, fling or keyboard focus
-                        // move can take the boxes out of view again
+                        // move can take the boxes out of view again. Then it returns to where the
+                        // user was typing, so the keys, and a keyboard user's focus, are in view
+                        val typingAt = scrollState.value
+
                         scrollState.scroll(MutatePriority.PreventUserInput) {
-                            scrollIntoView(placement)
+                            animateScrollBy(placement.distanceIntoView())
                             offsetX.shake()
                             pin = ""
+                            animateScrollBy(typingAt - scrollState.value.toFloat())
                         }
 
                         onWrongPin(submittedPin)
@@ -350,9 +354,8 @@ private class PinBoxesPlacement {
     }
 }
 
-/** Scrolls the PIN boxes wholly into view, inside a scroll the pad already holds */
-private suspend fun ScrollScope.scrollIntoView(placement: PinBoxesPlacement) {
-    val distance = placement.distanceIntoView()
+/** Scrolls by [distance] pixels with the default spring, inside a scroll the pad already holds */
+private suspend fun ScrollScope.animateScrollBy(distance: Float) {
     if (distance == 0f) return
 
     var scrolled = 0f

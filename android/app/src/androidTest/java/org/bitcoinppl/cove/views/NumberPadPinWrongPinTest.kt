@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
@@ -43,7 +44,7 @@ private const val FRAMES_AFTER_CLEAR = 60
  * into view before they shake, and clear them only after, or the pad looks like it ignored the
  * PIN. The test steps the clock one frame at a time, so it sees the order whatever the speed, and
  * a swipe or a hardware keyboard's Tab while the boxes scroll back or shake must not move them out
- * of view
+ * of view. Once the boxes clear, the pad returns to the keys, so a keyboard user's focus is in view
  */
 @LayoutRegressionTest
 class NumberPadPinWrongPinTest {
@@ -75,7 +76,7 @@ class NumberPadPinWrongPinTest {
     }
 
     @Test
-    fun aKeyboardTabDuringTheFeedbackKeepsThePinBoxesInView() {
+    fun aKeyboardUserSeesTheBoxesDuringTheFeedbackAndTheirFocusAfter() {
         setContent()
 
         checkWrongPin(attempt = 1, interruption = Interruption.TAB_WHILE_SCROLLING_BACK)
@@ -154,6 +155,10 @@ class NumberPadPinWrongPinTest {
 
         if (!interrupted) failures += "attempt $attempt: the boxes never moved, so ${interruption?.name?.lowercase()} never ran"
         feedback.failures().forEach { failures += "attempt $attempt: $it" }
+        if (usesKeyboard && !focusedKeyInView()) {
+            failures += "attempt $attempt: the key with keyboard focus should be in view after the feedback, but it was scrolled away"
+        }
+
         if (wrongPins.size != attempt) failures += "attempt $attempt: the pad should report each wrong PIN, but it reported ${wrongPins.size}"
     }
 
@@ -169,11 +174,18 @@ class NumberPadPinWrongPinTest {
 
     private fun pinBoxes(): Rect = compose.onNodeWithTag(PIN_BOXES_TAG).fetchSemanticsNode().ownBoundsPx()
 
-    private fun pinBoxesInView(): Boolean {
-        val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
-        val pinBoxes = pinBoxes()
+    private fun focusedKeyInView(): Boolean {
+        val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes().singleOrNull() ?: return false
 
-        return pinBoxes.top >= viewport.top && pinBoxes.bottom <= viewport.bottom
+        return focused.ownBoundsPx().inViewport()
+    }
+
+    private fun pinBoxesInView(): Boolean = pinBoxes().inViewport()
+
+    private fun Rect.inViewport(): Boolean {
+        val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
+
+        return top >= viewport.top && bottom <= viewport.bottom
     }
 
     private fun filledPinBoxes(): Int =
