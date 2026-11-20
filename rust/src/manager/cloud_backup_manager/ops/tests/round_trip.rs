@@ -413,3 +413,38 @@ async fn a_deleted_backup_another_device_uploads_again_covers_the_wallet_again()
     assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, _, record_id) = confirmed_backup(&manager, globals).await;
+
+    // this device's upload failed for good a while ago, and another device has since uploaded the
+    // same revision
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::Confirmed(confirmed) = state else {
+            panic!("the refresh should have confirmed the backup, got {state:?}");
+        };
+
+        PersistedCloudBlobState::Failed(CloudBlobFailedState {
+            revision_hash: Some(confirmed.revision_hash.clone()),
+            retryable: false,
+            error: "storage quota exceeded".into(),
+            issue: None,
+            failed_at: confirmed.confirmed_at - 60,
+        })
+    });
+    assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Unconfirmed);
+
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Confirmed,
+        "the provider holds this exact backup, so the wallet can be recovered from it"
+    );
+    assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}

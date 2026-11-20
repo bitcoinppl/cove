@@ -121,7 +121,7 @@ impl RemoteRevisionEvidence {
     /// evidence's namespace, and returns whether any row changed
     ///
     /// A copy at the local revision confirms a wallet with no row, such as one restored before
-    /// restores recorded their backup, or a dirty one. A confirmed row turns dirty when the
+    /// restores recorded their backup, or one whose upload is dirty or failed. A confirmed row turns dirty when the
     /// provider no longer holds its copy, or holds another revision than the one it confirmed,
     /// since the confirmation no longer proves a copy that restores the wallet. A row written
     /// since the read began is left alone, as it may record a change the read could not show
@@ -158,7 +158,7 @@ impl RemoteRevisionEvidence {
 
                     table.set_if_absent(&row)
                 }
-                (ProviderCopyShown::Matching, Some(row)) if self.dirtied_before_read(&row) => {
+                (ProviderCopyShown::Matching, Some(row)) if self.unconfirmed_before_read(&row) => {
                     table.set_if_current(&row, &row.uploaded_to(&self.namespace_id, confirmed()))
                 }
                 (ProviderCopyShown::Missing, Some(row))
@@ -204,16 +204,20 @@ impl RemoteRevisionEvidence {
         (row.namespace_id == self.namespace_id && before_read).then_some(confirmed)
     }
 
-    /// Whether `row` is waiting to upload a change made before the second the read began, which
-    /// the local revision the read compared already includes
+    /// Whether `row` is waiting to upload, or failed to upload, a change made before the second
+    /// the read began, which the local revision the read compared already includes
     ///
     /// The read's own second doesn't count: confirming a change made after the read took the
     /// local revision would drop that change's upload
-    fn dirtied_before_read(&self, row: &PersistedCloudBlobSyncState) -> bool {
-        let PersistedCloudBlobState::Dirty(dirty) = &row.state else {
-            return false;
+    fn unconfirmed_before_read(&self, row: &PersistedCloudBlobSyncState) -> bool {
+        let written_at = match &row.state {
+            PersistedCloudBlobState::Dirty(dirty) => dirty.changed_at,
+            PersistedCloudBlobState::Failed(failed) => failed.failed_at,
+            PersistedCloudBlobState::Uploading(_)
+            | PersistedCloudBlobState::UploadedPendingConfirmation(_)
+            | PersistedCloudBlobState::Confirmed(_) => return false,
         };
 
-        dirty.changed_at < self.read_started_at
+        written_at < self.read_started_at
     }
 }

@@ -1422,7 +1422,8 @@ confirms landed uploads, so it applies only to rows in the namespace it read
 and only while the configuration it started under is current. A wallet whose
 copy is at its local revision gets a `Confirmed` row when it has none, such
 as one restored before restores recorded their backup, or when its row is
-`Dirty`, such as after another device uploaded a copy that was gone again. A
+`Dirty` or `Failed`, such as after another device uploaded a copy that was gone
+again or that this device failed to upload. A
 `Confirmed` row whose copy the provider no longer holds, or holds at another
 revision than the one the row confirmed, turns `Dirty`, since another device
 deleted or replaced that copy; the wallet then counts as uncovered until its
@@ -1436,8 +1437,8 @@ that recorded a hash the wallet no longer reproduces, such as a backup written
 before #988, still reconciles. A row written after the read began is left
 alone, since it may record a change the read couldn't show. Times are whole
 seconds: a confirmation from the read's own second can still turn `Dirty`,
-which only uploads the wallet again, but a `Dirty` row from that second is not
-confirmed, since that could drop an edit's upload.
+which only uploads the wallet again, but a `Dirty` or `Failed` row from that
+second is not confirmed, since that could drop an edit's upload.
 
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.
