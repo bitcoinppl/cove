@@ -230,6 +230,43 @@ fn onboarding_with_pending_backup_metadata_offers_try_again_and_create_new() {
     });
 }
 
+/// Onboarding checks the cloud for a restore well before it starts Cloud Backup, so a master key
+/// that finished syncing in between is found and asked about, rather than offering to create a
+/// new backup under a prompt that says the files aren't there
+#[test]
+fn onboarding_finds_a_master_key_that_arrived_after_its_restore_check() {
+    let test = concat!(
+        module_path!(),
+        "::onboarding_finds_a_master_key_that_arrived_after_its_restore_check"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        seed_readable_backup(&mut app);
+        app.passkey.inner.push_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: vec![1; 32],
+            credential_id: vec![1, 2, 3],
+        }));
+
+        app.event(
+            "onboarding starts Cloud Backup from a restore check that found no master key",
+            |_| {
+                RustOnboardingManager::begin_cloud_backup_enable(
+                    CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::BackupMetadataPending),
+                );
+            },
+        )
+        .then_cannot(&[N::TurnOff]);
+
+        let screen = app.manager().published_screen();
+        assert!(
+            matches!(screen.root_prompt, CloudBackupRootPrompt::ExistingBackupFound(..)),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(app.passkey.inner.discover_count(), 1, "the readable backup wasn't tried");
+    });
+}
+
 /// A namespace whose master key isn't there gives no passkey anything to open, so Enable asks
 /// whether to wait for its files or create a new backup instead of asking for a passkey. Try
 /// Again that still finds nothing says so on the prompt rather than bringing it back unchanged,
