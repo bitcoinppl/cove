@@ -86,8 +86,12 @@ struct SelectedWalletTitleContent: View {
 struct SelectedWalletMainContent: View {
     let manager: WalletManager
     let screenHeight: CGFloat
-    /// Whether Cloud Backup has a confirmed copy of this wallet, which makes its words reminder moot
-    let isBackedUpByCloudBackup: Bool
+    /// Whether Cloud Backup is on, which hides the words reminder
+    ///
+    /// Hidden even before the wallet's first upload confirms, since a reminder that flashes on a
+    /// new wallet and then goes away confuses more than it protects; a failed upload shows on the
+    /// Cloud Backup row in Settings instead
+    let isCloudBackupOn: Bool
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
     let headerBottomChanged: (CGFloat) -> Void
@@ -108,7 +112,7 @@ struct SelectedWalletMainContent: View {
                 headerBottomChanged(headerBottom)
             }
 
-            if !isBackedUpByCloudBackup {
+            if !isCloudBackupOn {
                 VerifyReminder(
                     walletId: manager.walletMetadata.id,
                     isVerified: manager.walletMetadata.verified

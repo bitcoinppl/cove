@@ -1,7 +1,7 @@
 import XCTest
 
-/// A wallet counts as backed up only once Cloud Backup confirms its copy, not as soon as Cloud
-/// Backup is on
+/// A wallet counts as recoverable only once Cloud Backup confirms its copy, not as soon as Cloud
+/// Backup is on, though Cloud Backup being on hides its backup reminder from the start
 ///
 /// The fresh cloud accepts the new backup but keeps it unreadable until the visibility gate is
 /// released, so until then the new wallet's upload stays unconfirmed
@@ -30,9 +30,12 @@ final class CloudBackupWalletRecoveryFullAppUITests: XCTestCase {
             $0.awaitingUploadConfirmation
         }
 
-        XCTAssertTrue(
-            backupReminder.waitForExistence(timeout: 10),
-            "an unconfirmed backup leaves the wallet unprotected, so the reminder must show"
+        // the toolbar proves the wallet screen is up, so the reminder's absence is not just a
+        // screen still loading
+        XCTAssertTrue(app.buttons["selectedWallet.more"].waitForExistence(timeout: 10))
+        XCTAssertFalse(
+            backupReminder.exists,
+            "Cloud Backup is on, so the reminder must not show even before the upload confirms"
         )
         assertFinalDeleteWarning(
             startingWith: "This wallet is not backed up",
@@ -45,10 +48,7 @@ final class CloudBackupWalletRecoveryFullAppUITests: XCTestCase {
         }
         control.assertNextActions("the confirmed backup should stay on", available: ["turnOff"])
 
-        XCTAssertTrue(
-            backupReminder.waitForNonExistence(timeout: 10),
-            "a confirmed backup protects the wallet, so the reminder must go"
-        )
+        XCTAssertFalse(backupReminder.exists, "a confirmed backup must keep the reminder hidden")
         assertFinalDeleteWarning(
             startingWith: "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen",
             button: "Delete"
