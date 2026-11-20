@@ -15,6 +15,15 @@ pub enum RemotePayloadKind {
     Wallet,
 }
 
+impl std::fmt::Display for RemotePayloadKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MasterKey => write!(f, "master key"),
+            Self::Wallet => write!(f, "wallet"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemotePayloadMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -128,7 +137,7 @@ pub struct NormalizedRemotePayloadMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RemotePayloadError {
-    #[error("remote payload kind mismatch: expected {expected:?}, got {actual:?}")]
+    #[error("remote payload kind mismatch: expected {expected}, got {actual}")]
     KindMismatch { expected: RemotePayloadKind, actual: RemotePayloadKind },
 
     /// An identifier differs from the one expected. Neither value is kept, since the expected

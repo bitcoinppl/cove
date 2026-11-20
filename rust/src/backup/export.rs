@@ -197,7 +197,7 @@ impl BackupExporter {
             Ok(value) => value,
             Err(e) => {
                 warn!("failed to read config key {key:?}: {e}");
-                self.warnings.push(format!("Failed to read a setting ({key:?}), using default"));
+                self.warnings.push(format!("Failed to read the {key} setting, using the default"));
                 None
             }
         }

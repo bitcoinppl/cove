@@ -7,7 +7,8 @@
 # Usage: just pre-push [<revision>...]
 # The revisions select the commits to check, as `git log` takes them; with none it checks the
 # commits on HEAD that origin/master doesn't have. Skip some checks with
-# COVE_PRE_PUSH_SKIP=rustfmt,qa,bindings,swiftformat,ktlint,compose-rules (any of them, or `all`)
+# COVE_PRE_PUSH_SKIP=rustfmt,error-text,qa,bindings,swiftformat,ktlint,compose-rules (any of them,
+# or `all`)
 #
 # Exit codes, which the git hook and other callers rely on:
 #   0  every check that ran passed, or the commits need none
@@ -215,6 +216,13 @@ check_rustfmt() {
 # rustfmt job
 if [ "$run_rustfmt" = true ]; then
     run_check rustfmt needs_rustfmt "run 'just fmt'" check_rustfmt
+fi
+
+# clippy job, its error text step
+if [ "$run_rustfmt" = true ]; then
+    run_check error-text needs_cargo_and_just \
+        "format the values it lists with Display, not Debug ({:?}), see docs/testing.md#pre-push-checks" \
+        just error-text-check
 fi
 
 # qa-manifest job, its manifest check

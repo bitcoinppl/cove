@@ -115,7 +115,7 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err_debug(Error::NodeAccessError)?;
+        node.check_url().await.map_err_str(Error::NodeAccessError)?;
 
         Ok(())
     }
@@ -471,5 +471,26 @@ mod tests {
         assert!(message.contains(&node.url), "the alert should name {}, got: {message}", node.url);
 
         reset_selected_node();
+    }
+
+    // Node settings shows this text when checking the selected node fails
+    #[tokio::test]
+    async fn unreachable_selected_node_alert_has_no_rust_debug_text() {
+        let _guard = global_state_test_lock().lock().await;
+        ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+
+        let mut offline = FakeNode::start(BitcoinNetwork::Bitcoin);
+        let node = offline.esplora_node("dead esplora");
+        offline.go_offline();
+
+        let error = NodeSelector::new().check_selected_node(node).await.unwrap_err();
+        let message = error.to_string();
+
+        assert!(
+            message.starts_with("unable to access node: failed to check node url: "),
+            "unexpected alert text: {message}"
+        );
+        crate::test_support::assert_no_debug_dump(&message);
     }
 }

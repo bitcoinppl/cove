@@ -284,6 +284,31 @@ pub(crate) enum Rejection {
     DriveAccountSwitch,
 }
 
+impl std::fmt::Display for Rejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reason = match self {
+            Self::CloudBackupOff => "Cloud Backup is off",
+            Self::AlreadyOn => "Cloud Backup is already on",
+            Self::SetupNotFinished => "Cloud Backup setup hasn't finished",
+            Self::LoadFailed => "the Cloud Backup record couldn't be loaded",
+            Self::Corrupted => "the Cloud Backup record can't be read",
+            Self::TurnOffCommitted => "Cloud Backup is turning off",
+            Self::OperationRunning(_) => "another Cloud Backup operation is running",
+            Self::DetailInventoryNotLoaded => "the backed up wallets haven't loaded yet",
+            Self::OtherBackupsNotLoaded => "the other backups haven't loaded yet",
+            Self::RestoreAllUnavailable => "there is nothing to restore",
+            Self::NothingToCancel => "there is nothing to cancel",
+            Self::NothingToContinue => "there is nothing to continue",
+            Self::Resetting => "Cloud Backup is resetting on this device",
+            Self::ReviewStale => "what was confirmed has changed",
+            Self::TryAgainFirst => "try again first",
+            Self::DriveAccountSwitch => "a Google Drive account switch is waiting",
+        };
+
+        f.write_str(reason)
+    }
+}
+
 /// Why the write lane is not running a command class right now
 ///
 /// An admission fact, not a storage issue: it is never persisted in a failed blob row, and a
@@ -304,6 +329,22 @@ pub(crate) enum PauseReason {
     ConfigurationChanged,
     /// A reinitialize is replacing the configuration; background work runs again under the new one
     Reinitialize,
+}
+
+impl std::fmt::Display for PauseReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reason = match self {
+            Self::TurnOff => "Cloud Backup is turning off",
+            Self::AccountSwitch => "a Google Drive account switch is waiting",
+            Self::LocalReset => "Cloud Backup is resetting on this device",
+            Self::BackupOff => "Cloud Backup is off",
+            Self::LoadFailed => "the Cloud Backup record couldn't be loaded",
+            Self::ConfigurationChanged => "the Cloud Backup configuration changed",
+            Self::Reinitialize => "Cloud Backup is being set up again",
+        };
+
+        f.write_str(reason)
+    }
 }
 
 /// The lifecycle body admission decides on

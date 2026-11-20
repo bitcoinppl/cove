@@ -990,7 +990,7 @@ fn rollback_bdk_artifacts(
     initial: &RestoreArtifactSnapshot,
     failures: &mut Vec<String>,
 ) {
-    for (artifact, path) in bdk_artifacts(id) {
+    for (_, path) in bdk_artifacts(id) {
         if initial.bdk_paths.contains(&path) {
             continue;
         }
@@ -1001,7 +1001,7 @@ fn rollback_bdk_artifacts(
 
         if let Err(error) = crate::bdk_store::BdkStore::remove_wallet_artifact(&path) {
             failures.push(format!(
-                "wallet id={id}: failed to delete BDK artifact {artifact:?} {}: {error}",
+                "wallet id={id}: failed to delete BDK artifact {}: {error}",
                 path.display()
             ));
         }

@@ -18,7 +18,7 @@ pub struct HistoricalPriceRecord {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum HistoricalPriceRecordError {
-    #[error("failed to convert bytes to HistoricalPriceRecord: {0:?}")]
+    #[error("failed to convert bytes to HistoricalPriceRecord: {0}")]
     ConversionError(#[from] ByteReaderError),
 }
 

@@ -55,6 +55,12 @@ pub(crate) enum LaneOutput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupWriteCommandId(u64);
 
+impl std::fmt::Display for CloudBackupWriteCommandId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "write#{}", self.0)
+    }
+}
+
 /// Write command identity plus the exclusive operation that owns it, if any
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupWriteCommandContext {
@@ -459,7 +465,7 @@ impl CloudBackupWriteSupervisor {
         let result = if active.context != context {
             Err(CloudBackupError::Internal(
                 format!(
-                    "cloud backup write supervisor received mismatched completion for command {:?}",
+                    "cloud backup write supervisor received mismatched completion for command {}",
                     context.id()
                 )
                 .into(),

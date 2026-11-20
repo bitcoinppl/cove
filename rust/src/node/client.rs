@@ -104,7 +104,8 @@ pub enum Error {
 /// A node URL can carry an access token in its path or query, and node errors reach logs, so
 /// the only way in is through `From`, which drops it
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
+// esplora-client's Error has no source, so leaving it out of the chain loses nothing
+#[error("{}", cove_bdk_progressive_scan::esplora_error_text(.0))]
 pub struct EsploraError(esplora_client::Error);
 
 impl From<esplora_client::Error> for EsploraError {

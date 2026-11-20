@@ -1283,7 +1283,7 @@ async fn broadcast_payjoin_terminal_with_client(
             .is_ok_and(|found| found.is_some_and(|transaction| transaction.compute_txid() == txid));
         if !known_to_node {
             return Err(Error::BroadcastError(format!(
-                "failed to broadcast committed Payjoin transaction during wallet shutdown: {error:?}"
+                "failed to broadcast committed Payjoin transaction during wallet shutdown: {error}"
             )));
         }
     }
@@ -1397,9 +1397,7 @@ async fn broadcast_to_node_with_connection(
         .await
         .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
         .map_err(|error| {
-            BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
-                "failed to broadcast transaction, unable to connect to node: {error:?}"
-            )))
+            BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(error.to_string()))
         })?;
 
     let node_client = call!(addr.node_client_for_broadcast())
@@ -1409,7 +1407,7 @@ async fn broadcast_to_node_with_connection(
 
     node_client.broadcast_transaction(transaction.clone()).await.map_err(|error| {
         BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
-            "failed to broadcast transaction, try again: {error:?}"
+            "failed to broadcast transaction, try again: {error}"
         )))
     })?;
 
@@ -1436,7 +1434,12 @@ mod tests {
     use parking_lot::RwLock;
     use std::str::FromStr as _;
 
-    use super::{WalletActor, WalletManagerError, settled_unsigned_transactions};
+    use act_zero::{Produces, WeakAddr};
+
+    use super::{
+        BroadcastTransactionError, WalletActor, WalletManagerError,
+        broadcast_to_node_with_connection, settled_unsigned_transactions,
+    };
     use crate::{
         database::{
             unsigned_transactions::UnsignedTransactionRecord,
@@ -1575,5 +1578,33 @@ mod tests {
         );
 
         assert_eq!(settled_unsigned_transactions(&wallet, vec![record.clone()]), vec![record]);
+    }
+
+    // the send screen shows this text in its broadcast failure alert
+    #[tokio::test(flavor = "current_thread")]
+    async fn broadcast_failure_text_reads_as_a_sentence() {
+        let connection = Produces::Value(Err(WalletManagerError::NodeConnectionFailed(
+            "connection refused".into(),
+        )));
+        let transaction = BdkTransaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        };
+
+        let error =
+            broadcast_to_node_with_connection(WeakAddr::default(), connection, &transaction)
+                .await
+                .expect_err("a failed node connection fails the broadcast");
+
+        let BroadcastTransactionError::BroadcastFailed(error) = error else {
+            panic!("expected a broadcast failure, got {error:?}");
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "broadcast failed: unable to connect to node: connection refused"
+        );
     }
 }

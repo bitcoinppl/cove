@@ -610,7 +610,7 @@ fn unsigned_transactions_for_wallet(
     wallet_id: &WalletId,
 ) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
     let db = Database::global();
-    let context = format!("wallet id={wallet_id:?}");
+    let context = format!("wallet id={wallet_id}");
     let txns = db.unsigned_transactions().get_by_wallet_id(wallet_id).map_err(|source| {
         WalletManagerPendingUnsignedTransactionsLoadError::new(context.clone(), source)
     })?;
@@ -1140,7 +1140,10 @@ impl RustWalletManager {
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::StartedJson(_) => Err(Error::UnableToSwitch(
                 wallet_address_type,
-                format!("wallet in unexpected discovery state: {discovery_state:?}"),
+                format!(
+                    "wallet in unexpected discovery state: {}",
+                    <&'static str>::from(&discovery_state)
+                ),
             )),
         };
 

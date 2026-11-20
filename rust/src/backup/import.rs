@@ -28,7 +28,9 @@ use crate::wallet_secret::WalletSecretExt as _;
 
 use super::crypto;
 use super::error::BackupError;
-use super::model::{BackupImportReport, BackupPayload, WalletBackup, WalletSecret};
+use super::model::{
+    BackupImportReport, BackupPayload, WalletBackup, WalletSecret, WalletSecretType,
+};
 use super::recovery::{RestoreArtifactSnapshot, RestoreMarkerGuard, WalletRestoreLease};
 
 mod cloud_restore;
@@ -496,7 +498,9 @@ pub(crate) fn validate_wallet_type_secret(
 
         // genuine type/secret mismatch
         (wt, s) => Err(BackupError::Restore(format!(
-            "wallet has mismatched type ({wt:?}) and secret ({s:?})"
+            "wallet has mismatched type ({}) and secret ({})",
+            wt.display_name(),
+            WalletSecretType::from(s).display_name()
         ))),
     }
 }

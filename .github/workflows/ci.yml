@@ -568,3 +568,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cd rust && cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      # the apps show error text in alerts, so it must not carry Rust Debug dumps
+      - name: Check error text for Debug formatting
+        run: cd rust && cargo run --locked -q -p xtask -- check-error-text

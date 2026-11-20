@@ -101,7 +101,7 @@ impl TryFrom<bitcoin::Network> for Network {
             bitcoin::Network::Testnet => Ok(Self::Testnet),
             bitcoin::Network::Testnet4 => Ok(Self::Testnet4),
             bitcoin::Network::Signet => Ok(Self::Signet),
-            _ => Err(format!("unsupported network: {network:?}")),
+            _ => Err(format!("unsupported network: {network}")),
         }
     }
 }

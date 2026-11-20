@@ -93,11 +93,11 @@ impl CloudBackupSupervisor {
             OperationId::next(),
         );
         if let Err(unstartable) = self.runtime.start_standard(claim) {
+            // the error text can reach the user, so the runtime state it names stays in the log
+            error!("Pending Enable discard could not start: {unstartable:?}");
             self.fail_pending_enable_discard(
                 pending,
-                CloudBackupError::Internal(
-                    format!("discard could not start: {unstartable:?}").into(),
-                ),
+                CloudBackupError::Internal("discard could not start".into()),
             );
             return;
         }

@@ -6,6 +6,7 @@ mod android_ci_emulator;
 mod android_device;
 mod android_ui_shard;
 mod common;
+mod error_text;
 mod fake_node;
 mod github;
 mod ios;
@@ -384,6 +385,10 @@ enum Commands {
     #[command(name = "check-release-seams")]
     CheckReleaseSeams(release_seams::CheckReleaseSeams),
 
+    /// Fail when an #[error] message uses Rust Debug formatting, which the apps show in alerts
+    #[command(name = "check-error-text")]
+    CheckErrorText(error_text::CheckErrorText),
+
     /// Release checklist manifest: per-change plan, coverage, and consistency check
     #[command(subcommand)]
     Qa(qa::QaCommand),
@@ -585,6 +590,8 @@ fn run(cli: Cli) -> Result<()> {
         Commands::UiTestHost(command) => ui_test_host::run(command),
 
         Commands::CheckReleaseSeams(args) => release_seams::run(args),
+
+        Commands::CheckErrorText(args) => error_text::run(args),
 
         Commands::Qa(command) => qa::run(command),
 

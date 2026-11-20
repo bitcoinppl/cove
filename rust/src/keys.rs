@@ -12,7 +12,7 @@ use bdk_wallet::{
     template::{Bip44, Bip49, Bip84, DescriptorTemplate as _},
 };
 use bitcoin::bip32::Xpub;
-use cove_bdk::descriptor_ext::DescriptorExt as _;
+use cove_bdk::descriptor_ext::{DescriptorExt as _, descriptor_type_name};
 use pubport::descriptor::ScriptType;
 
 use crate::tap_card::tap_signer_reader::DeriveInfo;
@@ -33,7 +33,7 @@ pub enum DescriptorKeyParseError {
     #[error("unsupported descriptor: {0}")]
     UnsupportedDescriptor(String),
 
-    #[error("unsupported descriptor type: {0:?}")]
+    #[error("unsupported descriptor type: {}", descriptor_type_name(.0))]
     UnsupportedDescriptorType(DescriptorType),
 
     #[error("multisig descriptors are not yet supported")]
@@ -48,8 +48,12 @@ pub enum DescriptorKeyParseError {
     #[error("invalid chain code")]
     InvalidChainCode,
 
-    #[error("invalid bip84 path: {0:?}")]
+    #[error("invalid bip84 path: {}", bip84_path_text(.0))]
     InvalidBip84Path(Vec<u32>),
+}
+
+fn bip84_path_text(path: &[u32]) -> String {
+    path.iter().map(u32::to_string).collect::<Vec<_>>().join("/")
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
