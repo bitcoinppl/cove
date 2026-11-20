@@ -15,7 +15,6 @@ import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
-import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.WalletType
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -94,7 +93,7 @@ class CloudBackupWipeDataPinFullLaunchTest {
 
         // the Wipe Data PIN row shows only once a PIN is set
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            AuthManager.getInstance().dispatch(AuthManagerAction.SetPin(PIN))
+            AuthManager.getInstance().setPin(PIN)
         }
         robot.scrollToText(WIPE_DATA_PIN_ROW)
         device.switchInRow(WIPE_DATA_PIN_ROW).click()
