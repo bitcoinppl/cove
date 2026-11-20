@@ -5,6 +5,9 @@ use cove_types::{AddressIndex, BlockSizeLast};
 
 use super::*;
 use crate::manager::cloud_backup_manager::CloudBackupRecoveryCoverage;
+use crate::manager::cloud_backup_manager::recovery_coverage::{
+    CloudBackupRecovery, CloudBackupWalletRecovery,
+};
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::wallet_secret::WalletSecretExt as _;
 
@@ -223,4 +226,78 @@ async fn a_wallet_restored_from_cloud_backup_counts_as_backed_up() {
         !CloudBackupRecoveryCoverage::load().needs_backup(&restored),
         "a wallet restored from the active backup must not block the Wipe Data PIN"
     );
+}
+
+/// Refreshes the detail from the provider and waits for the supervisor to apply what it read
+async fn refresh_detail_from_provider(manager: &RustCloudBackupManager) {
+    let refreshed = manager.refresh_cloud_backup_detail(current_config(manager).await).await;
+    assert!(
+        matches!(refreshed, Some(CloudBackupDetailResult::SuccessWithAuthority { .. })),
+        "expected an authoritative refresh, got {refreshed:?}"
+    );
+
+    supervisor_checkpoint(manager).await;
+}
+
+fn wallet_recovery(wallet: &WalletMetadata) -> CloudBackupWalletRecovery {
+    CloudBackupRecovery::load().wallet(wallet.id.clone())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_backup_another_device_deleted_no_longer_covers_the_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    let record_id = wallet_record_id(wallet.id.as_ref());
+
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    refresh_detail_from_provider(&manager).await;
+    assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Confirmed);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.remove_wallet_backup(&namespace, &record_id);
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Unconfirmed,
+        "the provider no longer holds the backup, so deleting the wallet would lose its keys"
+    );
+    assert!(CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_wallet_restored_before_restores_recorded_their_backup_is_covered_once_the_provider_shows_it()
+ {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    let record_id = wallet_record_id(wallet.id.as_ref());
+
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+
+    // a restore from before restores recorded their backup left the wallet with no row
+    Database::global().cloud_blob_sync_states.delete(&record_id).unwrap();
+    assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Unconfirmed);
+
+    refresh_detail_from_provider(&manager).await;
+
+    assert_eq!(
+        wallet_recovery(&wallet),
+        CloudBackupWalletRecovery::Confirmed,
+        "the provider holds this exact backup, so the wallet can be recovered from it"
+    );
+    assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

@@ -12,9 +12,14 @@ use std::collections::HashMap;
 use tracing::warn;
 
 use crate::database::Database;
-use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
+use crate::database::cloud_backup::{
+    CloudBlobConfirmedState, CloudBlobDirtyState, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState,
+};
 use crate::manager::cloud_backup_manager::actors::ConfigGeneration;
-use crate::manager::cloud_backup_manager::cloud_inventory::RemoteWalletTruth;
+use crate::manager::cloud_backup_manager::cloud_inventory::{
+    ProviderCopy, ProviderCopyShown, RemoteWalletTruth,
+};
 
 /// Wallet revisions read from one namespace under one configuration
 #[derive(Debug, Clone)]
@@ -23,6 +28,8 @@ pub(crate) struct RemoteRevisionEvidence {
     config: ConfigGeneration,
     /// Revision hash by wallet record id, for the wallets the read found
     revisions: HashMap<String, String>,
+    /// What the read showed of each local wallet's copy, when it compared them
+    provider_copies: Vec<ProviderCopy>,
 }
 
 impl RemoteRevisionEvidence {
@@ -39,7 +46,12 @@ impl RemoteRevisionEvidence {
             .map(|(record_id, summary)| (record_id.clone(), summary.revision_hash.clone()))
             .collect();
 
-        Self { namespace_id, config, revisions }
+        Self { namespace_id, config, revisions, provider_copies: Vec::new() }
+    }
+
+    /// This evidence with what the read showed of each local wallet's copy
+    pub(crate) fn with_provider_copies(self, provider_copies: Vec<ProviderCopy>) -> Self {
+        Self { provider_copies, ..self }
     }
 
     /// The configuration generation the producer started under
@@ -95,5 +107,78 @@ impl RemoteRevisionEvidence {
         }
 
         updated
+    }
+
+    /// Reconciles each local wallet's row in this evidence's namespace with what the read showed
+    /// of its copy, and returns whether any row changed
+    ///
+    /// A wallet whose copy matches but which has no row, such as one restored before restores
+    /// recorded their backup, gets a confirmed row. A confirmed row whose copy the provider no
+    /// longer holds, or holds at another revision, turns dirty, since its confirmation no longer
+    /// proves a copy that restores the wallet. A row that changed since the read compared it is
+    /// left alone
+    pub(crate) fn reconcile_wallet_rows(&self) -> bool {
+        let table = &Database::global().cloud_blob_sync_states;
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
+        let mut updated = false;
+
+        for copy in &self.provider_copies {
+            let row = match table.get(&copy.record_id) {
+                Ok(row) => row,
+                Err(error) => {
+                    warn!("Reconcile wallet rows: read sync state failed: {error}");
+                    continue;
+                }
+            };
+
+            let written = match (copy.shown, row) {
+                (ProviderCopyShown::Matching, None) => {
+                    let confirmed = PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+                        revision_hash: copy.local_revision_hash.clone(),
+                        confirmed_at: now,
+                    });
+                    let row = PersistedCloudBlobSyncState::wallet(
+                        self.namespace_id.clone(),
+                        copy.wallet_id.clone(),
+                        copy.record_id.clone(),
+                        confirmed,
+                    );
+
+                    table.set_if_absent(&row)
+                }
+                (ProviderCopyShown::MissingOrStale, Some(row))
+                    if self.confirms_compared_revision(&row, copy) =>
+                {
+                    let dirty =
+                        row.with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState {
+                            changed_at: now,
+                        }));
+
+                    table.set_if_current(&row, &dirty)
+                }
+                _ => continue,
+            };
+
+            match written {
+                Ok(written) => updated |= written,
+                Err(error) => warn!("Reconcile wallet rows: persist sync state failed: {error}"),
+            }
+        }
+
+        updated
+    }
+
+    /// Whether `row` is a confirmation in this namespace of the very revision the read compared
+    /// against the provider, rather than one an upload confirmed after the read
+    fn confirms_compared_revision(
+        &self,
+        row: &PersistedCloudBlobSyncState,
+        copy: &ProviderCopy,
+    ) -> bool {
+        let PersistedCloudBlobState::Confirmed(confirmed) = &row.state else {
+            return false;
+        };
+
+        row.namespace_id == self.namespace_id && confirmed.revision_hash == copy.local_revision_hash
     }
 }

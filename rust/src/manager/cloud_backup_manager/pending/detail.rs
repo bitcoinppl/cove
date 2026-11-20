@@ -275,19 +275,27 @@ impl RustCloudBackupManager {
                 Err(error) => return CloudBackupDetailResult::AccessError(error),
             };
 
-        self.confirm_remote_revisions(RemoteRevisionEvidence::new(
-            namespace,
-            config,
-            &remote_wallet_truth,
-        ));
-
-        match self
-            .build_cloud_backup_detail_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
-            .await
+        let evidence = RemoteRevisionEvidence::new(namespace, config, &remote_wallet_truth);
+        let inventory = match CloudWalletInventory::load_with_remote_truth(
+            &wallet_record_ids,
+            remote_wallet_truth,
+        )
+        .await
         {
-            Ok(listed) => CloudBackupDetailResult::SuccessWithAuthority { listed, authority },
-            Err(error) => CloudBackupDetailResult::AccessError(error),
-        }
+            Ok(inventory) => inventory,
+            Err(error) => {
+                // the revisions read still prove uploads that landed
+                self.confirm_remote_revisions(evidence);
+                return CloudBackupDetailResult::AccessError(error);
+            }
+        };
+
+        // the copies this read showed reconcile each wallet's row, so what Cloud Backup can
+        // restore follows the provider, not only this device's uploads
+        self.confirm_remote_revisions(evidence.with_provider_copies(inventory.provider_copies()));
+
+        let listed = inventory.build_detail();
+        CloudBackupDetailResult::SuccessWithAuthority { listed, authority }
     }
 
     fn inventory_snapshot_authority(

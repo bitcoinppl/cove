@@ -1416,6 +1416,18 @@ nothing, so the restore records the backup it just downloaded and decrypted as
 never replaces an upload's or a later change's row. A restore during onboarding
 marks its wallets dirty instead, and they count once those uploads confirm.
 
+A detail refresh that reads each local wallet's copy from the provider also
+reconciles the rows with what it read, through the same remote evidence that
+confirms landed uploads, so it applies only to rows in the namespace it read
+and only while the configuration it started under is current. A wallet whose
+copy is at its local revision but which has no row, such as one restored
+before restores recorded their backup, gets a `Confirmed` row. A `Confirmed`
+row whose copy the provider no longer holds, or holds at another revision,
+turns `Dirty`, since another device deleted or replaced that copy; the
+wallet then counts as uncovered until its upload confirms. A row is changed
+only if it is still the one the read compared, and a copy the read couldn't
+read, or one at a version this app can't read, changes nothing.
+
 The alert's Go To Wallet switches the selected network when the wallet it names
 is on another one, since a wallet loads only on its own network.
 
@@ -1425,9 +1437,11 @@ live provider proof, which would refuse the PIN offline and right after launch:
 - On iOS, a wallet row can turn `Confirmed` once the file staged in the
   ubiquity container reads back, before iCloud has it, for example while
   iCloud storage is full
-- The rows are this device's record, not the provider's. If another device
-  turns Cloud Backup off and deletes the shared namespace, the `Confirmed` rows
-  here still count. A namespace with no master key wrapper row also passes,
+- The rows are this device's record, not the provider's, until a detail
+  refresh reads the copies again. Until then, for example offline or right
+  after launch, a copy another device deleted still counts, and if another
+  device turns Cloud Backup off and deletes the shared namespace, a refresh
+  that can't list it leaves the `Confirmed` rows here counting. A namespace with no master key wrapper row also passes,
   since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
 - A copy that the startup integrity check or a detail refresh can't decrypt is
   noted only in memory, so its `Confirmed` row still counts, as when another
@@ -1463,8 +1477,9 @@ the record it already reads and sends a `Recovery` message when it changed, at
 the next revision, and the platform applies it with
 `CloudBackupPublishedRecovery.applying`, which skips one its snapshot already
 includes. A write that grants or withdraws coverage without changing the
-screen still asks for a publish: marking an edited wallet dirty, and a local
-reset's key clear. The harness checks at every boundary that a platform copy
+screen still asks for a publish: marking an edited wallet dirty, a local
+reset's key clear, and a refresh's reconciliation of the rows with what the
+provider showed. The harness checks at every boundary that a platform copy
 built from the snapshot and the updates matches a fresh read of the record.
 
 The Settings row's Verification Recommended also reads persisted state: it

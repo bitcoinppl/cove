@@ -201,6 +201,11 @@ impl CloudBackupSupervisor {
             manager.refresh_pending_upload_verification_state();
         }
 
+        // a row granted or withdrawn changes what Cloud Backup can restore
+        if evidence.reconcile_wallet_rows() {
+            manager.request_screen_publish();
+        }
+
         Produces::ok(())
     }
 

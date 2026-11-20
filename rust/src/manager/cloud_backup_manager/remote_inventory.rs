@@ -8,25 +8,12 @@ use zeroize::Zeroizing;
 use super::cloud_inventory::RemoteWalletTruth;
 use super::wallets::{WalletBackupLookup, WalletBackupReader};
 use super::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupListedDetail,
-    CloudBackupStore, RustCloudBackupManager, blocking_cloud_error,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupStore,
+    RustCloudBackupManager, blocking_cloud_error,
 };
 use crate::database::Database;
 
 impl RustCloudBackupManager {
-    pub(crate) async fn build_cloud_backup_detail_with_remote_truth(
-        &self,
-        wallet_record_ids: &[String],
-        remote_wallet_truth: RemoteWalletTruth,
-    ) -> Result<CloudBackupListedDetail, CloudBackupError> {
-        Ok(super::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
-            wallet_record_ids,
-            remote_wallet_truth,
-        )
-        .await?
-        .build_detail())
-    }
-
     /// Reads the revision of every local wallet's backup in `namespace`
     ///
     /// The caller names the namespace, so the truth is from the namespace it holds, even if the

@@ -9,13 +9,31 @@ use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobFailedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
-use crate::wallet::metadata::WalletMetadata;
+use crate::wallet::metadata::{WalletId, WalletMetadata};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RemoteWalletTruth {
     pub(crate) summaries_by_record_id: HashMap<String, RemoteWalletBackupSummary>,
     pub(crate) unsupported_record_ids: HashSet<String>,
     pub(crate) unknown_record_ids: HashSet<String>,
+}
+
+/// What one read of the provider showed of a local wallet's copy
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProviderCopy {
+    pub(crate) wallet_id: WalletId,
+    pub(crate) record_id: String,
+    /// The local revision the read compared the copy against
+    pub(crate) local_revision_hash: String,
+    pub(crate) shown: ProviderCopyShown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderCopyShown {
+    /// The copy is at the local revision
+    Matching,
+    /// The provider holds no copy, or one at another revision
+    MissingOrStale,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +173,33 @@ impl CloudWalletInventory {
         }
 
         facts
+    }
+
+    /// What the provider showed of each local wallet's copy, for every wallet whose copy it
+    /// read or found absent
+    ///
+    /// A copy it could not read, or one at a version this app can't read, says nothing about the
+    /// wallet and is left out
+    pub(crate) fn provider_copies(&self) -> Vec<ProviderCopy> {
+        self.local_wallets
+            .iter()
+            .filter_map(|wallet| {
+                let shown = match self.remote_wallet_state(wallet) {
+                    RemoteWalletState::Matching(_) => ProviderCopyShown::Matching,
+                    RemoteWalletState::Missing | RemoteWalletState::Stale(_) => {
+                        ProviderCopyShown::MissingOrStale
+                    }
+                    RemoteWalletState::Unknown | RemoteWalletState::Unsupported => return None,
+                };
+
+                Some(ProviderCopy {
+                    wallet_id: wallet.metadata.id.clone(),
+                    record_id: wallet.record_id.clone(),
+                    local_revision_hash: wallet.revision_hash.clone(),
+                    shown,
+                })
+            })
+            .collect()
     }
 
     pub(crate) fn has_unknown_remote_wallets(&self) -> bool {
