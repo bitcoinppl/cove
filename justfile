@@ -270,7 +270,8 @@ alias aum := android-ui-manual
 fake-node-run *command:
     just xtask fake-node run -- {{ command }}
 
-# Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
+# Skips staged process-death tests, which need `android-ui-manual`, tests marked @QuarantinedInCi, and
+# @RealCloudAccountTest tests, which need `android-cloud-backup-e2e`
 # Runs with the fake node and the hardware signer host up and forwarded to the device, for tests
 # that need a funded wallet or a signer
 # Runs on an emulator only: the one ANDROID_SERIAL names, which must be an emulator-* serial, else
@@ -281,7 +282,7 @@ fake-node-run *command:
 [group('test')]
 [working-directory('android')]
 android-instrumented-ci flavours="Dev UiTest" tests="" not_tests="":
-    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }} {{ if not_tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.notClass=" + replace(not_tests, " ", "")) } }}
+    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi,org.bitcoinppl.cove.test.RealCloudAccountTest" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }} {{ if not_tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.notClass=" + replace(not_tests, " ", "")) } }}
 
 # Creates the CoveCI35 AVD on first use with the UI tests workflow's emulator settings, and boots it
 # read-only, so several can run at once: give each its own even console port from 5554 and point
@@ -290,6 +291,15 @@ android-instrumented-ci flavours="Dev UiTest" tests="" not_tests="":
 [group('test')]
 android-ci-emulator port="5554":
     just xtask android-ci-emulator --port {{ port }}
+
+# Local only: reads the test Google account from this Mac's Keychain, as docs/testing.md describes
+# Builds the Rust library, factory-resets the CoveCloudBackupE2E Play Store emulator, signs it in,
+# restores the account's frozen Google Drive backup with its real passkey, and checks the wallets
+# and labels; flags: --keep-data, --keep-emulator, --skip-build, --port <even port>
+# [long, external] Run the real Google Drive cloud backup restore test on an emulator
+[group('test')]
+android-cloud-backup-e2e *flags:
+    just xtask android-cloud-backup-e2e {{ flags }}
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
