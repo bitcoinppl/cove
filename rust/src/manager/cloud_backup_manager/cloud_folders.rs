@@ -1,6 +1,7 @@
 //! What each listed Cloud Backup folder holds, read once without asking for a passkey
 //!
-//! Onboarding's backup check, Enable and Restore read a listing only through [`CloudFolders`],
+//! Onboarding's backup check, Enable, Restore and Recover Other Backups read a listing only
+//! through [`CloudFolders`],
 //! so whether a backup exists, and whether its files are still unavailable, is decided in one
 //! place: [`ListedBackups::of`]
 
@@ -33,6 +34,32 @@ pub(crate) enum CloudFolder {
     /// The master key wrapper is there but doesn't decode or names another namespace, or the
     /// provider failed to read it, with that failure
     Unreadable(Option<CloudStorageError>),
+}
+
+impl CloudFolder {
+    /// Whether the folder holds a master key wrapper, in a format this app reads or not, so it
+    /// is a backup before any passkey is asked for
+    fn holds_wrapper(&self) -> bool {
+        match self {
+            Self::Readable(_) | Self::NewerFormat | Self::Unreadable(None) => true,
+            Self::MasterKeyMissing | Self::UploadPending | Self::Unreadable(Some(_)) => false,
+        }
+    }
+}
+
+/// A listed folder that holds a master key wrapper
+pub(crate) struct WrappedFolder {
+    pub(crate) namespace_id: String,
+    /// Where the passkey the wrapper names was created, when it names one
+    pub(crate) passkey_hint: Option<CloudBackupPasskeyHint>,
+}
+
+/// One listed folder, with the namespace it was read from and the passkey hint its wrapper
+/// carries
+struct ListedFolder {
+    namespace_id: String,
+    folder: CloudFolder,
+    passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
 /// A folder's master key wrapper a passkey may open
@@ -82,18 +109,16 @@ impl<'a> ListedBackups<'a> {
     pub(crate) fn of(folders: impl IntoIterator<Item = &'a CloudFolder>) -> Self {
         let mut listed = Self::None;
         for folder in folders {
+            if folder.holds_wrapper() {
+                return Self::Present;
+            }
+
+            // every folder left lacks a wrapper, so only a failed read keeps it from being files
+            // still unavailable
             listed = match (listed, folder) {
-                (
-                    _,
-                    CloudFolder::Readable(_)
-                    | CloudFolder::NewerFormat
-                    | CloudFolder::Unreadable(None),
-                ) => return Self::Present,
                 (Self::Unknown(failure), _) => Self::Unknown(failure),
                 (_, CloudFolder::Unreadable(Some(failure))) => Self::Unknown(failure),
-                (_, CloudFolder::MasterKeyMissing | CloudFolder::UploadPending) => {
-                    Self::FilesUnavailable
-                }
+                _ => Self::FilesUnavailable,
             };
         }
 
@@ -103,7 +128,7 @@ impl<'a> ListedBackups<'a> {
 
 /// Every listed folder's classification, with the newest passkey hint their wrappers carry
 pub(crate) struct CloudFolders {
-    folders: Vec<CloudFolder>,
+    folders: Vec<ListedFolder>,
     passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
@@ -119,40 +144,48 @@ impl CloudFolders {
         wrappers: WrapperRead,
         cancellation: &AtomicBool,
     ) -> Result<Self, CloudBackupError> {
-        let mut seen_namespaces = HashSet::new();
-        let unique_namespaces = namespaces
+        let folders =
+            read_each(cloud, namespaces, wrappers, cancellation, |listed| Ok(Some(listed))).await?;
+        let passkey_hint = folders
             .iter()
-            .filter(|namespace| seen_namespaces.insert((*namespace).clone()))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut folders =
-            stream::iter(unique_namespaces.into_iter().enumerate().map(|(index, namespace_id)| {
-                let cloud = cloud.clone();
-
-                Ok(async move {
-                    Ok::<_, CloudBackupError>((
-                        index,
-                        read_folder(&cloud, namespace_id, wrappers, cancellation).await?,
-                    ))
-                })
-            }))
-            .try_buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY)
-            .try_collect::<Vec<_>>()
-            .await?;
-        folders.sort_by_key(|(index, _)| *index);
-
-        let (folders, hints): (Vec<_>, Vec<_>) =
-            folders.into_iter().map(|(_, folder)| folder).unzip();
-        let passkey_hint = hints
-            .into_iter()
-            .flatten()
+            .filter_map(|folder| folder.passkey_hint.clone())
             .reduce(|newest, hint| if hint.is_newer_than(&newest) { hint } else { newest });
 
         Ok(Self { folders, passkey_hint })
     }
 
+    /// Reads the folders of `namespaces` that hold a master key wrapper, in listing order, as
+    /// [`CloudFolders::read`] does
+    ///
+    /// For a caller that lists backups one by one rather than asking what they show together. A
+    /// folder the provider fails to read may hold a backup, so that failure fails the whole read
+    /// as soon as it's known, without waiting for the folders still being read
+    pub(crate) async fn read_wrapped(
+        cloud: &CloudStorageClient,
+        namespaces: &[String],
+        wrappers: WrapperRead,
+        cancellation: &AtomicBool,
+    ) -> Result<Vec<WrappedFolder>, CloudBackupError> {
+        read_each(cloud, namespaces, wrappers, cancellation, |listed| {
+            let ListedFolder { namespace_id, folder, passkey_hint } = listed;
+            match folder {
+                CloudFolder::Unreadable(Some(failure)) => {
+                    Err(CloudBackupError::cloud_storage_context(
+                        "inspect cloud backup namespace",
+                        failure,
+                    ))
+                }
+                folder if folder.holds_wrapper() => {
+                    Ok(Some(WrappedFolder { namespace_id, passkey_hint }))
+                }
+                _ => Ok(None),
+            }
+        })
+        .await
+    }
+
     pub(crate) fn listed(&self) -> ListedBackups<'_> {
-        ListedBackups::of(&self.folders)
+        ListedBackups::of(self.folders.iter().map(|listed| &listed.folder))
     }
 
     /// Where the newest passkey named by any wrapper was created
@@ -174,8 +207,44 @@ impl CloudFolders {
     }
 
     pub(crate) fn into_folders(self) -> Vec<CloudFolder> {
-        self.folders
+        self.folders.into_iter().map(|listed| listed.folder).collect()
     }
+}
+
+/// Reads each of `namespaces` once, in listing order, keeping what `keep` makes of each folder
+///
+/// A folder `keep` fails ends the read at once, dropping the reads still running
+async fn read_each<T>(
+    cloud: &CloudStorageClient,
+    namespaces: &[String],
+    wrappers: WrapperRead,
+    cancellation: &AtomicBool,
+    keep: impl Fn(ListedFolder) -> Result<Option<T>, CloudBackupError>,
+) -> Result<Vec<T>, CloudBackupError> {
+    let keep = &keep;
+    let mut seen_namespaces = HashSet::new();
+    let unique_namespaces = namespaces
+        .iter()
+        .filter(|namespace| seen_namespaces.insert((*namespace).clone()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut kept =
+        stream::iter(unique_namespaces.into_iter().enumerate().map(|(index, namespace_id)| {
+            let cloud = cloud.clone();
+
+            Ok(async move {
+                let (folder, passkey_hint) =
+                    read_folder(&cloud, namespace_id.clone(), wrappers, cancellation).await?;
+                let kept = keep(ListedFolder { namespace_id, folder, passkey_hint })?;
+                Ok::<_, CloudBackupError>((index, kept))
+            })
+        }))
+        .try_buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY)
+        .try_collect::<Vec<_>>()
+        .await?;
+    kept.sort_by_key(|(index, _)| *index);
+
+    Ok(kept.into_iter().filter_map(|(_, kept)| kept).collect())
 }
 
 /// One folder's classification, with the passkey hint its wrapper carries

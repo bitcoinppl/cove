@@ -3,6 +3,7 @@ use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use tracing::info;
 
 use super::blocking_cloud_error;
+use crate::manager::cloud_backup_manager::WrappedFolder;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyRequestAuthority, Unopened,
@@ -26,12 +27,11 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
         let namespaces = self
-            .other_backup_namespaces(
-                &cloud,
-                &current_namespace,
-                BlockingCloudStep::RecoverOtherBackups,
-            )
-            .await?;
+            .other_backups(&cloud, &current_namespace, BlockingCloudStep::RecoverOtherBackups)
+            .await?
+            .into_iter()
+            .map(|backup| backup.namespace_id)
+            .collect::<Vec<_>>();
 
         if namespaces.is_empty() {
             return Err(CloudBackupError::Internal("no other cloud backups found".into()));
@@ -80,15 +80,11 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteOtherBackups)?;
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
-        let namespaces = self
-            .other_backup_namespaces(
-                &cloud,
-                &current_namespace,
-                BlockingCloudStep::DeleteOtherBackups,
-            )
+        let backups = self
+            .other_backups(&cloud, &current_namespace, BlockingCloudStep::DeleteOtherBackups)
             .await?;
 
-        for namespace in namespaces {
+        for WrappedFolder { namespace_id: namespace, .. } in backups {
             writes.delete_other_namespace(cloud.clone(), namespace.clone()).await.map_err(
                 |error| {
                     blocking_cloud_error(

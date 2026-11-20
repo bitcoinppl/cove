@@ -206,6 +206,42 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
     assert!(detail.needs_sync.is_empty());
 }
 
+/// On iOS a folder without a master key can take a minute to read, so a folder already known to
+/// have failed must fail the list without waiting for it
+#[tokio::test(flavor = "current_thread")]
+async fn other_backups_fail_without_waiting_for_folders_still_being_read() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    // the held folder is listed first, so a reader that reads one folder at a time blocks on it
+    let mut namespaces =
+        [(); 2].map(|()| cove_cspp::master_key::MasterKey::generate().namespace_id());
+    namespaces.sort();
+    let [slow_namespace, failed_namespace] = namespaces;
+    globals.cloud.set_wallet_files(failed_namespace.clone(), Vec::new());
+    globals.cloud.set_wallet_files(slow_namespace.clone(), Vec::new());
+    globals
+        .cloud
+        .fail_master_key_download_offline(failed_namespace, "offline while inspecting namespace");
+    let slow_read = globals.cloud.gate_master_key_download_for_namespace(slow_namespace);
+
+    let state = tokio::time::timeout(
+        Duration::from_secs(5),
+        manager.other_backup_state(&CloudStorage::global_explicit_client()),
+    )
+    .await;
+    slow_read.release();
+
+    let CloudBackupOtherBackupsState::LoadFailed { reason } =
+        state.expect("the failed folder ends the list")
+    else {
+        panic!("expected the other backups list to fail");
+    };
+    assert_eq!(reason, CloudBackupInventoryIncompleteReason::Offline);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_current_passkey_metadata() {
     let _guard = async_test_lock().lock().await;
