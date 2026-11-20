@@ -195,6 +195,10 @@ restore, `Disabling` while Turn Off drains before its commit,
 `RecoveryRequired` for pending-enable recovery and for an account switch that
 needs Retry, and an error row while the record failed to load or is corrupted.
 Otherwise a configured backup shows its passkey, verification and sync status.
+A failed upload or a provider that needs authorization outranks a verification
+the backup still asks for: adding a wallet asks for one, and the selected
+wallet screen hides its words reminder while Cloud Backup is on, so a new
+wallet's failed first upload must show here rather than as Unverified.
 
 A record that failed to load shows `LoadFailed` with `RetryLoad`, which loads
 it again in place; a successful retry resumes as a launch would, including an

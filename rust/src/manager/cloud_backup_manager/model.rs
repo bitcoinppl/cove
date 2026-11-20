@@ -627,10 +627,19 @@ impl CloudBackupReducerState {
             return CloudBackupSettingsRowStatus::Confirming;
         }
 
-        if matches!(
+        let verification_pending = matches!(
             self.configured.verification,
             CloudBackupVerificationState::Required | CloudBackupVerificationState::NotCompleted
-        ) {
+        );
+        let upload_failed = matches!(
+            self.sync_health,
+            CloudSyncHealth::Failed(_) | CloudSyncHealth::AuthorizationRequired(_)
+        );
+
+        // a failed upload outranks a pending verification: adding a wallet asks for one, and the
+        // selected wallet screen hides its words reminder while Cloud Backup is on, so this row is
+        // where a new wallet's failed first upload shows
+        if verification_pending && !upload_failed {
             return CloudBackupSettingsRowStatus::Unverified;
         }
 
@@ -1801,6 +1810,27 @@ mod tests {
             configured_state(CloudBackupVerificationState::Required, CloudSyncHealth::AllUploaded);
 
         assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Unverified);
+    }
+
+    #[test]
+    fn settings_row_status_prioritizes_failed_upload_over_verification() {
+        let required = configured_state(
+            CloudBackupVerificationState::Required,
+            CloudSyncHealth::Failed("upload failed".into()),
+        );
+        let authorization = configured_state(
+            CloudBackupVerificationState::Required,
+            CloudSyncHealth::AuthorizationRequired("wrong account".into()),
+        );
+
+        assert_eq!(
+            required.settings_row_status(),
+            CloudBackupSettingsRowStatus::Error("upload failed".into())
+        );
+        assert_eq!(
+            authorization.settings_row_status(),
+            CloudBackupSettingsRowStatus::AuthorizationRequired("wrong account".into())
+        );
     }
 
     #[test]
