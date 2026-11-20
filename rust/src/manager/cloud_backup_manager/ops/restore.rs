@@ -64,6 +64,7 @@ impl RustCloudBackupManager {
             );
 
             let mut restored_wallets = Vec::new();
+            let mut restored_record_ids = Vec::new();
 
             for record_id in &wallet_record_ids {
                 if current_wallet_record_ids.contains(record_id) {
@@ -107,7 +108,7 @@ impl RustCloudBackupManager {
                 };
 
                 match restore_session.restore_downloaded(&wallet) {
-                    Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
+                    Ok(WalletRestoreOutcome::Restored { wallet: restored, labels_warning }) => {
                         report.wallets_restored += 1;
                         if let Some(warning) = labels_warning {
                             report.labels_failed_wallet_names.push(warning.wallet_name);
@@ -116,7 +117,8 @@ impl RustCloudBackupManager {
                                 .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                         }
 
-                        restored_wallets.push(wallet.metadata);
+                        restored_wallets.push(restored.into_metadata());
+                        restored_record_ids.push(record_id.clone());
                     }
                     Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
 
@@ -143,10 +145,14 @@ impl RustCloudBackupManager {
                 }));
             }
 
+            // a wallet restored under a new wallet id is backed up under a new record id, so its
+            // source record counts as recovered here, but only for this namespace: another
+            // namespace's copy of the same record may hold different data and is still read
             if !wallet_record_ids.is_empty()
-                && wallet_record_ids
-                    .iter()
-                    .all(|record_id| current_wallet_record_ids.contains(record_id))
+                && wallet_record_ids.iter().all(|record_id| {
+                    current_wallet_record_ids.contains(record_id)
+                        || restored_record_ids.contains(record_id)
+                })
             {
                 writes
                     .delete_other_namespace(cloud.clone(), namespace.namespace_id.clone())

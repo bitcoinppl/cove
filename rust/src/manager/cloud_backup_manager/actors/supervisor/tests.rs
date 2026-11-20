@@ -5241,7 +5241,7 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
+async fn seed_backup_restores_beside_a_local_wallet_whose_secret_cannot_be_read() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
@@ -5257,7 +5257,7 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     Keychain::global().save(secret_key.clone(), "garbage-secret".into()).unwrap();
     Keychain::global().save(cryptor_key.clone(), "garbage-cryptor".into()).unwrap();
 
-    let (_, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
+    let (backup_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
     manager.apply_detail_outcome(
@@ -5280,18 +5280,81 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
     })
     .await;
 
-    // the restore fails without touching the unreadable seed, and the backup is not a copy
+    // the backup may hold the only readable copy of the seed, so it restores as its own wallet
+    // beside the local one, whose unreadable seed stays untouched
     let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
-        panic!("expected the seed row to stay loaded");
+        panic!("expected the cloud-only rows to stay loaded");
     };
-    assert_eq!(
-        cloud_only_row_statuses(&wallets),
-        vec![(seed_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
-    );
-    assert!(wallets[0].restore_failure.is_some());
+    assert!(cloud_only_row_statuses(&wallets).is_empty());
     assert_eq!(Keychain::global().get(secret_key).unwrap(), Some("garbage-secret".to_string()));
     assert_eq!(Keychain::global().get(cryptor_key).unwrap(), Some("garbage-cryptor".to_string()));
-    assert_eq!(local_wallets_like(&local_wallet).len(), 1);
+    assert_eq!(local_wallets_like(&local_wallet).len(), 2);
+    assert_eq!(Keychain::global().get_wallet_secret(&backup_wallet.id).unwrap(), Some(secret));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cloud_only_restore_beside_another_seed_moves_to_a_new_id_and_queues_its_own_backup() {
+    use crate::database::cloud_backup::{PersistedCloudBlobState, PersistedCloudBlobSyncState};
+
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    let secret = test_seed_secret();
+
+    let (backup_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
+    let seed_record_id = seed_record_id.as_str();
+
+    // a reinstall left another seed under the backup's wallet id
+    let other_seed = KeychainWalletSecret::Mnemonic(
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong").unwrap(),
+    );
+    Keychain::global().save_wallet_secret(&backup_wallet.id, other_seed.clone()).unwrap();
+
+    list_test_wallet_files(&namespace, &[seed_record_id]);
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::refreshed(listed_detail(&[seed_record_id])),
+    );
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_cloud_only_statuses(&manager, &[(
+        seed_record_id,
+        CloudBackupWalletStatus::DeletedFromDevice,
+    )])
+    .await;
+
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into(), Some(tap(PermitIntent::RestoreCloudWallet))))
+        .await
+        .unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the restore should finish", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // the other seed stays where it was, and the backup's seed is a wallet of its own
+    assert_eq!(Keychain::global().get_wallet_secret(&backup_wallet.id).unwrap(), Some(other_seed));
+    let [restored] = local_wallets_like(&backup_wallet).try_into().unwrap_or_else(|wallets| {
+        panic!("expected exactly the restored wallet, found {wallets:?}")
+    });
+    assert_ne!(restored.id, backup_wallet.id);
+    assert_eq!(Keychain::global().get_wallet_secret(&restored.id).unwrap(), Some(secret));
+
+    // the backup's record describes the old id, so it is not recorded as this wallet's backup,
+    // and the restored wallet is queued to upload its own
+    let sync_states = &Database::global().cloud_blob_sync_states;
+    assert!(
+        !matches!(
+            sync_states.get(seed_record_id).unwrap(),
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+        ),
+        "the backup's record must not be confirmed for the restored wallet"
+    );
+    let restored_record_id = cove_cspp::backup_data::wallet_record_id(restored.id.as_ref());
+    let restored_row = sync_states.get(&restored_record_id).unwrap();
+    assert!(
+        restored_row.as_ref().is_some_and(PersistedCloudBlobSyncState::is_dirty),
+        "the restored wallet should be queued for upload, found {restored_row:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

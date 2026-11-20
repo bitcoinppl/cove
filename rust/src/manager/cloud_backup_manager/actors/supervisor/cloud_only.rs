@@ -250,7 +250,7 @@ impl CloudBackupSupervisor {
         };
 
         let (outcome, committed_local_wallet) = match result {
-            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => (
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning, .. }) => (
                 CloudBackupCloudOnlyWalletOutcome::Restored {
                     record_id,
                     warning: labels_warning.map(cloud_only_restore_warning),

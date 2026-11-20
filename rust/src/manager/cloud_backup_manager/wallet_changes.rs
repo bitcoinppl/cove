@@ -98,12 +98,12 @@ impl RustCloudBackupManager {
         self.handle_wallet_set_change();
     }
 
-    /// A cloud restore added a secret to an existing local wallet, so that wallet's own backup
-    /// must be uploaded again with the secret
+    /// A cloud restore left a local wallet whose own backup is stale or missing, such as one it
+    /// added a secret to or one it restored under a new wallet id, so that wallet is uploaded
     ///
     /// Cloud-only rows are reclassified by the restore that made the change, not here, so a
     /// running Restore All keeps its batch
-    pub(crate) fn handle_restored_secret_added(&self, wallet_id: WalletId) {
+    pub(crate) fn handle_restored_wallet_needs_backup(&self, wallet_id: WalletId) {
         self.mark_wallet_blob_dirty(wallet_id);
         self.mark_verification_required_after_wallet_change();
     }
