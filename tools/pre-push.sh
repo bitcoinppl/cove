@@ -7,8 +7,8 @@
 # Usage: just pre-push [<revision>...]
 # The revisions select the commits to check, as `git log` takes them; with none it checks the
 # commits on HEAD that origin/master doesn't have. Skip some checks with
-# COVE_PRE_PUSH_SKIP=rustfmt,error-text,qa,bindings,swiftformat,ktlint,compose-rules (any of them,
-# or `all`)
+# COVE_PRE_PUSH_SKIP=rustfmt,error-text,qa,bindings,swiftformat,ktlint,compose-rules,detekt (any of
+# them, or `all`)
 #
 # Exit codes, which the git hook and other callers rely on:
 #   0  every check that ran passed, or the commits need none
@@ -59,6 +59,11 @@ run_qa=false
 run_bindings=false
 run_swiftformat=false
 run_ktlint=false
+run_detekt=false
+# the Kotlin files under android/ that detekt lints, comma-separated from android/; empty with
+# run_detekt set means its config changed, so it lints every file
+detekt_files=""
+detekt_config_changed=false
 while IFS= read -r path; do
     case $path in
         rust/*)
@@ -73,6 +78,20 @@ while IFS= read -r path; do
     case $path in
         *.swift | .swiftformat | tools/swift-tools.json) run_swiftformat=true ;;
         *.kt | *.kts | android/.editorconfig) run_ktlint=true ;;
+    esac
+
+    # a deleted file has nothing left to lint
+    case $path in
+        android/detekt.yml | android/detekt-baseline.xml)
+            run_detekt=true
+            detekt_config_changed=true
+            ;;
+        android/*.kt | android/*.kts)
+            if [ -f "$path" ]; then
+                run_detekt=true
+                detekt_files="$detekt_files,${path#android/}"
+            fi
+            ;;
     esac
 done <<<"$paths"
 
@@ -211,6 +230,15 @@ check_rustfmt() {
     (cd rust && cargo fmt --all -- --check)
 }
 
+# over every file detekt takes about three seconds, over a push's few well under one
+check_detekt() {
+    if [ "$detekt_config_changed" = true ]; then
+        just detekt-source --offline
+    else
+        just detekt-source --offline "-Pcove.detektOnly=${detekt_files#,}"
+    fi
+}
+
 # each runs the command of the CI job or step named beside it, with the same configs
 
 # rustfmt job
@@ -236,7 +264,7 @@ if [ "$run_swiftformat" = true ]; then
     run_check swiftformat needs_swiftformat "run 'just fmt-swift'" just lint-swift-format
 fi
 
-# ktlint job, its ktlint step; detekt stays in CI, since it compiles the app first
+# ktlint job, its ktlint step
 if [ "$run_ktlint" = true ]; then
     run_check ktlint needs_gradle_and_just "run 'just fmt-android'" just ktlint --offline
 fi
@@ -246,6 +274,14 @@ if [ "$run_ktlint" = true ]; then
     run_check compose-rules needs_python3 \
         "make each rule with coveComposeRule or coveAndroidComposeRule, see android/app/src/androidTest/java/org/bitcoinppl/cove/test/CoveComposeRule.kt" \
         python3 -I .github/scripts/ci_compose_rules.py
+fi
+
+# ktlint job, its detekt step, over the changed files and without the detektDevDebug half, which
+# compiles the app first and runs the rules that need type resolution, such as LongParameterList,
+# so those still fail only in CI
+if [ "$run_detekt" = true ]; then
+    run_check detekt needs_gradle_and_just "fix what detekt reports, or run 'just lint-android' for every rule" \
+        check_detekt
 fi
 
 # compile-android's and compile-ios's bindings checks, from a host build instead of device builds
