@@ -164,8 +164,11 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
 
-    // a new wallet is saved before it is backed up; without it, an upload that the setup's
-    // write policy or connectivity change starts would drop the row as an orphan's
+    // the setup's write policy and connectivity change can each start an upload of the new row.
+    // Offline, that upload defers before any cloud call, so the row stays Dirty and nothing
+    // reaches the next test's mocks. The wallet is saved first, as a new wallet is, so the
+    // upload doesn't drop the row as an orphan's
+    CONNECTIVITY_MANAGER.set_connection_state(false);
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata.clone()]);
     let record_id = wallet_record_id(metadata.id.as_ref());
@@ -178,10 +181,10 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
     assert!(state.last_verification_requested_at().is_some());
-
-    // an upload a resume started may already have moved the row past Dirty, so any state
-    // shows the wallet is tracked
-    assert!(Database::global().cloud_blob_sync_states.get(&record_id).unwrap().is_some());
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+    ));
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
