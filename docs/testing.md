@@ -508,7 +508,7 @@ Both set `core.hooksPath` to `tools/git-hooks`, for one worktree through `git co
 | `swiftformat` | `*.swift`, `.swiftformat` or `tools/swift-tools.json` | `just lint-swift-format` | `swift-lint`, its SwiftFormat step |
 | `ktlint` | `*.kt`, `*.kts` or `android/.editorconfig` | `just ktlint --offline` | `ktlint`, its ktlint step |
 | `compose-rules` | `*.kt`, `*.kts` or `android/.editorconfig` | `python3 -I .github/scripts/ci_compose_rules.py` | `ktlint`, its Compose test rules step |
-| `detekt` | `*.kt` or `*.kts` under `android/`, `android/detekt.yml` or `android/detekt-baseline.xml` | `just detekt-source --offline`, over the changed files | `ktlint`, its detekt step, without type resolution |
+| `detekt` | `*.kt` or `*.kts` under `android/`, or detekt's setup, `android/detekt.yml`, `android/detekt-baseline.xml`, `android/build.gradle.kts` or `android/app/build.gradle.kts`, which lints every file | `just detekt-source --offline`, over the changed files | `ktlint`, its detekt step, without type resolution |
 | `bindings` | `rust/`, once the checkout has a host build of the Rust library | `just bindings-check` | the bindings checks in `compile-android` and `compile-ios` |
 
 The hook checks the pushed commits that no remote has yet, so a new branch is checked from where it left a remote branch, a force push checks only the rewritten commits, and a delete runs nothing. Without `just`, it skips the checks with a warning. A merge counts only the files where it differs from every parent. The checks read the working tree, and `just pre-push` warns when the working tree differs from the checked commits under `rust/`, `ios/`, `android/` or `qa/`.
