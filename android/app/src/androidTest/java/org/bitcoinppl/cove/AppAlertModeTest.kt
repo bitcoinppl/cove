@@ -34,6 +34,9 @@ class AppAlertModeTest {
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
         assumeFalse("the device is in decoy mode", Auth.isInDecoyMode())
 
+        // turning off the PIN keeps the decoy PIN, which the test would replace and then delete
+        assumeFalse("a decoy PIN is already saved on this device", Auth.isDecoyPinEnabled)
+
         Auth.setPin(MAIN_PIN)
         Auth.setDecoyPin(DECOY_PIN)
         pinSet = true

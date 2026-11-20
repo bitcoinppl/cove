@@ -78,6 +78,9 @@ final class AppAlertLockTests: XCTestCase {
         try XCTSkipUnless(auth.type == .none, "an app lock is already set up on this simulator")
         try XCTSkipUnless(!auth.isInDecoyMode(), "the simulator is in decoy mode")
 
+        // turning off the PIN keeps the decoy PIN, which the test would replace and then delete
+        try XCTSkipUnless(!auth.rust.isDecoyPinEnabled(), "a decoy PIN is already saved on this simulator")
+
         try auth.setPin(Self.mainPin)
         addTeardownBlock { @MainActor in
             app.alertState = nil

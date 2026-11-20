@@ -149,12 +149,13 @@ private struct SheetAndAlertPresentation<SheetItem: TaggedSheetPresentable, Aler
         // a dismissal the same update started can reach UIKit just after this task starts, and
         // the presenter counts as idle only on consecutive checks, so the wait still sees it.
         // A wait that times out starts again, since releasing the alert over a presentation still
-        // in flight drops it. Locking cancels this task, so the wait itself ignores the lock
-        while !Task.isCancelled {
-            if case .ready = await PresenterIdle.waitUntilReady(isAppLocked: { false }) { break }
+        // in flight drops it. The lock can engage during the wait, before SwiftUI restarts this
+        // task, so a locked wait ends at once and the unlock starts a new one
+        while !Task.isCancelled, !isAppLocked {
+            if case .ready = await PresenterIdle.waitUntilReady() { break }
         }
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, !isAppLocked else { return }
 
         releasedAlertID = alertID
     }
