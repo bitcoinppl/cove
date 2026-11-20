@@ -607,9 +607,11 @@ impl RustOnboardingManager {
             }
             OnboardingCloudBackupEnableStart::CheckCloudAgain => {
                 info!("Onboarding: backup metadata was pending; checking the cloud again");
-                // a standard Enable asks about a master key that has synced since, and says the
-                // files aren't available yet if it still hasn't
-                CLOUD_BACKUP_MANAGER.dispatch(CloudBackupManagerAction::EnableCloudBackup(context));
+                // listing the cloud again without a passkey offers a master key that has synced
+                // since on the existing-backup prompt, as a backup the restore check found is,
+                // and says the files aren't available yet if it still hasn't
+                CLOUD_BACKUP_MANAGER
+                    .dispatch(CloudBackupManagerAction::EnableCloudBackupNoDiscovery(context));
             }
             OnboardingCloudBackupEnableStart::ChooseExistingOrNew => {
                 info!("Onboarding: cloud backup discovery was inconclusive; asking passkey choice");

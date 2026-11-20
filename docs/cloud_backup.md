@@ -624,9 +624,9 @@ Enable behavior depends on what discovery proved:
   New Backup starts a new backup beside the folders. This holds whenever every
   listed backup lacks its master key; a readable backup beside them still gets
   the existing-backup prompt. When onboarding's backup check finds only such
-  folders, its Cloud Backup step runs this Enable, which lists the cloud again,
-  so a master key that synced while the user finished onboarding is asked about
-  instead
+  folders, its Cloud Backup step lists the cloud again before asking for a
+  passkey, so a master key that synced while the user finished onboarding gets
+  the existing-backup prompt instead
 - a Use Existing Passkey, on the existing-backup prompt or the passkey choice,
   whose passkey opens none of the readable backups brings back the
   existing-backup prompt with that failure on it, so the answer never looks like

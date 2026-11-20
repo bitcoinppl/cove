@@ -231,8 +231,9 @@ fn onboarding_with_pending_backup_metadata_offers_try_again_and_create_new() {
 }
 
 /// Onboarding checks the cloud for a restore well before it starts Cloud Backup, so a master key
-/// that finished syncing in between is found and asked about, rather than offering to create a
-/// new backup under a prompt that says the files aren't there
+/// that finished syncing in between is found and offered on the existing-backup prompt before
+/// any passkey is asked for, as one found by that check is, rather than offering to create a new
+/// backup under a prompt that says the files aren't there
 #[test]
 fn onboarding_finds_a_master_key_that_arrived_after_its_restore_check() {
     let test = concat!(
@@ -242,10 +243,6 @@ fn onboarding_finds_a_master_key_that_arrived_after_its_restore_check() {
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch();
         seed_readable_backup(&mut app);
-        app.passkey.inner.push_discover_result(Ok(DiscoveredPasskeyResult {
-            prf_output: vec![1; 32],
-            credential_id: vec![1, 2, 3],
-        }));
 
         app.event(
             "onboarding starts Cloud Backup from a restore check that found no master key",
@@ -263,7 +260,17 @@ fn onboarding_finds_a_master_key_that_arrived_after_its_restore_check() {
             "{}",
             app.describe()
         );
-        assert_eq!(app.passkey.inner.discover_count(), 1, "the readable backup wasn't tried");
+        assert_eq!(
+            screen.actions.availability(CloudBackupScreenAction::AcceptEnablePromptUseExisting),
+            Some(CloudBackupActionAvailability::Available),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(
+            app.passkey.inner.discover_count(),
+            0,
+            "asked for a passkey before offering the existing backup"
+        );
     });
 }
 
