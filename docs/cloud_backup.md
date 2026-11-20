@@ -1464,6 +1464,22 @@ live provider proof, which would refuse the PIN offline and right after launch:
   follow-up that adds decoy-mode wallets to the check should make a failed read
   refuse the PIN instead
 
+Two more gaps in the refresh reconciliation are known and left open:
+
+- Two refreshes can overlap, since an exclusive operation's follow-up refresh
+  can run beside the detail workflow's. If another device deletes a copy
+  between their reads, the older refresh can apply last and record a
+  `Confirmed` row for a wallet with none, after the newer refresh found the
+  copy missing. The row counts until a later refresh reads the copy missing
+  again. Closing it needs a per-namespace record of the latest read applied
+- A copy the provider returns but that doesn't parse or decrypt reads like a
+  transient download failure, so it neither grants nor withdraws coverage, and
+  a `Confirmed` row keeps counting a copy that can't restore the wallet.
+  Withdrawing coverage on such a read needs the reader's errors split into
+  permanent and transient ones. A decrypt failure can also mean this device's
+  master key doesn't match the namespace; withdrawing on that would mark every
+  wallet `Dirty` and upload each again over copies encrypted with another key
+
 ### Wallet recovery
 
 Screens outside Cloud Backup ask whether Cloud Backup can bring one wallet
