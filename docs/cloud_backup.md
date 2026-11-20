@@ -1445,10 +1445,16 @@ The reducer keeps that answer, with the namespace it was found for, until a
 later check asks the provider again and confirms the key. A check that stops
 before asking, for example offline or with the provider unavailable, learned
 nothing, so it leaves the answer in place. A different namespace ignores it.
+A failed row, the wrapper's own included, doesn't stop the check asking: Settings
+keeps the failed row's message, which may ask the user to reconnect, and the
+check still carries the provider's answer on the key. Only a wrapper upload
+that is still running skips the question.
 
 A wrapper row the queue saved as `Failed` after its confirmation window ran out
 also withdraws all coverage, though Settings then shows the generic error. The
-row doesn't record why, so it counts as `Missing`, whose fix is Verify. A Verify
+row doesn't record why, so the provider's answer decides the fix: `Uploading`
+when iCloud still reports the file uploading, and otherwise `Missing`, whose
+fix is Verify. A Verify
 that decrypts the provider's wrapper hands that row back to the queue as
 `UploadedPendingConfirmation` with the revision it downloaded, so the queue
 confirms it against the provider as it would after an upload; a Verify that

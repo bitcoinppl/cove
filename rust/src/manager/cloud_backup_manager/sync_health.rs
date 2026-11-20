@@ -137,18 +137,16 @@ impl RustCloudBackupManager {
             }
         };
 
-        if let Some(sync_health) = Self::sync_health_from_local_failures(&sync_states) {
-            return sync_health.into();
+        let local_failure = Self::sync_health_from_local_failures(&sync_states);
+        let master_key_uploading = master_key_upload_grace_namespace == Some(namespace.as_str())
+            || Self::sync_health_has_pending_master_key_upload(&sync_states);
+        if master_key_uploading {
+            return local_failure.unwrap_or(CloudSyncHealth::Uploading).into();
         }
 
-        if master_key_upload_grace_namespace == Some(namespace.as_str()) {
-            return CloudSyncHealth::Uploading.into();
-        }
-
-        if Self::sync_health_has_pending_master_key_upload(&sync_states) {
-            return CloudSyncHealth::Uploading.into();
-        }
-
+        // a failed row, the wrapper's own included, still asks the provider for the key: the
+        // Wipe Data PIN counts cloud copies only while it confirms the key, and a failed wrapper
+        // row's fix depends on whether the provider lost the file or is still uploading it
         let cloud = CloudStorage::global_silent_client();
         let master_key_issue = match cloud
             .is_backup_uploaded(namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
@@ -159,8 +157,25 @@ impl RustCloudBackupManager {
             Ok(CloudBackupUploadStatus::NotFound) | Err(CloudStorageError::NotFound(_)) => {
                 Some(MasterKeyIssue::Missing)
             }
-            Err(error) => return Self::sync_health_from_cloud_error(error).into(),
+            Err(error) => {
+                return local_failure
+                    .unwrap_or_else(|| Self::sync_health_from_cloud_error(error))
+                    .into();
+            }
         };
+
+        // Settings keeps showing the failed row, which may ask the user to reconnect, while the
+        // key answer still reaches the Wipe Data PIN check
+        if let Some(health) = local_failure {
+            let master_key = match master_key_issue {
+                Some(issue) => {
+                    MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey { namespace, issue })
+                }
+                None => MasterKeyFinding::Confirmed,
+            };
+
+            return SyncHealthCheck { health, master_key };
+        }
 
         if let Some(issue) = master_key_issue {
             if !expected_wallet_record_ids.is_empty() {

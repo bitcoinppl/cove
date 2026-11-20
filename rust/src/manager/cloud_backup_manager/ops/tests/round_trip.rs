@@ -15,7 +15,7 @@ use crate::manager::cloud_backup_manager::recovery_coverage::{
 };
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, UnconfirmedMasterKey,
 };
 use crate::wallet_secret::WalletSecretExt as _;
 
@@ -908,5 +908,84 @@ async fn a_passing_verify_ends_the_refusal_when_it_rebuilds_the_wrapper() {
         wipe_data_pin_toggle(),
         SecuritySettingsResult::ShowAlert(SecurityAlertState::ConfirmEnableWipeMePin),
         "a Verify that rebuilt the wrapper left the Wipe Data PIN refused"
+    );
+}
+
+// the wrapper row is Failed while iCloud still uploads the file, so Verify can't help and the
+// refusal has to say so instead of sending the user back to Verify
+#[tokio::test(flavor = "current_thread")]
+async fn a_wrapper_row_the_queue_gave_up_on_still_asks_the_provider_why() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    let namespace = manager.current_namespace_id().unwrap();
+    save_wrapper_row_the_queue_gave_up_on(namespace.clone());
+    globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
+    globals.cloud.set_master_key_upload_pending(namespace.clone());
+
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(
+        check.clone().into_parts().1,
+        MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey {
+            namespace,
+            issue: MasterKeyIssue::Uploading,
+        }),
+        "the failed wrapper row stopped the check asking the provider why: {check:?}"
+    );
+    manager.observe_sync_health(check);
+
+    assert_eq!(
+        wipe_data_pin_toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUploading),
+        "a wrapper iCloud is still uploading sent the user to Verify, which can't finish it"
+    );
+}
+
+// another row's failure must not stop the check asking the provider for the key, or a wrapper
+// the provider lost goes unnoticed while that row stays failed
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_wallet_upload_doesnt_hide_a_missing_key() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let wallet = save_used_hot_wallet();
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    let namespace = manager.current_namespace_id().unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::wallet(
+            namespace.clone(),
+            wallet.id.clone(),
+            record_id,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: true,
+                error: "upload failed".into(),
+                issue: None,
+                failed_at: 30,
+            }),
+        ))
+        .unwrap();
+    globals.cloud.remove_master_key_backup(&namespace);
+
+    let (_, master_key) = manager.check_sync_health(None).await.into_parts();
+    assert_eq!(
+        master_key,
+        MasterKeyFinding::Unconfirmed(UnconfirmedMasterKey {
+            namespace,
+            issue: MasterKeyIssue::Missing,
+        }),
+        "a failed wallet upload stopped the check asking the provider for the key"
     );
 }
