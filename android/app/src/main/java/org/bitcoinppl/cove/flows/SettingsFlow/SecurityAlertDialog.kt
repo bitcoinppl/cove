@@ -82,7 +82,8 @@ private fun UnverifiedDecoyWalletsAlert(callbacks: SecurityAlertDialogCallbacks)
         text = {
             Text(
                 "A decoy wallet has not been backed up. Unlock Cove with your decoy PIN and back up " +
-                    "that wallet before enabling the Wipe Data PIN. If you wipe the data without having " +
+                    "that wallet before enabling the Wipe Data PIN. If the decoy PIN is off, set a new " +
+                    "one in Settings first. If you wipe the data without having " +
                     "a backup of your wallet, you will lose the bitcoin in that wallet.",
             )
         },

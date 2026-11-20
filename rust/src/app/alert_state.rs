@@ -3,7 +3,10 @@ use std::sync::Arc;
 use cove_tap_card::TapSigner;
 use cove_types::{Network, TxId, WalletId, address::Address, amount::Amount};
 
-use crate::{manager::auth_manager::DuplicateTrickPin, router::AfterPinAction};
+use crate::{
+    database::Database, manager::auth_manager::DuplicateTrickPin, router::AfterPinAction,
+    wallet::metadata::WalletMode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum AlertDisplayType {
@@ -121,7 +124,15 @@ impl AppAlertState {
                 "This wallet has already been imported! Taking you there now...".to_string()
             }
             Self::HotWalletKeyMissing { .. } => {
-                let base = "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, recover it from Cloud Backup or import your seed words.";
+                // decoy mode hides Cloud Backup, so it can only offer the seed words
+                let base = match Database::global().global_config.wallet_mode() {
+                    WalletMode::Main => {
+                        "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, recover it from Cloud Backup or import your seed words."
+                    }
+                    WalletMode::Decoy => {
+                        "This wallet's private key is no longer available on this device. It has been converted to watch-only. To restore full access, import your seed words."
+                    }
+                };
 
                 cfg_if::cfg_if! {
                     if #[cfg(target_os = "ios")] {
@@ -246,5 +257,27 @@ impl AppAlertState {
             | Self::FailedToScanQr { .. } => AlertDisplayType::Toast,
             _ => AlertDisplayType::FullAlert,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cove_types::WalletId;
+
+    use super::{AppAlertState, Database};
+
+    // decoy mode hides Cloud Backup, so the missing-key alert must not send the user there
+    #[test]
+    fn decoy_mode_missing_key_alert_never_mentions_cloud_backup() {
+        let _lock = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::init_test_database();
+        let config = &Database::global().global_config;
+
+        config.set_decoy_mode().expect("enter decoy mode");
+        let alert = AppAlertState::HotWalletKeyMissing { wallet_id: WalletId::preview_new() };
+        let message = alert.message();
+        config.set_main_mode().expect("leave decoy mode");
+
+        assert!(!message.contains("Cloud Backup"), "decoy mode pointed to Cloud Backup: {message}");
     }
 }

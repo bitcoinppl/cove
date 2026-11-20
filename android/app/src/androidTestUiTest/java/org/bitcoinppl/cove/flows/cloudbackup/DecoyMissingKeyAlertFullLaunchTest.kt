@@ -28,7 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The missing-key alert offers Open Cloud Backup in main mode only
+ * The missing-key alert offers Open Cloud Backup in main mode only, in its button and its message
  *
  * Decoy mode hides Cloud Backup, so the button would lead from the decoy wallets to the main
  * wallets' backup. The alert is raised in process, as the wallet manager raises it when a hot
@@ -84,9 +84,10 @@ class DecoyMissingKeyAlertFullLaunchTest {
         assertEquals("the decoy PIN didn't unlock decoy mode", UnlockMode.DECOY, mode)
 
         showMissingKeyAlert(walletId)
+        // neither the button nor the message may send the user to Cloud Backup
         assertFalse(
-            "decoy mode's missing-key alert offered Open Cloud Backup\n${device.hierarchy()}",
-            device.hasObject(By.text(OPEN_CLOUD_BACKUP)),
+            "decoy mode's missing-key alert pointed to Cloud Backup\n${device.hierarchy()}",
+            device.hasObject(By.textContains(CLOUD_BACKUP)),
         )
     }
 
@@ -115,6 +116,7 @@ class DecoyMissingKeyAlertFullLaunchTest {
         const val DECOY_PIN = "246802"
         const val ALERT_TITLE = "Wallet Needs Recovery"
         const val OPEN_CLOUD_BACKUP = "Open Cloud Backup"
+        const val CLOUD_BACKUP = "Cloud Backup"
         const val ALERT_TIMEOUT_MS = 10_000L
     }
 }

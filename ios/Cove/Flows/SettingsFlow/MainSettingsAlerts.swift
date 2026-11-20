@@ -65,7 +65,8 @@ private func unverifiedDecoyWalletsAlert(context: MainSettingsPresentationContex
     AlertBuilder(
         title: "Can't Enable Wipe Data PIN",
         message: """
-        A decoy wallet has not been backed up. Unlock Cove with your decoy PIN and back up that wallet before enabling the Wipe Data PIN.\
+        A decoy wallet has not been backed up. Unlock Cove with your decoy PIN and back up that wallet before enabling the Wipe Data PIN. \
+        If the decoy PIN is off, set a new one in Settings first. \
         If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet.
         """,
         actions: { Button("OK") { context.dismissAlert() } }

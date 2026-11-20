@@ -73,8 +73,8 @@ over the lock screen, before the PIN decides which mode opens; a result
 dropped there still shows in the Cloud Backup settings. The missing-key
 alert, raised when a hot wallet's key is gone from the keychain, offers Open
 Cloud Backup only when `missing_key_alert_offers_cloud_backup` says so: Cloud
-Backup is configured and the app is in main mode. A
-configured body lists its sections in the order they are drawn, and Turn Off is
+Backup is configured and the app is in main mode. In decoy mode its message
+names only the seed words, not Cloud Backup. A configured body lists its sections in the order they are drawn, and Turn Off is
 in every one. Listed cloud rows carry their own row actions. An extra copy
 offers Delete only while the wallet it copies has its own current backup; until
 then it offers Back up first and Check Again.
