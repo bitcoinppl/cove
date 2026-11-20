@@ -3,9 +3,12 @@ package org.bitcoinppl.cove.views
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +23,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,7 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +69,8 @@ fun NumberPadPinView(
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
-    val pinBoxes = remember { BringIntoViewRequester() }
+    val scrollState = rememberScrollState()
+    val placement = remember { PinBoxesPlacement() }
 
     fun enterDigit(digit: String) {
         if (isSubmitting || pin.length >= pinLength) return
@@ -89,11 +92,15 @@ fun NumberPadPinView(
                     } else {
                         // when the pad is taller than the screen, reaching its bottom row scrolls
                         // the boxes away, so they come back into view before they shake, and the
-                        // PIN clears only once the shake ends, however slowly animations run;
-                        // swipes and keys are off meanwhile, so the boxes stay in view throughout
-                        pinBoxes.bringIntoView()
-                        offsetX.shake()
-                        pin = ""
+                        // PIN clears only once the shake ends, however slowly animations run. The
+                        // pad holds the scroll throughout, so no swipe, fling or keyboard focus
+                        // move can take the boxes out of view again
+                        scrollState.scroll(MutatePriority.PreventUserInput) {
+                            scrollIntoView(placement)
+                            offsetX.shake()
+                            pin = ""
+                        }
+
                         onWrongPin(submittedPin)
                     }
                 } finally {
@@ -109,10 +116,8 @@ fun NumberPadPinView(
                 .fillMaxSize()
                 .background(CoveColor.midnightBlue)
                 .testTag("numberPadPin.viewport")
-                // a swipe or a keyboard focus move during a wrong PIN's feedback would scroll
-                // the PIN boxes away, so the pad takes neither while it checks a PIN
-                .verticalScroll(rememberScrollState(), enabled = !isSubmitting)
-                .onPreviewKeyEvent { isSubmitting }
+                .onGloballyPositioned { placement.viewport = it }
+                .verticalScroll(scrollState)
                 .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -159,7 +164,7 @@ fun NumberPadPinView(
                 Modifier
                     .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                     .padding(top = 15.dp)
-                    .bringIntoViewRequester(pinBoxes)
+                    .onGloballyPositioned { placement.boxes = it }
                     .testTag("numberPadPin.pinBoxes"),
         ) {
             repeat(pinLength) { index ->
@@ -321,4 +326,35 @@ private suspend fun Animatable<Float, AnimationVector1D>.shake() {
     for (offset in listOf(30f, -30f, 20f, -20f, 10f, -10f, 0f)) {
         animateTo(offset, animationSpec = tween(70, easing = LinearEasing))
     }
+}
+
+/** Where the PIN boxes sit in the pad's visible area, so a wrong PIN can scroll them into view */
+private class PinBoxesPlacement {
+    var viewport: LayoutCoordinates? = null
+    var boxes: LayoutCoordinates? = null
+
+    /** How far the pad must scroll for the boxes to sit wholly in view, or 0 when they already do */
+    fun distanceIntoView(): Float {
+        val viewport = viewport?.takeIf { it.isAttached }
+        val boxes = boxes?.takeIf { it.isAttached }
+        if (viewport == null || boxes == null) return 0f
+
+        val bounds = viewport.localBoundingBoxOf(boxes, clipBounds = false)
+        val height = viewport.size.height
+
+        return when {
+            bounds.top < 0f -> bounds.top
+            bounds.bottom > height -> bounds.bottom - height
+            else -> 0f
+        }
+    }
+}
+
+/** Scrolls the PIN boxes wholly into view, inside a scroll the pad already holds */
+private suspend fun ScrollScope.scrollIntoView(placement: PinBoxesPlacement) {
+    val distance = placement.distanceIntoView()
+    if (distance == 0f) return
+
+    var scrolled = 0f
+    animate(0f, distance) { value, _ -> scrolled += scrollBy(value - scrolled) }
 }
