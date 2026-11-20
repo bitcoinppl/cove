@@ -1437,8 +1437,10 @@ listing is what shows a copy another device deleted.
 
 Rows are compared by when they were written, not by revision, so a restore
 that recorded a hash the wallet no longer reproduces, such as a backup written
-before #988, still reconciles. A row written after the read began is left
-alone, since it may record a change the read couldn't show. Times are whole
+before #988, still reconciles. The read begins when it lists the provider,
+which for a refresh built on the screen's earlier inventory snapshot is when
+that snapshot was taken. A row written after that is left alone, since it may
+record a change the listing couldn't show. Times are whole
 seconds: a confirmation from the read's own second can still turn `Dirty`,
 which only uploads the wallet again, but a `Dirty` or `Failed` row from that
 second is not confirmed, since that could drop an edit's upload.

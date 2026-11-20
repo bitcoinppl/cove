@@ -183,6 +183,9 @@ impl CloudBackupDetailResult {
 pub(crate) struct CloudBackupDetailInventorySnapshot {
     pub(crate) namespace: String,
     pub(crate) wallet_record_ids: Vec<String>,
+    /// When the listing was taken, in unix seconds, so the refresh that completes it later
+    /// doesn't read a copy uploaded since as missing
+    pub(crate) listed_at: u64,
     pub(crate) authority: Option<CloudBackupInventoryAuthority>,
     pub(crate) provisional_detail: Option<CloudBackupDetail>,
 }

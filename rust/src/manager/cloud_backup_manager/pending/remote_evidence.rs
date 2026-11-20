@@ -40,8 +40,8 @@ pub(crate) struct RemoteRevisionEvidence {
     revisions: HashMap<String, String>,
     /// What the read showed of each local wallet's copy, when it compared them
     provider_copies: Vec<ProviderCopy>,
-    /// When the read began, in unix seconds: a row written since may record a change the read
-    /// could not show
+    /// When the read began, which is when it took the listing it relies on, in unix seconds: a
+    /// row written since may record a change the read could not show
     read_started_at: u64,
 }
 

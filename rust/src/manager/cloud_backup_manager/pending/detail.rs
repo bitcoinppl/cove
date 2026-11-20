@@ -22,6 +22,9 @@ struct DetailRead {
     namespace: String,
     config: ConfigGeneration,
     cloud: CloudStorageClient,
+    /// When the listing this read relies on was taken, in unix seconds: a row written since may
+    /// record a copy the listing couldn't show
+    listed_at: u64,
 }
 
 impl RustCloudBackupManager {
@@ -43,6 +46,7 @@ impl RustCloudBackupManager {
                 return Some(CloudBackupDetailInventorySnapshotResult::AccessError(error));
             }
         };
+        let listed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let snapshot = match cloud.list_wallet_backups_snapshot(namespace.clone()).await {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -74,6 +78,7 @@ impl RustCloudBackupManager {
             CloudBackupDetailInventorySnapshot {
                 namespace,
                 wallet_record_ids: snapshot.names,
+                listed_at,
                 authority,
                 provisional_detail,
             },
@@ -122,7 +127,12 @@ impl RustCloudBackupManager {
             Some(CloudBackupInventoryAuthority::ProviderConfirmed) => {
                 Some(CloudBackupDetailSnapshotCompletion::Final(
                     self.finish_cloud_backup_detail_refresh(
-                        DetailRead { namespace: snapshot.namespace, config, cloud },
+                        DetailRead {
+                            namespace: snapshot.namespace,
+                            config,
+                            cloud,
+                            listed_at: snapshot.listed_at,
+                        },
                         snapshot.wallet_record_ids,
                         CloudBackupInventoryAuthority::ProviderConfirmed,
                     )
@@ -130,7 +140,13 @@ impl RustCloudBackupManager {
                 ))
             }
             Some(CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount) => {
-                let read = DetailRead { namespace: snapshot.namespace.clone(), config, cloud };
+                let read = DetailRead {
+                    namespace: snapshot.namespace.clone(),
+                    config,
+                    cloud,
+                    listed_at: snapshot.listed_at,
+                };
+
                 let result = self
                     .finish_cloud_backup_detail_refresh(
                         read,
@@ -154,9 +170,11 @@ impl RustCloudBackupManager {
                 })
             }
             Some(CloudBackupInventoryAuthority::Provisional) | None => {
+                let listed_at = cove_util::time::unix_timestamp_secs_or_zero();
                 let result = match cloud.list_wallet_backups(snapshot.namespace.clone()).await {
                     Ok(record_ids) => {
-                        let read = DetailRead { namespace: snapshot.namespace, config, cloud };
+                        let read =
+                            DetailRead { namespace: snapshot.namespace, config, cloud, listed_at };
                         self.finish_cloud_backup_detail_refresh(
                             read,
                             record_ids,
@@ -240,6 +258,7 @@ impl RustCloudBackupManager {
         }
 
         info!("refresh_cloud_backup_detail: listing wallets for namespace {namespace}");
+        let listed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(error) => {
@@ -254,7 +273,7 @@ impl RustCloudBackupManager {
 
         Some(
             self.finish_cloud_backup_detail_refresh(
-                DetailRead { namespace, config, cloud },
+                DetailRead { namespace, config, cloud, listed_at },
                 wallet_record_ids,
                 CloudBackupInventoryAuthority::ProviderConfirmed,
             )
@@ -268,11 +287,7 @@ impl RustCloudBackupManager {
         wallet_record_ids: Vec<String>,
         authority: CloudBackupInventoryAuthority,
     ) -> CloudBackupDetailResult {
-        let DetailRead { namespace, config, cloud } = read;
-
-        // rows written from here on may record what this read can't show, so reconciliation
-        // leaves them alone
-        let read_started_at = cove_util::time::unix_timestamp_secs_or_zero();
+        let DetailRead { namespace, config, cloud, listed_at } = read;
         let remote_wallet_truth =
             match self.load_remote_wallet_truth(&namespace, &wallet_record_ids, cloud).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -297,9 +312,7 @@ impl RustCloudBackupManager {
         // the copies this read showed reconcile each wallet's row, so what Cloud Backup can
         // restore follows the provider, not only this device's uploads
         let provider_copies = inventory.provider_copies(authority);
-        self.confirm_remote_revisions(
-            evidence.with_provider_copies(provider_copies, read_started_at),
-        );
+        self.confirm_remote_revisions(evidence.with_provider_copies(provider_copies, listed_at));
 
         let listed = inventory.build_detail();
         CloudBackupDetailResult::SuccessWithAuthority { listed, authority }

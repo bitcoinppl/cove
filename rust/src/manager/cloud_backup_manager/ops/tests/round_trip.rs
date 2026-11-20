@@ -10,7 +10,6 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::recovery_coverage::{
     CloudBackupRecovery, CloudBackupWalletRecovery,
 };
-use crate::manager::cloud_backup_manager::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::manager::cloud_backup_manager::{
     CloudBackupRecoveryCoverage, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
@@ -368,6 +367,85 @@ async fn a_refresh_that_confirms_the_last_pending_upload_shows_every_wallet_uplo
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn an_upload_confirmed_after_the_listing_omitted_it_keeps_covering_the_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+
+    // the upload is still landing when the Cloud Backup screen lists the provider
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::Confirmed(confirmed) = state else {
+            panic!("the refresh should have confirmed the backup, got {state:?}");
+        };
+
+        PersistedCloudBlobState::UploadedPendingConfirmation(
+            CloudBlobUploadedPendingConfirmationState {
+                revision_hash: confirmed.revision_hash.clone(),
+                uploaded_at: confirmed.confirmed_at,
+                attempt_count: 0,
+                last_checked_at: None,
+            },
+        )
+    });
+    globals.cloud.set_wallet_files_snapshot(namespace.clone(), Vec::new(), true);
+
+    // and the read of the copy the listing left out times out, as iCloud's does for a file it
+    // doesn't list yet
+    globals.cloud.fail_wallet_backup_download(
+        namespace,
+        record_id.clone(),
+        CloudStorageError::SyncPending("not downloaded yet".into()),
+    );
+
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) = manager
+        .load_cloud_backup_detail_inventory_snapshot(CloudStorage::global_explicit_client())
+        .await
+    else {
+        panic!("expected an inventory snapshot");
+    };
+
+    // a second later the upload confirms, before the refresh reads the copies the listing named
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let mut confirmed = None;
+    rewrite_row_state(&record_id, |state| {
+        let PersistedCloudBlobState::UploadedPendingConfirmation(pending) = state else {
+            panic!("the upload should still be pending, got {state:?}");
+        };
+
+        let state = PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: pending.revision_hash.clone(),
+            confirmed_at: cove_util::time::unix_timestamp_secs_or_zero(),
+        });
+        confirmed = Some(state.clone());
+        state
+    });
+
+    // an upload the refresh starts would replace the confirmation, so hold it where it shows
+    let upload = globals.cloud.gate_next_wallet_upload();
+    manager
+        .complete_cloud_backup_detail_inventory_snapshot(
+            snapshot,
+            current_config(&manager).await,
+            CloudStorage::global_explicit_client(),
+        )
+        .await
+        .expect("expected the refresh to finish");
+    supervisor_checkpoint(&manager).await;
+
+    let row = Database::global().cloud_blob_sync_states.get(&record_id).unwrap().unwrap();
+    assert_eq!(
+        Some(row.state),
+        confirmed,
+        "the listing was taken before the upload landed, so it doesn't show the copy missing"
+    );
+    assert_eq!(wallet_recovery(&wallet), CloudBackupWalletRecovery::Confirmed);
+
+    upload.release();
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_wallet_restored_before_restores_recorded_their_backup_is_covered_once_the_provider_shows_it()
  {
     let _guard = async_test_lock().lock().await;
@@ -502,7 +580,8 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
-    let (wallet, _, record_id) = confirmed_backup(&manager, globals).await;
+    let (wallet, namespace, record_id) = confirmed_backup(&manager, globals).await;
+    globals.cloud.set_master_key_backup(namespace, vec![1]);
 
     // this device's upload failed for good a while ago, and another device has since uploaded the
     // same revision
@@ -535,11 +614,11 @@ async fn a_failed_upload_whose_revision_another_device_uploaded_covers_the_walle
     );
     assert!(!CloudBackupRecoveryCoverage::load().needs_backup(&wallet));
 
-    // the mock holds no master key, so once the failed upload is gone that is what Settings shows
-    let missing_key = CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
-    let healed = shown_sync_health(&manager, |health| *health == missing_key).await;
+    let healed =
+        shown_sync_health(&manager, |health| *health == CloudSyncHealth::AllUploaded).await;
     assert_eq!(
-        healed, missing_key,
+        healed,
+        CloudSyncHealth::AllUploaded,
         "the confirmed wallet must not keep the failed upload's error in Settings"
     );
     clear_wallet_upload_runtime_for_test_async(&manager).await;
