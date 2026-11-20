@@ -504,7 +504,7 @@ mod tests {
         assert_eq!(recovery.wallet(never_uploaded.id), CloudBackupWalletRecovery::Unconfirmed);
 
         // the queue gave up on the master key wrapper, so no copy restores its wallet
-        let mut key_failed = sync_states.clone();
+        let mut key_failed = sync_states;
         key_failed[0] = PersistedCloudBlobSyncState::master_key_wrapper(NAMESPACE.into(), failed());
         let coverage =
             CloudBackupRecoveryCoverage::from_states(&persisted, NAMESPACE, &key_failed, None);
