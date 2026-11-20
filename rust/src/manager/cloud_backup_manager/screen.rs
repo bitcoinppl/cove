@@ -47,9 +47,10 @@ pub use self::types::{
 };
 #[cfg(test)]
 pub(crate) use self::types::{
-    CloudBackupDriveAccountSwitchStage, CloudBackupInventoryControl, CloudBackupListedRow,
-    CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRowActionKind,
-    CloudBackupRowControl, CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
+    CloudBackupDriveAccountSwitchStage, CloudBackupInventoryControl, CloudBackupLastOutcome,
+    CloudBackupLastOutcomeUpdate, CloudBackupListedRow, CloudBackupOutcomeTarget,
+    CloudBackupProgressSection, CloudBackupRowActionKind, CloudBackupRowControl,
+    CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
     CloudBackupSavedPasskeyScreen, CloudBackupSection, CloudBackupVerificationControl,
 };
 use cove_cspp::backup_data::PasskeyProviderHint;

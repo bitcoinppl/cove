@@ -208,6 +208,59 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
         );
 }
 
+/// A passkey that opens neither listed backup, then has no credential for the second, leaves
+/// Restore to the local master key, which opens the device's own backup
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_falls_back_to_the_local_master_key_when_no_credential_opens_a_backup() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    for salt in [[3; 32], [4; 32]] {
+        let remote_master_key = cove_cspp::master_key::MasterKey::generate();
+        let encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&remote_master_key, &[7; 32], &salt)
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            remote_master_key.namespace_id(),
+            serde_json::to_vec(&encrypted).unwrap(),
+        );
+    }
+
+    let local_master_key = cove_cspp::master_key::MasterKey::generate();
+    let local_namespace = local_master_key.namespace_id();
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&local_master_key).unwrap();
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        local_namespace.clone(),
+        record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(&wallet, &local_master_key, "local-revision", 2).await,
+    );
+    globals.cloud.set_wallet_files(
+        local_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+
+    // the discovered passkey opens the first backup it tries, and has no credential for the other
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![1; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(globals.passkey.authenticate_count(), 1, "the second backup was tried");
+    assert_eq!(report.wallets_restored, 1);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(local_namespace));
+}
+
 // decrypted backup content that cloud restore rejects must reach restore logs and errors only
 // as a failure kind or serde's category and position, since the parsers' own text quotes the
 // rejected value

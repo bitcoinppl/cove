@@ -11,11 +11,12 @@ use zeroize::Zeroizing;
 
 use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
+use crate::manager::cloud_backup_manager::cloud_folders::{CloudFolders, WrapperRead};
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
-    PasskeyMaterialOutcome, PasskeyRequestAuthority, PendingMatch, PreparedWalletBackup,
-    StagedPrfKey,
+    PasskeyMaterialOutcome, PasskeyRequestAuthority, PreparedWalletBackup, StagedPrfKey,
+    UnopenedReason,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupExistingBackup,
@@ -121,47 +122,51 @@ impl RustCloudBackupManager {
                 })
             }
 
-            // a backup still uploading may be the one this passkey opens, but the prompt stays
-            // and says what the readable ones showed, so the user can try again once it arrives
-            NamespaceMatchOutcome::NoMatch
-            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoMatch) => {
-                info!("Enable: passkey didn't match existing backups, asking user to confirm");
-                Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
-                    context,
-                    passkey_hint,
-                    error: CloudBackupError::PasskeyMismatch,
-                })
-            }
+            // a backup still uploading may be the one a passkey opens, but the prompt stays and
+            // says what the others showed, so the user can try again once it arrives
+            NamespaceMatchOutcome::Unopened(unopened) => match unopened.reason {
+                UnopenedReason::PasskeyMismatch => {
+                    info!("Enable: passkey didn't match existing backups, asking user to confirm");
+                    Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
+                        context,
+                        passkey_hint,
+                        error: CloudBackupError::PasskeyMismatch,
+                    })
+                }
 
-            NamespaceMatchOutcome::NoPasskeyOnDevice
-            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoPasskeyOnDevice) => {
-                info!("Enable: no passkey on this device for existing backups, asking user to confirm");
-                Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
-                    context,
-                    passkey_hint,
-                    error: CloudBackupError::from(PasskeyError::NoCredentialFound),
-                })
-            }
+                UnopenedReason::NoPasskeyOnDevice => {
+                    info!(
+                        "Enable: no passkey on this device for existing backups, asking user to confirm"
+                    );
+                    Ok(CloudBackupEnablePreparation::ExistingPasskeyFailed {
+                        context,
+                        passkey_hint,
+                        error: CloudBackupError::from(PasskeyError::NoCredentialFound),
+                    })
+                }
 
-            // no passkey can open a backup whose master key isn't visible, so asking for one could
-            // only bring this prompt back; the user waits for the files or creates a new backup
-            NamespaceMatchOutcome::NoBackupFiles
-            | NamespaceMatchOutcome::FilesPending(PendingMatch::NoneReadable) => {
-                info!("Enable: listed backups have no visible master key, asking user to confirm");
-                Ok(CloudBackupEnablePreparation::ExistingBackupFound {
-                    context,
-                    existing: CloudBackupExistingBackup::FilesUnavailable,
-                })
-            }
+                // no passkey can open a backup whose master key isn't visible, so asking for one
+                // could only bring this prompt back; the user waits for the files or creates a
+                // new backup
+                UnopenedReason::NoBackupFiles => {
+                    info!(
+                        "Enable: listed backups have no visible master key, asking user to confirm"
+                    );
+                    Ok(CloudBackupEnablePreparation::ExistingBackupFound {
+                        context,
+                        existing: CloudBackupExistingBackup::FilesUnavailable,
+                    })
+                }
 
-            NamespaceMatchOutcome::Inconclusive => {
-                Err(self.offline_error_for_step(BlockingCloudStep::Enable))
-            }
+                UnopenedReason::Inconclusive => {
+                    Err(self.offline_error_for_step(BlockingCloudStep::Enable))
+                }
 
-            NamespaceMatchOutcome::UnsupportedVersions => Err(CloudBackupError::Internal(
-                "some cloud backups use a newer format, please update the app to access all backups"
-                    .into(),
-            )),
+                UnopenedReason::UnsupportedVersions => Err(CloudBackupError::Internal(
+                    "some cloud backups use a newer format, please update the app to access all backups"
+                        .into(),
+                )),
+            },
         }
     }
 
@@ -238,13 +243,14 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            // reading what the namespaces hold presents nothing, so it needs no permit
-            let matcher = NamespacePasskeyMatcher::new(
+            let existing = CloudFolders::read(
                 &cloud,
-                PasskeyAccess::global(),
-                &PasskeyRequestAuthority::Silent,
-            );
-            let existing = matcher.existing_backup(&existing_namespaces).await?;
+                &existing_namespaces,
+                WrapperRead::Uploaded,
+                &Default::default(),
+            )
+            .await?
+            .existing_backup();
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
                 existing,

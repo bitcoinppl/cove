@@ -17,7 +17,7 @@ pub(crate) use material::{
 };
 pub(crate) use namespace_matcher::{
     NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
-    PendingMatch,
+    Unopened, UnopenedReason,
 };
 
 fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> {

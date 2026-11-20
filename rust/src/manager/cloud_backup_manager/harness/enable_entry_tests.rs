@@ -109,6 +109,42 @@ fn a_restore_queued_behind_a_prompt_answer_finds_its_enable_running() {
     });
 }
 
+/// The loop users reported: Enable found a backup folder without its master key, and each answer
+/// to the prompt it showed brought the same prompt back. Invariant 11 checks every answer here
+/// once its Enable ends, so a prompt that comes back with nothing new fails the step
+#[test]
+fn answers_to_the_prompt_for_a_folder_without_its_master_key_make_progress() {
+    let test = concat!(
+        module_path!(),
+        "::answers_to_the_prompt_for_a_folder_without_its_master_key_make_progress"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let folder = MasterKey::generate().namespace_id();
+        app.cloud.inner.set_wallet_files(folder, Vec::new());
+
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(
+            CloudBackupEnableContext::settings_manual(),
+        ))
+        .then_cannot(&[N::TurnOff]);
+        assert_ne!(
+            app.manager().published_screen().root_prompt,
+            CloudBackupRootPrompt::None,
+            "{}",
+            app.describe()
+        );
+
+        // a second answer must make progress too, though its notice reads like the first's
+        for _ in 0..2 {
+            app.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+                CloudBackupEnablePromptChoice::UseExisting,
+            ))
+            .then_cannot(&[N::TurnOff]);
+            app.quiesce().then_cannot(&[N::TurnOff]);
+        }
+    });
+}
+
 /// Use Existing Passkey on the passkey-choice prompt, as onboarding offers it, leads to the
 /// files-unavailable prompt for the first time, so the prompt shows its own message without the
 /// failed-retry outcome its Try Again draws
