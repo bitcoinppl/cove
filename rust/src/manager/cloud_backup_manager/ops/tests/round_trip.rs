@@ -645,30 +645,84 @@ async fn a_cloud_copy_stops_counting_as_a_backup_once_the_provider_cant_confirm_
     // the provider holds the master key wrapper, so Settings doesn't report the key
     let namespace = manager.current_namespace_id().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
-    let missing_key = CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
-    let sync_health = manager.compute_sync_health().await;
-    assert_ne!(sync_health, missing_key);
-    manager.observe_sync_health(sync_health);
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check.master_key_issue(), None, "{check:?}");
+    manager.observe_sync_health(check);
     assert!(
         !CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
         "the confirmed cloud copy should count as the wallet's backup"
     );
 
-    globals.cloud.set_master_key_upload_pending(namespace);
-    let sync_health = manager.compute_sync_health().await;
-    assert_eq!(sync_health, missing_key);
-    manager.observe_sync_health(sync_health);
+    globals.cloud.set_master_key_upload_pending(namespace.clone());
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check, SyncHealthCheck::master_key_unconfirmed(MasterKeyIssue::Uploading));
+    manager.observe_sync_health(check);
 
     assert!(
         CloudBackupRecoveryCoverage::load().needs_backup(&wallet),
         "a cloud copy whose key the provider can't confirm still counted as the wallet's backup"
     );
 
-    // the Wipe Data PIN toggle names the key as the reason
+    // the Wipe Data PIN toggle names the key as the reason, with the fix that matches
+    let toggle = || {
+        AUTH_MANAGER
+            .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true })
+    };
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUploading)
+    );
+
+    globals.cloud.remove_master_key_backup(&namespace);
+    let check = manager.check_sync_health(None).await;
+    assert_eq!(check, SyncHealthCheck::master_key_unconfirmed(MasterKeyIssue::Missing));
+    manager.observe_sync_health(check);
+    assert_eq!(
+        toggle(),
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing)
+    );
+}
+
+// once the provider has gone a minute without confirming the master key wrapper, the queue saves
+// the wrapper row as failed and Settings shows the generic error instead of the key message, so
+// the reason the Wipe Data PIN gives must come from that row and not from the Settings text
+#[tokio::test(flavor = "current_thread")]
+async fn a_wrapper_the_queue_gave_up_on_names_the_key_as_the_reason() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let mut wallet = save_used_hot_wallet();
+    wallet.verified = false;
+    backup_wallets_for_test(&manager, std::slice::from_ref(&wallet)).await.unwrap();
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    // the row the queue saves when the confirmation window runs out
+    let namespace = manager.current_namespace_id().unwrap();
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: Some("revision".into()),
+                retryable: false,
+                error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                issue: None,
+                failed_at: 20,
+            }),
+        ))
+        .unwrap();
+
+    let sync_health = manager.compute_sync_health().await;
+    assert_eq!(sync_health, CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()));
+    manager.observe_sync_health(sync_health);
+
     let toggle = AUTH_MANAGER
         .validate_security_action(SecuritySettingsAction::ToggleWipeDataPin { enable: true });
     assert_eq!(
         toggle,
-        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyUnconfirmed)
+        SecuritySettingsResult::ShowAlert(SecurityAlertState::CloudBackupKeyMissing),
+        "a wrapper the queue gave up on should name the key, not the wallet"
     );
 }

@@ -16,34 +16,88 @@ use crate::database::cloud_backup::{
     CloudStorageIssue, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 
-pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
-    "Cove couldn't confirm the key for this cloud backup. Try syncing again.";
+// Sync Now uploads only wallets, so it can't fix the key; Verify rebuilds a wrapper the provider
+// doesn't have from the local master key
+pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str = "Cove couldn't confirm the key for this cloud backup. Open Cloud Backup and run Verify to fix it.";
 
-impl RustCloudBackupManager {
-    pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
-        self.compute_sync_health_with_master_key_grace(None).await
+// only iCloud Drive reports an upload as pending; the system's iCloud process runs it, so Cove
+// needn't stay open, and Verify reads the local copy back and has nothing to repair
+const SYNC_HEALTH_UPLOADING_MASTER_KEY_MESSAGE: &str = "iCloud hasn't finished uploading the key for this cloud backup. Check that you're online and iCloud Drive is on for Cove, then try again.";
+
+/// Why the provider can't confirm Cloud Backup's master key wrapper, which decides the fix
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MasterKeyIssue {
+    /// The provider doesn't have the wrapper, which Verify rebuilds from the local master key
+    Missing,
+    /// iCloud has the wrapper locally but hasn't finished uploading it
+    Uploading,
+}
+
+impl MasterKeyIssue {
+    fn message(self) -> &'static str {
+        match self {
+            Self::Missing => SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+            Self::Uploading => SYNC_HEALTH_UPLOADING_MASTER_KEY_MESSAGE,
+        }
+    }
+}
+
+/// What a sync health check found, for Settings and for the code that acts on it
+///
+/// Settings only shows the health; the master key answer stays typed so no caller has to match
+/// the message it shows
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SyncHealthCheck {
+    health: CloudSyncHealth,
+    master_key_issue: Option<MasterKeyIssue>,
+}
+
+impl SyncHealthCheck {
+    /// The provider can't confirm the master key wrapper, so no cloud copy can be decrypted
+    pub(crate) fn master_key_unconfirmed(issue: MasterKeyIssue) -> Self {
+        Self {
+            health: CloudSyncHealth::Failed(issue.message().into()),
+            master_key_issue: Some(issue),
+        }
     }
 
-    pub(crate) async fn compute_sync_health_with_master_key_grace(
+    pub(crate) fn health(&self) -> &CloudSyncHealth {
+        &self.health
+    }
+
+    /// Why this check found the provider can't confirm the master key wrapper, if it did
+    pub(crate) fn master_key_issue(&self) -> Option<MasterKeyIssue> {
+        self.master_key_issue
+    }
+}
+
+impl From<CloudSyncHealth> for SyncHealthCheck {
+    fn from(health: CloudSyncHealth) -> Self {
+        Self { health, master_key_issue: None }
+    }
+}
+
+impl RustCloudBackupManager {
+    pub(crate) async fn check_sync_health(
         &self,
         master_key_upload_grace_namespace: Option<&str>,
-    ) -> CloudSyncHealth {
+    ) -> SyncHealthCheck {
         if !Self::load_persisted_state().is_configured() {
-            return CloudSyncHealth::Unknown;
+            return CloudSyncHealth::Unknown.into();
         }
 
         let namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
-            Err(error) => return CloudSyncHealth::Failed(error.reader_message()),
+            Err(error) => return CloudSyncHealth::Failed(error.reader_message()).into(),
         };
         let expected_wallet_record_ids = match self.expected_wallet_record_ids().await {
             Ok(record_ids) => record_ids,
-            Err(error) => return CloudSyncHealth::Failed(error.reader_message()),
+            Err(error) => return CloudSyncHealth::Failed(error.reader_message()).into(),
         };
         let sync_states = match Database::global().cloud_blob_sync_states.list() {
             Ok(states) => {
                 if let Some(sync_health) = Self::sync_health_from_corrupt_sync_state(&states) {
-                    return sync_health;
+                    return sync_health.into();
                 }
 
                 states
@@ -57,53 +111,55 @@ impl RustCloudBackupManager {
             }
             Err(error) => {
                 tracing::error!("Failed to read cloud backup sync states: {error}");
-                return CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into());
+                return CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()).into();
             }
         };
 
         if let Some(sync_health) = Self::sync_health_from_local_failures(&sync_states) {
-            return sync_health;
+            return sync_health.into();
         }
 
         if master_key_upload_grace_namespace == Some(namespace.as_str()) {
-            return CloudSyncHealth::Uploading;
+            return CloudSyncHealth::Uploading.into();
         }
 
         if Self::sync_health_has_pending_master_key_upload(&sync_states) {
-            return CloudSyncHealth::Uploading;
+            return CloudSyncHealth::Uploading.into();
         }
 
         let cloud = CloudStorage::global_silent_client();
-        let master_key_uploaded = match cloud
+        let master_key_issue = match cloud
             .is_backup_uploaded(namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
             .await
         {
-            Ok(CloudBackupUploadStatus::Uploaded) => true,
-            Ok(CloudBackupUploadStatus::Pending | CloudBackupUploadStatus::NotFound) => false,
-            Err(CloudStorageError::NotFound(_)) => false,
-            Err(error) => return Self::sync_health_from_cloud_error(error),
+            Ok(CloudBackupUploadStatus::Uploaded) => None,
+            Ok(CloudBackupUploadStatus::Pending) => Some(MasterKeyIssue::Uploading),
+            Ok(CloudBackupUploadStatus::NotFound) | Err(CloudStorageError::NotFound(_)) => {
+                Some(MasterKeyIssue::Missing)
+            }
+            Err(error) => return Self::sync_health_from_cloud_error(error).into(),
         };
 
         if expected_wallet_record_ids.is_empty() {
-            if master_key_uploaded {
-                return CloudSyncHealth::AllUploaded;
+            if master_key_issue.is_none() {
+                return CloudSyncHealth::AllUploaded.into();
             }
 
-            return CloudSyncHealth::NoFiles;
+            return CloudSyncHealth::NoFiles.into();
         }
 
-        if !master_key_uploaded {
-            return CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
+        if let Some(issue) = master_key_issue {
+            return SyncHealthCheck::master_key_unconfirmed(issue);
         }
 
         if Self::sync_health_has_pending_wallet_upload(&sync_states) {
-            return CloudSyncHealth::Uploading;
+            return CloudSyncHealth::Uploading.into();
         }
 
         let remote_wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
             Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
             Err(CloudStorageError::NotFound(_)) => HashSet::new(),
-            Err(error) => return Self::sync_health_from_cloud_error(error),
+            Err(error) => return Self::sync_health_from_cloud_error(error).into(),
         };
 
         let missing_wallet_count = expected_wallet_record_ids
@@ -113,10 +169,11 @@ impl RustCloudBackupManager {
         if missing_wallet_count > 0 {
             return CloudSyncHealth::Failed(sync_health_missing_wallet_message(
                 missing_wallet_count,
-            ));
+            ))
+            .into();
         }
 
-        CloudSyncHealth::AllUploaded
+        CloudSyncHealth::AllUploaded.into()
     }
 
     pub(crate) async fn expected_wallet_record_ids(

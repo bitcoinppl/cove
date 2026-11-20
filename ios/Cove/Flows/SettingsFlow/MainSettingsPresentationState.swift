@@ -24,7 +24,8 @@ enum MainSettingsAlertState: Equatable {
     case unverifiedWallets(WalletId)
     case unverifiedDecoyWallets
     case unreadableWallets
-    case cloudBackupKeyUnconfirmed
+    case cloudBackupKeyMissing
+    case cloudBackupKeyUploading
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenTrickPins
@@ -64,7 +65,8 @@ extension MainSettingsAlertState {
         case let .unverifiedWallets(walletId): self = .unverifiedWallets(walletId)
         case .unverifiedDecoyWallets: self = .unverifiedDecoyWallets
         case .unreadableWallets: self = .unreadableWallets
-        case .cloudBackupKeyUnconfirmed: self = .cloudBackupKeyUnconfirmed
+        case .cloudBackupKeyMissing: self = .cloudBackupKeyMissing
+        case .cloudBackupKeyUploading: self = .cloudBackupKeyUploading
         case .confirmEnableWipeMePin: self = .confirmEnableWipeMePin
         case .confirmDecoyPin: self = .confirmDecoyPin
         case .noteNoFaceIdWhenTrickPins: self = .noteNoFaceIdWhenTrickPins

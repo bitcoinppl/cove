@@ -417,6 +417,11 @@ impl MockCloudStorage {
         self.state.lock().master_key_backups.insert(namespace, backup);
     }
 
+    /// Deletes `namespace`'s master key wrapper, as someone removing it from the provider would
+    pub(crate) fn remove_master_key_backup(&self, namespace: &str) {
+        self.state.lock().master_key_backups.remove(namespace);
+    }
+
     pub(crate) fn set_wallet_backup(&self, namespace: String, record_id: String, backup: Vec<u8>) {
         self.state.lock().wallet_backups.insert((namespace, record_id), backup);
     }
@@ -2377,6 +2382,13 @@ pub(crate) async fn shut_down_manager_for_restart(manager: Arc<RustCloudBackupMa
     .with_timeout(loaded_host_wait(Duration::from_secs(5)))
     .await
     .expect("the old manager's pending upload verifier stops");
+}
+
+impl RustCloudBackupManager {
+    /// The health a sync health check with no upload grace would show in Settings
+    pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
+        self.check_sync_health(None).await.health().clone()
+    }
 }
 
 pub(crate) async fn verify_pending_uploads_once_for_test_async(

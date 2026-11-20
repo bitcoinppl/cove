@@ -107,8 +107,11 @@ pub enum SecurityAlertState {
     UnverifiedDecoyWallets,
     /// A wallet list couldn't be read, so the Wipe Data PIN stays off
     UnreadableWallets,
-    /// A wallet relies on Cloud Backup, whose master key the provider can't confirm
-    CloudBackupKeyUnconfirmed,
+    /// A wallet relies on Cloud Backup, whose master key the provider doesn't have; Verify in
+    /// Cloud Backup rebuilds it
+    CloudBackupKeyMissing,
+    /// A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+    CloudBackupKeyUploading,
     ConfirmEnableWipeMePin,
     ConfirmDecoyPin,
     NoteNoFaceIdWhenTrickPins,

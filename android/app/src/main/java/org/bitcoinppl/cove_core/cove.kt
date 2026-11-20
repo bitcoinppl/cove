@@ -61300,9 +61300,16 @@ sealed class SecurityAlertState {
 
 
     /**
-     * A wallet relies on Cloud Backup, whose master key the provider can't confirm
+     * A wallet relies on Cloud Backup, whose master key the provider doesn't have; Verify in
+     * Cloud Backup rebuilds it
      */
-    object CloudBackupKeyUnconfirmed : SecurityAlertState()
+    object CloudBackupKeyMissing : SecurityAlertState()
+
+
+    /**
+     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+     */
+    object CloudBackupKeyUploading : SecurityAlertState()
 
 
     object ConfirmEnableWipeMePin : SecurityAlertState()
@@ -61365,16 +61372,17 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 )
             2 -> SecurityAlertState.UnverifiedDecoyWallets
             3 -> SecurityAlertState.UnreadableWallets
-            4 -> SecurityAlertState.CloudBackupKeyUnconfirmed
-            5 -> SecurityAlertState.ConfirmEnableWipeMePin
-            6 -> SecurityAlertState.ConfirmDecoyPin
-            7 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
-            8 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
-            9 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
-            10 -> SecurityAlertState.NotePinRequired
-            11 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
-            12 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
-            13 -> SecurityAlertState.ExtraSetPinError(
+            4 -> SecurityAlertState.CloudBackupKeyMissing
+            5 -> SecurityAlertState.CloudBackupKeyUploading
+            6 -> SecurityAlertState.ConfirmEnableWipeMePin
+            7 -> SecurityAlertState.ConfirmDecoyPin
+            8 -> SecurityAlertState.NoteNoFaceIdWhenTrickPins
+            9 -> SecurityAlertState.NoteNoFaceIdWhenWipeMePin
+            10 -> SecurityAlertState.NoteNoFaceIdWhenDecoyPin
+            11 -> SecurityAlertState.NotePinRequired
+            12 -> SecurityAlertState.NoteFaceIdDisablingForWipeMePin
+            13 -> SecurityAlertState.NoteFaceIdDisablingForDecoyPin
+            14 -> SecurityAlertState.ExtraSetPinError(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -61401,7 +61409,13 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 4UL
             )
         }
-        is SecurityAlertState.CloudBackupKeyUnconfirmed -> {
+        is SecurityAlertState.CloudBackupKeyMissing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SecurityAlertState.CloudBackupKeyUploading -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -61479,44 +61493,48 @@ public object FfiConverterTypeSecurityAlertState : FfiConverterRustBuffer<Securi
                 buf.putInt(3)
                 Unit
             }
-            is SecurityAlertState.CloudBackupKeyUnconfirmed -> {
+            is SecurityAlertState.CloudBackupKeyMissing -> {
                 buf.putInt(4)
                 Unit
             }
-            is SecurityAlertState.ConfirmEnableWipeMePin -> {
+            is SecurityAlertState.CloudBackupKeyUploading -> {
                 buf.putInt(5)
                 Unit
             }
-            is SecurityAlertState.ConfirmDecoyPin -> {
+            is SecurityAlertState.ConfirmEnableWipeMePin -> {
                 buf.putInt(6)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
+            is SecurityAlertState.ConfirmDecoyPin -> {
                 buf.putInt(7)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenTrickPins -> {
                 buf.putInt(8)
                 Unit
             }
-            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
+            is SecurityAlertState.NoteNoFaceIdWhenWipeMePin -> {
                 buf.putInt(9)
                 Unit
             }
-            is SecurityAlertState.NotePinRequired -> {
+            is SecurityAlertState.NoteNoFaceIdWhenDecoyPin -> {
                 buf.putInt(10)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
+            is SecurityAlertState.NotePinRequired -> {
                 buf.putInt(11)
                 Unit
             }
-            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
+            is SecurityAlertState.NoteFaceIdDisablingForWipeMePin -> {
                 buf.putInt(12)
                 Unit
             }
-            is SecurityAlertState.ExtraSetPinError -> {
+            is SecurityAlertState.NoteFaceIdDisablingForDecoyPin -> {
                 buf.putInt(13)
+                Unit
+            }
+            is SecurityAlertState.ExtraSetPinError -> {
+                buf.putInt(14)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
             }

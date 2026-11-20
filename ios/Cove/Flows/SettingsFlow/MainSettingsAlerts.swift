@@ -12,8 +12,11 @@ extension MainSettingsAlertState: TaggedAlertPresentable {
         case .unreadableWallets:
             unreadableWalletsAlert(context: context)
 
-        case .cloudBackupKeyUnconfirmed:
-            cloudBackupKeyUnconfirmedAlert(context: context)
+        case .cloudBackupKeyMissing:
+            cloudBackupKeyAlert(message: cloudBackupKeyMissingMessage, context: context)
+
+        case .cloudBackupKeyUploading:
+            cloudBackupKeyAlert(message: cloudBackupKeyUploadingMessage, context: context)
 
         case .confirmEnableWipeMePin:
             confirmEnableWipeDataPinAlert(context: context)
@@ -76,10 +79,20 @@ private func unverifiedDecoyWalletsAlert(context: MainSettingsPresentationContex
     ).eraseToAny()
 }
 
-private func cloudBackupKeyUnconfirmedAlert(context: MainSettingsPresentationContext) -> AnyAlertBuilder {
+/// Sync Now uploads only wallets, so neither message sends the user there
+private let cloudBackupKeyMissingMessage =
+    "Cove couldn't confirm the key for your cloud backup, so it can't restore your wallets after a wipe. Open Cloud Backup and run Verify to fix it, then you can set the Wipe Data PIN. Or back up each wallet's recovery words first."
+
+private let cloudBackupKeyUploadingMessage =
+    "iCloud hasn't finished uploading the key for your cloud backup, so it can't restore your wallets after a wipe yet. Check that you're online and iCloud Drive is on for Cove, then try again. Or back up each wallet's recovery words first."
+
+private func cloudBackupKeyAlert(
+    message: String,
+    context: MainSettingsPresentationContext
+) -> AnyAlertBuilder {
     AlertBuilder(
         title: "Can't Enable Wipe Data PIN",
-        message: "Cove couldn't confirm the key for your cloud backup, so it can't restore your wallets after a wipe. Sync Cloud Backup, or back up each wallet's recovery words, before enabling the Wipe Data PIN.",
+        message: message,
         actions: { Button("OK") { context.dismissAlert() } }
     ).eraseToAny()
 }

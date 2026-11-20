@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupReconcileMessage, RustCloudBackupManager,
+    CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupReconcileMessage, MasterKeyIssue,
+    RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -17,16 +18,26 @@ use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 /// inventory state start over on every launch, so they can't prove a backup outlived one. The one
 /// live input takes coverage away: a sync health check that found the provider can't confirm the
 /// master key
-#[derive(Debug, Default)]
-pub(crate) struct CloudBackupRecoveryCoverage(HashSet<WalletId>);
+#[derive(Debug)]
+pub(crate) enum CloudBackupRecoveryCoverage {
+    /// The cloud copies of these wallets restore them
+    Wallets(HashSet<WalletId>),
+    /// No cloud copy restores a wallet, since every one is encrypted under a master key the
+    /// provider can't confirm it holds
+    MasterKeyUnconfirmed(MasterKeyIssue),
+}
+
+impl Default for CloudBackupRecoveryCoverage {
+    fn default() -> Self {
+        Self::Wallets(HashSet::new())
+    }
+}
 
 impl CloudBackupRecoveryCoverage {
     /// Loads the coverage of the configured backup, or none when any read fails
     pub(crate) fn load() -> Self {
-        // every wallet copy is encrypted under the master key, so none restores a wallet after a
-        // wipe while the provider can't confirm it still holds that key
-        if Self::master_key_unconfirmed_at_provider() {
-            return Self::default();
+        if let Some(issue) = Self::master_key_issue_at_provider() {
+            return Self::MasterKeyUnconfirmed(issue);
         }
 
         Self::from_persisted(&RustCloudBackupManager::load_persisted_state())
@@ -52,14 +63,14 @@ impl CloudBackupRecoveryCoverage {
         Self::from_states(persisted, &namespace, &sync_states)
     }
 
-    /// Whether the running manager's last sync health check couldn't confirm the master key at the
+    /// Why the running manager's last sync health check couldn't confirm the master key at the
     /// provider, as the Cloud Backup row in Settings shows
     ///
-    /// Only a check that ran can say so, so this is false until the manager has checked since
-    /// launch; a wrapper row this device hasn't confirmed already counts for nothing
-    pub(crate) fn master_key_unconfirmed_at_provider() -> bool {
+    /// Only a check that ran can say so, so this is none until the manager has checked since
+    /// launch; the wrapper row covers the time before that
+    fn master_key_issue_at_provider() -> Option<MasterKeyIssue> {
         LazyLock::get(&CLOUD_BACKUP_MANAGER)
-            .is_some_and(|manager| manager.state.read().master_key_unconfirmed_at_provider())
+            .and_then(|manager| manager.state.read().master_key_issue_at_provider())
     }
 
     fn from_states(
@@ -92,9 +103,16 @@ impl CloudBackupRecoveryCoverage {
         for sync_state in in_namespace {
             let is_confirmed = matches!(sync_state.state, PersistedCloudBlobState::Confirmed(_));
 
-            // every wallet backup is encrypted under the master key its wrapper holds
+            // every wallet backup is encrypted under the master key its wrapper holds; a failed
+            // row is one the queue gave up confirming, which is not just an upload still running,
+            // and it doesn't record why, so it gets the fix that re-uploads the wrapper
             if sync_state.is_master_key_wrapper() && !is_confirmed {
-                return Self::default();
+                return match sync_state.state {
+                    PersistedCloudBlobState::Failed(_) => {
+                        Self::MasterKeyUnconfirmed(MasterKeyIssue::Missing)
+                    }
+                    _ => Self::default(),
+                };
             }
 
             if let (true, Some(wallet_id)) = (is_confirmed, sync_state.wallet_id()) {
@@ -102,7 +120,16 @@ impl CloudBackupRecoveryCoverage {
             }
         }
 
-        Self(confirmed)
+        Self::Wallets(confirmed)
+    }
+
+    /// Why the cloud copies count for nothing, when it's because the provider can't confirm the
+    /// master key that decrypts them
+    pub(crate) fn master_key_issue(&self) -> Option<MasterKeyIssue> {
+        match self {
+            Self::Wallets(_) => None,
+            Self::MasterKeyUnconfirmed(issue) => Some(*issue),
+        }
     }
 
     /// Whether a hot wallet needs its words verified before local data can be wiped
@@ -110,7 +137,12 @@ impl CloudBackupRecoveryCoverage {
     /// A wallet edited since its last confirmed upload needs verifying until that edit is
     /// confirmed too, since the row then shows only the pending edit
     pub(crate) fn needs_backup(&self, wallet: &WalletMetadata) -> bool {
-        wallet.wallet_type == WalletType::Hot && !wallet.verified && !self.0.contains(&wallet.id)
+        let covered = match self {
+            Self::Wallets(wallets) => wallets.contains(&wallet.id),
+            Self::MasterKeyUnconfirmed(_) => false,
+        };
+
+        wallet.wallet_type == WalletType::Hot && !wallet.verified && !covered
     }
 }
 
@@ -153,7 +185,12 @@ impl CloudBackupRecovery {
     }
 
     fn from_coverage(configured: bool, coverage: CloudBackupRecoveryCoverage) -> Self {
-        let mut confirmed_wallets = coverage.0.into_iter().collect::<Vec<_>>();
+        // a copy of a wallet counts only while its master key is confirmed
+        let confirmed = match coverage {
+            CloudBackupRecoveryCoverage::Wallets(wallets) => wallets,
+            CloudBackupRecoveryCoverage::MasterKeyUnconfirmed(_) => HashSet::new(),
+        };
+        let mut confirmed_wallets = confirmed.into_iter().collect::<Vec<_>>();
         confirmed_wallets.sort();
 
         Self { configured, confirmed_wallets }

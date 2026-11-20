@@ -1,5 +1,3 @@
-use cove_device::cloud_storage::CloudSyncHealth;
-
 use crate::database::cloud_backup::DriveAccountSwitchId;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
@@ -8,7 +6,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupExistingBackup, CloudBackupPasskeyChoiceIntent, CloudBackupProgress,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
+    PendingUploadVerificationState, RecoveryState, SyncHealthCheck, SyncState, VerificationState,
 };
 
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
@@ -160,7 +158,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     },
     RestoreAllRetryRequired,
     RestoreAllReset,
-    SyncHealthObserved(CloudSyncHealth),
+    SyncHealthObserved(SyncHealthCheck),
     EnableFlowAdvanced(CloudBackupEnableState),
     PendingUploadVerificationReconciled(PendingUploadVerificationState),
     PendingUploadVerificationAndFlagsReconciled {

@@ -1425,12 +1425,28 @@ never confirmed, or an edit whose upload hasn't confirmed yet, leaves the wallet
 uncovered. The rule reads no live verification or inventory state, and live
 sync health only takes coverage away. Those start over on every launch and
 need the network, so a gate that waited on them refused the PIN after every
-relaunch. A sync health check that found the master key wrapper missing from,
-or unconfirmed at, the provider, which Settings shows as "Cove couldn't confirm
-the key for this cloud backup", withdraws all coverage, since no wallet copy
-can be decrypted without that key. In main mode the alert then names the key
-as the reason (`SecurityAlertState::CloudBackupKeyUnconfirmed`). Until a check
-runs after launch, only the local wrapper row counts.
+relaunch. A sync health check that found the provider can't confirm the master
+key wrapper withdraws all coverage, since no wallet copy can be decrypted
+without that key. The check reports why as a typed `MasterKeyIssue` in its
+`SyncHealthCheck`, taken from the `is_backup_uploaded` status, so coverage
+never matches the text Settings shows:
+
+- `Missing` (not found): Settings says to open Cloud Backup and run Verify,
+  which rebuilds the wrapper from the local master key. Sync Now uploads only
+  wallets, so it can't fix this
+- `Uploading` (pending, which only iCloud Drive reports): Settings says iCloud
+  hasn't finished uploading the key and to check that the device is online and
+  iCloud Drive is on for Cove. Verify can't help here, since it reads the local
+  copy back and finds nothing to repair
+
+A wrapper row the queue saved as `Failed` after its confirmation window ran out
+also withdraws all coverage, though Settings then shows the generic error. The
+row doesn't record why, so it counts as `Missing`, whose fix re-uploads the
+wrapper. In each case `CloudBackupRecoveryCoverage` is `MasterKeyUnconfirmed`,
+and in main mode the alert names the key and the matching fix
+(`SecurityAlertState::CloudBackupKeyMissing` or `CloudBackupKeyUploading`). A
+wrapper upload that is still running only leaves the wallets uncovered. Until a
+check runs after launch, only the local wrapper row counts.
 
 A wallet restored from the active backup, alone or by Restore All, uploads
 nothing, so the restore records the backup it just downloaded and decrypted as

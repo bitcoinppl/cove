@@ -1,5 +1,4 @@
 use act_zero::send;
-use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
@@ -12,7 +11,7 @@ use super::{
     CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupPublishedRecovery,
     CloudBackupScreenDelta, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
-    PendingUploadVerificationState, RustCloudBackupManager,
+    PendingUploadVerificationState, RustCloudBackupManager, SyncHealthCheck,
 };
 
 /// Durable Google Drive account-switch state owned by the platform
@@ -178,8 +177,10 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::MissingPasskeyDismissalCleared);
     }
 
-    pub(crate) fn observe_sync_health(&self, sync_health: CloudSyncHealth) {
-        self.apply_model_event(CloudBackupStateReducerEvent::SyncHealthObserved(sync_health));
+    pub(crate) fn observe_sync_health(&self, sync_health: impl Into<SyncHealthCheck>) {
+        self.apply_model_event(CloudBackupStateReducerEvent::SyncHealthObserved(
+            sync_health.into(),
+        ));
     }
 
     pub(crate) fn reconcile_verification_presentation(

@@ -224,6 +224,38 @@ async fn sync_health_reports_missing_master_key_without_pending_confirmation() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
+// Sync Now never uploads the master key wrapper, so the message must name what does fix it: Verify
+// rebuilds a wrapper the provider doesn't have, while one iCloud hasn't finished uploading reads
+// back from the local copy and only iCloud can finish it
+#[tokio::test(flavor = "current_thread")]
+async fn the_missing_key_message_says_how_to_fix_each_case() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    persist_xpub_wallets(vec![xpub_only_wallet_metadata()]);
+
+    let message = |health| match health {
+        CloudSyncHealth::Failed(message) => message,
+        other => panic!("expected a failed sync health, got {other:?}"),
+    };
+
+    let missing = message(manager.compute_sync_health().await);
+    assert!(missing.contains("Verify"), "a missing key should point to Verify: {missing}");
+
+    let namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), b"wrapper".to_vec());
+    globals.cloud.set_master_key_upload_pending(namespace);
+    let uploading = message(manager.compute_sync_health().await);
+    assert!(
+        uploading.contains("hasn't finished uploading") && !uploading.contains("Verify"),
+        "a key iCloud is still uploading should say so, not point to Verify: {uploading}"
+    );
+
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_missing_master_key_before_pending_wallet_uploads() {
     let _guard = async_test_lock().lock().await;
@@ -257,7 +289,7 @@ async fn sync_health_respects_master_key_upload_confirmation_grace() {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
 
     assert_eq!(
-        manager.compute_sync_health_with_master_key_grace(Some(&namespace_id)).await,
+        manager.check_sync_health(Some(&namespace_id)).await.health().clone(),
         CloudSyncHealth::Uploading,
     );
 

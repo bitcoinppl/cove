@@ -189,7 +189,7 @@ class DecoySecuritySettingsFullLaunchTest {
             "the wipe data PIN was saved although a wallet it would wipe has no backup",
             RustAuthManager().use { it.isWipeDataPinEnabled() },
         )
-        device.clickText("OK")
+        device.clickText("Cancel")
     }
 
     // builds before Change PIN refused trick PINs could save the app PIN equal to the decoy PIN,

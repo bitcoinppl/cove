@@ -41969,9 +41969,14 @@ public enum SecurityAlertState: Equatable, Hashable {
      */
     case unreadableWallets
     /**
-     * A wallet relies on Cloud Backup, whose master key the provider can't confirm
+     * A wallet relies on Cloud Backup, whose master key the provider doesn't have; Verify in
+     * Cloud Backup rebuilds it
      */
-    case cloudBackupKeyUnconfirmed
+    case cloudBackupKeyMissing
+    /**
+     * A wallet relies on Cloud Backup, whose master key iCloud hasn't finished uploading
+     */
+    case cloudBackupKeyUploading
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenTrickPins
@@ -42016,25 +42021,27 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
 
         case 3: return .unreadableWallets
 
-        case 4: return .cloudBackupKeyUnconfirmed
+        case 4: return .cloudBackupKeyMissing
 
-        case 5: return .confirmEnableWipeMePin
+        case 5: return .cloudBackupKeyUploading
 
-        case 6: return .confirmDecoyPin
+        case 6: return .confirmEnableWipeMePin
 
-        case 7: return .noteNoFaceIdWhenTrickPins
+        case 7: return .confirmDecoyPin
 
-        case 8: return .noteNoFaceIdWhenWipeMePin
+        case 8: return .noteNoFaceIdWhenTrickPins
 
-        case 9: return .noteNoFaceIdWhenDecoyPin
+        case 9: return .noteNoFaceIdWhenWipeMePin
 
-        case 10: return .notePinRequired
+        case 10: return .noteNoFaceIdWhenDecoyPin
 
-        case 11: return .noteFaceIdDisablingForWipeMePin
+        case 11: return .notePinRequired
 
-        case 12: return .noteFaceIdDisablingForDecoyPin
+        case 12: return .noteFaceIdDisablingForWipeMePin
 
-        case 13: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
+        case 13: return .noteFaceIdDisablingForDecoyPin
+
+        case 14: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -42058,44 +42065,48 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
 
 
-        case .cloudBackupKeyUnconfirmed:
+        case .cloudBackupKeyMissing:
             writeInt(&buf, Int32(4))
 
 
-        case .confirmEnableWipeMePin:
+        case .cloudBackupKeyUploading:
             writeInt(&buf, Int32(5))
 
 
-        case .confirmDecoyPin:
+        case .confirmEnableWipeMePin:
             writeInt(&buf, Int32(6))
 
 
-        case .noteNoFaceIdWhenTrickPins:
+        case .confirmDecoyPin:
             writeInt(&buf, Int32(7))
 
 
-        case .noteNoFaceIdWhenWipeMePin:
+        case .noteNoFaceIdWhenTrickPins:
             writeInt(&buf, Int32(8))
 
 
-        case .noteNoFaceIdWhenDecoyPin:
+        case .noteNoFaceIdWhenWipeMePin:
             writeInt(&buf, Int32(9))
 
 
-        case .notePinRequired:
+        case .noteNoFaceIdWhenDecoyPin:
             writeInt(&buf, Int32(10))
 
 
-        case .noteFaceIdDisablingForWipeMePin:
+        case .notePinRequired:
             writeInt(&buf, Int32(11))
 
 
-        case .noteFaceIdDisablingForDecoyPin:
+        case .noteFaceIdDisablingForWipeMePin:
             writeInt(&buf, Int32(12))
 
 
-        case let .extraSetPinError(message):
+        case .noteFaceIdDisablingForDecoyPin:
             writeInt(&buf, Int32(13))
+
+
+        case let .extraSetPinError(message):
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(message, into: &buf)
 
         }

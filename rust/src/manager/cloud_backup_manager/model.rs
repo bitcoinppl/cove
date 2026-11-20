@@ -10,8 +10,8 @@ use super::{
     CloudBackupInventoryAuthority, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
     CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationReason, CloudBackupWalletStatus,
-    DeepVerificationReport, PendingUploadVerificationState, RecoveryAction, RecoveryState,
-    SyncState, VerificationState, is_connectivity_related_issue,
+    DeepVerificationReport, MasterKeyIssue, PendingUploadVerificationState, RecoveryAction,
+    RecoveryState, SyncHealthCheck, SyncState, VerificationState, is_connectivity_related_issue,
 };
 
 use super::cloud_inventory::LocalUploadStatus;
@@ -227,7 +227,7 @@ struct CloudBackupReducerState {
     active_operation: Option<CloudBackupExclusiveOperationClaim>,
     active_enable_context: Option<CloudBackupEnableContext>,
     restore_all: CloudBackupRestoreAllRuntimeState,
-    sync_health: CloudSyncHealth,
+    sync_health: SyncHealthCheck,
     missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
     verification_metadata: CloudBackupVerificationMetadata,
@@ -271,7 +271,7 @@ impl Default for CloudBackupReducerState {
             active_operation: None,
             active_enable_context: None,
             restore_all: CloudBackupRestoreAllRuntimeState::Idle,
-            sync_health: CloudSyncHealth::Unknown,
+            sync_health: CloudSyncHealth::Unknown.into(),
             missing_passkey_dismissed: false,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
@@ -329,7 +329,7 @@ impl CloudBackupReducerState {
             destructive_operation: self.public_destructive_operation(),
             undecryptable_wallet_deletion: self.public_undecryptable_wallet_deletion(),
             root_prompt: self.root_prompt(),
-            sync_health: self.sync_health.clone(),
+            sync_health: self.sync_health.health().clone(),
             verification_presentation: self.verification_presentation.clone(),
         }
     }
@@ -629,7 +629,7 @@ impl CloudBackupReducerState {
             return CloudBackupSettingsRowStatus::Unverified;
         }
 
-        match &self.sync_health {
+        match self.sync_health.health() {
             CloudSyncHealth::AllUploaded if self.is_verification_stale() => {
                 CloudBackupSettingsRowStatus::VerificationRecommended
             }
@@ -1207,13 +1207,10 @@ impl CloudBackupStateReducer {
         self.state.status()
     }
 
-    /// Whether the last sync health check found the master key wrapper missing from, or
-    /// unconfirmed at, the provider, which Settings shows as "couldn't confirm the key"
-    pub(crate) fn master_key_unconfirmed_at_provider(&self) -> bool {
-        matches!(
-            &self.state.sync_health,
-            CloudSyncHealth::Failed(message) if message == super::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE
-        )
+    /// Why the last sync health check found the provider can't confirm the master key wrapper,
+    /// if it did
+    pub(crate) fn master_key_issue_at_provider(&self) -> Option<MasterKeyIssue> {
+        self.state.sync_health.master_key_issue()
     }
 
     /// Whether the lifecycle shows recovery for an incomplete enable
@@ -1590,7 +1587,7 @@ pub(crate) mod test_support {
             CloudBackupModelSnapshot {
                 root_prompt: self.state.root_prompt(),
                 status: self.state.status(),
-                sync_health: self.state.sync_health.clone(),
+                sync_health: self.state.sync_health.health().clone(),
                 progress: self.state.progress(),
                 restore_progress: restore_progress(&self.state),
                 enable_state: enable_state(&self.state),
@@ -1682,7 +1679,7 @@ mod tests {
                 verification,
                 ..Default::default()
             },
-            sync_health,
+            sync_health: sync_health.into(),
             ..Default::default()
         }
     }
@@ -1833,7 +1830,7 @@ mod tests {
                 should_prompt: false,
             });
             model.apply_event(CloudBackupStateReducerEvent::SyncHealthObserved(
-                CloudSyncHealth::AllUploaded,
+                CloudSyncHealth::AllUploaded.into(),
             ));
             model
         };

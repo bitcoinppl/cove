@@ -3,7 +3,7 @@ use cove_types::{Network, WalletId};
 use super::SecurityAlertState;
 use crate::{
     database::{self, Database, global_config::SelectedWalletTarget, read_health},
-    manager::cloud_backup_manager::CloudBackupRecoveryCoverage,
+    manager::cloud_backup_manager::{CloudBackupRecoveryCoverage, MasterKeyIssue},
     wallet::metadata::{WalletMetadata, WalletMode},
 };
 
@@ -21,7 +21,7 @@ pub(crate) enum WipeDataPinBlocker {
     WalletsUnreadable,
     /// A wallet has no backup while the provider can't confirm Cloud Backup's master key, so its
     /// cloud copy can't restore it; main mode only, since decoy mode hides Cloud Backup
-    CloudBackupKeyUnconfirmed,
+    CloudBackupKeyUnconfirmed(MasterKeyIssue),
 }
 
 impl WipeDataPinBlocker {
@@ -38,15 +38,14 @@ impl WipeDataPinBlocker {
         )?;
 
         // the cloud copies count for nothing while the key is unconfirmed, so that is the reason to
-        // give where Cloud Backup shows; either syncing it or verifying the words clears it
-        let key_unconfirmed = target.mode == WalletMode::Main
-            && CloudBackupRecoveryCoverage::master_key_unconfirmed_at_provider();
+        // give where Cloud Backup shows; either fixing the key or verifying the words clears it
+        let key_issue = coverage.master_key_issue().filter(|_| target.mode == WalletMode::Main);
 
-        match blocker {
-            Self::UnbackedWallet(_) | Self::UnbackedDecoyWallet if key_unconfirmed => {
-                Some(Self::CloudBackupKeyUnconfirmed)
+        match (blocker, key_issue) {
+            (Self::UnbackedWallet(_) | Self::UnbackedDecoyWallet, Some(issue)) => {
+                Some(Self::CloudBackupKeyUnconfirmed(issue))
             }
-            blocker => Some(blocker),
+            (blocker, _) => Some(blocker),
         }
     }
 
@@ -90,7 +89,12 @@ impl From<WipeDataPinBlocker> for SecurityAlertState {
             WipeDataPinBlocker::UnbackedWallet(wallet_id) => Self::UnverifiedWallets { wallet_id },
             WipeDataPinBlocker::UnbackedDecoyWallet => Self::UnverifiedDecoyWallets,
             WipeDataPinBlocker::WalletsUnreadable => Self::UnreadableWallets,
-            WipeDataPinBlocker::CloudBackupKeyUnconfirmed => Self::CloudBackupKeyUnconfirmed,
+            WipeDataPinBlocker::CloudBackupKeyUnconfirmed(MasterKeyIssue::Missing) => {
+                Self::CloudBackupKeyMissing
+            }
+            WipeDataPinBlocker::CloudBackupKeyUnconfirmed(MasterKeyIssue::Uploading) => {
+                Self::CloudBackupKeyUploading
+            }
         }
     }
 }
