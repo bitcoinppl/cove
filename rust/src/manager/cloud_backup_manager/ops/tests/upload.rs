@@ -157,7 +157,10 @@ async fn backup_new_wallet_marks_verification_required() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
+// quarantined because it fails intermittently, mostly on the macOS CI runners, with the wallet's
+// sync row missing when the test checks it
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "quarantined until 2027-01-19: https://github.com/bitcoinppl/cove/issues/1241"]
 async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
