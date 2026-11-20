@@ -1957,22 +1957,6 @@ pub(crate) async fn hold_wallet_upload_in_flight(
     (gate, upload)
 }
 
-/// Waits until every write policy the supervisor was asked to publish has reached the write
-/// lane, and the upload worker has run any resume scan that policy woke
-///
-/// A policy that lets ordinary writes run again wakes uploads through three mailboxes: the lane
-/// tells the supervisor, which tells the upload worker to upload every Dirty row now. A row a
-/// test writes before that scan is uploaded at once instead of after the live debounce, so a
-/// test that asserts a fresh Dirty row waits here before it writes one. Each call queues behind
-/// the message the previous hop sent before answering
-pub(crate) async fn wait_for_write_policy_to_settle(manager: &RustCloudBackupManager) {
-    call!(manager.supervisor.harness_checkpoint()).await.expect("supervisor checkpoint");
-    call!(manager.cloud_writes.harness_checkpoint()).await.expect("write lane checkpoint");
-    call!(manager.supervisor.workers_checkpoint_for_test())
-        .await
-        .expect("the upload worker ran the resume the lane woke");
-}
-
 /// Waits until a command queues behind the lane's write in flight
 pub(crate) async fn wait_for_queued_lane_write(manager: &RustCloudBackupManager) {
     let deadline = tokio::time::Instant::now() + loaded_host_wait(Duration::from_secs(5));
