@@ -21,7 +21,7 @@ import org.bitcoinppl.cove.views.FlexibleSpacer
  * `<testTag>.content`
  *
  * While everything fits, the sheet fills its height as a fixed layout would. Once it doesn't, at
- * a large font size or on a landscape phone, the sheet scrolls and keeps its sections apart
+ * a large font size or on a small phone, the sheet scrolls and keeps its sections apart
  * instead of letting the content overflow into the header and the action, as iOS's
  * `TapSignerAdaptiveLayout` does
  */

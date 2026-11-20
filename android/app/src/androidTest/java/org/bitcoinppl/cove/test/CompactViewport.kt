@@ -9,38 +9,34 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 
-/** A compact phone held upright or turned on its side, as the app doesn't lock its orientation */
-enum class Viewport(
-    val width: Dp,
-    val height: Dp,
-) {
-    // a Galaxy S20 at its default display size is about 360dp wide, and 640dp tall is a short phone
-    PORTRAIT(360.dp, 640.dp),
-    LANDSCAPE(640.dp, 360.dp),
-}
+/**
+ * A compact phone held upright, the only way the app runs since it locks itself to portrait
+ *
+ * A Galaxy S20 at its default display size is about 360dp wide, and 640dp tall is a short phone
+ */
+val COMPACT_PHONE = DpSize(360.dp, 640.dp)
 
 /**
- * Lays out [content] in [viewport] at [fontScale], in a box tagged [testTag]
+ * Lays out [content] in a viewport of [size] at [fontScale], in a box tagged [testTag]
  *
- * The test emulator is an upright Pixel 6, about 411dp wide, and a size modifier can't grow past
- * the window, so it would squeeze a landscape viewport to the window's width. `ForcedSize` lowers
- * the density until the viewport fits instead, so [content] lays out in the viewport's dp size, as
- * on a phone of that size. [onDensity] gets that density, which differs from the activity's, so
- * the test reads positions in the dp the layout used
+ * A size modifier can't grow past the window, so on an emulator shorter than the viewport it
+ * would squeeze the content. `ForcedSize` lowers the density until the viewport fits instead, so
+ * [content] lays out in the viewport's dp size, as on a phone of that size. [onDensity] gets that
+ * density, which can differ from the activity's, so the test reads positions in the dp the
+ * layout used
  */
 @Composable
 fun CompactViewport(
-    viewport: Viewport,
     fontScale: Float,
     testTag: String,
+    size: DpSize = COMPACT_PHONE,
     onDensity: (Density) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(viewport.width, viewport.height))) {
+    DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size)) {
         WithFontScale(fontScale) {
             onDensity(LocalDensity.current)
 
