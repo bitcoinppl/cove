@@ -1458,18 +1458,25 @@ live provider proof, which would refuse the PIN offline and right after launch:
   refresh reads the copies again. Until then, for example offline or right
   after launch, a copy another device deleted still counts, and if another
   device turns Cloud Backup off and deletes the shared namespace, a refresh
-  that can't list it leaves the `Confirmed` rows here counting. A namespace with no master key wrapper row also passes,
-  since only a wrapper row that exists and isn't `Confirmed` withdraws coverage
+  that can't list it leaves the `Confirmed` rows here counting. A namespace
+  with no master key wrapper row also passes, since only a wrapper row that
+  exists and isn't `Confirmed` withdraws coverage. The master key wrapper is
+  never read back from the provider for coverage either: a refresh confirms a
+  wallet whose copy decrypts with this device's master key even if the
+  provider no longer holds the wrapper, which a restore after a wipe needs.
+  Settings then shows "Cove couldn't confirm the key for this cloud backup"
 - A copy that the startup integrity check or a detail refresh can't decrypt is
-  noted only in memory, so its `Confirmed` row still counts, as when another
-  device replaces the copy after this one confirmed it. Saving the failure
-  would need telling a corrupt copy from a transient read failure
+  noted only in memory, and reads like a transient download failure, so it
+  neither grants nor withdraws coverage and its `Confirmed` row still counts.
+  Saving the failure, or withdrawing coverage on it, would need telling a
+  corrupt copy from a transient read failure. A decrypt failure can also mean
+  this device's master key doesn't match the namespace, and withdrawing on
+  that would mark every wallet `Dirty` and upload each again over copies
+  encrypted with another key
 - If reading the local wallets of any network fails, the check lists no
   wallets and allows the PIN, as it did for the selected network before. The
   follow-up that adds decoy-mode wallets to the check should make a failed read
   refuse the PIN instead
-
-Two more gaps in the refresh reconciliation are known and left open:
 
 - Two refreshes can overlap, since an exclusive operation's follow-up refresh
   can run beside the detail workflow's. If another device deletes a copy
@@ -1477,13 +1484,11 @@ Two more gaps in the refresh reconciliation are known and left open:
   `Confirmed` row for a wallet with none, after the newer refresh found the
   copy missing. The row counts until a later refresh reads the copy missing
   again. Closing it needs a per-namespace record of the latest read applied
-- A copy the provider returns but that doesn't parse or decrypt reads like a
-  transient download failure, so it neither grants nor withdraws coverage, and
-  a `Confirmed` row keeps counting a copy that can't restore the wallet.
-  Withdrawing coverage on such a read needs the reader's errors split into
-  permanent and transient ones. A decrypt failure can also mean this device's
-  master key doesn't match the namespace; withdrawing on that would mark every
-  wallet `Dirty` and upload each again over copies encrypted with another key
+- A refresh that finds a wallet's copy at another revision than this device
+  confirmed uploads this device's copy over it, which can replace newer labels
+  another device uploaded. The backup integrity check, Sync and deep
+  verification already upload such wallets the same way, and the write lane
+  still refuses an upload that would drop key material
 
 ### Wallet recovery
 
