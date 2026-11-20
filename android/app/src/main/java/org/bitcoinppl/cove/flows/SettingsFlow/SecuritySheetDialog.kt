@@ -13,7 +13,6 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthManagerAction
-import org.bitcoinppl.cove_core.SecuritySettingsAction
 import org.bitcoinppl.cove_core.SecuritySheetState
 
 @Composable
@@ -66,36 +65,6 @@ internal fun SecuritySheetDialog(
                 )
                 else -> {}
             }
-        }
-    }
-}
-
-/**
- * Asks for the decoy PIN where main mode asks for its PIN, so decoy mode's Settings look the
- * same, then applies [action] to the toggles decoy mode shows
- */
-@Composable
-internal fun DecoyPinConfirmationDialog(
-    action: SecuritySettingsAction,
-    auth: AuthManager,
-    onConfirmed: (SecuritySettingsAction) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-        ) {
-            CurrentPinSheet(
-                isPinCorrect = { pin -> auth.checkDecoyPin(pin) },
-                backAction = onDismiss,
-                onUnlock = { onConfirmed(action) },
-            )
         }
     }
 }
@@ -205,8 +174,9 @@ private fun RemoveAllTrickPinsSheet(
     )
 }
 
+/** The PIN pad that asks for the PIN in use before a security change */
 @Composable
-private fun CurrentPinSheet(
+internal fun CurrentPinSheet(
     isPinCorrect: (String) -> Boolean,
     backAction: () -> Unit,
     onUnlock: (String) -> Unit,

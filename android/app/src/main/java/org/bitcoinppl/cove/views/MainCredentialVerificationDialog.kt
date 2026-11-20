@@ -1,10 +1,12 @@
 package org.bitcoinppl.cove.views
 
+import android.content.Context
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -13,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,9 +53,7 @@ fun MainCredentialVerificationDialog(
     onVerified: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val auth = Auth
     val context = LocalContext.current
-    val activity = context.findFragmentActivity()
     val biometricManager = remember { BiometricManager.from(context) }
     val usesBiometric =
         remember(lockType) {
@@ -63,61 +64,7 @@ fun MainCredentialVerificationDialog(
     var screen by remember(usesBiometric) {
         mutableStateOf(if (usesBiometric) CredentialScreen.BIOMETRIC else CredentialScreen.PIN)
     }
-    var isPrompting by remember { mutableStateOf(false) }
-
-    // the prompt can deliver a result after the caller took this dialog down, such as when a
-    // pause cancelled the request, and that result must not complete the cancelled export
-    val isShown = remember { AtomicBoolean(true) }
-    var biometricPrompt by remember { mutableStateOf<BiometricPrompt?>(null) }
-    DisposableEffect(Unit) {
-        onDispose {
-            isShown.set(false)
-            biometricPrompt?.cancelAuthentication()
-        }
-    }
-
-    val promptInfo =
-        remember {
-            BiometricPolicy.promptInfo(
-                title = "Verify Identity",
-                subtitle = "Confirm access to your private key",
-                negativeButtonText = "Cancel",
-            )
-        }
-
-    fun promptBiometric() {
-        val act = activity ?: return
-        if (isPrompting) return
-        isPrompting = true
-
-        val prompt =
-            BiometricPrompt(
-                act,
-                ContextCompat.getMainExecutor(context),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        super.onAuthenticationError(errorCode, errString)
-                        isPrompting = false
-                        Log.i("MainCredentialVerification", "biometric prompt ended: code $errorCode")
-                    }
-
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        isPrompting = false
-                        if (!isShown.get()) return
-                        onVerified()
-                    }
-
-                    override fun onAuthenticationFailed() {
-                        super.onAuthenticationFailed()
-                        Log.w("MainCredentialVerification", "biometric authentication failed, user can retry")
-                    }
-                },
-            )
-
-        biometricPrompt = prompt
-        prompt.authenticate(promptInfo)
-    }
+    val biometric = rememberMainBiometricPrompt(onVerified)
 
     Dialog(
         onDismissRequest = onCancel,
@@ -131,46 +78,118 @@ fun MainCredentialVerificationDialog(
                     .semantics { testTagsAsResourceId = true },
             contentAlignment = Alignment.Center,
         ) {
-            val cancel =
-                @Composable {
-                    Text(
-                        text = "Cancel",
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopEnd)
-                                .clickable(onClick = onCancel)
-                                .padding(24.dp),
-                    )
-                }
-
             when {
                 // a biometric-only lock has no PIN to fall back to, as on the lock screen and iOS
                 lockType == AuthType.BIOMETRIC && !usesBiometric -> {
                     PermissionsNeeded()
-                    cancel()
+                    CancelButton(onCancel)
                 }
 
                 screen == CredentialScreen.BIOMETRIC -> {
                     BiometricView(
                         showBoth = lockType == AuthType.BOTH,
-                        onBiometricTap = ::promptBiometric,
+                        onBiometricTap = biometric::authenticate,
                         onEnterPinTap = { screen = CredentialScreen.PIN },
-                        onResetBiometricFlag = { isPrompting = false },
+                        onResetBiometricFlag = biometric::resetPrompting,
                     )
-                    cancel()
+                    CancelButton(onCancel)
                 }
 
                 // only the app PIN opens this, never a trick PIN
                 else ->
                     NumberPadPinView(
                         title = "Enter Cove PIN",
-                        isPinCorrect = { pin -> auth.checkPin(pin) },
+                        isPinCorrect = { pin -> Auth.checkPin(pin) },
                         backAction = onCancel,
                         onUnlock = { onVerified() },
                     )
             }
         }
     }
+}
+
+@Composable
+private fun BoxScope.CancelButton(onCancel: () -> Unit) {
+    Text(
+        text = "Cancel",
+        color = Color.White,
+        fontSize = 17.sp,
+        modifier =
+            Modifier
+                .align(Alignment.TopEnd)
+                .clickable(onClick = onCancel)
+                .padding(24.dp),
+    )
+}
+
+/** The main credential's biometric prompt, cancelled when the dialog that shows it closes */
+@Composable
+private fun rememberMainBiometricPrompt(onVerified: () -> Unit): MainBiometricPrompt {
+    val context = LocalContext.current
+    val currentOnVerified by rememberUpdatedState(onVerified)
+    val prompt = remember(context) { MainBiometricPrompt(context) { currentOnVerified() } }
+
+    DisposableEffect(prompt) {
+        onDispose { prompt.dismiss() }
+    }
+
+    return prompt
+}
+
+private class MainBiometricPrompt(
+    private val context: Context,
+    private val onVerified: () -> Unit,
+) {
+    // the prompt can deliver a result after the caller took this dialog down, such as when a
+    // pause cancelled the request, and that result must not complete the cancelled export
+    private val isShown = AtomicBoolean(true)
+    private var isPrompting = false
+    private var prompt: BiometricPrompt? = null
+
+    private val promptInfo =
+        BiometricPolicy.promptInfo(
+            title = "Verify Identity",
+            subtitle = "Confirm access to your private key",
+            negativeButtonText = "Cancel",
+        )
+
+    fun authenticate() {
+        val activity = context.findFragmentActivity() ?: return
+        if (isPrompting) return
+        isPrompting = true
+
+        val next = BiometricPrompt(activity, ContextCompat.getMainExecutor(context), callback)
+        prompt = next
+        next.authenticate(promptInfo)
+    }
+
+    fun resetPrompting() {
+        isPrompting = false
+    }
+
+    fun dismiss() {
+        isShown.set(false)
+        prompt?.cancelAuthentication()
+    }
+
+    private val callback =
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                isPrompting = false
+                Log.i("MainCredentialVerification", "biometric prompt ended: code $errorCode")
+            }
+
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                isPrompting = false
+                if (!isShown.get()) return
+                onVerified()
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                Log.w("MainCredentialVerification", "biometric authentication failed, user can retry")
+            }
+        }
 }
