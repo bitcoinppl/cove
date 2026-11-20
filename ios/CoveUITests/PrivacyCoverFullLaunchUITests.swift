@@ -106,12 +106,12 @@ final class PrivacyCoverFullLaunchUITests: XCTestCase {
     /// The screen's color at a point given as a fraction of its size, read from a fresh screenshot
     private func screenColor(at point: CGPoint) -> ScreenColor {
         let image = XCUIScreen.main.screenshot().image.cgImage
-        let pixel = image.flatMap { pixel(of: $0, at: point) }
-        XCTAssertNotNil(pixel, "the screenshot could not be read at \(point)")
-        return pixel ?? ScreenColor(red: 0, green: 0, blue: 0)
+        let color = image.flatMap { pixelColor(of: $0, at: point) }
+        XCTAssertNotNil(color, "the screenshot could not be read at \(point)")
+        return color ?? ScreenColor(red: 0, green: 0, blue: 0)
     }
 
-    private func pixel(of image: CGImage, at point: CGPoint) -> ScreenColor? {
+    private func pixelColor(of image: CGImage, at point: CGPoint) -> ScreenColor? {
         let x = Int(CGFloat(image.width) * point.x)
         let y = Int(CGFloat(image.height) * point.y)
         var pixel = [UInt8](repeating: 0, count: 4)
