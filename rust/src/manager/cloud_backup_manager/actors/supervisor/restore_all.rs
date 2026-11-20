@@ -230,7 +230,7 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning, .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {

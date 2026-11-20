@@ -7,7 +7,6 @@ use cove_device::{
 use cove_util::json::JsonDecodeError;
 use tracing::{error, info, warn};
 
-use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::admission::{PauseReason, Rejection};
 
@@ -50,13 +49,9 @@ const NEEDS_PASSKEY_MESSAGE: &str =
     "Cloud Backup needs your passkey. Open Cloud Backup and tap Verify to continue.";
 const PASSKEY_BUSY_MESSAGE: &str =
     "Another passkey request is still open. Finish or close it, then try again.";
-const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
-    "Cove unlocked your backup, but some saved wallet data on this device does not match it. ",
-    "Cove kept that data unchanged."
-);
-const LOCAL_WALLET_UNREADABLE_MESSAGE: &str = concat!(
-    "Cove unlocked your backup, but some saved wallet data on this device could not be read. ",
-    "Cove kept that data unchanged."
+const LOCAL_KEYCHAIN_UNAVAILABLE_MESSAGE: &str = concat!(
+    "Cove unlocked your backup, but couldn't read the wallet data saved on this device. ",
+    "Unlock your device, then try again."
 );
 const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. ",
@@ -288,7 +283,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::NoBackupFound
             | CloudBackupError::BackupFilesUnavailable
             | CloudBackupError::PasskeyDiscoveryCancelled
-            | CloudBackupError::LocalWalletConflict(_)
+            | CloudBackupError::LocalKeychainUnavailable
             | CloudBackupError::NeedsPasskey
             | CloudBackupError::PasskeyBusy
             | CloudBackupError::Cancelled => Self::Other,
@@ -460,9 +455,10 @@ pub(crate) enum CloudBackupError {
     #[error("another passkey request is on screen")]
     PasskeyBusy,
 
-    /// A restore kept local wallet data unchanged because it did not match the backup
-    #[error("local wallet conflict: {0}")]
-    LocalWalletConflict(#[source] LocalWalletConflict),
+    /// A restore could not read this device's keychain, such as while the device is locked, so
+    /// it wrote nothing and a retry can succeed
+    #[error("local keychain is unavailable")]
+    LocalKeychainUnavailable,
 }
 
 impl CloudBackupError {
@@ -589,12 +585,7 @@ impl CloudBackupError {
             | Self::WritesPaused(_)
             | Self::NotAdmitted(_)
             | Self::Internal(_) => GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
-            Self::LocalWalletConflict(LocalWalletConflict::Mismatch) => {
-                LOCAL_WALLET_MISMATCH_MESSAGE.into()
-            }
-            Self::LocalWalletConflict(LocalWalletConflict::Unreadable) => {
-                LOCAL_WALLET_UNREADABLE_MESSAGE.into()
-            }
+            Self::LocalKeychainUnavailable => LOCAL_KEYCHAIN_UNAVAILABLE_MESSAGE.into(),
             // a bare platform cancellation does not prove the reader cancelled, so the
             // copy states the outcome instead of claiming intent
             Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
@@ -639,7 +630,7 @@ impl CloudBackupError {
             | Self::RecoveryRequired(_)
             | Self::Passkey(_)
             | Self::Compatibility(_)
-            | Self::LocalWalletConflict(_)
+            | Self::LocalKeychainUnavailable
             | Self::Crypto(_)
             | Self::Cloud(_)
             | Self::CloudStorage(_)

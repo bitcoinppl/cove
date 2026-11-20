@@ -36,7 +36,7 @@ use super::recovery::{RestoreArtifactSnapshot, RestoreMarkerGuard, WalletRestore
 mod cloud_restore;
 
 pub(crate) use cloud_restore::{
-    CloudRestoreError, LocalWalletConflict, restore_cloud_descriptor_wallet,
+    CloudRestoreError, CloudRestorePlacement, CloudRestoredWallet, restore_cloud_descriptor_wallet,
     restore_cloud_mnemonic_wallet, restore_cloud_xpriv_wallet,
 };
 

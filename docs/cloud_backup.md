@@ -904,6 +904,45 @@ restoring wallets or presenting passkey UI. Completion and clean cancellation
 clear the marker. There is no Restore All confirmation, terminal result screen,
 or persistent per-wallet batch history.
 
+## Local Data Under a Restored Wallet ID
+
+iOS keeps keychain items when the app is deleted, so a restore after a reinstall
+often finds a secret, xpub, descriptors or TapSigner backup already stored under
+the backup's wallet ID. A seed must never be stuck in the cloud because of that
+data, so every cloud restore (onboarding, Restore, Restore All, and other-backup
+recovery) brings the wallet back, and never writes over local data it cannot
+verify.
+
+The restore keeps the backup's wallet ID only when every local item describes
+the wallet being restored, and then writes only the missing items:
+
+- A secret must be the backup's, in either network form of a master key
+- An xpub must be the same key, in either network form, as the master xpub or the
+  account xpub in the descriptors the restore creates. A wallet imported from its
+  descriptor stores the account xpub and keeps it when its seed is added later,
+  while a hot wallet created in Cove stores the master xpub
+- Descriptors must normalize to the same descriptors
+- A hot backup never adopts a local TapSigner backup, and a public backup never
+  adopts a local secret, since the backup cannot verify either
+
+Anything else under the backup's ID — another seed, public data from another
+wallet, or items stored but undecodable — stays exactly as it was, and the
+wallet is restored under a new wallet ID (`CloudRestorePlacement::NewWalletId`).
+The backup's record describes the old ID, so the restored wallet uploads its own
+backup, and the old record becomes an Extra Copy covered by the restored wallet
+once that backup confirms. Other-backup recovery counts the source record as
+recovered once the restored wallet's backup uploads, so it can still delete the
+source namespace. Enable merge cannot yet prove the relocated record against
+a non-active source, so that source namespace stays listed under Other Backups. A cloud
+seed backup whose matching local wallet holds a secret that cannot be read also
+restores as its own wallet, rather than being added to that wallet.
+
+Only a keychain the platform cannot read at all, such as while the device is
+locked, stops a restore (`CloudBackupError::LocalKeychainUnavailable`). It writes
+nothing, and a retry after unlocking can finish. Metadata rows, BDK stores and
+wallet data under the backup's ID still refuse the restore as occupied, since
+that error is shared with a restore lock another restore holds.
+
 ## Write Lane
 
 All cloud writes go through `CloudBackupWriteSupervisor`, remote deletes
