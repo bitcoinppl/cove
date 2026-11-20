@@ -3,6 +3,7 @@ use color_eyre::Result;
 
 mod android;
 mod android_ci_emulator;
+mod android_cloud_backup_e2e;
 mod android_device;
 mod android_ui_shard;
 mod common;
@@ -182,6 +183,28 @@ enum Commands {
         /// Console port, an even number from 5554 to 5682; each running emulator needs its own, and its adb serial is emulator-<port>
         #[arg(long, default_value_t = 5554, value_parser = android_ci_emulator::parse_console_port)]
         port: u16,
+    },
+
+    /// Restore the frozen real Google Drive backup on a Play Store emulator and check its wallets
+    /// and labels; local only, since the Google account's credentials live in this Mac's Keychain
+    #[command(name = "android-cloud-backup-e2e")]
+    AndroidCloudBackupE2e {
+        /// Console port, an even number from 5554 to 5682; its adb serial is emulator-<port>
+        #[arg(long, default_value_t = 5584, value_parser = android_ci_emulator::parse_console_port)]
+        port: u16,
+
+        /// Boot from the emulator's last state instead of a factory reset, skipping the Google
+        /// sign-in while the account is still on it
+        #[arg(long)]
+        keep_data: bool,
+
+        /// Leave the emulator running afterwards
+        #[arg(long)]
+        keep_emulator: bool,
+
+        /// Use the Rust library and bindings already built
+        #[arg(long)]
+        skip_build: bool,
     },
 
     /// Build iOS library and generate Swift bindings
@@ -535,6 +558,15 @@ fn run(cli: Cli) -> Result<()> {
         Commands::IosUiTimings { records } => ios_ui_shard::refresh_timings(&records),
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
+
+        Commands::AndroidCloudBackupE2e { port, keep_data, keep_emulator, skip_build } => {
+            android_cloud_backup_e2e::run(android_cloud_backup_e2e::E2eOptions {
+                port,
+                keep_data,
+                keep_emulator,
+                skip_build,
+            })
+        }
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

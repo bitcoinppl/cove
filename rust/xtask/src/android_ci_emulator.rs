@@ -5,6 +5,9 @@
 //! The ABI follows this machine, since an x86_64 image only runs under emulation on Apple silicon.
 //! The emulator boots read-only, which lets several instances of the one AVD run at once, each on
 //! its own console port
+//!
+//! [`boot`] also starts other AVDs an [`AvdSpec`] describes, such as the Play Store one the real
+//! cloud backup test signs into Google
 
 use std::{
     env,
@@ -30,12 +33,50 @@ use crate::{
     shutdown::{self, Registration, Stop},
 };
 
-const AVD: &str = "CoveCI35";
-const API_LEVEL: u8 = 35;
-const PROFILE: &str = "pixel_6";
+/// The AVD an emulator boots, and how to create it when it is missing
+pub(crate) struct AvdSpec {
+    pub(crate) name: &'static str,
+    /// The `android-<api>` platform of its system image, such as `35` or `36.1`
+    pub(crate) api: &'static str,
+    /// The system image tag, such as `google_apis` or `google_apis_playstore`
+    pub(crate) tag: &'static str,
+    /// The avdmanager device profile it starts from
+    pub(crate) profile: &'static str,
+    /// Config lines that replace the profile's
+    pub(crate) config: &'static [(&'static str, &'static str)],
+}
 
-// the workflow's cores and ram-size inputs
-const HARDWARE: [(&str, &str); 2] = [("hw.cpu.ncore", "4"), ("hw.ramSize", "4096")];
+const CI_AVD: AvdSpec = AvdSpec {
+    name: "CoveCI35",
+    api: "35",
+    tag: "google_apis",
+    profile: "pixel_6",
+    // the workflow's cores and ram-size inputs
+    config: &[("hw.cpu.ncore", "4"), ("hw.ramSize", "4096")],
+};
+
+/// What a boot does with the AVD's user data
+#[derive(Clone, Copy)]
+pub(crate) enum UserData {
+    /// Discards every write when the emulator exits, so several can share the AVD
+    ReadOnly,
+    /// Starts from a factory reset and keeps what the run writes
+    Wipe,
+    /// Starts from, and keeps, what earlier runs wrote
+    Keep,
+}
+
+impl UserData {
+    fn emulator_args(self) -> &'static [&'static str] {
+        // a writable run cold boots and saves no snapshot, since a snapshot holds the session's
+        // memory, logs included, and the stop timeout could kill the emulator while it saved one
+        match self {
+            Self::ReadOnly => &["-read-only"],
+            Self::Wipe => &["-wipe-data", "-no-snapshot"],
+            Self::Keep => &["-no-snapshot"],
+        }
+    }
+}
 
 // the workflow's emulator-options; swiftshader is slower than the host GPU, but it is the
 // renderer whose launcher ANRs the workflow's tests have to survive
@@ -76,6 +117,22 @@ pub fn parse_console_port(value: &str) -> Result<u16, String> {
 ///
 /// The emulator keeps running after this returns; stop it with `adb -s emulator-<port> emu kill`
 pub fn start(port: u16) -> Result<()> {
+    let emulator = boot(&CI_AVD, port, UserData::ReadOnly)?;
+    let serial = emulator.serial().to_owned();
+
+    emulator.detach();
+    print_success(&format!(
+        "{serial} booted; run tests on it with ANDROID_SERIAL={serial}, and stop it with adb -s {serial} emu kill"
+    ));
+
+    Ok(())
+}
+
+/// Starts a headless emulator of `spec` on `port`, creating the AVD first if needed, waits for it
+/// to boot, and turns off animations
+///
+/// Dropping the result, or a signal, stops the emulator; [`Emulator::detach`] leaves it running
+pub(crate) fn boot(spec: &AvdSpec, port: u16, user_data: UserData) -> Result<Emulator> {
     let sdk = AndroidSdk::find()?;
     let serial = format!("emulator-{port}");
 
@@ -83,7 +140,7 @@ pub fn start(port: u16) -> Result<()> {
         bail!("{serial} is already running; pick another port or stop it with adb -s {serial} emu kill");
     }
 
-    sdk.ensure_avd()?;
+    sdk.ensure_avd(spec)?;
 
     // under the target dir rather than /tmp, where another user could plant a symlink at the
     // predictable name for this to overwrite
@@ -92,35 +149,38 @@ pub fn start(port: u16) -> Result<()> {
     fs::create_dir_all(&log_dir)
         .wrap_err_with(|| format!("Failed to create {}", log_dir.display()))?;
 
-    let log_path = log_dir.join(format!("{AVD}-{port}.log"));
+    let log_path = log_dir.join(format!("{}-{port}.log", spec.name));
     let log = File::create(&log_path)
         .wrap_err_with(|| format!("Failed to create {}", log_path.display()))?;
 
-    let emulator = BootingEmulator::spawn(
+    let emulator = Emulator::spawn(
+        serial,
         sdk.emulator()
-            .args(["-avd", AVD, "-read-only", "-port", &port.to_string()])
+            .args(["-avd", spec.name, "-port", &port.to_string()])
+            .args(user_data.emulator_args())
             .args(EMULATOR_OPTIONS)
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log),
     )?;
 
-    print_info(&format!("Booting {AVD} as {serial}; its output goes to {}", log_path.display()));
-    wait_for_boot(&emulator, &serial, &log_path)?;
+    print_info(&format!(
+        "Booting {} as {}; its output goes to {}",
+        spec.name,
+        emulator.serial(),
+        log_path.display()
+    ));
+    wait_for_boot(&emulator, &log_path)?;
 
     for setting in ANIMATION_SCALES {
-        adb(&serial, &["shell", "settings", "put", "global", setting, "0"])?;
+        adb(emulator.serial(), &["shell", "settings", "put", "global", setting, "0"])?;
     }
 
-    emulator.booted();
-    print_success(&format!(
-        "{serial} booted; run tests on it with ANDROID_SERIAL={serial}, and stop it with adb -s {serial} emu kill"
-    ));
-
-    Ok(())
+    Ok(emulator)
 }
 
-fn wait_for_boot(emulator: &BootingEmulator, serial: &str, log_path: &Path) -> Result<()> {
+fn wait_for_boot(emulator: &Emulator, log_path: &Path) -> Result<()> {
+    let serial = emulator.serial();
     let deadline = Instant::now() + BOOT_TIMEOUT;
 
     while Instant::now() < deadline {
@@ -145,18 +205,18 @@ fn wait_for_boot(emulator: &BootingEmulator, serial: &str, log_path: &Path) -> R
     ))
 }
 
-/// The emulator until it has booted; dropping it first, or a signal, stops the emulator's
-/// process group and waits for the emulator to exit, so a failed or cancelled start leaves
-/// nothing holding the console port
-struct BootingEmulator {
+/// A running emulator; dropping it, or a signal, stops the emulator's process group and waits for
+/// the emulator to exit, so a failed or cancelled run leaves nothing holding the console port
+pub(crate) struct Emulator {
+    serial: String,
     process: Arc<EmulatorProcess>,
     _registration: Registration,
 }
 
 struct EmulatorProcess(Mutex<Option<Child>>);
 
-impl BootingEmulator {
-    fn spawn(command: &mut Command) -> Result<Self> {
+impl Emulator {
+    fn spawn(serial: String, command: &mut Command) -> Result<Self> {
         let child = command
             // its own process group, so the emulator outlives this command and the terminal job
             // it ran in once it has booted, and its qemu children can be stopped with it before
@@ -165,7 +225,7 @@ impl BootingEmulator {
             .wrap_err("Failed to start the emulator")?;
 
         let process = Arc::new(EmulatorProcess(Mutex::new(Some(child))));
-        Ok(Self { _registration: shutdown::register(process.clone()), process })
+        Ok(Self { serial, _registration: shutdown::register(process.clone()), process })
     }
 
     fn try_wait(&self) -> Result<Option<ExitStatus>> {
@@ -175,13 +235,18 @@ impl BootingEmulator {
         Ok(child.try_wait()?)
     }
 
-    /// Leaves the booted emulator running after this command ends
-    fn booted(self) {
+    /// Its adb serial, `emulator-<port>`
+    pub(crate) fn serial(&self) -> &str {
+        &self.serial
+    }
+
+    /// Leaves the emulator running after this command ends
+    pub(crate) fn detach(self) {
         self.process.0.lock().take();
     }
 }
 
-impl Drop for BootingEmulator {
+impl Drop for Emulator {
     fn drop(&mut self) {
         self.process.stop();
     }
@@ -224,7 +289,7 @@ fn signal_group(signal: &str, group: &str) {
 }
 
 /// Runs adb against one device and returns its output
-fn adb(serial: &str, args: &[&str]) -> Result<String> {
+pub(crate) fn adb(serial: &str, args: &[&str]) -> Result<String> {
     let output = Command::new("adb")
         .args(["-s", serial])
         .args(args)
@@ -278,14 +343,16 @@ impl AndroidSdk {
     }
 
     /// Creates the AVD, and installs its system image, unless the AVD already exists
-    fn ensure_avd(&self) -> Result<()> {
+    fn ensure_avd(&self, spec: &AvdSpec) -> Result<()> {
+        let avd = spec.name;
+
         // held until the config is written, so a second first-time start waits here and then
         // finds the finished AVD rather than creating it again or booting it half set up
         let avd_home = avd_home()?;
         fs::create_dir_all(&avd_home)
             .wrap_err_with(|| format!("Failed to create {}", avd_home.display()))?;
 
-        let lock_path = avd_home.join(format!("{AVD}.setup.lock"));
+        let lock_path = avd_home.join(format!("{avd}.setup.lock"));
         let setup_lock = File::options()
             .create(true)
             .write(true)
@@ -297,13 +364,14 @@ impl AndroidSdk {
         let output =
             self.emulator().arg("-list-avds").output().wrap_err("Failed to list the AVDs")?;
 
-        if String::from_utf8_lossy(&output.stdout).lines().any(|line| line.trim() == AVD) {
+        if String::from_utf8_lossy(&output.stdout).lines().any(|line| line.trim() == avd) {
             return Ok(());
         }
 
         let abi = if env::consts::ARCH == "aarch64" { "arm64-v8a" } else { "x86_64" };
-        let image = format!("system-images;android-{API_LEVEL};google_apis;{abi}");
-        let image_dir = self.0.join(format!("system-images/android-{API_LEVEL}/google_apis/{abi}"));
+        let AvdSpec { api, tag, profile, .. } = spec;
+        let image = format!("system-images;android-{api};{tag};{abi}");
+        let image_dir = self.0.join(format!("system-images/android-{api}/{tag}/{abi}"));
 
         if !image_dir.is_dir() {
             print_info(&format!("Installing {image}"));
@@ -314,10 +382,10 @@ impl AndroidSdk {
             }
         }
 
-        print_info(&format!("Creating the {AVD} AVD"));
+        print_info(&format!("Creating the {avd} AVD"));
         let mut avdmanager = self
             .cmdline_tool("avdmanager")?
-            .args(["create", "avd", "-n", AVD, "-k", &image, "-d", PROFILE])
+            .args(["create", "avd", "-n", avd, "-k", &image, "-d", profile])
             .stdin(Stdio::piped())
             .spawn()
             .wrap_err("Failed to run avdmanager")?;
@@ -327,14 +395,14 @@ impl AndroidSdk {
         let status = avdmanager.wait()?;
 
         if !status.success() {
-            bail!("avdmanager failed to create {AVD}: {status}");
+            bail!("avdmanager failed to create {avd}: {status}");
         }
 
-        let config = avd_home.join(format!("{AVD}.avd/config.ini"));
+        let config = avd_home.join(format!("{avd}.avd/config.ini"));
         let contents = fs::read_to_string(&config)
             .wrap_err_with(|| format!("Failed to read {}", config.display()))?;
 
-        fs::write(&config, with_hardware(&contents))
+        fs::write(&config, with_config(&contents, spec.config))
             .wrap_err_with(|| format!("Failed to write {}", config.display()))
     }
 }
@@ -353,17 +421,17 @@ fn avd_home() -> Result<PathBuf> {
     Ok(user_home.join("avd"))
 }
 
-/// The AVD config with the workflow's core count and memory in place of the profile's
-fn with_hardware(config: &str) -> String {
-    let is_hardware_line = |line: &str| {
-        HARDWARE.iter().any(|(key, _)| line.split_once('=').is_some_and(|(k, _)| k == *key))
+/// The AVD config with `overrides` in place of the profile's lines for the same keys
+fn with_config(config: &str, overrides: &[(&str, &str)]) -> String {
+    let is_overridden = |line: &str| {
+        overrides.iter().any(|(key, _)| line.split_once('=').is_some_and(|(k, _)| k == *key))
     };
 
     config
         .lines()
-        .filter(|line| !is_hardware_line(line))
+        .filter(|line| !is_overridden(line))
         .map(ToOwned::to_owned)
-        .chain(HARDWARE.iter().map(|(key, value)| format!("{key}={value}")))
+        .chain(overrides.iter().map(|(key, value)| format!("{key}={value}")))
         .map(|line| line + "\n")
         .collect()
 }
