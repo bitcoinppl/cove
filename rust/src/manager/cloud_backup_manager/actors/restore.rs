@@ -802,6 +802,17 @@ impl RestoreOperation {
                 }
                 NamespaceMatchSnapshotOutcome::AuthenticationFailed { matches, error } => {
                     merge_namespace_matches(&mut accumulated_matches, matches);
+
+                    // a device with no passkey for the backup may still hold its local master key
+                    if accumulated_matches.is_empty()
+                        && matches!(error, PasskeyError::NoCredentialFound)
+                    {
+                        return Ok(NamespaceMatchOutcome::Unopened(Unopened {
+                            reason: UnopenedReason::NoPasskeyOnDevice,
+                            uploading: false,
+                        }));
+                    }
+
                     return NamespaceMatchSnapshotOutcome::authentication_failure_result(
                         accumulated_matches,
                         error,
