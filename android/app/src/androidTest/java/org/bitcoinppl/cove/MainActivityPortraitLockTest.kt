@@ -12,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -38,7 +39,7 @@ class MainActivityPortraitLockTest {
     }
 
     @Test
-    fun mainActivityStaysPortraitWhenThePhoneTurns() {
+    fun mainActivityAndItsAliasRequestPortrait() {
         for (activity in listOf(MainActivity::class.java.name, "$PACKAGE.KeyTeleportLinkActivity")) {
             assertEquals(
                 "$activity should request portrait",
@@ -46,11 +47,17 @@ class MainActivityPortraitLockTest {
                 activityInfo(activity).screenOrientation,
             )
         }
+    }
 
+    @Test
+    fun mainActivityStaysPortraitWhenThePhoneTurns() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             // freezing the display on its side stands in for the user turning the phone with
             // auto-rotate on, and an activity without the lock follows it into landscape
-            instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_FREEZE_90)
+            assertTrue(
+                "the emulator should take the rotation",
+                instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_FREEZE_90),
+            )
             device.wait({ device.displayRotation != Surface.ROTATION_0 }, ROTATION_WAIT_MILLIS)
             device.waitForIdle()
 
