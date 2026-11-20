@@ -73,7 +73,6 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
-import org.bitcoinppl.cove_core.CloudBackupWalletRecovery
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -136,9 +135,10 @@ fun SelectedWalletScreen(
     isDarkList: Boolean,
     manager: WalletManager,
     app: AppManager,
-    // only a confirmed cloud copy makes the words reminder moot; Cloud Backup being on is not enough
-    isBackedUpByCloudBackup: Boolean =
-        manager.walletMetadata?.id?.let(app.cloudBackupManager.recovery::wallet) == CloudBackupWalletRecovery.CONFIRMED,
+    // Cloud Backup being on hides the words reminder, even before the wallet's first upload
+    // confirms, since a reminder that flashes on a new wallet and then goes away confuses more
+    // than it protects; a failed upload shows on the Cloud Backup row in Settings instead
+    isCloudBackupOn: Boolean = app.cloudBackupManager.recovery.configured,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
@@ -378,7 +378,7 @@ fun SelectedWalletScreen(
 
                 val isVerified = manager.isVerified
                 val walletId = manager.walletMetadata?.id
-                val shouldShowVerifyReminder = !isVerified && !isBackedUpByCloudBackup
+                val shouldShowVerifyReminder = !isVerified && !isCloudBackupOn
                 val showLabels = manager.walletMetadata?.showLabels ?: false
                 val loadState = manager.loadState
                 val isScanStatusActive =

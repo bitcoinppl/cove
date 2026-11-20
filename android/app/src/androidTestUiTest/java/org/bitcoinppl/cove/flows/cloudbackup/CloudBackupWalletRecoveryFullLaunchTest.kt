@@ -29,13 +29,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * A wallet counts as backed up only once Cloud Backup confirms its copy, not as soon as Cloud
- * Backup is on
+ * A wallet counts as recoverable only once Cloud Backup confirms its copy, not as soon as Cloud
+ * Backup is on, though Cloud Backup being on hides its backup reminder from the start
  *
  * The provider accepts the fresh backup but keeps it unreadable, so its upload stays unconfirmed:
- * the wallet keeps its backup reminder, and deleting it warns that its funds are lost. Once the
+ * the wallet shows no backup reminder, but deleting it warns that its funds are lost. Once the
  * provider shows the backup and it confirms, even while a delete prompt is open, the warning
- * points to the cloud copy and the reminder goes away
+ * points to the cloud copy
  */
 @ManualFullLaunchTest
 @LargeTest
@@ -74,10 +74,7 @@ class CloudBackupWalletRecoveryFullLaunchTest {
         )
 
         openWallet(wallet.id)
-        assertTrue(
-            "an unconfirmed backup leaves the wallet unprotected, so the reminder must show",
-            device.wait(Until.hasObject(By.text(BACKUP_REMINDER)), 10_000L),
-        )
+        assertNoBackupReminder("Cloud Backup is on, so the reminder must not show even before the upload confirms")
         assertFinalDeleteWarning(wallet.id, message = NOT_BACKED_UP_MESSAGE, button = DELETE_FOREVER)
 
         // the backup confirms while the first delete prompt is open, and the warning it leads to
@@ -91,10 +88,17 @@ class CloudBackupWalletRecoveryFullLaunchTest {
         }
 
         openWallet(wallet.id)
+        assertNoBackupReminder("a confirmed backup must keep the reminder hidden")
+    }
+
+    // the balance proves the wallet screen rendered, so the reminder's absence is not just a
+    // screen still loading
+    private fun assertNoBackupReminder(message: String) {
         assertTrue(
-            "a confirmed backup protects the wallet, so the reminder must go",
-            device.wait(Until.gone(By.text(BACKUP_REMINDER)), 10_000L),
+            "the wallet screen never rendered",
+            device.wait(Until.hasObject(By.res("selectedWallet.balance")), 10_000L),
         )
+        assertFalse(message, device.hasObject(By.text(BACKUP_REMINDER)))
     }
 
     // the uploads are accepted but stay unreadable until the test releases them, so onboarding

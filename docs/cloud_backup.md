@@ -1549,10 +1549,14 @@ live provider proof, which would refuse the PIN offline and right after launch:
 
 ### Wallet recovery
 
-Screens outside Cloud Backup ask whether Cloud Backup can bring one wallet
-back: the selected wallet's Backup your wallet reminder and Wallet Settings'
-Final Warning before deleting an unverified hot wallet. They ask
-`CloudBackupRecovery`, never whether the screen shows a configured backup.
+Screens outside Cloud Backup ask `CloudBackupRecovery` about one wallet, never
+whether the screen shows a configured backup. Wallet Settings' Final Warning
+before deleting an unverified hot wallet asks whether Cloud Backup can bring
+the wallet back. The selected wallet's Backup your wallet reminder asks only
+whether Cloud Backup is on (`configured`): it hides from the start, even before
+the wallet's first upload confirms, since a reminder that flashed on a new
+wallet and then went away confused people, and a failed upload shows on the
+Cloud Backup row in Settings instead.
 The missing-keys alert's Open Cloud Backup asks
 `missing_key_alert_offers_cloud_backup()`, which reads the same persisted record
 and is false in decoy mode, where Cloud Backup is hidden. The screen starts as Disabled until the
@@ -1564,9 +1568,8 @@ record, and the wallets with a confirmed copy, by the Wipe Data PIN coverage
 rule above. It reads the rows alone, so a wrapper row saved as `Failed` leaves
 no wallet confirmed. The provider's last answer on the master key lives in memory
 and changes without a publish, so only the Wipe Data PIN check reads it. Its `wallet` answers `Off`, `Unconfirmed` or `Confirmed`. Only a
-`Confirmed` wallet hides the reminder and gets the Final Warning that it can be
-recovered from the Cloud Backup screen; any other gets "not backed up" and
-Delete Forever.
+`Confirmed` wallet gets the Final Warning that it can be recovered from the
+Cloud Backup screen; any other gets "not backed up" and Delete Forever.
 
 The platform reads `recovery()` before `listen_for_updates`, so the answer is
 right from the first frame after launch. That read is fresh, and when it
