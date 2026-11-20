@@ -80,11 +80,7 @@ impl RustCloudBackupManager {
 
         let (listing, counted) = {
             let listing = pin!(listing);
-            let count = pin!(self.other_backup_namespaces(
-                &cloud,
-                &namespace_id,
-                BlockingCloudStep::Disable
-            ));
+            let count = pin!(self.other_backups(&cloud, &namespace_id, BlockingCloudStep::Disable));
 
             match future::select(listing, count).await {
                 Either::Left((listing, count)) => (listing, count.now_or_never()),
@@ -102,8 +98,8 @@ impl RustCloudBackupManager {
 
         // the other-passkey line in the dialog is information, so failing to count leaves it out
         let other_backups = match counted {
-            Some(Ok(namespaces)) => {
-                OtherBackupsCount::Counted(u32::try_from(namespaces.len()).unwrap_or(u32::MAX))
+            Some(Ok(backups)) => {
+                OtherBackupsCount::Counted(u32::try_from(backups.len()).unwrap_or(u32::MAX))
             }
             Some(Err(error)) => {
                 warn!("Turn Off could not count other backups: {error}");
