@@ -57,41 +57,66 @@ pub fn upload_google_play(json_key_path: Option<&str>, verbose: bool) -> Result<
 }
 
 pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()> {
-    let sh = Shell::new()?;
-    ensure_rust_directory(&sh)?;
+    AndroidRelease::prepare(json_key_path)?.run(verbose)
+}
 
-    // fail before bumping if Play credentials, store signing, or build output dirs are missing
-    let credentials = GooglePlayCredentials::resolve(json_key_path)?;
-    super::AndroidReleaseSigning::resolve()?;
-    super::ensure_android_build_output_dirs_resolve()?;
-    let used = credentials.play_api()?.highest_version_code()?;
+/// A Google Play release whose credentials, signing, and build output dirs are already checked
+pub struct AndroidRelease(GooglePlayCredentials);
 
-    // an older bundle left for a `just ugp` retry must survive a release that fails before Gradle
-    // replaces it
-    let previous_bundle = bundle_modified_at();
-    BuildNumberFile::AndroidGradle.bump_for_release(&sh, used, || {
-        build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
+impl AndroidRelease {
+    /// Fail before bumping if Play credentials, store signing, or build output dirs are missing
+    pub fn prepare(json_key_path: Option<&str>) -> Result<Self> {
+        let sh = Shell::new()?;
+        ensure_rust_directory(&sh)?;
 
-        // the rollback restores the old versionCode, so a bundle signed with the new one must not
-        // stay behind for `just ugp` to upload
-        let Err(error) = bundle_android(verbose) else {
-            return Ok(());
-        };
+        let credentials = GooglePlayCredentials::resolve(json_key_path)?;
+        super::AndroidReleaseSigning::resolve()?;
+        super::ensure_android_build_output_dirs_resolve()?;
 
-        if bundle_modified_at() == previous_bundle {
-            return Err(error);
-        }
+        // prove the Play API accepts these credentials now; `run` reads the versionCode again
+        // because another upload can land while a combined release builds iOS first
+        credentials.play_api()?.highest_version_code()?;
 
-        match remove_file_if_exists(play_aab_path()) {
-            Ok(()) => Err(error),
-            Err(_) => Err(error.wrap_err(KeepBuildNumber(vec![play_aab_path()]))),
-        }
-    })?;
+        Ok(Self(credentials))
+    }
 
-    // Google may have accepted the bundle; keep versionCode if supply fails
-    upload_with_credentials(&sh, &credentials, verbose).wrap_err(
-        "Kept the new versionCode because Google Play may have accepted the bundle; retry the upload with just ugp",
-    )
+    /// Bump the versionCode, build the signed bundle, and upload it to internal testing
+    pub fn run(self, verbose: bool) -> Result<()> {
+        let Self(credentials) = self;
+        let sh = Shell::new()?;
+        let used = credentials.play_api()?.highest_version_code()?;
+
+        // an older bundle left for a `just ugp` retry must survive a release that fails before
+        // Gradle replaces it
+        let previous_bundle = bundle_modified_at();
+        BuildNumberFile::AndroidGradle.bump_for_release(&sh, used, || {
+            build_android(
+                BuildProfile::from_str("release-speed"),
+                AndroidBuildTargets::All,
+                verbose,
+            )?;
+
+            // the rollback restores the old versionCode, so a bundle signed with the new one must
+            // not stay behind for `just ugp` to upload
+            let Err(error) = bundle_android(verbose) else {
+                return Ok(());
+            };
+
+            if bundle_modified_at() == previous_bundle {
+                return Err(error);
+            }
+
+            match remove_file_if_exists(play_aab_path()) {
+                Ok(()) => Err(error),
+                Err(_) => Err(error.wrap_err(KeepBuildNumber(vec![play_aab_path()]))),
+            }
+        })?;
+
+        // Google may have accepted the bundle; keep versionCode if supply fails
+        upload_with_credentials(&sh, &credentials, verbose).wrap_err(
+            "Kept the new versionCode because Google Play may have accepted the bundle; retry the upload with just ugp",
+        )
+    }
 }
 
 fn bundle_modified_at() -> Option<std::time::SystemTime> {

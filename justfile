@@ -608,6 +608,14 @@ release-android:
 
 alias rela := release-android
 
+# both stores are checked before either build number is bumped; an iOS build failure stops before Android starts
+# [long, external] Release iOS to TestFlight and Android to Google Play, building Android while iOS uploads
+[group('release')]
+release-all:
+    just xtask release-all
+
+alias rel := release-all
+
 # use this when the versionCode was already bumped and the signed bundle already exists; it skips the upload when Google Play already has that versionCode, so it is safe to retry
 # [external] Upload the existing signed Android bundle to Google Play internal testing without bumping
 [group('release')]

@@ -334,6 +334,26 @@ enum Commands {
         api_issuer_id: Option<String>,
     },
 
+    /// Release to TestFlight and Google Play, building Android while the iOS archive uploads
+    #[command(name = "release-all")]
+    ReleaseAll {
+        /// App Store Connect API key file path
+        #[arg(long, env = "ASC_API_KEY_PATH")]
+        api_key_path: Option<String>,
+
+        /// App Store Connect API key ID
+        #[arg(long, env = "ASC_API_KEY_ID")]
+        api_key_id: Option<String>,
+
+        /// App Store Connect API issuer ID
+        #[arg(long, env = "ASC_API_ISSUER_ID")]
+        api_issuer_id: Option<String>,
+
+        /// Google Play service account JSON key file path
+        #[arg(long, env = "GOOGLE_PLAY_JSON_KEY_PATH")]
+        json_key_path: Option<String>,
+    },
+
     /// Upload to TestFlight without bumping, copy previous test notes, and add to me-only
     #[command(name = "upload-testflight")]
     UploadTestflight {
@@ -569,6 +589,12 @@ fn run(cli: Cli) -> Result<()> {
             let options =
                 ios::TestflightUploadOptions::new(api_key_path, api_key_id, api_issuer_id);
             ios::testflight(options, cli.verbose)
+        }
+
+        Commands::ReleaseAll { api_key_path, api_key_id, api_issuer_id, json_key_path } => {
+            let options =
+                ios::TestflightUploadOptions::new(api_key_path, api_key_id, api_issuer_id);
+            mobile::release_all(options, json_key_path.as_deref(), cli.verbose)
         }
 
         Commands::UploadTestflight { api_key_path, api_key_id, api_issuer_id } => {

@@ -726,26 +726,50 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 }
 
 pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
-    let sh = Shell::new()?;
-    let credentials = TestflightApiCredentials::from_options(&options)?;
-    let distribution = credentials.prepare_distribution()?;
+    PendingTestflightUpload::build(options, verbose)?.upload(verbose)
+}
 
-    // fail before bumping/building if Apple has not associated this TestFlight app id
-    validate_testflight_associated_domain()?;
+/// A bumped, built, and archived TestFlight release that still needs upload and distribution
+///
+/// Once built, nothing in the upload reads the iOS project or Rust build output, so callers can
+/// build other platforms while it uploads
+pub struct PendingTestflightUpload {
+    credentials: TestflightApiCredentials,
+    distribution: Distribution,
+    archive: TestflightArchive,
+}
 
-    let used = distribution.highest_build_number()?;
-    let archive = BuildNumberFile::IosProject.bump_for_release(&sh, used, || {
-        build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
-        archive_testflight(&credentials, verbose)
-    })?;
+impl PendingTestflightUpload {
+    /// Validate the TestFlight destination, bump the build number, then build and archive iOS
+    pub fn build(options: TestflightUploadOptions, verbose: bool) -> Result<Self> {
+        let sh = Shell::new()?;
+        let credentials = TestflightApiCredentials::from_options(&options)?;
+        let distribution = credentials.prepare_distribution()?;
 
-    // keep the bumped build number from here on: App Store Connect can accept an upload even when
-    // xcodebuild reports failure, and reusing an accepted number would fail the next upload
-    archive.upload(&credentials, verbose).wrap_err(
-        "TestFlight upload failed; kept the bumped build number. Retry with `just upload-testflight`",
-    )?;
+        // fail before bumping/building if Apple has not associated this TestFlight app id
+        validate_testflight_associated_domain()?;
 
-    finish_testflight_distribution(&distribution, &archive.identity)
+        let used = distribution.highest_build_number()?;
+        let archive = BuildNumberFile::IosProject.bump_for_release(&sh, used, || {
+            build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
+            archive_testflight(&credentials, verbose)
+        })?;
+
+        Ok(Self { credentials, distribution, archive })
+    }
+
+    /// Upload the archive, wait for App Store Connect to process it, and add it to me-only
+    pub fn upload(self, verbose: bool) -> Result<()> {
+        let Self { credentials, distribution, archive } = self;
+
+        // keep the bumped build number from here on: App Store Connect can accept an upload even
+        // when xcodebuild reports failure, and reusing an accepted number would fail the next upload
+        archive.upload(&credentials, verbose).wrap_err(
+            "TestFlight upload failed; kept the bumped build number. Retry with `just upload-testflight`",
+        )?;
+
+        finish_testflight_distribution(&distribution, &archive.identity)
+    }
 }
 
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
