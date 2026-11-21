@@ -985,6 +985,17 @@ later seed backup of that wallet look covered. When the two backups list seed
 first, the watch-only copy restores as a separate watch-only wallet beside the
 hot one; the seed is on the device either way.
 
+Adding the seed also adds the backup's labels for every transaction, address,
+input and output the wallet has no label or lock for
+(`LabelRestoreBehavior::AddMissingToExistingWallet`). A label or lock the wallet
+already has keeps its local value, since it may be a newer edit made on this
+device. The wallet's next upload replaces the active backup's record under its
+ID with the wallet's own labels, and that record may be the seed backup itself,
+so without this its labels would be lost. Recover Other Backups reads a
+different record there, so before it uploads the wallet it also adds the
+missing labels from the active backup's record under the wallet's ID. A failure
+to add labels is reported as a label warning; the seed stays added.
+
 A wallet that gained its seed this way has a cloud backup without it until it
 uploads again, and a wallet a batch restored has no record in the active
 backup until it uploads, so every path queues the upload of either as soon as
@@ -996,8 +1007,8 @@ doesn't leave the device's own backup watch-only.
   marks every local wallet for upload.
 - Recover Other Backups counts it as restored and uploads it with the run's
   restored wallets, replacing any copy restored earlier in that namespace, but
-  doesn't count the source record as recovered, since adding the seed imports
-  none of the record's labels. The source namespace stays.
+  doesn't count the source record as recovered, since a label the wallet already
+  had keeps its local text over the source's. The source namespace stays.
 - Enable merge uploads every local wallet after the merge, and its cleanup keeps
   a source whose record no longer matches the upgraded wallet's.
 

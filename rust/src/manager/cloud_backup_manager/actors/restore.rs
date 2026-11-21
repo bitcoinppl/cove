@@ -535,7 +535,9 @@ impl RestoreOperation {
         {
             self.ensure_current().await?;
             match manager.restore_in_session(&mut restore_session, wallet) {
-                Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => {
+                // activation marks every local wallet dirty, so an upgraded wallet uploads too
+                Ok(WalletRestoreOutcome::Restored { labels_warning, .. })
+                | Ok(WalletRestoreOutcome::SecretAdded { labels_warning, .. }) => {
                     resolution = resolution.restored(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {
@@ -544,11 +546,6 @@ impl RestoreOperation {
                             .labels_failed_errors
                             .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                     }
-                }
-                // activation marks every local wallet dirty, so the upgraded wallet uploads too
-                Ok(WalletRestoreOutcome::SecretAdded { .. }) => {
-                    resolution = resolution.restored(*namespace_index);
-                    report.wallets_restored += 1;
                 }
                 Ok(WalletRestoreOutcome::SkippedDuplicate) => {
                     resolution = resolution.skipped_duplicate(*namespace_index);

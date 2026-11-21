@@ -531,6 +531,9 @@ fn schedule_cloud_backup_after_local_commit(metadata: &WalletMetadata) {
 pub(crate) enum LabelRestoreBehavior {
     MarkCloudBackupDirty,
     PreserveCloudBackupClean,
+    /// Adds only labels the wallet has none of, into a wallet that already has its own, and
+    /// leaves queueing its upload to the caller
+    AddMissingToExistingWallet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -867,6 +870,13 @@ pub(crate) fn restore_wallet_labels(
         LabelRestoreBehavior::PreserveCloudBackupClean => {
             manager.map_err_str(BackupError::Restore).and_then(|manager| {
                 manager.import_without_cloud_backup_dirty(jsonl).map_err_str(BackupError::Restore)
+            })
+        }
+        LabelRestoreBehavior::AddMissingToExistingWallet => {
+            manager.map_err_str(BackupError::Restore).and_then(|manager| {
+                manager
+                    .import_missing_without_cloud_backup_dirty(jsonl)
+                    .map_err_str(BackupError::Restore)
             })
         }
     };

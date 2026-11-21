@@ -316,7 +316,7 @@ impl RustCloudBackupManager {
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         let result = session.restore_downloaded(wallet);
         match &result {
-            Ok(WalletRestoreOutcome::SecretAdded { wallet }) => {
+            Ok(WalletRestoreOutcome::SecretAdded { wallet, .. }) => {
                 self.handle_restored_wallet_needs_backup(wallet.id.clone());
             }
 

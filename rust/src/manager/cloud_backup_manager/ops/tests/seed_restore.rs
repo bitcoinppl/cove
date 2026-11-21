@@ -516,7 +516,8 @@ async fn recover_other_backups_adds_a_foreign_seed_to_a_local_watch_only_wallet(
     assert!(seed.is_held_by(&upgraded.id));
     assert!(active_record_holds_seed(&upgraded.id).await);
 
-    // adding the seed imported none of the source's labels, so the source stays
+    // a label the wallet already had would keep its local text over the source's, so the
+    // source stays
     assert!(globals.cloud.has_namespace(&other));
 }
 
@@ -669,9 +670,10 @@ async fn fingerprintless_seed_backup(
     (metadata.id, bytes)
 }
 
-// adding the seed to the local wallet imported none of the source's labels, so a later Recover,
-// which finds the seed local and a record under the same id in the current backup, still keeps
-// the source until the current backup holds those labels
+// the current backup's labels can still differ from the source's once the seed is added, since a
+// label the wallet already had keeps its local text, so a later Recover, which finds the seed
+// local and a record under the same id in the current backup, keeps the source until the current
+// backup holds the same labels
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_a_seed_source_whose_labels_the_current_backup_lacks() {
     let _guard = async_test_lock().lock().await;
@@ -859,4 +861,96 @@ async fn recover_other_backups_queues_a_restored_seed_when_its_upload_fails() {
         "the restored wallet should stay queued for upload, found {row:?}"
     );
     assert!(globals.cloud.has_namespace(&other));
+}
+
+const CURRENT_ONLY_TXID: &str = "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290";
+const SEED_ONLY_TXID: &str = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd";
+const SHARED_TXID: &str = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+
+fn tx_label(txid: &str, label: &str) -> String {
+    format!(r#"{{"type":"tx","ref":"{txid}","label":"{label}"}}"#)
+}
+
+/// Gives `entry` exactly the labels in `jsonl`
+fn set_record_labels(entry: &mut cove_cspp::backup_data::WalletEntry, jsonl: &str) {
+    let labeled = wallet_entry_with_labels(&WalletMetadata::preview_new(), Some(jsonl));
+    entry.labels_zstd_jsonl = labeled.labels_zstd_jsonl.clone();
+    entry.labels_count = labeled.labels_count;
+    entry.labels_hash = labeled.labels_hash.clone();
+    entry.labels_uncompressed_size = labeled.labels_uncompressed_size;
+}
+
+/// The labels the current backup's record of `wallet_id` holds
+async fn active_record_labels(wallet_id: &WalletId) -> String {
+    let reader = WalletBackupReader::new(
+        CloudStorage::global_explicit_client(),
+        active_namespace(),
+        zeroize::Zeroizing::new(active_master_key().critical_data_key()),
+    );
+
+    let wallet = reader.download(&wallet_record_id(wallet_id.as_ref())).await.unwrap();
+    crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl(&wallet.entry)
+        .unwrap()
+        .unwrap_or_default()
+}
+
+// adding the seed uploads the local wallet over the current backup's record under its id, so
+// labels that only that record or the seed backup held are added to the wallet first, while a
+// label edited on this device keeps its local text
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_cloud_labels_when_adding_a_seed_to_a_local_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(56);
+
+    let watch_only = seed.local_wallet(WalletType::Cold);
+    LabelManager::try_new(watch_only.id.clone())
+        .unwrap()
+        .import_without_cloud_backup_dirty(&tx_label(SHARED_TXID, "edited on this device"))
+        .unwrap();
+
+    let current_labels = [
+        tx_label(CURRENT_ONLY_TXID, "only in the current backup"),
+        tx_label(SHARED_TXID, "older current text"),
+    ]
+    .join("\n");
+    let master_key = active_master_key();
+    let watch_only_bytes =
+        encrypted_wallet_backup_bytes(&watch_only, &master_key, "watch-only", 1).await;
+    let watch_only_bytes = edit_record(&watch_only_bytes, &master_key, |entry| {
+        set_record_labels(entry, &current_labels);
+    });
+    list_backups(globals, &active_namespace(), vec![(&watch_only.id, watch_only_bytes)]);
+
+    let seed_labels = [
+        tx_label(SEED_ONLY_TXID, "only in the seed backup"),
+        tx_label(SHARED_TXID, "older seed text"),
+    ]
+    .join("\n");
+    let seed_bytes = seed.cloud_backup_under_id(&watch_only.id, &other_master_key).await;
+    let seed_bytes = edit_record(&seed_bytes, &other_master_key, |entry| {
+        set_record_labels(entry, &seed_labels);
+    });
+    list_backups(globals, &other, vec![(&watch_only.id, seed_bytes)]);
+
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!(restored_and_failed(&report), (1, 0, Vec::new()));
+    assert!(report.labels_failed_wallet_names.is_empty());
+    assert!(seed.is_held_by(&watch_only.id));
+
+    let local_labels =
+        LabelManager::try_new(watch_only.id.clone()).unwrap().export().await.unwrap();
+    let uploaded_labels = active_record_labels(&watch_only.id).await;
+    for labels in [&local_labels, &uploaded_labels] {
+        assert!(labels.contains("only in the current backup"), "missing current label: {labels}");
+        assert!(labels.contains("only in the seed backup"), "missing seed label: {labels}");
+        assert!(labels.contains("edited on this device"), "local edit replaced: {labels}");
+        assert!(!labels.contains("older"), "an older copy replaced a local edit: {labels}");
+    }
 }

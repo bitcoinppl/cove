@@ -282,10 +282,28 @@ impl LabelsTable {
     // MARK: INSERT
 
     pub fn insert_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
+        self.insert_imported_labels_where(parsed, |_| Ok(true))
+    }
+
+    /// Imports only the labels for items this wallet has no record of, so a label or output
+    /// lock set on this device is never replaced by another copy's
+    pub fn insert_missing_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
+        self.insert_imported_labels_where(parsed, |label| Ok(!self.has_record_for(label)?))
+    }
+
+    fn insert_imported_labels_where(
+        &self,
+        parsed: ParsedLabels,
+        should_import: impl Fn(&Label) -> Result<bool, Error>,
+    ) -> Result<(), Error> {
         let timestamps = Timestamps::now();
         let mut records_to_insert = Vec::new();
 
         for label in parsed.labels.into_vec() {
+            if !should_import(&label)? {
+                continue;
+            }
+
             match self.prepare_imported_label(label)? {
                 ImportedLabelAction::Insert(label) => {
                     records_to_insert.push(Record::with_timestamps(label, timestamps));
@@ -295,6 +313,23 @@ impl LabelsTable {
         }
 
         self.insert_records(records_to_insert)
+    }
+
+    /// Whether this wallet holds a record for the item `label` describes; a label type this
+    /// table never stores counts as held, so it is never imported
+    fn has_record_for(&self, label: &Label) -> Result<bool, Error> {
+        let held = match label {
+            Label::Transaction(txn) => self.get_txn_label_record(txn.ref_)?.is_some(),
+            Label::Address(address) => self.get_address_record(&address.ref_)?.is_some(),
+            Label::Output(output) => self.get_output_record(output.ref_)?.is_some(),
+            Label::Input(input) => {
+                let table = self.read_table(INPUT_TABLE)?;
+                table.get(OutPointKey::from(&input.ref_))?.is_some()
+            }
+            _ => true,
+        };
+
+        Ok(held)
     }
 
     fn prepare_imported_label(&self, label: Label) -> Result<ImportedLabelAction, Error> {
@@ -790,6 +825,49 @@ mod tests {
 
         assert_eq!(record.item.label, Some("renamed".to_string()));
         assert_eq!(record.item.spendable, Some(false));
+    }
+
+    #[test]
+    fn missing_only_import_keeps_local_labels_and_locks() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let txid = "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290";
+        let new_txid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let existing = format!(
+            "{}\n{}",
+            r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","spendable":false}"#,
+            format_args!(r#"{{"type":"tx","ref":"{txid}","label":"edited here"}}"#),
+        );
+        let imported = [
+            r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"older","spendable":true}"#.to_string(),
+            format!(r#"{{"type":"tx","ref":"{txid}","label":"older"}}"#),
+            format!(r#"{{"type":"tx","ref":"{new_txid}","label":"only in the backup"}}"#),
+        ]
+        .join("\n");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(&existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
+        db.insert_missing_imported_labels(
+            Labels::try_from_str_with_metadata(&imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to insert imported labels");
+
+        let output = db.get_output_record(outpoint).unwrap().expect("missing output record");
+        assert_eq!((output.item.label, output.item.spendable), (None, Some(false)));
+
+        let label_of = |txid: &str| {
+            let txid: bitcoin::Txid = txid.parse().unwrap();
+            db.get_txn_label_record(txid).unwrap().and_then(|record| record.item.label)
+        };
+        assert_eq!(label_of(txid).as_deref(), Some("edited here"));
+        assert_eq!(label_of(new_txid).as_deref(), Some("only in the backup"));
     }
 
     #[test]

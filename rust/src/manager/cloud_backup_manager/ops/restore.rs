@@ -7,16 +7,18 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::blocking_cloud_error;
+use crate::backup::import::LabelRestoreWarning;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, WalletBackupLookup, WalletBackupReader,
-    WalletRestoreOutcome, WalletRestoreSession,
+    WalletRestoreOutcome, WalletRestoreSession, add_missing_labels,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
     current_namespace_wallet_record_ids, is_provider_wide_interruption,
 };
+use crate::wallet::metadata::WalletMetadata;
 use crate::wallet_identity::LocalWalletCoverage;
 
 impl RustCloudBackupManager {
@@ -157,10 +159,36 @@ impl RustCloudBackupManager {
                     }
 
                     // the upgraded wallet uploads with this batch, replacing any copy restored
-                    // earlier in it, which still has the watch-only metadata; the source stays,
-                    // since adding the secret imported none of its labels
-                    Ok(WalletRestoreOutcome::SecretAdded { wallet: upgraded }) => {
+                    // earlier in it, which still has the watch-only metadata, and replacing the
+                    // current backup's record under its id, so that record's labels are added to
+                    // it first; the source stays, since labels it shares with the wallet keep the
+                    // wallet's version
+                    Ok(WalletRestoreOutcome::SecretAdded { wallet: upgraded, labels_warning }) => {
                         report.wallets_restored += 1;
+                        let current_labels_warning =
+                            match add_current_record_labels(current_reader.as_ref(), &upgraded)
+                                .await
+                            {
+                                Ok(warning) => warning,
+                                Err(error) if is_provider_wide_interruption(&error) => {
+                                    return Err(blocking_cloud_error(
+                                        BlockingCloudStep::RecoverOtherBackups,
+                                        error,
+                                    ));
+                                }
+                                Err(error) => Some(LabelRestoreWarning {
+                                    wallet_name: upgraded.name.clone(),
+                                    error: error.to_string(),
+                                }),
+                            };
+
+                        if labels_warning.is_some() || current_labels_warning.is_some() {
+                            report.labels_failed_wallet_names.push(upgraded.name.clone());
+                            report
+                                .labels_failed_errors
+                                .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
+                        }
+
                         restored_wallets.retain(|restored| restored.id != upgraded.id);
                         restored_wallets.push(*upgraded);
                     }
@@ -243,6 +271,24 @@ fn current_namespace_reader(
             Zeroizing::new(master_key.critical_data_key()),
         )
     }))
+}
+
+/// Adds the labels of the current backup's record under `wallet`'s id that the wallet has none
+/// for, since the wallet's upload replaces that record with its own labels
+///
+/// Without the current namespace's master key nothing is read, and the upload then has no key to
+/// write with either
+async fn add_current_record_labels(
+    current_reader: Option<&WalletBackupReader>,
+    wallet: &WalletMetadata,
+) -> Result<Option<LabelRestoreWarning>, CloudBackupError> {
+    let Some(current_reader) = current_reader else { return Ok(None) };
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    let WalletBackupLookup::Found(current) = current_reader.lookup_entry(&record_id).await? else {
+        return Ok(None);
+    };
+
+    Ok(add_missing_labels(&current, wallet))
 }
 
 /// Whether the current backup's record under `record_id` holds everything `source` holds: its

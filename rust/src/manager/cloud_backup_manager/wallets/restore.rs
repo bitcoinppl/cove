@@ -297,8 +297,12 @@ pub(crate) enum WalletRestoreOutcome {
     },
     /// A local wallet matched the backup without its secret and now holds it, so its own backup
     /// is stale until it uploads again; `wallet` is its metadata after the upgrade
+    ///
+    /// The backup's labels were added where the wallet had none, and `labels_warning` says when
+    /// that failed
     SecretAdded {
         wallet: Box<WalletMetadata>,
+        labels_warning: Option<LabelRestoreWarning>,
     },
     SkippedDuplicate,
 }
@@ -309,9 +313,13 @@ pub(crate) enum CloudOnlyRestoreOutcome {
     /// The backup was restored as a new local wallet, under the backup's own wallet id or, when
     /// local data held that id, under a new one
     Restored { wallet: CloudRestoredWallet, labels_warning: Option<LabelRestoreWarning> },
-    /// The local wallet `wallet`, with the backup's identity, now holds its secret as well;
-    /// `wallet` is its metadata after the upgrade
-    SecretAdded { wallet: Box<WalletMetadata>, covered_by: CoveringWallets },
+    /// The local wallet `wallet`, with the backup's identity, now holds its secret as well, and
+    /// the backup's labels where it had none; `wallet` is its metadata after the upgrade
+    SecretAdded {
+        wallet: Box<WalletMetadata>,
+        covered_by: CoveringWallets,
+        labels_warning: Option<LabelRestoreWarning>,
+    },
     /// Local wallets already hold everything the backup can recover; `covered_by` names them
     AlreadyOnDevice { covered_by: CoveringWallets },
 }
@@ -380,8 +388,8 @@ impl WalletRestoreSession {
             CloudOnlyRestoreOutcome::Restored { wallet, labels_warning } => {
                 WalletRestoreOutcome::Restored { wallet, labels_warning }
             }
-            CloudOnlyRestoreOutcome::SecretAdded { wallet, .. } => {
-                WalletRestoreOutcome::SecretAdded { wallet }
+            CloudOnlyRestoreOutcome::SecretAdded { wallet, labels_warning, .. } => {
+                WalletRestoreOutcome::SecretAdded { wallet, labels_warning }
             }
             CloudOnlyRestoreOutcome::AlreadyOnDevice { .. } => {
                 WalletRestoreOutcome::SkippedDuplicate
@@ -390,6 +398,39 @@ impl WalletRestoreSession {
 
         Ok(outcome)
     }
+}
+
+/// Adds the labels `entry` holds for items the local wallet `wallet` has none for
+///
+/// A wallet that gained a secret uploads next, replacing any backup record under its id with
+/// its own labels, so labels only that record held would otherwise be lost; labels the wallet
+/// already has stay, since they may be newer edits made on this device
+///
+/// The secret is already added by then, so a failure here is a warning, never an error
+pub(crate) fn add_missing_labels(
+    entry: &WalletEntry,
+    wallet: &WalletMetadata,
+) -> Option<LabelRestoreWarning> {
+    let warning = match decode_cloud_labels_jsonl(entry) {
+        Ok(labels_jsonl) => {
+            restore_wallet_labels(
+                &wallet.id,
+                &wallet.name,
+                labels_jsonl.as_deref(),
+                LabelRestoreBehavior::AddMissingToExistingWallet,
+            )
+            .warning
+        }
+        Err(error) => {
+            Some(LabelRestoreWarning { wallet_name: wallet.name.clone(), error: error.to_string() })
+        }
+    };
+
+    if let Some(warning) = &warning {
+        warn!("Failed to add backup labels to upgraded wallet: {}", warning.error);
+    }
+
+    warning
 }
 
 /// What a cloud-only restore does when adding its secret to a matching local wallet failed
@@ -615,10 +656,14 @@ impl DownloadedWalletBackup {
         let covered_by = CoveringWallets::one(upgrade.target(), BackupRecoveryMaterial::Secret);
         let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
         match upgrade.apply(&database, keychain, source) {
-            Ok(upgraded) => Ok(Some(CloudOnlyRestoreOutcome::SecretAdded {
-                wallet: Box::new(upgraded),
-                covered_by,
-            })),
+            Ok(upgraded) => {
+                let labels_warning = add_missing_labels(&self.entry, &upgraded);
+                Ok(Some(CloudOnlyRestoreOutcome::SecretAdded {
+                    wallet: Box::new(upgraded),
+                    covered_by,
+                    labels_warning,
+                }))
+            }
             // the local wallet gained a readable secret after coverage was read
             Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
                 info!("Cloud-only wallet secret was added locally meanwhile");
