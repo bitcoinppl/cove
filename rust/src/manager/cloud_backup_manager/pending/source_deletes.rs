@@ -148,10 +148,7 @@ impl PendingSourceDeletes<'_> {
         }
 
         for record_id in &required_record_ids {
-            match cloud
-                .is_written_backup_uploaded(entry.active_namespace_id.clone(), record_id.clone())
-                .await
-            {
+            match Self::provider_upload(cloud, &entry.active_namespace_id, record_id).await {
                 Ok(CloudBackupUploadStatus::Uploaded) => {}
                 Ok(CloudBackupUploadStatus::Pending | CloudBackupUploadStatus::NotFound) => {
                     info!(
@@ -226,6 +223,26 @@ impl PendingSourceDeletes<'_> {
                 SourceDeleteStep::Pending
             }
         }
+    }
+
+    /// The provider state of `record_id` in `namespace`, asked first of the copy this app writes
+    ///
+    /// An uploaded legacy copy would vouch for a new upload still staged at the written location,
+    /// so the written copy decides whenever it exists. A record with none there, such as a master
+    /// key wrapper an older build or another device wrote, is judged by its legacy copy, or the
+    /// source would wait on it forever
+    async fn provider_upload(
+        cloud: &CloudStorageClient,
+        namespace: &str,
+        record_id: &str,
+    ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
+        let written =
+            cloud.is_written_backup_uploaded(namespace.to_owned(), record_id.to_owned()).await?;
+        if written != CloudBackupUploadStatus::NotFound {
+            return Ok(written);
+        }
+
+        cloud.is_backup_uploaded(namespace.to_owned(), record_id.to_owned()).await
     }
 
     /// Whether this device's upload of `record_id` to the active namespace is confirmed

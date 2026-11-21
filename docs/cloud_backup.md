@@ -1074,7 +1074,8 @@ blocked on authorization. For each entry:
   reports a record uploaded once any of its copies is, and an uploaded legacy
   copy would vouch for a new one still staged on this device. A record with no
   copy at that location, such as a master key wrapper an older build wrote, is
-  judged by its legacy copy. The pending upload verifier asks the same way. Anything else leaves the entry for a later pass,
+  judged by its legacy copy. The pending upload verifier asks only about the
+  written location, since it checks uploads this build made there. Anything else leaves the entry for a later pass,
   and an authorization error ends the settle for that pass.
 - The source is listed again. A record the proof didn't cover, such as a wallet
   another device still using the source added while the delete waited, drops

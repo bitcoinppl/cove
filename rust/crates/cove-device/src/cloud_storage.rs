@@ -350,12 +350,10 @@ impl CloudStorageClient {
         self.0.0.is_backup_uploaded(namespace, record_id, upload_locations, self.1).await
     }
 
-    /// The provider state of the copy this app writes for `record_id`, falling back to a legacy
-    /// copy only when the written location holds none
+    /// The provider state of the copy this app writes for `record_id`, ignoring a legacy copy
     ///
     /// The provider reports a record uploaded once any of its copies is, so an uploaded legacy
-    /// copy would vouch for a new upload still staged on this device. A record with no copy at
-    /// the written location, such as one an older build wrote, is judged by its legacy copy
+    /// copy would vouch for a new upload still staged on this device
     pub async fn is_written_backup_uploaded(
         &self,
         namespace: String,
@@ -365,18 +363,8 @@ impl CloudStorageClient {
 
         let upload_location =
             locations(vec![remote_layout::upload_location_for_record_id(&record_id)]);
-        let written = self
-            .0
-            .0
-            .is_backup_uploaded(namespace.clone(), record_id.clone(), upload_location, self.1)
-            .await?;
 
-        match written {
-            CloudBackupUploadStatus::NotFound => {
-                self.is_backup_uploaded(namespace, record_id).await
-            }
-            written => Ok(written),
-        }
+        self.0.0.is_backup_uploaded(namespace, record_id, upload_location, self.1).await
     }
 
     pub async fn overall_sync_health(&self) -> CloudSyncHealth {
@@ -711,19 +699,6 @@ mod tests {
 
         assert!(matches!(any_copy, CloudBackupUploadStatus::Uploaded));
         assert!(matches!(written_copy, CloudBackupUploadStatus::Pending));
-    }
-
-    #[test]
-    fn written_backup_upload_uses_the_legacy_copy_when_none_was_written() {
-        let cloud = cloud_with_storage(test_storage(CloudAccessPolicy::Silent, Vec::new()));
-        let client = cloud.client(CloudAccessPolicy::Silent);
-        let record_id = cove_cspp::backup_data::wallet_record_id("wallet-from-an-older-build");
-
-        let status =
-            block_on_ready(client.is_written_backup_uploaded(VALID_NAMESPACE.into(), record_id))
-                .expect("upload state");
-
-        assert!(matches!(status, CloudBackupUploadStatus::Uploaded));
     }
 
     #[test]
