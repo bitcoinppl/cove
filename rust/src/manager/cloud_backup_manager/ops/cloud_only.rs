@@ -304,19 +304,31 @@ impl RustCloudBackupManager {
     }
 
     /// Restores one downloaded backup in a batch's `session`, queueing the upload of a local
-    /// wallet the restore added a secret to as soon as that commits
+    /// wallet the restore added a secret to, or restored under a new wallet id, as soon as that
+    /// commits
     ///
-    /// The upgraded wallet's own backup lacks the secret until it uploads, so a batch that is
+    /// Neither wallet's own backup holds the secret until it uploads, so a batch that is
     /// cancelled, returns early or fails its own upload still leaves it queued, and a retry that
-    /// now finds the wallet covered doesn't leave the device's backup of it watch-only
+    /// now finds the wallet covered doesn't leave the device without a backup of it
     pub(crate) fn restore_in_session(
         &self,
         session: &mut WalletRestoreSession,
         wallet: &DownloadedWalletBackup,
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         let result = session.restore_downloaded(wallet);
-        if let Ok(WalletRestoreOutcome::SecretAdded { wallet }) = &result {
-            self.handle_restored_wallet_needs_backup(wallet.id.clone());
+        match &result {
+            Ok(WalletRestoreOutcome::SecretAdded { wallet }) => {
+                self.handle_restored_wallet_needs_backup(wallet.id.clone());
+            }
+
+            // the backup's record describes the old wallet id, so nothing else uploads this
+            // wallet if the run's own upload fails
+            Ok(WalletRestoreOutcome::Restored { wallet, .. })
+                if wallet.placement() == CloudRestorePlacement::NewWalletId =>
+            {
+                self.handle_restored_wallet_needs_backup(wallet.metadata().id.clone());
+            }
+            _ => {}
         }
 
         result

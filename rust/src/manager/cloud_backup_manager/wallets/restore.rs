@@ -359,6 +359,13 @@ impl WalletRestoreSession {
         Ok(outcome)
     }
 
+    /// How much of `wallet` the local wallets, and those this session restored, already hold
+    pub(crate) fn coverage_of(&self, wallet: &DownloadedWalletBackup) -> LocalWalletCoverage {
+        let (identity_key, _) = wallet.identity_key();
+
+        self.0.coverage(&identity_key, wallet.recovery_material())
+    }
+
     /// Restores a secret backup whose identity a local wallet without that secret shares, the
     /// way a cloud-only restore does: it adds the secret to the one local wallet with the
     /// backup's exact identity, or restores the backup as its own wallet

@@ -634,3 +634,161 @@ async fn enable_merge_adds_a_backed_up_seed_to_a_local_watch_only_wallet() {
     assert!(seed.is_held_by(&watch_only.id));
     assert!(active_record_holds_seed(&watch_only.id).await);
 }
+
+/// Rewrites `bytes`, a record encrypted with `master_key`, through `edit`
+fn edit_record(
+    bytes: &[u8],
+    master_key: &cove_cspp::master_key::MasterKey,
+    edit: impl FnOnce(&mut cove_cspp::backup_data::WalletEntry),
+) -> Vec<u8> {
+    let reader = WalletBackupReader::new(
+        CloudStorage::global_explicit_client(),
+        String::new(),
+        zeroize::Zeroizing::new(master_key.critical_data_key()),
+    );
+    let mut entry = reader.decrypt_entry(&serde_json::from_slice(bytes).unwrap()).unwrap();
+    edit(&mut entry);
+
+    encrypted_wallet_backup_bytes_for_entry(&entry, master_key, 1)
+}
+
+/// This seed's hot backup under a new wallet id, with no master fingerprint in its metadata
+async fn fingerprintless_seed_backup(
+    seed: &Seed,
+    master_key: &cove_cspp::master_key::MasterKey,
+) -> (WalletId, Vec<u8>) {
+    let mut metadata = seed.wallet(WalletType::Hot);
+    assert!(Keychain::global().delete_wallet_items(&metadata.id));
+    metadata.master_fingerprint = None;
+
+    let bytes = seed.cloud_backup_under_id(&metadata.id, master_key).await;
+    let bytes = edit_record(&bytes, master_key, |entry| {
+        entry.metadata = serde_json::to_value(&metadata).unwrap();
+    });
+
+    (metadata.id, bytes)
+}
+
+// adding the seed to the local wallet imported none of the source's labels, so a later Recover,
+// which finds the seed local and a record under the same id in the current backup, still keeps
+// the source until the current backup holds those labels
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_a_seed_source_whose_labels_the_current_backup_lacks() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(51);
+
+    let watch_only = seed.local_wallet(WalletType::Cold);
+    let watch_only_bytes =
+        encrypted_wallet_backup_bytes(&watch_only, &active_master_key(), "watch-only", 1).await;
+    list_backups(globals, &active_namespace(), vec![(&watch_only.id, watch_only_bytes)]);
+    let seed_bytes = seed.cloud_backup_under_id(&watch_only.id, &other_master_key).await;
+    let seed_bytes = edit_record(&seed_bytes, &other_master_key, |entry| {
+        entry.labels_count = 1;
+        entry.labels_hash = Some("labels-only-the-source-holds".into());
+    });
+    list_backups(globals, &other, vec![(&watch_only.id, seed_bytes)]);
+
+    recover_other_backups_for_test(&manager).await.unwrap();
+    assert!(seed.is_held_by(&watch_only.id));
+    assert!(active_record_holds_seed(&watch_only.id).await);
+
+    offer_other_passkey(globals);
+    let _ = recover_other_backups_for_test(&manager).await;
+
+    assert!(globals.cloud.has_namespace(&other));
+}
+
+// the current backup's copy is the newer one this device uploads over, so an older source copy
+// of a wallet that is not on this device is never restored and uploaded over it
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_never_uploads_an_older_copy_over_the_current_one() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(52);
+
+    let (current, current_bytes) = seed.cloud_backup(WalletType::Hot, &active_master_key()).await;
+    list_backups(globals, &active_namespace(), vec![(&current.id, current_bytes.clone())]);
+    let older_bytes = seed.cloud_backup_under_id(&current.id, &other_master_key).await;
+    list_backups(globals, &other, vec![(&current.id, older_bytes)]);
+
+    let _ = recover_other_backups_for_test(&manager).await;
+
+    let record_id = wallet_record_id(current.id.as_ref());
+    assert_eq!(
+        globals.cloud.wallet_backup_bytes(&active_namespace(), &record_id),
+        Some(current_bytes)
+    );
+    assert!(local_wallets().is_empty(), "nothing should be restored from the older copy");
+}
+
+// a restored seed wallet keeps the fingerprint of its seed even when its record had none, so a
+// later run finds the seed local instead of restoring it again under a new wallet id
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_restores_a_fingerprintless_seed_backup_only_once() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let seed = Seed::new(53);
+
+    let first_master_key = other_namespace(globals);
+    let (first_id, first_bytes) = fingerprintless_seed_backup(&seed, &first_master_key).await;
+    list_backups(globals, &first_master_key.namespace_id(), vec![(&first_id, first_bytes)]);
+    recover_other_backups_for_test(&manager).await.unwrap();
+    assert_eq!(local_wallets().len(), 1);
+
+    let second_master_key = other_namespace(globals);
+    let (second_id, second_bytes) = fingerprintless_seed_backup(&seed, &second_master_key).await;
+    list_backups(globals, &second_master_key.namespace_id(), vec![(&second_id, second_bytes)]);
+    let _ = recover_other_backups_for_test(&manager).await;
+
+    let [restored] = local_wallets()
+        .try_into()
+        .unwrap_or_else(|wallets| panic!("expected one wallet for the seed, found {wallets:?}"));
+    assert!(seed.is_held_by(&restored.id));
+}
+
+// a wallet restored under a new wallet id has no backup until it uploads, and a retry finds its
+// seed local, so a failed batch upload still leaves it queued
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_queues_a_seed_moved_to_a_new_id_when_its_upload_fails() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(54);
+
+    let keyless = local_wallet_with_lost_key(&seed);
+    let backup_bytes = seed.cloud_backup_under_id(&keyless.id, &other_master_key).await;
+    list_backups(globals, &other, vec![(&keyless.id, backup_bytes)]);
+    globals.cloud.fail_wallet_backup_upload("upload failed");
+
+    assert!(recover_other_backups_for_test(&manager).await.is_err());
+
+    let [restored] = wallets_besides(&[&keyless.id]).try_into().unwrap_or_else(|wallets| {
+        panic!("expected the seed restored under a new id, found {wallets:?}")
+    });
+    assert!(seed.is_held_by(&restored.id));
+    let row = Database::global()
+        .cloud_blob_sync_states
+        .get(&wallet_record_id(restored.id.as_ref()))
+        .unwrap();
+    assert!(
+        row.as_ref().is_some_and(PersistedCloudBlobSyncState::is_dirty),
+        "the restored wallet should stay queued for upload, found {row:?}"
+    );
+    assert!(globals.cloud.has_namespace(&other));
+}

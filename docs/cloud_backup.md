@@ -976,7 +976,9 @@ the local wallets as they are at that moment:
   watched under two address types), or a hardware wallet.
 
 A hot backup whose metadata has no master fingerprint keys on the fingerprint of
-its secret, so a second copy of a seed already on the device is still skipped.
+its secret, and restores with that fingerprint in its metadata, so a second copy
+of a seed already on the device is still skipped, in the same run or a later
+one.
 After each restore the session records what it actually wrote: a record whose
 metadata says hot but that holds no secret restores watch-only and never makes a
 later seed backup of that wallet look covered. When the two backups list seed
@@ -984,8 +986,9 @@ first, the watch-only copy restores as a separate watch-only wallet beside the
 hot one; the seed is on the device either way.
 
 A wallet that gained its seed this way has a cloud backup without it until it
-uploads again, so every path queues its upload as soon as the upgrade commits
-(`restore_in_session`). A run that is cancelled, returns early or fails its own
+uploads again, and a seed restored under a new wallet ID has no backup of its
+own until it uploads, so every path queues the upload of either as soon as the
+restore commits (`restore_in_session`). A run that is cancelled, returns early or fails its own
 upload still leaves the wallet queued, and a retry that now finds it covered
 doesn't leave the device's own backup watch-only.
 
@@ -1000,10 +1003,14 @@ doesn't leave the device's own backup watch-only.
 
 Recover Other Backups reads every record in a source namespace, including one
 whose record ID the active backup also holds: the active copy can be watch-only
-while the source holds the seed. A source record counts as recovered only when
-its wallet was restored and the run's upload finished, or when the session found
-everything it holds already on this device and the active backup holds a record
-under the same ID. Only then is the source namespace deleted.
+while the source holds the seed. The active copy is the one this device's
+wallet uploads over, so a source record under the same ID goes through the
+session only when a local wallet with its identity lacks its seed. Otherwise it
+is not restored, since its upload could replace a newer active copy, and it
+counts as recovered only when the active record holds the same key material and,
+when the source has labels, the same labels. Any other source record counts as
+recovered only when its wallet was restored and the run's upload finished. Only
+when every record counts is the source namespace deleted.
 
 The Other Backups summary, which decides whether Recover is offered, still
 counts only records whose ID no local wallet uses, since it reads no record

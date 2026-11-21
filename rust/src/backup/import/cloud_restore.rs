@@ -514,6 +514,16 @@ fn restore_cloud_hot_wallet(
 ) -> Result<CloudRestoredWallet, CloudRestoreError> {
     let prepared = PreparedHotWallet::from_secret(secret, metadata);
 
+    // a record without a master fingerprint restores with its secret's, so a later restore finds
+    // this wallet by its seed, not only by its wallet id, and doesn't restore the seed again
+    let mut metadata = metadata.clone();
+    if metadata.master_fingerprint.is_none() {
+        let fingerprint =
+            crate::wallet::fingerprint::Fingerprint::from(prepared.xpub.fingerprint());
+        metadata.master_fingerprint = Some(std::sync::Arc::new(fingerprint));
+    }
+    let metadata = &metadata;
+
     match VerifiedCloudRestorePlan::<HotWalletWrites>::prepare(metadata, prepared)? {
         LocalFit::Adopt(plan) => plan.execute(metadata),
         LocalFit::Unadoptable(prepared) => {
