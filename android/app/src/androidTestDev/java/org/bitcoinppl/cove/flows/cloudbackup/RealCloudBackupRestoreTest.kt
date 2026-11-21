@@ -267,10 +267,7 @@ private class GoogleSignInRobot(
         otherDevice.click()
         device.waitForIdle()
 
-        val pinField =
-            device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000)
-                ?: error("No screen lock field\n${device.dumpWindowHierarchy()}")
-        pinField.text = account.screenLockPin
+        enterOtherDeviceScreenLock()
         if (!device.clickGoogleButton("Submit")) device.pressEnter()
 
         // Google Password Manager rejects a wrong lock on the same screen, and only a few tries
@@ -281,8 +278,30 @@ private class GoogleSignInRobot(
         }
     }
 
+    private fun enterOtherDeviceScreenLock() {
+        repeat(SCREEN_LOCK_FIELD_ATTEMPTS) {
+            val pinField =
+                device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000)
+                    ?: error("No screen lock field\n${device.dumpWindowHierarchy()}")
+
+            // tapped first, like the email and password, since the web page drops text set on a
+            // field that has no input focus
+            try {
+                device.setTextQuietly(pinField, account.screenLockPin)
+                return
+            } catch (_: StaleObjectException) {
+                // the page redraws its field while it finishes loading, so the field is found again
+                Log.i(TAG, "Google sign-in: the screen lock field changed, finding it again")
+                device.waitForIdle()
+            }
+        }
+
+        error("The screen lock field kept changing\n${device.dumpWindowHierarchy()}")
+    }
+
     private companion object {
         const val SIGN_IN_TIMEOUT_MILLIS = 5 * 60_000L
+        const val SCREEN_LOCK_FIELD_ATTEMPTS = 5
         const val FLOW_CLOSED_MILLIS = 10_000L
     }
 }
