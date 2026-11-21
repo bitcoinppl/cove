@@ -12,6 +12,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Arc,
     thread,
     time::Duration,
 };
@@ -25,6 +26,7 @@ use crate::{
     android::{self, AndroidBuildTargets, BuildProfile},
     android_ci_emulator::{self, adb, AvdSpec, UserData},
     common::{print_info, print_success, print_warning},
+    shutdown::{self, Registration, Stop},
 };
 
 const AVD: AvdSpec = AvdSpec {
@@ -90,14 +92,15 @@ pub fn run(options: E2eOptions) -> Result<()> {
     let emulator = android_ci_emulator::boot(&AVD, options.port, user_data)?;
     let serial = emulator.serial().to_owned();
 
-    let result = prepare_emulator(&serial)
-        .and_then(|()| push_account(&serial, &account))
-        .and_then(|()| run_test(&serial));
+    let result = {
+        // registered after the emulator, so a signal, which stops what the run started newest
+        // first, deletes the file before it stops the emulator
+        let _account_file = DeviceAccountFile::register(&serial);
 
-    // the test deletes the account as soon as it reads it, so this only matters when it never ran
-    if let Err(error) = adb(&serial, &["shell", "rm", "-f", DEVICE_ACCOUNT_FILE]) {
-        print_warning(&format!("Could not delete {DEVICE_ACCOUNT_FILE} on {serial}: {error}"));
-    }
+        prepare_emulator(&serial)
+            .and_then(|()| push_account(&serial, &account))
+            .and_then(|()| run_test(&serial))
+    };
 
     if options.keep_emulator {
         emulator.detach();
@@ -105,6 +108,42 @@ pub fn run(options: E2eOptions) -> Result<()> {
     }
 
     result
+}
+
+/// Deletes the account file from the emulator when dropped, or when a signal ends the run first
+///
+/// Both writable modes keep the emulator's disk, so a file left there outlives the run. The test
+/// deletes it as soon as it reads it, so this matters only when the test never got that far
+struct DeviceAccountFile {
+    file: Arc<AccountFileOnDevice>,
+    _registration: Registration,
+}
+
+impl DeviceAccountFile {
+    fn register(serial: &str) -> Self {
+        let file = Arc::new(AccountFileOnDevice(serial.to_owned()));
+        Self { _registration: shutdown::register(file.clone()), file }
+    }
+}
+
+impl Drop for DeviceAccountFile {
+    fn drop(&mut self) {
+        self.file.stop();
+    }
+}
+
+/// The account file on the emulator with this adb serial
+struct AccountFileOnDevice(String);
+
+impl Stop for AccountFileOnDevice {
+    // rm -f, so the run and the signal thread can both delete it
+    fn stop(&self) {
+        let serial = &self.0;
+
+        if let Err(error) = adb(serial, &["shell", "rm", "-f", DEVICE_ACCOUNT_FILE]) {
+            print_warning(&format!("Could not delete {DEVICE_ACCOUNT_FILE} on {serial}: {error}"));
+        }
+    }
 }
 
 /// Enlarges the log buffer and sets the screen lock the test needs
