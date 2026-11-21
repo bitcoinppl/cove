@@ -21,14 +21,14 @@ use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::error::CloudBackupInternalError;
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
-use crate::wallet::metadata::WalletId;
+use crate::wallet::metadata::WalletMetadata;
 use crate::wallet::secret_upgrade::{
-    ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeSource,
+    ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeScope, SecretUpgradeSource,
 };
 use crate::wallet_identity::{
-    BackupRecoveryMaterial, CoveringWallets, ExistingWalletIdentitySet, LocalWalletIdentities,
-    NamedWalletCoverage, WalletIdentityKey, fallback_identity_key_for_backup,
-    identity_key_for_backup,
+    BackupRecoveryMaterial, CoveringWallets, ExistingWalletIdentitySet, LocalWalletCoverage,
+    LocalWalletIdentities, NamedWalletCoverage, WalletIdentityKey,
+    fallback_identity_key_for_backup, identity_key_for_backup, public_identity_key_for_backup,
 };
 
 pub(crate) enum WalletBackupLookup<T> {
@@ -291,7 +291,15 @@ pub(crate) struct WalletRestoreSession(ExistingWalletIdentitySet);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletRestoreOutcome {
-    Restored { wallet: CloudRestoredWallet, labels_warning: Option<LabelRestoreWarning> },
+    Restored {
+        wallet: CloudRestoredWallet,
+        labels_warning: Option<LabelRestoreWarning>,
+    },
+    /// A local wallet matched the backup without its secret and now holds it, so its own backup
+    /// is stale until it uploads again; `wallet` is its metadata after the upgrade
+    SecretAdded {
+        wallet: Box<WalletMetadata>,
+    },
     SkippedDuplicate,
 }
 
@@ -301,8 +309,9 @@ pub(crate) enum CloudOnlyRestoreOutcome {
     /// The backup was restored as a new local wallet, under the backup's own wallet id or, when
     /// local data held that id, under a new one
     Restored { wallet: CloudRestoredWallet, labels_warning: Option<LabelRestoreWarning> },
-    /// The local wallet `wallet_id`, with the backup's identity, now holds its secret as well
-    SecretAdded { wallet_id: WalletId, covered_by: CoveringWallets },
+    /// The local wallet `wallet`, with the backup's identity, now holds its secret as well;
+    /// `wallet` is its metadata after the upgrade
+    SecretAdded { wallet: Box<WalletMetadata>, covered_by: CoveringWallets },
     /// Local wallets already hold everything the backup can recover; `covered_by` names them
     AlreadyOnDevice { covered_by: CoveringWallets },
 }
@@ -312,39 +321,67 @@ impl WalletRestoreSession {
         Self(existing_identities)
     }
 
+    /// Restores a downloaded backup unless the local wallets, or ones this session restored,
+    /// already hold everything it can recover
+    ///
+    /// A seed backup is a duplicate only of a wallet that holds the seed. A watch-only or cold
+    /// wallet with the same fingerprint, such as one restored earlier in this session, gets the
+    /// seed added or the backup restores beside it, so the seed never stays only in the cloud
     pub(crate) fn restore_downloaded(
         &mut self,
         wallet: &DownloadedWalletBackup,
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        let duplicate_key = match wallet.duplicate_key() {
-            Ok(duplicate_key) => duplicate_key,
-            Err(error) => {
-                let fallback_key = wallet.fallback_duplicate_key();
-                if self.should_skip_duplicate_wallet(&fallback_key) {
-                    return Ok(WalletRestoreOutcome::SkippedDuplicate);
+        let (identity_key, identity_error) = wallet.identity_key();
+
+        let outcome = match self.0.coverage(&identity_key, wallet.recovery_material()) {
+            LocalWalletCoverage::Covered => {
+                info!("Skipping duplicate wallet during cloud restore");
+                return Ok(WalletRestoreOutcome::SkippedDuplicate);
+            }
+            LocalWalletCoverage::SecretMissing => {
+                info!("Cloud wallet matches a wallet without its secret, adding the secret");
+                Self::restore_missing_secret(wallet)?
+            }
+            LocalWalletCoverage::Absent => {
+                if let Some(error) = identity_error {
+                    return Err(error);
                 }
 
-                return Err(error);
+                let (wallet, labels_warning) = wallet.restore()?;
+                WalletRestoreOutcome::Restored { wallet, labels_warning }
             }
         };
 
-        if self.should_skip_duplicate_wallet(&duplicate_key) {
-            return Ok(WalletRestoreOutcome::SkippedDuplicate);
+        if let Some(restored_key) = wallet.restored_identity_key(&outcome) {
+            self.0.insert(restored_key);
         }
 
-        let (wallet, labels_warning) = wallet.restore()?;
-        self.0.insert(duplicate_key);
-
-        Ok(WalletRestoreOutcome::Restored { wallet, labels_warning })
+        Ok(outcome)
     }
 
-    fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
-        if self.0.contains(duplicate_key) {
-            info!("Skipping duplicate wallet during cloud restore");
-            true
-        } else {
-            false
-        }
+    /// Restores a secret backup whose identity a local wallet without that secret shares, the
+    /// way a cloud-only restore does: it adds the secret to the one local wallet with the
+    /// backup's exact identity, or restores the backup as its own wallet
+    ///
+    /// The local wallets are read here, after this session's earlier restores were written
+    fn restore_missing_secret(
+        wallet: &DownloadedWalletBackup,
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
+        let local_wallets = crate::wallet_identity::collect_local_wallet_identities()?;
+
+        let outcome = match wallet.restore_cloud_only(&local_wallets)? {
+            CloudOnlyRestoreOutcome::Restored { wallet, labels_warning } => {
+                WalletRestoreOutcome::Restored { wallet, labels_warning }
+            }
+            CloudOnlyRestoreOutcome::SecretAdded { wallet, .. } => {
+                WalletRestoreOutcome::SecretAdded { wallet }
+            }
+            CloudOnlyRestoreOutcome::AlreadyOnDevice { .. } => {
+                WalletRestoreOutcome::SkippedDuplicate
+            }
+        };
+
+        Ok(outcome)
     }
 }
 
@@ -433,11 +470,63 @@ impl DownloadedWalletBackup {
 
     /// The key a restore matches against local wallets, plus the error that forced the fallback
     /// key when the backup's own public identity could not be read
+    ///
+    /// A secret backup keys on the master fingerprint of its secret, which is what a local wallet
+    /// must hold to cover it, read from the secret when the record's metadata lacks it
     fn identity_key(&self) -> (WalletIdentityKey, Option<CloudBackupError>) {
+        if let Some(secret_key) = self.secret_identity_key() {
+            return (secret_key, None);
+        }
+
         match self.duplicate_key() {
             Ok(identity_key) => (identity_key, None),
             Err(error) => (self.fallback_duplicate_key(), Some(error)),
         }
+    }
+
+    /// The hot-fingerprint key of this backup's secret, or `None` for a public-only backup
+    fn secret_identity_key(&self) -> Option<WalletIdentityKey> {
+        use crate::wallet_secret::WalletSecretExt as _;
+
+        // a hot-typed record can hold no secret, and a secret is held whatever the type says
+        if self.recovery_material() != BackupRecoveryMaterial::Secret {
+            return None;
+        }
+
+        let metadata = &self.metadata;
+        let fingerprint = match metadata.master_fingerprint.as_deref().copied() {
+            Some(fingerprint) => fingerprint,
+
+            // an unparseable secret also fails its restore, which then reports the error
+            None => {
+                let secret = self.signing_secret().ok().flatten()?;
+                secret.xpub(metadata.network).fingerprint().into()
+            }
+        };
+
+        Some(WalletIdentityKey::HotFingerprint {
+            fingerprint,
+            network: metadata.network,
+            mode: metadata.wallet_mode,
+        })
+    }
+
+    /// The key of what a restore of this backup wrote, for the session to skip later copies of
+    ///
+    /// Only a restore that wrote the secret claims its hot fingerprint, so a public-only record
+    /// whose metadata says hot never makes a later seed backup of that wallet look covered
+    fn restored_identity_key(&self, outcome: &WalletRestoreOutcome) -> Option<WalletIdentityKey> {
+        match outcome {
+            WalletRestoreOutcome::SkippedDuplicate => None,
+            WalletRestoreOutcome::SecretAdded { .. } => self.secret_identity_key(),
+            WalletRestoreOutcome::Restored { .. } => {
+                Some(self.secret_identity_key().unwrap_or_else(|| self.public_identity_key()))
+            }
+        }
+    }
+
+    fn public_identity_key(&self) -> WalletIdentityKey {
+        public_identity_key_for_backup(&self.metadata, &self.public_backup_model())
     }
 
     fn recovery_material(&self) -> BackupRecoveryMaterial {
@@ -491,12 +580,14 @@ impl DownloadedWalletBackup {
         let database = Database::global();
         let keychain = Keychain::global();
         let metadata = &self.metadata;
+        let scope = SecretUpgradeScope::CloudBackup { address_type: metadata.address_type };
         let upgrade = match ExistingWalletSecretUpgrade::find(
             &database,
             keychain,
             &secret,
             metadata.network,
             metadata.wallet_mode,
+            scope,
         ) {
             Ok(Some(upgrade)) => upgrade,
             Ok(None) => {
@@ -518,7 +609,7 @@ impl DownloadedWalletBackup {
         let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
         match upgrade.apply(&database, keychain, source) {
             Ok(upgraded) => Ok(Some(CloudOnlyRestoreOutcome::SecretAdded {
-                wallet_id: upgraded.id,
+                wallet: Box::new(upgraded),
                 covered_by,
             })),
             // the local wallet gained a readable secret after coverage was read
@@ -539,16 +630,19 @@ impl DownloadedWalletBackup {
         }
     }
 
-    fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
-        let backup_model = WalletBackup {
+    /// The backup's public keys alone, which is all its identity keys read
+    fn public_backup_model(&self) -> WalletBackup {
+        WalletBackup {
             metadata: self.entry.metadata.clone(),
             secret: WalletSecret::None,
             descriptors: descriptor_pair_from_cloud(&self.entry.descriptors),
             xpub: self.entry.xpub.clone(),
             labels_jsonl: None,
-        };
+        }
+    }
 
-        identity_key_for_backup(&self.metadata, &backup_model).map_err(|source| {
+    fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
+        identity_key_for_backup(&self.metadata, &self.public_backup_model()).map_err(|source| {
             CloudBackupError::internal_context("cloud wallet duplicate identity", source)
         })
     }
@@ -730,7 +824,10 @@ mod tests {
         let session = WalletRestoreSession::new(existing_identities);
         let incoming_key = incoming_wallet.duplicate_key().unwrap();
 
-        assert!(!session.should_skip_duplicate_wallet(&incoming_key));
+        assert_eq!(
+            session.0.coverage(&incoming_key, BackupRecoveryMaterial::PublicOnly),
+            LocalWalletCoverage::Absent
+        );
     }
 
     #[test]

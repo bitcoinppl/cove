@@ -48,6 +48,11 @@ const MARKER_EXTENSION: &str = "json";
 pub(crate) struct ValidatedRestoreWalletId(WalletId);
 
 impl ValidatedRestoreWalletId {
+    /// Whether another restore holds this wallet id's durable lock right now
+    pub(crate) fn has_running_restore(&self) -> bool {
+        RestoreFileLock::is_held(self)
+    }
+
     pub(crate) fn validate(id: &WalletId) -> Result<Self, BackupError> {
         let value = id.as_str();
 
@@ -371,17 +376,41 @@ impl From<WalletKeychainReadError> for BackupError {
 pub(crate) enum SnapshotCaptureError {
     /// A keychain item the wallet id owns could not be read
     ///
-    /// `storage_occupied` says whether a metadata row, BDK store or wallet data already
-    /// reserves the wallet id, which the snapshot checks before reading the keychain
+    /// `occupancy` says what in local storage already reserves the wallet id, which the
+    /// snapshot checks before reading the keychain
     #[error("{error}")]
     Keychain {
         #[source]
         error: WalletKeychainReadError,
-        storage_occupied: bool,
+        occupancy: StorageOccupancy,
     },
 
     #[error(transparent)]
     Backup(#[from] BackupError),
+}
+
+/// What in local storage, apart from keychain items, already reserves a wallet id
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StorageOccupancy {
+    Free,
+
+    /// A wallet's metadata row, which a restore writes last, so once no restore holds the id's
+    /// lock a wallet lives under it
+    WalletMetadata,
+
+    /// BDK stores or wallet data with no metadata row, which a restore that is still running may
+    /// be writing
+    Artifacts,
+}
+
+impl StorageOccupancy {
+    fn new(metadata: bool, other_artifacts: bool) -> Self {
+        match (metadata, other_artifacts) {
+            (true, _) => Self::WalletMetadata,
+            (false, true) => Self::Artifacts,
+            (false, false) => Self::Free,
+        }
+    }
 }
 
 impl From<SnapshotCaptureError> for BackupError {
@@ -571,9 +600,10 @@ impl RestoreArtifactSnapshot {
 
         // the keychain is read last, so a failed read still reports whether storage reserves
         // the wallet id
-        let storage_occupied = metadata_present || !bdk_paths.is_empty() || wallet_data_occupied;
+        let occupancy =
+            StorageOccupancy::new(metadata_present, !bdk_paths.is_empty() || wallet_data_occupied);
         let keychain_items_read = WalletKeychainItems::read(id.as_wallet_id())
-            .map_err(|error| SnapshotCaptureError::Keychain { error, storage_occupied })?;
+            .map_err(|error| SnapshotCaptureError::Keychain { error, occupancy })?;
         let keychain_entries = keychain_items_read
             .fingerprints()
             .into_iter()
@@ -602,6 +632,14 @@ impl RestoreArtifactSnapshot {
             || self.keychain_items
             || !self.bdk_paths.is_empty()
             || self.wallet_data_occupied
+    }
+
+    /// What in local storage, apart from keychain items, reserves the wallet id
+    pub(crate) fn storage_occupancy(&self) -> StorageOccupancy {
+        StorageOccupancy::new(
+            self.metadata,
+            !self.bdk_paths.is_empty() || self.wallet_data_occupied,
+        )
     }
 
     pub(crate) fn has_markerless_conflict(&self) -> bool {

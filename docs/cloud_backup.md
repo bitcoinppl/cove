@@ -937,11 +937,79 @@ a non-active source, so that source namespace stays listed under Other Backups. 
 seed backup whose matching local wallet holds a secret that cannot be read also
 restores as its own wallet, rather than being added to that wallet.
 
+A wallet already saved on this device under the backup's ID, one with a metadata
+row, also moves a seed backup to a new wallet ID when the seed can't be added to
+it, such as a wallet whose key no longer decrypts or a TAPSIGNER wallet. That
+wallet's data stays exactly as it was. A public backup under the ID of a saved
+wallet still refuses the restore as occupied (`WalletIdOccupied`), since that
+wallet most likely already watches the same keys.
+
 Only a keychain the platform cannot read at all, such as while the device is
 locked, stops a restore (`CloudBackupError::LocalKeychainUnavailable`). It writes
-nothing, and a retry after unlocking can finish. Metadata rows, BDK stores and
-wallet data under the backup's ID still refuse the restore as occupied, since
-that error is shared with a restore lock another restore holds.
+nothing, and a retry after unlocking can finish. A metadata row while another
+restore holds the ID's restore lock, and BDK stores or wallet data with no
+metadata row, still refuse the restore as occupied, since a restore that is
+still running may be writing them.
+
+## Seed Backups and Weaker Local Copies
+
+Onboarding restore, Recover Other Backups and enable merge each read many
+backups through one `WalletRestoreSession`, which starts from the identities of
+the local wallets and adds each wallet it restores. A seed backup is skipped
+only when a local wallet provably holds the seed: a hot wallet with that master
+fingerprint whose secret is stored and decrypts. A watch-only, cold or hardware
+wallet with the same fingerprint, a hot wallet that lost its key, or a
+watch-only copy restored earlier in the same run never makes a seed backup look
+like a duplicate. A public backup is skipped when a local wallet has its public
+identity, as before.
+
+When a weaker local copy matches a seed backup, the session runs the same
+decision as Restore for one cloud-only record (`restore_cloud_only`), against
+the local wallets as they are at that moment:
+
+- The seed is added to the one local wallet the seed derives to, only when that
+  wallet has the backup's own public identity, under the backup's address type,
+  and is not a hardware wallet. Adding a seed marks a wallet hot and clears its
+  hardware metadata, so a TAPSIGNER wallet is never converted.
+- Anything else restores the backup as its own wallet: a match by fingerprint
+  only, a wallet of another address type, two wallets that each match (one seed
+  watched under two address types), or a hardware wallet.
+
+A hot backup whose metadata has no master fingerprint keys on the fingerprint of
+its secret, so a second copy of a seed already on the device is still skipped.
+After each restore the session records what it actually wrote: a record whose
+metadata says hot but that holds no secret restores watch-only and never makes a
+later seed backup of that wallet look covered. When the two backups list seed
+first, the watch-only copy restores as a separate watch-only wallet beside the
+hot one; the seed is on the device either way.
+
+A wallet that gained its seed this way has a cloud backup without it until it
+uploads again, so every path queues its upload as soon as the upgrade commits
+(`restore_in_session`). A run that is cancelled, returns early or fails its own
+upload still leaves the wallet queued, and a retry that now finds it covered
+doesn't leave the device's own backup watch-only.
+
+- Onboarding counts it as restored, and activating the restored backup also
+  marks every local wallet for upload.
+- Recover Other Backups counts it as restored and uploads it with the run's
+  restored wallets, replacing any copy restored earlier in that namespace, but
+  doesn't count the source record as recovered, since adding the seed imports
+  none of the record's labels. The source namespace stays.
+- Enable merge uploads every local wallet after the merge, and its cleanup keeps
+  a source whose record no longer matches the upgraded wallet's.
+
+Recover Other Backups reads every record in a source namespace, including one
+whose record ID the active backup also holds: the active copy can be watch-only
+while the source holds the seed. A source record counts as recovered only when
+its wallet was restored and the run's upload finished, or when the session found
+everything it holds already on this device and the active backup holds a record
+under the same ID. Only then is the source namespace deleted.
+
+The Other Backups summary, which decides whether Recover is offered, still
+counts only records whose ID no local wallet uses, since it reads no record
+before a passkey opens its namespace. A namespace whose only records share IDs
+with local wallets is not offered on its own, though a Recover started for
+another namespace reads it too.
 
 ## Write Lane
 

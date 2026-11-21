@@ -8,7 +8,8 @@ use zeroize::Zeroizing;
 use crate::backup::error::BackupError;
 use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::backup::recovery::{
-    RestoreArtifactSnapshot, SnapshotCaptureError, ValidatedRestoreWalletId, WalletKeychainItems,
+    RestoreArtifactSnapshot, SnapshotCaptureError, StorageOccupancy, ValidatedRestoreWalletId,
+    WalletKeychainItems,
 };
 use crate::wallet::metadata::{WalletId, WalletMetadata};
 use crate::wallet_identity::PublicWalletIdentity;
@@ -209,32 +210,90 @@ enum LocalWalletState {
     Unadoptable,
 }
 
+/// What local storage under the backup's wallet id leaves a restore free to do
+enum StorageFit {
+    /// Nothing reserves the id, so only its keychain items decide
+    Free,
+
+    /// A local wallet already lives under the id, so the backup restores under a new one
+    LocalWallet,
+}
+
+/// What a restore brings back, which decides whether a local wallet under the backup's wallet id
+/// moves it to a new one
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestoredMaterial {
+    /// A seed or master private key, which must never stay stuck in the cloud
+    Secret,
+
+    /// Public keys, which a local wallet under the same id most likely already watches
+    Public,
+}
+
+/// Decide what a restore may do about the local storage reserving `id`
+///
+/// A settled wallet under the id moves a seed backup beside it, since the seed must never stay
+/// stuck in the cloud because of it, such as a wallet that lost its key or a hardware wallet
+/// that can't take the seed. A public backup keeps refusing it, since that wallet most likely
+/// already watches the same keys. Artifacts a running restore may still be writing reserve the
+/// id outright, as `WalletIdOccupied`, so the retry decides once that restore is done
+fn storage_fit(
+    id: &ValidatedRestoreWalletId,
+    occupancy: StorageOccupancy,
+    material: RestoredMaterial,
+) -> Result<StorageFit, CloudRestoreError> {
+    let wallet_id = id.as_wallet_id();
+
+    match occupancy {
+        StorageOccupancy::Free => Ok(StorageFit::Free),
+        StorageOccupancy::WalletMetadata if id.has_running_restore() => {
+            warn!("cloud restore refused wallet id={wallet_id}: another restore of it is running");
+            Err(BackupError::WalletIdOccupied(wallet_id.clone()).into())
+        }
+        StorageOccupancy::WalletMetadata if material == RestoredMaterial::Secret => {
+            warn!(
+                "cloud restore cannot adopt wallet id={wallet_id}: a local wallet already uses it"
+            );
+            Ok(StorageFit::LocalWallet)
+        }
+        StorageOccupancy::WalletMetadata => {
+            warn!("cloud restore refused wallet id={wallet_id}: a local wallet already uses it");
+            Err(BackupError::WalletIdOccupied(wallet_id.clone()).into())
+        }
+        StorageOccupancy::Artifacts => {
+            warn!(
+                "cloud restore refused wallet id={wallet_id}: wallet data without a metadata row already uses it"
+            );
+            Err(BackupError::WalletIdOccupied(wallet_id.clone()).into())
+        }
+    }
+}
+
 /// Capture the local artifacts a wallet id owns and read its keychain items
 ///
-/// Metadata rows, BDK artifacts and occupied wallet-data paths still reserve the
-/// wallet id outright: only keychain items can be verified and adopted
+/// A local wallet under the id moves a seed restore to a new id and refuses a public one, and
+/// artifacts with no metadata row reserve the id outright: only keychain items can be verified
+/// and adopted
 ///
 /// A keychain the platform cannot read at all stops the restore, since nothing can be
 /// written until it can be read
 fn capture_local_wallet_state(
     metadata: &WalletMetadata,
+    material: RestoredMaterial,
 ) -> Result<LocalWalletState, CloudRestoreError> {
     let wallet_id = &metadata.id;
     let id = ValidatedRestoreWalletId::validate(wallet_id)?;
 
     let (snapshot, items) = match RestoreArtifactSnapshot::capture_with_keychain_items(&id) {
         Ok(captured) => captured,
-        Err(SnapshotCaptureError::Keychain { error, storage_occupied: true }) => {
-            warn!(
-                "cloud restore refused wallet id={wallet_id}: id already occupied by stored wallet data, keychain unreadable: {error}"
-            );
-            return Err(BackupError::WalletIdOccupied(wallet_id.clone()).into());
-        }
-        Err(SnapshotCaptureError::Keychain { error, .. }) if error.is_keychain_unavailable() => {
-            warn!("cloud restore cannot read the keychain for wallet id={wallet_id}: {error}");
-            return Err(CloudRestoreError::LocalKeychainUnavailable);
-        }
-        Err(SnapshotCaptureError::Keychain { error, .. }) => {
+        Err(SnapshotCaptureError::Keychain { error, occupancy }) => {
+            storage_fit(&id, occupancy, material)?;
+
+            if error.is_keychain_unavailable() {
+                warn!("cloud restore cannot read the keychain for wallet id={wallet_id}: {error}");
+                return Err(CloudRestoreError::LocalKeychainUnavailable);
+            }
+
             warn!(
                 "cloud restore cannot decode local keychain data for wallet id={wallet_id}: {error}"
             );
@@ -243,16 +302,8 @@ fn capture_local_wallet_state(
         Err(SnapshotCaptureError::Backup(error)) => return Err(error.into()),
     };
 
-    if snapshot.metadata || !snapshot.bdk_paths.is_empty() || snapshot.wallet_data_occupied {
-        // the error names only the wallet id, so log which artifacts reserve it
-        warn!(
-            "cloud restore refused wallet id={wallet_id}: id already occupied (metadata={}, bdk_stores={}, wallet_data={})",
-            snapshot.metadata,
-            snapshot.bdk_paths.len(),
-            snapshot.wallet_data_occupied
-        );
-
-        return Err(BackupError::WalletIdOccupied(wallet_id.clone()).into());
+    if let StorageFit::LocalWallet = storage_fit(&id, snapshot.storage_occupancy(), material)? {
+        return Ok(LocalWalletState::Unadoptable);
     }
 
     // rollback can only preserve keychain kinds the snapshot fingerprinted, so a
@@ -324,7 +375,9 @@ impl VerifiedCloudRestorePlan<HotWalletWrites> {
         metadata: &WalletMetadata,
         prepared: PreparedHotWallet,
     ) -> Result<LocalFit<HotWalletWrites, PreparedHotWallet>, CloudRestoreError> {
-        let LocalWalletState::Captured(captured) = capture_local_wallet_state(metadata)? else {
+        let LocalWalletState::Captured(captured) =
+            capture_local_wallet_state(metadata, RestoredMaterial::Secret)?
+        else {
             return Ok(LocalFit::Unadoptable(prepared));
         };
 
@@ -393,7 +446,9 @@ impl VerifiedCloudRestorePlan<PublicWalletWrites> {
         metadata: &WalletMetadata,
         prepared: PreparedPublicWallet,
     ) -> Result<LocalFit<PublicWalletWrites, PreparedPublicWallet>, CloudRestoreError> {
-        let LocalWalletState::Captured(captured) = capture_local_wallet_state(metadata)? else {
+        let LocalWalletState::Captured(captured) =
+            capture_local_wallet_state(metadata, RestoredMaterial::Public)?
+        else {
             return Ok(LocalFit::Unadoptable(prepared));
         };
 

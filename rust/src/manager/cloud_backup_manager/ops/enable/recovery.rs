@@ -158,10 +158,7 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
         namespaces: &[MergeNamespace],
     ) -> Result<Vec<MergedNamespaceWallets>, CloudBackupError> {
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut merged_namespaces = Vec::with_capacity(namespaces.len());
 
@@ -219,11 +216,15 @@ impl RustCloudBackupManager {
                     }
                 };
 
-                match restore_session.restore_downloaded(&wallet) {
+                match self.restore_in_session(&mut restore_session, &wallet) {
                     Ok(WalletRestoreOutcome::Restored { wallet: restored, .. }) => {
                         restored_wallets.push(restored.into_metadata())
                     }
-                    Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
+
+                    // enable uploads every local wallet after the merge, the upgraded one too, and
+                    // cleanup keeps the source while the upgraded wallet's record differs from it
+                    Ok(WalletRestoreOutcome::SecretAdded { .. })
+                    | Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));

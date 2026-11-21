@@ -8,6 +8,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     network::Network,
     wallet::{
+        WalletAddressType,
         fingerprint::Fingerprint,
         metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
     },
@@ -62,6 +63,23 @@ pub(crate) enum SecretUpgradeSource {
     CloudBackup { verified: bool },
 }
 
+/// Which local wallets an upgrade may add a secret to
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SecretUpgradeScope {
+    /// The user entered the secret, so the one local wallet it derives under that wallet's own
+    /// address type takes it, a hardware wallet or one matched only by fingerprint included
+    Import,
+
+    /// A cloud backup supplied the secret and no one chose the wallet, so only the one local
+    /// software wallet the secret derives to, with the backup's `address_type` and so its exact
+    /// public identity, takes it
+    ///
+    /// Anything else restores the backup as its own wallet: a fingerprint-only match may be
+    /// another account, several matches leave the choice open, and adding a seed to a hardware
+    /// wallet drops its hardware metadata
+    CloudBackup { address_type: WalletAddressType },
+}
+
 /// A local public wallet that gains the private key for the identity it already watches
 ///
 /// Every path that hands a secret to an existing wallet goes through this owner, so the wallet
@@ -83,10 +101,17 @@ impl ExistingWalletSecretUpgrade {
         secret: &WalletSecret,
         network: Network,
         mode: WalletMode,
+        scope: SecretUpgradeScope,
     ) -> Result<Option<Self>, SecretUpgradeError> {
         let fingerprint: Fingerprint = secret.xpub(network).fingerprint().into();
-        let target =
-            existing_wallet_for_secret(database, keychain, secret, network, mode, fingerprint)?;
+        let target = existing_wallet_for_secret(
+            database,
+            keychain,
+            secret,
+            (network, mode),
+            fingerprint,
+            scope,
+        )?;
 
         // the stored key matches the wallet's network whatever form the incoming key used
         let secret = secret.clone().into_network_kind(network.into());
@@ -300,9 +325,9 @@ fn existing_wallet_for_secret(
     database: &Database,
     keychain: &Keychain,
     secret: &WalletSecret,
-    network: Network,
-    mode: WalletMode,
+    (network, mode): (Network, WalletMode),
     fingerprint: Fingerprint,
+    scope: SecretUpgradeScope,
 ) -> Result<Option<WalletMetadata>, SecretUpgradeError> {
     let same_fingerprint_wallets = database
         .wallets
@@ -335,6 +360,10 @@ fn existing_wallet_for_secret(
         exact_matches.push(metadata);
     }
 
+    if let SecretUpgradeScope::CloudBackup { address_type } = scope {
+        return cloud_backup_target(exact_matches, address_type);
+    }
+
     if exact_matches.len() > 1 {
         return Err(SecretUpgradeError::IdentityCollision);
     }
@@ -357,6 +386,42 @@ fn existing_wallet_for_secret(
     );
 
     Ok(Some(degraded_match))
+}
+
+/// The one local wallet a cloud backup's secret may be added to, among the wallets the secret
+/// derives under each one's own address type
+///
+/// Two such wallets, such as one seed watched under two address types, leave the choice open,
+/// so the backup restores as its own wallet. A single one takes the secret only when it is the
+/// backup's own wallet, under the backup's `address_type`, and is not a hardware wallet, which
+/// the upgrade would turn hot, dropping its hardware metadata
+fn cloud_backup_target(
+    exact_matches: Vec<WalletMetadata>,
+    address_type: WalletAddressType,
+) -> Result<Option<WalletMetadata>, SecretUpgradeError> {
+    if exact_matches.len() > 1 {
+        return Err(SecretUpgradeError::IdentityCollision);
+    }
+
+    let Some(target) = exact_matches.into_iter().next() else {
+        return Ok(None);
+    };
+
+    if target.address_type != address_type {
+        let id = &target.id;
+        info!("cloud backup secret not added to wallet {id} of another address type");
+
+        return Ok(None);
+    }
+
+    if target.hardware_metadata.is_some() {
+        let id = &target.id;
+        info!("cloud backup secret not added to hardware wallet {id}, restoring beside it");
+
+        return Ok(None);
+    }
+
+    Ok(Some(target))
 }
 
 #[cfg(test)]

@@ -24,10 +24,7 @@ impl RustCloudBackupManager {
         writes: &CloudBackupWriteClient,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut current_wallet_record_ids: HashSet<_> = current_namespace_wallet_record_ids(
             cloud,
@@ -64,13 +61,14 @@ impl RustCloudBackupManager {
             );
 
             let mut restored_wallets = Vec::new();
-            let mut restored_record_ids = Vec::new();
 
+            // the source records this device and the current backup now hold, so the namespace
+            // may be deleted once they are all of its records
+            let mut recovered_record_ids = HashSet::new();
+
+            // a record under an id the current backup also holds is still read: the current copy
+            // may be watch-only while this one holds the seed
             for record_id in &wallet_record_ids {
-                if current_wallet_record_ids.contains(record_id) {
-                    continue;
-                }
-
                 let wallet = match reader.lookup(record_id).await {
                     Ok(WalletBackupLookup::Found(wallet)) => wallet,
                     Ok(WalletBackupLookup::NotFound) => {
@@ -107,7 +105,7 @@ impl RustCloudBackupManager {
                     }
                 };
 
-                match restore_session.restore_downloaded(&wallet) {
+                match self.restore_in_session(&mut restore_session, &wallet) {
                     Ok(WalletRestoreOutcome::Restored { wallet: restored, labels_warning }) => {
                         report.wallets_restored += 1;
                         if let Some(warning) = labels_warning {
@@ -118,7 +116,25 @@ impl RustCloudBackupManager {
                         }
 
                         restored_wallets.push(restored.into_metadata());
-                        restored_record_ids.push(record_id.clone());
+                        recovered_record_ids.insert(record_id.clone());
+                    }
+
+                    // the upgraded wallet uploads with this batch, replacing any copy restored
+                    // earlier in it, which still has the watch-only metadata; the source stays,
+                    // since adding the secret imported none of its labels
+                    Ok(WalletRestoreOutcome::SecretAdded { wallet: upgraded }) => {
+                        report.wallets_restored += 1;
+                        restored_wallets.retain(|restored| restored.id != upgraded.id);
+                        restored_wallets.push(*upgraded);
+                    }
+
+                    // the local wallet holds everything this record can recover and the current
+                    // backup holds a record under its id; the id alone proves nothing, since the
+                    // current copy can be watch-only while this one holds the seed
+                    Ok(WalletRestoreOutcome::SkippedDuplicate)
+                        if current_wallet_record_ids.contains(record_id) =>
+                    {
+                        recovered_record_ids.insert(record_id.clone());
                     }
                     Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
 
@@ -145,14 +161,14 @@ impl RustCloudBackupManager {
                 }));
             }
 
-            // a wallet restored under a new wallet id is backed up under a new record id, so its
-            // source record counts as recovered here, but only for this namespace: another
-            // namespace's copy of the same record may hold different data and is still read
+            // reached only once the restored wallets uploaded, so every restored record is backed
+            // up; a wallet restored under a new wallet id is backed up under a new record id, so
+            // its source record counts here, but only for this namespace: another namespace's
+            // copy of the same record may hold different data and is still read
             if !wallet_record_ids.is_empty()
-                && wallet_record_ids.iter().all(|record_id| {
-                    current_wallet_record_ids.contains(record_id)
-                        || restored_record_ids.contains(record_id)
-                })
+                && wallet_record_ids
+                    .iter()
+                    .all(|record_id| recovered_record_ids.contains(record_id))
             {
                 writes
                     .delete_other_namespace(cloud.clone(), namespace.namespace_id.clone())

@@ -684,6 +684,19 @@ impl From<cove_cspp::CsppError> for CloudBackupError {
     }
 }
 
+/// Reading the local wallets' identities failed, which a restore reports as the keychain
+/// being unavailable when it could not be read at all, so the reader learns that unlocking and
+/// retrying can work
+impl From<crate::wallet_identity::WalletIdentityError> for CloudBackupError {
+    fn from(error: crate::wallet_identity::WalletIdentityError) -> Self {
+        if error.is_keychain_unavailable() {
+            return Self::LocalKeychainUnavailable;
+        }
+
+        Self::internal_context("collect wallet identities", error)
+    }
+}
+
 impl From<CloudBackupInternalError> for CloudBackupError {
     fn from(error: CloudBackupInternalError) -> Self {
         Self::Internal(error)
