@@ -4,6 +4,7 @@
 
 - Improved app lock handling so finishing or leaving a send never clears a lock that needs authentication
 - Fixed animated UR transaction QR codes stalling a hardware wallet that misses a frame, and made each frame simpler to scan
+- Fixed signed transactions from SeedSigner failing to finalize, and the alert now says why when a signed transaction can't be finalized (thanks to [Dean Torcasio](https://x.com/dean_torcasio) for reporting it)
 
 ## [1.3.0] - 2026-07-16
 
