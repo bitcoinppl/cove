@@ -4,10 +4,12 @@
 //! namespace's wallets, then record a pending source delete instead of deleting. A returned
 //! upload can mean the file is only staged on this device, as on iOS, so a source deleted then
 //! could leave the cloud with no copy of a wallet once its own deletion syncs. This owner deletes
-//! a source only once every replacement record's upload is confirmed in the active namespace and
-//! the provider reports the record uploaded
+//! a source only once every replacement record's upload, and the active master key wrapper's, is
+//! confirmed in the active namespace and the provider reports the copy this device wrote
+//! uploaded, and only while the source still lists no record the proof didn't cover
 
 use act_zero::call;
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_device::cloud_storage::{
     CloudBackupUploadStatus, CloudStorage, CloudStorageClient, CloudStorageError,
 };
@@ -119,10 +121,16 @@ impl PendingSourceDeletes<'_> {
     ) -> SourceDeleteStep {
         let source = &entry.source_namespace_id;
 
+        // the replacements are readable only with the active master key wrapper, so a new device
+        // restoring from the cloud needs it uploaded as much as the wallet records
+        let required_record_ids = std::iter::once(MASTER_KEY_RECORD_ID.to_string())
+            .chain(entry.record_ids.iter().cloned())
+            .collect::<Vec<_>>();
+
         // every local row is checked before the provider is asked, so a terminal failure clears
         // the entry even while another record is still uploading
         let mut all_confirmed = true;
-        for record_id in &entry.record_ids {
+        for record_id in &required_record_ids {
             match Self::local_upload(entry, record_id) {
                 LocalUpload::Confirmed => {}
                 LocalUpload::Pending => all_confirmed = false,
@@ -139,9 +147,9 @@ impl PendingSourceDeletes<'_> {
             return SourceDeleteStep::Pending;
         }
 
-        for record_id in &entry.record_ids {
+        for record_id in &required_record_ids {
             match cloud
-                .is_backup_uploaded(entry.active_namespace_id.clone(), record_id.clone())
+                .is_written_backup_uploaded(entry.active_namespace_id.clone(), record_id.clone())
                 .await
             {
                 Ok(CloudBackupUploadStatus::Uploaded) => {}
@@ -160,6 +168,37 @@ impl PendingSourceDeletes<'_> {
                     );
                     return SourceDeleteStep::Pending;
                 }
+            }
+        }
+
+        // the proof read the source when it was recorded, and another device still using the
+        // source may have added a wallet since, which no replacement holds
+        match cloud.list_wallet_backups(source.clone()).await {
+            Ok(listed) => {
+                if let Some(unproven) =
+                    listed.iter().find(|record_id| !entry.source_record_ids.contains(record_id))
+                {
+                    warn!(
+                        "Pending source delete: keeping source={source} reason=source_gained_record record_id={unproven}"
+                    );
+                    return SourceDeleteStep::Settled;
+                }
+            }
+
+            Err(CloudStorageError::NotFound(_)) => {
+                info!("Cloud backup source namespace {source} was already deleted");
+                return SourceDeleteStep::Settled;
+            }
+
+            Err(CloudStorageError::AuthorizationRequired(_)) => {
+                return SourceDeleteStep::AuthorizationRequired;
+            }
+
+            Err(error) => {
+                warn!(
+                    "Pending source delete: waiting source={source} listing unavailable: {error}"
+                );
+                return SourceDeleteStep::Pending;
             }
         }
 

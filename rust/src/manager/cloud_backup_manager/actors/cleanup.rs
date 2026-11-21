@@ -162,14 +162,15 @@ async fn run_cleanup_job(
         }
 
         let Some(manager) = manager.upgrade() else { return Ok(()) };
+        // a merge keeps each wallet's record id, so the records that hold the source's wallets
+        // are the source's own
+        let record_ids: Vec<String> =
+            source.expected_wallets.into_iter().map(|wallet| wallet.record_id).collect();
         let pending = PersistedPendingSourceDelete {
             source_namespace_id: source.namespace_id.clone(),
             active_namespace_id: job.active_namespace_id.clone(),
-            record_ids: source
-                .expected_wallets
-                .into_iter()
-                .map(|wallet| wallet.record_id)
-                .collect(),
+            record_ids: record_ids.clone(),
+            source_record_ids: record_ids,
         };
 
         match manager.record_pending_source_delete(writes, pending).await {

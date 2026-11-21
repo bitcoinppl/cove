@@ -553,6 +553,9 @@ pub struct PersistedPendingSourceDelete {
     pub active_namespace_id: String,
     /// Active-namespace wallet records that hold the source's wallets
     pub record_ids: Vec<String>,
+    /// The source's wallet records the proof covered; a source that lists any other by the time
+    /// it would be deleted gained a wallet the proof never read, so it stays
+    pub source_record_ids: Vec<String>,
 }
 
 /// Durable notice that Cloud Backup was healed from a disable that never deleted anything

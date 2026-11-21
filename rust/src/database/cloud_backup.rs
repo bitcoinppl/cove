@@ -361,6 +361,7 @@ mod tests {
             source_namespace_id: "source-1".into(),
             active_namespace_id: "namespace-1".into(),
             record_ids: vec![record_id.into()],
+            source_record_ids: vec![record_id.into()],
         };
 
         assert!(state.replace_pending_source_delete(pending("wallet-1")));

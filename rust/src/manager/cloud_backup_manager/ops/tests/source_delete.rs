@@ -11,6 +11,8 @@ use crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_p
 /// Another backup namespace holding one watch-only wallet that Recover Other Backups restores
 /// under its own id, returning the namespace and the wallet's record id
 async fn other_backup_with_one_wallet(globals: &TestGlobals) -> (String, String) {
+    upload_active_master_key_wrapper(globals);
+
     let prf_key = [7u8; 32];
     let other_master_key = cove_cspp::master_key::MasterKey::generate();
     let other_namespace = other_master_key.namespace_id();
@@ -133,6 +135,7 @@ async fn recover_other_backups_keeps_a_source_the_current_backup_holds_until_its
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
     globals.cloud.set_uploaded_wallets_pending_confirmation(true);
     let verifier_pass = hold_verifier_pass().await;
@@ -223,6 +226,81 @@ async fn recover_other_backups_keeps_the_source_when_its_replacement_upload_fail
     ));
     assert!(globals.cloud.has_namespace(&other_namespace));
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempts);
+    assert!(pending_source_namespaces().is_empty());
+
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
+}
+
+/// Another device still using the source can add a wallet while the delete waits, and no
+/// replacement holds that wallet, so the source stays
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_a_source_that_gained_a_wallet_while_its_delete_waited() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    globals.cloud.set_uploaded_wallets_pending_confirmation(true);
+    let (other_namespace, record_id) = other_backup_with_one_wallet(globals).await;
+
+    let verifier_pass = hold_verifier_pass().await;
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!((report.wallets_restored, report.wallets_failed), (1, 0));
+    assert_eq!(pending_source_namespaces(), vec![other_namespace.clone()]);
+
+    let added_record_id = wallet_record_id("wallet-added-on-another-device");
+    globals.cloud.set_wallet_files(
+        other_namespace.clone(),
+        vec![
+            wallet_filename_from_record_id(&record_id),
+            wallet_filename_from_record_id(&added_record_id),
+        ],
+    );
+    globals.cloud.set_uploaded_wallets_pending_confirmation(false);
+    verifier_pass.verify_once(&manager).await;
+
+    assert!(
+        globals.cloud.has_namespace(&other_namespace),
+        "the source was deleted with a wallet no replacement holds"
+    );
+    assert!(pending_source_namespaces().is_empty());
+
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
+}
+
+/// The replacements decrypt only with the active master key wrapper, so a source waits for the
+/// wrapper's upload too, not only for the wallet records
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_the_source_until_the_master_key_wrapper_uploads() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let (other_namespace, _) = other_backup_with_one_wallet(globals).await;
+    let active_namespace = manager.current_namespace_id().unwrap();
+    globals.cloud.set_master_key_upload_pending(active_namespace.clone());
+
+    let verifier_pass = hold_verifier_pass().await;
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!((report.wallets_restored, report.wallets_failed), (1, 0));
+
+    verifier_pass.verify_once(&manager).await;
+
+    assert!(
+        globals.cloud.has_namespace(&other_namespace),
+        "the source was deleted before the master key wrapper reached the cloud"
+    );
+    assert_eq!(pending_source_namespaces(), vec![other_namespace.clone()]);
+
+    globals.cloud.finish_master_key_upload(&active_namespace);
+    verifier_pass.verify_once(&manager).await;
+
+    assert!(!globals.cloud.has_namespace(&other_namespace));
     assert!(pending_source_namespaces().is_empty());
 
     drop(verifier_pass);

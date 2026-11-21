@@ -466,6 +466,7 @@ async fn recover_other_backups_moves_a_seed_beside_a_local_wallet_that_lost_its_
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
     let other_master_key = other_namespace(globals);
     let other = other_master_key.namespace_id();
@@ -534,6 +535,7 @@ async fn recover_other_backups_reads_a_seed_record_sharing_an_id_with_a_watch_on
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
     let other_master_key = other_namespace(globals);
     let other = other_master_key.namespace_id();

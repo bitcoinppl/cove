@@ -249,6 +249,7 @@ impl RustCloudBackupManager {
                     source_namespace_id: namespace.namespace_id.clone(),
                     active_namespace_id: current_namespace.clone(),
                     record_ids: replacement_record_ids,
+                    source_record_ids: wallet_record_ids.clone(),
                 };
                 self.record_pending_source_delete(writes, pending).await.map_err(|error| {
                     blocking_cloud_error(BlockingCloudStep::RecoverOtherBackups, error)

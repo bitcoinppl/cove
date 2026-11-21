@@ -248,6 +248,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
     let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
@@ -317,6 +318,7 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
     let prf_key = [7u8; 32];

@@ -249,8 +249,10 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
+
+        // this device wrote the wrapper to its upload location, so a legacy copy proves nothing
         match cloud
-            .is_backup_uploaded(
+            .is_written_backup_uploaded(
                 namespace_id.to_string(),
                 cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string(),
             )
@@ -294,8 +296,13 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
+
+        // this device wrote the record to its upload location, so a legacy copy proves nothing
         match cloud
-            .is_backup_uploaded(sync_state.namespace_id.clone(), sync_state.record_id().to_string())
+            .is_written_backup_uploaded(
+                sync_state.namespace_id.clone(),
+                sync_state.record_id().to_string(),
+            )
             .await
         {
             Ok(CloudBackupUploadStatus::Uploaded) => info!(

@@ -1219,7 +1219,7 @@ mod tests {
         });
         let older_configured: PersistedCloudBackupState = serde_json::from_value(json!({
             "version": 3,
-            "backup": { "state": "Configured", "data": configured_data.clone() }
+            "backup": { "state": "Configured", "data": configured_data }
         }))
         .unwrap();
         let older_disabling: PersistedCloudBackupState = serde_json::from_value(json!({
@@ -1246,6 +1246,7 @@ mod tests {
             source_namespace_id: "source-1".into(),
             active_namespace_id: "namespace-1".into(),
             record_ids: vec!["wallet-1".into(), "wallet-2".into()],
+            source_record_ids: vec!["wallet-1".into(), "wallet-2".into()],
         };
         let mut configured = older_configured;
         assert!(configured.replace_pending_source_delete(pending.clone()));

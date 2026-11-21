@@ -1061,15 +1061,24 @@ The pending upload verifier settles these entries at the end of each pass
 blocked on authorization. For each entry:
 
 - When another namespace is active, the entry is dropped and the source stays.
+- The records checked are the entry's wallet records plus the active master key
+  wrapper, since a new device can't decrypt the replacements without it.
 - Each record's upload row must be absent, for a record another device wrote,
   or `Confirmed` in the active namespace. An upload that failed for good drops
   the entry and keeps the source. Any other row leaves the entry for a later
   pass. A confirmed row alone is not proof, since a listing or summary read can
   confirm an upload.
-- The provider must then report every record uploaded (`is_backup_uploaded`;
-  on iOS `ubiquitousItemIsUploaded`, on Android the file exists in Drive).
-  Anything else leaves the entry for a later pass, and an authorization error
-  ends the settle for that pass.
+- The provider must then report the copy this device writes of every record
+  uploaded (`is_written_backup_uploaded`; on iOS `ubiquitousItemIsUploaded`, on
+  Android the file exists in Drive). Only that location is asked, because iOS
+  reports a record uploaded once any of its copies is, and an uploaded legacy
+  copy would vouch for a new one still staged on this device. The pending upload
+  verifier asks the same way. Anything else leaves the entry for a later pass,
+  and an authorization error ends the settle for that pass.
+- The source is listed again. A record the proof didn't cover, such as a wallet
+  another device still using the source added while the delete waited, drops
+  the entry and keeps the source. A change to a record the proof did cover is
+  not detected, since the settle holds no key to read the source.
 - Only then is the source deleted, as a background `SourceCleanup` write under
   the configuration current at the pass's start. A source already gone counts as
   deleted. A paused or failed delete leaves the entry for a later pass.

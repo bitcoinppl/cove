@@ -41,6 +41,15 @@ pub fn wallet_upload_location(record_id: &str) -> String {
     wallet_location_from_record_id(record_id)
 }
 
+/// The location this app writes `record_id` to, which its reads also check first
+pub fn upload_location_for_record_id(record_id: &str) -> String {
+    if record_id == MASTER_KEY_RECORD_ID {
+        return master_key_upload_location();
+    }
+
+    wallet_upload_location(record_id)
+}
+
 pub fn locations_for_record_id(record_id: &str) -> Vec<String> {
     if record_id == MASTER_KEY_RECORD_ID {
         return master_key_read_locations();

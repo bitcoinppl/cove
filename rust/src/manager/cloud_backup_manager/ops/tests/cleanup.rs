@@ -345,6 +345,7 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
@@ -575,6 +576,7 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
