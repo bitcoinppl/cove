@@ -257,11 +257,12 @@ impl CloudBackupSupervisor {
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, .. }) => (
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, labels_warning, .. }) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,
                     covered_by,
                     listing_generation,
+                    warning: labels_warning.map(cloud_only_restore_warning),
                 },
                 true,
             ),
@@ -270,6 +271,7 @@ impl CloudBackupSupervisor {
                     record_id,
                     covered_by,
                     listing_generation,
+                    warning: None,
                 },
                 false,
             ),

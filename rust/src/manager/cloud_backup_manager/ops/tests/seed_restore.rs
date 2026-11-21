@@ -957,3 +957,30 @@ async fn recover_other_backups_keeps_cloud_labels_when_adding_a_seed_to_a_local_
         assert!(!labels.contains("older"), "an older copy replaced a local edit: {labels}");
     }
 }
+
+// the seed is added before its labels, so labels that fail to import are reported as a label
+// warning and never undo or fail the restore
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn onboarding_restore_reports_unreadable_labels_of_a_seed_it_adds() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    reset_cloud_backup_test_state(&manager, globals);
+    let master_key = restorable_namespace(globals);
+    let seed = Seed::new(57);
+
+    let watch_only = seed.local_wallet(WalletType::Cold);
+    let (hot, hot_bytes) = seed.cloud_backup(WalletType::Hot, &master_key).await;
+    let hot_bytes = edit_record(&hot_bytes, &master_key, |entry| set_record_labels(entry, "{"));
+    list_backups(globals, &master_key.namespace_id(), vec![(&hot.id, hot_bytes)]);
+
+    let report = onboarding_restore(&manager).await;
+
+    assert_eq!(restored_and_failed(&report), (1, 0, Vec::new()));
+    assert!(seed.is_held_by(&watch_only.id));
+    assert_eq!(report.labels_failed_wallet_names, vec![watch_only.name]);
+    assert_eq!(
+        report.labels_failed_errors,
+        vec![crate::manager::cloud_backup_manager::CLOUD_BACKUP_LABELS_WARNING_MESSAGE]
+    );
+}

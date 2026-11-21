@@ -282,28 +282,10 @@ impl LabelsTable {
     // MARK: INSERT
 
     pub fn insert_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
-        self.insert_imported_labels_where(parsed, |_| Ok(true))
-    }
-
-    /// Imports only the labels for items this wallet has no record of, so a label or output
-    /// lock set on this device is never replaced by another copy's
-    pub fn insert_missing_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
-        self.insert_imported_labels_where(parsed, |label| Ok(!self.has_record_for(label)?))
-    }
-
-    fn insert_imported_labels_where(
-        &self,
-        parsed: ParsedLabels,
-        should_import: impl Fn(&Label) -> Result<bool, Error>,
-    ) -> Result<(), Error> {
         let timestamps = Timestamps::now();
         let mut records_to_insert = Vec::new();
 
         for label in parsed.labels.into_vec() {
-            if !should_import(&label)? {
-                continue;
-            }
-
             match self.prepare_imported_label(label)? {
                 ImportedLabelAction::Insert(label) => {
                     records_to_insert.push(Record::with_timestamps(label, timestamps));
@@ -315,16 +297,48 @@ impl LabelsTable {
         self.insert_records(records_to_insert)
     }
 
+    /// Imports only the labels for items this wallet has no record of, so a label or output
+    /// lock set on this device is never replaced by another copy's
+    ///
+    /// Each record is checked inside the write that inserts it, so a label or lock the user
+    /// saves meanwhile is never overwritten
+    pub fn insert_missing_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
+        let timestamps = Timestamps::now();
+        let _persistence = self.begin_persistence()?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        for label in parsed.labels.into_vec() {
+            if Self::has_record_for(&label, &write_txn)? {
+                continue;
+            }
+
+            // with no local record there is nothing to merge the imported label with
+            if let ImportedLabelAction::Insert(label) = imported_label_action(label, None) {
+                self.insert_label_with_write_txn(label, timestamps, &write_txn)?;
+            }
+        }
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        Ok(())
+    }
+
     /// Whether this wallet holds a record for the item `label` describes; a label type this
     /// table never stores counts as held, so it is never imported
-    fn has_record_for(&self, label: &Label) -> Result<bool, Error> {
+    fn has_record_for(label: &Label, write_txn: &redb::WriteTransaction) -> Result<bool, Error> {
         let held = match label {
-            Label::Transaction(txn) => self.get_txn_label_record(txn.ref_)?.is_some(),
-            Label::Address(address) => self.get_address_record(&address.ref_)?.is_some(),
-            Label::Output(output) => self.get_output_record(output.ref_)?.is_some(),
+            Label::Transaction(txn) => {
+                let key: TxId = txn.ref_.into();
+                write_txn.open_table(TXN_TABLE)?.get(key)?.is_some()
+            }
+            Label::Address(address) => {
+                write_txn.open_table(ADDRESS_TABLE)?.get(&address.ref_)?.is_some()
+            }
+            Label::Output(output) => {
+                write_txn.open_table(OUTPUT_TABLE)?.get(OutPointKey::from(&output.ref_))?.is_some()
+            }
             Label::Input(input) => {
-                let table = self.read_table(INPUT_TABLE)?;
-                table.get(OutPointKey::from(&input.ref_))?.is_some()
+                write_txn.open_table(INPUT_TABLE)?.get(OutPointKey::from(&input.ref_))?.is_some()
             }
             _ => true,
         };
@@ -333,57 +347,12 @@ impl LabelsTable {
     }
 
     fn prepare_imported_label(&self, label: Label) -> Result<ImportedLabelAction, Error> {
-        let Label::Output(output) = label else {
-            if has_non_empty_label(label.label()) {
-                return Ok(ImportedLabelAction::Insert(label));
-            }
-
-            return Ok(ImportedLabelAction::Ignore);
+        let current_output = match &label {
+            Label::Output(output) => self.get_output_record(output.ref_)?,
+            _ => None,
         };
 
-        self.prepare_imported_output_label(output)
-    }
-
-    fn prepare_imported_output_label(
-        &self,
-        mut output: OutputRecord,
-    ) -> Result<ImportedLabelAction, Error> {
-        let current = self.get_output_record(output.ref_)?;
-
-        if has_non_empty_label(output.label.as_deref()) {
-            if output.spendable.is_none()
-                && let Some(current) = current
-            {
-                output.spendable = current.item.spendable;
-            }
-
-            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
-        }
-
-        let Some(spendable) = output.spendable else {
-            return Ok(ImportedLabelAction::Ignore);
-        };
-
-        if !spendable {
-            if let Some(current) = current {
-                output.label = current.item.label;
-            }
-            output.spendable = Some(false);
-
-            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
-        }
-
-        let Some(mut current) = current else {
-            return Ok(ImportedLabelAction::Ignore);
-        };
-
-        if current.item.spendable == Some(false) {
-            current.item.spendable = Some(true);
-
-            return Ok(ImportedLabelAction::Insert(Label::Output(current.item)));
-        }
-
-        Ok(ImportedLabelAction::Ignore)
+        Ok(imported_label_action(label, current_output))
     }
 
     pub fn insert_labels_with_timestamps(
@@ -682,6 +651,62 @@ pub(crate) mod test_support {
 
         (wallet_db, tmp)
     }
+}
+
+/// What importing `label` writes, given the output record already stored for it, if any
+fn imported_label_action(
+    label: Label,
+    current_output: Option<Record<OutputRecord>>,
+) -> ImportedLabelAction {
+    let Label::Output(output) = label else {
+        if has_non_empty_label(label.label()) {
+            return ImportedLabelAction::Insert(label);
+        }
+
+        return ImportedLabelAction::Ignore;
+    };
+
+    imported_output_action(output, current_output)
+}
+
+fn imported_output_action(
+    mut output: OutputRecord,
+    current: Option<Record<OutputRecord>>,
+) -> ImportedLabelAction {
+    if has_non_empty_label(output.label.as_deref()) {
+        if output.spendable.is_none()
+            && let Some(current) = current
+        {
+            output.spendable = current.item.spendable;
+        }
+
+        return ImportedLabelAction::Insert(Label::Output(output));
+    }
+
+    let Some(spendable) = output.spendable else {
+        return ImportedLabelAction::Ignore;
+    };
+
+    if !spendable {
+        if let Some(current) = current {
+            output.label = current.item.label;
+        }
+        output.spendable = Some(false);
+
+        return ImportedLabelAction::Insert(Label::Output(output));
+    }
+
+    let Some(mut current) = current else {
+        return ImportedLabelAction::Ignore;
+    };
+
+    if current.item.spendable == Some(false) {
+        current.item.spendable = Some(true);
+
+        return ImportedLabelAction::Insert(Label::Output(current.item));
+    }
+
+    ImportedLabelAction::Ignore
 }
 
 #[cfg(test)]

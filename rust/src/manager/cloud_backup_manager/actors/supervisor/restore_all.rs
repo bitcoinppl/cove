@@ -240,13 +240,14 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, .. }) => {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, labels_warning, .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
                         covered_by,
                         listing_generation,
+                        warning: labels_warning.map(cloud_only_restore_warning),
                     },
                 );
                 manager.refresh_sync_health();
@@ -257,6 +258,7 @@ impl CloudBackupSupervisor {
                         record_id: wallet.record_id,
                         covered_by,
                         listing_generation,
+                        warning: None,
                     },
                 );
                 manager.refresh_sync_health();
