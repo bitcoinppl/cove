@@ -792,3 +792,62 @@ async fn recover_other_backups_queues_a_seed_moved_to_a_new_id_when_its_upload_f
     );
     assert!(globals.cloud.has_namespace(&other));
 }
+
+// a watch-only wallet keeps its wallet id when its address type changes, so a current record
+// under the same id can watch other descriptors than the source, which then stays
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_a_watch_only_source_whose_descriptors_differ() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+
+    let local = Seed::new(55).local_wallet(WalletType::Cold);
+    let current_bytes =
+        encrypted_wallet_backup_bytes(&local, &active_master_key(), "current", 1).await;
+    list_backups(globals, &active_namespace(), vec![(&local.id, current_bytes)]);
+
+    let mut source = Seed::new(56).wallet(WalletType::Cold);
+    let source_bytes = encrypted_wallet_backup_bytes(&source, &other_master_key, "source", 1).await;
+    assert!(Keychain::global().delete_wallet_items(&source.id));
+    source.id = local.id.clone();
+    let source_bytes = edit_record(&source_bytes, &other_master_key, |entry| {
+        entry.wallet_id = source.id.to_string();
+        entry.metadata = serde_json::to_value(&source).unwrap();
+    });
+    list_backups(globals, &other, vec![(&local.id, source_bytes)]);
+
+    let _ = recover_other_backups_for_test(&manager).await;
+
+    assert!(globals.cloud.has_namespace(&other));
+}
+
+// a wallet restored under its own id from another namespace has no record in the current
+// backup until it uploads, and a retry finds it local, so a failed batch upload leaves it queued
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_queues_a_restored_seed_when_its_upload_fails() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(57);
+
+    let (hot, hot_bytes) = seed.cloud_backup(WalletType::Hot, &other_master_key).await;
+    list_backups(globals, &other, vec![(&hot.id, hot_bytes)]);
+    globals.cloud.fail_wallet_backup_upload("upload failed");
+
+    assert!(recover_other_backups_for_test(&manager).await.is_err());
+
+    assert!(seed.is_held_by(&hot.id));
+    let row =
+        Database::global().cloud_blob_sync_states.get(&wallet_record_id(hot.id.as_ref())).unwrap();
+    assert!(
+        row.as_ref().is_some_and(PersistedCloudBlobSyncState::is_dirty),
+        "the restored wallet should stay queued for upload, found {row:?}"
+    );
+    assert!(globals.cloud.has_namespace(&other));
+}

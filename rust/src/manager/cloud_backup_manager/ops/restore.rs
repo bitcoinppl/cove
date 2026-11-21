@@ -137,17 +137,23 @@ impl RustCloudBackupManager {
                 }
 
                 match self.restore_in_session(&mut restore_session, &wallet) {
+                    // a wallet whose labels failed to import uploads without them, so its source
+                    // stays as the only copy of those labels
                     Ok(WalletRestoreOutcome::Restored { wallet: restored, labels_warning }) => {
                         report.wallets_restored += 1;
-                        if let Some(warning) = labels_warning {
-                            report.labels_failed_wallet_names.push(warning.wallet_name);
-                            report
-                                .labels_failed_errors
-                                .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
+                        match labels_warning {
+                            Some(warning) => {
+                                report.labels_failed_wallet_names.push(warning.wallet_name);
+                                report
+                                    .labels_failed_errors
+                                    .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
+                            }
+                            None => {
+                                recovered_record_ids.insert(record_id.clone());
+                            }
                         }
 
                         restored_wallets.push(restored.into_metadata());
-                        recovered_record_ids.insert(record_id.clone());
                     }
 
                     // the upgraded wallet uploads with this batch, replacing any copy restored
@@ -240,10 +246,11 @@ fn current_namespace_reader(
 }
 
 /// Whether the current backup's record under `record_id` holds everything `source` holds: its
-/// key material and, when it has labels, the same labels
+/// key material, its public keys and, when it has labels, the same labels
 ///
 /// A matching record id alone proves nothing, since the current copy can be watch-only while
-/// the source holds the seed, or hold none of the source's labels
+/// the source holds the seed, watch other descriptors after an address type change, or hold
+/// none of the source's labels
 async fn current_record_holds(
     current_reader: Option<&WalletBackupReader>,
     record_id: &str,
@@ -265,8 +272,16 @@ async fn current_record_holds(
         (CloudWalletSecret::Descriptor(_) | CloudWalletSecret::WatchOnly, _) => true,
         _ => false,
     };
+    let holds_descriptors = match (&source.descriptors, &current.descriptors) {
+        (None, _) => true,
+        (Some(source), Some(current)) => {
+            source.external == current.external && source.internal == current.internal
+        }
+        (Some(_), None) => false,
+    };
+    let holds_xpub = source.xpub.is_none() || source.xpub == current.xpub;
     let holds_labels = source.labels_count == 0
         || (source.labels_hash.is_some() && source.labels_hash == current.labels_hash);
 
-    Ok(holds_key_material && holds_labels)
+    Ok(holds_key_material && holds_descriptors && holds_xpub && holds_labels)
 }

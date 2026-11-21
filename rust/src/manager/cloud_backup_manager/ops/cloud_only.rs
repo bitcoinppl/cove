@@ -303,11 +303,10 @@ impl RustCloudBackupManager {
         }
     }
 
-    /// Restores one downloaded backup in a batch's `session`, queueing the upload of a local
-    /// wallet the restore added a secret to, or restored under a new wallet id, as soon as that
-    /// commits
+    /// Restores one downloaded backup in a batch's `session`, queueing the upload of the wallet it
+    /// restored, or added a secret to, as soon as that commits
     ///
-    /// Neither wallet's own backup holds the secret until it uploads, so a batch that is
+    /// The active backup holds none of that until the wallet uploads, so a batch that is
     /// cancelled, returns early or fails its own upload still leaves it queued, and a retry that
     /// now finds the wallet covered doesn't leave the device without a backup of it
     pub(crate) fn restore_in_session(
@@ -321,14 +320,12 @@ impl RustCloudBackupManager {
                 self.handle_restored_wallet_needs_backup(wallet.id.clone());
             }
 
-            // the backup's record describes the old wallet id, so nothing else uploads this
-            // wallet if the run's own upload fails
-            Ok(WalletRestoreOutcome::Restored { wallet, .. })
-                if wallet.placement() == CloudRestorePlacement::NewWalletId =>
-            {
+            // the batch may read the record from another namespace, or under an id the record
+            // doesn't describe, so nothing else uploads this wallet if the run's own upload fails
+            Ok(WalletRestoreOutcome::Restored { wallet, .. }) => {
                 self.handle_restored_wallet_needs_backup(wallet.metadata().id.clone());
             }
-            _ => {}
+            Ok(WalletRestoreOutcome::SkippedDuplicate) | Err(_) => {}
         }
 
         result

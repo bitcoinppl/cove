@@ -986,9 +986,9 @@ first, the watch-only copy restores as a separate watch-only wallet beside the
 hot one; the seed is on the device either way.
 
 A wallet that gained its seed this way has a cloud backup without it until it
-uploads again, and a seed restored under a new wallet ID has no backup of its
-own until it uploads, so every path queues the upload of either as soon as the
-restore commits (`restore_in_session`). A run that is cancelled, returns early or fails its own
+uploads again, and a wallet a batch restored has no record in the active
+backup until it uploads, so every path queues the upload of either as soon as
+the restore commits (`restore_in_session`). A run that is cancelled, returns early or fails its own
 upload still leaves the wallet queued, and a retry that now finds it covered
 doesn't leave the device's own backup watch-only.
 
@@ -1007,10 +1007,12 @@ while the source holds the seed. The active copy is the one this device's
 wallet uploads over, so a source record under the same ID goes through the
 session only when a local wallet with its identity lacks its seed. Otherwise it
 is not restored, since its upload could replace a newer active copy, and it
-counts as recovered only when the active record holds the same key material and,
-when the source has labels, the same labels. Any other source record counts as
-recovered only when its wallet was restored and the run's upload finished. Only
-when every record counts is the source namespace deleted.
+counts as recovered only when the active record holds the same key material, the
+same descriptors and xpub, which an address type change replaces under the same
+wallet ID, and, when the source has labels, the same labels. Any other source
+record counts as recovered only when its wallet was restored with its labels and
+the run's upload finished. Only when every record counts is the source
+namespace deleted.
 
 The Other Backups summary, which decides whether Recover is offered, still
 counts only records whose ID no local wallet uses, since it reads no record
