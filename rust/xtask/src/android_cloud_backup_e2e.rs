@@ -21,6 +21,7 @@ use color_eyre::{
     eyre::{bail, eyre, Context},
     Result,
 };
+use parking_lot::Mutex;
 
 use crate::{
     android::{self, AndroidBuildTargets, BuildProfile},
@@ -121,7 +122,8 @@ struct DeviceAccountFile {
 
 impl DeviceAccountFile {
     fn register(serial: &str) -> Self {
-        let file = Arc::new(AccountFileOnDevice(serial.to_owned()));
+        let file =
+            Arc::new(AccountFileOnDevice { serial: serial.to_owned(), deleted: Mutex::new(false) });
         Self { _registration: shutdown::register(file.clone()), file }
     }
 }
@@ -132,16 +134,27 @@ impl Drop for DeviceAccountFile {
     }
 }
 
-/// The account file on the emulator with this adb serial
-struct AccountFileOnDevice(String);
+/// The account file on the emulator with this adb serial, and whether it is deleted yet
+struct AccountFileOnDevice {
+    serial: String,
+    deleted: Mutex<bool>,
+}
 
 impl Stop for AccountFileOnDevice {
-    // rm -f, so the run and the signal thread can both delete it
+    // after a signal the run deletes it again as it unwinds, once the signal thread has stopped
+    // the emulator, so a delete that succeeded isn't tried again
     fn stop(&self) {
-        let serial = &self.0;
+        let mut deleted = self.deleted.lock();
+        if *deleted {
+            return;
+        }
 
-        if let Err(error) = adb(serial, &["shell", "rm", "-f", DEVICE_ACCOUNT_FILE]) {
-            print_warning(&format!("Could not delete {DEVICE_ACCOUNT_FILE} on {serial}: {error}"));
+        let serial = &self.serial;
+        match adb(serial, &["shell", "rm", "-f", DEVICE_ACCOUNT_FILE]) {
+            Ok(_) => *deleted = true,
+            Err(error) => print_warning(&format!(
+                "Could not delete {DEVICE_ACCOUNT_FILE} on {serial}: {error}"
+            )),
         }
     }
 }
