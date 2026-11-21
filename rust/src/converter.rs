@@ -81,10 +81,30 @@ impl Converter {
             return Ok(0.0);
         }
 
+        // keep at most two decimals; flooring `x * 100.0` loses a cent, e.g. 1.15 -> 1.14
+        let fiat_amount = match fiat_amount.split_once('.') {
+            Some((int, cents)) => format!("{int}.{}", cents.chars().take(2).collect::<String>()),
+            None => fiat_amount,
+        };
+
         let fiat_value =
             fiat_amount.parse::<f64>().map_err_str(Error::FiatAmountFromStringError)?;
 
-        let fiat_value = (fiat_value * 100.0).floor() / 100.0;
         Ok(fiat_value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_fiat_str_keeps_typed_cents() {
+        let converter = Converter::new();
+        assert_eq!(converter.parse_fiat_str("$0.29").unwrap(), 0.29);
+        assert_eq!(converter.parse_fiat_str("$1.15").unwrap(), 1.15);
+        assert_eq!(converter.parse_fiat_str("$2.01").unwrap(), 2.01);
+        assert_eq!(converter.parse_fiat_str("$1,234.567").unwrap(), 1234.56);
+        assert_eq!(converter.parse_fiat_str("$12.").unwrap(), 12.0);
     }
 }
