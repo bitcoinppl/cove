@@ -354,7 +354,9 @@ The child modules under `cloud_backup_manager::actors` own narrower work:
   restore event delivery
 - `uploads` owns dirty wallet upload scheduling and pending-upload verification
 - `CloudBackupSyncHealthWorker` owns background sync health refreshes
-- `cleanup` owns namespace cleanup after merge or recovery flows
+- `cleanup` proves an enable merge's sources and records each one for
+  deletion; the pending upload verifier deletes recorded sources (see
+  [Deleting Recovered Sources](#deleting-recovered-sources))
 - `write` owns serialized cloud writes, proven-key keychain saves and
   post-write local completion
 
@@ -931,8 +933,9 @@ wallet is restored under a new wallet ID (`CloudRestorePlacement::NewWalletId`).
 The backup's record describes the old ID, so the restored wallet uploads its own
 backup, and the old record becomes an Extra Copy covered by the restored wallet
 once that backup confirms. Other-backup recovery counts the source record as
-recovered once the restored wallet's backup uploads, so it can still delete the
-source namespace. Enable merge cannot yet prove the relocated record against
+recovered once the restored wallet's backup uploads, and the source namespace is
+deleted once the provider reports that backup, under its new record ID, uploaded
+(see [Deleting Recovered Sources](#deleting-recovered-sources)). Enable merge cannot yet prove the relocated record against
 a non-active source, so that source namespace stays listed under Other Backups. A cloud
 seed backup whose matching local wallet holds a secret that cannot be read also
 restores as its own wallet, rather than being added to that wallet.
@@ -1023,13 +1026,61 @@ same descriptors and xpub, which an address type change replaces under the same
 wallet ID, and, when the source has labels, the same labels. Any other source
 record counts as recovered only when its wallet was restored with its labels and
 the run's upload finished. Only when every record counts is the source
-namespace deleted.
+namespace deleted, and only once the provider reports each active record that
+holds its wallets uploaded (see
+[Deleting Recovered Sources](#deleting-recovered-sources)).
 
 The Other Backups summary, which decides whether Recover is offered, still
 counts only records whose ID no local wallet uses, since it reads no record
 before a passkey opens its namespace. A namespace whose only records share IDs
 with local wallets is not offered on its own, though a Recover started for
 another namespace reads it too.
+
+## Deleting Recovered Sources
+
+Recover Other Backups and enable merge cleanup each prove that the active
+namespace holds a source namespace's wallets: Recover by the rules above, and
+merge cleanup by reading every expected active record back at its revision. That
+proof isn't enough to delete the source. On iOS a returned upload only means the
+file was staged on this device, and reading the record back can read that local
+copy. If iCloud never takes the new file, for example while the user's iCloud
+storage is full, while the source's deletion syncs, iCloud is left with no copy
+of the wallet.
+
+So neither deletes the source. Each records a pending source delete in the
+configured lifecycle record (`PersistedPendingSourceDelete`): the source
+namespace, the active namespace, and the active records that hold the source's
+wallets. For a wallet restored under a new wallet ID, that is the new wallet's
+record, not the source's. The lifecycle owner records it only under the
+producer's authority: Recover's while its operation runs, and merge cleanup's
+while the configuration it proved under is current. Recover counts a recorded
+source as moved, as it counted a deleted one.
+
+The pending upload verifier settles these entries at the end of each pass
+(`PendingSourceDeletes`), after that pass's confirmations, and not while it is
+blocked on authorization. For each entry:
+
+- When another namespace is active, the entry is dropped and the source stays.
+- Each record's upload row must be absent, for a record another device wrote,
+  or `Confirmed` in the active namespace. An upload that failed for good drops
+  the entry and keeps the source. Any other row leaves the entry for a later
+  pass. A confirmed row alone is not proof, since a listing or summary read can
+  confirm an upload.
+- The provider must then report every record uploaded (`is_backup_uploaded`;
+  on iOS `ubiquitousItemIsUploaded`, on Android the file exists in Drive).
+  Anything else leaves the entry for a later pass, and an authorization error
+  ends the settle for that pass.
+- Only then is the source deleted, as a background `SourceCleanup` write under
+  the configuration current at the pass's start. A source already gone counts as
+  deleted. A paused or failed delete leaves the entry for a later pass.
+
+The entry lives in the configured record, so it survives a relaunch, and Turn
+Off or a new configuration drops it with the record. An older build ignores the
+field, and one that rewrites the record drops it, which only leaves the source
+in place. The verifier pass already runs on launch, on provider metadata and
+connectivity changes and after every upload, so a pending entry doesn't keep
+the verifier loop running on its own; that would retry every 10 seconds while
+iCloud is full.
 
 ## Write Lane
 
@@ -1062,11 +1113,11 @@ one of four:
 | Class | Sent by | Runs when | Paused when |
 |---|---|---|---|
 | `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset, a failed load |
-| `SourceCleanup { generation }` | merged-namespace cleanup | as `Ordinary` | as `Ordinary` |
+| `SourceCleanup { generation }` | a pending source delete, once its replacements uploaded | as `Ordinary` | as `Ordinary` |
 | `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
 | `RowDelete { claim, .. }` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running and its authorization still matches the inventory | never |
-| `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
+| `OtherBackupDelete(claim)` | Delete Other Backups | that operation is running | never |
 | `EnableDiscard(claim)` | discarding the namespace of an interrupted Enable or a stopped reinitialize | that discard is running | never |
 
 For every class without a pause, a write that does not meet the "Runs when"
@@ -1093,7 +1144,7 @@ The same rules by runtime body:
 A configuration generation is a process-local number. The supervisor starts a
 new one when the policy body changes kind, for example when backup turns on or
 off, or when a reinitialize ends. `Ordinary` and `SourceCleanup` writes from an
-older generation are stale. That covers cleanup jobs already queued or being
+older generation are stale. That covers source deletes already queued or being
 prepared for a configuration that was replaced.
 
 When a new policy lets ordinary writes run again, the lane tells the supervisor
@@ -1117,11 +1168,12 @@ uploaded. It re-decides the class before it applies the completion, so a write
 whose operation ended meanwhile is reported cancelled.
 
 A reinitialize owns the namespaces from its start, the same way. Its policy
-pauses ordinary writes and source cleanup, so a cleanup whose proof was read
-before the reinitialize began never deletes a source it may recover. It then
-drains the lane before it lists the namespaces, so a cleanup delete that was
-already running finishes before the reinitialize reads what exists. When it
-ends, the new generation makes anything left from before stale.
+pauses ordinary writes and source cleanup, so a source delete recorded before
+the reinitialize began never deletes a source it may recover. It then drains
+the lane before it lists the namespaces, so a source delete that was already
+running finishes before the reinitialize reads what exists. When it ends, the
+new generation makes anything left from before stale, and a pending source
+delete whose active namespace is no longer the active one is dropped.
 
 ### Uploads never drop key material
 

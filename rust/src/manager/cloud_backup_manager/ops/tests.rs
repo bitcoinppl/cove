@@ -536,6 +536,7 @@ mod restore;
 mod restored_history;
 mod round_trip;
 mod seed_restore;
+mod source_delete;
 mod sync_health;
 mod ui_fixture;
 mod undecryptable_wallets;

@@ -486,8 +486,10 @@ async fn recover_other_backups_moves_a_seed_beside_a_local_wallet_that_lost_its_
     });
     assert!(seed.is_held_by(&restored.id));
 
-    // the restored wallet's own backup holds the seed, so the source is recovered
+    // the restored wallet's own backup holds the seed, so the source is recovered and deleted
+    // by the verifier pass that finds that backup uploaded
     assert!(active_record_holds_seed(&restored.id).await);
+    verify_pending_uploads_once_for_test_async(&manager).await;
     assert!(!globals.cloud.has_namespace(&other));
 }
 
@@ -557,6 +559,7 @@ async fn recover_other_backups_reads_a_seed_record_sharing_an_id_with_a_watch_on
     offer_other_passkey(globals);
     let second_report = recover_other_backups_for_test(&manager).await.unwrap();
     assert_eq!(restored_and_failed(&second_report), (0, 0, Vec::new()));
+    verify_pending_uploads_once_for_test_async(&manager).await;
     assert!(!globals.cloud.has_namespace(&other));
 }
 

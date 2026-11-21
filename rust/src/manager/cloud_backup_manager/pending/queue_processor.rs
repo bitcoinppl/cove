@@ -2,7 +2,8 @@
 //!
 //! Uploaded blobs are not trusted until a later cloud read confirms that the
 //! expected revision is visible remotely. Authorization failures pause this
-//! verifier without rewriting the persisted blob state
+//! verifier without rewriting the persisted blob state. Each pass ends by
+//! settling the pending source deletes whose replacements it may have confirmed
 
 use act_zero::call;
 use cove_cspp::backup_data::EncryptedWalletBackup;
@@ -13,6 +14,7 @@ use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use super::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
+use super::source_deletes::PendingSourceDeletes;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
@@ -147,6 +149,12 @@ impl PendingUploadVerifier {
                     "Pending upload verification: lifecycle owner stopped before settling: {error}"
                 );
             }
+        }
+
+        // after this pass's confirmations, so a source whose replacements just confirmed is
+        // deleted in the same pass
+        if !blocked_on_authorization {
+            PendingSourceDeletes(&self.0).settle().await;
         }
 
         let has_pending = self.0.has_pending_cloud_upload_verification();

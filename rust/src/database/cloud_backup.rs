@@ -25,8 +25,9 @@ pub use state::{
     PersistedDeepVerificationReport, PersistedDisableDisposition, PersistedDisablingCloudBackup,
     PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
     PersistedDriveAccountSwitchState, PersistedHealNotice, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker, PersistedVerificationRequirement, PersistedWalletVerificationIssues,
+    PersistedPendingSourceDelete, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
+    PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -265,6 +266,7 @@ mod tests {
             pending_verification_completion: None,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 
@@ -340,6 +342,37 @@ mod tests {
         assert!(state.clear_pending_restore_all());
         assert!(state.pending_restore_all().is_none());
         assert!(!state.clear_pending_restore_all());
+    }
+
+    /// One entry per source: a later entry for the same source replaces the earlier one, and a
+    /// clear of the earlier one leaves the later in place
+    #[test]
+    fn pending_source_delete_replaces_by_source_and_clears_only_the_stored_entry() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            None,
+            Some(2),
+        );
+        let pending = |record_id: &str| PersistedPendingSourceDelete {
+            source_namespace_id: "source-1".into(),
+            active_namespace_id: "namespace-1".into(),
+            record_ids: vec![record_id.into()],
+        };
+
+        assert!(state.replace_pending_source_delete(pending("wallet-1")));
+        assert!(state.replace_pending_source_delete(pending("wallet-2")));
+        assert_eq!(state.pending_source_deletes(), [pending("wallet-2")]);
+        assert!(!state.clear_pending_source_delete(&pending("wallet-1")));
+        assert!(state.clear_pending_source_delete(&pending("wallet-2")));
+        assert!(state.pending_source_deletes().is_empty());
+
+        let mut disabled = PersistedCloudBackupState::Disabled;
+        assert!(!disabled.replace_pending_source_delete(pending("wallet-1")));
+        assert!(disabled.pending_source_deletes().is_empty());
     }
 
     #[test]

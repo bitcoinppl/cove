@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, send};
 use cove_cspp::backup_data::WalletEntry;
@@ -7,6 +7,7 @@ use cove_device::cloud_storage::CloudStorageClient;
 use tracing::{info, warn};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use crate::database::cloud_backup::PersistedPendingSourceDelete;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteClient, ConfigGeneration,
 };
@@ -25,10 +26,11 @@ pub(crate) struct CleanupSourceNamespace {
     pub(crate) expected_wallets: Vec<CleanupExpectedWalletRecord>,
 }
 
-/// Deletes merge sources once the active namespace provably holds their wallets
+/// Records merge sources for deletion once the active namespace provably holds their wallets
 ///
-/// The job is proven under one configuration: its deletes carry `generation`, so the write lane
-/// drops them, queued or preparing, once the configuration changes
+/// The job is proven under one configuration: the lifecycle owner records its sources only while
+/// `generation` is current, so a proof read before a Turn Off or a new configuration records
+/// nothing
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct CloudBackupCleanupJob {
     #[zeroize(skip)]
@@ -94,9 +96,10 @@ impl CloudBackupCleanupWorker {
 
         let writes =
             CloudBackupWriteClient::background(manager.cloud_writes.clone(), job.generation);
+        let manager = Arc::downgrade(&manager);
         self.running = true;
         self.addr.send_fut_with(move |addr| async move {
-            let result = run_cleanup_job(job, &writes).await;
+            let result = run_cleanup_job(job, &manager, &writes).await;
             send!(addr.complete_cleanup(result));
         });
     }
@@ -124,8 +127,14 @@ impl CloudBackupCleanupWorker {
     }
 }
 
+/// Proves each source's wallets held by the active namespace, then records the source for
+/// deletion once the provider reports those records uploaded
+///
+/// The proof reads the active records back, which on iOS can read a file only staged on this
+/// device, so it is not enough on its own to delete the source
 async fn run_cleanup_job(
     mut job: CloudBackupCleanupJob,
+    manager: &Weak<RustCloudBackupManager>,
     writes: &CloudBackupWriteClient,
 ) -> Result<(), CloudBackupError> {
     let cloud = job.cloud.clone();
@@ -152,22 +161,31 @@ async fn run_cleanup_job(
             continue;
         }
 
-        match writes.delete_source_namespace(cloud.clone(), source.namespace_id.clone()).await {
-            Ok(()) => info!("Deleted merged cloud backup namespace {}", source.namespace_id),
+        let Some(manager) = manager.upgrade() else { return Ok(()) };
+        let pending = PersistedPendingSourceDelete {
+            source_namespace_id: source.namespace_id.clone(),
+            active_namespace_id: job.active_namespace_id.clone(),
+            record_ids: source
+                .expected_wallets
+                .into_iter()
+                .map(|wallet| wallet.record_id)
+                .collect(),
+        };
 
-            // the proof was made under a configuration that changed, or deletes are paused;
-            // the sources stay, which is always safe
+        match manager.record_pending_source_delete(writes, pending).await {
+            Ok(()) => info!(
+                "Merged cloud backup namespace {} is deleted once its uploads confirm",
+                source.namespace_id
+            ),
+
+            // the proof was made under a configuration that changed; the sources stay, which is
+            // always safe
             Err(CloudBackupError::WritesPaused(reason)) => {
                 info!("Skipping cloud backup namespace cleanup reason={reason:?}");
                 return Ok(());
             }
 
-            Err(error) => {
-                return Err(error.with_cloud_storage_context(format!(
-                    "delete merged cloud backup namespace {}",
-                    source.namespace_id
-                )));
-            }
+            Err(error) => return Err(error),
         }
     }
 

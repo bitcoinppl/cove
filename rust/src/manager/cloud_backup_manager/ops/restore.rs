@@ -8,6 +8,7 @@ use zeroize::Zeroizing;
 
 use super::blocking_cloud_error;
 use crate::backup::import::LabelRestoreWarning;
+use crate::database::cloud_backup::PersistedPendingSourceDelete;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, WalletBackupLookup, WalletBackupReader,
@@ -72,6 +73,10 @@ impl RustCloudBackupManager {
             // may be deleted once they are all of its records
             let mut recovered_record_ids = HashSet::new();
 
+            // the current backup's records that hold them, which the provider must report
+            // uploaded before the source is deleted
+            let mut replacement_record_ids = Vec::new();
+
             // a record under an id the current backup also holds is still read: the current copy
             // may be watch-only while this one holds the seed
             for record_id in &wallet_record_ids {
@@ -122,6 +127,7 @@ impl RustCloudBackupManager {
                     match current_record_holds(current_reader.as_ref(), record_id, &wallet).await {
                         Ok(true) => {
                             recovered_record_ids.insert(record_id.clone());
+                            replacement_record_ids.push(record_id.clone());
                         }
                         Ok(false) => {}
                         Err(error) if is_provider_wide_interruption(&error) => {
@@ -152,6 +158,14 @@ impl RustCloudBackupManager {
                             }
                             None => {
                                 recovered_record_ids.insert(record_id.clone());
+
+                                // a wallet restored under a new id is backed up under a new
+                                // record id
+                                replacement_record_ids.push(
+                                    cove_cspp::backup_data::wallet_record_id(
+                                        restored.metadata().id.as_ref(),
+                                    ),
+                                );
                             }
                         }
 
@@ -220,27 +234,29 @@ impl RustCloudBackupManager {
                 }));
             }
 
-            // reached only once the restored wallets uploaded, so every restored record is backed
-            // up; a wallet restored under a new wallet id is backed up under a new record id, so
-            // its source record counts here, but only for this namespace: another namespace's
-            // copy of the same record may hold different data and is still read
+            // reached only once the restored wallets' uploads returned, which on iOS can mean
+            // the files are only staged on this device, so the source is recorded for deletion
+            // once the provider reports each replacement uploaded rather than deleted here; a
+            // wallet restored under a new wallet id counts its source record, but only for this
+            // namespace: another namespace's copy of the same record may hold different data and
+            // is still read
             if !wallet_record_ids.is_empty()
                 && wallet_record_ids
                     .iter()
                     .all(|record_id| recovered_record_ids.contains(record_id))
             {
-                writes
-                    .delete_other_namespace(cloud.clone(), namespace.namespace_id.clone())
-                    .await
-                    .map_err(|error| {
-                        blocking_cloud_error(
-                            BlockingCloudStep::RecoverOtherBackups,
-                            error.with_cloud_storage_context(
-                                "delete recovered cloud backup namespace",
-                            ),
-                        )
-                    })?;
-                info!("Deleted recovered cloud backup namespace {}", namespace.namespace_id);
+                let pending = PersistedPendingSourceDelete {
+                    source_namespace_id: namespace.namespace_id.clone(),
+                    active_namespace_id: current_namespace.clone(),
+                    record_ids: replacement_record_ids,
+                };
+                self.record_pending_source_delete(writes, pending).await.map_err(|error| {
+                    blocking_cloud_error(BlockingCloudStep::RecoverOtherBackups, error)
+                })?;
+                info!(
+                    "Recovered cloud backup namespace {} is deleted once its uploads confirm",
+                    namespace.namespace_id
+                );
                 moved_namespace_count += 1;
             }
         }

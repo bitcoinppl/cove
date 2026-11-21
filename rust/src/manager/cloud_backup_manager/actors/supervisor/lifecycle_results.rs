@@ -5,7 +5,10 @@
 //! so no producer persists the lifecycle record itself
 
 use super::*;
-use crate::manager::cloud_backup_manager::actors::write::CloudBackupUploadedWalletsStateMode;
+use crate::database::cloud_backup::PersistedPendingSourceDelete;
+use crate::manager::cloud_backup_manager::actors::write::{
+    CloudBackupUploadedWalletsStateMode, WriteOwner,
+};
 use crate::manager::cloud_backup_manager::pending::RemoteRevisionEvidence;
 use crate::manager::cloud_backup_manager::verify::{
     IntegrityDowngrade, PendingVerificationSettlement,
@@ -234,6 +237,56 @@ impl CloudBackupSupervisor {
             self.runtime.commit(|lifecycle| lifecycle.clear_stale_restore_all_marker(&namespace_id))
         {
             error!("Failed to clear stale Restore All marker: {error}");
+        }
+
+        Produces::ok(())
+    }
+
+    /// A producer proved the active namespace holds another namespace's wallets, so that source
+    /// is deleted once the provider reports the records holding them uploaded
+    ///
+    /// Judged under the producer's authority, as the write lane judges its writes: an
+    /// operation's only while it still runs, and background work's only while the configuration
+    /// it read is current, so a proof read before a Turn Off or a new configuration records
+    /// nothing
+    pub async fn record_pending_source_delete(
+        &mut self,
+        owner: WriteOwner,
+        pending: PersistedPendingSourceDelete,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let refusal = match owner {
+            WriteOwner::Operation(claim)
+                if !self.runtime.accepts_completion(claim, "pending source delete") =>
+            {
+                Some(CloudBackupError::Cancelled)
+            }
+            WriteOwner::Background(generation) if generation != self.runtime.generation() => {
+                Some(CloudBackupError::WritesPaused(PauseReason::ConfigurationChanged))
+            }
+            WriteOwner::Operation(_) | WriteOwner::Background(_) => None,
+        };
+
+        if let Some(refusal) = refusal {
+            return Produces::ok(Err(refusal));
+        }
+
+        let result =
+            self.runtime.commit(|lifecycle| lifecycle.persist_pending_source_delete(pending));
+
+        Produces::ok(result)
+    }
+
+    /// The pending source delete `pending` finished, or can no longer finish and keeps its source
+    ///
+    /// The settling worker waits for this reply, so its next read already sees the entry gone
+    pub async fn clear_pending_source_delete(
+        &mut self,
+        pending: PersistedPendingSourceDelete,
+    ) -> ActorResult<()> {
+        if let Err(error) =
+            self.runtime.commit(|lifecycle| lifecycle.clear_pending_source_delete(&pending))
+        {
+            error!("Failed to clear pending source delete: {error}");
         }
 
         Produces::ok(())

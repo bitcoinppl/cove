@@ -98,6 +98,7 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
             pending_verification_completion: state.pending_verification_completion,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 }
@@ -293,6 +294,8 @@ struct PersistedConfiguredCloudBackupV2 {
     drive_account_switch: Option<PersistedDriveAccountSwitch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heal_notice: Option<super::PersistedHealNotice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pending_source_deletes: Vec<super::PersistedPendingSourceDelete>,
 }
 
 impl From<&PersistedConfiguredCloudBackup> for PersistedConfiguredCloudBackupV2 {
@@ -305,6 +308,7 @@ impl From<&PersistedConfiguredCloudBackup> for PersistedConfiguredCloudBackupV2 
             pending_restore_all: configured.pending_restore_all.clone(),
             drive_account_switch: None,
             heal_notice: configured.heal_notice,
+            pending_source_deletes: configured.pending_source_deletes.clone(),
         }
     }
 }
@@ -318,6 +322,7 @@ impl PersistedConfiguredCloudBackupV2 {
             pending_verification_completion: self.pending_verification_completion,
             pending_restore_all: self.pending_restore_all,
             heal_notice: self.heal_notice,
+            pending_source_deletes: self.pending_source_deletes,
         };
 
         match self.drive_account_switch {
@@ -503,6 +508,7 @@ mod tests {
             pending_verification_completion: None,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 
@@ -1195,5 +1201,67 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    /// A record an older build wrote has no pending source deletes and loads with none, as a
+    /// Configured record and inside a Disabling one, and writes no field for them; a record
+    /// with entries keeps them across a write and a read
+    #[test]
+    fn cloud_backup_state_reads_and_roundtrips_pending_source_deletes() {
+        use serde_json::json;
+
+        use super::super::PersistedPendingSourceDelete;
+
+        let configured_data = json!({
+            "passkey": "Available",
+            "verification": { "state": "NotVerified", "data": {} },
+            "sync": { "last_sync": 10, "wallet_count": 2 }
+        });
+        let older_configured: PersistedCloudBackupState = serde_json::from_value(json!({
+            "version": 3,
+            "backup": { "state": "Configured", "data": configured_data.clone() }
+        }))
+        .unwrap();
+        let older_disabling: PersistedCloudBackupState = serde_json::from_value(json!({
+            "version": 3,
+            "backup": {
+                "state": "Disabling",
+                "data": {
+                    "previous_configured": configured_data,
+                    "namespace_id": "namespace-1",
+                    "disable_generation": 99,
+                    "started_at": 30
+                }
+            }
+        }))
+        .unwrap();
+
+        for state in [&older_configured, &older_disabling] {
+            assert!(state.pending_source_deletes().is_empty(), "{state:?}");
+            let encoded = serde_json::to_value(state).unwrap();
+            assert!(!encoded.to_string().contains("pending_source_deletes"), "{encoded}");
+        }
+
+        let pending = PersistedPendingSourceDelete {
+            source_namespace_id: "source-1".into(),
+            active_namespace_id: "namespace-1".into(),
+            record_ids: vec!["wallet-1".into(), "wallet-2".into()],
+        };
+        let mut configured = older_configured;
+        assert!(configured.replace_pending_source_delete(pending.clone()));
+
+        let encoded = serde_json::to_value(&configured).unwrap();
+        assert_eq!(
+            encoded["backup"]["data"]["pending_source_deletes"][0]["source_namespace_id"],
+            "source-1"
+        );
+        let decoded: PersistedCloudBackupState = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.pending_source_deletes(), std::slice::from_ref(&pending));
+
+        let mut disabling = older_disabling;
+        assert!(disabling.replace_pending_source_delete(pending.clone()));
+        let decoded: PersistedCloudBackupState =
+            serde_json::from_value(serde_json::to_value(&disabling).unwrap()).unwrap();
+        assert_eq!(decoded.pending_source_deletes(), std::slice::from_ref(&pending));
     }
 }

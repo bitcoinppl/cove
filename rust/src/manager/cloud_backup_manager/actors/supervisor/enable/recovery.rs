@@ -195,7 +195,8 @@ impl CloudBackupSupervisor {
         self.finish_enable_operation(manager, claim);
 
         // queued after Enable ends, so the job carries the generation of the configuration it
-        // proved its sources under, and the lane drops its deletes once that changes
+        // proved its sources under, and the lifecycle owner records none of them once that
+        // changes
         self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
             generation: self.runtime.generation(),
             cloud: CloudStorage::global_explicit_client(),
