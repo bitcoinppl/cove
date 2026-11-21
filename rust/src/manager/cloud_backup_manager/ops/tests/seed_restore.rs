@@ -502,6 +502,9 @@ async fn recover_other_backups_adds_a_foreign_seed_to_a_local_watch_only_wallet(
     let other = other_master_key.namespace_id();
     let seed = Seed::new(48);
 
+    // the watch-only wallet has no record in the current backup, and iCloud reports a read of a
+    // missing file as a pending sync, which would fail the run after the seed was added
+    globals.cloud.set_explicit_missing_record_lookup(MockMissingRecordLookup::SyncPending);
     let watch_only = seed.local_wallet(WalletType::Cold);
     let (hot, hot_bytes) = seed.cloud_backup(WalletType::Hot, &other_master_key).await;
     list_backups(globals, &other, vec![(&hot.id, hot_bytes)]);

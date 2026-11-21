@@ -165,22 +165,25 @@ impl RustCloudBackupManager {
                     // wallet's version
                     Ok(WalletRestoreOutcome::SecretAdded { wallet: upgraded, labels_warning }) => {
                         report.wallets_restored += 1;
-                        let current_labels_warning =
-                            match add_current_record_labels(current_reader.as_ref(), &upgraded)
-                                .await
-                            {
-                                Ok(warning) => warning,
-                                Err(error) if is_provider_wide_interruption(&error) => {
-                                    return Err(blocking_cloud_error(
-                                        BlockingCloudStep::RecoverOtherBackups,
-                                        error,
-                                    ));
-                                }
-                                Err(error) => Some(LabelRestoreWarning {
-                                    wallet_name: upgraded.name.clone(),
-                                    error: error.to_string(),
-                                }),
-                            };
+                        let current_labels_warning = match add_current_record_labels(
+                            current_reader.as_ref(),
+                            &current_wallet_record_ids,
+                            &upgraded,
+                        )
+                        .await
+                        {
+                            Ok(warning) => warning,
+                            Err(error) if is_provider_wide_interruption(&error) => {
+                                return Err(blocking_cloud_error(
+                                    BlockingCloudStep::RecoverOtherBackups,
+                                    error,
+                                ));
+                            }
+                            Err(error) => Some(LabelRestoreWarning {
+                                wallet_name: upgraded.name.clone(),
+                                error: error.to_string(),
+                            }),
+                        };
 
                         if labels_warning.is_some() || current_labels_warning.is_some() {
                             report.labels_failed_wallet_names.push(upgraded.name.clone());
@@ -277,13 +280,19 @@ fn current_namespace_reader(
 /// for, since the wallet's upload replaces that record with its own labels
 ///
 /// Without the current namespace's master key nothing is read, and the upload then has no key to
-/// write with either
+/// write with either. A record the current backup doesn't list has nothing to replace, and is not
+/// read, since iCloud reports a read of a missing file as a pending sync, which would fail the run
 async fn add_current_record_labels(
     current_reader: Option<&WalletBackupReader>,
+    current_wallet_record_ids: &HashSet<String>,
     wallet: &WalletMetadata,
 ) -> Result<Option<LabelRestoreWarning>, CloudBackupError> {
     let Some(current_reader) = current_reader else { return Ok(None) };
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    if !current_wallet_record_ids.contains(&record_id) {
+        return Ok(None);
+    }
+
     let WalletBackupLookup::Found(current) = current_reader.lookup_entry(&record_id).await? else {
         return Ok(None);
     };
