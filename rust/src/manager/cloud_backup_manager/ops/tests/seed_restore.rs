@@ -793,8 +793,8 @@ async fn recover_other_backups_queues_a_seed_moved_to_a_new_id_when_its_upload_f
     assert!(globals.cloud.has_namespace(&other));
 }
 
-// a watch-only wallet keeps its wallet id when its address type changes, so a current record
-// under the same id can watch other descriptors than the source, which then stays
+// a watch-only wallet keeps its wallet id and xpub when its address type changes, so a current
+// record under the same id can watch other descriptors than the source, which then stays
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_a_watch_only_source_whose_descriptors_differ() {
     let _guard = async_test_lock().lock().await;
@@ -803,25 +803,34 @@ async fn recover_other_backups_keeps_a_watch_only_source_whose_descriptors_diffe
     configure_enabled_cloud_backup(&manager, globals, 0);
     let other_master_key = other_namespace(globals);
     let other = other_master_key.namespace_id();
+    let seed = Seed::new(55);
 
-    let local = Seed::new(55).local_wallet(WalletType::Cold);
+    let local = seed.local_wallet(WalletType::Cold);
     let current_bytes =
         encrypted_wallet_backup_bytes(&local, &active_master_key(), "current", 1).await;
     list_backups(globals, &active_namespace(), vec![(&local.id, current_bytes)]);
 
-    let mut source = Seed::new(56).wallet(WalletType::Cold);
-    let source_bytes = encrypted_wallet_backup_bytes(&source, &other_master_key, "source", 1).await;
-    assert!(Keychain::global().delete_wallet_items(&source.id));
-    source.id = local.id.clone();
+    // the same wallet and xpub, backed up before its address type changed
+    let mut before_change = local.clone();
+    before_change.address_type = crate::wallet::WalletAddressType::WrappedSegwit;
+    let descriptors =
+        seed.secret().into_descriptors(before_change.network, before_change.address_type);
+    let source_bytes = encrypted_wallet_backup_bytes(&local, &other_master_key, "source", 1).await;
     let source_bytes = edit_record(&source_bytes, &other_master_key, |entry| {
-        entry.wallet_id = source.id.to_string();
-        entry.metadata = serde_json::to_value(&source).unwrap();
+        entry.metadata = serde_json::to_value(&before_change).unwrap();
+        entry.descriptors = Some(cove_cspp::backup_data::DescriptorPair {
+            external: descriptors.external.extended_descriptor.to_string(),
+            internal: descriptors.internal.extended_descriptor.to_string(),
+        });
     });
     list_backups(globals, &other, vec![(&local.id, source_bytes)]);
 
-    let _ = recover_other_backups_for_test(&manager).await;
+    let error = recover_other_backups_for_test(&manager).await.unwrap_err();
 
+    // the record was read and compared, found nothing to restore, and kept its namespace
+    assert!(error.to_string().contains("no wallets were found"), "{error}");
     assert!(globals.cloud.has_namespace(&other));
+    assert_eq!(local_wallets(), vec![local]);
 }
 
 // a wallet restored under its own id from another namespace has no record in the current
