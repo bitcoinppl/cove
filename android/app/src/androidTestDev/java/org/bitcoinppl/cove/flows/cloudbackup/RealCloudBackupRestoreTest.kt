@@ -284,10 +284,12 @@ private class GoogleSignInRobot(
                 device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000)
                     ?: error("No screen lock field\n${device.dumpWindowHierarchy()}")
 
-            // tapped first, like the email and password, since the web page drops text set on a
-            // field that has no input focus
+            // the page ignores text set on this field through accessibility, so the PIN is typed as
+            // key events once the field has focus, as the restore's screen lock prompt is
             try {
-                device.setTextQuietly(pinField, account.screenLockPin)
+                pinField.click()
+                device.waitForIdle()
+                device.executeShellCommand("input text ${account.screenLockPin}")
                 return
             } catch (_: StaleObjectException) {
                 // the page redraws its field while it finishes loading, so the field is found again
