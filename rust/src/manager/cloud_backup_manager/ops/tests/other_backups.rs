@@ -248,6 +248,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
     let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
@@ -288,6 +289,9 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
+
+    // the source is deleted by the verifier pass that finds its replacement uploaded
+    verify_pending_uploads_once_for_test_async(&manager).await;
     assert!(!globals.cloud.has_namespace(&other_namespace));
     assert_eq!(
         CloudBackupKeychain::global().namespace_id().unwrap(),
@@ -314,6 +318,7 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    upload_active_master_key_wrapper(globals);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
     let prf_key = [7u8; 32];
@@ -362,10 +367,18 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
     assert_ne!(restored.id, wallet.id);
     assert_eq!(Keychain::global().get_wallet_xpub(&wallet.id).unwrap(), Some(unrelated_xpub));
 
-    // the source is deleted only after the restored wallet's own backup uploaded
+    // the source is deleted only after the restored wallet's own backup uploaded, by the
+    // verifier pass that finds that backup's record, under the new id, uploaded
     let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let restored_record_id = cove_cspp::backup_data::wallet_record_id(restored.id.as_ref());
     assert!(globals.cloud.has_wallet_backup(&current_namespace, &restored_record_id));
+    let state = Database::global().cloud_backup_state.get().unwrap();
+    let [pending] = state.pending_source_deletes() else {
+        panic!("expected the source pending deletion, found {state:?}");
+    };
+    assert_eq!(pending.record_ids, vec![restored_record_id]);
+
+    verify_pending_uploads_once_for_test_async(&manager).await;
     assert!(!globals.cloud.has_namespace(&other_namespace));
 }
 

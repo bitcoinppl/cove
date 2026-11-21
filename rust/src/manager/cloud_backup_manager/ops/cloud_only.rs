@@ -25,7 +25,7 @@ use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
     CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
-    WalletBackupReadError, WalletBackupReader,
+    WalletBackupReadError, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
@@ -60,10 +60,7 @@ impl CloudBackupPreparedWalletRestore {
 
         // read after the download, so a local wallet deleted while it waited is not counted and
         // a wallet this run restored earlier is
-        let local_wallets =
-            crate::wallet_identity::collect_local_wallet_identities().map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let local_wallets = crate::wallet_identity::collect_local_wallet_identities()?;
 
         let outcome = wallet.restore_cloud_only(&local_wallets)?;
 
@@ -294,8 +291,8 @@ impl RustCloudBackupManager {
         result: &Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) {
         match result {
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id, .. }) => {
-                self.handle_restored_wallet_needs_backup(wallet_id.clone());
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet, .. }) => {
+                self.handle_restored_wallet_needs_backup(wallet.id.clone());
             }
             Ok(CloudOnlyRestoreOutcome::Restored { wallet, .. })
                 if wallet.placement() == CloudRestorePlacement::NewWalletId =>
@@ -304,6 +301,34 @@ impl RustCloudBackupManager {
             }
             _ => {}
         }
+    }
+
+    /// Restores one downloaded backup in a batch's `session`, queueing the upload of the wallet it
+    /// restored, or added a secret to, as soon as that commits
+    ///
+    /// The active backup holds none of that until the wallet uploads, so a batch that is
+    /// cancelled, returns early or fails its own upload still leaves it queued, and a retry that
+    /// now finds the wallet covered doesn't leave the device without a backup of it
+    pub(crate) fn restore_in_session(
+        &self,
+        session: &mut WalletRestoreSession,
+        wallet: &DownloadedWalletBackup,
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
+        let result = session.restore_downloaded(wallet);
+        match &result {
+            Ok(WalletRestoreOutcome::SecretAdded { wallet, .. }) => {
+                self.handle_restored_wallet_needs_backup(wallet.id.clone());
+            }
+
+            // the batch may read the record from another namespace, or under an id the record
+            // doesn't describe, so nothing else uploads this wallet if the run's own upload fails
+            Ok(WalletRestoreOutcome::Restored { wallet, .. }) => {
+                self.handle_restored_wallet_needs_backup(wallet.metadata().id.clone());
+            }
+            Ok(WalletRestoreOutcome::SkippedDuplicate) | Err(_) => {}
+        }
+
+        result
     }
 
     /// Uses `authority` only when the local master key is missing

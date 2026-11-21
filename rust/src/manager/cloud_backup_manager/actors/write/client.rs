@@ -22,7 +22,7 @@ use crate::manager::cloud_backup_manager::wallets::{WalletBackupReader, WalletUp
 /// Producers read it before anything they write depends on, so a configuration or operation that
 /// changes after that leaves their writes with an authority the owner no longer accepts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WriteOwner {
+pub(crate) enum WriteOwner {
     /// Background work, read under this configuration generation
     Background(ConfigGeneration),
     /// The running exclusive operation with this claim
@@ -63,6 +63,12 @@ impl CloudBackupWriteClient {
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Self {
         Self { supervisor, owner: WriteOwner::Operation(origin) }
+    }
+
+    /// Who this client writes for, so the lifecycle owner can judge a durable record of its
+    /// work under the same authority the lane judges its writes under
+    pub(crate) fn owner(&self) -> WriteOwner {
+        self.owner
     }
 
     fn origin(&self) -> Option<CloudBackupExclusiveOperationClaim> {
@@ -311,7 +317,7 @@ impl CloudBackupWriteClient {
         self.delete_namespace(class, cloud, namespace).await
     }
 
-    /// Recover Other Backups or Delete Other Backups deleting another namespace
+    /// Delete Other Backups deleting another namespace
     pub(crate) async fn delete_other_namespace(
         &self,
         cloud: CloudStorageClient,
@@ -331,7 +337,8 @@ impl CloudBackupWriteClient {
         self.delete_namespace(class, cloud, namespace).await
     }
 
-    /// Deletes a namespace a merge made redundant, proven under this client's generation
+    /// Deletes a source namespace whose replacements the provider reported uploaded, proven under
+    /// this client's generation
     pub(crate) async fn delete_source_namespace(
         &self,
         cloud: CloudStorageClient,

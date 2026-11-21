@@ -1,6 +1,7 @@
 mod detail;
 mod queue_processor;
 mod remote_evidence;
+mod source_deletes;
 
 use std::time::Duration;
 

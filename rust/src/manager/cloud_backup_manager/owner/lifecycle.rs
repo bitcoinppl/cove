@@ -15,7 +15,8 @@ use crate::database::cloud_backup::{
     CommittedCloudBackupStateMutation, DriveAccountSwitchId, PersistedCloudBackupState,
     PersistedCloudBackupTransition, PersistedCloudBlobSyncState, PersistedDisableDisposition,
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
-    PersistedHealNotice, PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
+    PersistedHealNotice, PersistedPendingSourceDelete, PersistedPendingVerificationCompletion,
+    PersistedRestoreAllMarker,
 };
 
 use super::super::verify::{IntegrityDowngrade, apply_persisted_verification_result};
@@ -496,6 +497,38 @@ impl LifecycleWriter {
         })
         .map(|mutation| mutation.outcome)
         .map_err(|source| CloudBackupError::internal_context("clear Restore All marker", source))
+    }
+
+    /// A source namespace waits for the provider to report its replacement records uploaded
+    /// before it is deleted; replaces any entry for the same source
+    pub(crate) fn persist_pending_source_delete(
+        &self,
+        pending: PersistedPendingSourceDelete,
+    ) -> Result<(), CloudBackupError> {
+        let mutation = self.mutate(|state| state.replace_pending_source_delete(pending)).map_err(
+            |source| CloudBackupError::internal_context("persist pending source delete", source),
+        )?;
+        if !mutation.outcome {
+            return Err(CloudBackupError::Internal(
+                "cannot record a pending source delete while Cloud Backup is not configured".into(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// A pending source delete finished or was abandoned
+    ///
+    /// Bound to the entry, so one a later run recorded for the same source stays
+    pub(crate) fn clear_pending_source_delete(
+        &self,
+        pending: &PersistedPendingSourceDelete,
+    ) -> Result<bool, CloudBackupError> {
+        self.mutate(|state| state.clear_pending_source_delete(pending))
+            .map(|mutation| mutation.outcome)
+            .map_err(|source| {
+                CloudBackupError::internal_context("clear pending source delete", source)
+            })
     }
 
     /// A local reset is about to clear the local keys, which can't be taken back

@@ -337,6 +337,19 @@ impl LabelManager {
         self.save_imported_labels(parse_labels(jsonl)?, false)
     }
 
+    /// Imports only the labels for items this wallet has no label or lock for, without marking
+    /// its cloud backup dirty; the caller queues the upload
+    pub(crate) fn import_missing_without_cloud_backup_dirty(
+        &self,
+        jsonl: &str,
+    ) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
+        self.db
+            .labels
+            .insert_missing_imported_labels(parse_labels(jsonl)?)
+            .map_err_str(LabelManagerError::Save)
+    }
+
     fn delete_labels_for_txn_without_cloud_backup_dirty(
         &self,
         tx_id: Arc<TxId>,

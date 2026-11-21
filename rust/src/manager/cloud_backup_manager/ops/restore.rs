@@ -1,20 +1,26 @@
 use std::collections::HashSet;
 
+use cove_cspp::backup_data::WalletSecret as CloudWalletSecret;
 use cove_device::cloud_storage::CloudStorageClient;
+use cove_device::keychain::Keychain;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::blocking_cloud_error;
+use crate::backup::import::LabelRestoreWarning;
+use crate::database::cloud_backup::PersistedPendingSourceDelete;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    DownloadedWalletBackup, NamespaceMatch, WalletBackupLookup, WalletBackupReader,
+    WalletRestoreOutcome, WalletRestoreSession, add_missing_labels,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
     current_namespace_wallet_record_ids, is_provider_wide_interruption,
 };
+use crate::wallet::metadata::WalletMetadata;
+use crate::wallet_identity::LocalWalletCoverage;
 
 impl RustCloudBackupManager {
     pub(crate) async fn restore_wallets_from_namespaces(
@@ -24,10 +30,7 @@ impl RustCloudBackupManager {
         writes: &CloudBackupWriteClient,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut current_wallet_record_ids: HashSet<_> = current_namespace_wallet_record_ids(
             cloud,
@@ -37,6 +40,7 @@ impl RustCloudBackupManager {
         .await?
         .into_iter()
         .collect();
+        let current_reader = current_namespace_reader(cloud, &current_namespace)?;
         let mut moved_namespace_count = 0;
         let mut report = CloudBackupRestoreReport {
             wallets_restored: 0,
@@ -64,13 +68,18 @@ impl RustCloudBackupManager {
             );
 
             let mut restored_wallets = Vec::new();
-            let mut restored_record_ids = Vec::new();
 
+            // the source records this device and the current backup now hold, so the namespace
+            // may be deleted once they are all of its records
+            let mut recovered_record_ids = HashSet::new();
+
+            // the current backup's records that hold them, which the provider must report
+            // uploaded before the source is deleted
+            let mut replacement_record_ids = Vec::new();
+
+            // a record under an id the current backup also holds is still read: the current copy
+            // may be watch-only while this one holds the seed
             for record_id in &wallet_record_ids {
-                if current_wallet_record_ids.contains(record_id) {
-                    continue;
-                }
-
                 let wallet = match reader.lookup(record_id).await {
                     Ok(WalletBackupLookup::Found(wallet)) => wallet,
                     Ok(WalletBackupLookup::NotFound) => {
@@ -107,18 +116,98 @@ impl RustCloudBackupManager {
                     }
                 };
 
-                match restore_session.restore_downloaded(&wallet) {
+                // the current backup's copy of a record is the one this device's wallet uploads
+                // over, so a source copy under the same record id is restored only to add a seed a
+                // local wallet lacks, since restoring it otherwise could upload an older copy over
+                // a newer one, and counts as recovered only once the current copy holds everything
+                // it does
+                if current_wallet_record_ids.contains(record_id)
+                    && restore_session.coverage_of(&wallet) != LocalWalletCoverage::SecretMissing
+                {
+                    match current_record_holds(current_reader.as_ref(), record_id, &wallet).await {
+                        Ok(true) => {
+                            recovered_record_ids.insert(record_id.clone());
+                            replacement_record_ids.push(record_id.clone());
+                        }
+                        Ok(false) => {}
+                        Err(error) if is_provider_wide_interruption(&error) => {
+                            return Err(blocking_cloud_error(
+                                BlockingCloudStep::RecoverOtherBackups,
+                                error,
+                            ));
+                        }
+                        Err(error) => {
+                            warn!("Keeping other backup record, current copy unreadable: {error}");
+                        }
+                    }
+
+                    continue;
+                }
+
+                match self.restore_in_session(&mut restore_session, &wallet) {
+                    // a wallet whose labels failed to import uploads without them, so its source
+                    // stays as the only copy of those labels
                     Ok(WalletRestoreOutcome::Restored { wallet: restored, labels_warning }) => {
                         report.wallets_restored += 1;
-                        if let Some(warning) = labels_warning {
-                            report.labels_failed_wallet_names.push(warning.wallet_name);
+                        match labels_warning {
+                            Some(warning) => {
+                                report.labels_failed_wallet_names.push(warning.wallet_name);
+                                report
+                                    .labels_failed_errors
+                                    .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
+                            }
+                            None => {
+                                recovered_record_ids.insert(record_id.clone());
+
+                                // a wallet restored under a new id is backed up under a new
+                                // record id
+                                replacement_record_ids.push(
+                                    cove_cspp::backup_data::wallet_record_id(
+                                        restored.metadata().id.as_ref(),
+                                    ),
+                                );
+                            }
+                        }
+
+                        restored_wallets.push(restored.into_metadata());
+                    }
+
+                    // the upgraded wallet uploads with this batch, replacing any copy restored
+                    // earlier in it, which still has the watch-only metadata, and replacing the
+                    // current backup's record under its id, so that record's labels are added to
+                    // it first; the source stays, since labels it shares with the wallet keep the
+                    // wallet's version
+                    Ok(WalletRestoreOutcome::SecretAdded { wallet: upgraded, labels_warning }) => {
+                        report.wallets_restored += 1;
+                        let current_labels_warning = match add_current_record_labels(
+                            current_reader.as_ref(),
+                            &current_wallet_record_ids,
+                            &upgraded,
+                        )
+                        .await
+                        {
+                            Ok(warning) => warning,
+                            Err(error) if is_provider_wide_interruption(&error) => {
+                                return Err(blocking_cloud_error(
+                                    BlockingCloudStep::RecoverOtherBackups,
+                                    error,
+                                ));
+                            }
+                            Err(error) => Some(LabelRestoreWarning {
+                                wallet_name: upgraded.name.clone(),
+                                error: error.to_string(),
+                            }),
+                        };
+
+                        if labels_warning.is_some() || current_labels_warning.is_some() {
+                            report.labels_failed_wallet_names.push(upgraded.name.clone());
                             report
                                 .labels_failed_errors
                                 .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                         }
 
-                        restored_wallets.push(restored.into_metadata());
-                        restored_record_ids.push(record_id.clone());
+                        restored_wallets.retain(|restored| restored.id != upgraded.id);
+                        restored_wallets.push(*upgraded);
                     }
                     Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
 
@@ -145,27 +234,30 @@ impl RustCloudBackupManager {
                 }));
             }
 
-            // a wallet restored under a new wallet id is backed up under a new record id, so its
-            // source record counts as recovered here, but only for this namespace: another
-            // namespace's copy of the same record may hold different data and is still read
+            // reached only once the restored wallets' uploads returned, which on iOS can mean
+            // the files are only staged on this device, so the source is recorded for deletion
+            // once the provider reports each replacement uploaded rather than deleted here; a
+            // wallet restored under a new wallet id counts its source record, but only for this
+            // namespace: another namespace's copy of the same record may hold different data and
+            // is still read
             if !wallet_record_ids.is_empty()
-                && wallet_record_ids.iter().all(|record_id| {
-                    current_wallet_record_ids.contains(record_id)
-                        || restored_record_ids.contains(record_id)
-                })
+                && wallet_record_ids
+                    .iter()
+                    .all(|record_id| recovered_record_ids.contains(record_id))
             {
-                writes
-                    .delete_other_namespace(cloud.clone(), namespace.namespace_id.clone())
-                    .await
-                    .map_err(|error| {
-                        blocking_cloud_error(
-                            BlockingCloudStep::RecoverOtherBackups,
-                            error.with_cloud_storage_context(
-                                "delete recovered cloud backup namespace",
-                            ),
-                        )
-                    })?;
-                info!("Deleted recovered cloud backup namespace {}", namespace.namespace_id);
+                let pending = PersistedPendingSourceDelete {
+                    source_namespace_id: namespace.namespace_id.clone(),
+                    active_namespace_id: current_namespace.clone(),
+                    record_ids: replacement_record_ids,
+                    source_record_ids: wallet_record_ids.clone(),
+                };
+                self.record_pending_source_delete(writes, pending).await.map_err(|error| {
+                    blocking_cloud_error(BlockingCloudStep::RecoverOtherBackups, error)
+                })?;
+                info!(
+                    "Recovered cloud backup namespace {} is deleted once its uploads confirm",
+                    namespace.namespace_id
+                );
                 moved_namespace_count += 1;
             }
         }
@@ -179,4 +271,89 @@ impl RustCloudBackupManager {
 
         Ok(report)
     }
+}
+
+/// A reader for the current namespace, or `None` when its master key is not on this device, in
+/// which case no source record can be proven held by the current backup
+fn current_namespace_reader(
+    cloud: &CloudStorageClient,
+    namespace: &str,
+) -> Result<Option<WalletBackupReader>, CloudBackupError> {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
+        .filter(|master_key| master_key.namespace_id() == namespace);
+
+    Ok(master_key.map(|master_key| {
+        WalletBackupReader::new(
+            cloud.clone(),
+            namespace.to_owned(),
+            Zeroizing::new(master_key.critical_data_key()),
+        )
+    }))
+}
+
+/// Adds the labels of the current backup's record under `wallet`'s id that the wallet has none
+/// for, since the wallet's upload replaces that record with its own labels
+///
+/// Without the current namespace's master key nothing is read, and the upload then has no key to
+/// write with either. A record the current backup doesn't list has nothing to replace, and is not
+/// read, since iCloud reports a read of a missing file as a pending sync, which would fail the run
+async fn add_current_record_labels(
+    current_reader: Option<&WalletBackupReader>,
+    current_wallet_record_ids: &HashSet<String>,
+    wallet: &WalletMetadata,
+) -> Result<Option<LabelRestoreWarning>, CloudBackupError> {
+    let Some(current_reader) = current_reader else { return Ok(None) };
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    if !current_wallet_record_ids.contains(&record_id) {
+        return Ok(None);
+    }
+
+    let WalletBackupLookup::Found(current) = current_reader.lookup_entry(&record_id).await? else {
+        return Ok(None);
+    };
+
+    Ok(add_missing_labels(&current, wallet))
+}
+
+/// Whether the current backup's record under `record_id` holds everything `source` holds: its
+/// key material, its public keys and, when it has labels, the same labels
+///
+/// A matching record id alone proves nothing, since the current copy can be watch-only while
+/// the source holds the seed, watch other descriptors after an address type change, or hold
+/// none of the source's labels
+async fn current_record_holds(
+    current_reader: Option<&WalletBackupReader>,
+    record_id: &str,
+    source: &DownloadedWalletBackup,
+) -> Result<bool, CloudBackupError> {
+    let Some(current_reader) = current_reader else { return Ok(false) };
+    let WalletBackupLookup::Found(current) = current_reader.lookup_entry(record_id).await? else {
+        return Ok(false);
+    };
+
+    let source = &source.entry;
+    let holds_key_material = match (&source.secret, &current.secret) {
+        (CloudWalletSecret::Mnemonic(source), CloudWalletSecret::Mnemonic(current))
+        | (CloudWalletSecret::Xprv(source), CloudWalletSecret::Xprv(current)) => source == current,
+        (
+            CloudWalletSecret::TapSignerBackup(source),
+            CloudWalletSecret::TapSignerBackup(current),
+        ) => source == current,
+        (CloudWalletSecret::Descriptor(_) | CloudWalletSecret::WatchOnly, _) => true,
+        _ => false,
+    };
+    let holds_descriptors = match (&source.descriptors, &current.descriptors) {
+        (None, _) => true,
+        (Some(source), Some(current)) => {
+            source.external == current.external && source.internal == current.internal
+        }
+        (Some(_), None) => false,
+    };
+    let holds_xpub = source.xpub.is_none() || source.xpub == current.xpub;
+    let holds_labels = source.labels_count == 0
+        || (source.labels_hash.is_some() && source.labels_hash == current.labels_hash);
+
+    Ok(holds_key_material && holds_descriptors && holds_xpub && holds_labels)
 }

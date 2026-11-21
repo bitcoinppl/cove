@@ -350,7 +350,8 @@ impl RestoreOperation {
                 &mut report,
             )
             .await?;
-        let applied = self.apply_downloaded_wallets(&downloaded_wallets, &mut report).await?;
+        let applied =
+            self.apply_downloaded_wallets(manager, &downloaded_wallets, &mut report).await?;
 
         if matches!(applied.resolution, RestoreResolution::Nothing) && report.wallets_failed > 0 {
             self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
@@ -508,13 +509,11 @@ impl RestoreOperation {
     /// Restore the downloaded wallets locally and say which namespace, if any, proved usable
     async fn apply_downloaded_wallets(
         &self,
+        manager: &RustCloudBackupManager,
         downloaded_wallets: &[(usize, DownloadedWalletRecord)],
         report: &mut CloudBackupRestoreReport,
     ) -> Result<RestoreApplication, CloudBackupError> {
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let restore_total = downloaded_wallets.len() as u32;
         let mut resolution = RestoreResolution::Nothing;
@@ -535,8 +534,10 @@ impl RestoreOperation {
             downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
-            match restore_session.restore_downloaded(wallet) {
-                Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => {
+            match manager.restore_in_session(&mut restore_session, wallet) {
+                // activation marks every local wallet dirty, so an upgraded wallet uploads too
+                Ok(WalletRestoreOutcome::Restored { labels_warning, .. })
+                | Ok(WalletRestoreOutcome::SecretAdded { labels_warning, .. }) => {
                     resolution = resolution.restored(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {

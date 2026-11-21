@@ -1,5 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::actors::write::ConfigGeneration;
+use crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass;
 
 struct CleanupTestSource {
     namespace: String,
@@ -7,49 +8,34 @@ struct CleanupTestSource {
     revision_hash: Option<String>,
 }
 
-/// What the cleanup job must have done before a test inspects the source namespace
-enum CleanupWait {
-    ActiveNamespaceInspected,
-    SourceNamespaceDeleted,
-    SourceDeleteAttempted,
-    /// The cleanup worker finished the job, whatever it did
-    Idle,
-}
-
+/// Runs a merge cleanup job under the current configuration and waits for the worker to finish
+/// it
+///
+/// The job only records a proven source; the verifier pass a test runs next deletes it
 async fn enqueue_cleanup_for_test(
     manager: &RustCloudBackupManager,
-    globals: &TestGlobals,
     active_namespace: &str,
     active_master_key: &cove_cspp::master_key::MasterKey,
     source: CleanupTestSource,
-    wait: CleanupWait,
 ) {
     let generation = manager.write_ticket().await.expect("write ticket").generation;
     enqueue_cleanup_in_generation_for_test(
         manager,
-        globals,
         active_namespace,
         active_master_key,
         source,
         generation,
-        wait,
     )
     .await;
 }
 
 async fn enqueue_cleanup_in_generation_for_test(
     manager: &RustCloudBackupManager,
-    globals: &TestGlobals,
     active_namespace: &str,
     active_master_key: &cove_cspp::master_key::MasterKey,
     source: CleanupTestSource,
     generation: ConfigGeneration,
-    wait: CleanupWait,
 ) {
-    let source_namespace = source.namespace.clone();
-    let list_attempts_before =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace);
-    let delete_attempts_before = globals.cloud.delete_namespace_attempt_count();
     call!(manager.supervisor.enqueue_cleanup_for_test(CloudBackupCleanupJob {
         cloud: CloudStorage::global_explicit_client(),
         generation,
@@ -66,42 +52,35 @@ async fn enqueue_cleanup_in_generation_for_test(
     .await
     .expect("enqueue cleanup");
 
-    match wait {
-        CleanupWait::ActiveNamespaceInspected => {
-            wait_for_test_condition(
-                Duration::from_secs(1),
-                "cleanup should inspect active namespace",
-                &mut || {
-                    globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace)
-                        > list_attempts_before
-                },
-            )
-            .await;
-        }
-        CleanupWait::SourceNamespaceDeleted => {
-            wait_for_test_condition(
-                Duration::from_secs(1),
-                "cleanup should delete source namespace",
-                &mut || !globals.cloud.has_namespace(&source_namespace),
-            )
-            .await;
-        }
-        CleanupWait::SourceDeleteAttempted => {
-            wait_for_test_condition(
-                Duration::from_secs(1),
-                "cleanup should attempt source namespace delete",
-                &mut || globals.cloud.delete_namespace_attempt_count() > delete_attempts_before,
-            )
-            .await;
-        }
-        CleanupWait::Idle => {
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            while !call!(manager.supervisor.cleanup_idle_for_test()).await.expect("cleanup idle") {
-                assert!(tokio::time::Instant::now() < deadline, "cleanup should finish");
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        }
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while !call!(manager.supervisor.cleanup_idle_for_test()).await.expect("cleanup idle") {
+        assert!(tokio::time::Instant::now() < deadline, "cleanup should finish");
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+}
+
+/// The configured backup's master key, whose namespace a merge's sources moved into
+fn configured_master_key() -> cove_cspp::master_key::MasterKey {
+    cove_cspp::Cspp::new(Keychain::global().clone()).load_master_key_from_store().unwrap().unwrap()
+}
+
+/// Makes `master_key` the configured backup's key again, as a new configuration that keeps the
+/// namespace does
+fn reuse_namespace(master_key: &cove_cspp::master_key::MasterKey) {
+    CloudBackupKeychain::global().save_namespace_id(&master_key.namespace_id()).unwrap();
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(master_key).unwrap();
+}
+
+/// The sources the configured record still waits to delete
+fn pending_source_namespaces() -> Vec<String> {
+    Database::global()
+        .cloud_backup_state
+        .get()
+        .unwrap()
+        .pending_source_deletes()
+        .iter()
+        .map(|pending| pending.source_namespace_id.clone())
+        .collect()
 }
 
 /// Drives a reinitialize that is already running to its end, confirming its saved passkey
@@ -142,10 +121,14 @@ async fn cleanup_from_an_older_configuration_never_deletes_its_source() {
     Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
     manager.sync_persisted_state();
     supervisor_checkpoint(&manager).await;
+    let old_master_key = configured_master_key();
     enable_cloud_backup_without_reset(&manager, 0);
     assert_ne!(manager.write_ticket().await.unwrap().generation, old_generation);
 
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    // the new configuration keeps the namespace, so only the configuration the proof was read
+    // under keeps it from deleting
+    let active_master_key = old_master_key;
+    reuse_namespace(&active_master_key);
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -167,7 +150,6 @@ async fn cleanup_from_an_older_configuration_never_deletes_its_source() {
 
     enqueue_cleanup_in_generation_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -176,12 +158,13 @@ async fn cleanup_from_an_older_configuration_never_deletes_its_source() {
             revision_hash: Some("matching-revision".into()),
         },
         old_generation,
-        CleanupWait::Idle,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace));
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert!(pending_source_namespaces().is_empty());
 }
 
 /// A merge cleanup held in its proof while the backup is turned off and on again never deletes
@@ -196,7 +179,7 @@ async fn cleanup_held_in_its_proof_across_turn_off_and_enable_never_deletes_its_
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -225,7 +208,6 @@ async fn cleanup_held_in_its_proof_across_turn_off_and_enable_never_deletes_its_
     let generation = manager.write_ticket().await.expect("write ticket").generation;
     let enqueue = enqueue_cleanup_in_generation_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -234,7 +216,6 @@ async fn cleanup_held_in_its_proof_across_turn_off_and_enable_never_deletes_its_
             revision_hash: Some("matching-revision".into()),
         },
         generation,
-        CleanupWait::Idle,
     );
     let replace_configuration = async {
         proof.wait_until_blocked().await;
@@ -244,17 +225,24 @@ async fn cleanup_held_in_its_proof_across_turn_off_and_enable_never_deletes_its_
         supervisor_checkpoint(&manager).await;
         enable_cloud_backup_without_reset(&manager, 0);
         assert_ne!(manager.write_ticket().await.unwrap().generation, generation);
+
+        // the new configuration keeps the namespace, so only the configuration the proof was
+        // read under keeps it from deleting
+        reuse_namespace(&active_master_key);
         proof.release();
     };
     tokio::join!(enqueue, replace_configuration);
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace), "the late proof deleted its source");
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert!(pending_source_namespaces().is_empty());
 }
 
 /// A merge cleanup proven before a reinitialize never deletes the namespace that reinitialize
-/// promotes: the old proof's delete arrives while the reinitialize is recovering its source, and
-/// the running reinitialize pauses source cleanup
+/// promotes: the old proof's record arrives while the reinitialize is recovering its source, the
+/// running reinitialize pauses source cleanup, and once it ends another namespace is active, so
+/// the record is dropped
 ///
 /// `cleanup_deletes_source_namespace_after_active_record_proof` is the control: the same proof
 /// with no reinitialize deletes the source
@@ -305,7 +293,6 @@ async fn cleanup_proven_before_a_reinitialize_never_deletes_the_namespace_it_pro
     let generation = manager.write_ticket().await.expect("write ticket").generation;
     let enqueue = enqueue_cleanup_in_generation_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -314,13 +301,12 @@ async fn cleanup_proven_before_a_reinitialize_never_deletes_the_namespace_it_pro
             revision_hash: Some("matching-revision".into()),
         },
         generation,
-        CleanupWait::Idle,
     );
     let reinitialize = async {
         proof.wait_until_blocked().await;
 
         // the reinitialize waits at its namespace listing while the old proof finishes and
-        // asks to delete its source
+        // records its source
         let listing = globals.cloud.gate_next_list_namespaces();
         call!(manager.supervisor.start_recovery_operation(
             RecoveryAction::ReinitializeBackup,
@@ -339,9 +325,11 @@ async fn cleanup_proven_before_a_reinitialize_never_deletes_the_namespace_it_pro
     };
     tokio::join!(enqueue, reinitialize);
     finish_running_reinitialize(&manager).await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace), "the old proof deleted its source");
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert!(pending_source_namespaces().is_empty());
     assert_eq!(
         CloudBackupKeychain::global().namespace_id().unwrap(),
         Some(source_namespace),
@@ -357,7 +345,8 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    upload_active_master_key_wrapper(globals);
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -378,9 +367,11 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
+    // recording the source starts the manager's own verifier loop, so the test holds the pass and
+    // runs it itself
+    let verifier_pass = hold_verifier_pass().await;
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -388,11 +379,20 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
             record_id,
             revision_hash: Some("matching-revision".into()),
         },
-        CleanupWait::SourceNamespaceDeleted,
     )
     .await;
 
+    // the cleanup only records the source; the verifier pass that finds its replacement
+    // uploaded deletes it
+    assert!(globals.cloud.has_namespace(&source_namespace));
+    assert_eq!(pending_source_namespaces(), vec![source_namespace.clone()]);
+    verifier_pass.verify_once(&manager).await;
+
     assert!(!globals.cloud.has_namespace(&source_namespace));
+    assert!(pending_source_namespaces().is_empty());
+
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -403,7 +403,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let record_id = "missing-record".to_string();
@@ -414,7 +414,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
 
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -422,11 +421,12 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace));
+    assert!(pending_source_namespaces().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -437,7 +437,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = configured_master_key();
     let wrong_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
@@ -461,7 +461,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
 
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -469,11 +468,12 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace));
+    assert!(pending_source_namespaces().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -484,7 +484,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -507,7 +507,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
 
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -515,11 +514,12 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace));
+    assert!(pending_source_namespaces().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -530,7 +530,7 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -553,7 +553,6 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
 
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -561,11 +560,12 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(globals.cloud.has_namespace(&source_namespace));
+    assert!(pending_source_namespaces().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -576,7 +576,8 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
 
     // the cleanup runs after Enable committed, as a configured backup's background write
     configure_enabled_cloud_backup(&manager, globals, 0);
-    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    upload_active_master_key_wrapper(globals);
+    let active_master_key = configured_master_key();
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
@@ -600,7 +601,6 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
 
     enqueue_cleanup_for_test(
         &manager,
-        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -608,9 +608,18 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        CleanupWait::SourceDeleteAttempted,
     )
     .await;
+    verify_pending_uploads_once_for_test_async(&manager).await;
 
+    // a failed delete keeps the source pending, so a later pass tries again
+    assert!(globals.cloud.delete_namespace_attempt_count() > 0);
     assert!(globals.cloud.has_namespace(&source_namespace));
+    assert_eq!(pending_source_namespaces(), vec![source_namespace.clone()]);
+
+    // a source another device already deleted is what the delete wanted
+    globals.cloud.fail_delete_namespace_not_found("source already deleted");
+    verify_pending_uploads_once_for_test_async(&manager).await;
+
+    assert!(pending_source_namespaces().is_empty());
 }

@@ -129,6 +129,6 @@ pub(crate) use payload::{
 };
 pub(crate) use restore::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReadError, WalletBackupReader,
-    WalletRestoreOutcome, WalletRestoreSession,
+    WalletRestoreOutcome, WalletRestoreSession, add_missing_labels,
 };
 pub(crate) use upload::WalletUpload;

@@ -144,10 +144,14 @@ pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
     ///
     /// `listing_generation` is the generation observed before the restore read the local
     /// wallets, so a later local wallet change can discard the result
+    ///
+    /// `warning` is set when the restore added the record's seed to a local wallet but some of
+    /// its labels failed to import
     AlreadyOnDevice {
         record_id: String,
         covered_by: crate::wallet_identity::CoveringWallets,
         listing_generation: u64,
+        warning: Option<CloudBackupCloudOnlyOperationWarning>,
     },
     Deleted {
         record_id: String,
@@ -555,8 +559,16 @@ impl RustCloudBackupManager {
                 record_id,
                 covered_by,
                 listing_generation,
+                warning,
             } => {
-                self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
+                let operation = match warning {
+                    Some(warning) => CloudOnlyOperation::Warning {
+                        message: warning.message,
+                        error: warning.error,
+                    },
+                    None => CloudOnlyOperation::Idle,
+                };
+                self.apply_cloud_only_operation(operation);
                 self.apply_inventory(InventoryInput::CloudOnlyRowAlreadyOnDevice {
                     record_id,
                     covered_by,

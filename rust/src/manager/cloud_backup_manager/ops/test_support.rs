@@ -1930,6 +1930,21 @@ pub(crate) fn enable_cloud_backup_without_reset(
     block_on_supervisor_checkpoint(manager);
 }
 
+/// Puts the configured namespace's master key wrapper in the mock cloud, as every real backup
+/// holds one, for tests whose code requires the provider to report it uploaded
+pub(crate) fn upload_active_master_key_wrapper(globals: &TestGlobals) {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .expect("a configured backup has a local master key");
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+
+    globals
+        .cloud
+        .set_master_key_backup(master_key.namespace_id(), serde_json::to_vec(&encrypted).unwrap());
+}
+
 /// Blocks sync test code until the supervisor handled every message sent before this call
 pub(crate) fn block_on_supervisor_checkpoint(manager: &RustCloudBackupManager) {
     let supervisor = manager.supervisor.clone();
@@ -2042,6 +2057,7 @@ pub(crate) fn persisted_enabled_cloud_backup_state(
         pending_verification_completion: None,
         pending_restore_all: None,
         heal_notice: None,
+        pending_source_deletes: Vec::new(),
     })
 }
 
@@ -2058,6 +2074,7 @@ pub(crate) fn persisted_passkey_missing_cloud_backup_state(
         pending_verification_completion: None,
         pending_restore_all: None,
         heal_notice: None,
+        pending_source_deletes: Vec::new(),
     })
 }
 

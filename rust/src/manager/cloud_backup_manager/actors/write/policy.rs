@@ -70,11 +70,13 @@ pub(crate) enum CommandClass {
         authorization: Arc<DeleteAuthorization>,
         record_id: String,
     },
-    /// Recover Other Backups or Delete Other Backups deleting another namespace
+    /// Delete Other Backups deleting another namespace
     OtherBackupDelete(CloudBackupExclusiveOperationClaim),
     /// Discarding the namespace an interrupted Enable wrote
     EnableDiscard(CloudBackupExclusiveOperationClaim),
-    /// Cleanup of a namespace a merge made redundant, proven under `generation`
+    /// Deleting a source namespace whose wallets the active namespace holds, once a merge or
+    /// Recover Other Backups proved it and the provider reported its replacements uploaded, under
+    /// `generation`
     SourceCleanup { generation: ConfigGeneration },
 }
 
