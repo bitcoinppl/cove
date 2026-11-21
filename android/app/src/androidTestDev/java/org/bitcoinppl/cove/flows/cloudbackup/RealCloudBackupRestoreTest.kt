@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.provider.Settings
+import android.system.Os
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -31,7 +32,10 @@ import java.util.regex.Pattern
  * Password Manager, then checks that every wallet and the marker labels came back
  *
  * Runs only through `just android-cloud-backup-e2e`, which factory-resets a Play Store emulator and
- * passes the account in instrumentation arguments; docs/testing.md describes the account
+ * puts the account in a file on it; docs/testing.md describes the account
+ *
+ * The app reads the real Drive but never writes to it, since a finished restore uploads every
+ * wallet again and would otherwise replace the frozen backup with what the code under test wrote
  */
 @RealCloudAccountTest
 @RunWith(AndroidJUnit4::class)
@@ -51,6 +55,8 @@ class RealCloudBackupRestoreTest {
         // sign-in, so the app that shows it is turned off before the restore
         device.executeShellCommand("pm disable-user --user 0 $GOOGLE_RESTORE_PACKAGE")
 
+        // the test runs in the app's process, so the app sees this before its first Drive request
+        Os.setenv(DRIVE_READ_ONLY_ENV, "1", true)
         launchFullApp(resetData = true)
         CloudRestoreRobot(device, account).restoreFromOnboarding()
 
@@ -583,6 +589,9 @@ private const val APP_PACKAGE = "org.bitcoinppl.cove.dev"
 private const val GMS_PACKAGE = "com.google.android.gms"
 private const val SETTINGS_PACKAGE = "com.android.settings"
 private const val GOOGLE_RESTORE_PACKAGE = "com.google.android.apps.restore"
+
+// UiTestSeams in the debug source set reads it
+private const val DRIVE_READ_ONLY_ENV = "COVE_UI_TEST_DRIVE_READ_ONLY"
 
 private fun UiDevice.waitOrFail(
     selector: BySelector,
