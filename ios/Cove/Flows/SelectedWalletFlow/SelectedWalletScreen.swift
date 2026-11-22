@@ -287,7 +287,7 @@ struct SelectedWalletScreen: View {
             content: SelectedWalletPresentedContent(
                 manager: manager,
                 screenHeight: screenHeight,
-                isBackedUpByCloudBackup: cloudBackupManager.recovery.wallet(walletId: manager.walletMetadata.id) == .confirmed,
+                isCloudBackupOn: cloudBackupManager.recovery.configured,
                 shouldShowNavBar: shouldShowNavBar,
                 reduceTransparency: reduceTransparency,
                 toolbarTextColor: toolbarTextColor,
@@ -419,7 +419,7 @@ struct SelectedWalletScreen: View {
 private struct SelectedWalletPresentedContent: View {
     let manager: WalletManager
     let screenHeight: CGFloat
-    let isBackedUpByCloudBackup: Bool
+    let isCloudBackupOn: Bool
     let shouldShowNavBar: Bool
     let reduceTransparency: Bool
     let toolbarTextColor: Color
@@ -448,7 +448,7 @@ private struct SelectedWalletPresentedContent: View {
         SelectedWalletMainContent(
             manager: manager,
             screenHeight: screenHeight,
-            isBackedUpByCloudBackup: isBackedUpByCloudBackup,
+            isCloudBackupOn: isCloudBackupOn,
             updater: updater,
             showReceiveSheet: showReceiveSheet,
             headerBottomChanged: headerBottomChanged

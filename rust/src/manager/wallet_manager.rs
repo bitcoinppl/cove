@@ -47,6 +47,7 @@ use crate::{
     wallet::{
         AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
+        finalize::PsbtFinalizeFailure,
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
     },
@@ -384,8 +385,8 @@ pub enum WalletManagerError {
     #[error("Unknown error: {0}")]
     UnknownError(String),
 
-    #[error("Error finalizing PSBT: {0}")]
-    PsbtFinalizeError(String),
+    #[error("{0}")]
+    PsbtFinalizeError(#[from] PsbtFinalizeFailure),
 
     #[error("Unable to get historical prices for transactions: {0}")]
     GetHistoricalPricesError(String),

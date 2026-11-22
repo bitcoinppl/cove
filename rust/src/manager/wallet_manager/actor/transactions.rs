@@ -7,8 +7,8 @@ use std::{
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use bdk_wallet::{
-    AddUtxoError, KeychainKind, LocalOutput, SignOptions, TxOrdering, Utxo, WeightedUtxo,
-    chain::bitcoin::Psbt, error::CreateTxError,
+    AddUtxoError, KeychainKind, LocalOutput, TxOrdering, Utxo, WeightedUtxo, chain::bitcoin::Psbt,
+    error::CreateTxError,
 };
 use bitcoin::{
     Amount, FeeRate as BdkFeeRate, OutPoint, Transaction as BdkTransaction, TxIn, Txid,
@@ -776,28 +776,10 @@ impl WalletActor {
     }
 
     #[into_actor_result]
-    #[allow(deprecated)] // SignOptions usage required by bdk_wallet API, no replacement yet
     pub async fn finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        let mut psbt = psbt;
-
-        let finalized = self
-            .wallet
-            .bdk
-            .finalize_psbt(&mut psbt, SignOptions::default())
-            .map_err_str(Error::PsbtFinalizeError)?;
-
-        if !finalized {
-            return Err(Error::PsbtFinalizeError("Failed to finalize PSBT".to_string()));
-        }
-
-        // use Display, since the Debug form embeds the whole PSBT or transaction
-        let tx = psbt
-            .extract_tx()
-            .map_err_prefix("Failed to extract tx from PSBT", Error::PsbtFinalizeError)?;
-
-        Ok(tx)
+        Ok(self.wallet.finalize_signed_psbt(psbt)?)
     }
 
     /// Insert a broadcast transaction into the local wallet and update the UI

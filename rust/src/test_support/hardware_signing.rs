@@ -80,37 +80,75 @@ pub(crate) fn init_signet_globals() -> RestoreWalletTarget {
     restore
 }
 
-/// A BIP84 single-sig software signer holding the keys a watch-only wallet only sees publicly
+/// A single-sig script type a hardware signer exports, with its BIP44-style purpose
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SignerScript {
+    Legacy,
+    WrappedSegwit,
+    NativeSegwit,
+}
+
+impl SignerScript {
+    pub(crate) const ALL: [Self; 3] = [Self::Legacy, Self::WrappedSegwit, Self::NativeSegwit];
+
+    fn purpose(self) -> u32 {
+        match self {
+            Self::Legacy => 44,
+            Self::WrappedSegwit => 49,
+            Self::NativeSegwit => 84,
+        }
+    }
+
+    fn descriptor(self, key: &str) -> String {
+        match self {
+            Self::Legacy => format!("pkh({key})"),
+            Self::WrappedSegwit => format!("sh(wpkh({key}))"),
+            Self::NativeSegwit => format!("wpkh({key})"),
+        }
+    }
+}
+
+/// A single-sig software signer holding the keys a watch-only wallet only sees publicly
 pub(crate) struct TestSigner {
     wallet: bdk_wallet::Wallet,
     public_descriptor: String,
 }
 
 impl TestSigner {
+    /// A BIP84 native segwit signer
     pub(crate) fn new(words: &str, network: bitcoin::Network) -> Self {
+        Self::with_script(words, network, SignerScript::NativeSegwit)
+    }
+
+    pub(crate) fn with_script(
+        words: &str,
+        network: bitcoin::Network,
+        script: SignerScript,
+    ) -> Self {
         let secp = Secp256k1::new();
         let mnemonic = Mnemonic::from_str(words).expect("test mnemonic parses");
         let master = Xpriv::new_master(network, &mnemonic.to_seed("")).expect("master key");
 
         let coin_type = if network == bitcoin::Network::Bitcoin { 0 } else { 1 };
-        let account_path =
-            DerivationPath::from_str(&format!("m/84'/{coin_type}'/0'")).expect("account path");
+        let purpose = script.purpose();
+        let account_path = DerivationPath::from_str(&format!("m/{purpose}'/{coin_type}'/0'"))
+            .expect("account path");
 
         let account_xpub = Xpub::from_priv(
             &secp,
             &master.derive_priv(&secp, &account_path).expect("account key derives"),
         );
 
-        let origin = format!("{}/84h/{coin_type}h/0h", master.fingerprint(&secp));
-        let multipath = format!("wpkh([{origin}]{account_xpub}/<0;1>/*)");
+        let origin = format!("{}/{purpose}h/{coin_type}h/0h", master.fingerprint(&secp));
+        let multipath = script.descriptor(&format!("[{origin}]{account_xpub}/<0;1>/*"));
 
         // the checksummed multipath form is what hardware wallets export
         let public_descriptor = Descriptor::<DescriptorPublicKey>::from_str(&multipath)
             .expect("public descriptor parses")
             .to_string();
 
-        let external = format!("wpkh({master}/84'/{coin_type}'/0'/0/*)");
-        let internal = format!("wpkh({master}/84'/{coin_type}'/0'/1/*)");
+        let external = script.descriptor(&format!("{master}/{purpose}'/{coin_type}'/0'/0/*"));
+        let internal = script.descriptor(&format!("{master}/{purpose}'/{coin_type}'/0'/1/*"));
         let wallet = bdk_wallet::Wallet::create(external, internal)
             .network(network)
             .create_wallet_no_persist()
