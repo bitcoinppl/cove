@@ -9,6 +9,8 @@ pub mod ledger_state;
 pub(crate) mod payjoin;
 #[cfg(test)]
 mod payjoin_e2e_tests;
+#[cfg(test)]
+mod payjoin_relay_tests;
 pub mod receive_address;
 mod send_transactions;
 mod transaction_locks;
