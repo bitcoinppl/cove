@@ -368,31 +368,22 @@ impl WalletActor {
         // device can pay someone else entirely
         let recipients = self.outside_scripts(replacement);
         let graph = self.wallet.bdk.tx_graph();
-        let mut same_payment = replaced
-            .iter()
-            .filter(|replaced| {
-                graph
-                    .get_tx(replaced.txid)
-                    .is_some_and(|tx| self.outside_scripts(&tx) == recipients)
-            })
-            .collect::<Vec<_>>();
+        let same_payment = replaced.iter().filter(|replaced| {
+            graph.get_tx(replaced.txid).is_some_and(|tx| self.outside_scripts(&tx) == recipients)
+        });
 
         // a payment sped up more than once leaves several originals, the latest one holds the
-        // label the user saw last
-        same_payment.sort_by_key(|replaced| std::cmp::Reverse(replaced.last_seen));
+        // label the user saw last, or none when they deleted it, which an older one mustn't undo
+        let Some(latest) = same_payment.max_by_key(|replaced| replaced.last_seen) else {
+            return Ok(());
+        };
 
-        let mut replaced_label = None;
-        for replaced in same_payment {
-            let record =
-                labels.get_txn_label_record(replaced.txid).map_err(|error| error.to_string())?;
+        let record = labels.get_txn_label_record(latest.txid).map_err(|error| error.to_string())?;
+        let Some(label) = record.map(|record| record.item).filter(|label| label.label.is_some())
+        else {
+            return Ok(());
+        };
 
-            if let Some(record) = record.filter(|record| record.item.label.is_some()) {
-                replaced_label = Some(record.item);
-                break;
-            }
-        }
-
-        let Some(label) = replaced_label else { return Ok(()) };
         let details = self
             .transaction_details_for_tx_id(TxId::from(txid))
             .map_err(|error| error.to_string())?;

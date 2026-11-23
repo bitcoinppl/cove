@@ -382,6 +382,44 @@ async fn a_double_spend_paying_someone_else_keeps_no_label() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_label_deleted_from_a_replacement_stays_deleted_on_the_next_bump() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+    let details = manager.transaction_details(tx_id(sent)).await.unwrap().details();
+    manager
+        .label_manager()
+        .insert_or_update_labels_for_txn(details, "Rent".into(), None)
+        .expect("the label saves");
+
+    let target = manager.fee_bump_target(sent).await.expect("the payment can be sped up");
+    let confirm = manager
+        .confirm_fee_bump_txn(sent, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .expect("the replacement builds");
+
+    let first = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
+    assert_eq!(listed_label(&manager, first).await.as_deref(), Some("Rent"));
+
+    manager.label_manager().delete_labels_for_txn(tx_id(first)).expect("the label deletes");
+    assert_eq!(listed_label(&manager, first).await, None);
+
+    // the original still holds the label, but the user removed it from the payment since
+    let target = manager.fee_bump_target(first).await.expect("the replacement can be sped up");
+    let confirm = manager
+        .confirm_fee_bump_txn(first, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .expect("the second replacement builds");
+
+    let second = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
+    assert_eq!(listed_label(&manager, second).await, None);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_hardware_wallet_signs_the_replacement_it_exports() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
