@@ -34,7 +34,7 @@ Host names are resolved by the proxy, never on the device: reqwest and Esplora u
 
 ### Switching modes
 
-Each change saves the new mode and publishes its route under one lock, so two quick changes can't save in one order and apply in the other. Choosing the mode that's already applied changes nothing, so the screens send every pick and leave that decision to Rust. Changing the mode stops the old built-in client before publishing the new route, so no stream outlives its mode.
+`RustTorManager` applies the user's changes on one thread, in the order they were dispatched. Each change saves the new mode and publishes its route under one lock, so two quick changes can't save in one order and apply in the other. A change that turns Tor on blocks new connections before it's saved, so none starts on the old direct route while built-in Tor starts. Choosing the mode that's already applied changes nothing, so the screens send every pick and leave that decision to Rust. Changing the mode stops the old built-in client before publishing the new route, so no stream outlives its mode.
 
 Clients built on the old route stop using it:
 
@@ -45,7 +45,8 @@ Clients built on the old route stop using it:
 
 ### Known limits
 
-- A single request already in flight when the route changes, such as one batch of a scan or a short sync, finishes on the route it started on.
+- Work already running when the route changes finishes its current step on the route it started on: one batch of a scan, including the extra history pages an Esplora batch fetches, or one short sync.
+- The wallet's connection check limits the node check to 60 seconds over Tor, but an Electrum connection that stalls while it's being opened waits for Electrum's own 90-second SOCKS timeout.
 - With Tor off, an Esplora server that redirects to a `.onion` address makes the HTTP client look that name up with the system resolver, as it would any redirect target.
 
 ## What goes through Tor

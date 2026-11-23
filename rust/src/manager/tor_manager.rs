@@ -85,14 +85,32 @@ crate::manager::reconcile_channel::impl_reconcile_sink!(
 pub struct RustTorManager {
     reconciler: ReconcileChannel<TorManagerReconcileMessage>,
     forwarding: Arc<AtomicBool>,
+    /// Changes the user asked for, applied one at a time in the order they were dispatched
+    changes: flume::Sender<TorChange>,
+}
+
+/// A change waiting for the Tor service
+#[derive(Debug)]
+enum TorChange {
+    Select(TorSettings),
+    Restart,
 }
 
 impl RustTorManager {
     fn init() -> Arc<Self> {
-        Arc::new(Self {
-            reconciler: ReconcileChannel::new(100),
-            forwarding: Arc::new(AtomicBool::new(false)),
-        })
+        let reconciler = ReconcileChannel::new(100);
+        let (changes, queued) = flume::unbounded();
+
+        // saving writes the database and starting built-in Tor opens its files, so changes run
+        // off the caller's thread; one thread runs them in order, so Off then Built-in never
+        // lands as Off
+        let rejections = reconciler.clone();
+        std::thread::Builder::new()
+            .name("tor-settings".into())
+            .spawn(move || apply_changes(&queued, &rejections))
+            .expect("the Tor settings thread starts");
+
+        Arc::new(Self { reconciler, forwarding: Arc::new(AtomicBool::new(false)), changes })
     }
 
     /// Sends every mode and status change to the reconciler, from the first listener on
@@ -143,15 +161,33 @@ impl RustTorManager {
             }
         };
 
-        // saving writes the database and starting built-in Tor opens its files, so this stays
-        // off the caller's thread
-        // the saved mode reaches the screen through the service's published state
-        let reconciler = self.reconciler.clone();
-        cove_tokio::task::spawn_blocking(move || {
-            if let Err(error) = TorService::global().set_settings(settings) {
-                reconciler.send(TorManagerReconcileMessage::ModeRejected(error.into()));
+        self.queue(TorChange::Select(settings));
+    }
+
+    fn queue(&self, change: TorChange) {
+        // the receiver lives on its own thread for the whole process
+        if self.changes.send(change).is_err() {
+            warn!("the Tor settings thread stopped, dropping a change");
+        }
+    }
+}
+
+/// Applies queued changes in order; the saved mode reaches the screen through the service's
+/// published state, and only a refusal is sent from here
+fn apply_changes(
+    queued: &flume::Receiver<TorChange>,
+    reconciler: &ReconcileChannel<TorManagerReconcileMessage>,
+) {
+    for change in queued.iter() {
+        match change {
+            TorChange::Select(settings) => {
+                if let Err(error) = TorService::global().set_settings(settings) {
+                    reconciler.send(TorManagerReconcileMessage::ModeRejected(error.into()));
+                }
             }
-        });
+
+            TorChange::Restart => TorService::global().restart(),
+        }
     }
 }
 
@@ -176,9 +212,7 @@ impl RustTorManager {
     pub fn dispatch(&self, action: TorManagerAction) {
         match action {
             TorManagerAction::SelectMode(mode) => self.select_mode(mode),
-            TorManagerAction::Restart => {
-                cove_tokio::task::spawn_blocking(|| TorService::global().restart());
-            }
+            TorManagerAction::Restart => self.queue(TorChange::Restart),
         }
     }
 

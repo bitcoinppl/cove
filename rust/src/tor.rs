@@ -172,10 +172,20 @@ impl TorService {
             return Err(SetTorError::OnionNodeSelected { node_name });
         }
 
-        Database::global()
-            .global_config
-            .set_tor_settings(&settings)
-            .map_err(|error| SetTorError::Save(error.to_string()))?;
+        // a mode that turns Tor on blocks new connections before it's saved, so none starts on
+        // the old direct route while built-in Tor opens its files
+        let previous = self.state.borrow().clone();
+        if settings != TorSettings::Off {
+            self.state.send_modify(|state| {
+                state.route = Err(RouteError::TorUnavailable("Tor is starting".into()));
+            });
+        }
+
+        let saved = Database::global().global_config.set_tor_settings(&settings);
+        if let Err(error) = saved {
+            self.state.send_replace(previous);
+            return Err(SetTorError::Save(error.to_string()));
+        }
 
         self.apply(&mut built_in, Ok(Some(settings)));
         Ok(())
