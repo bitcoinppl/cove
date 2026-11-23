@@ -503,6 +503,19 @@ impl LabelManager {
             .map(|record| (record.item.ref_.vout, record))
             .collect::<HashMap<u32, Record<OutputRecord>>>();
 
+        // records an edit creates are dated from the transaction label, as they would be had the
+        // label written them, so deleting the label still removes them. A label Cove writes on its
+        // own or one imported alone has no input or output records until its first edit
+        let now = jiff::Timestamp::now().as_second() as u64;
+        let created = self
+            .db
+            .labels
+            .get_txn_label_record(tx_id.as_ref())
+            .map_err_str(LabelManagerError::Get)?
+            .map_or(Timestamps::new(now, now), |txn_label| {
+                Timestamps::new(txn_label.timestamps.created_at, now)
+            });
+
         let input_records = new_input_records_iter.into_iter().map(|record| {
             let vout = record.ref_.vout;
             let label: Label = record.into();
@@ -510,10 +523,10 @@ impl LabelManager {
             match current_input_records.remove(&vout) {
                 Some(current) => {
                     let mut timestamps = current.timestamps;
-                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    timestamps.updated_at = now;
                     Record::with_timestamps(label, timestamps)
                 }
-                None => Record::new(label),
+                None => Record::with_timestamps(label, created),
             }
         });
 
@@ -525,10 +538,10 @@ impl LabelManager {
                     record.spendable = current.item.spendable;
                     let label: Label = record.into();
                     let mut timestamps = current.timestamps;
-                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    timestamps.updated_at = now;
                     Record::with_timestamps(label, timestamps)
                 }
-                None => Record::new(Label::from(record)),
+                None => Record::with_timestamps(Label::from(record), created),
             }
         });
 
@@ -887,6 +900,44 @@ mod tests {
         assert!(changed);
         assert!(manager.db.labels.get_output_record(outpoint).unwrap().is_none());
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+        assert!(manager.db.labels.all_labels().expect("labels load").is_empty());
+    }
+
+    /// A label Cove writes on its own, such as a transfer label, has no input or output records,
+    /// so the user's first edit creates them, and deleting the label later must remove them too
+    #[test]
+    fn deleting_an_edited_label_written_without_records_removes_its_output_labels() {
+        let (manager, _tmp) = test_manager();
+        let details = received_details_with_output(0);
+        let tx_id = details.tx_id;
+        let outpoint = bitcoin::OutPoint { txid: tx_id.0, vout: 0 };
+
+        // written at broadcast, a while before the user edits it
+        let earlier = jiff::Timestamp::now().as_second() as u64 - 60;
+        let record = TransactionRecord {
+            ref_: tx_id.0,
+            label: Some("Transfer from Savings".to_string()),
+            origin: None,
+        };
+
+        let inserted = manager
+            .db
+            .labels
+            .insert_txn_label_if_absent(record, Timestamps::new(earlier, earlier))
+            .expect("failed to insert transaction label");
+
+        assert!(inserted);
+
+        insert_or_update_auto_labels(&manager, &details, "rent");
+        let output =
+            manager.db.labels.get_output_record(outpoint).unwrap().expect("no output label");
+        assert_eq!(output.item.label.as_deref(), Some("rent (received)"));
+
+        let changed = manager
+            .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
+            .expect("failed to delete labels");
+
+        assert!(changed);
         assert!(manager.db.labels.all_labels().expect("labels load").is_empty());
     }
 

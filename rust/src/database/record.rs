@@ -14,11 +14,6 @@ pub struct Timestamps {
 }
 
 impl<T> Record<T> {
-    pub fn new(item: T) -> Self {
-        let now = jiff::Timestamp::now().as_second().cast_unsigned();
-        Self { item, timestamps: Timestamps { created_at: now, updated_at: now } }
-    }
-
     pub const fn with_timestamps(item: T, timestamps: Timestamps) -> Self {
         Self { item, timestamps }
     }
