@@ -197,9 +197,14 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let confirmed_pending = evidence.confirm_pending_uploads();
+        let confirmed_rows = evidence.confirm_pending_uploads();
+        let confirmed_pending = !confirmed_rows.is_empty();
         if confirmed_pending {
             manager.refresh_pending_upload_verification_state();
+            // the open detail never hears about confirmations from a refresh, so publish each one
+            for row in &confirmed_rows {
+                manager.show_upload_state(row);
+            }
         }
 
         // a row granted or withdrawn changes what Cloud Backup can restore

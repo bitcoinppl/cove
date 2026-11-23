@@ -346,14 +346,22 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
 
 /// The status an upload's persisted state alone decides for its wallet's row, wherever the cloud
 /// copy stands
+///
+/// `Confirmed` is only for live notices after the verifier (or a late re-read) settles a row. A
+/// refresh still derives Confirmed from the cloud copy via `sync_status_for_wallet`, so
+/// [`Self::from_persisted`] returns `None` for a confirmed row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LocalUploadStatus {
     Uploading,
     UploadedPendingConfirmation,
     Failed,
+    /// The verifier confirmed the upload; an open detail moves the row out of Needs Sync
+    Confirmed,
 }
 
 impl LocalUploadStatus {
+    /// Statuses a refresh can take from the persisted upload alone
+    ///
     /// `None` for a dirty or confirmed upload, whose row the cloud copy decides
     pub(crate) fn from_persisted(state: &PersistedCloudBlobState) -> Option<Self> {
         match state {
@@ -365,6 +373,14 @@ impl LocalUploadStatus {
             PersistedCloudBlobState::Dirty(_) | PersistedCloudBlobState::Confirmed(_) => None,
         }
     }
+
+    /// Statuses an open-detail notice can take from the persisted upload, including Confirmed
+    pub(crate) fn from_persisted_notice(state: &PersistedCloudBlobState) -> Option<Self> {
+        match state {
+            PersistedCloudBlobState::Confirmed(_) => Some(Self::Confirmed),
+            other => Self::from_persisted(other),
+        }
+    }
 }
 
 impl From<LocalUploadStatus> for CloudBackupWalletStatus {
@@ -373,6 +389,7 @@ impl From<LocalUploadStatus> for CloudBackupWalletStatus {
             LocalUploadStatus::Uploading => Self::Uploading,
             LocalUploadStatus::UploadedPendingConfirmation => Self::UploadedPendingConfirmation,
             LocalUploadStatus::Failed => Self::Failed,
+            LocalUploadStatus::Confirmed => Self::Confirmed,
         }
     }
 }

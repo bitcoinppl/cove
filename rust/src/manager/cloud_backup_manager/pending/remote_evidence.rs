@@ -78,22 +78,23 @@ impl RemoteRevisionEvidence {
     }
 
     /// Marks confirmed the uploads waiting for confirmation in this evidence's namespace whose
-    /// revision it read, and returns whether any row changed
+    /// revision it read, and returns each row that was written
     ///
     /// Each row is replaced only if it is still the row that was read, so an upload that started
-    /// again since keeps waiting for its own revision
-    pub(crate) fn confirm_pending_uploads(&self) -> bool {
+    /// again since keeps waiting for its own revision. Callers publish the returned rows onto an
+    /// open detail via `show_upload_state`.
+    pub(crate) fn confirm_pending_uploads(&self) -> Vec<PersistedCloudBlobSyncState> {
         let table = &Database::global().cloud_blob_sync_states;
         let states = match table.list() {
             Ok(states) => states,
             Err(error) => {
                 warn!("Confirm remote revisions: list cloud blob sync states failed: {error}");
-                return false;
+                return Vec::new();
             }
         };
 
         let confirmed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let mut updated = false;
+        let mut confirmed = Vec::new();
 
         for state in states {
             if state.namespace_id != self.namespace_id {
@@ -117,14 +118,15 @@ impl RemoteRevisionEvidence {
                 }));
 
             match table.set_if_current(&state, &confirmed_state) {
-                Ok(persisted) => updated |= persisted,
+                Ok(true) => confirmed.push(confirmed_state),
+                Ok(false) => {}
                 Err(error) => {
                     warn!("Confirm remote revisions: persist confirmed state failed: {error}");
                 }
             }
         }
 
-        updated
+        confirmed
     }
 
     /// Reconciles each local wallet's row with what the read showed of its copy in this

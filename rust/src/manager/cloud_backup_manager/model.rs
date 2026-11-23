@@ -143,24 +143,36 @@ impl CloudBackupDetail {
     /// Shows the upload state of `record_id`, as the next refresh would from its persisted state,
     /// returning whether a row changed
     ///
-    /// Every status an upload state decides is one that needs a sync, so the row keeps its place
+    /// In-progress and failed uploads stay in Needs Sync. A confirmation moves the row to
+    /// Up to Date, the same place a refresh would put a matching cloud copy.
     pub(crate) fn apply_local_upload_status(
         &mut self,
         record_id: &str,
         status: LocalUploadStatus,
     ) -> bool {
-        let Some(wallet) = self.needs_sync.iter_mut().find(|wallet| wallet.record_id == record_id)
+        let Some(index) = self.needs_sync.iter().position(|wallet| wallet.record_id == record_id)
         else {
             return false;
         };
 
-        let status = CloudBackupWalletStatus::from(status);
-        let changes = wallet.sync_status != status && wallet.sync_status.follows_upload_state();
-        if changes {
-            wallet.sync_status = status;
+        if !self.needs_sync[index].sync_status.follows_upload_state() {
+            return false;
         }
 
-        changes
+        let next_status = CloudBackupWalletStatus::from(status);
+        if self.needs_sync[index].sync_status == next_status {
+            return false;
+        }
+
+        if matches!(status, LocalUploadStatus::Confirmed) {
+            let mut wallet = self.needs_sync.remove(index);
+            wallet.sync_status = CloudBackupWalletStatus::Confirmed;
+            self.up_to_date.push(wallet);
+            return true;
+        }
+
+        self.needs_sync[index].sync_status = next_status;
+        true
     }
 }
 

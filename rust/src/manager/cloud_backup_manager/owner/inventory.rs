@@ -1893,6 +1893,13 @@ mod tests {
         }
     }
 
+    fn upload_confirmed(record_id: &str) -> InventoryInput {
+        InventoryInput::LocalUploadStateChanged {
+            record_id: record_id.into(),
+            status: LocalUploadStatus::Confirmed,
+        }
+    }
+
     #[test]
     fn upload_failure_shows_on_the_loaded_detail_without_a_refresh() {
         let mut owner = InventoryOwner::default();
@@ -1917,6 +1924,38 @@ mod tests {
             visible_rows(&owner)[0],
             ("confirmed".into(), CloudBackupWalletStatus::Confirmed)
         );
+    }
+
+    #[test]
+    fn upload_confirmation_moves_needs_sync_row_without_a_refresh() {
+        let mut owner = InventoryOwner::default();
+        apply_provider_detail(&mut owner, detail_with_uploading_wallet());
+
+        let effects = owner.apply(upload_failed("new"));
+        assert!(effects.changed);
+        assert_eq!(
+            visible_rows(&owner),
+            vec![
+                ("confirmed".into(), CloudBackupWalletStatus::Confirmed),
+                ("new".into(), CloudBackupWalletStatus::Failed),
+            ]
+        );
+
+        // the verifier confirms while the detail still shows Failed
+        let effects = owner.apply(upload_confirmed("new"));
+
+        assert!(effects.changed, "the confirmation must publish the screen again");
+        assert_eq!(
+            visible_rows(&owner),
+            vec![
+                ("confirmed".into(), CloudBackupWalletStatus::Confirmed),
+                ("new".into(), CloudBackupWalletStatus::Confirmed),
+            ]
+        );
+
+        // an already Confirmed row is left alone
+        let effects = owner.apply(upload_confirmed("confirmed"));
+        assert!(!effects.changed);
     }
 
     #[test]

@@ -128,8 +128,11 @@ impl PendingUploadVerifier {
 
             if matches!(next_state.state, PersistedCloudBlobState::Failed(_)) {
                 any_failed = true;
-                self.0.show_upload_state(&next_state);
             }
+
+            // Failed and Confirmed both change what an open detail shows; Dirty notices are
+            // dropped inside show_upload_state because only a refresh can place that row
+            self.0.show_upload_state(&next_state);
 
             self.log_blob_result(&next_state, &result);
             self.schedule_retry_if_needed(&next_state);
