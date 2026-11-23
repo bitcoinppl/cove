@@ -2,7 +2,9 @@
 
 use act_zero::*;
 use bdk_wallet::chain::bitcoin::Psbt;
-use bitcoin::{FeeRate as BdkFeeRate, Transaction as BdkTransaction, consensus, params::Params};
+use bitcoin::{
+    FeeRate as BdkFeeRate, Script, Transaction as BdkTransaction, consensus, params::Params,
+};
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use payjoin::{
@@ -328,12 +330,16 @@ async fn try_ohttp_relays<C>(
 }
 
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
-fn recipient_output_index(psbt: &Psbt) -> Result<usize> {
+//
+// ownership comes from the wallet's own scripts, not PSBT output metadata: BDK clears every
+// output's bip32_derivation when it finalizes, so a signed PSBT's change looks external
+fn recipient_output_index(psbt: &Psbt, is_mine: impl Fn(&Script) -> bool) -> Result<usize> {
     let external: Vec<_> = psbt
-        .outputs
+        .unsigned_tx
+        .output
         .iter()
         .enumerate()
-        .filter(|(_, o)| o.bip32_derivation.is_empty())
+        .filter(|(_, output)| !is_mine(&output.script_pubkey))
         .map(|(i, _)| i)
         .collect();
 
@@ -348,19 +354,22 @@ fn recipient_output_index(psbt: &Psbt) -> Result<usize> {
 }
 
 /// Builds the v2 sender state machine from a signed PSBT and payjoin endpoint
+///
+/// `is_mine` reports whether an output script belongs to the sending wallet
 pub(crate) fn build_sender(
     signed_psbt: Psbt,
     fallback_tx: &BdkTransaction,
     endpoint: String,
     network: bitcoin::Network,
     persister: &PayjoinSessionPersister,
+    is_mine: impl Fn(&Script) -> bool,
 ) -> Result<V2Sender<WithReplyKey>> {
     // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
     // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
 
     let pj_param = v2_pj_param(&endpoint)?;
 
-    let idx = recipient_output_index(&signed_psbt)?;
+    let idx = recipient_output_index(&signed_psbt, is_mine)?;
     let txout = &signed_psbt.unsigned_tx.output[idx];
     let amount = txout.value;
     let address = bitcoin::Address::from_script(&txout.script_pubkey, Params::from(network))
@@ -1055,9 +1064,7 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
     use crate::{database::wallet_data::test_support, wallet::metadata::WalletId};
-    use bitcoin::{
-        Amount, ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
-    };
+    use bitcoin::{Amount, ScriptBuf, Transaction, TxOut, transaction::Version};
 
     // in-memory storage skips the process-global lifecycle coordinator, so these
     // persister tests cannot race with wipe-phase tests in the same cargo test process
@@ -1084,35 +1091,30 @@ mod tests {
         }
     }
 
-    // secp256k1 generator point G — a well-known valid compressed public key (33 bytes)
-    const SECP_G: [u8; 33] = [
-        0x02, 0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac, 0x55, 0xa0, 0x62, 0x95, 0xce, 0x87,
-        0x0b, 0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9, 0x59, 0xf2, 0x81, 0x5b, 0x16,
-        0xf8, 0x17, 0x98,
-    ];
+    // builds a PSBT whose outputs each pay a distinct script, and returns the wallet's scripts
+    fn make_psbt(output_is_mine: &[bool]) -> (Psbt, Vec<ScriptBuf>) {
+        let outputs = (0u8..)
+            .zip(output_is_mine)
+            .map(|(index, is_mine)| (ScriptBuf::from_bytes(vec![index]), *is_mine))
+            .collect::<Vec<_>>();
 
-    fn make_psbt(outputs: Vec<(TxOut, bool)>) -> Psbt {
-        let tx_outputs: Vec<TxOut> = outputs.iter().map(|(o, _)| o.clone()).collect();
         let unsigned_tx = Transaction {
             version: Version::TWO,
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![],
-            output: tx_outputs,
+            output: outputs
+                .iter()
+                .map(|(script, _)| TxOut {
+                    value: Amount::from_sat(50_000),
+                    script_pubkey: script.clone(),
+                })
+                .collect(),
         };
-        let mut psbt = Psbt::from_unsigned_tx(unsigned_tx).expect("valid tx");
-        for (i, (_, is_external)) in outputs.iter().enumerate() {
-            if *is_external {
-                psbt.outputs[i] = PsbtOutput::default();
-            } else {
-                let mut out = PsbtOutput::default();
-                out.bip32_derivation.insert(
-                    bitcoin::secp256k1::PublicKey::from_slice(&SECP_G).expect("valid pubkey"),
-                    Default::default(),
-                );
-                psbt.outputs[i] = out;
-            }
-        }
-        psbt
+
+        let owned =
+            outputs.into_iter().filter_map(|(script, is_mine)| is_mine.then_some(script)).collect();
+
+        (Psbt::from_unsigned_tx(unsigned_tx).expect("valid tx"), owned)
     }
 
     fn empty_transaction() -> Transaction {
@@ -1244,30 +1246,25 @@ mod tests {
 
     #[test]
     fn test_recipient_output_index_accepts_single_recipient() {
-        let psbt = make_psbt(vec![
-            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
-            (TxOut { value: Amount::from_sat(49_000), script_pubkey: ScriptBuf::default() }, false),
-        ]);
-        assert_eq!(recipient_output_index(&psbt).unwrap(), 0);
+        // the change output carries no PSBT metadata, as after BDK finalizes a signed PSBT
+        let (psbt, owned) = make_psbt(&[true, false]);
+        let index = recipient_output_index(&psbt, |script| owned.iter().any(|own| own == script));
+        assert_eq!(index.unwrap(), 1);
     }
 
     #[test]
     fn test_recipient_output_index_rejects_batch_send() {
-        let psbt = make_psbt(vec![
-            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
-            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
-        ]);
-        let err = recipient_output_index(&psbt).unwrap_err();
+        let (psbt, owned) = make_psbt(&[false, false, true]);
+        let err = recipient_output_index(&psbt, |script| owned.iter().any(|own| own == script))
+            .unwrap_err();
         assert!(err.to_string().contains("batch"), "expected 'batch' in error, got: {err}");
     }
 
     #[test]
     fn test_recipient_output_index_rejects_no_recipient() {
-        let psbt = make_psbt(vec![(
-            TxOut { value: Amount::from_sat(99_000), script_pubkey: ScriptBuf::default() },
-            false,
-        )]);
-        let err = recipient_output_index(&psbt).unwrap_err();
+        let (psbt, owned) = make_psbt(&[true]);
+        let err = recipient_output_index(&psbt, |script| owned.iter().any(|own| own == script))
+            .unwrap_err();
         assert!(err.to_string().contains("recipient"), "expected 'recipient' in error, got: {err}");
     }
 
