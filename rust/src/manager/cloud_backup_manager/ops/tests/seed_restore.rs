@@ -993,6 +993,45 @@ async fn recover_other_backups_keeps_a_seed_in_its_source_while_the_current_reco
     );
 }
 
+// a current record from a newer version of Cove may hold data this version can't read, so it
+// counts as unreadable rather than missing, and the seed stays in its source instead of an upload
+// replacing that record
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_a_seed_in_its_source_while_the_current_record_is_from_a_newer_version()
+ {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(59);
+
+    let watch_only = seed.local_wallet(WalletType::Cold);
+    let active_master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let newer_bytes =
+        encrypted_wallet_backup_bytes(&watch_only, &active_master_key, "newer-revision", 3).await;
+    list_backups(globals, &active_namespace(), vec![(&watch_only.id, newer_bytes.clone())]);
+    let seed_bytes = seed.cloud_backup_under_id(&watch_only.id, &other_master_key).await;
+    list_backups(globals, &other, vec![(&watch_only.id, seed_bytes)]);
+
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!((report.wallets_restored, report.wallets_failed), (0, 1));
+    assert_eq!(local_wallet(&watch_only.id).wallet_type, WalletType::Cold);
+    assert!(!seed.is_held_by(&watch_only.id));
+    assert!(globals.cloud.has_namespace(&other));
+    let record_id = cove_cspp::backup_data::wallet_record_id(watch_only.id.as_ref());
+    assert_eq!(
+        globals.cloud.wallet_backup_bytes(&active_namespace(), &record_id),
+        Some(newer_bytes)
+    );
+}
+
 // the seed is added before its labels, so labels that fail to import are reported as a label
 // warning and never undo or fail the restore
 #[tokio::test(flavor = "current_thread", start_paused = true)]

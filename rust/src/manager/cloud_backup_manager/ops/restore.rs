@@ -53,7 +53,8 @@ impl CurrentNamespace {
     /// The current backup's record `record_id`, when it lists one this device can read
     ///
     /// A record the current backup doesn't list is not read, since iCloud reports a read of a
-    /// missing file as a pending sync, which would fail the run
+    /// missing file as a pending sync, which would fail the run. A record from a newer version
+    /// fails the read, since it may hold data this version can't see and an upload would replace
     async fn entry(&self, record_id: &str) -> Result<Option<WalletEntry>, CloudBackupError> {
         let Some(reader) = &self.reader else { return Ok(None) };
         if !self.record_ids.contains(record_id) {
@@ -62,7 +63,11 @@ impl CurrentNamespace {
 
         match reader.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => Ok(Some(entry)),
-            WalletBackupLookup::NotFound | WalletBackupLookup::UnsupportedVersion(_) => Ok(None),
+            WalletBackupLookup::NotFound => Ok(None),
+            WalletBackupLookup::UnsupportedVersion(version) => Err(CloudBackupError::Internal(
+                format!("read current wallet backup: unsupported wallet backup version {version}")
+                    .into(),
+            )),
         }
     }
 }
