@@ -1,5 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::CloudOnlyRow;
+use crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass;
 
 #[tokio::test(flavor = "current_thread")]
 async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
@@ -382,6 +383,9 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
+    // the recovery's upload starts the manager's own verifier loop, which could delete the
+    // source before the pending delete is checked, so the test holds the pass
+    let verifier_pass = hold_verifier_pass().await;
     let report = recover_other_backups_for_test(&manager).await.unwrap();
 
     assert_eq!((report.wallets_restored, report.wallets_failed), (1, 0));
@@ -403,7 +407,7 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
     };
     assert_eq!(replacement_record_ids(pending), vec![restored_record_id]);
 
-    verify_pending_uploads_once_for_test_async(&manager).await;
+    verifier_pass.verify_once(&manager).await;
     assert!(!globals.cloud.has_namespace(&other_namespace));
 }
 
