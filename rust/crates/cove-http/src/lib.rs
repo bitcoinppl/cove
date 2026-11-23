@@ -64,14 +64,13 @@ pub struct RouteTimeouts {
 /// effect on their next request instead of reusing a pooled connection on the old route
 #[derive(Debug)]
 pub struct RoutedClient {
-    redirects: bool,
     cached: Mutex<Option<(NetworkRoute, reqwest::Client)>>,
 }
 
 impl RoutedClient {
     /// A client that follows redirects
     pub const fn new() -> Self {
-        Self { redirects: true, cached: Mutex::new(None) }
+        Self { cached: Mutex::new(None) }
     }
 
     /// The client for `route`, building a new one when the route changed since the last call
@@ -83,8 +82,7 @@ impl RoutedClient {
             return Ok(client.clone());
         }
 
-        let client =
-            if self.redirects { new_client(route)? } else { new_client_without_redirects(route)? };
+        let client = new_client(route)?;
 
         *cached = Some((route.clone(), client.clone()));
         Ok(client)

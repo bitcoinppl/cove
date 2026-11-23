@@ -23,7 +23,8 @@ use std::{
 
 use arc_swap::ArcSwap;
 use cove_http::{NetworkRoute, SocksProxy, route::is_onion_host};
-use cove_tor::{BootstrapState, BuiltInTor, BuiltInTorConfig};
+use cove_tor::{BootstrapState, BuiltInTor};
+use cove_util::ResultExt as _;
 use parking_lot::Mutex;
 use strum::IntoEnumIterator as _;
 use tokio::sync::watch;
@@ -164,7 +165,7 @@ impl TorService {
         Database::global()
             .global_config
             .set_tor_settings(&settings)
-            .map_err(|error| SetTorError::Save(error.to_string()))?;
+            .map_err_str(SetTorError::Save)?;
 
         self.apply(Ok(Some(settings)));
         Ok(())
@@ -281,10 +282,8 @@ fn read_saved_settings() -> Result<Option<TorSettings>, String> {
 fn start_built_in() -> Result<BuiltInTor, String> {
     let runtime = cove_tokio::handle().ok_or("the app runtime isn't running yet")?;
 
-    let dir = tor_data_dir();
-    let config = BuiltInTorConfig { state_dir: dir.join("state"), cache_dir: dir.join("cache") };
-
-    let built_in = BuiltInTor::start(config, &runtime).map_err(|error| error.to_string())?;
+    let built_in =
+        BuiltInTor::start(&tor_data_dir(), &runtime).map_err(|error| error.to_string())?;
     info!("built-in Tor started");
 
     Ok(built_in)

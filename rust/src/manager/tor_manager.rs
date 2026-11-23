@@ -6,6 +6,7 @@ use std::sync::{
 };
 
 use cove_http::ProxyAddress;
+use cove_util::ResultExt as _;
 use serde::Deserialize;
 use tracing::warn;
 
@@ -170,8 +171,7 @@ impl RustTorManager {
 
     /// Checks a typed proxy address, returning it in the form the app saves
     pub fn validate_proxy_address(&self, input: String) -> Result<String, TorManagerError> {
-        let address = ProxyAddress::parse(&input)
-            .map_err(|error| TorManagerError::InvalidProxy(error.to_string()))?;
+        let address = ProxyAddress::parse(&input).map_err_str(TorManagerError::InvalidProxy)?;
         Ok(address.to_string())
     }
 
@@ -180,14 +180,12 @@ impl RustTorManager {
     /// Useful for a proxy, which Cove can't otherwise tell apart from a SOCKS proxy that isn't
     /// Tor. The request only ever goes over the Tor route
     pub async fn check_connection(&self) -> Result<TorConnectionCheck, TorManagerError> {
-        let route = crate::tor::current_route()
-            .map_err(|error| TorManagerError::CheckFailed(error.to_string()))?;
+        let route = crate::tor::current_route().map_err_str(TorManagerError::CheckFailed)?;
         if !route.is_tor() {
             return Err(TorManagerError::TorOff);
         }
 
-        let client = cove_http::new_client(&route)
-            .map_err(|error| TorManagerError::CheckFailed(error.to_string()))?;
+        let client = cove_http::new_client(&route).map_err_str(TorManagerError::CheckFailed)?;
         let response = client
             .get(TOR_CHECK_URL)
             .send()

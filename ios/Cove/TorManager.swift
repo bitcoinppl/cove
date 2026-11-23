@@ -13,25 +13,20 @@ final class TorManager: TorManagerReconciler {
 
     /// The saved mode, nil when Rust can't read the saved setting
     private(set) var mode: TorMode?
-    private(set) var status: TorStatus
+    private(set) var status: TorStatus = .off
 
     /// The last mode change Rust refused, which the Tor screen shows until the user dismisses it
     private(set) var modeRejection: TaggedItem<TorManagerError>?
 
     private init() {
-        let rust = RustTorManager()
-        let state = rust.state()
-        self.rust = rust
-        mode = state.mode
-        status = state.status
-
+        rust = RustTorManager()
         rust.listenForUpdates(reconciler: self)
 
-        // Rust forwards only the status changes after the first listener, so one between the
-        // first snapshot and listening would be lost without this second read
-        let current = rust.state()
-        mode = current.mode
-        status = current.status
+        // Rust forwards only the status changes after the first listener, so the snapshot is
+        // read after listening to cover any change in between
+        let state = rust.state()
+        mode = state.mode
+        status = state.status
     }
 
     /// Rust calls this from its own threads; the main queue applies messages in the order Rust

@@ -1,22 +1,23 @@
 //! The Tor client that runs inside the app, built on Arti
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use arti_client::{
     BootstrapBehavior, ErrorKind, HasKind as _, IsolationToken, StreamPrefs, TorClient,
     config::{BoolOrAuto, TorClientConfigBuilder},
 };
-use cove_http::SocksProxy;
+use cove_http::{SocksCredentials, SocksProxy};
 use futures::StreamExt as _;
 use parking_lot::Mutex;
+use rand::RngExt as _;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tor_rtcompat::PreferredRuntime;
 use tracing::{info, warn};
 
 use crate::{
+    SocksAddr, SocksStatus,
     bridge::{BoundBridge, Connector},
-    socks::{Reply, Target, TargetHost},
 };
 
 /// Waits between bootstrap attempts after one fails, such as while the device is offline
@@ -26,15 +27,6 @@ const BOOTSTRAP_RETRY_DELAYS: [Duration; 4] = [
     Duration::from_secs(30),
     Duration::from_secs(60),
 ];
-
-/// Where the built-in client keeps its files
-#[derive(Debug, Clone)]
-pub struct BuiltInTorConfig {
-    /// Guard choices and other state Tor keeps between launches
-    pub state_dir: PathBuf,
-    /// The downloaded network directory, which makes later starts fast
-    pub cache_dir: PathBuf,
-}
 
 /// How far the built-in client is from carrying traffic
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,18 +61,16 @@ pub struct BuiltInTor {
 impl BuiltInTor {
     /// Binds the local proxy and starts joining the Tor network in the background
     ///
-    /// The proxy is usable as soon as this returns: streams opened before the client is ready
-    /// wait for it, and fail rather than leave Tor if it never gets there
-    pub fn start(
-        config: BuiltInTorConfig,
-        runtime: &tokio::runtime::Handle,
-    ) -> Result<Self, StartError> {
-        let bridge = BoundBridge::bind()?;
+    /// Tor keeps its state and its downloaded network directory under `data_dir`. The proxy is
+    /// usable as soon as this returns: streams opened before the client is ready wait for it,
+    /// and fail rather than leave Tor if it never gets there
+    pub fn start(data_dir: &Path, runtime: &tokio::runtime::Handle) -> Result<Self, StartError> {
+        let bridge = BoundBridge::bind(Some(random_credentials()))?;
         let proxy = bridge.proxy().clone();
 
         let client = {
             let _entered = runtime.enter();
-            create_client(&config)?
+            create_client(data_dir)?
         };
 
         let (state_sender, state) = watch::channel(BootstrapState::Starting { percent: 0 });
@@ -111,15 +101,21 @@ impl Drop for BuiltInTor {
     }
 }
 
-fn create_client(
-    config: &BuiltInTorConfig,
-) -> Result<Arc<TorClient<PreferredRuntime>>, StartError> {
-    for dir in [&config.state_dir, &config.cache_dir] {
+fn random_credentials() -> SocksCredentials {
+    let mut password = [0u8; 24];
+    rand::rng().fill(&mut password);
+
+    SocksCredentials { username: "cove".to_string(), password: hex::encode(password) }
+}
+
+fn create_client(data_dir: &Path) -> Result<Arc<TorClient<PreferredRuntime>>, StartError> {
+    let state_dir = data_dir.join("state");
+    let cache_dir = data_dir.join("cache");
+    for dir in [&state_dir, &cache_dir] {
         std::fs::create_dir_all(dir)?;
     }
 
-    let mut builder =
-        TorClientConfigBuilder::from_directories(&config.state_dir, &config.cache_dir);
+    let mut builder = TorClientConfigBuilder::from_directories(&state_dir, &cache_dir);
 
     // Arti refuses directories that other users could write to, checking every parent. The app
     // sandbox already keeps other apps out of these, and on Android and iOS the parents belong
@@ -204,31 +200,30 @@ impl ArtiConnector {
 impl Connector for ArtiConnector {
     type Stream = arti_client::DataStream;
 
-    async fn connect(&self, target: Target) -> Result<Self::Stream, Reply> {
-        let host = match &target.host {
-            TargetHost::Name(name) => name.clone(),
-            TargetHost::Ip(ip) => ip.to_string(),
-        };
+    async fn connect(&self, target: SocksAddr, port: u16) -> Result<Self::Stream, SocksStatus> {
+        let host = target.to_string();
 
         let mut prefs = StreamPrefs::new();
         prefs.connect_to_onion_services(BoolOrAuto::Explicit(true));
         prefs.set_isolation(self.isolation_for(&host));
 
-        self.client.connect_with_prefs((host.as_str(), target.port), &prefs).await.map_err(
-            |error| {
-                warn!("Tor stream failed: {}", error.kind());
-                reply_for(error.kind())
-            },
-        )
+        self.client.connect_with_prefs((host.as_str(), port), &prefs).await.map_err(|error| {
+            warn!("Tor stream failed: {}", error.kind());
+            reply_for(error.kind())
+        })
     }
 }
 
-fn reply_for(kind: ErrorKind) -> Reply {
+fn reply_for(kind: ErrorKind) -> SocksStatus {
     match kind {
-        ErrorKind::ForbiddenStreamTarget | ErrorKind::InvalidStreamTarget => Reply::NotAllowed,
-        ErrorKind::RemoteConnectionRefused => Reply::ConnectionRefused,
-        ErrorKind::RemoteHostNotFound | ErrorKind::OnionServiceNotFound => Reply::HostUnreachable,
-        ErrorKind::RemoteNetworkTimeout | ErrorKind::TorNetworkTimeout => Reply::TimedOut,
-        _ => Reply::GeneralFailure,
+        ErrorKind::ForbiddenStreamTarget | ErrorKind::InvalidStreamTarget => {
+            SocksStatus::NOT_ALLOWED
+        }
+        ErrorKind::RemoteConnectionRefused => SocksStatus::CONNECTION_REFUSED,
+        ErrorKind::RemoteHostNotFound | ErrorKind::OnionServiceNotFound => {
+            SocksStatus::HOST_UNREACHABLE
+        }
+        ErrorKind::RemoteNetworkTimeout | ErrorKind::TorNetworkTimeout => SocksStatus::TTL_EXPIRED,
+        _ => SocksStatus::GENERAL_FAILURE,
     }
 }
