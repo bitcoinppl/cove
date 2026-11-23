@@ -87,6 +87,15 @@ impl Node {
         }
     }
 
+    /// How long a check of this node may take: `direct` off Tor, and longer on Tor, where the
+    /// first circuit to a node or an onion service takes several round trips
+    pub(crate) fn check_timeout(&self, direct: Duration) -> Duration {
+        match self.route() {
+            Ok(route) if route.is_tor() => TOR_CHECK_URL_TIMEOUT,
+            _ => direct,
+        }
+    }
+
     /// The route a new connection to this node takes
     pub(crate) fn route(&self) -> Result<NetworkRoute, RouteError> {
         let host =
@@ -150,10 +159,7 @@ impl Node {
     pub async fn check_url(&self) -> Result<(), Error> {
         // neither client sets a timeout on a direct route, so a host that never answers would
         // hold the settings check until the OS gives up on the connection
-        let timeout = match self.route() {
-            Ok(route) if route.is_tor() => TOR_CHECK_URL_TIMEOUT,
-            _ => CHECK_URL_TIMEOUT,
-        };
+        let timeout = self.check_timeout(CHECK_URL_TIMEOUT);
 
         async {
             let client = NodeClient::new(self).await?;

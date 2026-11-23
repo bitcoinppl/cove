@@ -468,7 +468,7 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
 
     node_client
         .check_url()
-        .with_timeout(Duration::from_secs(5))
+        .with_timeout(node.check_timeout(Duration::from_secs(5)))
         .await
         .map_err(|_| "unable to connect to node, timeout".to_string())?
         .map_err(|err| err.to_string())?;
