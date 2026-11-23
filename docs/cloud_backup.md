@@ -1001,7 +1001,9 @@ different record there, so it also reads the active backup's record under the
 wallet's ID before it adds the seed, and adds that record's missing labels
 after the backup's (`WalletRestoreSession::commit`). The read comes before the
 seed is added, since adding it queues the wallet's upload. While that record
-can't be read, the seed isn't added in this run and the source keeps it. A
+can't be read, including a record from a newer version of Cove that may hold
+data this version can't see, the seed isn't added in this run and the source
+keeps it. A
 failure to add labels is reported as a label warning; the seed stays added.
 
 A wallet that gained its seed this way has a cloud backup without it until it
