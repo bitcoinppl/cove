@@ -344,7 +344,10 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_asks_twice_for_backups_it_could_not_check_and_deletes_only_after_consent",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_failed_listing_asks_twice_and_deletes_nothing_until_confirmed",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_review_never_asks_for_a_passkey",
-    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_leaves_backups_made_with_another_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::turn_off_deletes_backups_made_with_another_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::a_backup_made_with_another_passkey_after_the_review_asks_again_and_deletes_nothing",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::try_again_finishes_deleting_other_backups_after_a_failed_delete",
+    "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::turn_off_reaches_a_review_and_a_commit_past_an_other_backups_list_that_never_answers",
     "rust:rust/src/manager/cloud_backup_manager/harness/tests.rs::turn_off_is_admitted_before_the_detail_inventory_loads",
     "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testExtraCopiesOnlyAskOnceAndTurnOffCompletes",
     "ios-ui:ios/CoveUITests/CloudBackupTurnOffFullAppUITests.swift::testWalletsNotOnDeviceAskTwiceAndRestoreThemFirstRestoresThem",
@@ -353,11 +356,13 @@ coverage = [
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::ownBackupsOnlyNeedOneConfirmationThatNamesTheCount",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::walletsOnlyInCloudBackupAreNamedWithTheRestCounted",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::incompleteInventoryWarnsBeforeAnyCountsAndNeverClaimsAll",
-    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::extraCopiesAndOtherPasskeyBackupsAreExplainedInTheFinalStep",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::extraCopiesAndUncheckedOtherPasskeyBackupsAreExplainedInTheFinalStep",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupTurnOffReviewCopyTest.kt::otherPasskeyBackupsTurnOffDeletesAreARisk",
 ]
-# this device's own backups and extra copies ask once; wallets not on this device, unchecked or unreadable backups, an incomplete
-# inventory or a failed listing ask twice. turn off never waits for the inventory and never asks for a passkey, and backups
-# made with another passkey stay
+# this device's own backups and extra copies ask once; wallets not on this device, unchecked or unreadable backups, backups made
+# with another passkey, an incomplete inventory or a failed listing ask twice. turn off never waits for the inventory and never
+# asks for a passkey. it deletes the backups made with another passkey that the review listed, asks again when one appears
+# after the review, and leaves them when the list fails or times out
 
 [[row]]
 id = "s05-turn-off-review-restore-or-verify-first"
