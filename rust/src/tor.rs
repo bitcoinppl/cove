@@ -85,6 +85,14 @@ pub enum TorStatus {
     UsingProxy,
 }
 
+/// The saved mode and what Tor is doing, as the settings screen shows them
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TorState {
+    /// The saved mode, `None` when the saved setting can't be read
+    pub mode: Option<TorMode>,
+    pub status: TorStatus,
+}
+
 /// Why a Tor setting change was refused
 #[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum SetTorError {
@@ -99,7 +107,8 @@ pub enum SetTorError {
 pub struct TorService {
     route: ArcSwap<Result<NetworkRoute, RouteError>>,
     applied: Mutex<Applied>,
-    status: watch::Sender<TorStatus>,
+    /// Published with every route, so a mode change the screen didn't ask for still reaches it
+    state: watch::Sender<TorState>,
     /// Bumped on every apply, so a stopped client's late status updates are dropped
     generation: Arc<AtomicU64>,
 }
@@ -126,11 +135,11 @@ impl TorService {
         let service = Self {
             route: ArcSwap::from_pointee(Err(RouteError::TorUnavailable("loading".into()))),
             applied: Mutex::new(Applied { settings: None, built_in: None }),
-            status: watch::Sender::new(TorStatus::Off),
+            state: watch::Sender::new(TorState { mode: None, status: TorStatus::Off }),
             generation: Arc::new(AtomicU64::new(0)),
         };
 
-        service.apply(read_saved_settings());
+        service.restart();
         service
     }
 
@@ -138,17 +147,12 @@ impl TorService {
         self.route.load().as_ref().clone()
     }
 
-    /// The saved settings, or `None` when they can't be read
-    pub fn settings(&self) -> Option<TorSettings> {
-        self.applied.lock().settings.clone()
+    pub fn state(&self) -> TorState {
+        self.state.borrow().clone()
     }
 
-    pub fn status(&self) -> TorStatus {
-        self.status.borrow().clone()
-    }
-
-    pub fn subscribe_status(&self) -> watch::Receiver<TorStatus> {
-        self.status.subscribe()
+    pub fn subscribe_state(&self) -> watch::Receiver<TorState> {
+        self.state.subscribe()
     }
 
     /// Saves and applies new settings
@@ -156,6 +160,9 @@ impl TorService {
     /// Turning Tor off is refused while any network's selected node is an onion node, since
     /// that node would stop working
     pub fn set_settings(&self, settings: TorSettings) -> Result<(), SetTorError> {
+        // saving and applying share the lock, so two changes in flight can't leave the saved
+        // setting and the published route on different modes
+        let mut applied = self.applied.lock();
         if settings == TorSettings::Off
             && let Some(node_name) = selected_onion_node()
         {
@@ -167,13 +174,16 @@ impl TorService {
             .set_tor_settings(&settings)
             .map_err_str(SetTorError::Save)?;
 
-        self.apply(Ok(Some(settings)));
+        self.apply(&mut applied, Ok(Some(settings)));
         Ok(())
     }
 
     /// Restarts Tor with the saved settings, such as after the built-in client failed
     pub fn restart(&self) {
-        self.apply(read_saved_settings());
+        // the read happens under the lock, so a change saved meanwhile is never overwritten by
+        // the older value
+        let mut applied = self.applied.lock();
+        self.apply(&mut applied, read_saved_settings());
     }
 
     /// Stops Tor and removes its files ahead of a full wipe
@@ -185,7 +195,7 @@ impl TorService {
         self.generation.fetch_add(1, Ordering::AcqRel);
         applied.built_in = None;
         applied.settings = None;
-        self.publish(Err(RouteError::TorUnavailable("resetting".into())), TorStatus::Off);
+        self.publish(&applied, Err(RouteError::TorUnavailable("resetting".into())), TorStatus::Off);
 
         match std::fs::remove_dir_all(tor_data_dir()) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
@@ -194,8 +204,7 @@ impl TorService {
     }
 
     /// Replaces the running setup with `settings`, publishing its route and status
-    fn apply(&self, settings: Result<Option<TorSettings>, String>) {
-        let mut applied = self.applied.lock();
+    fn apply(&self, applied: &mut Applied, settings: Result<Option<TorSettings>, String>) {
         let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
 
         // the old client stops before the new route goes out, so no stream outlives its mode
@@ -209,47 +218,58 @@ impl TorService {
 
                 let message = "Cove couldn't read your Tor settings. Choose a Tor mode again";
                 let failed = TorStatus::Failed { message: message.to_string() };
-                self.publish(Err(RouteError::TorUnavailable(message.to_string())), failed);
+                self.publish(applied, Err(RouteError::TorUnavailable(message.to_string())), failed);
                 return;
             }
         };
 
         applied.settings = Some(settings.clone());
         match settings {
-            TorSettings::Off => self.publish(Ok(NetworkRoute::Direct), TorStatus::Off),
+            TorSettings::Off => self.publish(applied, Ok(NetworkRoute::Direct), TorStatus::Off),
 
             TorSettings::Proxy(address) => {
                 let proxy = SocksProxy { address, credentials: None };
-                self.publish(Ok(NetworkRoute::Tor(proxy)), TorStatus::UsingProxy);
+                self.publish(applied, Ok(NetworkRoute::Tor(proxy)), TorStatus::UsingProxy);
             }
 
             TorSettings::BuiltIn => match start_built_in() {
                 Ok(built_in) => {
                     let proxy = built_in.proxy().clone();
-                    self.forward_bootstrap_state(&built_in, generation);
+                    let bootstrap = built_in.state();
                     applied.built_in = Some(built_in);
-                    self.publish(Ok(NetworkRoute::Tor(proxy)), TorStatus::Starting { percent: 0 });
+
+                    // the first status goes out before the forwarder starts, so a fast
+                    // bootstrap's update always lands after it
+                    let starting = TorStatus::Starting { percent: 0 };
+                    self.publish(applied, Ok(NetworkRoute::Tor(proxy)), starting);
+                    self.forward_bootstrap_state(bootstrap, generation);
                 }
 
                 Err(message) => {
                     warn!("built-in Tor failed to start: {message}");
                     let failed = TorStatus::Failed { message: message.clone() };
-                    self.publish(Err(RouteError::TorUnavailable(message)), failed);
+                    self.publish(applied, Err(RouteError::TorUnavailable(message)), failed);
                 }
             },
         }
     }
 
-    fn publish(&self, route: Result<NetworkRoute, RouteError>, status: TorStatus) {
+    fn publish(
+        &self,
+        applied: &Applied,
+        route: Result<NetworkRoute, RouteError>,
+        status: TorStatus,
+    ) {
         self.route.store(Arc::new(route));
-        self.status.send_replace(status);
+
+        let mode = applied.settings.as_ref().map(TorMode::from);
+        self.state.send_replace(TorState { mode, status });
     }
 
-    fn forward_bootstrap_state(&self, built_in: &BuiltInTor, generation: u64) {
+    fn forward_bootstrap_state(&self, mut state: watch::Receiver<BootstrapState>, generation: u64) {
         let Some(runtime) = cove_tokio::handle() else { return };
 
-        let mut state = built_in.state();
-        let status = self.status.clone();
+        let screen = self.state.clone();
         let current_generation = self.generation.clone();
 
         runtime.spawn(async move {
@@ -265,11 +285,19 @@ impl TorService {
                     }
                 };
 
-                if current_generation.load(Ordering::Acquire) != generation {
+                // checked under the state's lock, so a newer mode published meanwhile always wins
+                let is_current = screen.send_if_modified(|screen| {
+                    let is_current = current_generation.load(Ordering::Acquire) == generation;
+                    if is_current {
+                        screen.status = next;
+                    }
+
+                    is_current
+                });
+
+                if !is_current {
                     return;
                 }
-
-                status.send_replace(next);
             }
         });
     }

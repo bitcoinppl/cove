@@ -12,7 +12,7 @@ use tracing::warn;
 
 use crate::{
     manager::reconcile_channel::ReconcileChannel,
-    tor::{SetTorError, TorMode, TorService, TorSettings, TorSettingsError, TorStatus},
+    tor::{SetTorError, TorMode, TorService, TorSettings, TorSettingsError, TorState, TorStatus},
 };
 
 /// Tor's standard SOCKS port, which Orbot on Android also uses
@@ -96,19 +96,31 @@ impl RustTorManager {
         })
     }
 
-    /// Sends every status change to the reconciler, from the first listener on
+    /// Sends every mode and status change to the reconciler, from the first listener on
+    ///
+    /// The mode comes from the service rather than from this manager's own requests, so a reset
+    /// the screen didn't ask for, such as a full wipe, still reaches it
     fn forward_status(&self) {
         if self.forwarding_status.swap(true, Ordering::AcqRel) {
             return;
         }
 
-        let mut status = TorService::global().subscribe_status();
+        let mut state = TorService::global().subscribe_state();
+        let mut last = state.borrow_and_update().clone();
         let reconciler = self.reconciler.clone();
 
         cove_tokio::task::spawn(async move {
-            while status.changed().await.is_ok() {
-                let next = status.borrow_and_update().clone();
-                reconciler.send(TorManagerReconcileMessage::Status(next));
+            while state.changed().await.is_ok() {
+                let next = state.borrow_and_update().clone();
+                if next.mode != last.mode {
+                    reconciler.send(TorManagerReconcileMessage::Mode(next.mode.clone()));
+                }
+
+                if next.status != last.status {
+                    reconciler.send(TorManagerReconcileMessage::Status(next.status.clone()));
+                }
+
+                last = next;
             }
         });
     }
@@ -124,14 +136,12 @@ impl RustTorManager {
 
         // saving writes the database and starting built-in Tor opens its files, so this stays
         // off the caller's thread
+        // the saved mode reaches the screen through the service's state, so only a refusal is
+        // sent from here
         let reconciler = self.reconciler.clone();
         cove_tokio::task::spawn_blocking(move || {
-            let mode = TorMode::from(&settings);
-            match TorService::global().set_settings(settings) {
-                Ok(()) => reconciler.send(TorManagerReconcileMessage::Mode(Some(mode))),
-                Err(error) => {
-                    reconciler.send(TorManagerReconcileMessage::ModeRejected(error.into()));
-                }
+            if let Err(error) = TorService::global().set_settings(settings) {
+                reconciler.send(TorManagerReconcileMessage::ModeRejected(error.into()));
             }
         });
     }
@@ -146,8 +156,7 @@ impl RustTorManager {
 
     /// The initial snapshot; later changes arrive as reconcile messages
     pub fn state(&self) -> TorManagerState {
-        let tor = TorService::global();
-        TorManagerState { mode: tor.settings().as_ref().map(TorMode::from), status: tor.status() }
+        TorService::global().state().into()
     }
 
     pub fn listen_for_updates(&self, reconciler: Box<dyn TorManagerReconciler>) {
@@ -211,6 +220,12 @@ impl RustTorManager {
     }
 }
 
+impl From<TorState> for TorManagerState {
+    fn from(TorState { mode, status }: TorState) -> Self {
+        Self { mode, status }
+    }
+}
+
 impl From<TorSettingsError> for TorManagerError {
     fn from(error: TorSettingsError) -> Self {
         Self::InvalidProxy(error.to_string())
@@ -223,5 +238,54 @@ impl From<SetTorError> for TorManagerError {
             SetTorError::OnionNodeSelected { node_name } => Self::OnionNodeSelected { node_name },
             SetTorError::Save(message) => Self::Save(message),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::{
+        database::{Database, global_config::GlobalConfigKey},
+        manager::deferred_sender::SingleOrMany,
+        test_support::socks_proxy::{TorTest, closed_proxy_address},
+    };
+
+    // a full wipe resets Tor underneath the manager, and the settings screen must still learn the
+    // new mode, or it keeps showing the old one and ignores a tap on it
+    #[tokio::test]
+    async fn a_reset_mode_reaches_the_screen() {
+        let tor = TorTest::start().await;
+        tor.use_proxy(closed_proxy_address());
+
+        let manager = TOR_MANAGER.clone();
+        manager.forward_status();
+        let receiver = manager.reconciler.receiver();
+        while receiver.try_recv().is_ok() {}
+
+        Database::global()
+            .global_config
+            .set(GlobalConfigKey::TorSettings, TorSettings::Off.to_json())
+            .unwrap();
+        TorService::global().restart();
+
+        let expected = TorManagerReconcileMessage::Mode(Some(TorMode::Off));
+        let wait = crate::test_support::loaded_host_wait(Duration::from_secs(1));
+        let arrived = tokio::time::timeout(wait, async {
+            while let Ok(messages) = receiver.recv_async().await {
+                let messages = match messages {
+                    SingleOrMany::Single(message) => vec![message],
+                    SingleOrMany::Many(messages) => messages,
+                };
+
+                if messages.contains(&expected) {
+                    return;
+                }
+            }
+        })
+        .await;
+
+        assert!(arrived.is_ok(), "the reset mode never reached the screen");
     }
 }

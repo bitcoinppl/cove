@@ -44,7 +44,9 @@ async fn node_traffic_goes_through_the_proxy_with_names_resolved_there() {
 async fn node_traffic_authenticates_to_the_built_in_bridge() {
     let _tor = TorTest::start().await;
     let proxy = RecordingSocksProxy::start_with_credentials();
-    TorService::global().publish(Ok(NetworkRoute::Tor(proxy.socks_proxy())), TorStatus::Ready);
+    let service = TorService::global();
+    let route = Ok(NetworkRoute::Tor(proxy.socks_proxy()));
+    service.publish(&service.applied.lock(), route, TorStatus::Ready);
 
     assert_node_traffic_goes_through(&proxy).await;
 }
@@ -137,7 +139,7 @@ async fn unreadable_settings_block_every_connection() {
     TorService::global().restart();
 
     assert!(matches!(current_route(), Err(RouteError::TorUnavailable(_))));
-    assert!(matches!(TorService::global().status(), TorStatus::Failed { .. }));
+    assert!(matches!(TorService::global().state().status, TorStatus::Failed { .. }));
 
     let node = Node::new_esplora(
         "esplora".into(),

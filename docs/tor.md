@@ -65,6 +65,6 @@ The `cove-tor` crate (`rust/crates/cove-tor`) wraps Arti. `BuiltInTor::start` cr
 
 ## Settings screen
 
-`RustTorManager` (`rust/src/manager/tor_manager.rs`) is a process singleton. `state()` is the initial snapshot. User intents go through `dispatch(.selectMode(mode))` and `dispatch(.restart)`, and saving runs off the caller's thread. Reconcile messages carry full values (`Mode`, `Status`, and `ModeRejected` for a refused change), so a reconciler that applies them in order converges on the current state without a revision counter.
+`RustTorManager` (`rust/src/manager/tor_manager.rs`) is a process singleton. `state()` is the initial snapshot. User intents go through `dispatch(.selectMode(mode))` and `dispatch(.restart)`, and saving runs off the caller's thread. Reconcile messages carry full values (`Mode`, `Status`, and `ModeRejected` for a refused change), so a reconciler that applies them in order converges on the current state without a revision counter. The manager forwards `Mode` and `Status` from the state `TorService` publishes with each route, so a change the screen didn't request, such as a full wipe turning Tor off, still reaches it.
 
 The saved mode is the `tor_settings` key in `GlobalConfigTable`, stored as JSON with explicit names, such as `{"mode":"proxy","address":"127.0.0.1:9050"}`. The table is a string table, so its redb metadata doesn't change.
