@@ -353,7 +353,9 @@ impl CloudStorageClient {
     /// The provider state of the copy this app writes for `record_id`, ignoring a legacy copy
     ///
     /// The provider reports a record uploaded once any of its copies is, so an uploaded legacy
-    /// copy would vouch for a new upload still staged on this device
+    /// copy would vouch for a new upload still staged on this device. A check of an upload this
+    /// build made asks only this, so a missing written copy uploads again instead of being judged
+    /// by a legacy one
     pub async fn is_written_backup_uploaded(
         &self,
         namespace: String,
@@ -365,6 +367,25 @@ impl CloudStorageClient {
             locations(vec![remote_layout::upload_location_for_record_id(&record_id)]);
 
         self.0.0.is_backup_uploaded(namespace, record_id, upload_location, self.1).await
+    }
+
+    /// The provider state of the copy reads of `record_id` resolve to: the copy this app writes,
+    /// or an older build's copy only when nothing is at the written location
+    ///
+    /// For a record this app may not have written, such as a master key wrapper an older build or
+    /// another device wrote, which would otherwise never count as uploaded. The written copy is
+    /// asked first, so a legacy copy never vouches for a new upload still staged on this device
+    pub async fn is_current_backup_uploaded(
+        &self,
+        namespace: String,
+        record_id: String,
+    ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
+        let written = self.is_written_backup_uploaded(namespace.clone(), record_id.clone()).await?;
+        if written != CloudBackupUploadStatus::NotFound {
+            return Ok(written);
+        }
+
+        self.is_backup_uploaded(namespace, record_id).await
     }
 
     pub async fn overall_sync_health(&self) -> CloudSyncHealth {
@@ -685,20 +706,35 @@ mod tests {
     }
 
     #[test]
-    fn written_backup_upload_ignores_an_uploaded_legacy_copy() {
+    fn current_backup_upload_ignores_a_legacy_copy_unless_nothing_was_written() {
         let cloud = cloud_with_storage(test_storage(CloudAccessPolicy::Silent, Vec::new()));
         let client = cloud.client(CloudAccessPolicy::Silent);
-        let record_id = cove_cspp::backup_data::wallet_record_id(STAGED_RECORD_WALLET_ID);
+        let staged = cove_cspp::backup_data::wallet_record_id(STAGED_RECORD_WALLET_ID);
+        let legacy_only = cove_cspp::backup_data::wallet_record_id("wallet-legacy-only");
 
         let any_copy =
-            block_on_ready(client.is_backup_uploaded(VALID_NAMESPACE.into(), record_id.clone()))
+            block_on_ready(client.is_backup_uploaded(VALID_NAMESPACE.into(), staged.clone()))
                 .expect("upload state");
+        let current_copy = block_on_ready(
+            client.is_current_backup_uploaded(VALID_NAMESPACE.into(), staged.clone()),
+        )
+        .expect("upload state");
         let written_copy =
-            block_on_ready(client.is_written_backup_uploaded(VALID_NAMESPACE.into(), record_id))
+            block_on_ready(client.is_written_backup_uploaded(VALID_NAMESPACE.into(), staged))
+                .expect("upload state");
+        let never_written_current = block_on_ready(
+            client.is_current_backup_uploaded(VALID_NAMESPACE.into(), legacy_only.clone()),
+        )
+        .expect("upload state");
+        let never_written_written =
+            block_on_ready(client.is_written_backup_uploaded(VALID_NAMESPACE.into(), legacy_only))
                 .expect("upload state");
 
         assert!(matches!(any_copy, CloudBackupUploadStatus::Uploaded));
+        assert!(matches!(current_copy, CloudBackupUploadStatus::Pending));
         assert!(matches!(written_copy, CloudBackupUploadStatus::Pending));
+        assert!(matches!(never_written_current, CloudBackupUploadStatus::Uploaded));
+        assert!(matches!(never_written_written, CloudBackupUploadStatus::NotFound));
     }
 
     #[test]

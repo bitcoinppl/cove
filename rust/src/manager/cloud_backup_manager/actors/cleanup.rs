@@ -7,7 +7,7 @@ use cove_device::cloud_storage::CloudStorageClient;
 use tracing::{info, warn};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::database::cloud_backup::PersistedPendingSourceDelete;
+use crate::database::cloud_backup::{PersistedPendingSourceDelete, PersistedSourceReplacement};
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteClient, ConfigGeneration,
 };
@@ -157,20 +157,17 @@ async fn run_cleanup_job(
             continue;
         }
 
-        if !verify_source_in_active_namespace(&cloud, &active_reader, &job, &source).await? {
+        let Some(replacements) =
+            verify_source_in_active_namespace(&cloud, &active_reader, &job, &source).await?
+        else {
             continue;
-        }
+        };
 
         let Some(manager) = manager.upgrade() else { return Ok(()) };
-        // a merge keeps each wallet's record id, so the records that hold the source's wallets
-        // are the source's own
-        let record_ids: Vec<String> =
-            source.expected_wallets.into_iter().map(|wallet| wallet.record_id).collect();
         let pending = PersistedPendingSourceDelete {
             source_namespace_id: source.namespace_id.clone(),
             active_namespace_id: job.active_namespace_id.clone(),
-            record_ids: record_ids.clone(),
-            source_record_ids: record_ids,
+            replacements,
         };
 
         match manager.record_pending_source_delete(writes, pending).await {
@@ -193,49 +190,61 @@ async fn run_cleanup_job(
     Ok(())
 }
 
+/// The active records that hold each of the source's wallets, at the revision the source holds,
+/// or `None` when any of them doesn't
+///
+/// A merge keeps each wallet's record id, so the record that holds a source wallet is the
+/// source's own
 async fn verify_source_in_active_namespace(
     cloud: &CloudStorageClient,
     active_reader: &WalletBackupReader,
     job: &CloudBackupCleanupJob,
     source: &CleanupSourceNamespace,
-) -> Result<bool, CloudBackupError> {
+) -> Result<Option<Vec<PersistedSourceReplacement>>, CloudBackupError> {
     let active_record_ids =
         cloud.list_wallet_backups(job.active_namespace_id.clone()).await.map_err(|error| {
             CloudBackupError::cloud_storage_context("list active wallet backups for cleanup", error)
         })?;
 
+    let mut replacements = Vec::with_capacity(source.expected_wallets.len());
     for expected in &source.expected_wallets {
         let Some(expected_revision) = expected.content_revision_hash.as_ref() else {
             warn!("Skipping cloud backup namespace cleanup reason=source_unverified");
-            return Ok(false);
+            return Ok(None);
         };
 
         if !active_record_ids.contains(&expected.record_id) {
             warn!("Skipping cloud backup namespace cleanup reason=missing_active_record");
-            return Ok(false);
+            return Ok(None);
         }
 
         let active_entry = match active_reader.lookup_entry(&expected.record_id).await? {
             WalletBackupLookup::Found(entry) => entry,
             WalletBackupLookup::NotFound => {
                 warn!("Skipping cloud backup namespace cleanup reason=active_record_not_found");
-                return Ok(false);
+                return Ok(None);
             }
             WalletBackupLookup::UnsupportedVersion(version) => {
                 warn!(
                     "Skipping cloud backup namespace cleanup reason=unsupported_active_version version={version}"
                 );
-                return Ok(false);
+                return Ok(None);
             }
         };
 
         if !matches_revision_hash(&active_entry, expected_revision) {
             warn!("Skipping cloud backup namespace cleanup reason=revision_mismatch");
-            return Ok(false);
+            return Ok(None);
         }
+
+        replacements.push(PersistedSourceReplacement {
+            source_record_id: expected.record_id.clone(),
+            replacement_record_id: expected.record_id.clone(),
+            revision_hash: expected_revision.clone(),
+        });
     }
 
-    Ok(true)
+    Ok(Some(replacements))
 }
 
 fn matches_revision_hash(entry: &WalletEntry, expected_revision: &str) -> bool {

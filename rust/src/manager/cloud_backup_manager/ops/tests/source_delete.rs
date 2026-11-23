@@ -6,6 +6,7 @@
 //! iCloud storage is full. The mock models that with uploads pending confirmation
 
 use super::*;
+use crate::database::cloud_backup::CloudBlobConfirmedState;
 use crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass;
 
 /// Another backup namespace holding one watch-only wallet that Recover Other Backups restores
@@ -180,7 +181,7 @@ async fn recover_other_backups_keeps_a_source_the_current_backup_holds_until_its
     let [pending] = state.pending_source_deletes() else {
         panic!("expected the source pending deletion, found {state:?}");
     };
-    assert_eq!(pending.record_ids, vec![record_id]);
+    assert_eq!(replacement_record_ids(pending), vec![record_id]);
 
     verifier_pass.verify_once(&manager).await;
 
@@ -224,6 +225,42 @@ async fn recover_other_backups_keeps_the_source_when_its_replacement_upload_fail
             ..
         })
     ));
+    assert!(globals.cloud.has_namespace(&other_namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempts);
+    assert!(pending_source_namespaces().is_empty());
+
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
+}
+
+/// The proof compared the source with one revision of its replacement, so a later revision
+/// confirmed while the delete waited proves nothing about the source, which stays
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_the_source_when_its_replacement_changes_while_its_delete_waits()
+ {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    globals.cloud.set_uploaded_wallets_pending_confirmation(true);
+    let (other_namespace, record_id) = other_backup_with_one_wallet(globals).await;
+
+    let verifier_pass = hold_verifier_pass().await;
+    recover_other_backups_for_test(&manager).await.unwrap();
+    assert_eq!(pending_source_namespaces(), vec![other_namespace.clone()]);
+
+    // a later upload of the wallet, such as after an address type change, confirmed meanwhile
+    let mut row = Database::global().cloud_blob_sync_states.get(&record_id).unwrap().unwrap();
+    row.state = PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+        revision_hash: "a-later-revision".into(),
+        confirmed_at: 1,
+    });
+    Database::global().cloud_blob_sync_states.set(&row).unwrap();
+    globals.cloud.set_uploaded_wallets_pending_confirmation(false);
+    let delete_attempts = globals.cloud.delete_namespace_attempt_count();
+    verifier_pass.verify_once(&manager).await;
+
     assert!(globals.cloud.has_namespace(&other_namespace));
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempts);
     assert!(pending_source_namespaces().is_empty());

@@ -250,11 +250,23 @@ pub(crate) enum NamedWalletCoverage {
 }
 
 impl LocalWalletIdentities {
+    /// Adds `key` to `wallet`'s identity, beside any key the wallet already has
+    ///
+    /// A wallet that gained a secret keeps the public identity it was read with, since it still
+    /// watches those keys, and adds the hot fingerprint it now holds
     pub(crate) fn insert(&mut self, wallet: CoveringWallet, key: WalletIdentityKey) {
-        let mut identity = ExistingWalletIdentitySet::default();
-        identity.insert(key.clone());
+        self.all.insert(key.clone());
 
-        self.all.insert(key);
+        if let Some((existing, identity)) =
+            self.wallets.iter_mut().find(|(existing, _)| existing.id == wallet.id)
+        {
+            existing.name = wallet.name;
+            identity.insert(key);
+            return;
+        }
+
+        let mut identity = ExistingWalletIdentitySet::default();
+        identity.insert(key);
         self.wallets.push((wallet, identity));
     }
 
@@ -292,24 +304,6 @@ impl LocalWalletIdentities {
             LocalWalletCoverage::Covered | LocalWalletCoverage::Absent => {
                 NamedWalletCoverage::Absent
             }
-        }
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::ExistingWalletIdentitySet;
-
-    pub(crate) trait ExistingWalletIdentitySetTestExt {
-        fn len(&self) -> usize;
-    }
-
-    impl ExistingWalletIdentitySetTestExt for ExistingWalletIdentitySet {
-        fn len(&self) -> usize {
-            self.public_identities.len()
-                + self.degraded_fingerprints.len()
-                + self.hot_fingerprints.len()
-                + self.wallet_ids.len()
         }
     }
 }

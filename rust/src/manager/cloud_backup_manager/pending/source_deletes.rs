@@ -4,9 +4,10 @@
 //! namespace's wallets, then record a pending source delete instead of deleting. A returned
 //! upload can mean the file is only staged on this device, as on iOS, so a source deleted then
 //! could leave the cloud with no copy of a wallet once its own deletion syncs. This owner deletes
-//! a source only once every replacement record's upload, and the active master key wrapper's, is
-//! confirmed in the active namespace and the provider reports the copy this device wrote
-//! uploaded, and only while the source still lists no record the proof didn't cover
+//! a source only once every replacement record's upload, at the revision the proof compared with
+//! the source, and the active master key wrapper's are confirmed in the active namespace and the
+//! provider reports their current copies uploaded, and only while the source still lists no
+//! record the proof didn't cover
 
 use act_zero::call;
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
@@ -122,21 +123,33 @@ impl PendingSourceDeletes<'_> {
         let source = &entry.source_namespace_id;
 
         // the replacements are readable only with the active master key wrapper, so a new device
-        // restoring from the cloud needs it uploaded as much as the wallet records
-        let required_record_ids = std::iter::once(MASTER_KEY_RECORD_ID.to_string())
-            .chain(entry.record_ids.iter().cloned())
-            .collect::<Vec<_>>();
+        // restoring from the cloud needs it uploaded as much as the wallet records; the wrapper
+        // has no revision of its own to hold
+        let required = std::iter::once((MASTER_KEY_RECORD_ID, None)).chain(
+            entry.replacements.iter().map(|replacement| {
+                (
+                    replacement.replacement_record_id.as_str(),
+                    Some(replacement.revision_hash.as_str()),
+                )
+            }),
+        );
 
         // every local row is checked before the provider is asked, so a terminal failure clears
         // the entry even while another record is still uploading
         let mut all_confirmed = true;
-        for record_id in &required_record_ids {
-            match Self::local_upload(entry, record_id) {
+        for (record_id, revision_hash) in required {
+            match Self::local_upload(entry, record_id, revision_hash) {
                 LocalUpload::Confirmed => {}
                 LocalUpload::Pending => all_confirmed = false,
                 LocalUpload::TerminalFailure => {
                     warn!(
                         "Pending source delete: keeping source={source} reason=upload_failed record_id={record_id}"
+                    );
+                    return SourceDeleteStep::Settled;
+                }
+                LocalUpload::Superseded => {
+                    warn!(
+                        "Pending source delete: keeping source={source} reason=replacement_changed record_id={record_id}"
                     );
                     return SourceDeleteStep::Settled;
                 }
@@ -147,8 +160,14 @@ impl PendingSourceDeletes<'_> {
             return SourceDeleteStep::Pending;
         }
 
-        for record_id in &required_record_ids {
-            match Self::provider_upload(cloud, &entry.active_namespace_id, record_id).await {
+        let required_record_ids = std::iter::once(MASTER_KEY_RECORD_ID).chain(
+            entry.replacements.iter().map(|replacement| replacement.replacement_record_id.as_str()),
+        );
+        for record_id in required_record_ids {
+            match cloud
+                .is_current_backup_uploaded(entry.active_namespace_id.clone(), record_id.to_owned())
+                .await
+            {
                 Ok(CloudBackupUploadStatus::Uploaded) => {}
                 Ok(CloudBackupUploadStatus::Pending | CloudBackupUploadStatus::NotFound) => {
                     info!(
@@ -172,8 +191,9 @@ impl PendingSourceDeletes<'_> {
         // source may have added a wallet since, which no replacement holds
         match cloud.list_wallet_backups(source.clone()).await {
             Ok(listed) => {
-                if let Some(unproven) =
-                    listed.iter().find(|record_id| !entry.source_record_ids.contains(record_id))
+                if let Some(unproven) = listed
+                    .iter()
+                    .find(|listed| !entry.source_record_ids().any(|proven| proven == *listed))
                 {
                     warn!(
                         "Pending source delete: keeping source={source} reason=source_gained_record record_id={unproven}"
@@ -225,32 +245,17 @@ impl PendingSourceDeletes<'_> {
         }
     }
 
-    /// The provider state of `record_id` in `namespace`, asked first of the copy this app writes
-    ///
-    /// An uploaded legacy copy would vouch for a new upload still staged at the written location,
-    /// so the written copy decides whenever it exists. A record with none there, such as a master
-    /// key wrapper an older build or another device wrote, is judged by its legacy copy, or the
-    /// source would wait on it forever
-    async fn provider_upload(
-        cloud: &CloudStorageClient,
-        namespace: &str,
-        record_id: &str,
-    ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
-        let written =
-            cloud.is_written_backup_uploaded(namespace.to_owned(), record_id.to_owned()).await?;
-        if written != CloudBackupUploadStatus::NotFound {
-            return Ok(written);
-        }
-
-        cloud.is_backup_uploaded(namespace.to_owned(), record_id.to_owned()).await
-    }
-
-    /// Whether this device's upload of `record_id` to the active namespace is confirmed
+    /// Whether this device's upload of `record_id` to the active namespace is confirmed, at
+    /// `revision_hash` when the proof saw one
     ///
     /// A record with no row was written by another device, and the provider check that follows
     /// is what proves it. A confirmed row alone is not proof, since a listing or summary read can
     /// confirm an upload the provider still holds only on this device
-    fn local_upload(entry: &PersistedPendingSourceDelete, record_id: &str) -> LocalUpload {
+    fn local_upload(
+        entry: &PersistedPendingSourceDelete,
+        record_id: &str,
+        revision_hash: Option<&str>,
+    ) -> LocalUpload {
         let row = match Database::global().cloud_blob_sync_states.get(record_id) {
             Ok(row) => row,
             Err(error) => {
@@ -265,7 +270,10 @@ impl PendingSourceDeletes<'_> {
         }
 
         match row.state {
-            PersistedCloudBlobState::Confirmed(_) => LocalUpload::Confirmed,
+            PersistedCloudBlobState::Confirmed(confirmed) => match revision_hash {
+                Some(expected) if confirmed.revision_hash != expected => LocalUpload::Superseded,
+                Some(_) | None => LocalUpload::Confirmed,
+            },
             PersistedCloudBlobState::Failed(CloudBlobFailedState { retryable: false, .. }) => {
                 LocalUpload::TerminalFailure
             }
@@ -289,4 +297,7 @@ enum LocalUpload {
     Confirmed,
     Pending,
     TerminalFailure,
+    /// A later revision than the one the proof compared with the source was confirmed, so the
+    /// record no longer proves it holds the source
+    Superseded,
 }

@@ -47,7 +47,7 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::PermitIntent;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
+    NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,

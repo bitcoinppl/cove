@@ -963,6 +963,36 @@ async fn recover_other_backups_keeps_cloud_labels_when_adding_a_seed_to_a_local_
     }
 }
 
+// adding the seed queues the wallet's upload over the current backup's record under its id, so
+// that record is read first; while it can't be read the seed isn't added, and stays in the source
+// rather than an upload dropping the labels only that record holds
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_keeps_a_seed_in_its_source_while_the_current_record_is_unreadable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let other_master_key = other_namespace(globals);
+    let other = other_master_key.namespace_id();
+    let seed = Seed::new(58);
+
+    let watch_only = seed.local_wallet(WalletType::Cold);
+    list_backups(globals, &active_namespace(), vec![(&watch_only.id, b"not a backup".to_vec())]);
+    let seed_bytes = seed.cloud_backup_under_id(&watch_only.id, &other_master_key).await;
+    list_backups(globals, &other, vec![(&watch_only.id, seed_bytes)]);
+
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!((report.wallets_restored, report.wallets_failed), (0, 1));
+    assert_eq!(local_wallet(&watch_only.id).wallet_type, WalletType::Cold);
+    assert!(!seed.is_held_by(&watch_only.id));
+    assert!(globals.cloud.has_namespace(&other));
+    assert!(
+        Database::global().cloud_backup_state.get().unwrap().pending_source_deletes().is_empty()
+    );
+}
+
 // the seed is added before its labels, so labels that fail to import are reported as a label
 // warning and never undo or fail the restore
 #[tokio::test(flavor = "current_thread", start_paused = true)]

@@ -5417,7 +5417,7 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
     let outcome = prepared.restore_record(&seed_record_id).await.unwrap();
 
     // both watch-only wallets match the seed, so it becomes its own hot wallet
-    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }));
+    assert!(matches!(outcome, WalletRestoreOutcome::Restored { .. }));
     let local_wallets = local_wallets_like(&seed_wallet);
     let wallet_type = |id: &WalletId| {
         local_wallets.iter().find(|wallet| &wallet.id == id).map(|wallet| wallet.wallet_type)

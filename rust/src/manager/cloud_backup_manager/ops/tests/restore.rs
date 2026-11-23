@@ -8,6 +8,15 @@ use crate::test_support::{LoadedHostDeadline, loaded_host_wait, raw_wallet_keych
 use crate::wallet_identity::{BackupRecoveryMaterial, CoveringWallet, CoveringWallets};
 use cove_tokio::FutureTimeoutExt as _;
 
+/// Restores `wallet` in a session that queues no uploads, so the restore's own writes are all
+/// the test sees
+fn restore_without_upload_queue(
+    wallet: &DownloadedWalletBackup,
+) -> Result<WalletRestoreOutcome, CloudBackupError> {
+    WalletRestoreSession::new(crate::wallet_identity::LocalWalletIdentities::default(), |_| {})
+        .restore(wallet)
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_counts() {
     let _guard = async_test_lock().lock().await;
@@ -34,9 +43,7 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
         },
     };
 
-    WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
-        .restore_downloaded(&wallet)
-        .unwrap();
+    restore_without_upload_queue(&wallet).unwrap();
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
@@ -71,10 +78,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
         entry: wallet_entry_with_labels(&metadata, Some(&labels_jsonl)),
     };
 
-    let outcome =
-        WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
-            .restore_downloaded(&wallet)
-            .unwrap();
+    let outcome = restore_without_upload_queue(&wallet).unwrap();
 
     let WalletRestoreOutcome::Restored { labels_warning, .. } = outcome else {
         panic!("expected restored wallet");
@@ -1698,7 +1702,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
         .await
         .unwrap();
 
-    let CloudOnlyRestoreOutcome::Restored { labels_warning, .. } = outcome else {
+    let WalletRestoreOutcome::Restored { labels_warning, .. } = outcome else {
         panic!("expected restored wallet");
     };
 
@@ -1876,13 +1880,10 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
     let first_outcome = prepared.restore_record(&first_record_id).await.unwrap();
-    assert!(matches!(
-        first_outcome,
-        CloudOnlyRestoreOutcome::Restored { labels_warning: None, .. }
-    ));
+    assert!(matches!(first_outcome, WalletRestoreOutcome::Restored { labels_warning: None, .. }));
 
     let second_outcome = prepared.restore_record(&second_record_id).await.unwrap();
-    let CloudOnlyRestoreOutcome::Restored { labels_warning, .. } = second_outcome else {
+    let WalletRestoreOutcome::Restored { labels_warning, .. } = second_outcome else {
         panic!("expected second wallet to restore");
     };
 
@@ -1892,7 +1893,7 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
     let duplicate_outcome = prepared.restore_record(&second_record_id).await.unwrap();
     assert_eq!(
         duplicate_outcome,
-        CloudOnlyRestoreOutcome::AlreadyOnDevice {
+        WalletRestoreOutcome::AlreadyOnDevice {
             covered_by: CoveringWallets::one(
                 CoveringWallet { id: second_wallet.id.clone(), name: second_wallet.name.clone() },
                 BackupRecoveryMaterial::PublicOnly,

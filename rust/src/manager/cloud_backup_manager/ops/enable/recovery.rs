@@ -12,7 +12,7 @@ use crate::manager::cloud_backup_manager::actors::{
 };
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession, restored_content_revision_hash,
+    restored_content_revision_hash,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupError, CloudBackupStore, is_connectivity_related_issue,
@@ -158,8 +158,7 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
         namespaces: &[MergeNamespace],
     ) -> Result<Vec<MergedNamespaceWallets>, CloudBackupError> {
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
-        let mut restore_session = WalletRestoreSession::new(existing_identities);
+        let mut restore_session = self.restore_session()?;
         let mut merged_namespaces = Vec::with_capacity(namespaces.len());
 
         for namespace in namespaces {
@@ -216,7 +215,7 @@ impl RustCloudBackupManager {
                     }
                 };
 
-                match self.restore_in_session(&mut restore_session, &wallet) {
+                match restore_session.restore(&wallet) {
                     Ok(WalletRestoreOutcome::Restored { wallet: restored, .. }) => {
                         restored_wallets.push(restored.into_metadata())
                     }
@@ -224,7 +223,7 @@ impl RustCloudBackupManager {
                     // enable uploads every local wallet after the merge, the upgraded one too, and
                     // cleanup keeps the source while the upgraded wallet's record differs from it
                     Ok(WalletRestoreOutcome::SecretAdded { .. })
-                    | Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
+                    | Ok(WalletRestoreOutcome::AlreadyOnDevice { .. }) => {}
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));

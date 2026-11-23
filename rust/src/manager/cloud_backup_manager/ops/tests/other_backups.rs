@@ -376,7 +376,7 @@ async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id(
     let [pending] = state.pending_source_deletes() else {
         panic!("expected the source pending deletion, found {state:?}");
     };
-    assert_eq!(pending.record_ids, vec![restored_record_id]);
+    assert_eq!(replacement_record_ids(pending), vec![restored_record_id]);
 
     verify_pending_uploads_once_for_test_async(&manager).await;
     assert!(!globals.cloud.has_namespace(&other_namespace));

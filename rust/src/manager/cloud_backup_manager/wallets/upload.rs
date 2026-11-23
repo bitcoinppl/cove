@@ -222,7 +222,10 @@ impl DirtyWalletUploadPreparationError {
 }
 
 impl RustCloudBackupManager {
-    /// Upload wallets to cloud and update local cache
+    /// Upload wallets to cloud and update local cache, returning the records actually written
+    ///
+    /// A wallet whose cloud copy holds key material it lacks keeps that copy and is left out of
+    /// the result, so a caller never counts a record it did not write as replaced
     ///
     /// `writes` decides when the lane runs these uploads: a background client's generation
     /// must be read before this reads the namespace, and an operation's client runs them only
@@ -231,9 +234,9 @@ impl RustCloudBackupManager {
         &self,
         writes: &CloudBackupWriteClient,
         wallets: &[crate::wallet::metadata::WalletMetadata],
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<Vec<CloudBackupUploadedWallet>, CloudBackupError> {
         if wallets.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let namespace = self.current_namespace_id()?;
@@ -356,13 +359,13 @@ impl RustCloudBackupManager {
         self.complete_cloud_wallet_upload_batch_for_records(
             writes,
             batch,
-            uploaded_wallets,
+            uploaded_wallets.clone(),
             uploaded_record_ids,
         )
         .await?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
-        Ok(())
+        Ok(uploaded_wallets)
     }
 
     pub(crate) async fn upload_wallets_with_writer(
@@ -440,7 +443,7 @@ impl RustCloudBackupManager {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         uploaded_record_ids: Vec<String>,
         upload_error: CloudBackupError,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<Vec<CloudBackupUploadedWallet>, CloudBackupError> {
         if uploaded_wallets.is_empty() {
             return Err(upload_error);
         }

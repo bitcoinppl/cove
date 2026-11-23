@@ -20,7 +20,7 @@ use crate::manager::cloud_backup_manager::ops::{
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
     NamespacePasskeyMatcher, PasskeyRequestAuthority, Unopened, UnopenedReason, WalletBackupLookup,
-    WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
+    WalletBackupReader, WalletRestoreOutcome,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -513,8 +513,7 @@ impl RestoreOperation {
         downloaded_wallets: &[(usize, DownloadedWalletRecord)],
         report: &mut CloudBackupRestoreReport,
     ) -> Result<RestoreApplication, CloudBackupError> {
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()?;
-        let mut restore_session = WalletRestoreSession::new(existing_identities);
+        let mut restore_session = manager.restore_session()?;
         let restore_total = downloaded_wallets.len() as u32;
         let mut resolution = RestoreResolution::Nothing;
         // download failures already counted here have no local category of their own
@@ -534,7 +533,7 @@ impl RestoreOperation {
             downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
-            match manager.restore_in_session(&mut restore_session, wallet) {
+            match restore_session.restore(wallet) {
                 // activation marks every local wallet dirty, so an upgraded wallet uploads too
                 Ok(WalletRestoreOutcome::Restored { labels_warning, .. })
                 | Ok(WalletRestoreOutcome::SecretAdded { labels_warning, .. }) => {
@@ -547,7 +546,7 @@ impl RestoreOperation {
                             .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                     }
                 }
-                Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+                Ok(WalletRestoreOutcome::AlreadyOnDevice { .. }) => {
                     resolution = resolution.skipped_duplicate(*namespace_index);
                 }
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),

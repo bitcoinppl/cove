@@ -219,7 +219,7 @@ impl CloudBackupSupervisor {
         completed: u32,
         wallet: CloudBackupWalletItem,
         listing_generation: u64,
-        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
+        result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<bool> {
         if self.runtime.restore_all(claim).is_none() {
             return Produces::ok(false);
@@ -230,7 +230,7 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning, .. }) => {
+            Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {
@@ -240,7 +240,7 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, labels_warning, .. }) => {
+            Ok(WalletRestoreOutcome::SecretAdded { covered_by, labels_warning, .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
@@ -252,7 +252,7 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }) => {
+            Ok(WalletRestoreOutcome::AlreadyOnDevice { covered_by }) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,

@@ -65,6 +65,7 @@ impl RustCloudBackupManager {
         info!("Sync: {} wallet(s) need backup", unsynced.len());
         self.do_backup_wallets(writes, &unsynced)
             .await
+            .map(|_| ())
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Sync, error))
     }
 

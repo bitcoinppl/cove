@@ -26,7 +26,7 @@ pub use state::{
     PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
     PersistedDriveAccountSwitchState, PersistedHealNotice, PersistedPasskeyState,
     PersistedPendingSourceDelete, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker, PersistedSourceReplacement,
     PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
@@ -360,8 +360,11 @@ mod tests {
         let pending = |record_id: &str| PersistedPendingSourceDelete {
             source_namespace_id: "source-1".into(),
             active_namespace_id: "namespace-1".into(),
-            record_ids: vec![record_id.into()],
-            source_record_ids: vec![record_id.into()],
+            replacements: vec![PersistedSourceReplacement {
+                source_record_id: record_id.into(),
+                replacement_record_id: record_id.into(),
+                revision_hash: "revision-1".into(),
+            }],
         };
 
         assert!(state.replace_pending_source_delete(pending("wallet-1")));

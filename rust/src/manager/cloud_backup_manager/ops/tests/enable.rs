@@ -627,7 +627,7 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
         panic!("expected the merged source pending deletion, found {state:?}");
     };
     assert_eq!(pending.source_namespace_id, first_namespace);
-    assert_eq!(pending.record_ids, vec![first_record_id.clone()]);
+    assert_eq!(replacement_record_ids(pending), vec![first_record_id.clone()]);
     verifier_pass.verify_once(&manager).await;
     assert!(globals.cloud.has_namespace(&first_namespace));
 

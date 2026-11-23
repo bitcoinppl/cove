@@ -2035,13 +2035,24 @@ pub(crate) async fn finish_operation_for_test(
         .expect("complete exclusive operation");
 }
 
+/// The active records `pending` waits on, in the order it lists them
+pub(crate) fn replacement_record_ids(
+    pending: &crate::database::cloud_backup::PersistedPendingSourceDelete,
+) -> Vec<String> {
+    pending
+        .replacements
+        .iter()
+        .map(|replacement| replacement.replacement_record_id.clone())
+        .collect()
+}
+
 /// Backs up wallets through a background write ticket, the way the upload worker does
 pub(crate) async fn backup_wallets_for_test(
     manager: &RustCloudBackupManager,
     wallets: &[crate::wallet::metadata::WalletMetadata],
 ) -> Result<(), CloudBackupError> {
     let writes = manager.background_writes().await?;
-    manager.do_backup_wallets(&writes, wallets).await
+    manager.do_backup_wallets(&writes, wallets).await.map(|_| ())
 }
 
 pub(crate) fn persisted_enabled_cloud_backup_state(

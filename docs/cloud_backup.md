@@ -966,9 +966,10 @@ watch-only copy restored earlier in the same run never makes a seed backup look
 like a duplicate. A public backup is skipped when a local wallet has its public
 identity, as before.
 
-When a weaker local copy matches a seed backup, the session runs the same
-decision as Restore for one cloud-only record (`restore_cloud_only`), against
-the local wallets as they are at that moment:
+When a weaker local copy matches a seed backup, the session plans the same
+restore as Restore for one cloud-only record
+(`DownloadedWalletBackup::plan_restore`), against the local wallets it started
+from and every wallet it has written since:
 
 - The seed is added to the one local wallet the seed derives to, only when that
   wallet has the backup's own public identity, under the backup's address type,
@@ -982,9 +983,11 @@ A hot backup whose metadata has no master fingerprint keys on the fingerprint of
 its secret, and restores with that fingerprint in its metadata, so a second copy
 of a seed already on the device is still skipped, in the same run or a later
 one.
-After each restore the session records what it actually wrote: a record whose
-metadata says hot but that holds no secret restores watch-only and never makes a
-later seed backup of that wallet look covered. When the two backups list seed
+After each restore the session reads the identity of the wallet it wrote, the
+way it reads every local wallet (`LocalWalletIdentities::insert_wallet`), so it
+covers only what that wallet holds: a record whose metadata says hot but that
+holds no secret restores watch-only and never makes a later seed backup of that
+wallet look covered. When the two backups list seed
 first, the watch-only copy restores as a separate watch-only wallet beside the
 hot one; the seed is on the device either way.
 
@@ -995,14 +998,18 @@ already has keeps its local value, since it may be a newer edit made on this
 device. The wallet's next upload replaces the active backup's record under its
 ID with the wallet's own labels, and that record may be the seed backup itself,
 so without this its labels would be lost. Recover Other Backups reads a
-different record there, so before it uploads the wallet it also adds the
-missing labels from the active backup's record under the wallet's ID. A failure
-to add labels is reported as a label warning; the seed stays added.
+different record there, so it also reads the active backup's record under the
+wallet's ID before it adds the seed, and adds that record's missing labels
+after the backup's (`WalletRestoreSession::commit`). The read comes before the
+seed is added, since adding it queues the wallet's upload. While that record
+can't be read, the seed isn't added in this run and the source keeps it. A
+failure to add labels is reported as a label warning; the seed stays added.
 
 A wallet that gained its seed this way has a cloud backup without it until it
 uploads again, and a wallet a batch restored has no record in the active
 backup until it uploads, so every path queues the upload of either as soon as
-the restore commits (`restore_in_session`). A run that is cancelled, returns early or fails its own
+the restore commits: a batch through `WalletRestoreSession::commit`, and Restore
+for one cloud-only record through `handle_cloud_only_restore_committed`. A run that is cancelled, returns early or fails its own
 upload still leaves the wallet queued, and a retry that now finds it covered
 doesn't leave the device's own backup watch-only.
 
@@ -1021,14 +1028,20 @@ while the source holds the seed. The active copy is the one this device's
 wallet uploads over, so a source record under the same ID goes through the
 session only when a local wallet with its identity lacks its seed. Otherwise it
 is not restored, since its upload could replace a newer active copy, and it
-counts as recovered only when the active record holds the same key material, the
-same descriptors and xpub, which an address type change replaces under the same
-wallet ID, and, when the source has labels, the same labels. Any other source
-record counts as recovered only when its wallet was restored with its labels and
-the run's upload finished. Only when every record counts is the source
-namespace deleted, and only once the provider reports each active record that
-holds its wallets uploaded (see
-[Deleting Recovered Sources](#deleting-recovered-sources)).
+counts as recovered only when the active record holds everything the source
+record does (`backup_entry_holds`): the same key material, compared by value so
+an extended private key stored in another network's form still matches, and a
+descriptor secret only by the same descriptor; the same descriptors and xpub,
+which an address type change replaces under the same wallet ID; and, when the
+source has labels, the same labels. Any other source record counts as recovered
+only when its wallet was restored with its labels and the run's upload wrote
+that wallet's record. A wallet whose active copy kept key material the wallet
+lacks writes nothing (`WalletUploadOutcome::KeptKeyMaterial`), so its source
+record doesn't count. Each record that counts names the active record that
+holds it and that record's revision: the active record's own, or the one the
+upload wrote. Only when every record counts is the source namespace deleted,
+and only once the provider reports each of those active records uploaded at
+that revision (see [Deleting Recovered Sources](#deleting-recovered-sources)).
 
 The Other Backups summary, which decides whether Recover is offered, still
 counts only records whose ID no local wallet uses, since it reads no record
@@ -1049,9 +1062,11 @@ of the wallet.
 
 So neither deletes the source. Each records a pending source delete in the
 configured lifecycle record (`PersistedPendingSourceDelete`): the source
-namespace, the active namespace, and the active records that hold the source's
-wallets. For a wallet restored under a new wallet ID, that is the new wallet's
-record, not the source's. The lifecycle owner records it only under the
+namespace, the active namespace, and, for each source record, the active record
+that holds it and the revision the proof saw (`PersistedSourceReplacement`).
+For a wallet restored under a new wallet ID, that is the new wallet's record,
+not the source's. Merge cleanup keeps each wallet's record ID, so each active
+record is the source's own, at the revision it read back. The lifecycle owner records it only under the
 producer's authority: Recover's while its operation runs, and merge cleanup's
 while the configuration it proved under is current. Recover counts a recorded
 source as moved, as it counted a deleted one.
@@ -1061,22 +1076,29 @@ The pending upload verifier settles these entries at the end of each pass
 blocked on authorization. For each entry:
 
 - When another namespace is active, the entry is dropped and the source stays.
-- The records checked are the entry's wallet records plus the active master key
-  wrapper, since a new device can't decrypt the replacements without it.
+- The records checked are the entry's replacement records plus the active
+  master key wrapper, since a new device can't decrypt the replacements without
+  it.
 - Each record's upload row must be absent, for a record another device wrote,
-  or `Confirmed` in the active namespace. An upload that failed for good drops
-  the entry and keeps the source. Any other row leaves the entry for a later
-  pass. A confirmed row alone is not proof, since a listing or summary read can
-  confirm an upload.
-- The provider must then report the copy this device writes of every record
-  uploaded (`is_written_backup_uploaded`; on iOS `ubiquitousItemIsUploaded`, on
-  Android the file exists in Drive). Only that location is asked, because iOS
+  or `Confirmed` in the active namespace, and a replacement's at the revision
+  the entry names. A replacement confirmed at another revision drops the entry
+  and keeps the source, since that revision was never compared with the source.
+  An upload that failed for good also drops the entry and keeps the source. Any
+  other row leaves the entry for a later pass. A confirmed row alone is not
+  proof, since a listing or summary read can confirm an upload.
+- The provider must then report the current copy of every record uploaded
+  (`is_current_backup_uploaded`; on iOS `ubiquitousItemIsUploaded`, on Android
+  the file exists in Drive). The current copy is the one this build writes, or
+  the legacy copy when nothing is at the written location, such as a master key
+  wrapper an older build wrote. The written location is asked first because iOS
   reports a record uploaded once any of its copies is, and an uploaded legacy
-  copy would vouch for a new one still staged on this device. A record with no
-  copy at that location, such as a master key wrapper an older build wrote, is
-  judged by its legacy copy. The pending upload verifier asks only about the
-  written location, since it checks uploads this build made there. Anything else leaves the entry for a later pass,
-  and an authorization error ends the settle for that pass.
+  copy would vouch for a new one still staged on this device. The pending upload
+  verifier asks the same way about the master key wrapper, so a wrapper Verify
+  read only at its legacy location still confirms, but asks only about the
+  written copy of a wallet record (`is_written_backup_uploaded`), since it checks
+  an upload this build made there: a missing written copy uploads again instead
+  of being judged by a legacy one. Anything else leaves the entry for a later
+  pass, and an authorization error ends the settle for that pass.
 - The source is listed again. A record the proof didn't cover, such as a wallet
   another device still using the source added while the delete waited, drops
   the entry and keeps the source. A change to a record the proof did cover is

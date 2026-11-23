@@ -551,11 +551,27 @@ pub struct PersistedPendingSourceDelete {
     pub source_namespace_id: String,
     /// The namespace that holds the source's wallets; the entry is stale once another is active
     pub active_namespace_id: String,
-    /// Active-namespace wallet records that hold the source's wallets
-    pub record_ids: Vec<String>,
-    /// The source's wallet records the proof covered; a source that lists any other by the time
-    /// it would be deleted gained a wallet the proof never read, so it stays
-    pub source_record_ids: Vec<String>,
+    /// One entry per source record the proof covered; a source that lists any other record by
+    /// the time it would be deleted gained a wallet the proof never read, so it stays
+    pub replacements: Vec<PersistedSourceReplacement>,
+}
+
+impl PersistedPendingSourceDelete {
+    /// The source records the proof covered
+    pub fn source_record_ids(&self) -> impl Iterator<Item = &str> {
+        self.replacements.iter().map(|replacement| replacement.source_record_id.as_str())
+    }
+}
+
+/// The active-namespace record that holds one source record, at the revision the proof saw
+///
+/// The source is deleted only while that record is still this revision: a later revision was
+/// never compared with the source, so it proves nothing about it
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedSourceReplacement {
+    pub source_record_id: String,
+    pub replacement_record_id: String,
+    pub revision_hash: String,
 }
 
 /// Durable notice that Cloud Backup was healed from a disable that never deleted anything

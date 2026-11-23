@@ -1210,7 +1210,7 @@ mod tests {
     fn cloud_backup_state_reads_and_roundtrips_pending_source_deletes() {
         use serde_json::json;
 
-        use super::super::PersistedPendingSourceDelete;
+        use super::super::{PersistedPendingSourceDelete, PersistedSourceReplacement};
 
         let configured_data = json!({
             "passkey": "Available",
@@ -1245,8 +1245,13 @@ mod tests {
         let pending = PersistedPendingSourceDelete {
             source_namespace_id: "source-1".into(),
             active_namespace_id: "namespace-1".into(),
-            record_ids: vec!["wallet-1".into(), "wallet-2".into()],
-            source_record_ids: vec!["wallet-1".into(), "wallet-2".into()],
+            replacements: ["wallet-1", "wallet-2"]
+                .map(|record_id| PersistedSourceReplacement {
+                    source_record_id: record_id.into(),
+                    replacement_record_id: record_id.into(),
+                    revision_hash: format!("{record_id}-revision"),
+                })
+                .into(),
         };
         let mut configured = older_configured;
         assert!(configured.replace_pending_source_delete(pending.clone()));
