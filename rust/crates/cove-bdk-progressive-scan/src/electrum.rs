@@ -306,6 +306,12 @@ where
         let mut valid =
             electrum_client::utils::validate_merkle_proof(&txid, &header.merkle_root, &proof);
         if !valid {
+            // a header asked for again after a reorg is a new request, so a scan cancelled
+            // during the proof batch doesn't send it
+            if cancel_token.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+
             header = client.inner.block_header(height)?;
             valid =
                 electrum_client::utils::validate_merkle_proof(&txid, &header.merkle_root, &proof);
