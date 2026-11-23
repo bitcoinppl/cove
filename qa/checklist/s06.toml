@@ -298,3 +298,28 @@ coverage = [
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/AddressOwnershipSendFullLaunchTest.kt::noteStaysInSightWhileTheAmountIsTyped",
 ]
 # with no amount, a whole address moves the focus to the amount and the screen scrolls it to the top, so the note moves under the amount until the keyboard closes; the tests check the note clears the keyboard's toolbar on both platforms, and on iOS that the amount does too
+
+[[row]]
+id = "s06-scanned-address-alert-names-the-owner"
+section = "6"
+title = "The scanned-address alert names the wallet that owns the address"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/address_ownership.rs",
+    "rust/src/address_ownership/**",
+    "rust/src/app/alert_state.rs",
+    "ios/Cove/AppManager.swift",
+    "ios/Cove/ScanManager.swift",
+    "ios/Cove/CoveMainAlerts.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/AppManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/AddressOwnershipScanFullLaunchUITests.swift::testFoundAddressAlertNamesTheWalletThatOwnsTheAddress",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/AddressOwnershipScanFullLaunchTest.kt::foundAddressAlertNamesTheWalletThatOwnsTheAddress",
+    "rust:rust/src/address_ownership/tests.rs::a_scanned_address_alert_names_the_wallet_that_owns_it",
+]
+# the ui tests scan, from the second wallet, the first wallet's receive address, the second wallet's own change address, and one no wallet owns, checking the alert names the first wallet, then this wallet, then neither
+# a lookup result that arrives after another alert was shown or dismissed is dropped; that race needs timing neither the ui tests nor an agent can control, so it has no test here
