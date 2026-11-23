@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use act_zero_ext::into_actor_result;
-use bdk_wallet::{TxOrdering, chain::ChainPosition, chain::bitcoin::Psbt};
+use bdk_wallet::{KeychainKind, TxOrdering, chain::ChainPosition, chain::bitcoin::Psbt};
 use bitcoin::{
     FeeRate as BdkFeeRate, OutPoint, ScriptBuf, Transaction as BdkTransaction, Txid, Weight,
 };
@@ -335,9 +335,11 @@ impl WalletActor {
             .collect()
     }
 
-    /// Stops watching the transactions `replacement` replaced, and gives it their label
+    /// Stops watching the transactions `replacement` replaced, and gives it their label and
+    /// output locks
     ///
-    /// Labels are keyed by txid, so without this a sped up payment would lose its label
+    /// Labels are keyed by txid and locks by outpoint, so without this a sped up payment would
+    /// lose its label and its locked change would become spendable
     pub(crate) async fn hand_over_to_replacement(
         &mut self,
         replaced: &[ReplacedTransaction],
@@ -351,6 +353,63 @@ impl WalletActor {
         if let Err(error) = self.carry_label_to_replacement(replaced, replacement) {
             warn!("failed to carry the label of a replaced transaction to {txid}: {error}");
         }
+
+        if let Err(error) = self.carry_locks_to_replacement(replaced, replacement) {
+            warn!("failed to carry the output locks of a replaced transaction to {txid}: {error}");
+        }
+    }
+
+    /// Locks each output of `replacement` that takes the place of a locked output of the latest
+    /// transaction it replaced: one paying the same script, or its change when that change was
+    /// locked
+    ///
+    /// A lock follows the coin rather than the payment, so a double spend paying someone else
+    /// keeps the lock on its change too. BDK gives a replacement a fresh change address, so change
+    /// is matched by keychain rather than by script
+    fn carry_locks_to_replacement(
+        &self,
+        replaced: &[ReplacedTransaction],
+        replacement: &BdkTransaction,
+    ) -> Result<(), String> {
+        let locked = self.db.labels.locked_output_outpoints().map_err(|error| error.to_string())?;
+        let bdk = &self.wallet.bdk;
+        let graph = bdk.tx_graph();
+        let is_change = |script: &ScriptBuf| {
+            bdk.derivation_of_spk(script.clone())
+                .is_some_and(|(keychain, _)| keychain == KeychainKind::Internal)
+        };
+
+        // a payment sped up more than once leaves several originals, the latest one holds the
+        // locks the user set last, which an older one's mustn't undo
+        let Some(latest) = replaced.iter().max_by_key(|replaced| replaced.last_seen) else {
+            return Ok(());
+        };
+
+        let Some(latest_tx) = graph.get_tx(latest.txid) else { return Ok(()) };
+        let locked_scripts = (0_u32..)
+            .zip(&latest_tx.output)
+            .filter(|(vout, _)| locked.contains(&OutPoint { txid: latest.txid, vout: *vout }))
+            .map(|(_, output)| output.script_pubkey.clone())
+            .collect::<BTreeSet<_>>();
+
+        let change_locked = locked_scripts.iter().any(is_change);
+        let txid = replacement.compute_txid();
+        let outpoints = (0_u32..)
+            .zip(&replacement.output)
+            .filter(|(_, output)| {
+                locked_scripts.contains(&output.script_pubkey)
+                    || (change_locked && is_change(&output.script_pubkey))
+            })
+            .map(|(vout, _)| OutPoint { txid, vout })
+            .collect::<Vec<_>>();
+
+        if outpoints.is_empty() {
+            return Ok(());
+        }
+
+        LabelManager::new_with_db(self.db.clone())
+            .set_output_spendability_for_outpoints(outpoints, false)
+            .map_err(|error| error.to_string())
     }
 
     fn carry_label_to_replacement(

@@ -18,7 +18,8 @@ use super::{
 };
 use crate::{
     manager::{
-        import_wallet_manager::import_mnemonic_with_target, wallet_manager::RustWalletManager,
+        import_wallet_manager::import_mnemonic_with_target,
+        wallet_manager::{RustWalletManager, TransactionLockState},
     },
     mnemonic::MnemonicExt as _,
     network::Network,
@@ -417,6 +418,44 @@ async fn a_label_deleted_from_a_replacement_stays_deleted_on_the_next_bump() {
 
     let second = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
     assert_eq!(listed_label(&manager, second).await, None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn locked_change_stays_locked_in_the_replacement() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+    let locked = manager.toggle_transaction_lock_state(tx_id(sent)).await.unwrap();
+    assert_eq!(locked, TransactionLockState::Locked);
+
+    let target = manager.fee_bump_target(sent).await.expect("the payment can be sped up");
+    let confirm = manager
+        .confirm_fee_bump_txn(sent, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .expect("the replacement builds");
+
+    let replacement = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
+    let state = manager.transaction_lock_state(tx_id(replacement)).await.unwrap();
+    assert_eq!(state, TransactionLockState::Locked, "the replacement's change keeps the lock");
+
+    // the original's change is still locked, but the user unlocked the payment since
+    let unlocked = manager.toggle_transaction_lock_state(tx_id(replacement)).await.unwrap();
+    assert_eq!(unlocked, TransactionLockState::Unlocked);
+
+    let target =
+        manager.fee_bump_target(replacement).await.expect("the replacement can be sped up");
+    let confirm = manager
+        .confirm_fee_bump_txn(replacement, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .expect("the second replacement builds");
+
+    let second = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
+    let state = manager.transaction_lock_state(tx_id(second)).await.unwrap();
+    assert_eq!(state, TransactionLockState::Unlocked, "an unlock isn't undone by the next bump");
 }
 
 #[tokio::test(flavor = "current_thread")]
