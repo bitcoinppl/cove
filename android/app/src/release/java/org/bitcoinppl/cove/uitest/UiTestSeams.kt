@@ -8,12 +8,15 @@ import org.bitcoinppl.cove_core.TapcardTransportProtocol
  *
  * The debug source set holds the real implementations. These stubs keep the
  * call sites compiling and report that no seam is configured, so release
- * builds always use the camera and NFC
+ * builds always use the camera, NFC and every Google Drive write
  */
 internal object UiTestSeams {
     fun qrScriptFrames(): Flow<String>? = null
 
     fun nfcNdefMessages(): Flow<ByteArray>? = null
+
+    val driveReadOnly: Boolean
+        get() = false
 
     val tapSignerBridgeConfigured: Boolean
         get() = false

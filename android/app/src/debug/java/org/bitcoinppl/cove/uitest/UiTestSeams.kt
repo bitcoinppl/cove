@@ -40,6 +40,9 @@ import org.json.JSONObject
  *   test writes `{"ndef": "<hex>"}` there, atomically, with the raw bytes of an
  *   NDEF message; the scan takes the file and reads the message as if a tag
  *   held it. The TAPSIGNER bridge takes precedence when both are set
+ * - `COVE_UI_TEST_DRIVE_READ_ONLY`, set to any value, makes every Google Drive
+ *   request that would change Drive report success without being sent, while
+ *   reads still go to the real Drive
  */
 // debug-only test seam with no caller that could inject a dispatcher
 @Suppress("InjectDispatcher")
@@ -48,6 +51,7 @@ internal object UiTestSeams {
     private const val QR_SCRIPT_ENV = "COVE_UI_TEST_QR_SCRIPT"
     private const val TAPSIGNER_BRIDGE_ENV = "COVE_UI_TEST_TAPSIGNER_BRIDGE"
     private const val NFC_NDEF_SCRIPT_ENV = "COVE_UI_TEST_NFC_NDEF_SCRIPT"
+    private const val DRIVE_READ_ONLY_ENV = "COVE_UI_TEST_DRIVE_READ_ONLY"
     private const val QR_FRAME_INTERVAL_MS = 150L
     private const val QR_POLL_INTERVAL_MS = 200L
     private const val NFC_POLL_INTERVAL_MS = 200L
@@ -109,6 +113,13 @@ internal object UiTestSeams {
             }
         }.flowOn(Dispatchers.IO)
     }
+
+    /**
+     * Whether Google Drive writes are skipped, so a test against a real account's backup can't
+     * change it
+     */
+    val driveReadOnly: Boolean
+        get() = Os.getenv(DRIVE_READ_ONLY_ENV) != null
 
     /** Whether TAPSIGNER commands and NFC reads go to the card emulator bridge */
     val tapSignerBridgeConfigured: Boolean

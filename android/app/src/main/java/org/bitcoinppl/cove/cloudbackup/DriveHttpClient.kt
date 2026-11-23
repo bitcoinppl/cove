@@ -6,6 +6,7 @@ import java.net.URL
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.uitest.UiTestSeams
 import org.json.JSONObject
 
 @Suppress("InjectDispatcher")
@@ -21,6 +22,14 @@ internal class DriveHttpClient(
         contentType: String? = null,
     ): DriveResponse =
         withContext(ioDispatcher) {
+            // every Drive request comes through here, so a debug test that restores a real
+            // account's backup can't change it. An empty body is enough for uploads and deletes,
+            // which ignore it; creating a folder reads the new folder's id, so it fails instead
+            if (method != "GET" && UiTestSeams.driveReadOnly) {
+                logDriveWarning("google drive request skipped, drive is read-only method=$method url=$url")
+                return@withContext DriveResponse(HTTP_SUCCESS_MIN, ByteArray(0))
+            }
+
             val connection = (URL(url).openConnection() as HttpURLConnection)
             try {
                 connection.requestMethod = method
