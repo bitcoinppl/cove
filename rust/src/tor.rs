@@ -189,16 +189,17 @@ impl TorService {
 
         // a mode that turns Tor on blocks new connections before it's saved, so none starts on
         // the old direct route while built-in Tor opens its files
-        let previous = self.state.borrow().clone();
+        let previous_route = self.state.borrow().route.clone();
         if settings != TorSettings::Off {
             self.state.send_modify(|state| {
                 state.route = Err(RouteError::TorUnavailable("Tor is starting".into()));
             });
         }
 
+        // only the route is put back, since built-in Tor may have reported progress meanwhile
         let saved = Database::global().global_config.set_tor_settings(&settings);
         if let Err(error) = saved {
-            self.state.send_replace(previous);
+            self.state.send_modify(|state| state.route = previous_route);
             return Err(SetTorError::Save(error.to_string()));
         }
 

@@ -157,6 +157,12 @@ impl Error {
             Self::Route(RouteError::Changed) => "route_changed",
         }
     }
+
+    /// Whether the client's route stopped being current, so the same work can run again on a
+    /// client built for the new route
+    pub(crate) const fn is_route_changed(&self) -> bool {
+        matches!(self, Self::Route(RouteError::Changed))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -203,12 +209,15 @@ impl NodeClient {
         if self.route.is_tor() { crate::node::TOR_CHECK_URL_TIMEOUT } else { direct }
     }
 
-    /// Fails when the current route isn't the one this client was built on
+    /// Fails with [`RouteError::Changed`] when the current route isn't the one this client was
+    /// built on, including when no route is available, so callers can tell a stale client from
+    /// a new one that couldn't connect
     fn ensure_route(&self) -> Result<(), Error> {
-        match crate::tor::current_route()? {
-            route if route == self.route => Ok(()),
-            _ => Err(RouteError::Changed.into()),
+        if crate::tor::current_route().as_ref() != Ok(&self.route) {
+            return Err(RouteError::Changed.into());
         }
+
+        Ok(())
     }
 
     /// Resolves once the current route is no longer the one this client was built on
@@ -226,10 +235,11 @@ impl NodeClient {
         }
     }
 
-    /// Runs a call that sends several requests, dropping it once the route changes
+    /// Runs a read, dropping it once the route changes
     ///
-    /// A scan or sync can run for minutes, so without this it would keep sending its remaining
-    /// requests on a route that's no longer current, outside Tor after Tor turns on
+    /// A scan or sync can run for minutes, and some reads send a second request after the
+    /// first answers, so without this they would keep sending on a route that's no longer
+    /// current, outside Tor after Tor turns on
     async fn on_route<T>(
         &self,
         call: impl std::future::Future<Output = Result<T, Error>>,
@@ -243,35 +253,37 @@ impl NodeClient {
     }
 
     pub async fn check_url(&self) -> Result<(), Error> {
-        self.ensure_route()?;
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    client.get_height().await?;
+                }
 
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                client.get_height().await?;
+                NodeClientBackend::Electrum(client) => {
+                    client.get_height().await?;
+                }
             }
 
-            NodeClientBackend::Electrum(client) => {
-                client.get_height().await?;
-            }
-        }
-
-        Ok(())
+            Ok(())
+        })
+        .await
     }
 
     pub async fn get_height(&self) -> Result<usize, Error> {
-        self.ensure_route()?;
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    let height = client.get_height().await?;
+                    Ok(height as usize)
+                }
 
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                let height = client.get_height().await?;
-                Ok(height as usize)
+                NodeClientBackend::Electrum(client) => {
+                    let height = client.get_height().await?;
+                    Ok(height)
+                }
             }
-
-            NodeClientBackend::Electrum(client) => {
-                let height = client.get_height().await?;
-                Ok(height)
-            }
-        }
+        })
+        .await
     }
 
     pub async fn start_wallet_scan(
@@ -367,50 +379,56 @@ impl NodeClient {
         &self,
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
-        self.ensure_route()?;
-
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_confirmed_transaction(&txid).await,
-            NodeClientBackend::Electrum(client) => client.get_confirmed_transaction(txid).await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_confirmed_transaction(&txid).await,
+                NodeClientBackend::Electrum(client) => client.get_confirmed_transaction(txid).await,
+            }
+        })
+        .await
     }
 
     /// Fetches a transaction from the mempool or chain; returns `None` if not found.
     pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
-        self.ensure_route()?;
-
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_transaction(txid).await,
-            NodeClientBackend::Electrum(client) => client.get_transaction(txid).await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_transaction(txid).await,
+                NodeClientBackend::Electrum(client) => client.get_transaction(txid).await,
+            }
+        })
+        .await
     }
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
-        self.ensure_route()?;
-
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_block_id().await,
-            NodeClientBackend::Electrum(client) => client.get_block_id().await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_block_id().await,
+                NodeClientBackend::Electrum(client) => client.get_block_id().await,
+            }
+        })
+        .await
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
-        self.ensure_route()?;
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    let address = client.check_address_for_txn(address).await?;
+                    Ok(address)
+                }
 
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                let address = client.check_address_for_txn(address).await?;
-                Ok(address)
+                NodeClientBackend::Electrum(client) => {
+                    let address = client.check_address_for_txn(address).await?;
+                    Ok(address)
+                }
             }
-
-            NodeClientBackend::Electrum(client) => {
-                let address = client.check_address_for_txn(address).await?;
-                Ok(address)
-            }
-        }
+        })
+        .await
     }
 
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        // one request whose outcome the user needs, so it isn't dropped midway, where it may
+        // already have reached the node
         self.ensure_route()?;
 
         match &self.backend {

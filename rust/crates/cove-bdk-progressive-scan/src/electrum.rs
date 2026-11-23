@@ -189,6 +189,12 @@ where
                     continue;
                 }
 
+                // a batch with many transactions sends one request for each, so a cancelled
+                // scan, such as one whose route changed, stops before the next one
+                if cancel_token.is_cancelled() {
+                    return Err(Error::Cancelled);
+                }
+
                 partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
 
                 match tx_res.height.try_into() {
@@ -412,7 +418,7 @@ fn chain_update(
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Borrow, collections::BTreeMap};
+    use std::{borrow::Borrow, collections::BTreeMap, sync::Arc};
 
     use bdk_electrum::{
         BdkElectrumClient,
@@ -451,6 +457,8 @@ mod tests {
         fetched_txids: SharedVec<Txid>,
         history_response_limit: Option<usize>,
         merkle_response_limit: Option<usize>,
+        /// Cancelled once a history batch answers, like a route change while the batch runs
+        cancel_on_history: Option<CancellationToken>,
     }
 
     impl FakeElectrum {
@@ -462,6 +470,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -473,6 +482,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -489,6 +499,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -504,6 +515,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -523,6 +535,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -538,6 +551,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -675,6 +689,10 @@ mod tests {
                     QueuedResponse::Exhausted => Vec::new(),
                 };
                 histories.push(history);
+            }
+
+            if let Some(cancel_token) = &self.cancel_on_history {
+                cancel_token.cancel();
             }
 
             Ok(histories)
@@ -991,6 +1009,7 @@ mod tests {
             fetched_txids: SharedVec::default(),
             history_response_limit: None,
             merkle_response_limit: None,
+            cancel_on_history: None,
         };
         let client = BdkElectrumClient::new(fake);
         let (events, receiver) = event_channel();
@@ -1164,6 +1183,33 @@ mod tests {
             .run();
 
         assert!(matches!(result, Err(Error::ChannelClosed)));
+    }
+
+    // a route change cancels the scan while a batch runs, and the batch used to fetch every
+    // transaction its histories named before it checked again
+    #[test]
+    fn a_scan_cancelled_during_a_batch_fetches_no_more_transactions() {
+        let request = external_request(7, 5);
+        let (events, _receiver) = event_channel();
+        let cancel_token = CancellationToken::new();
+        let fake = FakeElectrum {
+            cancel_on_history: Some(cancel_token.clone()),
+            ..FakeElectrum::with_mempool_transaction(test_transaction())
+        };
+        let client = Arc::new(BdkElectrumClient::new(fake));
+
+        let result = ProgressiveScanner::builder()
+            .request(request)
+            .stop_gap(2)
+            .events(events)
+            .cancel_token(cancel_token)
+            .electrum(client.clone())
+            .expect("scanner builds")
+            .batch_size(1)
+            .run();
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert_eq!(client.inner.fetched_txids(), Vec::new());
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::{
     database::{Database, wallet_data::ReceiveAddressCache},
     manager::wallet_manager::{
         Error, WalletManagerReconcileMessage,
-        actor::WalletActor,
+        actor::{WalletActor, scan::RunningScan},
         receive_address::{
             ReceiveAddressPresentation, ReceiveAddressRefreshState, ReceiveAddressState,
             ReceiveAddressStatus, RefreshExpiredAddressDecision, cache_window,
@@ -639,7 +639,13 @@ impl WalletActor {
         result: Result<SyncResponse, NodeError>,
     ) -> ActorResult<()> {
         let sync_result = result
-            .inspect_err(|error| warn!("Address sync failed index={derivation_index}: {error}"))
+            .inspect_err(|error| {
+                warn!("Address sync failed index={derivation_index}: {error}");
+
+                // the screen already shows the payment, so a sync a route change stopped is
+                // made up by a scan on the new route
+                self.rescan_after_route_change(error, RunningScan::Incremental);
+            })
             .map_err_str(Error::ReceiveAddressError)?;
 
         self.wallet.bdk.apply_update(sync_result)?;

@@ -15,7 +15,6 @@ use crate::{
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
-    tor::RouteError,
     transaction::{ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId},
     transaction_watcher::TransactionWatcher,
     wallet::{
@@ -1169,7 +1168,7 @@ impl WalletActor {
     /// The restart waits until a route is available, since turning Tor on blocks connections
     /// briefly, and then reconnects so the node client is rebuilt on the new route
     fn rescan_after_route_change(&mut self, error: &NodeError, scan: RunningScan) {
-        if !matches!(error, NodeError::Route(RouteError::Changed)) {
+        if !error.is_route_changed() {
             return;
         }
 

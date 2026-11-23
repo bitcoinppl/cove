@@ -575,14 +575,28 @@ impl DiscoveryScanTask {
     }
 
     async fn scan(mut self) -> eyre::Result<()> {
-        let client = self.client_builder.build().await.context("build discovery node client")?;
+        let mut client =
+            self.client_builder.build().await.context("build discovery node client")?;
         let mut current_address = self.current_address;
 
         loop {
             let address = call!(self.worker.address_at(current_address)).await?;
 
-            let found_address =
-                client.check_address_for_txn(address).await.context("could not check address")?;
+            let found_address = match client.check_address_for_txn(address).await {
+                // checks the same address again on a client built for the new route
+                Err(error) if error.is_route_changed() => {
+                    crate::tor::usable_route().await;
+                    client = self
+                        .client_builder
+                        .build()
+                        .await
+                        .context("rebuild discovery node client")?;
+
+                    continue;
+                }
+
+                result => result.context("could not check address")?,
+            };
 
             if found_address {
                 self.db

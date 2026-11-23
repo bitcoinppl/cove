@@ -39,13 +39,14 @@ Host names are resolved by the proxy, never on the device: reqwest and Esplora u
 Clients built on the old route stop using it:
 
 - Cached node clients notice the change because the route is part of `NodeConnectionIdentity` (`rust/src/node.rs`): the wallet actor and the transaction watcher drop a client whose identity no longer matches and build one on the new route.
-- A `NodeClient` checks before every request that its route is still current, and fails with `RouteError::Changed` when it isn't, so a client someone still holds can't send more requests on the old route.
-- A scan or sync that is still running when the route changes is dropped and fails with `RouteError::Changed`, so it sends none of its remaining requests on the old route. A wallet scan stopped this way runs again once a route is available, on a node client rebuilt for the new route.
+- A `NodeClient` checks before every request that its route is still current, and fails with `RouteError::Changed` when it isn't, including when no route is available, so a client someone still holds can't send more requests on the old route.
+- A read that is still running when the route changes, such as a scan, a sync, or a transaction lookup that sends a second request, is dropped and fails with `RouteError::Changed`, so it sends none of its remaining requests on the old route. A broadcast isn't dropped midway, since it may already have reached the node.
+- Work stopped this way runs again once a route is available, on a node client built for the new route: a wallet scan runs again, a receive address's payment sync is made up by a scan, and wallet discovery checks the same address again.
 - The fee and price clients cache one reqwest client per route through `cove_http::RoutedClient`.
 
 ### Known limits
 
-- Electrum work runs on a blocking thread that dropping it can't stop. A running Electrum scan stops after the batch in flight, but a running Electrum sync, which covers a handful of addresses, finishes its requests on the connection it already has to the same server. Both results are discarded.
+- Electrum work runs on a blocking thread that dropping it can't stop. A running Electrum scan stops before its next request, but a running Electrum sync, which covers a handful of addresses, finishes its requests on the connection it already has to the same server. If that connection drops meanwhile, electrum-client reconnects once on its original route. The results are discarded.
 - The wallet's connection check limits the node check to 60 seconds over Tor, but an Electrum connection that stalls while it's being opened waits for Electrum's own 90-second SOCKS timeout.
 - With Tor off, an Esplora server that redirects to a `.onion` address makes the HTTP client look that name up with the system resolver, as it would any redirect target.
 
