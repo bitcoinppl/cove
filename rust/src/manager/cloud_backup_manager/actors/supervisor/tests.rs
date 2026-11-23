@@ -5282,11 +5282,9 @@ async fn seed_backup_restores_beside_a_local_wallet_whose_secret_cannot_be_read(
     .await;
 
     // the backup may hold the only readable copy of the seed, so it restores as its own wallet
-    // beside the local one, whose unreadable seed stays untouched
-    let Some(wallets) = manager.inventory.read().cloud_only().loaded_wallets() else {
-        panic!("expected the cloud-only rows to stay loaded");
-    };
-    assert!(cloud_only_row_statuses(&wallets).is_empty());
+    // beside the local one, whose unreadable seed stays untouched. the restore reloads the
+    // cloud-only rows, so the test waits for them to settle instead of reading them once
+    wait_for_cloud_only_statuses(&manager, &[]).await;
     assert_eq!(Keychain::global().get(secret_key).unwrap(), Some("garbage-secret".to_string()));
     assert_eq!(Keychain::global().get(cryptor_key).unwrap(), Some("garbage-cryptor".to_string()));
     assert_eq!(local_wallets_like(&local_wallet).len(), 2);
