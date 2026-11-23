@@ -85,8 +85,13 @@ fn transfer_recipients(
     for ownership in ownerships {
         let AddressOwnership::Owned { owners } = ownership else { continue };
 
-        // the sender owns its change
-        for owner in owners.into_iter().filter(|owner| owner.wallet_id != sender.id) {
+        // an output the sender owns is its change, even when another wallet holds the same keys,
+        // such as the same account imported again without its key origin
+        if owners.iter().any(|owner| owner.wallet_id == sender.id) {
+            continue;
+        }
+
+        for owner in owners {
             if recipients.iter().any(|recipient| recipient.wallet_id == owner.wallet_id) {
                 continue;
             }
@@ -253,6 +258,39 @@ mod tests {
 
         assert!(!label_transfer(&sender, &transaction));
         assert_eq!(label(&sender, &transaction), None);
+    }
+
+    /// The same keys imported again without their key origin are a second wallet that also owns
+    /// the sender's change, which still makes the change the sender's and not a transfer
+    #[tokio::test]
+    async fn change_a_copy_of_the_sender_also_owns_gets_no_label() {
+        let _lock = crate::test_support::global_state_test_lock().lock().await;
+        let _target = main_signet();
+
+        let mnemonic = Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap();
+        let sender =
+            import_mnemonic_with_target(mnemonic.clone(), Network::Signet, WalletMode::Main)
+                .expect("the wallet imports");
+
+        // the checksum covers the origin, so it goes too
+        let export =
+            crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
+        let export = export.split('#').next().unwrap();
+        let origin_start = export.find('[').expect("the export has a key origin");
+        let origin_end = export.find(']').expect("the export has a key origin");
+        let origin_less = format!("{}{}", &export[..origin_start], &export[origin_end + 1..]);
+        let copy = Wallet::try_new_persisted_from_xpub(origin_less)
+            .expect("the origin-less copy imports")
+            .metadata;
+
+        let change = script(&sender, KeychainKind::Internal, 0);
+        assert_eq!(change, script(&copy, KeychainKind::Internal, 0), "the copy has other keys");
+
+        let transaction = paying(vec![external(), change]);
+
+        assert!(!label_transfer(&sender, &transaction));
+        assert_eq!(label(&sender, &transaction), None);
+        assert_eq!(label(&copy, &transaction), None);
     }
 
     /// A main wallet's send that lands after the app switched to decoy mode names no wallets,
